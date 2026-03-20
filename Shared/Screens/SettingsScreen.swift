@@ -1,4 +1,6 @@
 import SwiftUI
+import CinemaxKit
+@preconcurrency import JellyfinAPI
 
 // MARK: - Accent Color Definition
 
@@ -24,17 +26,14 @@ private enum AccentOption: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Settings Tab (tvOS)
+// MARK: - tvOS Focus Tracking
 
 #if os(tvOS)
-private enum SettingsTab: String, CaseIterable, Identifiable {
-    case personalization = "Personalization"
-    case playback        = "Playback"
-    case display         = "Display"
-    case library         = "Library"
-    case advanced        = "Advanced"
-
-    var id: String { rawValue }
+private enum SettingsFocus: Hashable {
+    case profile(String)
+    case switchAccount
+    case refreshConnection
+    case toggle(String)
 }
 #endif
 
@@ -104,260 +103,242 @@ struct SettingsScreen: View {
         }
     }
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - tvOS Layout
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     #if os(tvOS)
-    @State private var selectedTab: SettingsTab = .personalization
+    @FocusState private var focusedItem: SettingsFocus?
+    @State private var serverUsers: [UserDto] = []
+    @State private var showSwitchAccountAlert = false
+
+    @AppStorage("motionEffects") private var motionEffects: Bool = true
+    @AppStorage("forceSubtitles") private var forceSubtitles: Bool = false
+    @AppStorage("render4K") private var render4K: Bool = true
 
     private var tvOSLayout: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Large title
-            Text("Settings")
-                .font(.system(size: 56, weight: .heavy))
-                .foregroundStyle(CinemaColor.onSurface)
-                .padding(.horizontal, CinemaSpacing.spacing20)
-                .padding(.top, CinemaSpacing.spacing8)
-                .padding(.bottom, CinemaSpacing.spacing5)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                // Two-column layout
+                HStack(alignment: .top, spacing: CinemaSpacing.spacing6) {
+                    // Left column
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                        tvAppearanceSection
+                        tvProfileSection
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Tab bar
-            tvTabBar
-                .padding(.horizontal, CinemaSpacing.spacing20)
-                .padding(.bottom, CinemaSpacing.spacing8)
-
-            // Content area
-            switch selectedTab {
-            case .personalization:
-                tvPersonalizationContent
-            default:
-                tvPlaceholderContent(for: selectedTab)
+                    // Right column
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                        tvServerSection
+                        tvInterfaceSection
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-
-            Spacer()
+            .padding(.horizontal, CinemaSpacing.spacing20)
+            .padding(.bottom, CinemaSpacing.spacing8)
+        }
+        .task { await loadServerUsers() }
+        .alert("Switch Account", isPresented: $showSwitchAccountAlert) {
+            Button("Switch Account", role: .destructive) {
+                appState.logout()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You will be logged out and returned to the login screen.")
         }
     }
 
-    private var tvTabBar: some View {
-        HStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsTab.allCases) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    Text(tab.rawValue)
-                        .font(.system(size: 20, weight: selectedTab == tab ? .bold : .medium))
-                        .foregroundStyle(
-                            selectedTab == tab
-                                ? themeManager.accent
-                                : CinemaColor.onSurfaceVariant
-                        )
-                        .padding(.horizontal, CinemaSpacing.spacing4)
-                        .padding(.vertical, CinemaSpacing.spacing2)
-                        .background(
-                            selectedTab == tab
-                                ? themeManager.accent.opacity(0.12)
-                                : Color.clear,
-                            in: Capsule()
-                        )
-                }
-                .buttonStyle(.plain)
-            }
+    private func loadServerUsers() async {
+        do {
+            serverUsers = try await appState.apiClient.getUsers()
+        } catch {
+            do { serverUsers = try await appState.apiClient.getPublicUsers() } catch {}
         }
     }
 
-    // MARK: - Personalization Tab Content
+    // MARK: - Appearance
 
-    private var tvPersonalizationContent: some View {
-        HStack(alignment: .top, spacing: CinemaSpacing.spacing8) {
-            // Left column
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                    tvAppearanceSection
-                    tvProfileManagementSection
-                }
-            }
-            .frame(maxWidth: .infinity)
-
-            // Right column
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                    tvConnectionIntegrityCard
-                    tvInterfaceOptionsSection
-                }
-            }
-            .frame(width: 420)
-        }
-        .padding(.horizontal, CinemaSpacing.spacing20)
-    }
-
-    // MARK: - Appearance Theme Section
+    @AppStorage("darkMode") private var darkModeStorage: Bool = true
 
     private var tvAppearanceSection: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            tvSectionHeader(icon: "circle.lefthalf.filled", label: "Appearance Theme")
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvSectionLabel("Appearance")
 
-            // Dark / Light pill buttons
-            HStack(spacing: CinemaSpacing.spacing3) {
-                tvThemeButton(
-                    title: "Dark",
-                    icon: "moon.fill",
-                    isSelected: themeManager.darkModeEnabled
-                ) {
-                    themeManager.darkModeEnabled = true
-                }
-
-                tvThemeButton(
-                    title: "Light",
-                    icon: "sun.max.fill",
-                    isSelected: !themeManager.darkModeEnabled
-                ) {
-                    themeManager.darkModeEnabled = false
-                }
-            }
-
-            // Description
-            Text("Optimize your viewing experience for low-light environments. Dark mode reduces eye strain and power consumption on OLED panels.")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .lineSpacing(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, CinemaSpacing.spacing1)
-        }
-    }
-
-    private func tvThemeButton(title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: CinemaSpacing.spacing2) {
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 17, weight: .semibold))
-            }
-            .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .padding(.vertical, CinemaSpacing.spacing2)
-            .background(
-                isSelected
-                    ? themeManager.accentContainer
-                    : CinemaColor.surfaceContainerHigh,
-                in: Capsule()
+            tvGlassToggle(
+                icon: darkModeStorage ? "moon.fill" : "sun.max.fill",
+                label: darkModeStorage ? "Dark Mode" : "Light Mode",
+                key: "darkMode",
+                value: $darkModeStorage
             )
         }
-        .buttonStyle(.plain)
-        .focusable()
-        .scaleEffect(1.0)
     }
 
-    // MARK: - Profile Management Section
+    // MARK: - Profile Management
 
-    @State private var tvProfiles: [(name: String, role: String)] = [
-        (name: "John Doe", role: "Admin \u{2022} Full Access"),
-        (name: "Family", role: "Restricted \u{2022} 2 Kids")
-    ]
+    private var currentUserId: String {
+        appState.currentUserId ?? ""
+    }
 
-    private var tvProfileManagementSection: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            tvSectionHeader(icon: "person.2.fill", label: "Profile Management")
+    private var displayUsers: [UserDto] {
+        let users: [UserDto]
+        if serverUsers.isEmpty {
+            if let session = appState.keychain.getUserSession() {
+                users = [UserDto(id: session.userID, name: session.username)]
+            } else {
+                users = []
+            }
+        } else {
+            users = serverUsers
+        }
+        return users.sorted { a, _ in a.id == currentUserId }
+    }
 
-            HStack(spacing: CinemaSpacing.spacing4) {
-                // Profile cards
-                ForEach(tvProfiles, id: \.name) { profile in
-                    tvProfileCard(profile)
+    private var tvProfileSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvSectionLabel("Profiles")
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: CinemaSpacing.spacing3),
+                    GridItem(.flexible(), spacing: CinemaSpacing.spacing3),
+                    GridItem(.flexible(), spacing: CinemaSpacing.spacing3)
+                ],
+                spacing: CinemaSpacing.spacing3
+            ) {
+                ForEach(displayUsers, id: \.id) { user in
+                    tvProfileBlock(user: user)
                 }
 
-                // Add New Profile card
-                tvAddProfileCard
+                tvSwitchAccountBlock
             }
         }
     }
 
-    private func tvProfileCard(_ profile: (name: String, role: String)) -> some View {
-        VStack(spacing: CinemaSpacing.spacing3) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [themeManager.accentContainer, themeManager.accent.opacity(0.5)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 60, height: 60)
+    private func tvProfileBlock(user: UserDto) -> some View {
+        let userId = user.id ?? ""
+        let isCurrentUser = userId == currentUserId
+        let hasImage = user.primaryImageTag != nil
+        let isFocused = focusedItem == .profile(userId)
 
-                Text(String(profile.name.prefix(1)))
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-
-            VStack(spacing: 2) {
-                Text(profile.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Text(profile.role)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(width: 120)
-        .padding(CinemaSpacing.spacing4)
-        .glassPanel(cornerRadius: CinemaRadius.large)
-    }
-
-    private var tvAddProfileCard: some View {
-        Button {
-            // Add profile action
+        return Button {
+            if !isCurrentUser { showSwitchAccountAlert = true }
         } label: {
-            VStack(spacing: CinemaSpacing.spacing3) {
-                ZStack {
-                    Circle()
-                        .fill(CinemaColor.surfaceContainerHighest)
-                        .frame(width: 60, height: 60)
-                    Image(systemName: "plus")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+            VStack(spacing: CinemaSpacing.spacing2) {
+                Group {
+                    if hasImage, let serverURL = appState.serverURL {
+                        let imageURL = ImageURLBuilder(serverURL: serverURL)
+                            .userImageURL(userId: userId, tag: user.primaryImageTag, maxWidth: 96)
+                        AsyncImage(url: imageURL) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            tvUserInitial(name: user.name ?? "?", size: 36)
+                        }
+                        .frame(width: 36, height: 36)
+                        .clipShape(Circle())
+                    } else {
+                        tvUserInitial(name: user.name ?? "?", size: 36)
+                    }
                 }
+                .opacity(isCurrentUser ? 1.0 : 0.55)
 
-                Text("Add New Profile")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .multilineTextAlignment(.center)
+                Text(user.name ?? "User")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
+                    .lineLimit(1)
+
+                if isCurrentUser {
+                    Text("Active")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x34C759))
+                } else {
+                    Text(user.policy?.isAdministrator == true ? "Admin" : "User")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
+                }
             }
-            .frame(width: 120)
-            .padding(CinemaSpacing.spacing4)
-            .glassPanel(cornerRadius: CinemaRadius.large)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
         }
         .buttonStyle(.plain)
-        .focusable()
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .profile(userId))
     }
 
-    // MARK: - Connection Integrity Card
+    private var tvSwitchAccountBlock: some View {
+        let isFocused = focusedItem == .switchAccount
 
-    private var tvConnectionIntegrityCard: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            Text("CONNECTION INTEGRITY")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .tracking(1.5)
+        return Button {
+            showSwitchAccountAlert = true
+        } label: {
+            VStack(spacing: CinemaSpacing.spacing2) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
+                    .frame(width: 36, height: 36)
 
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                // Server info row
+                Text("Switch")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
+
+                Text("Account")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
+            }
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .switchAccount)
+    }
+
+    private func tvUserInitial(name: String, size: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [themeManager.accentContainer, themeManager.accent.opacity(0.5)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: size, height: size)
+
+            Text(String(name.prefix(1)).uppercased())
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundStyle(.white)
+        }
+    }
+
+    // MARK: - Server Connection
+
+    private var tvServerSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvSectionLabel("Server")
+
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                 HStack(spacing: CinemaSpacing.spacing3) {
-                    // Server icon
                     ZStack {
                         Circle()
-                            .fill(themeManager.accent.opacity(0.15))
-                            .frame(width: 44, height: 44)
+                            .fill(themeManager.accent.opacity(0.12))
+                            .frame(width: 40, height: 40)
                         Image(systemName: "server.rack")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(themeManager.accent)
                     }
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(serverName)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(CinemaColor.onSurface)
                         Text(serverAddress)
-                            .font(.system(size: 13, weight: .regular))
+                            .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -365,168 +346,142 @@ struct SettingsScreen: View {
 
                     Spacer()
 
-                    liveBadge
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: 0x34C759))
+                            .frame(width: 6, height: 6)
+                        Text("Connected")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color(hex: 0x34C759))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color(hex: 0x34C759, alpha: 0.1)))
                 }
 
-                // Uptime and latency row
-                HStack(spacing: CinemaSpacing.spacing6) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("UPTIME")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .tracking(1)
-                        Text("14d 02h")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(CinemaColor.onSurface)
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("LATENCY")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .tracking(1)
-                        Text("12ms")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(CinemaColor.onSurface)
-                    }
-                }
-
-                // Refresh Connection button
-                Button {
-                    Task { await appState.restoreSession() }
-                } label: {
-                    HStack(spacing: CinemaSpacing.spacing2) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("Refresh Connection")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, CinemaSpacing.spacing2)
-                    .background(themeManager.accentContainer, in: RoundedRectangle(cornerRadius: CinemaRadius.large))
-                }
-                .buttonStyle(.plain)
-                .focusable()
+                tvRefreshConnectionButton
             }
             .padding(CinemaSpacing.spacing4)
-            .glassPanel(cornerRadius: CinemaRadius.large)
+            .background(
+                RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                    .fill(CinemaColor.surfaceContainerLow)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                            .fill(CinemaColor.surfaceVariant.opacity(0.6))
+                    )
+            )
         }
     }
 
-    // MARK: - Interface Options Section
+    private var tvRefreshConnectionButton: some View {
+        let isFocused = focusedItem == .refreshConnection
 
-    @AppStorage("motionEffects") private var motionEffects: Bool = true
-    @AppStorage("forceSubtitles") private var forceSubtitles: Bool = false
-    @AppStorage("render4K") private var render4K: Bool = true
+        return Button {
+            Task { await appState.restoreSession() }
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
 
-    private var tvInterfaceOptionsSection: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            Text("Interface Options")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(CinemaColor.onSurface)
+                Text("Refresh Connection")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
 
-            VStack(spacing: 0) {
-                tvToggleRow(
-                    icon: "sparkles",
-                    label: "Motion Effects",
-                    value: $motionEffects
-                )
-
-                Divider()
-                    .background(CinemaColor.surfaceContainerHighest)
-
-                tvToggleRow(
-                    icon: "captions.bubble",
-                    label: "Force Subtitles",
-                    value: $forceSubtitles
-                )
-
-                Divider()
-                    .background(CinemaColor.surfaceContainerHighest)
-
-                tvToggleRow(
-                    icon: "4k.tv",
-                    label: "4K UI Rendering",
-                    value: $render4K
-                )
+                Spacer()
             }
-            .glassPanel(cornerRadius: CinemaRadius.large)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .refreshConnection)
+    }
+
+    // MARK: - Interface Options
+
+    private var tvInterfaceSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvSectionLabel("Interface")
+
+            tvGlassToggle(icon: "sparkles", label: "Motion Effects", key: "motion", value: $motionEffects)
+            tvGlassToggle(icon: "captions.bubble", label: "Force Subtitles", key: "subtitles", value: $forceSubtitles)
+            tvGlassToggle(icon: "4k.tv", label: "4K UI Rendering", key: "4k", value: $render4K)
         }
     }
 
-    private func tvToggleRow(icon: String, label: String, value: Binding<Bool>) -> some View {
-        HStack(spacing: CinemaSpacing.spacing3) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .frame(width: 24)
+    private func tvGlassToggle(icon: String, label: String, key: String, value: Binding<Bool>) -> some View {
+        let isFocused = focusedItem == .toggle(key)
 
-            Text(label)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(CinemaColor.onSurface)
+        return Button {
+            value.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
 
-            Spacer()
+                Text(label)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
 
-            Toggle("", isOn: value)
-                .labelsHidden()
-                .tint(themeManager.accentContainer)
+                Spacer()
+
+                // Custom toggle indicator
+                Capsule()
+                    .fill(value.wrappedValue ? themeManager.accent : CinemaColor.surfaceContainerHighest)
+                    .frame(width: 52, height: 32)
+                    .overlay(alignment: value.wrappedValue ? .trailing : .leading) {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 26, height: 26)
+                            .padding(3)
+                    }
+                    .animation(.easeInOut(duration: 0.15), value: value.wrappedValue)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
         }
-        .padding(.horizontal, CinemaSpacing.spacing4)
-        .padding(.vertical, CinemaSpacing.spacing3)
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle(key))
     }
 
-    // MARK: - Placeholder for other tabs
+    // MARK: - tvOS Helpers
 
-    private func tvPlaceholderContent(for tab: SettingsTab) -> some View {
-        VStack(spacing: CinemaSpacing.spacing4) {
-            Image(systemName: "gearshape.2")
-                .font(.system(size: 48))
-                .foregroundStyle(CinemaColor.outlineVariant)
-            Text("\(tab.rawValue) settings coming soon")
-                .font(CinemaFont.headline(.small))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-    }
-
-    // MARK: - tvOS Section Header Helper
-
-    private func tvSectionHeader(icon: String, label: String) -> some View {
-        HStack(spacing: CinemaSpacing.spacing2) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(themeManager.accent)
-            Text(label)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(CinemaColor.onSurface)
-        }
+    private func tvSectionLabel(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .tracking(1.5)
     }
 
     #endif // os(tvOS)
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - iOS Components
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     // MARK: - Profile Header (iOS)
 
     private var profileHeader: some View {
         HStack(spacing: CinemaSpacing.spacing4) {
-            // Avatar circle
             ZStack {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [
-                                themeManager.accentContainer,
-                                themeManager.accent.opacity(0.6)
-                            ],
+                            colors: [themeManager.accentContainer, themeManager.accent.opacity(0.6)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(
-                        width: avatarSize,
-                        height: avatarSize
-                    )
+                    .frame(width: avatarSize, height: avatarSize)
 
                 Text(userInitial)
                     .font(.system(size: avatarFontSize, weight: .bold, design: .default))
@@ -556,7 +511,6 @@ struct SettingsScreen: View {
             sectionHeader("Infrastructure")
 
             HStack(spacing: CinemaSpacing.spacing3) {
-                // Server icon
                 ZStack {
                     RoundedRectangle(cornerRadius: CinemaRadius.medium)
                         .fill(themeManager.accent.opacity(0.15))
@@ -567,7 +521,6 @@ struct SettingsScreen: View {
                         .foregroundStyle(themeManager.accent)
                 }
 
-                // Server details
                 VStack(alignment: .leading, spacing: 3) {
                     Text(serverName)
                         .font(CinemaFont.label(.large))
@@ -582,7 +535,6 @@ struct SettingsScreen: View {
 
                 Spacer()
 
-                // Status badge + chevron
                 HStack(spacing: CinemaSpacing.spacing2) {
                     liveBadge
 
@@ -609,10 +561,7 @@ struct SettingsScreen: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(Color(hex: 0x34C759, alpha: 0.12))
-        )
+        .background(Capsule().fill(Color(hex: 0x34C759, alpha: 0.12)))
     }
 
     // MARK: - Personalization Section (iOS)
@@ -622,7 +571,6 @@ struct SettingsScreen: View {
             sectionHeader("Personalization")
 
             VStack(spacing: 0) {
-                // Dark Mode toggle row
                 settingsRow {
                     HStack {
                         rowIcon(systemName: "moon.fill", color: themeManager.accent)
@@ -644,7 +592,6 @@ struct SettingsScreen: View {
 
                 divider
 
-                // Accent Color row
                 settingsRow {
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                         HStack {
@@ -699,9 +646,6 @@ struct SettingsScreen: View {
         .buttonStyle(.plain)
         .scaleEffect(isSelected ? 1.1 : 1.0)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
-        #if os(tvOS)
-        .focusable()
-        #endif
     }
 
     // MARK: - Account Section
@@ -711,17 +655,14 @@ struct SettingsScreen: View {
             sectionHeader("Account")
 
             VStack(spacing: 0) {
-                // Profile Settings
                 navigationRow(icon: "person.crop.circle", label: "Profile Settings") {}
 
                 divider
 
-                // Privacy & Security
                 navigationRow(icon: "lock.shield", label: "Privacy & Security") {}
 
                 divider
 
-                // Log Out
                 settingsRow {
                     Button {
                         showLogOutAlert = true
@@ -743,7 +684,7 @@ struct SettingsScreen: View {
         }
     }
 
-    // MARK: - Reusable Row Helpers
+    // MARK: - Reusable iOS Helpers
 
     @ViewBuilder
     private func navigationRow(icon: String, label: String, action: @escaping () -> Void) -> some View {
@@ -829,3 +770,22 @@ struct SettingsScreen: View {
         #endif
     }
 }
+
+// MARK: - tvOS Settings Focus Style
+
+#if os(tvOS)
+private extension View {
+    func tvSettingsFocusable(isFocused: Bool, accent: Color) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: CinemaRadius.large)
+                    .fill(CinemaColor.surfaceContainerHigh)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: CinemaRadius.large)
+                    .strokeBorder(accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
+            )
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+    }
+}
+#endif

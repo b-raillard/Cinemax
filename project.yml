@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.cinemax
   deploymentTarget:
     iOS: "18.0"
-    tvOS: "18.0"
+    tvOS: "26.0"
   xcodeVersion: "26.2"
   createIntermediateGroups: true
   groupSortPosition: top

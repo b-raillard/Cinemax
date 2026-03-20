@@ -120,6 +120,20 @@ public final class JellyfinAPIClient: Sendable {
         )
     }
 
+    // MARK: - Users
+
+    public func getPublicUsers() async throws -> [UserDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getPublicUsers)
+        return response.value
+    }
+
+    public func getUsers() async throws -> [UserDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getUsers())
+        return response.value
+    }
+
     // MARK: - Media Queries
 
     public func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {

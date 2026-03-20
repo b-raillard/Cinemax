@@ -1,7 +1,7 @@
 # Cinemax - Jellyfin Client for Apple Platforms
 
 ## Project Overview
-Native Jellyfin media streaming client targeting iOS 18+ and tvOS 18+. Uses a "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
+Native Jellyfin media streaming client targeting iOS 18+ and tvOS 26+. Uses a "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
 
 ## Architecture
 - **SwiftUI** multi-platform (single Xcode project, iOS + tvOS targets)
@@ -29,7 +29,8 @@ Native Jellyfin media streaming client targeting iOS 18+ and tvOS 18+. Uses a "C
 - **Dynamic accent colors** via `ThemeManager` (`@Observable`, injected from `AppNavigation`). Use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` instead of `CinemaColor.tertiary*` for all accent-colored elements
 - **Dark/Light mode** via `ThemeManager.darkModeEnabled` → applied as `.preferredColorScheme()` at root. Design system colors are dark-first; light mode only affects system controls for now
 - Glass panels: `.glassPanel()` modifier
-- Focus states: `.cinemaFocus()` modifier (1.1x scale + glow on tvOS)
+- **tvOS Focus states**: Custom focus via `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Focus indicator is a thin accent-colored `strokeBorder` (1.5px) — no scale, no white background. Shared via `.tvSettingsFocusable()` modifier in SettingsScreen.
+- **iOS Focus states**: `.cinemaFocus()` modifier (1.1x scale + glow)
 - Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass` checks
 
 ## Video Playback Architecture
@@ -79,6 +80,7 @@ Follows the same flow as Swiftfin (reference: https://github.com/jellyfin/swiftf
 - **Phase 3**: Home screen, Movie/TV libraries with real data
 - **Phase 4**: Media detail screen, video player, search, navigation wiring
 - **Phase 5**: Sort & filter (movies/TV), voice search (iOS), settings redesign (tvOS tabbed layout), dynamic accent color system, dark/light mode toggle, tvOS video focus fix (UIKit presentation)
+- **Phase 6**: tvOS Settings rework — Cinema Glass design system, single-page two-column layout, profile management with server users + profile images, custom toggle indicators, server connection info, interface options (motion effects, subtitles, 4K rendering), premium focus style (thin accent border, no scale/zoom)
 
 ## Build
 ```bash
