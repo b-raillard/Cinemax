@@ -2,6 +2,7 @@ import SwiftUI
 import NukeUI
 
 struct WideCard: View {
+    @Environment(ThemeManager.self) private var themeManager
     let title: String
     let imageURL: URL?
     var progress: Double? = nil
@@ -37,7 +38,7 @@ struct WideCard: View {
                                     .fill(CinemaColor.surfaceContainerHighest)
                                     .frame(height: 4)
                                 Capsule()
-                                    .fill(CinemaColor.tertiary)
+                                    .fill(themeManager.accent)
                                     .frame(width: geo.size.width * progress, height: 4)
                             }
                             .padding(.horizontal, 8)

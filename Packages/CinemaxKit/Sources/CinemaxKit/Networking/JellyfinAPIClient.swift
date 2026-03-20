@@ -1,12 +1,15 @@
 import Foundation
+import OSLog
 #if DEBUG
 import Get
 #endif
 import JellyfinAPI
 
+private let logger = Logger(subsystem: "com.cinemax", category: "API")
+
 #if DEBUG
 func debugLog(_ message: String) {
-    print("[Cinemax] \(message)")
+    logger.debug("\(message)")
 }
 #endif
 
@@ -150,6 +153,10 @@ public final class JellyfinAPIClient: Sendable {
         parentId: String? = nil,
         includeItemTypes: [BaseItemKind]? = nil,
         sortBy: [ItemSortBy]? = nil,
+        sortOrder: [JellyfinAPI.SortOrder]? = nil,
+        genres: [String]? = nil,
+        years: [Int]? = nil,
+        isFavorite: Bool? = nil,
         limit: Int? = nil,
         startIndex: Int? = nil
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
@@ -159,13 +166,31 @@ public final class JellyfinAPIClient: Sendable {
             startIndex: startIndex,
             limit: limit,
             isRecursive: true,
+            sortOrder: sortOrder,
             parentID: parentId,
             includeItemTypes: includeItemTypes,
-            sortBy: sortBy
+            sortBy: sortBy,
+            genres: genres,
+            years: years
         )
         let response = try await client.send(Paths.getItems(parameters: params))
         let result = response.value
         return (result.items ?? [], result.totalRecordCount ?? 0)
+    }
+
+    /// Fetches available genres for the given item types from the server.
+    public func getGenres(
+        userId: String,
+        includeItemTypes: [BaseItemKind]? = nil
+    ) async throws -> [String] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.GetQueryFiltersParameters(
+            userID: userId,
+            includeItemTypes: includeItemTypes,
+            isRecursive: true
+        )
+        let response = try await client.send(Paths.getQueryFilters(parameters: params))
+        return response.value.genres?.compactMap(\.name) ?? []
     }
 
     public func getUserViews(userId: String) async throws -> [BaseItemDto] {

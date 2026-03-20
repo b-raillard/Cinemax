@@ -2,11 +2,17 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(ThemeManager.self) private var themeManager
     @State private var selectedTab: AppTab = .home
+
+    #if os(tvOS)
+    @State private var playerCoordinator = VideoPlayerCoordinator()
+    #endif
 
     var body: some View {
         #if os(tvOS)
-        sidebarLayout
+        tvTabLayout
+            .environment(playerCoordinator)
         #else
         if sizeClass == .regular {
             sidebarLayout
@@ -16,14 +22,27 @@ struct MainTabView: View {
         #endif
     }
 
-    // MARK: - Sidebar (tvOS + iPad Landscape)
+    // MARK: - tvOS Tab Bar (native top tab bar)
+
+    #if os(tvOS)
+    private var tvTabLayout: some View {
+        TabView(selection: $selectedTab) {
+            ForEach(AppTab.allCases) { tab in
+                selectedView(for: tab)
+                    .tabItem {
+                        Label(tab.title, systemImage: tab.icon)
+                    }
+                    .tag(tab)
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Sidebar (iPad Landscape)
 
     private var sidebarLayout: some View {
         NavigationSplitView {
             sidebarContent
-                #if os(tvOS)
-                .frame(width: 256)
-                #endif
         } detail: {
             selectedTabView
         }
@@ -50,7 +69,7 @@ struct MainTabView: View {
                         .padding(.horizontal, 20)
                         .background(
                             selectedTab == tab
-                                ? Capsule().fill(CinemaColor.tertiaryContainer)
+                                ? Capsule().fill(themeManager.accentContainer)
                                 : nil
                         )
                 }
@@ -76,7 +95,7 @@ struct MainTabView: View {
                     .tag(tab)
             }
         }
-        .tint(CinemaColor.tertiaryContainer)
+        .tint(themeManager.accentContainer)
     }
 
     // MARK: - Tab Content

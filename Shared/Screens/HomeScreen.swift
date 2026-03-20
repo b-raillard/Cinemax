@@ -34,6 +34,7 @@ final class HomeViewModel {
 
 struct HomeScreen: View {
     @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
     @State private var viewModel = HomeViewModel()
 
     var body: some View {
@@ -146,9 +147,7 @@ struct HomeScreen: View {
                 // Action buttons
                 HStack(spacing: 12) {
                     if let id = item.id {
-                        NavigationLink {
-                            VideoPlayerView(itemId: id, title: item.name ?? "")
-                        } label: {
+                        PlayLink(itemId: id, title: item.name ?? "") {
                             HStack(spacing: CinemaSpacing.spacing2) {
                                 Text("Play")
                                     .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
@@ -160,7 +159,7 @@ struct HomeScreen: View {
                             .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
                             .padding(.horizontal, CinemaSpacing.spacing4)
                             #if os(iOS)
-                            .background(CinemaColor.tertiaryContainer)
+                            .background(themeManager.accentContainer)
                             .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
                             #endif
                         }
@@ -211,19 +210,17 @@ struct HomeScreen: View {
     private var continueWatchingRow: some View {
         ContentRow(title: "Continue Watching", showViewAll: true) {
             ForEach(viewModel.resumeItems, id: \.id) { item in
-                NavigationLink {
-                    if let id = item.id {
-                        VideoPlayerView(itemId: id, title: item.name ?? "")
+                if let id = item.id {
+                    PlayLink(itemId: id, title: item.name ?? "") {
+                        continueWatchingCard(item)
+                            .frame(width: wideCardWidth)
                     }
-                } label: {
-                    continueWatchingCard(item)
-                        .frame(width: wideCardWidth)
+                    #if os(tvOS)
+                    .buttonStyle(CinemaTVCardButtonStyle())
+                    #else
+                    .buttonStyle(.plain)
+                    #endif
                 }
-                #if os(tvOS)
-                .buttonStyle(CinemaTVCardButtonStyle())
-                #else
-                .buttonStyle(.plain)
-                #endif
             }
         }
     }

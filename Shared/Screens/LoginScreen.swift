@@ -44,6 +44,7 @@ final class LoginViewModel {
 
 struct LoginScreen: View {
     @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
     @State private var viewModel = LoginViewModel()
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -82,7 +83,7 @@ struct LoginScreen: View {
                     Rectangle()
                         .fill(
                             LinearGradient(
-                                colors: [.clear, CinemaColor.tertiary, .clear],
+                                colors: [.clear, themeManager.accent, .clear],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
@@ -244,7 +245,7 @@ struct LoginScreen: View {
                                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                                 Button("Join Community") {}
                                     .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(CinemaColor.tertiary)
+                                    .foregroundStyle(themeManager.accent)
                                     .buttonStyle(.plain)
                             }
                         }
@@ -263,7 +264,7 @@ struct LoginScreen: View {
                 Rectangle()
                     .fill(
                         LinearGradient(
-                            colors: [.clear, CinemaColor.tertiary.opacity(0.3), .clear],
+                            colors: [.clear, themeManager.accent.opacity(0.3), .clear],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -284,13 +285,13 @@ struct LoginScreen: View {
     private var backgroundGlow: some View {
         ZStack {
             Circle()
-                .fill(CinemaColor.tertiaryContainer.opacity(0.15))
+                .fill(themeManager.accentContainer.opacity(0.15))
                 .frame(width: 500, height: 500)
                 .blur(radius: 120)
                 .offset(x: -200, y: -300)
 
             Circle()
-                .fill(CinemaColor.tertiary.opacity(0.1))
+                .fill(themeManager.accent.opacity(0.1))
                 .frame(width: 400, height: 400)
                 .blur(radius: 120)
                 .offset(x: 200, y: 300)
@@ -326,7 +327,7 @@ struct LoginScreen: View {
         HStack(spacing: 12) {
             Text("Server: \(info.name)")
             Circle()
-                .fill(CinemaColor.tertiaryDim)
+                .fill(themeManager.accentDim)
                 .frame(width: 5, height: 5)
             Text("Version \(info.version)")
         }
@@ -341,11 +342,11 @@ struct LoginScreen: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(CinemaColor.tertiaryContainer)
+                        .fill(themeManager.accentContainer)
                         .frame(width: 32, height: 32)
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(CinemaColor.onTertiary)
+                        .foregroundStyle(themeManager.onAccent)
                 }
                 Text(message)
                     .font(.system(size: 15, weight: .semibold))

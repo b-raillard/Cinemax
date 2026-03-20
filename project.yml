@@ -4,7 +4,7 @@ options:
   deploymentTarget:
     iOS: "18.0"
     tvOS: "18.0"
-  xcodeVersion: "16.0"
+  xcodeVersion: "26.2"
   createIntermediateGroups: true
   groupSortPosition: top
 
@@ -38,6 +38,8 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen: {}
+        NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
+        NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
         UISupportedInterfaceOrientations~iPad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

@@ -46,6 +46,7 @@ final class ServerSetupViewModel {
 
 struct ServerSetupScreen: View {
     @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
     @State private var viewModel = ServerSetupViewModel()
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -164,7 +165,7 @@ struct ServerSetupScreen: View {
                             .frame(width: 80, height: 80)
                         Image(systemName: "server.rack")
                             .font(.system(size: 36))
-                            .foregroundStyle(CinemaColor.tertiary)
+                            .foregroundStyle(themeManager.accent)
                     }
                     .shadow(color: .black.opacity(0.3), radius: 20)
 
@@ -240,7 +241,7 @@ struct ServerSetupScreen: View {
     private var backgroundGlow: some View {
         ZStack {
             Circle()
-                .fill(CinemaColor.tertiary.opacity(0.15))
+                .fill(themeManager.accent.opacity(0.15))
                 .frame(width: 400, height: 400)
                 .blur(radius: 120)
                 .offset(x: 150, y: -200)
@@ -286,7 +287,7 @@ struct ServerSetupScreen: View {
     private var statusPill: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(viewModel.isConnecting ? CinemaColor.tertiary : CinemaColor.error)
+                .fill(viewModel.isConnecting ? themeManager.accent : CinemaColor.error)
                 .frame(width: 6, height: 6)
             Text(viewModel.isConnecting ? "Connecting..." : "Offline")
                 .font(.system(size: 13, weight: .medium))

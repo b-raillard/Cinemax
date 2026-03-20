@@ -16,8 +16,8 @@ Native Jellyfin media streaming client targeting iOS 18+ and tvOS 18+. Uses a "C
 - `AVKit` / `AVPlayer` — video playback (VLCKit planned for broader codec support)
 
 ## Project Structure
-- `Shared/DesignSystem/` — CinemaGlassTheme, GlassModifiers, FocusScaleModifier, Components/
-- `Shared/Navigation/` — AppNavigation (auth routing), MainTabView (sidebar/tab)
+- `Shared/DesignSystem/` — CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, Components/
+- `Shared/Navigation/` — AppNavigation (auth routing), MainTabView (tab bar/sidebar)
 - `Shared/Screens/` — HomeScreen, MediaDetailScreen, VideoPlayerView, SearchScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen
 - `iOS/` — iOS app entry point
 - `tvOS/` — tvOS app entry point
@@ -25,7 +25,9 @@ Native Jellyfin media streaming client targeting iOS 18+ and tvOS 18+. Uses a "C
 
 ## Design System Conventions
 - **No 1px borders** — use color shifts for boundaries
-- Color tokens in `CinemaGlassTheme.swift` (CinemaColor, CinemaFont, CinemaSpacing, CinemaRadius)
+- Static color tokens in `CinemaGlassTheme.swift` (CinemaColor, CinemaFont, CinemaSpacing, CinemaRadius)
+- **Dynamic accent colors** via `ThemeManager` (`@Observable`, injected from `AppNavigation`). Use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` instead of `CinemaColor.tertiary*` for all accent-colored elements
+- **Dark/Light mode** via `ThemeManager.darkModeEnabled` → applied as `.preferredColorScheme()` at root. Design system colors are dark-first; light mode only affects system controls for now
 - Glass panels: `.glassPanel()` modifier
 - Focus states: `.cinemaFocus()` modifier (1.1x scale + glow on tvOS)
 - Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass` checks
@@ -55,19 +57,28 @@ Follows the same flow as Swiftfin (reference: https://github.com/jellyfin/swiftf
 - KVO on `playerItem.status` for `.readyToPlay` / `.failed`
 - Cleanup on disappear (pause + nil player + invalidate observation)
 
+### tvOS Video Playback (UIKit-based)
+- **Critical**: On tvOS, video MUST be presented via UIKit (`AVPlayerViewController` + `UIViewController.present()`), NOT via SwiftUI `fullScreenCover` or `NavigationLink`. SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus state on dismiss.
+- `TVVideoPresenter` handles UIKit modal presentation directly on the root VC
+- `VideoPlayerCoordinator` (`@Observable`) fetches the stream URL then calls `TVVideoPresenter.present(url:)`
+- `PlayLink<Label>` — cross-platform component: `Button` → coordinator on tvOS, `NavigationLink` on iOS
+- All play buttons across screens use `PlayLink` instead of direct `NavigationLink` to `VideoPlayerView`
+
 ## Navigation Flow
 - `AppNavigation` → checks Keychain for stored session → restores via `apiClient.reconnect()` + `fetchServerInfo()`
+- `AppNavigation` injects `ThemeManager` and applies `.preferredColorScheme()` at root
 - No server → `ServerSetupScreen` → `LoginScreen` → `MainTabView`
-- `MainTabView`: sidebar on tvOS/iPad, tab bar on iPhone
-- Home hero Play → `VideoPlayerView`; More Info → `MediaDetailScreen`
-- Continue Watching → `VideoPlayerView`; Recently Added → `MediaDetailScreen`
-- Libraries → `MediaDetailScreen` → Play → `VideoPlayerView`
+- `MainTabView`: **TabView (top tab bar) on tvOS**, sidebar on iPad, bottom tab bar on iPhone
+- Home hero Play → `PlayLink` → video; More Info → `MediaDetailScreen`
+- Continue Watching → `PlayLink` → video; Recently Added → `MediaDetailScreen`
+- Libraries → `MediaDetailScreen` → Play → `PlayLink` → video
 
 ## Completed Phases
 - **Phase 1**: Project setup, design system, navigation shell
 - **Phase 2**: Jellyfin API, authentication, Keychain persistence
 - **Phase 3**: Home screen, Movie/TV libraries with real data
 - **Phase 4**: Media detail screen, video player, search, navigation wiring
+- **Phase 5**: Sort & filter (movies/TV), voice search (iOS), settings redesign (tvOS tabbed layout), dynamic accent color system, dark/light mode toggle, tvOS video focus fix (UIKit presentation)
 
 ## Build
 ```bash

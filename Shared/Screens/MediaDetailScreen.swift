@@ -60,6 +60,7 @@ final class MediaDetailViewModel {
 
 struct MediaDetailScreen: View {
     @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
     @State var viewModel: MediaDetailViewModel
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
@@ -180,7 +181,7 @@ struct MediaDetailScreen: View {
                 if let genres = item.genres, !genres.isEmpty {
                     Text(genres.prefix(3).joined(separator: " · "))
                         .font(.system(size: genreFontSize, weight: .medium))
-                        .foregroundStyle(CinemaColor.tertiary)
+                        .foregroundStyle(themeManager.accent)
                 }
 
                 // Community rating
@@ -223,32 +224,30 @@ struct MediaDetailScreen: View {
 
     private func actionButtons(_ item: BaseItemDto) -> some View {
         HStack(spacing: 12) {
-            NavigationLink {
-                if let id = item.id {
-                    VideoPlayerView(itemId: id, title: item.name ?? "")
+            if let id = item.id {
+                PlayLink(itemId: id, title: item.name ?? "") {
+                    HStack(spacing: CinemaSpacing.spacing2) {
+                        Text("Play")
+                            .font(.system(size: buttonFontSize, weight: .bold))
+                        Image(systemName: "play.fill")
+                            .font(.system(size: buttonFontSize - 2, weight: .bold))
+                    }
+                    .foregroundStyle(CinemaColor.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, buttonVerticalPadding)
+                    .padding(.horizontal, CinemaSpacing.spacing4)
+                    #if os(iOS)
+                    .background(CinemaGradient.primaryButton)
+                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                    #endif
                 }
-            } label: {
-                HStack(spacing: CinemaSpacing.spacing2) {
-                    Text("Play")
-                        .font(.system(size: buttonFontSize, weight: .bold))
-                    Image(systemName: "play.fill")
-                        .font(.system(size: buttonFontSize - 2, weight: .bold))
-                }
-                .foregroundStyle(CinemaColor.onPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, buttonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
-                #if os(iOS)
-                .background(CinemaGradient.primaryButton)
-                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                #if os(tvOS)
+                .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .primary))
+                #else
+                .buttonStyle(.plain)
                 #endif
+                .frame(width: playButtonWidth)
             }
-            #if os(tvOS)
-            .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .primary))
-            #else
-            .buttonStyle(.plain)
-            #endif
-            .frame(width: playButtonWidth)
 
             CinemaButton(title: "More Info", style: .ghost, icon: "info.circle") {}
                 .frame(width: playButtonWidth)
@@ -296,7 +295,7 @@ struct MediaDetailScreen: View {
                                 .padding(.vertical, 8)
                                 .background(
                                     isSelected
-                                        ? Capsule().fill(CinemaColor.tertiaryContainer)
+                                        ? Capsule().fill(themeManager.accentContainer)
                                         : Capsule().fill(CinemaColor.surfaceContainerHigh)
                                 )
                         }
@@ -325,14 +324,10 @@ struct MediaDetailScreen: View {
         let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
         let builder = ImageURLBuilder(serverURL: serverURL)
 
-        NavigationLink {
-            if let id = episode.id {
-                VideoPlayerView(itemId: id, title: episode.name ?? "")
-            }
-        } label: {
-            HStack(spacing: 12) {
-                // Thumbnail
-                if let id = episode.id {
+        if let id = episode.id {
+            PlayLink(itemId: id, title: episode.name ?? "") {
+                HStack(spacing: 12) {
+                    // Thumbnail
                     LazyImage(url: builder.imageURL(itemId: id, imageType: .primary, maxWidth: 300)) { state in
                         if let image = state.image {
                             image.resizable().aspectRatio(contentMode: .fill)
@@ -346,38 +341,38 @@ struct MediaDetailScreen: View {
                     }
                     .frame(width: episodeThumbnailWidth, height: episodeThumbnailWidth * 9 / 16)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
-                }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    if let num = episode.indexNumber {
-                        Text("Episode \(num)")
-                            .font(CinemaFont.label(.medium))
-                            .foregroundStyle(CinemaColor.tertiary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let num = episode.indexNumber {
+                            Text("Episode \(num)")
+                                .font(CinemaFont.label(.medium))
+                                .foregroundStyle(themeManager.accent)
+                        }
+                        Text(episode.name ?? "")
+                            .font(.system(size: episodeTitleFontSize, weight: .semibold))
+                            .foregroundStyle(CinemaColor.onSurface)
+                            .lineLimit(2)
+
+                        if let runtime = episode.runTimeTicks {
+                            let minutes = runtime / 600_000_000
+                            Text("\(minutes) min")
+                                .font(CinemaFont.label(.medium))
+                                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        }
                     }
-                    Text(episode.name ?? "")
-                        .font(.system(size: episodeTitleFontSize, weight: .semibold))
-                        .foregroundStyle(CinemaColor.onSurface)
-                        .lineLimit(2)
 
-                    if let runtime = episode.runTimeTicks {
-                        let minutes = runtime / 600_000_000
-                        Text("\(minutes) min")
-                            .font(CinemaFont.label(.medium))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    }
+                    Spacer()
                 }
-
-                Spacer()
+                .padding(12)
+                .background(CinemaColor.surfaceContainerHigh)
+                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
             }
-            .padding(12)
-            .background(CinemaColor.surfaceContainerHigh)
-            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
         }
-        #if os(tvOS)
-        .buttonStyle(CinemaTVCardButtonStyle())
-        #else
-        .buttonStyle(.plain)
-        #endif
     }
 
     // MARK: - Similar Items

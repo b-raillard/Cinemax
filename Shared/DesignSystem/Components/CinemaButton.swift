@@ -7,6 +7,7 @@ enum CinemaButtonStyle {
 }
 
 struct CinemaButton: View {
+    @Environment(ThemeManager.self) private var themeManager
     let title: String
     var style: CinemaButtonStyle = .primary
     var icon: String? = nil
@@ -60,7 +61,7 @@ struct CinemaButton: View {
                         .stroke(CinemaColor.outline.opacity(0.2), lineWidth: 1)
                 )
         case .accent:
-            CinemaColor.tertiaryContainer
+            themeManager.accentContainer
         }
     }
 
@@ -94,6 +95,9 @@ struct CinemaButton: View {
 #if os(tvOS)
 struct CinemaTVButtonStyle: ButtonStyle {
     let cinemaStyle: CinemaButtonStyle
+    // ThemeManager is read from environment so every call site auto-picks up
+    // the current accent color without needing to pass it explicitly.
+    @Environment(ThemeManager.self) private var themeManager
     @Environment(\.isFocused) private var isFocused
 
     func makeBody(configuration: Configuration) -> some View {
@@ -123,7 +127,7 @@ struct CinemaTVButtonStyle: ButtonStyle {
                         .stroke(CinemaColor.outline.opacity(0.3), lineWidth: 1)
                 )
         case .accent:
-            CinemaColor.tertiaryContainer
+            themeManager.accentContainer
         }
     }
 
@@ -131,7 +135,7 @@ struct CinemaTVButtonStyle: ButtonStyle {
         switch cinemaStyle {
         case .primary: CinemaColor.primary
         case .ghost: CinemaColor.surfaceTint
-        case .accent: CinemaColor.tertiaryContainer
+        case .accent: themeManager.accentContainer
         }
     }
 }

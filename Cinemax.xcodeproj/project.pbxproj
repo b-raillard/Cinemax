@@ -37,6 +37,7 @@
 		73713753B981A3971272B7E3 /* FocusScaleModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */; };
 		7B44A3991F0C37968A142F3C /* HeroSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99804197978BB943117E82DC /* HeroSection.swift */; };
 		7F7723CF469BF94B2314A645 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAA0B8314F73A80686E650D /* SettingsScreen.swift */; };
+		7FB1C0EDE50B3335093F475C /* ThemeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61944A0EB692FE3706F500B /* ThemeManager.swift */; };
 		850FA2A4714148E59074CC92 /* PosterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE5FB096BB1BE0581798DFD /* PosterCard.swift */; };
 		8BEED9AD5A4971DD030806F0 /* CastCircle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6663B7C168DECE8F2BAC327 /* CastCircle.swift */; };
 		8CE621C8D3CAD1DE98B6CA11 /* AppNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78377E8E832D65F7226A2A06 /* AppNavigation.swift */; };
@@ -56,6 +57,7 @@
 		CF9AC2FE2683ACF8F970C686 /* VideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D97F65D618EBC05344F98AD7 /* VideoPlayerView.swift */; };
 		DDE0943D46488F809421872D /* CastCircle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6663B7C168DECE8F2BAC327 /* CastCircle.swift */; };
 		DFDBEF3D856DD4B602C58F59 /* CinemaGlassTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */; };
+		F253F28BCDA12B2EC62BE33E /* ThemeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61944A0EB692FE3706F500B /* ThemeManager.swift */; };
 		FF21EDCBFAE6F61736975202 /* MovieLibraryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A30840A8AEBE5AA59B722F /* MovieLibraryScreen.swift */; };
 /* End PBXBuildFile section */
 
@@ -100,6 +102,7 @@
 		D97F65D618EBC05344F98AD7 /* VideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerView.swift; sourceTree = "<group>"; };
 		DC1B61BF8E4B4D7BFFEEDF40 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
+		E61944A0EB692FE3706F500B /* ThemeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeManager.swift; sourceTree = "<group>"; };
 		E9A353B49C5117D5F686F07B /* GlassModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassModifiers.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -246,6 +249,7 @@
 				5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */,
 				D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */,
 				E9A353B49C5117D5F686F07B /* GlassModifiers.swift */,
+				E61944A0EB692FE3706F500B /* ThemeManager.swift */,
 			);
 			path = DesignSystem;
 			sourceTree = "<group>";
@@ -334,7 +338,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 				};
 			};
@@ -414,6 +418,7 @@
 				97AF9B841BA015AD94A9B390 /* ServerSetupScreen.swift in Sources */,
 				473F59EC7FA3CB025D4F5D35 /* SettingsScreen.swift in Sources */,
 				A3B5BCE46E4207582861DBBE /* TVSeriesScreen.swift in Sources */,
+				F253F28BCDA12B2EC62BE33E /* ThemeManager.swift in Sources */,
 				CF9AC2FE2683ACF8F970C686 /* VideoPlayerView.swift in Sources */,
 				91132D1D741BF7CEFF44DBE3 /* WideCard.swift in Sources */,
 			);
@@ -443,6 +448,7 @@
 				91ED326A57E034CF33FCA565 /* ServerSetupScreen.swift in Sources */,
 				7F7723CF469BF94B2314A645 /* SettingsScreen.swift in Sources */,
 				2D505F5E99229EC948F2A7E0 /* TVSeriesScreen.swift in Sources */,
+				7FB1C0EDE50B3335093F475C /* ThemeManager.swift in Sources */,
 				0E09FF53825D339001BB6137 /* VideoPlayerView.swift in Sources */,
 				6D40EAF27B0800AE33161733 /* WideCard.swift in Sources */,
 			);

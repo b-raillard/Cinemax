@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentRow<Content: View>: View {
+    @Environment(ThemeManager.self) private var themeManager
     let title: String
     var showViewAll: Bool = false
     var onViewAll: (() -> Void)? = nil
@@ -26,7 +27,7 @@ struct ContentRow<Content: View>: View {
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 12, weight: .semibold))
                         }
-                        .foregroundStyle(CinemaColor.tertiary)
+                        .foregroundStyle(themeManager.accent)
                     }
                     .buttonStyle(.plain)
                 }
