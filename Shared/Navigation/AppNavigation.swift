@@ -51,6 +51,7 @@ final class AppState {
 struct AppNavigation: View {
     @State private var appState = AppState()
     @State private var themeManager = ThemeManager()
+    @State private var loc = LocalizationManager()
     @State private var hasCheckedSession = false
 
     var body: some View {
@@ -67,6 +68,7 @@ struct AppNavigation: View {
         }
         .environment(appState)
         .environment(themeManager)
+        .environment(loc)
         .preferredColorScheme(themeManager.colorScheme)
         .task {
             await appState.restoreSession()

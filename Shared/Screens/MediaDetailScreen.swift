@@ -61,6 +61,7 @@ final class MediaDetailViewModel {
 struct MediaDetailScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State var viewModel: MediaDetailViewModel
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
@@ -142,8 +143,8 @@ struct MediaDetailScreen: View {
         let builder = ImageURLBuilder(serverURL: serverURL)
 
         ZStack(alignment: .bottomLeading) {
-            if let id = item.id {
-                LazyImage(url: builder.imageURL(itemId: id, imageType: .backdrop, maxWidth: 1920)) { state in
+            if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
+                LazyImage(url: builder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920)) { state in
                     if let image = state.image {
                         image.resizable().aspectRatio(contentMode: .fill)
                     } else {
@@ -211,9 +212,9 @@ struct MediaDetailScreen: View {
             item.productionYear.map(String.init),
             item.runTimeTicks.map { ticks in
                 let minutes = ticks / 600_000_000
-                return minutes > 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+                return minutes > 60 ? loc.localized("detail.runtime.hours", minutes / 60, minutes % 60) : loc.localized("detail.runtime.minutes", minutes)
             },
-            viewModel.itemType == .series ? item.childCount.map { "\($0) Seasons" } : nil
+            viewModel.itemType == .series ? item.childCount.map { loc.localized("detail.seasons", $0) } : nil
         ].compactMap { $0 }
 
         return Text(parts.joined(separator: " · "))
@@ -227,7 +228,7 @@ struct MediaDetailScreen: View {
             if let id = item.id {
                 PlayLink(itemId: id, title: item.name ?? "") {
                     HStack(spacing: CinemaSpacing.spacing2) {
-                        Text("Play")
+                        Text(loc.localized("detail.play"))
                             .font(.system(size: buttonFontSize, weight: .bold))
                         Image(systemName: "play.fill")
                             .font(.system(size: buttonFontSize - 2, weight: .bold))
@@ -249,8 +250,8 @@ struct MediaDetailScreen: View {
                 .frame(width: playButtonWidth)
             }
 
-            CinemaButton(title: "More Info", style: .ghost, icon: "info.circle") {}
-                .frame(width: playButtonWidth)
+            CinemaButton(title: loc.localized("detail.moreInfo"), style: .ghost, icon: "info.circle") {}
+                .frame(minWidth: playButtonWidth)
         }
         .padding(.horizontal, contentPadding)
     }
@@ -261,7 +262,7 @@ struct MediaDetailScreen: View {
         let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
         let builder = ImageURLBuilder(serverURL: serverURL)
 
-        return ContentRow(title: "Cast & Crew") {
+        return ContentRow(title: loc.localized("detail.castCrew")) {
             ForEach(people.prefix(20), id: \.id) { person in
                 CastCircle(
                     name: person.name ?? "",
@@ -288,7 +289,7 @@ struct MediaDetailScreen: View {
                                 Task { await viewModel.selectSeason(id, using: appState) }
                             }
                         } label: {
-                            Text(season.name ?? "Season")
+                            Text(season.name ?? loc.localized("detail.season"))
                                 .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
                                 .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
                                 .padding(.horizontal, 16)
@@ -344,7 +345,7 @@ struct MediaDetailScreen: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         if let num = episode.indexNumber {
-                            Text("Episode \(num)")
+                            Text(loc.localized("detail.episode", num))
                                 .font(CinemaFont.label(.medium))
                                 .foregroundStyle(themeManager.accent)
                         }
@@ -355,7 +356,7 @@ struct MediaDetailScreen: View {
 
                         if let runtime = episode.runTimeTicks {
                             let minutes = runtime / 600_000_000
-                            Text("\(minutes) min")
+                            Text(loc.localized("detail.runtime.min", minutes))
                                 .font(CinemaFont.label(.medium))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }
@@ -381,7 +382,7 @@ struct MediaDetailScreen: View {
         let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
         let builder = ImageURLBuilder(serverURL: serverURL)
 
-        return ContentRow(title: "More Like This") {
+        return ContentRow(title: loc.localized("detail.moreLikeThis")) {
             ForEach(viewModel.similarItems, id: \.id) { item in
                 NavigationLink {
                     if let id = item.id {
@@ -418,7 +419,7 @@ struct MediaDetailScreen: View {
                 .font(CinemaFont.body)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .multilineTextAlignment(.center)
-            CinemaButton(title: "Retry", style: .ghost) {
+            CinemaButton(title: loc.localized("action.retry"), style: .ghost) {
                 Task { await viewModel.load(using: appState) }
             }
             .frame(width: 160)

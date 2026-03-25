@@ -18,6 +18,7 @@
 		28A82A58BDED7ACD5B9221F8 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */; };
 		2BC23AB09D961A04A91415F7 /* AppNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78377E8E832D65F7226A2A06 /* AppNavigation.swift */; };
 		2D505F5E99229EC948F2A7E0 /* TVSeriesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0A181A9E709E7700EC2E95 /* TVSeriesScreen.swift */; };
+		2FA1FE57761F94C1764861F9 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */; };
 		2FE40D74DA7EDE3249D0D17B /* CinemaGlassTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */; };
 		33E221E051D6B7D1422D4552 /* CinemaButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCD86E8274D7D248752E886F /* CinemaButton.swift */; };
 		3674658960C75FB68F6576B9 /* CinemaButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCD86E8274D7D248752E886F /* CinemaButton.swift */; };
@@ -30,9 +31,11 @@
 		5F7645BF5DDCF276733DD2AB /* GlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9A353B49C5117D5F686F07B /* GlassModifiers.swift */; };
 		5FD3234EE63A765E0C82E5C7 /* MediaDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */; };
 		629034F00C9B9A91F1DFDFAF /* ContentRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAFD25D98FA0E18A0F441F5 /* ContentRow.swift */; };
+		64406006E2A4AB13FDE38E19 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = AF177D070920EC62E7827637 /* Localizable.strings */; };
 		649F44415009AA3AFB1D1FE3 /* CinemaxKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223258AFA0F2668369423520 /* CinemaxKitTests.swift */; };
 		6A6800B822850477D1905491 /* GlassTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CE3A78C397CC15A81F1635 /* GlassTextField.swift */; };
 		6D40EAF27B0800AE33161733 /* WideCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0B2775D4776FF99A90FB12 /* WideCard.swift */; };
+		70247C5A32673CC464D68A32 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */; };
 		72281CF32299F9545AA48ED7 /* SearchScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C144D0A57021E0A0A783977B /* SearchScreen.swift */; };
 		73713753B981A3971272B7E3 /* FocusScaleModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */; };
 		7B44A3991F0C37968A142F3C /* HeroSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99804197978BB943117E82DC /* HeroSection.swift */; };
@@ -53,6 +56,7 @@
 		A3B5BCE46E4207582861DBBE /* TVSeriesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0A181A9E709E7700EC2E95 /* TVSeriesScreen.swift */; };
 		B17B6055000707C83658C8DF /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */; };
 		BC8DB0AD9987440328A7AD9B /* HeroSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99804197978BB943117E82DC /* HeroSection.swift */; };
+		C394E04E4C329F99F29E70D6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = AF177D070920EC62E7827637 /* Localizable.strings */; };
 		C44498C1E8C83FEA0AB195FE /* CinemaxKit in Frameworks */ = {isa = PBXBuildFile; productRef = 322F1C238D53E437686630C4 /* CinemaxKit */; };
 		CF9AC2FE2683ACF8F970C686 /* VideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D97F65D618EBC05344F98AD7 /* VideoPlayerView.swift */; };
 		DDE0943D46488F809421872D /* CastCircle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6663B7C168DECE8F2BAC327 /* CastCircle.swift */; };
@@ -79,10 +83,13 @@
 		280786386ED204F8AAAF36B6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2BAFD25D98FA0E18A0F441F5 /* ContentRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRow.swift; sourceTree = "<group>"; };
 		2C408AFB766D464538419F25 /* CinemaxTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CinemaxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationManager.swift; sourceTree = "<group>"; };
 		3A70C2603459BCEE70535BB4 /* CinemaxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxApp.swift; sourceTree = "<group>"; };
+		3D4F7E03E3AA68A284C0FD7E /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
 		59CE3A78C397CC15A81F1635 /* GlassTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTextField.swift; sourceTree = "<group>"; };
 		5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaGlassTheme.swift; sourceTree = "<group>"; };
 		6EAA0B8314F73A80686E650D /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		71EDA47106672004DE07BDCF /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		78377E8E832D65F7226A2A06 /* AppNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigation.swift; sourceTree = "<group>"; };
 		7D88DF3FEF51CF7E5E1C948A /* Cinemax.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Cinemax.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailScreen.swift; sourceTree = "<group>"; };
@@ -228,6 +235,7 @@
 		943FF0F751C21904343B7FB3 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				AF177D070920EC62E7827637 /* Localizable.strings */,
 				280786386ED204F8AAAF36B6 /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -249,6 +257,7 @@
 				5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */,
 				D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */,
 				E9A353B49C5117D5F686F07B /* GlassModifiers.swift */,
+				32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */,
 				E61944A0EB692FE3706F500B /* ThemeManager.swift */,
 			);
 			path = DesignSystem;
@@ -343,11 +352,12 @@
 				};
 			};
 			buildConfigurationList = 4A265CE224197B289D7A7B4E /* Build configuration list for PBXProject "Cinemax" */;
-			developmentRegion = en;
+			developmentRegion = fr;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
+				fr,
 			);
 			mainGroup = 386B44D1F77FA0937C0FE5D1;
 			minimizedProjectReferenceProxies = 1;
@@ -372,6 +382,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9F7E13CC3312F27A84915032 /* Assets.xcassets in Resources */,
+				64406006E2A4AB13FDE38E19 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -380,6 +391,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2853B78C03BA5522E348B212 /* Assets.xcassets in Resources */,
+				C394E04E4C329F99F29E70D6 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,6 +421,7 @@
 				28909321B0A490C0E70342E4 /* GlassTextField.swift in Sources */,
 				7B44A3991F0C37968A142F3C /* HeroSection.swift in Sources */,
 				47242004DB5BA9497108DE62 /* HomeScreen.swift in Sources */,
+				70247C5A32673CC464D68A32 /* LocalizationManager.swift in Sources */,
 				8D24463B5C884F60485FD40C /* LoginScreen.swift in Sources */,
 				276021C21CB270437185ACF2 /* MainTabView.swift in Sources */,
 				5FD3234EE63A765E0C82E5C7 /* MediaDetailScreen.swift in Sources */,
@@ -439,6 +452,7 @@
 				6A6800B822850477D1905491 /* GlassTextField.swift in Sources */,
 				BC8DB0AD9987440328A7AD9B /* HeroSection.swift in Sources */,
 				28A82A58BDED7ACD5B9221F8 /* HomeScreen.swift in Sources */,
+				2FA1FE57761F94C1764861F9 /* LocalizationManager.swift in Sources */,
 				B17B6055000707C83658C8DF /* LoginScreen.swift in Sources */,
 				389E81F4513E0CE8A622D08F /* MainTabView.swift in Sources */,
 				100AA327B088A392E7732C98 /* MediaDetailScreen.swift in Sources */,
@@ -463,6 +477,18 @@
 			targetProxy = F32A71850E5CE7631CDB4313 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		AF177D070920EC62E7827637 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				71EDA47106672004DE07BDCF /* en */,
+				3D4F7E03E3AA68A284C0FD7E /* fr */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		1083A812DCF273FE8D9DC633 /* Debug */ = {

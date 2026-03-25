@@ -182,6 +182,7 @@ final class TVSeriesViewModel {
 struct TVSeriesScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = TVSeriesViewModel()
     @State private var showFilterSheet = false
 
@@ -197,8 +198,8 @@ struct TVSeriesScreen: View {
                 mainContent
             }
         }
-        .navigationTitle("TV Shows")
         #if os(iOS)
+        .navigationTitle(loc.localized("tvShows.title"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -346,7 +347,7 @@ struct TVSeriesScreen: View {
                     if let id = item.id {
                         PlayLink(itemId: id, title: item.name ?? "") {
                             HStack(spacing: CinemaSpacing.spacing2) {
-                                Text("Play")
+                                Text(loc.localized("action.play"))
                                     .font(.system(size: heroButtonFontSize, weight: .bold))
                                 Image(systemName: "play.fill")
                                     .font(.system(size: heroButtonFontSize - 2, weight: .bold))
@@ -371,7 +372,7 @@ struct TVSeriesScreen: View {
                             MediaDetailScreen(itemId: id, itemType: .series)
                         } label: {
                             HStack(spacing: CinemaSpacing.spacing2) {
-                                Text("My List")
+                                Text(loc.localized("tvShows.myList"))
                                     .font(.system(size: heroButtonFontSize, weight: .bold))
                                 Image(systemName: "plus")
                                     .font(.system(size: heroButtonFontSize - 2, weight: .bold))
@@ -405,7 +406,7 @@ struct TVSeriesScreen: View {
     private func heroMetadata(for item: BaseItemDto) -> some View {
         let parts: [String] = [
             item.productionYear.map(String.init),
-            item.childCount.map { "\($0) Season\($0 == 1 ? "" : "s")" },
+            item.childCount.map { loc.localized($0 == 1 ? "tvShows.season" : "tvShows.seasonsPlural", $0) },
             item.genres?.first
         ].compactMap { $0 }
 
@@ -460,7 +461,7 @@ struct TVSeriesScreen: View {
 
     private var browseGenresSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            Text("Browse Genres")
+            Text(loc.localized("tvShows.browseGenres"))
                 .font(CinemaFont.headline(.large))
                 .foregroundStyle(CinemaColor.onSurface)
                 .padding(.horizontal, browseGenresPadding)
@@ -527,7 +528,7 @@ struct TVSeriesScreen: View {
 
                     Spacer()
 
-                    Text("\(viewModel.filteredTotalCount) Series")
+                    Text(loc.localized("tvShows.count", viewModel.filteredTotalCount))
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
@@ -562,7 +563,7 @@ struct TVSeriesScreen: View {
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
-            if let count = item.childCount { parts.append("\(count) Season\(count == 1 ? "" : "s")") }
+            if let count = item.childCount { parts.append(loc.localized(count == 1 ? "tvShows.season" : "tvShows.seasonsPlural", count)) }
             return parts.joined(separator: " · ")
         }()
 
@@ -748,6 +749,7 @@ struct TVSeriesFilterSheet: View {
     let onApply: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
 
     // Local draft state — committed only on Apply
     @State private var draftSort: TVSeriesSortOption
@@ -776,12 +778,12 @@ struct TVSeriesFilterSheet: View {
                     .padding(.top, CinemaSpacing.spacing4)
                 }
             }
-            .navigationTitle("Sort & Filter")
+            .navigationTitle(loc.localized("movies.sortFilter"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Reset") {
+                    Button(loc.localized("action.reset")) {
                         draftSort = .name
                         draftAscending = true
                         draftGenre = nil
@@ -790,7 +792,7 @@ struct TVSeriesFilterSheet: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Apply") {
+                    Button(loc.localized("action.apply")) {
                         viewModel.selectedSortOption = draftSort
                         viewModel.sortAscending = draftAscending
                         viewModel.selectedGenre = draftGenre
@@ -814,7 +816,7 @@ struct TVSeriesFilterSheet: View {
 
     private var sortSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            sectionHeader("Sort By")
+            sectionHeader(loc.localized("sort.by"))
 
             VStack(spacing: 0) {
                 ForEach(TVSeriesSortOption.allCases) { option in
@@ -833,10 +835,10 @@ struct TVSeriesFilterSheet: View {
             // Sort direction toggle (hidden for Random)
             if draftSort != .random {
                 HStack(spacing: 0) {
-                    sortDirectionButton(label: "Ascending", icon: "arrow.up", isSelected: draftAscending) {
+                    sortDirectionButton(label: loc.localized("sort.ascending"), icon: "arrow.up", isSelected: draftAscending) {
                         draftAscending = true
                     }
-                    sortDirectionButton(label: "Descending", icon: "arrow.down", isSelected: !draftAscending) {
+                    sortDirectionButton(label: loc.localized("sort.descending"), icon: "arrow.down", isSelected: !draftAscending) {
                         draftAscending = false
                     }
                 }
@@ -855,7 +857,7 @@ struct TVSeriesFilterSheet: View {
             draftSort = option
         } label: {
             HStack {
-                Text(option.rawValue)
+                Text(localizedSortOption(option))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(isSelected ? themeManager.accent : CinemaColor.onSurface)
                 Spacer()
@@ -890,12 +892,12 @@ struct TVSeriesFilterSheet: View {
 
     private var genreSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            sectionHeader("Genre")
+            sectionHeader(loc.localized("tvShows.genre"))
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: CinemaSpacing.spacing2) {
                     // "All" chip
-                    genreChip(title: "All", isSelected: draftGenre == nil) {
+                    genreChip(title: loc.localized("tvShows.all"), isSelected: draftGenre == nil) {
                         draftGenre = nil
                     }
 
@@ -928,6 +930,16 @@ struct TVSeriesFilterSheet: View {
     }
 
     // MARK: Helpers
+
+    private func localizedSortOption(_ option: TVSeriesSortOption) -> String {
+        switch option {
+        case .name: loc.localized("sort.name")
+        case .dateAdded: loc.localized("sort.dateAdded")
+        case .year: loc.localized("sort.releaseYear")
+        case .rating: loc.localized("sort.rating")
+        case .random: loc.localized("sort.random")
+        }
+    }
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())

@@ -25,6 +25,8 @@ struct CinemaButton: View {
                     Text(title)
                         .font(.system(size: fontSize, weight: .bold))
                         .tracking(-0.3)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
 
                     if let icon {
                         Image(systemName: icon)

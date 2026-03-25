@@ -158,6 +158,7 @@ final class MovieLibraryViewModel {
 struct MovieLibraryScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = MovieLibraryViewModel()
     @State private var showSortFilter = false
 
@@ -173,8 +174,8 @@ struct MovieLibraryScreen: View {
                 mainContent
             }
         }
-        .navigationTitle("Movies")
         #if os(iOS)
+        .navigationTitle(loc.localized("movies.title"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -251,7 +252,7 @@ struct MovieLibraryScreen: View {
             LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
                 // Header
                 HStack {
-                    Text("\(viewModel.filteredTotalCount) Movies")
+                    Text(loc.localized("movies.count", viewModel.filteredTotalCount))
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
 
@@ -353,7 +354,7 @@ struct MovieLibraryScreen: View {
                     HStack(spacing: 12) {
                         PlayLink(itemId: id, title: item.name ?? "") {
                             HStack(spacing: CinemaSpacing.spacing2) {
-                                Text("Play Now")
+                                Text(loc.localized("movies.playNow"))
                                     .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
                                 Image(systemName: "play.fill")
                                     .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
@@ -378,7 +379,7 @@ struct MovieLibraryScreen: View {
                             MediaDetailScreen(itemId: id, itemType: .movie)
                         } label: {
                             HStack(spacing: CinemaSpacing.spacing2) {
-                                Text("More Info")
+                                Text(loc.localized("action.moreInfo"))
                                     .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
                                 Image(systemName: "info.circle")
                                     .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
@@ -415,10 +416,10 @@ struct MovieLibraryScreen: View {
     private var tvHeaderBar: some View {
         HStack(alignment: .center, spacing: CinemaSpacing.spacing4) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Movies")
+                Text(loc.localized("movies.title"))
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
-                Text("\(viewModel.totalCount) titles")
+                Text(loc.localized("movies.titles", viewModel.totalCount))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
@@ -486,7 +487,7 @@ struct MovieLibraryScreen: View {
             HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal.decrease.circle\(viewModel.sortFilter.isNonDefault ? ".fill" : "")")
                     .font(.system(size: filterIconSize, weight: .semibold))
-                Text("Sort & Filter")
+                Text(loc.localized("movies.sortFilter"))
                     .font(.system(size: filterLabelSize, weight: .semibold))
             }
             .foregroundStyle(.white)
@@ -663,6 +664,7 @@ private struct SortFilterSheet: View {
     @Binding var sortFilter: MovieSortFilterState
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     let onApply: () -> Void
 
     // All available genres come from the parent, but we read them from AppState via the VM.
@@ -670,13 +672,15 @@ private struct SortFilterSheet: View {
     // The full genre list is injected via the parent.
     var availableGenres: [String] = []
 
-    private let sortOptions: [(label: String, value: ItemSortBy)] = [
-        ("Name", .sortName),
-        ("Date Added", .dateCreated),
-        ("Release Year", .productionYear),
-        ("Rating", .communityRating),
-        ("Runtime", .runtime)
-    ]
+    private var sortOptions: [(label: String, value: ItemSortBy)] {
+        [
+            (loc.localized("sort.name"), .sortName),
+            (loc.localized("sort.dateAdded"), .dateCreated),
+            (loc.localized("sort.releaseYear"), .productionYear),
+            (loc.localized("sort.rating"), .communityRating),
+            (loc.localized("sort.runtime"), .runtime)
+        ]
+    }
 
     var body: some View {
         NavigationStack {
@@ -696,13 +700,13 @@ private struct SortFilterSheet: View {
                     .padding(.top, CinemaSpacing.spacing4)
                 }
             }
-            .navigationTitle("Sort & Filter")
+            .navigationTitle(loc.localized("movies.sortFilter"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply") {
+                    Button(loc.localized("action.apply")) {
                         onApply()
                         dismiss()
                     }
@@ -710,7 +714,7 @@ private struct SortFilterSheet: View {
                     .foregroundStyle(themeManager.accent)
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Reset") {
+                    Button(loc.localized("action.reset")) {
                         sortFilter = MovieSortFilterState()
                         onApply()
                         dismiss()
@@ -726,7 +730,7 @@ private struct SortFilterSheet: View {
 
     private var sortSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            sectionHeader("Sort by")
+            sectionHeader(loc.localized("sort.by"))
 
             VStack(spacing: 0) {
                 ForEach(sortOptions, id: \.value.rawValue) { option in
@@ -777,11 +781,11 @@ private struct SortFilterSheet: View {
 
     private var sortOrderSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            sectionHeader("Sort order")
+            sectionHeader(loc.localized("sort.order"))
 
             HStack(spacing: CinemaSpacing.spacing3) {
-                orderChip(label: "Ascending", icon: "arrow.up", isAscending: true)
-                orderChip(label: "Descending", icon: "arrow.down", isAscending: false)
+                orderChip(label: loc.localized("sort.ascending"), icon: "arrow.up", isAscending: true)
+                orderChip(label: loc.localized("sort.descending"), icon: "arrow.down", isAscending: false)
             }
         }
     }
@@ -817,13 +821,13 @@ private struct SortFilterSheet: View {
     private var genreSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             HStack {
-                sectionHeader("Filter by genre")
+                sectionHeader(loc.localized("filter.byGenre"))
                 Spacer()
                 if !sortFilter.selectedGenres.isEmpty {
                     Button {
                         sortFilter.selectedGenres = []
                     } label: {
-                        Text("Clear")
+                        Text(loc.localized("action.clear"))
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(themeManager.accent)
                     }
@@ -954,11 +958,8 @@ struct CinemaTVCardButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(isFocused ? 1.08 : (configuration.isPressed ? 0.95 : 1.0))
-            .shadow(
-                color: CinemaColor.surfaceTint.opacity(isFocused ? 0.08 : 0),
-                radius: 30, y: 15
-            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .brightness(isFocused ? 0.05 : 0)
             .animation(.easeInOut(duration: 0.2), value: isFocused)
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }

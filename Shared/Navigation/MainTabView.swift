@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var selectedTab: AppTab = .home
 
     #if os(tvOS)
@@ -30,7 +31,7 @@ struct MainTabView: View {
             ForEach(AppTab.allCases) { tab in
                 selectedView(for: tab)
                     .tabItem {
-                        Label(tab.title, systemImage: tab.icon)
+                        Label(loc.localized(tab.titleKey), systemImage: tab.icon)
                     }
                     .tag(tab)
             }
@@ -50,7 +51,7 @@ struct MainTabView: View {
 
     private var sidebarContent: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Cinemax")
+            Text(loc.localized("app.name"))
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(CinemaColor.onSurface)
                 .padding(.horizontal, 20)
@@ -61,7 +62,7 @@ struct MainTabView: View {
                 Button {
                     selectedTab = tab
                 } label: {
-                    Label(tab.title, systemImage: tab.icon)
+                    Label(loc.localized(tab.titleKey), systemImage: tab.icon)
                         .font(.system(size: 17, weight: selectedTab == tab ? .semibold : .regular))
                         .foregroundStyle(selectedTab == tab ? .white : CinemaColor.onSurfaceVariant)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -90,7 +91,7 @@ struct MainTabView: View {
             ForEach(AppTab.allCases) { tab in
                 selectedView(for: tab)
                     .tabItem {
-                        Label(tab.title, systemImage: tab.icon)
+                        Label(loc.localized(tab.titleKey), systemImage: tab.icon)
                     }
                     .tag(tab)
             }
@@ -129,13 +130,13 @@ enum AppTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    var titleKey: String {
         switch self {
-        case .home: "Home"
-        case .movies: "Movies"
-        case .tvShows: "TV Shows"
-        case .search: "Search"
-        case .settings: "Settings"
+        case .home: "tab.home"
+        case .movies: "tab.movies"
+        case .tvShows: "tab.tvShows"
+        case .search: "tab.search"
+        case .settings: "tab.settings"
         }
     }
 

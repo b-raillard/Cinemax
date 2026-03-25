@@ -1,0 +1,174 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Cinemax — French Localization (Default)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+// MARK: - Tabs & Navigation
+
+"tab.home" = "Accueil";
+"tab.movies" = "Films";
+"tab.tvShows" = "Séries";
+"tab.search" = "Recherche";
+"tab.settings" = "Réglages";
+"app.name" = "Cinemax";
+
+// MARK: - Common Actions
+
+"action.play" = "Lecture";
+"action.moreInfo" = "Plus d'infos";
+"action.retry" = "Réessayer";
+"action.cancel" = "Annuler";
+"action.apply" = "Appliquer";
+"action.reset" = "Réinitialiser";
+"action.clear" = "Effacer";
+"action.connect" = "Connexion";
+"action.login" = "Connexion";
+"action.logOut" = "Déconnexion";
+"action.viewAll" = "Tout voir";
+
+// MARK: - Home Screen
+
+"home.continueWatching" = "Reprendre";
+"home.recentlyAdded" = "Ajouts récents";
+"home.remainingTime.hours" = "%dh %dm restantes";
+"home.remainingTime.minutes" = "%dm restantes";
+
+// MARK: - Movie Library
+
+"movies.title" = "Films";
+"movies.sortFilter" = "Trier et filtrer";
+"movies.playNow" = "Lecture";
+"movies.count" = "%d films";
+"movies.titles" = "%d titres";
+"sort.ascending" = "Croissant";
+"sort.descending" = "Décroissant";
+"sort.by" = "Trier par";
+"sort.order" = "Ordre";
+"sort.name" = "Nom";
+"sort.dateAdded" = "Date d'ajout";
+"sort.releaseYear" = "Année de sortie";
+"sort.rating" = "Note";
+"sort.runtime" = "Durée";
+"sort.random" = "Aléatoire";
+"filter.byGenre" = "Filtrer par genre";
+
+// MARK: - TV Series
+
+"tvShows.title" = "Séries";
+"tvShows.myList" = "Ma liste";
+"tvShows.browseGenres" = "Parcourir les genres";
+"tvShows.count" = "%d séries";
+"tvShows.genre" = "Genre";
+"tvShows.all" = "Tout";
+"tvShows.seasons" = "%d saison(s)";
+"tvShows.season" = "%d saison";
+"tvShows.seasonsPlural" = "%d saisons";
+
+// MARK: - Search
+
+"search.title" = "Recherche";
+"search.placeholder" = "Rechercher des films, séries...";
+"search.listening" = "Écoute en cours...";
+"search.noResults" = "Aucun résultat";
+"search.searchLibrary" = "Rechercher dans votre bibliothèque";
+"search.topMatches" = "Meilleurs résultats";
+"search.permissionRequired" = "Autorisation requise";
+"search.openSettings" = "Ouvrir les réglages";
+
+// MARK: - Settings
+
+"settings.title" = "Réglages";
+"settings.appearance" = "Apparence";
+"settings.darkMode" = "Mode sombre";
+"settings.lightMode" = "Mode clair";
+"settings.accentColor" = "Couleur d'accentuation";
+"settings.language" = "Langue";
+"settings.language.french" = "Français";
+"settings.language.english" = "English";
+"settings.personalization" = "Personnalisation";
+"settings.infrastructure" = "Infrastructure";
+"settings.live" = "EN LIGNE";
+"settings.account" = "Compte";
+"settings.profileSettings" = "Réglages du profil";
+"settings.privacySecurity" = "Confidentialité et sécurité";
+"settings.premiumMember" = "Membre Premium \u{2022} Profil géré";
+"settings.logOutConfirm" = "Vous serez redirigé vers l'écran de configuration du serveur.";
+
+// MARK: - Settings (tvOS)
+
+"settings.profiles" = "Profils";
+"settings.active" = "Actif";
+"settings.admin" = "Admin";
+"settings.user" = "Utilisateur";
+"settings.switchAccount" = "Changer de compte";
+"settings.switchAccountConfirm" = "Vous serez déconnecté et redirigé vers l'écran de connexion.";
+"settings.server" = "Serveur";
+"settings.connected" = "Connecté";
+"settings.refreshConnection" = "Actualiser la connexion";
+"settings.interface" = "Interface";
+"settings.motionEffects" = "Effets de mouvement";
+"settings.forceSubtitles" = "Forcer les sous-titres";
+"settings.4kRendering" = "Rendu 4K";
+
+// MARK: - Media Detail
+
+"detail.play" = "Lecture";
+"detail.moreInfo" = "Plus d'infos";
+"detail.castCrew" = "Casting";
+"detail.moreLikeThis" = "Titres similaires";
+"detail.episode" = "Épisode %d";
+"detail.runtime.hours" = "%dh %dm";
+"detail.runtime.minutes" = "%dm";
+"detail.runtime.min" = "%d min";
+"detail.seasons" = "%d saisons";
+"detail.season" = "Saison";
+
+// MARK: - Login
+
+"login.header" = "JELLYFIN";
+"login.title" = "CONNEXION";
+"login.subtitle" = "Entrez vos identifiants pour accéder à votre bibliothèque";
+"login.mobileTitle" = "Connexion";
+"login.tagline" = "Vos médias, simplifiés";
+"login.username" = "Nom d'utilisateur";
+"login.usernamePlaceholder" = "Votre nom d'utilisateur";
+"login.password" = "Mot de passe";
+"login.passwordPlaceholder" = "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}";
+"login.button" = "CONNEXION";
+"login.buttonMobile" = "Connexion";
+"login.forgotPassword" = "Mot de passe oublié ?";
+"login.createAccount" = "Créer un compte";
+"login.joinCommunity" = "Rejoindre la communauté";
+"login.noServer" = "Pas de serveur ?";
+"login.serverConnected" = "Serveur connecté !";
+"login.authenticated" = "Authentifié !";
+"login.emptyUsername" = "Veuillez entrer votre nom d'utilisateur.";
+"login.authFailed" = "Échec de l'authentification : %@";
+"login.server" = "Serveur : %@";
+"login.version" = "Version %@";
+
+// MARK: - Server Setup
+
+"server.header" = "JELLYFIN";
+"server.title" = "Connexion au serveur";
+"server.subtitle" = "Entrez l'adresse de votre serveur Jellyfin pour commencer à diffuser votre collection.";
+"server.mobileTitle" = "Configuration du serveur";
+"server.mobileSubtitle" = "Entrez l'adresse de votre serveur Jellyfin pour commencer.";
+"server.urlLabel" = "URL du serveur";
+"server.addressLabel" = "Adresse du serveur";
+"server.placeholder" = "http://192.168.1.100:8096";
+"server.connect" = "Connexion";
+"server.needHelp" = "Besoin d'aide ?";
+"server.howToFind" = "Comment trouver mon serveur ?";
+"server.networkSettings" = "Paramètres réseau";
+"server.connecting" = "Connexion en cours...";
+"server.offline" = "Hors ligne";
+"server.emptyAddress" = "Veuillez entrer une adresse de serveur.";
+"server.invalidURL" = "Format d'URL invalide.";
+"server.connectFailed" = "Connexion impossible : %@";
+
+// MARK: - Video Player
+
+"player.preparing" = "Préparation du flux...";
+"player.notAuthenticated" = "Non authentifié";
+"player.playbackFailed" = "Échec de la lecture";
+"player.method" = "Méthode : %@";

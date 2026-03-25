@@ -47,6 +47,7 @@ final class ServerSetupViewModel {
 struct ServerSetupScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = ServerSetupViewModel()
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -73,7 +74,7 @@ struct ServerSetupScreen: View {
 
             VStack(spacing: 0) {
                 // Header
-                Text("JELLYFIN")
+                Text(loc.localized("server.header"))
                     .font(.system(size: 28, weight: .bold))
                     .tracking(4)
                     .foregroundStyle(CinemaColor.onSurface)
@@ -83,12 +84,12 @@ struct ServerSetupScreen: View {
 
                 // Title
                 VStack(spacing: CinemaSpacing.spacing3) {
-                    Text("Connect to Server")
+                    Text(loc.localized("server.title"))
                         .font(CinemaFont.display(.medium))
                         .foregroundStyle(CinemaColor.onSurface)
                         .tracking(-1)
 
-                    Text("Enter the address of your Jellyfin media server to start streaming your collection.")
+                    Text(loc.localized("server.subtitle"))
                         .font(.system(size: 20, weight: .medium))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .multilineTextAlignment(.center)
@@ -99,9 +100,9 @@ struct ServerSetupScreen: View {
                 // Glass input panel
                 VStack(spacing: CinemaSpacing.spacing6) {
                     GlassTextField(
-                        label: "Server URL",
+                        label: loc.localized("server.urlLabel"),
                         text: $viewModel.serverURL,
-                        placeholder: "http://192.168.1.100:8096",
+                        placeholder: loc.localized("server.placeholder"),
                         icon: "server.rack"
                     )
                     #if os(iOS)
@@ -113,7 +114,7 @@ struct ServerSetupScreen: View {
                     }
 
                     CinemaButton(
-                        title: "Connect",
+                        title: loc.localized("server.connect"),
                         style: .primary,
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
@@ -130,11 +131,11 @@ struct ServerSetupScreen: View {
 
                 // Helper links
                 HStack(spacing: CinemaSpacing.spacing6) {
-                    helperLink(icon: "questionmark.circle", title: "How do I find my server?")
+                    helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind"))
                     Divider()
                         .frame(height: 20)
                         .overlay(CinemaColor.outlineVariant.opacity(0.3))
-                    helperLink(icon: "network", title: "Network Settings")
+                    helperLink(icon: "network", title: loc.localized("server.networkSettings"))
                 }
                 .padding(.bottom, CinemaSpacing.spacing6)
 
@@ -169,17 +170,17 @@ struct ServerSetupScreen: View {
                     }
                     .shadow(color: .black.opacity(0.3), radius: 20)
 
-                    Text("JELLYFIN")
+                    Text(loc.localized("server.header"))
                         .font(.system(size: 14, weight: .bold))
                         .tracking(3)
                         .foregroundStyle(CinemaColor.onSurface)
 
-                    Text("Setup Server")
+                    Text(loc.localized("server.mobileTitle"))
                         .font(.system(size: 28, weight: .black))
                         .tracking(-0.5)
                         .foregroundStyle(.white)
 
-                    Text("Enter your Jellyfin server address to begin your cinematic journey.")
+                    Text(loc.localized("server.mobileSubtitle"))
                         .font(.system(size: 14))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .multilineTextAlignment(.center)
@@ -190,9 +191,9 @@ struct ServerSetupScreen: View {
                 // Input card
                 VStack(spacing: CinemaSpacing.spacing4) {
                     GlassTextField(
-                        label: "Server Address",
+                        label: loc.localized("server.addressLabel"),
                         text: $viewModel.serverURL,
-                        placeholder: "http://192.168.1.100:8096",
+                        placeholder: loc.localized("server.placeholder"),
                         icon: "link"
                     )
                     #if os(iOS)
@@ -212,7 +213,7 @@ struct ServerSetupScreen: View {
                 // Actions
                 VStack(spacing: CinemaSpacing.spacing3) {
                     CinemaButton(
-                        title: "Connect",
+                        title: loc.localized("server.connect"),
                         style: .primary,
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
@@ -224,7 +225,7 @@ struct ServerSetupScreen: View {
                     Button {
                         // Help action
                     } label: {
-                        Text("Need help?")
+                        Text(loc.localized("server.needHelp"))
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                     }
@@ -289,7 +290,7 @@ struct ServerSetupScreen: View {
             Circle()
                 .fill(viewModel.isConnecting ? themeManager.accent : CinemaColor.error)
                 .frame(width: 6, height: 6)
-            Text(viewModel.isConnecting ? "Connecting..." : "Offline")
+            Text(viewModel.isConnecting ? loc.localized("server.connecting") : loc.localized("server.offline"))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
         }

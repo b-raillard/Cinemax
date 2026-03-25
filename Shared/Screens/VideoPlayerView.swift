@@ -25,6 +25,7 @@ struct TVPlayerViewController: UIViewControllerRepresentable {
 
 struct VideoPlayerView: View {
     @Environment(AppState.self) private var appState
+    @Environment(LocalizationManager.self) private var loc
     @State private var player: AVPlayer?
     @State private var errorMessage: String?
     @State private var playMethod: String?
@@ -57,11 +58,11 @@ struct VideoPlayerView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                     if let method = playMethod {
-                        Text("Method: \(method)")
+                        Text(loc.localized("player.method", method))
                             .font(CinemaFont.label(.medium))
                             .foregroundStyle(CinemaColor.outline)
                     }
-                    CinemaButton(title: "Retry", style: .ghost) {
+                    CinemaButton(title: loc.localized("action.retry"), style: .ghost) {
                         Task { await startPlayback() }
                     }
                     .frame(width: 160)
@@ -71,7 +72,7 @@ struct VideoPlayerView: View {
                     ProgressView()
                         .tint(.white)
                         .scaleEffect(1.5)
-                    Text("Preparing stream...")
+                    Text(loc.localized("player.preparing"))
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }

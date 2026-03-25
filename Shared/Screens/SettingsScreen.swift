@@ -34,6 +34,8 @@ private enum SettingsFocus: Hashable {
     case switchAccount
     case refreshConnection
     case toggle(String)
+    case accentColor(String)
+    case language(String)
 }
 #endif
 
@@ -42,6 +44,7 @@ private enum SettingsFocus: Hashable {
 struct SettingsScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var showLogOutAlert = false
 
     private var username: String {
@@ -70,17 +73,17 @@ struct SettingsScreen: View {
             iOSLayout
             #endif
         }
-        .navigationTitle("Settings")
         #if os(iOS)
+        .navigationTitle(loc.localized("settings.title"))
         .navigationBarTitleDisplayMode(.large)
         #endif
-        .alert("Log Out", isPresented: $showLogOutAlert) {
-            Button("Log Out", role: .destructive) {
+        .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
+            Button(loc.localized("action.logOut"), role: .destructive) {
                 appState.logout()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
-            Text("You will be returned to the server setup screen.")
+            Text(loc.localized("settings.logOutConfirm"))
         }
     }
 
@@ -140,13 +143,13 @@ struct SettingsScreen: View {
             .padding(.bottom, CinemaSpacing.spacing8)
         }
         .task { await loadServerUsers() }
-        .alert("Switch Account", isPresented: $showSwitchAccountAlert) {
-            Button("Switch Account", role: .destructive) {
+        .alert(loc.localized("settings.switchAccount"), isPresented: $showSwitchAccountAlert) {
+            Button(loc.localized("settings.switchAccount"), role: .destructive) {
                 appState.logout()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
-            Text("You will be logged out and returned to the login screen.")
+            Text(loc.localized("settings.switchAccountConfirm"))
         }
     }
 
@@ -164,15 +167,146 @@ struct SettingsScreen: View {
 
     private var tvAppearanceSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            tvSectionLabel("Appearance")
+            tvSectionLabel(loc.localized("settings.appearance"))
 
             tvGlassToggle(
                 icon: darkModeStorage ? "moon.fill" : "sun.max.fill",
-                label: darkModeStorage ? "Dark Mode" : "Light Mode",
+                label: darkModeStorage ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"),
                 key: "darkMode",
                 value: $darkModeStorage
             )
+
+            tvAccentColorPicker
+
+            tvLanguagePicker
         }
+    }
+
+    private var tvLanguagePicker: some View {
+        HStack(spacing: CinemaSpacing.spacing3) {
+            Image(systemName: "globe")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(themeManager.accent)
+                .frame(width: 24)
+
+            Text(loc.localized("settings.language"))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Spacer()
+
+            HStack(spacing: CinemaSpacing.spacing2) {
+                tvLanguageButton("fr", label: loc.localized("settings.language.french"))
+                tvLanguageButton("en", label: loc.localized("settings.language.english"))
+            }
+        }
+        .padding(.horizontal, CinemaSpacing.spacing4)
+        .frame(maxWidth: .infinity, minHeight: 80)
+        .background(
+            RoundedRectangle(cornerRadius: CinemaRadius.large)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: CinemaRadius.large)
+                        .fill(CinemaColor.surfaceContainerLow.opacity(0.5))
+                )
+        )
+    }
+
+    private func tvLanguageButton(_ code: String, label: String) -> some View {
+        let isSelected = loc.languageCode == code
+        let isFocused = focusedItem == .language(code)
+
+        return Button {
+            loc.languageCode = code
+        } label: {
+            Text(label)
+                .font(.system(size: 16, weight: isSelected ? .bold : .medium))
+                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.vertical, CinemaSpacing.spacing2)
+                .background(
+                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                        .fill(isSelected ? themeManager.accent : CinemaColor.surfaceContainerHigh)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                        .strokeBorder(
+                            isFocused ? themeManager.accent : .clear,
+                            lineWidth: 1.5
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .language(code))
+    }
+
+    private var tvAccentColorPicker: some View {
+        HStack(spacing: CinemaSpacing.spacing3) {
+            Image(systemName: "paintpalette.fill")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(themeManager.accent)
+                .frame(width: 24)
+
+            Text(loc.localized("settings.accentColor"))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Spacer()
+
+            HStack(spacing: CinemaSpacing.spacing3) {
+                ForEach(AccentOption.allCases) { option in
+                    tvAccentDot(option)
+                }
+            }
+        }
+        .padding(.horizontal, CinemaSpacing.spacing4)
+        .frame(maxWidth: .infinity, minHeight: 80)
+        .background(
+            RoundedRectangle(cornerRadius: CinemaRadius.large)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: CinemaRadius.large)
+                        .fill(CinemaColor.surfaceContainerLow.opacity(0.5))
+                )
+        )
+    }
+
+    private func tvAccentDot(_ option: AccentOption) -> some View {
+        let isSelected = option.rawValue == themeManager.accentColorKey
+        let isFocused = focusedItem == .accentColor(option.rawValue)
+
+        return Button {
+            themeManager.accentColorKey = option.rawValue
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(option.color)
+                    .frame(width: 36, height: 36)
+
+                if isSelected {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.9), lineWidth: 2.5)
+                        .frame(width: 36, height: 36)
+
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                if isFocused {
+                    Circle()
+                        .strokeBorder(option.color, lineWidth: 2)
+                        .frame(width: 44, height: 44)
+                }
+            }
+            .frame(width: 48, height: 48)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .accentColor(option.rawValue))
     }
 
     // MARK: - Profile Management
@@ -197,7 +331,7 @@ struct SettingsScreen: View {
 
     private var tvProfileSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            tvSectionLabel("Profiles")
+            tvSectionLabel(loc.localized("settings.profiles"))
 
             LazyVGrid(
                 columns: [
@@ -249,11 +383,11 @@ struct SettingsScreen: View {
                     .lineLimit(1)
 
                 if isCurrentUser {
-                    Text("Active")
+                    Text(loc.localized("settings.active"))
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color(hex: 0x34C759))
                 } else {
-                    Text(user.policy?.isAdministrator == true ? "Admin" : "User")
+                    Text(user.policy?.isAdministrator == true ? loc.localized("settings.admin") : loc.localized("settings.user"))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
                 }
@@ -280,13 +414,10 @@ struct SettingsScreen: View {
                     .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
                     .frame(width: 36, height: 36)
 
-                Text("Switch")
+                Text(loc.localized("settings.switchAccount"))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
-
-                Text("Account")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, minHeight: 80)
             .padding(.vertical, CinemaSpacing.spacing3)
@@ -320,7 +451,7 @@ struct SettingsScreen: View {
 
     private var tvServerSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            tvSectionLabel("Server")
+            tvSectionLabel(loc.localized("settings.server"))
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                 HStack(spacing: CinemaSpacing.spacing3) {
@@ -350,7 +481,7 @@ struct SettingsScreen: View {
                         Circle()
                             .fill(Color(hex: 0x34C759))
                             .frame(width: 6, height: 6)
-                        Text("Connected")
+                        Text(loc.localized("settings.connected"))
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(Color(hex: 0x34C759))
                     }
@@ -385,7 +516,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(themeManager.accent)
                     .frame(width: 24)
 
-                Text("Refresh Connection")
+                Text(loc.localized("settings.refreshConnection"))
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
 
@@ -405,11 +536,11 @@ struct SettingsScreen: View {
 
     private var tvInterfaceSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            tvSectionLabel("Interface")
+            tvSectionLabel(loc.localized("settings.interface"))
 
-            tvGlassToggle(icon: "sparkles", label: "Motion Effects", key: "motion", value: $motionEffects)
-            tvGlassToggle(icon: "captions.bubble", label: "Force Subtitles", key: "subtitles", value: $forceSubtitles)
-            tvGlassToggle(icon: "4k.tv", label: "4K UI Rendering", key: "4k", value: $render4K)
+            tvGlassToggle(icon: "sparkles", label: loc.localized("settings.motionEffects"), key: "motion", value: $motionEffects)
+            tvGlassToggle(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), key: "subtitles", value: $forceSubtitles)
+            tvGlassToggle(icon: "4k.tv", label: loc.localized("settings.4kRendering"), key: "4k", value: $render4K)
         }
     }
 
@@ -493,7 +624,7 @@ struct SettingsScreen: View {
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurface)
 
-                Text("Premium Member \u{2022} Managed Profile")
+                Text(loc.localized("settings.premiumMember"))
                     .font(CinemaFont.label(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
@@ -508,7 +639,7 @@ struct SettingsScreen: View {
 
     private var infrastructureSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            sectionHeader("Infrastructure")
+            sectionHeader(loc.localized("settings.infrastructure"))
 
             HStack(spacing: CinemaSpacing.spacing3) {
                 ZStack {
@@ -554,7 +685,7 @@ struct SettingsScreen: View {
                 .fill(Color(hex: 0x34C759))
                 .frame(width: 6, height: 6)
 
-            Text("LIVE")
+            Text(loc.localized("settings.live"))
                 .font(.system(size: 10, weight: .bold))
                 .tracking(0.5)
                 .foregroundStyle(Color(hex: 0x34C759))
@@ -568,14 +699,14 @@ struct SettingsScreen: View {
 
     private var personalizationSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            sectionHeader("Personalization")
+            sectionHeader(loc.localized("settings.personalization"))
 
             VStack(spacing: 0) {
                 settingsRow {
                     HStack {
                         rowIcon(systemName: "moon.fill", color: themeManager.accent)
 
-                        Text("Dark Mode")
+                        Text(loc.localized("settings.darkMode"))
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
 
@@ -597,7 +728,7 @@ struct SettingsScreen: View {
                         HStack {
                             rowIcon(systemName: "paintpalette.fill", color: selectedAccent.color)
 
-                            Text("Accent Color")
+                            Text(loc.localized("settings.accentColor"))
                                 .font(CinemaFont.label(.large))
                                 .foregroundStyle(CinemaColor.onSurface)
 
@@ -611,9 +742,49 @@ struct SettingsScreen: View {
                         }
                     }
                 }
+
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "globe", color: themeManager.accent)
+
+                        Text(loc.localized("settings.language"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+
+                        Spacer()
+
+                        languagePicker
+                    }
+                }
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
         }
+    }
+
+    private var languagePicker: some View {
+        HStack(spacing: CinemaSpacing.spacing2) {
+            languageButton("fr", label: "FR")
+            languageButton("en", label: "EN")
+        }
+    }
+
+    private func languageButton(_ code: String, label: String) -> some View {
+        let isSelected = loc.languageCode == code
+        return Button {
+            loc.languageCode = code
+        } label: {
+            Text(label)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
+                .frame(width: 40, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                        .fill(isSelected ? themeManager.accent : CinemaColor.surfaceContainerHigh)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var selectedAccent: AccentOption {
@@ -652,14 +823,14 @@ struct SettingsScreen: View {
 
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            sectionHeader("Account")
+            sectionHeader(loc.localized("settings.account"))
 
             VStack(spacing: 0) {
-                navigationRow(icon: "person.crop.circle", label: "Profile Settings") {}
+                navigationRow(icon: "person.crop.circle", label: loc.localized("settings.profileSettings")) {}
 
                 divider
 
-                navigationRow(icon: "lock.shield", label: "Privacy & Security") {}
+                navigationRow(icon: "lock.shield", label: loc.localized("settings.privacySecurity")) {}
 
                 divider
 
@@ -670,7 +841,7 @@ struct SettingsScreen: View {
                         HStack {
                             rowIcon(systemName: "rectangle.portrait.and.arrow.right", color: CinemaColor.error)
 
-                            Text("Log Out")
+                            Text(loc.localized("action.logOut"))
                                 .font(CinemaFont.label(.large))
                                 .foregroundStyle(CinemaColor.error)
 

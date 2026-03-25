@@ -16,11 +16,13 @@ Native Jellyfin media streaming client targeting iOS 18+ and tvOS 26+. Uses a "C
 - `AVKit` / `AVPlayer` — video playback (VLCKit planned for broader codec support)
 
 ## Project Structure
-- `Shared/DesignSystem/` — CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, Components/
+- `Shared/DesignSystem/` — CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, Components/
 - `Shared/Navigation/` — AppNavigation (auth routing), MainTabView (tab bar/sidebar)
 - `Shared/Screens/` — HomeScreen, MediaDetailScreen, VideoPlayerView, SearchScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen
 - `iOS/` — iOS app entry point
 - `tvOS/` — tvOS app entry point
+- `Resources/fr.lproj/` — French localization (default language)
+- `Resources/en.lproj/` — English localization
 - `Packages/CinemaxKit/` — Models, Networking (JellyfinAPIClient, ImageURLBuilder), Persistence (KeychainService)
 
 ## Design System Conventions
@@ -29,8 +31,8 @@ Native Jellyfin media streaming client targeting iOS 18+ and tvOS 26+. Uses a "C
 - **Dynamic accent colors** via `ThemeManager` (`@Observable`, injected from `AppNavigation`). Use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` instead of `CinemaColor.tertiary*` for all accent-colored elements
 - **Dark/Light mode** via `ThemeManager.darkModeEnabled` → applied as `.preferredColorScheme()` at root. Design system colors are dark-first; light mode only affects system controls for now
 - Glass panels: `.glassPanel()` modifier
-- **tvOS Focus states**: Custom focus via `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Focus indicator is a thin accent-colored `strokeBorder` (1.5px) — no scale, no white background. Shared via `.tvSettingsFocusable()` modifier in SettingsScreen.
-- **iOS Focus states**: `.cinemaFocus()` modifier (1.1x scale + glow)
+- **tvOS Focus states**: Custom focus via `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Focus indicator is a thin accent-colored `strokeBorder` (2px) — no scale, no white background. Cards use `CinemaTVCardButtonStyle` (brightness on focus, no scale). Shared via `.tvSettingsFocusable()` modifier in SettingsScreen.
+- **iOS Focus states**: `.cinemaFocus()` modifier (accent border + shadow)
 - Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass` checks
 
 ## Video Playback Architecture
@@ -67,7 +69,7 @@ Follows the same flow as Swiftfin (reference: https://github.com/jellyfin/swiftf
 
 ## Navigation Flow
 - `AppNavigation` → checks Keychain for stored session → restores via `apiClient.reconnect()` + `fetchServerInfo()`
-- `AppNavigation` injects `ThemeManager` and applies `.preferredColorScheme()` at root
+- `AppNavigation` injects `ThemeManager` and `LocalizationManager` and applies `.preferredColorScheme()` at root
 - No server → `ServerSetupScreen` → `LoginScreen` → `MainTabView`
 - `MainTabView`: **TabView (top tab bar) on tvOS**, sidebar on iPad, bottom tab bar on iPhone
 - Home hero Play → `PlayLink` → video; More Info → `MediaDetailScreen`
@@ -81,6 +83,19 @@ Follows the same flow as Swiftfin (reference: https://github.com/jellyfin/swiftf
 - **Phase 4**: Media detail screen, video player, search, navigation wiring
 - **Phase 5**: Sort & filter (movies/TV), voice search (iOS), settings redesign (tvOS tabbed layout), dynamic accent color system, dark/light mode toggle, tvOS video focus fix (UIKit presentation)
 - **Phase 6**: tvOS Settings rework — Cinema Glass design system, single-page two-column layout, profile management with server users + profile images, custom toggle indicators, server connection info, interface options (motion effects, subtitles, 4K rendering), premium focus style (thin accent border, no scale/zoom)
+- **Phase 7**: UI polish — tvOS focus without image overlap (border instead of scale), card image alignment (Color.clear container pattern), full i18n system (French default + English, in-app language switcher via `LocalizationManager`), accent color picker in settings, `@AppStorage`+`@Observable` reactivity fix (`_revision` counter pattern), series image fallback (`parentBackdropItemID` → `seriesID` → `id`)
+
+## Localization
+- In-app language switching via `LocalizationManager` (`@Observable`, injected from `AppNavigation`)
+- Default language: French (`fr`). Also supports English (`en`)
+- All UI strings use `loc.localized("key")` or `loc.localized("key", args...)` — never hardcoded
+- Strings files at `Resources/{lang}.lproj/Localizable.strings`
+- Uses `@ObservationIgnored` + `@AppStorage` + `_revision` counter pattern (same as `ThemeManager`) to trigger SwiftUI updates
+
+## Image URL Patterns
+- `ImageURLBuilder` builds Jellyfin `/Items/{id}/Images/{type}` URLs
+- **Series/episode backdrop fallback**: Episodes don't have their own backdrop — use `item.parentBackdropItemID ?? item.seriesID ?? item.id` for backdrop image IDs
+- **Card image containers**: Use `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { LazyImage }` + `.clipped()` for consistent sizing
 
 ## Build
 ```bash

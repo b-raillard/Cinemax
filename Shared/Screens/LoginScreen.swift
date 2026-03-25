@@ -45,6 +45,7 @@ final class LoginViewModel {
 struct LoginScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = LoginViewModel()
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -69,7 +70,7 @@ struct LoginScreen: View {
 
             VStack(spacing: 0) {
                 // Header
-                Text("JELLYFIN")
+                Text(loc.localized("login.header"))
                     .font(.system(size: 28, weight: .bold))
                     .tracking(4)
                     .foregroundStyle(CinemaColor.onSurface)
@@ -93,12 +94,12 @@ struct LoginScreen: View {
 
                     // Title
                     VStack(spacing: CinemaSpacing.spacing2) {
-                        Text("USER LOGIN")
+                        Text(loc.localized("login.title"))
                             .font(.system(size: 40, weight: .heavy))
                             .tracking(1)
                             .foregroundStyle(CinemaColor.onSurface)
 
-                        Text("Enter your credentials to access your library")
+                        Text(loc.localized("login.subtitle"))
                             .font(.system(size: 18))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                     }
@@ -106,16 +107,16 @@ struct LoginScreen: View {
                     // Fields
                     VStack(spacing: CinemaSpacing.spacing4) {
                         GlassTextField(
-                            label: "Username",
+                            label: loc.localized("login.username"),
                             text: $viewModel.username,
-                            placeholder: "Your Username",
+                            placeholder: loc.localized("login.usernamePlaceholder"),
                             icon: "person"
                         )
 
                         GlassTextField(
-                            label: "Password",
+                            label: loc.localized("login.password"),
                             text: $viewModel.password,
-                            placeholder: "••••••••",
+                            placeholder: loc.localized("login.passwordPlaceholder"),
                             icon: "lock",
                             isSecure: true
                         )
@@ -127,7 +128,7 @@ struct LoginScreen: View {
 
                     // Login button
                     CinemaButton(
-                        title: "LOG IN",
+                        title: loc.localized("login.button"),
                         style: .primary,
                         isLoading: viewModel.isAuthenticating
                     ) {
@@ -137,8 +138,8 @@ struct LoginScreen: View {
 
                     // Secondary actions
                     HStack(spacing: CinemaSpacing.spacing6) {
-                        secondaryButton("Forgot Password?")
-                        secondaryButton("Create Account")
+                        secondaryButton(loc.localized("login.forgotPassword"))
+                        secondaryButton(loc.localized("login.createAccount"))
                     }
                 }
                 .padding(CinemaSpacing.spacing10)
@@ -157,7 +158,7 @@ struct LoginScreen: View {
 
             // Success toast
             if viewModel.showSuccess {
-                successToast("Server Connected!")
+                successToast(loc.localized("login.serverConnected"))
             }
         }
     }
@@ -188,12 +189,12 @@ struct LoginScreen: View {
                                 .foregroundStyle(CinemaColor.onSurface)
                         }
 
-                        Text("JELLYFIN")
+                        Text(loc.localized("login.header"))
                             .font(.system(size: 32, weight: .black))
                             .tracking(-1)
                             .foregroundStyle(.white)
 
-                        Text("Your Media, Simplified")
+                        Text(loc.localized("login.tagline"))
                             .font(.system(size: 12, weight: .medium))
                             .tracking(2)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -203,21 +204,21 @@ struct LoginScreen: View {
 
                     // Form
                     VStack(spacing: CinemaSpacing.spacing4) {
-                        Text("Login")
+                        Text(loc.localized("login.mobileTitle"))
                             .font(.system(size: 24, weight: .bold))
                             .foregroundStyle(.white)
 
                         GlassTextField(
                             label: "",
                             text: $viewModel.username,
-                            placeholder: "Username",
+                            placeholder: loc.localized("login.username"),
                             icon: "person"
                         )
 
                         GlassTextField(
                             label: "",
                             text: $viewModel.password,
-                            placeholder: "Password",
+                            placeholder: loc.localized("login.password"),
                             icon: "lock",
                             isSecure: true
                         )
@@ -227,7 +228,7 @@ struct LoginScreen: View {
                         }
 
                         CinemaButton(
-                            title: "Login",
+                            title: loc.localized("login.buttonMobile"),
                             style: .accent,
                             icon: "chevron.right",
                             isLoading: viewModel.isAuthenticating
@@ -237,13 +238,13 @@ struct LoginScreen: View {
                         .disabled(viewModel.isAuthenticating)
 
                         VStack(spacing: 12) {
-                            secondaryButton("Forgot Password?")
+                            secondaryButton(loc.localized("login.forgotPassword"))
 
                             HStack(spacing: 4) {
-                                Text("Don't have a server?")
+                                Text(loc.localized("login.noServer"))
                                     .font(CinemaFont.label(.large))
                                     .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                Button("Join Community") {}
+                                Button(loc.localized("login.joinCommunity")) {}
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(themeManager.accent)
                                     .buttonStyle(.plain)
@@ -275,7 +276,7 @@ struct LoginScreen: View {
 
             // Success toast
             if viewModel.showSuccess {
-                successToast("Authenticated!")
+                successToast(loc.localized("login.authenticated"))
             }
         }
     }
@@ -325,11 +326,11 @@ struct LoginScreen: View {
 
     private func serverFooter(_ info: ServerInfo) -> some View {
         HStack(spacing: 12) {
-            Text("Server: \(info.name)")
+            Text(loc.localized("login.server", info.name))
             Circle()
                 .fill(themeManager.accentDim)
                 .frame(width: 5, height: 5)
-            Text("Version \(info.version)")
+            Text(loc.localized("login.version", info.version))
         }
         .font(.system(size: 13, weight: .medium))
         .tracking(1)

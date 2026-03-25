@@ -208,6 +208,7 @@ final class SearchViewModel {
 struct SearchScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = SearchViewModel()
 
     // Pulsing animation state for the listening indicator
@@ -233,15 +234,15 @@ struct SearchScreen: View {
                 resultContent
             }
         }
-        .navigationTitle("Search")
         #if os(iOS)
-        .alert("Permission Required", isPresented: Bindable(viewModel).showPermissionAlert) {
-            Button("Open Settings") {
+        .navigationTitle(loc.localized("search.title"))
+        .alert(loc.localized("search.permissionRequired"), isPresented: Bindable(viewModel).showPermissionAlert) {
+            Button(loc.localized("search.openSettings")) {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
             Text(viewModel.permissionAlertMessage)
         }
@@ -262,7 +263,7 @@ struct SearchScreen: View {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .font(.system(size: searchIconSize))
 
-            TextField("Search movies, shows...", text: Bindable(viewModel).searchText)
+            TextField(loc.localized("search.placeholder"), text: Bindable(viewModel).searchText)
                 #if os(iOS)
                 .textFieldStyle(.plain)
                 #endif
@@ -341,7 +342,7 @@ struct SearchScreen: View {
     @ViewBuilder
     private var listeningLabel: some View {
         if viewModel.isListening {
-            Text("Listening...")
+            Text(loc.localized("search.listening"))
                 .font(CinemaFont.label(.large))
                 .foregroundStyle(themeManager.accent)
                 .padding(.bottom, CinemaSpacing.spacing1)
@@ -366,7 +367,7 @@ struct SearchScreen: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 48))
                     .foregroundStyle(CinemaColor.outlineVariant)
-                Text("No results found")
+                Text(loc.localized("search.noResults"))
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
@@ -377,7 +378,7 @@ struct SearchScreen: View {
                 Image(systemName: "sparkle.magnifyingglass")
                     .font(.system(size: 48))
                     .foregroundStyle(CinemaColor.outlineVariant)
-                Text("Search your library")
+                Text(loc.localized("search.searchLibrary"))
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
@@ -390,7 +391,7 @@ struct SearchScreen: View {
     private var resultsGrid: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                Text("Top Matches")
+                Text(loc.localized("search.topMatches"))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .padding(.horizontal, gridPadding)

@@ -13,16 +13,36 @@ final class ThemeManager {
     // MARK: - Persisted Properties
 
     @ObservationIgnored
-    @AppStorage("accentColor") var accentColorKey: String = "blue"
+    @AppStorage("accentColor") private var _accentColorKey: String = "blue"
+
+    var accentColorKey: String {
+        get { _accentColorKey }
+        set {
+            _accentColorKey = newValue
+            _accentRevision += 1
+        }
+    }
 
     @ObservationIgnored
-    @AppStorage("darkMode") var darkModeEnabled: Bool = true
+    @AppStorage("darkMode") private var _darkModeEnabled: Bool = true
+
+    var darkModeEnabled: Bool {
+        get { _darkModeEnabled }
+        set {
+            _darkModeEnabled = newValue
+            _accentRevision += 1
+        }
+    }
+
+    /// Tracked revision counter — triggers SwiftUI updates when AppStorage values change.
+    private var _accentRevision: Int = 0
 
     // MARK: - Dynamic Accent Colors
 
     /// Accent "light" variant — used for text, icons, active indicators.
     var accent: Color {
-        switch accentColorKey {
+        _ = _accentRevision
+        return switch accentColorKey {
         case "purple": Color(hex: 0xBF7FFF)
         case "pink":   Color(hex: 0xFF6BB5)
         case "orange": Color(hex: 0xFF8C42)
@@ -35,7 +55,8 @@ final class ThemeManager {
     /// Accent "container" — used for filled button backgrounds, selection highlights.
     /// Slightly deeper / more saturated than `accent`.
     var accentContainer: Color {
-        switch accentColorKey {
+        _ = _accentRevision
+        return switch accentColorKey {
         case "purple": Color(hex: 0x9B57E0)
         case "pink":   Color(hex: 0xE0458F)
         case "orange": Color(hex: 0xE06A1A)
@@ -47,7 +68,8 @@ final class ThemeManager {
 
     /// Dimmed accent — used for hover/pressed states of accent-colored UI.
     var accentDim: Color {
-        switch accentColorKey {
+        _ = _accentRevision
+        return switch accentColorKey {
         case "purple": Color(hex: 0x8B44CF)
         case "pink":   Color(hex: 0xCC3578)
         case "orange": Color(hex: 0xCC5500)
@@ -59,7 +81,8 @@ final class ThemeManager {
 
     /// On-accent — text/icon color placed on top of `accentContainer`.
     var onAccent: Color {
-        switch accentColorKey {
+        _ = _accentRevision
+        return switch accentColorKey {
         case "purple": Color(hex: 0x1A0040)
         case "pink":   Color(hex: 0x3D001A)
         case "orange": Color(hex: 0x3D1500)
@@ -72,6 +95,7 @@ final class ThemeManager {
     // MARK: - Color Scheme
 
     var colorScheme: ColorScheme? {
-        darkModeEnabled ? .dark : .light
+        _ = _accentRevision
+        return darkModeEnabled ? .dark : .light
     }
 }

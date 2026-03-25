@@ -7,6 +7,10 @@ options:
   xcodeVersion: "26.2"
   createIntermediateGroups: true
   groupSortPosition: top
+  developmentLanguage: fr
+  knownRegions:
+    - fr
+    - en
 
 packages:
   CinemaxKit:
