@@ -49,7 +49,7 @@
 "sort.rating" = "Note";
 "sort.runtime" = "Durée";
 "sort.random" = "Aléatoire";
-"filter.byGenre" = "Filtrer par genre";
+"filter.byGenre" = "Genre";
 
 // MARK: - TV Series
 
