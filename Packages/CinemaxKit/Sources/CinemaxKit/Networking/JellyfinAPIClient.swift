@@ -281,7 +281,7 @@ public final class JellyfinAPIClient: Sendable {
     /// 1. Get full item → extract initial media source
     /// 2. POST PlaybackInfo with device profile
     /// 3. Build stream URL from response (transcodingURL or direct stream)
-    public func getPlaybackInfo(itemId: String, userId: String) async throws -> PlaybackInfo {
+    public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000) async throws -> PlaybackInfo {
         guard let client = getClient(),
               let serverURL = getServerURL() else {
             throw JellyfinError.notConnected
@@ -354,9 +354,9 @@ public final class JellyfinAPIClient: Sendable {
         #endif
 
         // Step 2: POST PlaybackInfo (matching Swiftfin exactly)
-        var body = PlaybackInfoDto(deviceProfile: Self.buildAppleDeviceProfile())
+        var body = PlaybackInfoDto(deviceProfile: Self.buildAppleDeviceProfile(maxBitrate: maxBitrate))
         body.isAutoOpenLiveStream = true
-        body.maxStreamingBitrate = 40_000_000
+        body.maxStreamingBitrate = maxBitrate
         body.userID = userId
         if let initialMediaSourceId {
             body.mediaSourceID = initialMediaSourceId
@@ -551,7 +551,7 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     /// Builds a DeviceProfile matching Swiftfin's native player profile.
-    private static func buildAppleDeviceProfile() -> DeviceProfile {
+    private static func buildAppleDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
         let directPlayProfiles = [
             DirectPlayProfile(
                 audioCodec: "aac,ac3,alac,eac3,flac",
@@ -588,7 +588,7 @@ public final class JellyfinAPIClient: Sendable {
         ]
         return DeviceProfile(
             directPlayProfiles: directPlayProfiles,
-            maxStreamingBitrate: 40_000_000,
+            maxStreamingBitrate: maxBitrate,
             transcodingProfiles: transcodingProfiles
         )
     }

@@ -1,8 +1,24 @@
 import SwiftUI
 
+// MARK: - Motion Effects Environment Key
+
+private struct MotionEffectsEnabledKey: EnvironmentKey {
+    static let defaultValue: Bool = true
+}
+
+extension EnvironmentValues {
+    var motionEffectsEnabled: Bool {
+        get { self[MotionEffectsEnabledKey.self] }
+        set { self[MotionEffectsEnabledKey.self] = newValue }
+    }
+}
+
+// MARK: - Cinema Focus Modifier
+
 struct CinemaFocusModifier: ViewModifier {
     @Environment(\.isFocused) private var isFocused
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
 
     func body(content: Content) -> some View {
         content
@@ -19,7 +35,7 @@ struct CinemaFocusModifier: ViewModifier {
                 radius: 24,
                 x: 0, y: 12
             )
-            .animation(.easeInOut(duration: 0.2), value: isFocused)
+            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
             #endif
     }
 }

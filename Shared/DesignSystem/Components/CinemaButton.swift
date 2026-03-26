@@ -101,6 +101,7 @@ struct CinemaTVButtonStyle: ButtonStyle {
     // the current accent color without needing to pass it explicitly.
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -112,8 +113,8 @@ struct CinemaTVButtonStyle: ButtonStyle {
                 radius: 20,
                 y: 10
             )
-            .animation(.easeInOut(duration: 0.2), value: isFocused)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeInOut(duration: 0.1) : nil, value: configuration.isPressed)
     }
 
     @ViewBuilder

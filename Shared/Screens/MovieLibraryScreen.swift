@@ -955,13 +955,14 @@ private struct FlowLayout: Layout {
 #if os(tvOS)
 struct CinemaTVCardButtonStyle: ButtonStyle {
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .brightness(isFocused ? 0.05 : 0)
-            .animation(.easeInOut(duration: 0.2), value: isFocused)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeInOut(duration: 0.1) : nil, value: configuration.isPressed)
     }
 }
 #endif

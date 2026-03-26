@@ -572,11 +572,11 @@ struct SettingsScreen: View {
                             .frame(width: 26, height: 26)
                             .padding(3)
                     }
-                    .animation(.easeInOut(duration: 0.15), value: value.wrappedValue)
+                    .animation(motionEffects ? .easeInOut(duration: 0.15) : nil, value: value.wrappedValue)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -946,7 +946,7 @@ struct SettingsScreen: View {
 
 #if os(tvOS)
 private extension View {
-    func tvSettingsFocusable(isFocused: Bool, accent: Color) -> some View {
+    func tvSettingsFocusable(isFocused: Bool, accent: Color, animated: Bool = true) -> some View {
         self
             .background(
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
@@ -956,7 +956,7 @@ private extension View {
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
                     .strokeBorder(accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
             )
-            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .animation(animated ? .easeOut(duration: 0.15) : nil, value: isFocused)
     }
 }
 #endif

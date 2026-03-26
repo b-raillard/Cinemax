@@ -13,6 +13,9 @@ final class MediaDetailViewModel {
     var isLoading = true
     var errorMessage: String?
 
+    // The resolved type after loading (episode/season → series)
+    var resolvedType: BaseItemKind = .movie
+
     let itemId: String
     let itemType: BaseItemKind
 
@@ -26,18 +29,37 @@ final class MediaDetailViewModel {
         isLoading = true
 
         do {
-            async let detail = appState.apiClient.getItem(userId: userId, itemId: itemId)
-            async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
+            let loadedItem = try await appState.apiClient.getItem(userId: userId, itemId: itemId)
 
-            item = try await detail
-            similarItems = try await similar
+            // Resolve episodes/seasons to their parent series for full detail
+            let effectiveType = loadedItem.type ?? itemType
+            if effectiveType == .episode || effectiveType == .season,
+               let seriesId = loadedItem.seriesID {
+                let seriesItem = try await appState.apiClient.getItem(userId: userId, itemId: seriesId)
+                item = seriesItem
+                resolvedType = .series
 
-            // Load seasons for series
-            if itemType == .series {
-                seasons = try await appState.apiClient.getSeasons(seriesId: itemId, userId: userId)
+                async let similar = appState.apiClient.getSimilarItems(itemId: seriesId, userId: userId, limit: 12)
+                similarItems = try await similar
+
+                seasons = try await appState.apiClient.getSeasons(seriesId: seriesId, userId: userId)
                 if let firstSeason = seasons.first, let seasonId = firstSeason.id {
                     selectedSeasonId = seasonId
-                    episodes = try await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
+                    episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
+                }
+            } else {
+                item = loadedItem
+                resolvedType = effectiveType
+
+                async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
+                similarItems = try await similar
+
+                if effectiveType == .series {
+                    seasons = try await appState.apiClient.getSeasons(seriesId: itemId, userId: userId)
+                    if let firstSeason = seasons.first, let seasonId = firstSeason.id {
+                        selectedSeasonId = seasonId
+                        episodes = try await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
+                    }
                 }
             }
         } catch {
@@ -47,11 +69,11 @@ final class MediaDetailViewModel {
         isLoading = false
     }
 
-    func selectSeason(_ seasonId: String, using appState: AppState) async {
+    func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         selectedSeasonId = seasonId
         do {
-            episodes = try await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
+            episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
         } catch {
             // Keep existing episodes on error
         }
@@ -108,6 +130,9 @@ struct MediaDetailScreen: View {
                             .font(CinemaFont.body)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .padding(.horizontal, contentPadding)
+                            #if os(tvOS)
+                            .focusable()
+                            #endif
                     }
 
                     // Cast
@@ -116,8 +141,8 @@ struct MediaDetailScreen: View {
                     }
 
                     // Seasons & Episodes (for series)
-                    if viewModel.itemType == .series, !viewModel.seasons.isEmpty {
-                        seasonsSection
+                    if viewModel.resolvedType == .series, !viewModel.seasons.isEmpty {
+                        seasonsSection(item)
                     }
 
                     // Similar items
@@ -214,7 +239,7 @@ struct MediaDetailScreen: View {
                 let minutes = ticks / 600_000_000
                 return minutes > 60 ? loc.localized("detail.runtime.hours", minutes / 60, minutes % 60) : loc.localized("detail.runtime.minutes", minutes)
             },
-            viewModel.itemType == .series ? item.childCount.map { loc.localized("detail.seasons", $0) } : nil
+            viewModel.resolvedType == .series ? item.childCount.map { loc.localized("detail.seasons", $0) } : nil
         ].compactMap { $0 }
 
         return Text(parts.joined(separator: " · "))
@@ -224,7 +249,7 @@ struct MediaDetailScreen: View {
     // MARK: - Action Buttons
 
     private func actionButtons(_ item: BaseItemDto) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: actionButtonSpacing) {
             if let id = item.id {
                 PlayLink(itemId: id, title: item.name ?? "") {
                     HStack(spacing: CinemaSpacing.spacing2) {
@@ -249,9 +274,6 @@ struct MediaDetailScreen: View {
                 #endif
                 .frame(width: playButtonWidth)
             }
-
-            CinemaButton(title: loc.localized("detail.moreInfo"), style: .ghost, icon: "info.circle") {}
-                .frame(minWidth: playButtonWidth)
         }
         .padding(.horizontal, contentPadding)
     }
@@ -277,8 +299,10 @@ struct MediaDetailScreen: View {
 
     // MARK: - Seasons
 
-    private var seasonsSection: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+    private func seasonsSection(_ item: BaseItemDto) -> some View {
+        let seriesId = item.id ?? viewModel.itemId
+
+        return VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             // Season picker
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -286,7 +310,7 @@ struct MediaDetailScreen: View {
                         let isSelected = season.id == viewModel.selectedSeasonId
                         Button {
                             if let id = season.id {
-                                Task { await viewModel.selectSeason(id, using: appState) }
+                                Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
                             }
                         } label: {
                             Text(season.name ?? loc.localized("detail.season"))
@@ -301,7 +325,9 @@ struct MediaDetailScreen: View {
                                 )
                         }
                         #if os(tvOS)
-                        .buttonStyle(.plain)
+                        .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
+                        .focusEffectDisabled()
+                        .hoverEffectDisabled()
                         #else
                         .buttonStyle(.plain)
                         #endif
@@ -430,7 +456,7 @@ struct MediaDetailScreen: View {
 
     private var backdropHeight: CGFloat {
         #if os(tvOS)
-        700
+        760
         #else
         420
         #endif
@@ -508,6 +534,14 @@ struct MediaDetailScreen: View {
         #endif
     }
 
+    private var actionButtonSpacing: CGFloat {
+        #if os(tvOS)
+        CinemaSpacing.spacing5
+        #else
+        12
+        #endif
+    }
+
     private var playButtonWidth: CGFloat {
         #if os(tvOS)
         220
@@ -548,3 +582,22 @@ struct MediaDetailScreen: View {
         #endif
     }
 }
+
+// MARK: - tvOS Season Tab Button Style
+
+#if os(tvOS)
+private struct SeasonTabButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    let accent: Color
+    @Environment(\.isFocused) private var isFocused
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay(
+                Capsule()
+                    .strokeBorder(accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
+            )
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+    }
+}
+#endif

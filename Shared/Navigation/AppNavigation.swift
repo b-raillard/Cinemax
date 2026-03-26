@@ -54,6 +54,10 @@ struct AppNavigation: View {
     @State private var loc = LocalizationManager()
     @State private var hasCheckedSession = false
 
+    #if os(tvOS)
+    @AppStorage("motionEffects") private var motionEffects: Bool = true
+    #endif
+
     var body: some View {
         Group {
             if !hasCheckedSession {
@@ -69,6 +73,9 @@ struct AppNavigation: View {
         .environment(appState)
         .environment(themeManager)
         .environment(loc)
+        #if os(tvOS)
+        .environment(\.motionEffectsEnabled, motionEffects)
+        #endif
         .preferredColorScheme(themeManager.colorScheme)
         .task {
             await appState.restoreSession()

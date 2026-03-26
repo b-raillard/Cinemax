@@ -165,7 +165,7 @@ struct VideoPlayerView: View {
 @MainActor
 final class TVVideoPresenter {
 
-    static func present(url: URL) {
+    static func present(url: URL, forceSubtitles: Bool = false) {
         guard let windowScene = UIApplication.shared.connectedScenes
                 .compactMap({ $0 as? UIWindowScene }).first,
               let rootVC = windowScene.windows.first?.rootViewController else {
@@ -185,6 +185,20 @@ final class TVVideoPresenter {
         let player = AVPlayer(playerItem: playerItem)
         player.automaticallyWaitsToMinimizeStalling = true
 
+        if forceSubtitles {
+            // Disable automatic selection so we can force subtitles on
+            player.appliesMediaSelectionCriteriaAutomatically = false
+            // Select the first available subtitle track once the asset is ready
+            Task {
+                if let group = try? await playerItem.asset.loadMediaSelectionGroup(for: .legible) {
+                    let options = AVMediaSelectionGroup.mediaSelectionOptions(from: group.options, filteredAndSortedAccordingToPreferredLanguages: Locale.preferredLanguages)
+                    if let subtitle = options.first ?? group.options.first {
+                        playerItem.select(subtitle, in: group)
+                    }
+                }
+            }
+        }
+
         let playerVC = AVPlayerViewController()
         playerVC.player = player
         playerVC.modalPresentationStyle = .fullScreen
@@ -203,17 +217,23 @@ final class TVVideoPresenter {
 #if os(tvOS)
 @MainActor @Observable
 final class VideoPlayerCoordinator {
+    @ObservationIgnored
+    @AppStorage("forceSubtitles") private var forceSubtitles: Bool = false
+    @ObservationIgnored
+    @AppStorage("render4K") private var render4K: Bool = true
 
     func play(itemId: String, title: String, using appState: AppState) {
+        let subtitles = forceSubtitles
+        let maxBitrate = render4K ? 120_000_000 : 20_000_000
         Task {
             guard let userId = appState.currentUserId else {
                 logger.error("VideoPlayerCoordinator: not authenticated")
                 return
             }
             do {
-                let info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId)
+                let info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: maxBitrate)
                 logger.info("tvOS play: method=\(info.playMethod), url=\(info.url.absoluteString)")
-                TVVideoPresenter.present(url: info.url)
+                TVVideoPresenter.present(url: info.url, forceSubtitles: subtitles)
             } catch {
                 logger.error("tvOS playback error: \(error.localizedDescription)")
             }
