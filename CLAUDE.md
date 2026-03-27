@@ -110,10 +110,11 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - **Phase 10**: Fully custom tvOS video player (`TVCustomPlayerView.swift`). Replaced `AVPlayerViewController` (showed "Unknown" for audio tracks, no public API to fix) with `TVPlayerHostViewController` — bare `AVPlayerLayer` + SwiftUI overlay. Custom transport bar: floating audio/subtitle `Menu` buttons (bottom-right, glass circles) + scrubber with time labels, all floating on video with no background container. Isolated sub-views prevent Menu blinking on time ticks. Centralized `@FocusState` in `TVControlsOverlay` restores focus to the correct button after Menu back. Same-track selection is a no-op. Scrubber pinned during track switch (no jump to 0). Remote input via `pressesBegan`; left/right only seeks when scrubber is focused (`onMoveCommand`).
 
 ## tvOS Interface Settings
-Three `@AppStorage` toggles in SettingsScreen (tvOS only):
+Three `@AppStorage` toggles + one picker in SettingsScreen (tvOS only):
 - **Motion Effects** (`motionEffects`, default: `true`) — controls all UI animations via `motionEffectsEnabled` environment key injected from `AppNavigation`. When off, `.animation(nil)` is used everywhere
 - **Force Subtitles** (`forceSubtitles`, default: `false`) — read by `VideoPlayerCoordinator`, passed to `TVVideoPresenter.present(url:forceSubtitles:)`. Disables `appliesMediaSelectionCriteriaAutomatically` and selects first `.legible` track
 - **4K Rendering** (`render4K`, default: `true`) — read by `VideoPlayerCoordinator`, sets `maxBitrate` to 120 Mbps (on) or 20 Mbps (off) in `getPlaybackInfo()` and `DeviceProfile`
+- **Text Size** (`uiScale`, default: `1.0`) — global font scale factor (80%–130%, 5% steps). Stored via `ThemeManager.uiScale` (`@AppStorage("uiScale")`). Read at render time by `CinemaScale.factor` (computed `static var` from UserDefaults). All `CinemaFont` methods and `CinemaScale.pt()` calls multiply by this factor. Changing `uiScale` bumps `ThemeManager._accentRevision` to trigger a full re-render. UI: `Button` row with `.confirmationDialog` listing percentage options (80%–130%); same row style as toggles (`.tvSettingsFocusable`, `minHeight: 80`). **Note**: `confirmationDialog` does not support pre-focusing the current value — use a custom sheet with `@FocusState` + `.defaultFocus` if that behaviour is needed in future.
 
 ## MediaDetailScreen
 - `MediaDetailViewModel` auto-resolves Episode/Season items to their parent Series (fetches series by `seriesID`, loads seasons + episodes)

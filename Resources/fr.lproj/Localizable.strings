@@ -106,6 +106,7 @@
 "settings.refreshConnection" = "Actualiser la connexion";
 "settings.interface" = "Interface";
 "settings.motionEffects" = "Effets de mouvement";
+"settings.fontSize" = "Taille du texte";
 "settings.forceSubtitles" = "Forcer les sous-titres";
 "settings.4kRendering" = "Rendu 4K";
 

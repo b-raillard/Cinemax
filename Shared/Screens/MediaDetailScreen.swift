@@ -268,7 +268,7 @@ struct MediaDetailScreen: View {
                     #endif
                 }
                 #if os(tvOS)
-                .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .primary))
+                .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
                 #else
                 .buttonStyle(.plain)
                 #endif
@@ -464,7 +464,7 @@ struct MediaDetailScreen: View {
 
     private var detailTitleSize: CGFloat {
         #if os(tvOS)
-        56
+        CinemaScale.pt(64)
         #else
         32
         #endif
@@ -488,7 +488,7 @@ struct MediaDetailScreen: View {
 
     private var badgeFontSize: CGFloat {
         #if os(tvOS)
-        14
+        CinemaScale.pt(17)
         #else
         11
         #endif
@@ -496,7 +496,7 @@ struct MediaDetailScreen: View {
 
     private var metadataFontSize: CGFloat {
         #if os(tvOS)
-        16
+        CinemaScale.pt(20)
         #else
         13
         #endif
@@ -504,7 +504,7 @@ struct MediaDetailScreen: View {
 
     private var genreFontSize: CGFloat {
         #if os(tvOS)
-        16
+        CinemaScale.pt(20)
         #else
         13
         #endif
@@ -512,7 +512,7 @@ struct MediaDetailScreen: View {
 
     private var ratingFontSize: CGFloat {
         #if os(tvOS)
-        18
+        CinemaScale.pt(22)
         #else
         15
         #endif
@@ -520,7 +520,7 @@ struct MediaDetailScreen: View {
 
     private var buttonFontSize: CGFloat {
         #if os(tvOS)
-        28
+        CinemaScale.pt(28)
         #else
         18
         #endif
@@ -568,7 +568,7 @@ struct MediaDetailScreen: View {
 
     private var episodeTitleFontSize: CGFloat {
         #if os(tvOS)
-        18
+        CinemaScale.pt(22)
         #else
         15
         #endif
@@ -576,7 +576,7 @@ struct MediaDetailScreen: View {
 
     private var seasonTabFontSize: CGFloat {
         #if os(tvOS)
-        18
+        CinemaScale.pt(22)
         #else
         14
         #endif

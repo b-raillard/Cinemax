@@ -443,24 +443,31 @@ private struct TVControlsOverlay: View {
                         TVAudioTrackMenu(
                             state: state,
                             tracks: info.audioTracks,
+                            isFocused: focus == .audio,
                             onInteraction: onInteraction,
                             onAudioChange: onAudioChange
                         )
                         .focused($focus, equals: .audio)
+                        .focusEffectDisabled()
                     }
                     if !info.subtitleTracks.isEmpty {
                         TVSubtitleTrackMenu(
                             state: state,
                             tracks: info.subtitleTracks,
+                            isFocused: focus == .subtitle,
                             onInteraction: onInteraction,
                             onSubtitleChange: onSubtitleChange
                         )
                         .focused($focus, equals: .subtitle)
+                        .focusEffectDisabled()
                     }
                 }
 
-                // Scrubber: focus + seek handled here; sub-view is display-only
+                // Scrubber: glass pill container, focus + seek handled here
                 TVPlayerScrubber(state: state, isFocused: focus == .scrubber)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 14)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                     .focusable()
                     .focused($focus, equals: .scrubber)
                     .focusEffectDisabled()
@@ -532,6 +539,7 @@ private struct TVPlayerScrubber: View {
 private struct TVAudioTrackMenu: View {
     let state: TVPlayerState
     let tracks: [MediaTrackInfo]
+    let isFocused: Bool
     let onInteraction: () -> Void
     let onAudioChange: (Int?) -> Void
 
@@ -552,10 +560,12 @@ private struct TVAudioTrackMenu: View {
             }
         } label: {
             Image(systemName: "speaker.wave.2.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(.white)
-                .padding(11)
-                .background(.white.opacity(0.15), in: Circle())
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(isFocused ? Color.black.opacity(0.8) : .white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 14)
+                .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Capsule())
+                .animation(.easeInOut(duration: 0.15), value: isFocused)
         }
     }
 }
@@ -567,6 +577,7 @@ private struct TVAudioTrackMenu: View {
 private struct TVSubtitleTrackMenu: View {
     let state: TVPlayerState
     let tracks: [MediaTrackInfo]
+    let isFocused: Bool
     let onInteraction: () -> Void
     let onSubtitleChange: (Int?) -> Void
 
@@ -602,10 +613,12 @@ private struct TVSubtitleTrackMenu: View {
             }
         } label: {
             Image(systemName: "captions.bubble.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(.white)
-                .padding(11)
-                .background(.white.opacity(0.15), in: Circle())
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(isFocused ? Color.black.opacity(0.8) : .white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 14)
+                .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Capsule())
+                .animation(.easeInOut(duration: 0.15), value: isFocused)
         }
     }
 }

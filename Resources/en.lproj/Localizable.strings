@@ -106,6 +106,7 @@
 "settings.refreshConnection" = "Refresh Connection";
 "settings.interface" = "Interface";
 "settings.motionEffects" = "Motion Effects";
+"settings.fontSize" = "Text Size";
 "settings.forceSubtitles" = "Force Subtitles";
 "settings.4kRendering" = "4K UI Rendering";
 

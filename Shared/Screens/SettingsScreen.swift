@@ -185,12 +185,12 @@ struct SettingsScreen: View {
     private var tvLanguagePicker: some View {
         HStack(spacing: CinemaSpacing.spacing3) {
             Image(systemName: "globe")
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: CinemaScale.pt(20), weight: .medium))
                 .foregroundStyle(themeManager.accent)
                 .frame(width: 24)
 
             Text(loc.localized("settings.language"))
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: CinemaScale.pt(20), weight: .medium))
                 .foregroundStyle(CinemaColor.onSurface)
 
             Spacer()
@@ -220,7 +220,7 @@ struct SettingsScreen: View {
             loc.languageCode = code
         } label: {
             Text(label)
-                .font(.system(size: 16, weight: isSelected ? .bold : .medium))
+                .font(.system(size: CinemaScale.pt(20), weight: isSelected ? .bold : .medium))
                 .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.vertical, CinemaSpacing.spacing2)
@@ -245,12 +245,12 @@ struct SettingsScreen: View {
     private var tvAccentColorPicker: some View {
         HStack(spacing: CinemaSpacing.spacing3) {
             Image(systemName: "paintpalette.fill")
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: CinemaScale.pt(20), weight: .medium))
                 .foregroundStyle(themeManager.accent)
                 .frame(width: 24)
 
             Text(loc.localized("settings.accentColor"))
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: CinemaScale.pt(20), weight: .medium))
                 .foregroundStyle(CinemaColor.onSurface)
 
             Spacer()
@@ -291,7 +291,7 @@ struct SettingsScreen: View {
                         .frame(width: 36, height: 36)
 
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: CinemaScale.pt(14), weight: .bold))
                         .foregroundStyle(.white)
                 }
 
@@ -378,17 +378,17 @@ struct SettingsScreen: View {
                 .opacity(isCurrentUser ? 1.0 : 0.55)
 
                 Text(user.name ?? "User")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                     .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
                     .lineLimit(1)
 
                 if isCurrentUser {
                     Text(loc.localized("settings.active"))
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: CinemaScale.pt(13), weight: .bold))
                         .foregroundStyle(Color(hex: 0x34C759))
                 } else {
                     Text(user.policy?.isAdministrator == true ? loc.localized("settings.admin") : loc.localized("settings.user"))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: CinemaScale.pt(13), weight: .medium))
                         .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
                 }
             }
@@ -410,12 +410,12 @@ struct SettingsScreen: View {
         } label: {
             VStack(spacing: CinemaSpacing.spacing2) {
                 Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                     .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
                     .frame(width: 36, height: 36)
 
                 Text(loc.localized("settings.switchAccount"))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                     .foregroundStyle(isFocused ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
                     .multilineTextAlignment(.center)
             }
@@ -460,16 +460,16 @@ struct SettingsScreen: View {
                             .fill(themeManager.accent.opacity(0.12))
                             .frame(width: 40, height: 40)
                         Image(systemName: "server.rack")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                             .foregroundStyle(themeManager.accent)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(serverName)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                             .foregroundStyle(CinemaColor.onSurface)
                         Text(serverAddress)
-                            .font(.system(size: 12, weight: .regular))
+                            .font(.system(size: CinemaScale.pt(15), weight: .regular))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -482,7 +482,7 @@ struct SettingsScreen: View {
                             .fill(Color(hex: 0x34C759))
                             .frame(width: 6, height: 6)
                         Text(loc.localized("settings.connected"))
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: CinemaScale.pt(14), weight: .bold))
                             .foregroundStyle(Color(hex: 0x34C759))
                     }
                     .padding(.horizontal, 8)
@@ -512,12 +512,12 @@ struct SettingsScreen: View {
         } label: {
             HStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
                     .foregroundStyle(themeManager.accent)
                     .frame(width: 24)
 
                 Text(loc.localized("settings.refreshConnection"))
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
 
                 Spacer()
@@ -541,6 +541,53 @@ struct SettingsScreen: View {
             tvGlassToggle(icon: "sparkles", label: loc.localized("settings.motionEffects"), key: "motion", value: $motionEffects)
             tvGlassToggle(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), key: "subtitles", value: $forceSubtitles)
             tvGlassToggle(icon: "4k.tv", label: loc.localized("settings.4kRendering"), key: "4k", value: $render4K)
+
+            tvFontSizeRow
+        }
+    }
+
+    @State private var fontScale: Double = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
+    @State private var showFontSizePicker = false
+
+    private let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]
+
+    private var tvFontSizeRow: some View {
+        let isFocused = focusedItem == .toggle("fontSize")
+        return Button {
+            showFontSizePicker = true
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: "textformat.size")
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+                Text(loc.localized("settings.fontSize"))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                Text("\(Int(fontScale * 100))%")
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .monospacedDigit()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle("fontSize"))
+        .confirmationDialog(loc.localized("settings.fontSize"), isPresented: $showFontSizePicker) {
+            ForEach(fontScaleOptions, id: \.self) { option in
+                Button("\(Int(option * 100))%") {
+                    fontScale = option
+                    themeManager.uiScale = option
+                }
+            }
         }
     }
 
@@ -552,12 +599,12 @@ struct SettingsScreen: View {
         } label: {
             HStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
                     .foregroundStyle(themeManager.accent)
                     .frame(width: 24)
 
                 Text(label)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
 
                 Spacer()
@@ -588,7 +635,7 @@ struct SettingsScreen: View {
 
     private func tvSectionLabel(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 13, weight: .bold))
+            .font(.system(size: CinemaScale.pt(17), weight: .bold))
             .foregroundStyle(CinemaColor.onSurfaceVariant)
             .tracking(1.5)
     }
@@ -648,7 +695,7 @@ struct SettingsScreen: View {
                         .frame(width: 40, height: 40)
 
                     Image(systemName: "server.rack")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                         .foregroundStyle(themeManager.accent)
                 }
 
@@ -670,7 +717,7 @@ struct SettingsScreen: View {
                     liveBadge
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
                         .foregroundStyle(CinemaColor.outlineVariant)
                 }
             }
@@ -686,7 +733,7 @@ struct SettingsScreen: View {
                 .frame(width: 6, height: 6)
 
             Text(loc.localized("settings.live"))
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: CinemaScale.pt(13), weight: .bold))
                 .tracking(0.5)
                 .foregroundStyle(Color(hex: 0x34C759))
         }
@@ -776,7 +823,7 @@ struct SettingsScreen: View {
             loc.languageCode = code
         } label: {
             Text(label)
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: CinemaScale.pt(17), weight: .bold))
                 .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
                 .frame(width: 40, height: 30)
                 .background(
@@ -809,7 +856,7 @@ struct SettingsScreen: View {
                         .frame(width: accentDotSize, height: accentDotSize)
 
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: CinemaScale.pt(13), weight: .bold))
                         .foregroundStyle(.white)
                 }
             }
@@ -871,7 +918,7 @@ struct SettingsScreen: View {
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
                         .foregroundStyle(CinemaColor.outlineVariant)
                 }
             }
@@ -959,4 +1006,5 @@ private extension View {
             .animation(animated ? .easeOut(duration: 0.15) : nil, value: isFocused)
     }
 }
+
 #endif

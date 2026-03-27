@@ -34,6 +34,18 @@ final class ThemeManager {
         }
     }
 
+    @ObservationIgnored
+    @AppStorage("uiScale") private var _uiScale: Double = 1.0
+
+    /// Global UI text scale factor (0.8 – 1.4). Changing this re-renders all views.
+    var uiScale: Double {
+        get { _uiScale }
+        set {
+            _uiScale = min(1.4, max(0.8, newValue))
+            _accentRevision += 1
+        }
+    }
+
     /// Tracked revision counter — triggers SwiftUI updates when AppStorage values change.
     private var _accentRevision: Int = 0
 

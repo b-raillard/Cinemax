@@ -416,7 +416,11 @@ struct SearchScreen: View {
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
-            if let type = item.type { parts.append(type.rawValue) }
+            if item.type == .episode, let seriesName = item.seriesName {
+                parts.append(seriesName)
+            } else if let type = item.type {
+                parts.append(type.rawValue)
+            }
             return parts.joined(separator: " · ")
         }()
 
