@@ -62,12 +62,31 @@ Follows the same flow as Swiftfin (reference: https://github.com/jellyfin/swiftf
 - KVO on `playerItem.status` for `.readyToPlay` / `.failed`
 - Cleanup on disappear (pause + nil player + invalidate observation)
 
-### tvOS Video Playback (UIKit-based)
-- **Critical**: On tvOS, video MUST be presented via UIKit (`AVPlayerViewController` + `UIViewController.present()`), NOT via SwiftUI `fullScreenCover` or `NavigationLink`. SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus state on dismiss.
-- `TVVideoPresenter` handles UIKit modal presentation directly on the root VC. Accepts `forceSubtitles` flag — when true, disables automatic media selection and selects the first available subtitle track (preferred language order)
-- `VideoPlayerCoordinator` (`@Observable`) reads `@AppStorage("forceSubtitles")` and `@AppStorage("render4K")`, fetches the stream URL via `getPlaybackInfo(maxBitrate:)`, then calls `TVVideoPresenter.present(url:forceSubtitles:)`
-- `PlayLink<Label>` — cross-platform component: `Button` → coordinator on tvOS, `NavigationLink` on iOS
-- All play buttons across screens use `PlayLink` instead of direct `NavigationLink` to `VideoPlayerView`
+### tvOS Video Playback (UIKit-based, fully custom player)
+- **Critical**: On tvOS, video MUST be presented via UIKit modal (`UIViewController.present()`), NOT via SwiftUI. SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus state on dismiss.
+- **Do NOT use `AVPlayerViewController`** — its native transport bar shows "Unknown" for audio tracks and has no public API to remove or correct individual buttons. Use `TVPlayerHostViewController` (our custom UIKit VC) instead.
+- `TVVideoPresenter` handles UIKit modal presentation directly on the root VC. Calls `TVPlayerHostViewController(title:info:onTrackChange:)`.
+- `VideoPlayerCoordinator` (`@Observable`) reads `@AppStorage("forceSubtitles")` and `@AppStorage("render4K")`, fetches playback info, then calls `TVVideoPresenter.present(title:info:onTrackChange:)`.
+- `PlayLink<Label>` — cross-platform component: `Button` → coordinator on tvOS, `NavigationLink` on iOS.
+- All play buttons across screens use `PlayLink` instead of direct `NavigationLink` to `VideoPlayerView`.
+
+### Custom tvOS Player (`TVCustomPlayerView.swift`, `#if os(tvOS)` only)
+All types live in `Shared/Screens/TVCustomPlayerView.swift`:
+
+- **`TVPlayerState`** (`@MainActor @Observable`) — single source of truth: `currentTime`, `duration`, `isPlaying`, `isBuffering`, `showControls`, `currentAudioIdx`, `currentSubtitleIdx`. Computed: `progress`, `formattedCurrentTime`, `formattedRemaining`.
+- **`TVPlayerHostViewController`** — full-screen UIKit VC. Embeds `AVPlayerLayer` + a `UIHostingController<TVPlayerOverlayView>`. Owns the `AVPlayer`, KVO observations, periodic time observer (1 s interval), and remote press handling (`pressesBegan`).
+  - `pressesBegan`: `playPause` → toggle; `menu` → show controls or dismiss; `select` → toggle when controls visible; `leftArrow`/`rightArrow` → show controls + pass to super (SwiftUI `onMoveCommand` handles seeking, so we never seek unconditionally here).
+  - `restartWithCurrentTracks()`: pins `state.currentTime` before setting `isBuffering = true`, so the scrubber doesn't jump to 0 during a track switch. Time observer skips updates while `isBuffering`.
+- **`TVPlayerOverlayView`** — only observes `isBuffering` + `showControls`. Delegates time/track rendering to isolated sub-views to prevent Menu blinking on time updates.
+- **`TVControlsOverlay`** — owns the single `@FocusState<FocusItem?>` (`.scrubber`, `.audio`, `.subtitle`) for all interactive elements. This is required so SwiftUI reliably restores focus to the correct button after a `Menu` is dismissed with the back button. `onMoveCommand` for seeking lives here (not in the scrubber sub-view).
+  - Controls float directly on video — **no wrapping background container**. Buttons have individual `Circle()` glass backgrounds (`.white.opacity(0.15)`); time labels have drop shadows for readability.
+- **`TVPlayerScrubber`** — display-only (accepts `isFocused: Bool`, no `@FocusState`). Only re-renders when `state.progress`, `state.formattedCurrentTime`, or `state.formattedRemaining` change.
+- **`TVAudioTrackMenu`** / **`TVSubtitleTrackMenu`** — isolated sub-views that only observe `state.currentAudioIdx` / `state.currentSubtitleIdx`. Selecting the already-active track is a **no-op** (no stream restart). Use `Label(…, systemImage: "checkmark")` for the active track.
+
+**Key invariants:**
+- Never re-render Menus on time ticks — isolate to sub-views with only the properties they need.
+- Always set `state.currentTime = savedSeconds` before `state.isBuffering = true` in track-switch paths.
+- `@FocusState` must live in the parent (`TVControlsOverlay`), not inside each sub-view, for cross-element focus restoration to work.
 
 ## Navigation Flow
 - `AppNavigation` → checks Keychain for stored session → restores via `apiClient.reconnect()` + `fetchServerInfo()`
@@ -88,6 +107,7 @@ Follows the same flow as Swiftfin (reference: https://github.com/jellyfin/swiftf
 - **Phase 7**: UI polish — tvOS focus without image overlap (border instead of scale), card image alignment (Color.clear container pattern), full i18n system (French default + English, in-app language switcher via `LocalizationManager`), accent color picker in settings, `@AppStorage`+`@Observable` reactivity fix (`_revision` counter pattern), series image fallback (`parentBackdropItemID` → `seriesID` → `id`)
 - **Phase 8**: Settings toggles wired up (Motion Effects → `motionEffectsEnabled` environment key disables all tvOS animations; Force Subtitles → auto-selects subtitle track on playback; 4K Rendering → adjusts max streaming bitrate 120/20 Mbps). MediaDetailScreen refactored: episodes/seasons auto-resolve to parent series for full detail, dead More Info button removed, tvOS scrolling fixed (`.focusable()` on overview text), backdrop height increased, action button spacing widened. Season tab buttons use custom `SeasonTabButtonStyle` (accent capsule border, no native focus effect).
 - **Phase 9**: MovieLibraryScreen + TVSeriesScreen unified into `MediaLibraryScreen` (parameterized by `BaseItemKind`). tvOS Sort & Filter reworked: replaced unusable modal sheet with inline filter bar — sort pills (horizontal scroll) + genre chips (wrapping `FlowLayout`, multi-line) + reset button on its own line below all filters. `TVFilterChipButtonStyle` for chip focus (thin accent capsule border). Sort options: Name, Date Added, Release Year, Rating (runtime removed).
+- **Phase 10**: Fully custom tvOS video player (`TVCustomPlayerView.swift`). Replaced `AVPlayerViewController` (showed "Unknown" for audio tracks, no public API to fix) with `TVPlayerHostViewController` — bare `AVPlayerLayer` + SwiftUI overlay. Custom transport bar: floating audio/subtitle `Menu` buttons (bottom-right, glass circles) + scrubber with time labels, all floating on video with no background container. Isolated sub-views prevent Menu blinking on time ticks. Centralized `@FocusState` in `TVControlsOverlay` restores focus to the correct button after Menu back. Same-track selection is a no-op. Scrubber pinned during track switch (no jump to 0). Remote input via `pressesBegan`; left/right only seeks when scrubber is focused (`onMoveCommand`).
 
 ## tvOS Interface Settings
 Three `@AppStorage` toggles in SettingsScreen (tvOS only):

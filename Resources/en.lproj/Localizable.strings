@@ -172,3 +172,7 @@
 "player.notAuthenticated" = "Not authenticated";
 "player.playbackFailed" = "Playback failed";
 "player.method" = "Method: %@";
+"player.audio" = "Audio";
+"player.subtitles" = "Subtitles";
+"player.subtitles.off" = "Off";
+"player.trackPicker.title" = "Playback Tracks";

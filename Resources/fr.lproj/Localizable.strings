@@ -172,3 +172,7 @@
 "player.notAuthenticated" = "Non authentifié";
 "player.playbackFailed" = "Échec de la lecture";
 "player.method" = "Méthode : %@";
+"player.audio" = "Audio";
+"player.subtitles" = "Sous-titres";
+"player.subtitles.off" = "Désactivé";
+"player.trackPicker.title" = "Pistes de lecture";

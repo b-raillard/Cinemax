@@ -13,6 +13,14 @@ func debugLog(_ message: String) {
 }
 #endif
 
+/// A single audio or subtitle track from a Jellyfin media source.
+public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
+    public let id: Int        // stream index (AudioStreamIndex / SubtitleStreamIndex)
+    public let label: String  // Jellyfin DisplayTitle, e.g. "English - AAC - Stereo"
+    public let isDefault: Bool
+    public let isForced: Bool
+}
+
 public final class JellyfinAPIClient: Sendable {
     // JellyfinClient is not Sendable, so we protect it with a lock
     private let lock = NSLock()
@@ -274,6 +282,10 @@ public final class JellyfinAPIClient: Sendable {
         public let playSessionId: String?
         public let mediaSourceId: String?
         public let playMethod: String // "DirectPlay", "DirectStream", "Transcode"
+        public let audioTracks: [MediaTrackInfo]
+        public let subtitleTracks: [MediaTrackInfo]
+        public let selectedAudioIndex: Int?    // default or caller-requested audio stream index
+        public let selectedSubtitleIndex: Int? // default or caller-requested subtitle index (-1 = off)
     }
 
     /// Builds the best streaming URL for the given item.
@@ -281,7 +293,7 @@ public final class JellyfinAPIClient: Sendable {
     /// 1. Get full item → extract initial media source
     /// 2. POST PlaybackInfo with device profile
     /// 3. Build stream URL from response (transcodingURL or direct stream)
-    public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000) async throws -> PlaybackInfo {
+    public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000, audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil) async throws -> PlaybackInfo {
         guard let client = getClient(),
               let serverURL = getServerURL() else {
             throw JellyfinError.notConnected
@@ -358,6 +370,8 @@ public final class JellyfinAPIClient: Sendable {
         body.isAutoOpenLiveStream = true
         body.maxStreamingBitrate = maxBitrate
         body.userID = userId
+        body.audioStreamIndex = audioStreamIndex
+        body.subtitleStreamIndex = subtitleStreamIndex
         if let initialMediaSourceId {
             body.mediaSourceID = initialMediaSourceId
         }
@@ -421,11 +435,16 @@ public final class JellyfinAPIClient: Sendable {
                 #if DEBUG
                 debugLog("Transcode URL: \(url)")
                 #endif
+                let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
                 return PlaybackInfo(
                     url: url,
                     playSessionId: playSessionId,
                     mediaSourceId: mediaSource.id,
-                    playMethod: "Transcode"
+                    playMethod: "Transcode",
+                    audioTracks: audioTracks,
+                    subtitleTracks: subtitleTracks,
+                    selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
+                    selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex
                 )
             }
         }
@@ -442,7 +461,7 @@ public final class JellyfinAPIClient: Sendable {
         var queryItems = [
             URLQueryItem(name: "static", value: "true"),
             URLQueryItem(name: "playSessionId", value: playSessionId),
-            URLQueryItem(name: "mediaSourceId", value: effectiveItemId),
+            URLQueryItem(name: "mediaSourceId", value: mediaSource.id ?? effectiveItemId),
         ]
         if let tag = item.etag { queryItems.append(URLQueryItem(name: "tag", value: tag)) }
         if let token { queryItems.append(URLQueryItem(name: "api_key", value: token)) }
@@ -457,11 +476,16 @@ public final class JellyfinAPIClient: Sendable {
         #if DEBUG
         debugLog("Direct stream URL: \(url)")
         #endif
+        let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
         return PlaybackInfo(
             url: url,
             playSessionId: playSessionId,
             mediaSourceId: mediaSource.id,
-            playMethod: "DirectStream"
+            playMethod: "DirectStream",
+            audioTracks: audioTracks,
+            subtitleTracks: subtitleTracks,
+            selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
+            selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex
         )
     }
 
@@ -547,7 +571,28 @@ public final class JellyfinAPIClient: Sendable {
         #if DEBUG
         debugLog("Direct stream fallback URL: \(url)")
         #endif
-        return PlaybackInfo(url: url, playSessionId: nil, mediaSourceId: itemId, playMethod: "DirectStream")
+        return PlaybackInfo(url: url, playSessionId: nil, mediaSourceId: itemId, playMethod: "DirectStream",
+                            audioTracks: [], subtitleTracks: [], selectedAudioIndex: nil, selectedSubtitleIndex: nil)
+    }
+
+    /// Extracts audio and subtitle track info from a media source's stream list.
+    private static func extractTracks(from source: MediaSourceInfo) -> (audio: [MediaTrackInfo], subtitles: [MediaTrackInfo]) {
+        let streams = source.mediaStreams ?? []
+        let audio: [MediaTrackInfo] = streams
+            .filter { $0.type == .audio }
+            .compactMap { s in
+                guard let idx = s.index else { return nil }
+                let label = s.displayTitle ?? s.language ?? "Track \(idx)"
+                return MediaTrackInfo(id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false)
+            }
+        let subtitles: [MediaTrackInfo] = streams
+            .filter { $0.type == .subtitle }
+            .compactMap { s in
+                guard let idx = s.index else { return nil }
+                let label = s.displayTitle ?? s.language ?? "Track \(idx)"
+                return MediaTrackInfo(id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false)
+            }
+        return (audio, subtitles)
     }
 
     /// Builds a DeviceProfile matching Swiftfin's native player profile.
@@ -578,7 +623,7 @@ public final class JellyfinAPIClient: Sendable {
                 isBreakOnNonKeyFrames: true,
                 container: "mp4",
                 context: .streaming,
-                enableSubtitlesInManifest: true,
+                enableSubtitlesInManifest: false,
                 maxAudioChannels: "8",
                 minSegments: 2,
                 protocol: .hls,
@@ -586,9 +631,30 @@ public final class JellyfinAPIClient: Sendable {
                 videoCodec: "hevc,h264,mpeg4"
             ),
         ]
+        // All subtitles are burned (encoded) into the video by the server.
+        // This prevents AVPlayerViewController from showing its native subtitle picker button
+        // (which appears only when the HLS manifest contains subtitle media groups).
+        // Subtitle selection is handled exclusively via our custom transport-bar menu,
+        // which re-requests the stream with the desired SubtitleStreamIndex.
+        // Burning preserves full ASS/SSA styling that AVPlayer's WebVTT conversion would strip.
+        let subtitleProfiles: [SubtitleProfile] = [
+            SubtitleProfile(format: "srt",    method: .encode),
+            SubtitleProfile(format: "subrip", method: .encode),
+            SubtitleProfile(format: "vtt",    method: .encode),
+            SubtitleProfile(format: "webvtt", method: .encode),
+            SubtitleProfile(format: "ass",    method: .encode),
+            SubtitleProfile(format: "ssa",    method: .encode),
+            SubtitleProfile(format: "ttml",   method: .encode),
+            SubtitleProfile(format: "pgs",    method: .encode),
+            SubtitleProfile(format: "pgssub", method: .encode),
+            SubtitleProfile(format: "dvbsub", method: .encode),
+            SubtitleProfile(format: "dvdsub", method: .encode),
+            SubtitleProfile(format: "sub",    method: .encode),
+        ]
         return DeviceProfile(
             directPlayProfiles: directPlayProfiles,
             maxStreamingBitrate: maxBitrate,
+            subtitleProfiles: subtitleProfiles,
             transcodingProfiles: transcodingProfiles
         )
     }

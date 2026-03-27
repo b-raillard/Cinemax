@@ -31,6 +31,8 @@ struct VideoPlayerView: View {
     @State private var playMethod: String?
     @State private var isLoading = true
     @State private var playerObservation: NSKeyValueObservation?
+    @State private var playbackInfo: JellyfinAPIClient.PlaybackInfo?
+    @State private var showTrackPicker = false
 
     let itemId: String
     let title: String
@@ -46,6 +48,25 @@ struct VideoPlayerView: View {
                 #else
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
+                    .overlay(alignment: .topTrailing) {
+                        if let info = playbackInfo, info.audioTracks.count > 1 || !info.subtitleTracks.isEmpty {
+                            Button { showTrackPicker = true } label: {
+                                Image(systemName: "ellipsis.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .shadow(radius: 4)
+                                    .padding(16)
+                            }
+                        }
+                    }
+                    .sheet(isPresented: $showTrackPicker) {
+                        if let info = playbackInfo {
+                            TrackPickerSheet(info: info) { audioIdx, subtitleIdx in
+                                showTrackPicker = false
+                                Task { await restartWithTracks(audioIndex: audioIdx, subtitleIndex: subtitleIdx) }
+                            }
+                        }
+                    }
                 #endif
             } else if let error = errorMessage {
                 VStack(spacing: CinemaSpacing.spacing3) {
@@ -110,6 +131,7 @@ struct VideoPlayerView: View {
         do {
             let info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId)
             playMethod = info.playMethod
+            self.playbackInfo = info
             logger.info("Starting playback: method=\(info.playMethod), url=\(info.url.absoluteString)")
 
             let playerItem = AVPlayerItem(url: info.url)
@@ -154,18 +176,64 @@ struct VideoPlayerView: View {
         player?.replaceCurrentItem(with: nil)
         player = nil
     }
+
+    private func restartWithTracks(audioIndex: Int?, subtitleIndex: Int?) async {
+        guard let userId = appState.currentUserId else { return }
+        let savedTime = player?.currentTime() ?? .zero
+        cleanup()
+        isLoading = true
+        errorMessage = nil
+        do {
+            let info = try await appState.apiClient.getPlaybackInfo(
+                itemId: itemId, userId: userId,
+                audioStreamIndex: audioIndex,
+                subtitleStreamIndex: subtitleIndex
+            )
+            playbackInfo = info
+            playMethod = info.playMethod
+
+            let playerItem = AVPlayerItem(url: info.url)
+            playerItem.preferredForwardBufferDuration = 5
+            let avPlayer = AVPlayer(playerItem: playerItem)
+            avPlayer.automaticallyWaitsToMinimizeStalling = true
+
+            playerObservation = playerItem.observe(\.status) { item, _ in
+                Task { @MainActor in
+                    switch item.status {
+                    case .readyToPlay:
+                        if savedTime.seconds > 0 { avPlayer.seek(to: savedTime) }
+                        isLoading = false
+                    case .failed:
+                        errorMessage = item.error?.localizedDescription ?? "Playback failed"
+                        cleanup()
+                    default: break
+                    }
+                }
+            }
+            self.player = avPlayer
+            avPlayer.play()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
+    }
 }
 
 // MARK: - tvOS UIKit Video Presentation
 
-/// Presents AVPlayerViewController directly via UIKit modal presentation,
+/// Presents TVPlayerHostViewController via UIKit modal presentation,
 /// completely bypassing SwiftUI's view hierarchy. This prevents
-/// NavigationSplitView focus corruption on dismiss.
+/// NavigationSplitView focus corruption on dismiss, and gives us a
+/// fully custom transport bar with correct Jellyfin track metadata.
 #if os(tvOS)
 @MainActor
 final class TVVideoPresenter {
 
-    static func present(url: URL, forceSubtitles: Bool = false) {
+    static func present(
+        title: String,
+        info: JellyfinAPIClient.PlaybackInfo,
+        onTrackChange: @escaping (Int?, Int?) async -> URL?
+    ) {
         guard let windowScene = UIApplication.shared.connectedScenes
                 .compactMap({ $0 as? UIWindowScene }).first,
               let rootVC = windowScene.windows.first?.rootViewController else {
@@ -173,39 +241,17 @@ final class TVVideoPresenter {
             return
         }
 
-        // Walk up to the topmost presented VC
         var topVC = rootVC
         while let presented = topVC.presentedViewController {
             topVC = presented
         }
 
-        let playerItem = AVPlayerItem(url: url)
-        playerItem.preferredForwardBufferDuration = 5
-
-        let player = AVPlayer(playerItem: playerItem)
-        player.automaticallyWaitsToMinimizeStalling = true
-
-        if forceSubtitles {
-            // Disable automatic selection so we can force subtitles on
-            player.appliesMediaSelectionCriteriaAutomatically = false
-            // Select the first available subtitle track once the asset is ready
-            Task {
-                if let group = try? await playerItem.asset.loadMediaSelectionGroup(for: .legible) {
-                    let options = AVMediaSelectionGroup.mediaSelectionOptions(from: group.options, filteredAndSortedAccordingToPreferredLanguages: Locale.preferredLanguages)
-                    if let subtitle = options.first ?? group.options.first {
-                        playerItem.select(subtitle, in: group)
-                    }
-                }
-            }
-        }
-
-        let playerVC = AVPlayerViewController()
-        playerVC.player = player
-        playerVC.modalPresentationStyle = .fullScreen
-
-        topVC.present(playerVC, animated: true) {
-            player.play()
-        }
+        let playerVC = TVPlayerHostViewController(
+            title: title,
+            info: info,
+            onTrackChange: onTrackChange
+        )
+        topVC.present(playerVC, animated: true)
     }
 }
 #endif
@@ -222,18 +268,25 @@ final class VideoPlayerCoordinator {
     @ObservationIgnored
     @AppStorage("render4K") private var render4K: Bool = true
 
+    var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
+
     func play(itemId: String, title: String, using appState: AppState) {
-        let subtitles = forceSubtitles
-        let maxBitrate = render4K ? 120_000_000 : 20_000_000
+        let bitrate = maxBitrate
+        let apiClient = appState.apiClient
         Task {
             guard let userId = appState.currentUserId else {
                 logger.error("VideoPlayerCoordinator: not authenticated")
                 return
             }
             do {
-                let info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: maxBitrate)
+                let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
                 logger.info("tvOS play: method=\(info.playMethod), url=\(info.url.absoluteString)")
-                TVVideoPresenter.present(url: info.url, forceSubtitles: subtitles)
+                TVVideoPresenter.present(title: title, info: info) { audioIdx, subtitleIdx in
+                    return try? await apiClient.getPlaybackInfo(
+                        itemId: itemId, userId: userId, maxBitrate: bitrate,
+                        audioStreamIndex: audioIdx, subtitleStreamIndex: subtitleIdx
+                    ).url
+                }
             } catch {
                 logger.error("tvOS playback error: \(error.localizedDescription)")
             }
@@ -270,5 +323,111 @@ struct PlayLink<Label: View>: View {
             label()
         }
         #endif
+    }
+}
+
+// MARK: - Track Picker Sheet
+
+/// Unified audio + subtitle track picker, used on both iOS (sheet) and tvOS (pre-play sheet).
+struct TrackPickerSheet: View {
+    let info: JellyfinAPIClient.PlaybackInfo
+    /// Called with (audioStreamIndex, subtitleStreamIndex). nil = keep current / off.
+    let onConfirm: (Int?, Int?) -> Void
+
+    @Environment(LocalizationManager.self) private var loc
+    @State private var audioId: Int?
+    @State private var subtitleId: Int?  // -1 = off, nil initially resolved to current or off
+
+    private let noSubtitle = -1
+
+    init(info: JellyfinAPIClient.PlaybackInfo, onConfirm: @escaping (Int?, Int?) -> Void) {
+        self.info = info
+        self.onConfirm = onConfirm
+        _audioId = State(initialValue: info.selectedAudioIndex ?? info.audioTracks.first(where: { $0.isDefault })?.id ?? info.audioTracks.first?.id)
+        _subtitleId = State(initialValue: info.selectedSubtitleIndex)
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                if !info.audioTracks.isEmpty {
+                    Section(loc.localized("player.audio")) {
+                        ForEach(info.audioTracks) { track in
+                            Button {
+                                audioId = track.id
+                            } label: {
+                                HStack {
+                                    Text(track.label)
+                                        .foregroundStyle(CinemaColor.onSurface)
+                                    Spacer()
+                                    if audioId == track.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if !info.subtitleTracks.isEmpty {
+                    Section(loc.localized("player.subtitles")) {
+                        // "Off" option
+                        Button {
+                            subtitleId = noSubtitle
+                        } label: {
+                            HStack {
+                                Text(loc.localized("player.subtitles.off"))
+                                    .foregroundStyle(CinemaColor.onSurface)
+                                Spacer()
+                                if subtitleId == noSubtitle || subtitleId == nil {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        ForEach(info.subtitleTracks) { track in
+                            Button {
+                                subtitleId = track.id
+                            } label: {
+                                HStack {
+                                    Text(track.label)
+                                        .foregroundStyle(CinemaColor.onSurface)
+                                    Spacer()
+                                    if subtitleId == track.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(loc.localized("player.trackPicker.title"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(loc.localized("action.play")) {
+                        onConfirm(audioId, subtitleId == noSubtitle ? -1 : subtitleId)
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            #else
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(loc.localized("action.play")) {
+                        onConfirm(audioId, subtitleId == noSubtitle ? -1 : subtitleId)
+                    }
+                }
+            }
+            #endif
+        }
     }
 }
