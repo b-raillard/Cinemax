@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "fragment_select_server.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

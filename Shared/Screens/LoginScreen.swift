@@ -129,7 +129,7 @@ struct LoginScreen: View {
                     // Login button
                     CinemaButton(
                         title: loc.localized("login.button"),
-                        style: .primary,
+                        style: .accent,
                         isLoading: viewModel.isAuthenticating
                     ) {
                         Task { await viewModel.authenticate(using: appState) }

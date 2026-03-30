@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "libs.versions.toml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "view_row_details.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

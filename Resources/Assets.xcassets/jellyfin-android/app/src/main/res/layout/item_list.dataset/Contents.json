@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "item_list.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

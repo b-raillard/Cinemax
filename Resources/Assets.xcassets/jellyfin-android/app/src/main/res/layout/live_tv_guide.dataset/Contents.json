@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "live_tv_guide.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

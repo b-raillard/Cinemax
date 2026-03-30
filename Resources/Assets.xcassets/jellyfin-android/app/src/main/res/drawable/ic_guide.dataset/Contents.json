@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "ic_guide.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -115,7 +115,7 @@ struct ServerSetupScreen: View {
 
                     CinemaButton(
                         title: loc.localized("server.connect"),
-                        style: .primary,
+                        style: .accent,
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
                     ) {
@@ -214,7 +214,7 @@ struct ServerSetupScreen: View {
                 VStack(spacing: CinemaSpacing.spacing3) {
                     CinemaButton(
                         title: loc.localized("server.connect"),
-                        style: .primary,
+                        style: .accent,
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
                     ) {

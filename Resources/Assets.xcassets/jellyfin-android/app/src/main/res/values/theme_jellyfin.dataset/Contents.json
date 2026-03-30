@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "theme_jellyfin.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

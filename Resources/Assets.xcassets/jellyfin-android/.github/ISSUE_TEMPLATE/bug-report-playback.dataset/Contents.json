@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "bug-report-playback.yaml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

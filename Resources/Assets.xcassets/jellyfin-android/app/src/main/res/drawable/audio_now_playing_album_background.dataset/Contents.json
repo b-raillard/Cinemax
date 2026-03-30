@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "audio_now_playing_album_background.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

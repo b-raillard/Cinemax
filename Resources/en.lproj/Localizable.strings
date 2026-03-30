@@ -90,7 +90,7 @@
 "settings.account" = "Account";
 "settings.profileSettings" = "Profile Settings";
 "settings.privacySecurity" = "Privacy & Security";
-"settings.premiumMember" = "Premium Member \u{2022} Managed Profile";
+"settings.premiumMember" = "Premium Member \U2022 Managed Profile";
 "settings.logOutConfirm" = "You will be returned to the server setup screen.";
 
 // MARK: - Settings (tvOS)
@@ -133,7 +133,7 @@
 "login.username" = "Username";
 "login.usernamePlaceholder" = "Your Username";
 "login.password" = "Password";
-"login.passwordPlaceholder" = "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}";
+"login.passwordPlaceholder" = "\U2022\U2022\U2022\U2022\U2022\U2022\U2022\U2022";
 "login.button" = "LOG IN";
 "login.buttonMobile" = "Login";
 "login.forgotPassword" = "Forgot Password?";

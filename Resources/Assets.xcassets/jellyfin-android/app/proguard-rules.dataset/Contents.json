@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "proguard-rules.pro",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

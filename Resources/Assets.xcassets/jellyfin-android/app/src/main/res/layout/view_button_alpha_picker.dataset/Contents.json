@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "view_button_alpha_picker.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

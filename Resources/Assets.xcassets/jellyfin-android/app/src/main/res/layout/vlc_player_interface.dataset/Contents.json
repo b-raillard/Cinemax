@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "vlc_player_interface.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

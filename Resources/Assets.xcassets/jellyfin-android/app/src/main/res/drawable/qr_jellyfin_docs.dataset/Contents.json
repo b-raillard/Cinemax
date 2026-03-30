@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "qr_jellyfin_docs.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

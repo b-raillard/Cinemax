@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "horizontal_scroll_pane.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

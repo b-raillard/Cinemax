@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "fragment_content_view.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

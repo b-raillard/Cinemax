@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "app_icon_foreground.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

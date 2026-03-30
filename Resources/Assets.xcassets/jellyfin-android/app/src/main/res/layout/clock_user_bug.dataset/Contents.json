@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "clock_user_bug.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

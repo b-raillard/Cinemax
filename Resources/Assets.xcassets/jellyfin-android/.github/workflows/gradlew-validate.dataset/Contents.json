@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "gradlew-validate.yaml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

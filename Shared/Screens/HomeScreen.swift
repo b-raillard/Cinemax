@@ -16,8 +16,8 @@ final class HomeViewModel {
         isLoading = true
 
         do {
-            async let resume = appState.apiClient.getResumeItems(userId: userId, limit: 10)
-            async let latest = appState.apiClient.getLatestMedia(userId: userId, limit: 16)
+            async let resume = appState.apiClient.getResumeItems(userId: userId, limit: 20)
+            async let latest = appState.apiClient.getLatestMedia(userId: userId, limit: 20)
 
             resumeItems = try await resume
             latestItems = try await latest
@@ -209,7 +209,7 @@ struct HomeScreen: View {
     // MARK: - Continue Watching
 
     private var continueWatchingRow: some View {
-        ContentRow(title: loc.localized("home.continueWatching"), showViewAll: true) {
+        ContentRow(title: loc.localized("home.continueWatching")) {
             ForEach(viewModel.resumeItems, id: \.id) { item in
                 if let id = item.id {
                     PlayLink(itemId: id, title: item.name ?? "") {
@@ -260,7 +260,7 @@ struct HomeScreen: View {
     // MARK: - Recently Added
 
     private var recentlyAddedRow: some View {
-        ContentRow(title: loc.localized("home.recentlyAdded"), showViewAll: true) {
+        ContentRow(title: loc.localized("home.recentlyAdded")) {
             ForEach(viewModel.latestItems, id: \.id) { item in
                 recentlyAddedCard(item)
                     .frame(width: posterCardWidth)

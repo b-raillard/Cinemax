@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "SettingsTelemetryScreen.kt",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

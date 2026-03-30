@@ -25,6 +25,12 @@ Native Jellyfin media streaming client targeting iOS 18+ and tvOS 26+. Uses a "C
 - `Resources/en.lproj/` — English localization
 - `Packages/CinemaxKit/` — Models, Networking (JellyfinAPIClient, ImageURLBuilder), Persistence (KeychainService)
 
+## App Icons
+- **iOS**: `Resources/Assets.xcassets/AppIcon.appiconset/` — single 1024x1024 icon with three variants: `app_icon_1024.png` (light), `app_icon_1024_dark.png` (dark mode), `app_icon_1024_tinted.png` (tinted mode)
+- **macOS**: `AppIcon.appiconset/` (root-level) — full set of macOS sizes (16–512 @1x/@2x) plus the same three 1024x1024 iOS variants (light, dark, tinted)
+- **tvOS**: `Resources/Assets.xcassets/AppIcon.brandassets/` — layered brand assets: 3-layer parallax imagestack (Front/Middle/Back at 1x+2x), Top Shelf image (single), Top Shelf Wide image (single)
+- **Standalone**: `appIcon.png` at project root (1024x1024 source file)
+
 ## Design System Conventions
 - **No 1px borders** — use color shifts for boundaries
 - Static color tokens in `CinemaGlassTheme.swift` (CinemaColor, CinemaFont, CinemaSpacing, CinemaRadius)

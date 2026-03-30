@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "pull_request_template.md",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

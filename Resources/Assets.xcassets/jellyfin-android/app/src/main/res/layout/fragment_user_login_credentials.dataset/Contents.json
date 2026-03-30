@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "fragment_user_login_credentials.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

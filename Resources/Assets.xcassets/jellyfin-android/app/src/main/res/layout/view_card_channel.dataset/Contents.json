@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "view_card_channel.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

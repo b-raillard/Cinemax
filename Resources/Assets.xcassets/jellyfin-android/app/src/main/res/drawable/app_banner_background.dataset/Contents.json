@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "app_banner_background.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "ica_play_pause.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

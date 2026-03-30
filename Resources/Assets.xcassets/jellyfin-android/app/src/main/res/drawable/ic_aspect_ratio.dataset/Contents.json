@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "ic_aspect_ratio.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

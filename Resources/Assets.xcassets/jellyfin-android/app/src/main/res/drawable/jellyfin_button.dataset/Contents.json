@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "jellyfin_button.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

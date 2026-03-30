@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "build.gradle.kts",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "bug-report.yaml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

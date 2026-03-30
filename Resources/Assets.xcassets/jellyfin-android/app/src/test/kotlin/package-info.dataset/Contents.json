@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "package-info.kt",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

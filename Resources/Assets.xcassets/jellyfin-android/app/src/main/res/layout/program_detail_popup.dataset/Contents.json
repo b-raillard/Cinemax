@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "program_detail_popup.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

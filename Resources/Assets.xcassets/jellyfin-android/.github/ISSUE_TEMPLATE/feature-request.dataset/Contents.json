@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "feature-request.yaml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

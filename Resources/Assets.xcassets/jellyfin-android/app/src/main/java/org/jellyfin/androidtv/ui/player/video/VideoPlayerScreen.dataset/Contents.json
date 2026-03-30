@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "VideoPlayerScreen.kt",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

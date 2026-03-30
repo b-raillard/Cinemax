@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "fragment_audio_now_playing.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

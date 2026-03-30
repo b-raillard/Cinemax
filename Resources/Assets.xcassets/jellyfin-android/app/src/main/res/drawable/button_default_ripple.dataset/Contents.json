@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "button_default_ripple.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

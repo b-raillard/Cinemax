@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "tile_album_artists.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

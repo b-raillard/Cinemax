@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "network_security_config.xml",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

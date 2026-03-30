@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "full_description.txt",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
