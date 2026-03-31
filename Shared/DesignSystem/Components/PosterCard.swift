@@ -39,10 +39,17 @@ struct PosterCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
                 .cinemaFocus()
 
-            Text(title)
+            Text("M\nM")
                 .font(CinemaFont.label(.large))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .lineLimit(2)
+                .hidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .topLeading) {
+                    Text(title)
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .lineLimit(2)
+                }
 
             if let subtitle {
                 Text(subtitle)

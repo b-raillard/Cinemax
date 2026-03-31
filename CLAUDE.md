@@ -28,7 +28,7 @@ Native Jellyfin media streaming client targeting iOS 18+ and tvOS 26+. Uses a "C
 ## App Icons
 - **iOS**: `Resources/Assets.xcassets/AppIcon.appiconset/` — single 1024x1024 icon with three variants: `app_icon_1024.png` (light), `app_icon_1024_dark.png` (dark mode), `app_icon_1024_tinted.png` (tinted mode)
 - **macOS**: `AppIcon.appiconset/` (root-level) — full set of macOS sizes (16–512 @1x/@2x) plus the same three 1024x1024 iOS variants (light, dark, tinted)
-- **tvOS**: `Resources/Assets.xcassets/AppIcon.brandassets/` — layered brand assets: 3-layer parallax imagestack (Front/Middle/Back at 1x+2x), Top Shelf image (single), Top Shelf Wide image (single)
+- **tvOS**: `Resources/Assets.xcassets/App Icon & Top Shelf Image.brandassets/` — layered brand assets: 3-layer parallax imagestack (Front/Middle/Back at 1x+2x), Top Shelf image (1920x720, full-width dark bg + centered jellyfish), Top Shelf Wide image (2320x720, same style)
 - **Standalone**: `appIcon.png` at project root (1024x1024 source file)
 
 ## Design System Conventions
@@ -114,6 +114,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - **Phase 8**: Settings toggles wired up (Motion Effects → `motionEffectsEnabled` environment key disables all tvOS animations; Force Subtitles → auto-selects subtitle track on playback; 4K Rendering → adjusts max streaming bitrate 120/20 Mbps). MediaDetailScreen refactored: episodes/seasons auto-resolve to parent series for full detail, dead More Info button removed, tvOS scrolling fixed (`.focusable()` on overview text), backdrop height increased, action button spacing widened. Season tab buttons use custom `SeasonTabButtonStyle` (accent capsule border, no native focus effect).
 - **Phase 9**: MovieLibraryScreen + TVSeriesScreen unified into `MediaLibraryScreen` (parameterized by `BaseItemKind`). tvOS Sort & Filter reworked: replaced unusable modal sheet with inline filter bar — sort pills (horizontal scroll) + genre chips (wrapping `FlowLayout`, multi-line) + reset button on its own line below all filters. `TVFilterChipButtonStyle` for chip focus (thin accent capsule border). Sort options: Name, Date Added, Release Year, Rating (runtime removed).
 - **Phase 10**: Fully custom tvOS video player (`TVCustomPlayerView.swift`). Replaced `AVPlayerViewController` (showed "Unknown" for audio tracks, no public API to fix) with `TVPlayerHostViewController` — bare `AVPlayerLayer` + SwiftUI overlay. Custom transport bar: floating audio/subtitle `Menu` buttons (bottom-right, glass circles) + scrubber with time labels, all floating on video with no background container. Isolated sub-views prevent Menu blinking on time ticks. Centralized `@FocusState` in `TVControlsOverlay` restores focus to the correct button after Menu back. Same-track selection is a no-op. Scrubber pinned during track switch (no jump to 0). Remote input via `pressesBegan`; left/right only seeks when scrubber is focused (`onMoveCommand`).
+- **Phase 11**: tvOS Top Shelf images regenerated — replaced square app-icon-in-a-card with full-width dark background (`#1C1C1E`) + centered jellyfish logo (composited from app icon front layer). Standard (1920x720) and wide (2320x720) variants. PosterCard title alignment fix — title area now reserves 2 lines of space using a hidden placeholder (`Text("M\nM").hidden()` + overlay), ensuring all poster images in a row are top-aligned regardless of title length.
 
 ## tvOS Interface Settings
 Three `@AppStorage` toggles + one picker in SettingsScreen (tvOS only):
@@ -139,6 +140,7 @@ Three `@AppStorage` toggles + one picker in SettingsScreen (tvOS only):
 - `ImageURLBuilder` builds Jellyfin `/Items/{id}/Images/{type}` URLs
 - **Series/episode backdrop fallback**: Episodes don't have their own backdrop — use `item.parentBackdropItemID ?? item.seriesID ?? item.id` for backdrop image IDs
 - **Card image containers**: Use `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { LazyImage }` + `.clipped()` for consistent sizing
+- **PosterCard title alignment**: Title area uses hidden 2-line placeholder (`Text("M\nM").hidden()`) with actual title overlaid top-aligned, ensuring all cards in a row have uniform height regardless of title length
 
 ## Build
 ```bash
