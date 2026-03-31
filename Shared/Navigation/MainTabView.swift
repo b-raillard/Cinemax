@@ -2,11 +2,18 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var selectedTab: AppTab = .home
+
+    #if os(tvOS)
+    @State private var playerCoordinator = VideoPlayerCoordinator()
+    #endif
 
     var body: some View {
         #if os(tvOS)
-        sidebarLayout
+        tvTabLayout
+            .environment(playerCoordinator)
         #else
         if sizeClass == .regular {
             sidebarLayout
@@ -16,14 +23,27 @@ struct MainTabView: View {
         #endif
     }
 
-    // MARK: - Sidebar (tvOS + iPad Landscape)
+    // MARK: - tvOS Tab Bar (native top tab bar)
+
+    #if os(tvOS)
+    private var tvTabLayout: some View {
+        TabView(selection: $selectedTab) {
+            ForEach(AppTab.allCases) { tab in
+                selectedView(for: tab)
+                    .tabItem {
+                        Label(loc.localized(tab.titleKey), systemImage: tab.icon)
+                    }
+                    .tag(tab)
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Sidebar (iPad Landscape)
 
     private var sidebarLayout: some View {
         NavigationSplitView {
             sidebarContent
-                #if os(tvOS)
-                .frame(width: 256)
-                #endif
         } detail: {
             selectedTabView
         }
@@ -31,7 +51,7 @@ struct MainTabView: View {
 
     private var sidebarContent: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Cinemax")
+            Text(loc.localized("app.name"))
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(CinemaColor.onSurface)
                 .padding(.horizontal, 20)
@@ -42,7 +62,7 @@ struct MainTabView: View {
                 Button {
                     selectedTab = tab
                 } label: {
-                    Label(tab.title, systemImage: tab.icon)
+                    Label(loc.localized(tab.titleKey), systemImage: tab.icon)
                         .font(.system(size: 17, weight: selectedTab == tab ? .semibold : .regular))
                         .foregroundStyle(selectedTab == tab ? .white : CinemaColor.onSurfaceVariant)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,7 +70,7 @@ struct MainTabView: View {
                         .padding(.horizontal, 20)
                         .background(
                             selectedTab == tab
-                                ? Capsule().fill(CinemaColor.tertiaryContainer)
+                                ? Capsule().fill(themeManager.accentContainer)
                                 : nil
                         )
                 }
@@ -71,12 +91,12 @@ struct MainTabView: View {
             ForEach(AppTab.allCases) { tab in
                 selectedView(for: tab)
                     .tabItem {
-                        Label(tab.title, systemImage: tab.icon)
+                        Label(loc.localized(tab.titleKey), systemImage: tab.icon)
                     }
                     .tag(tab)
             }
         }
-        .tint(CinemaColor.tertiaryContainer)
+        .tint(themeManager.accentContainer)
     }
 
     // MARK: - Tab Content
@@ -110,13 +130,13 @@ enum AppTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    var titleKey: String {
         switch self {
-        case .home: "Home"
-        case .movies: "Movies"
-        case .tvShows: "TV Shows"
-        case .search: "Search"
-        case .settings: "Settings"
+        case .home: "tab.home"
+        case .movies: "tab.movies"
+        case .tvShows: "tab.tvShows"
+        case .search: "tab.search"
+        case .settings: "tab.settings"
         }
     }
 

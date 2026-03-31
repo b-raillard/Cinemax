@@ -8,37 +8,48 @@ struct PosterCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            LazyImage(url: imageURL) { state in
-                if let image = state.image {
-                    image
-                        .resizable()
-                        .aspectRatio(2/3, contentMode: .fill)
-                } else if state.isLoading {
-                    Rectangle()
-                        .fill(CinemaColor.surfaceContainerHigh)
-                        .aspectRatio(2/3, contentMode: .fill)
-                        .overlay {
-                            ProgressView()
-                                .tint(CinemaColor.onSurfaceVariant)
+            Color.clear
+                .aspectRatio(2/3, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    LazyImage(url: imageURL) { state in
+                        if let image = state.image {
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } else if state.isLoading {
+                            Rectangle()
+                                .fill(CinemaColor.surfaceContainerHigh)
+                                .overlay {
+                                    ProgressView()
+                                        .tint(CinemaColor.onSurfaceVariant)
+                                }
+                        } else {
+                            Rectangle()
+                                .fill(CinemaColor.surfaceContainerHigh)
+                                .overlay {
+                                    Image(systemName: "film")
+                                        .font(.largeTitle)
+                                        .foregroundStyle(CinemaColor.outlineVariant)
+                                }
                         }
-                } else {
-                    Rectangle()
-                        .fill(CinemaColor.surfaceContainerHigh)
-                        .aspectRatio(2/3, contentMode: .fill)
-                        .overlay {
-                            Image(systemName: "film")
-                                .font(.largeTitle)
-                                .foregroundStyle(CinemaColor.outlineVariant)
-                        }
+                    }
                 }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-            .cinemaFocus()
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                .cinemaFocus()
 
-            Text(title)
+            Text("M\nM")
                 .font(CinemaFont.label(.large))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .lineLimit(2)
+                .hidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .topLeading) {
+                    Text(title)
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .lineLimit(2)
+                }
 
             if let subtitle {
                 Text(subtitle)

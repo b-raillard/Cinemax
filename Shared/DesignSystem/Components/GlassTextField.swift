@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct GlassTextField: View {
+    @Environment(ThemeManager.self) private var themeManager
     let label: String
     @Binding var text: String
     var placeholder: String = ""
@@ -36,7 +37,7 @@ struct GlassTextField: View {
                 Image(systemName: icon)
                     .font(.system(size: 24))
                     .foregroundStyle(
-                        isFocused ? CinemaColor.tertiary : CinemaColor.outline
+                        isFocused ? themeManager.accent : CinemaColor.outline
                     )
             }
 
@@ -58,7 +59,7 @@ struct GlassTextField: View {
         .overlay(
             RoundedRectangle(cornerRadius: CinemaRadius.large)
                 .stroke(
-                    isFocused ? CinemaColor.tertiary.opacity(0.5) : .clear,
+                    isFocused ? themeManager.accent.opacity(0.5) : .clear,
                     lineWidth: 3
                 )
         )
@@ -74,7 +75,7 @@ struct GlassTextField: View {
                 Image(systemName: icon)
                     .font(.system(size: 18))
                     .foregroundStyle(
-                        isFocused ? CinemaColor.tertiary : CinemaColor.outline
+                        isFocused ? themeManager.accent : CinemaColor.outline
                     )
                     .animation(.easeInOut(duration: 0.2), value: isFocused)
             }
@@ -85,14 +86,14 @@ struct GlassTextField: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .tint(CinemaColor.tertiary)
+                    .tint(themeManager.accent)
             } else {
                 TextField(placeholder, text: $text)
                     .focused($isFocused)
                     .textFieldStyle(.plain)
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .tint(CinemaColor.tertiary)
+                    .tint(themeManager.accent)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
@@ -106,7 +107,7 @@ struct GlassTextField: View {
         .overlay(
             RoundedRectangle(cornerRadius: CinemaRadius.large)
                 .stroke(
-                    isFocused ? CinemaColor.tertiary.opacity(0.3) : .clear,
+                    isFocused ? themeManager.accent.opacity(0.3) : .clear,
                     lineWidth: 2
                 )
         )

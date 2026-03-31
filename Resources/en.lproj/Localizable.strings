@@ -1,0 +1,179 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Cinemax — English Localization
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+// MARK: - Tabs & Navigation
+
+"tab.home" = "Home";
+"tab.movies" = "Movies";
+"tab.tvShows" = "TV Shows";
+"tab.search" = "Search";
+"tab.settings" = "Settings";
+"app.name" = "Cinemax";
+
+// MARK: - Common Actions
+
+"action.play" = "Play";
+"action.moreInfo" = "More Info";
+"action.retry" = "Retry";
+"action.cancel" = "Cancel";
+"action.apply" = "Apply";
+"action.reset" = "Reset";
+"action.clear" = "Clear";
+"action.connect" = "Connect";
+"action.login" = "Login";
+"action.logOut" = "Log Out";
+"action.viewAll" = "View All";
+
+// MARK: - Home Screen
+
+"home.continueWatching" = "Continue Watching";
+"home.recentlyAdded" = "Recently Added";
+"home.remainingTime.hours" = "%dh %dm remaining";
+"home.remainingTime.minutes" = "%dm remaining";
+
+// MARK: - Movie Library
+
+"movies.title" = "Movies";
+"movies.sortFilter" = "Sort & Filter";
+"movies.playNow" = "Play Now";
+"movies.count" = "%d Movies";
+"movies.titles" = "%d titles";
+"sort.ascending" = "Ascending";
+"sort.descending" = "Descending";
+"sort.by" = "Sort by";
+"sort.order" = "Sort order";
+"sort.name" = "Name";
+"sort.dateAdded" = "Date Added";
+"sort.releaseYear" = "Release Year";
+"sort.rating" = "Rating";
+"sort.runtime" = "Runtime";
+"sort.random" = "Random";
+"filter.byGenre" = "Genre";
+
+// MARK: - TV Series
+
+"tvShows.title" = "TV Shows";
+"tvShows.myList" = "My List";
+"tvShows.browseGenres" = "Browse Genres";
+"tvShows.count" = "%d Series";
+"tvShows.genre" = "Genre";
+"tvShows.all" = "All";
+"tvShows.seasons" = "%d Season(s)";
+"tvShows.season" = "%d Season";
+"tvShows.seasonsPlural" = "%d Seasons";
+
+// MARK: - Search
+
+"search.title" = "Search";
+"search.placeholder" = "Search movies, shows...";
+"search.listening" = "Listening...";
+"search.noResults" = "No results found";
+"search.searchLibrary" = "Search your library";
+"search.topMatches" = "Top Matches";
+"search.permissionRequired" = "Permission Required";
+"search.openSettings" = "Open Settings";
+
+// MARK: - Settings
+
+"settings.title" = "Settings";
+"settings.appearance" = "Appearance";
+"settings.darkMode" = "Dark Mode";
+"settings.lightMode" = "Light Mode";
+"settings.accentColor" = "Accent Color";
+"settings.language" = "Language";
+"settings.language.french" = "Français";
+"settings.language.english" = "English";
+"settings.personalization" = "Personalization";
+"settings.infrastructure" = "Infrastructure";
+"settings.live" = "LIVE";
+"settings.account" = "Account";
+"settings.profileSettings" = "Profile Settings";
+"settings.privacySecurity" = "Privacy & Security";
+"settings.premiumMember" = "Premium Member \U2022 Managed Profile";
+"settings.logOutConfirm" = "You will be returned to the server setup screen.";
+
+// MARK: - Settings (tvOS)
+
+"settings.profiles" = "Profiles";
+"settings.active" = "Active";
+"settings.admin" = "Admin";
+"settings.user" = "User";
+"settings.switchAccount" = "Switch Account";
+"settings.switchAccountConfirm" = "You will be logged out and returned to the login screen.";
+"settings.server" = "Server";
+"settings.connected" = "Connected";
+"settings.refreshConnection" = "Refresh Connection";
+"settings.interface" = "Interface";
+"settings.motionEffects" = "Motion Effects";
+"settings.fontSize" = "Text Size";
+"settings.forceSubtitles" = "Force Subtitles";
+"settings.4kRendering" = "4K UI Rendering";
+
+// MARK: - Media Detail
+
+"detail.play" = "Play";
+"detail.moreInfo" = "More Info";
+"detail.castCrew" = "Cast & Crew";
+"detail.moreLikeThis" = "More Like This";
+"detail.episode" = "Episode %d";
+"detail.runtime.hours" = "%dh %dm";
+"detail.runtime.minutes" = "%dm";
+"detail.runtime.min" = "%d min";
+"detail.seasons" = "%d Seasons";
+"detail.season" = "Season";
+
+// MARK: - Login
+
+"login.header" = "JELLYFIN";
+"login.title" = "USER LOGIN";
+"login.subtitle" = "Enter your credentials to access your library";
+"login.mobileTitle" = "Login";
+"login.tagline" = "Your Media, Simplified";
+"login.username" = "Username";
+"login.usernamePlaceholder" = "Your Username";
+"login.password" = "Password";
+"login.passwordPlaceholder" = "\U2022\U2022\U2022\U2022\U2022\U2022\U2022\U2022";
+"login.button" = "LOG IN";
+"login.buttonMobile" = "Login";
+"login.forgotPassword" = "Forgot Password?";
+"login.createAccount" = "Create Account";
+"login.joinCommunity" = "Join Community";
+"login.noServer" = "Don't have a server?";
+"login.serverConnected" = "Server Connected!";
+"login.authenticated" = "Authenticated!";
+"login.emptyUsername" = "Please enter your username.";
+"login.authFailed" = "Authentication failed: %@";
+"login.server" = "Server: %@";
+"login.version" = "Version %@";
+
+// MARK: - Server Setup
+
+"server.header" = "JELLYFIN";
+"server.title" = "Connect to Server";
+"server.subtitle" = "Enter the address of your Jellyfin media server to start streaming your collection.";
+"server.mobileTitle" = "Setup Server";
+"server.mobileSubtitle" = "Enter your Jellyfin server address to begin your cinematic journey.";
+"server.urlLabel" = "Server URL";
+"server.addressLabel" = "Server Address";
+"server.placeholder" = "http://192.168.1.100:8096";
+"server.connect" = "Connect";
+"server.needHelp" = "Need help?";
+"server.howToFind" = "How do I find my server?";
+"server.networkSettings" = "Network Settings";
+"server.connecting" = "Connecting...";
+"server.offline" = "Offline";
+"server.emptyAddress" = "Please enter a server address.";
+"server.invalidURL" = "Invalid URL format.";
+"server.connectFailed" = "Unable to connect: %@";
+
+// MARK: - Video Player
+
+"player.preparing" = "Preparing stream...";
+"player.notAuthenticated" = "Not authenticated";
+"player.playbackFailed" = "Playback failed";
+"player.method" = "Method: %@";
+"player.audio" = "Audio";
+"player.subtitles" = "Subtitles";
+"player.subtitles.off" = "Off";
+"player.trackPicker.title" = "Playback Tracks";

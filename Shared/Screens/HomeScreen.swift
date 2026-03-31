@@ -16,8 +16,8 @@ final class HomeViewModel {
         isLoading = true
 
         do {
-            async let resume = appState.apiClient.getResumeItems(userId: userId, limit: 10)
-            async let latest = appState.apiClient.getLatestMedia(userId: userId, limit: 16)
+            async let resume = appState.apiClient.getResumeItems(userId: userId, limit: 20)
+            async let latest = appState.apiClient.getLatestMedia(userId: userId, limit: 20)
 
             resumeItems = try await resume
             latestItems = try await latest
@@ -34,6 +34,8 @@ final class HomeViewModel {
 
 struct HomeScreen: View {
     @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = HomeViewModel()
 
     var body: some View {
@@ -48,8 +50,8 @@ struct HomeScreen: View {
                 content
             }
         }
-        .navigationTitle("Home")
         #if os(iOS)
+        .navigationTitle(loc.localized("tab.home"))
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
@@ -91,9 +93,9 @@ struct HomeScreen: View {
         let builder = ImageURLBuilder(serverURL: serverURL)
 
         ZStack(alignment: .bottomLeading) {
-            // Backdrop
-            if let id = item.id {
-                LazyImage(url: builder.imageURL(itemId: id, imageType: .backdrop, maxWidth: 1920)) { state in
+            // Backdrop — episodes/seasons don't have their own backdrop; use the parent (series)
+            if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
+                LazyImage(url: builder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920)) { state in
                     if let image = state.image {
                         image
                             .resizable()
@@ -146,11 +148,9 @@ struct HomeScreen: View {
                 // Action buttons
                 HStack(spacing: 12) {
                     if let id = item.id {
-                        NavigationLink {
-                            VideoPlayerView(itemId: id, title: item.name ?? "")
-                        } label: {
+                        PlayLink(itemId: id, title: item.name ?? "") {
                             HStack(spacing: CinemaSpacing.spacing2) {
-                                Text("Play")
+                                Text(loc.localized("action.play"))
                                     .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
                                 Image(systemName: "play.fill")
                                     .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
@@ -160,7 +160,7 @@ struct HomeScreen: View {
                             .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
                             .padding(.horizontal, CinemaSpacing.spacing4)
                             #if os(iOS)
-                            .background(CinemaColor.tertiaryContainer)
+                            .background(themeManager.accentContainer)
                             .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
                             #endif
                         }
@@ -175,13 +175,13 @@ struct HomeScreen: View {
                             MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
                         } label: {
                             HStack(spacing: CinemaSpacing.spacing2) {
-                                Text("More Info")
+                                Text(loc.localized("action.moreInfo"))
                                     .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
+                                    .lineLimit(1)
                                 Image(systemName: "info.circle")
                                     .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
                             }
                             .foregroundStyle(CinemaColor.onSurface)
-                            .frame(maxWidth: .infinity)
                             .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
                             .padding(.horizontal, CinemaSpacing.spacing4)
                             #if os(iOS)
@@ -194,7 +194,7 @@ struct HomeScreen: View {
                         #else
                         .buttonStyle(.plain)
                         #endif
-                        .frame(width: playButtonWidth)
+                        .fixedSize()
                     }
                 }
             }
@@ -209,21 +209,19 @@ struct HomeScreen: View {
     // MARK: - Continue Watching
 
     private var continueWatchingRow: some View {
-        ContentRow(title: "Continue Watching", showViewAll: true) {
+        ContentRow(title: loc.localized("home.continueWatching")) {
             ForEach(viewModel.resumeItems, id: \.id) { item in
-                NavigationLink {
-                    if let id = item.id {
-                        VideoPlayerView(itemId: id, title: item.name ?? "")
+                if let id = item.id {
+                    PlayLink(itemId: id, title: item.name ?? "") {
+                        continueWatchingCard(item)
+                            .frame(width: wideCardWidth)
                     }
-                } label: {
-                    continueWatchingCard(item)
-                        .frame(width: wideCardWidth)
+                    #if os(tvOS)
+                    .buttonStyle(CinemaTVCardButtonStyle())
+                    #else
+                    .buttonStyle(.plain)
+                    #endif
                 }
-                #if os(tvOS)
-                .buttonStyle(CinemaTVCardButtonStyle())
-                #else
-                .buttonStyle(.plain)
-                #endif
             }
         }
     }
@@ -246,14 +244,14 @@ struct HomeScreen: View {
             let remainingTicks = total - position
             let minutes = remainingTicks / 600_000_000
             if minutes > 60 {
-                return "\(minutes / 60)h \(minutes % 60)m remaining"
+                return loc.localized("home.remainingTime.hours", minutes / 60, minutes % 60)
             }
-            return "\(minutes)m remaining"
+            return loc.localized("home.remainingTime.minutes", minutes)
         }()
 
         WideCard(
             title: item.name ?? "",
-            imageURL: item.id.map { builder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
+            imageURL: (item.parentBackdropItemID ?? item.seriesID ?? item.id).map { builder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
             progress: progress,
             subtitle: remaining
         )
@@ -262,7 +260,7 @@ struct HomeScreen: View {
     // MARK: - Recently Added
 
     private var recentlyAddedRow: some View {
-        ContentRow(title: "Recently Added", showViewAll: true) {
+        ContentRow(title: loc.localized("home.recentlyAdded")) {
             ForEach(viewModel.latestItems, id: \.id) { item in
                 recentlyAddedCard(item)
                     .frame(width: posterCardWidth)

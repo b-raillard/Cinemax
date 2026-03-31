@@ -47,33 +47,56 @@ enum CinemaColor {
     static let surfaceTint = Color(hex: 0xC6C6C7)
 }
 
+// MARK: - Global UI Scale
+
+/// Global UI text scale. Backed by UserDefaults key "uiScale" (set via ThemeManager.uiScale).
+/// All CinemaFont methods and explicit CinemaScale.pt() calls read this at view-render time,
+/// so bumping ThemeManager._accentRevision (which happens on uiScale write) re-renders
+/// all views and they pick up the new factor automatically.
+enum CinemaScale {
+    /// Reads the persisted scale factor. Default 1.0 (= 100%).
+    /// On tvOS a 1.4× base multiplier is applied on top, since base sizes
+    /// are defined for iOS (~10 pt/m) but tvOS is viewed from ~3 m away.
+    static var factor: CGFloat {
+        let stored = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
+        #if os(tvOS)
+        return CGFloat(stored) * 1.4
+        #else
+        return CGFloat(stored)
+        #endif
+    }
+
+    /// Returns a point size multiplied by the global scale factor.
+    static func pt(_ size: CGFloat) -> CGFloat { (size * factor).rounded() }
+}
+
 // MARK: - Typography
 
 enum CinemaFont {
     static func display(_ size: DisplaySize = .medium) -> Font {
         switch size {
-        case .large: .system(size: 56, weight: .heavy, design: .default)
-        case .medium: .system(size: 45, weight: .heavy, design: .default)
-        case .small: .system(size: 36, weight: .bold, design: .default)
+        case .large: .system(size: CinemaScale.pt(56), weight: .heavy, design: .default)
+        case .medium: .system(size: CinemaScale.pt(45), weight: .heavy, design: .default)
+        case .small: .system(size: CinemaScale.pt(36), weight: .bold, design: .default)
         }
     }
 
     static func headline(_ size: HeadlineSize = .medium) -> Font {
         switch size {
-        case .large: .system(size: 32, weight: .bold, design: .default)
-        case .medium: .system(size: 28, weight: .bold, design: .default)
-        case .small: .system(size: 24, weight: .semibold, design: .default)
+        case .large: .system(size: CinemaScale.pt(32), weight: .bold, design: .default)
+        case .medium: .system(size: CinemaScale.pt(28), weight: .bold, design: .default)
+        case .small: .system(size: CinemaScale.pt(24), weight: .semibold, design: .default)
         }
     }
 
-    static let body = Font.system(size: 17, weight: .regular)
-    static let bodyLarge = Font.system(size: 19, weight: .regular)
+    static var body: Font { .system(size: CinemaScale.pt(17), weight: .regular) }
+    static var bodyLarge: Font { .system(size: CinemaScale.pt(19), weight: .regular) }
 
     static func label(_ size: LabelSize = .medium) -> Font {
         switch size {
-        case .large: .system(size: 15, weight: .medium)
-        case .medium: .system(size: 13, weight: .medium)
-        case .small: .system(size: 11, weight: .medium)
+        case .large: .system(size: CinemaScale.pt(19), weight: .medium)
+        case .medium: .system(size: CinemaScale.pt(16), weight: .medium)
+        case .small: .system(size: CinemaScale.pt(14), weight: .medium)
         }
     }
 

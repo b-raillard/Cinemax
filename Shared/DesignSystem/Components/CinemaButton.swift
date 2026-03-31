@@ -7,6 +7,7 @@ enum CinemaButtonStyle {
 }
 
 struct CinemaButton: View {
+    @Environment(ThemeManager.self) private var themeManager
     let title: String
     var style: CinemaButtonStyle = .primary
     var icon: String? = nil
@@ -24,6 +25,8 @@ struct CinemaButton: View {
                     Text(title)
                         .font(.system(size: fontSize, weight: .bold))
                         .tracking(-0.3)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
 
                     if let icon {
                         Image(systemName: icon)
@@ -60,7 +63,7 @@ struct CinemaButton: View {
                         .stroke(CinemaColor.outline.opacity(0.2), lineWidth: 1)
                 )
         case .accent:
-            CinemaColor.tertiaryContainer
+            themeManager.accentContainer
         }
     }
 
@@ -94,7 +97,11 @@ struct CinemaButton: View {
 #if os(tvOS)
 struct CinemaTVButtonStyle: ButtonStyle {
     let cinemaStyle: CinemaButtonStyle
+    // ThemeManager is read from environment so every call site auto-picks up
+    // the current accent color without needing to pass it explicitly.
+    @Environment(ThemeManager.self) private var themeManager
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -106,8 +113,8 @@ struct CinemaTVButtonStyle: ButtonStyle {
                 radius: 20,
                 y: 10
             )
-            .animation(.easeInOut(duration: 0.2), value: isFocused)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeInOut(duration: 0.1) : nil, value: configuration.isPressed)
     }
 
     @ViewBuilder
@@ -123,7 +130,7 @@ struct CinemaTVButtonStyle: ButtonStyle {
                         .stroke(CinemaColor.outline.opacity(0.3), lineWidth: 1)
                 )
         case .accent:
-            CinemaColor.tertiaryContainer
+            themeManager.accentContainer
         }
     }
 
@@ -131,7 +138,7 @@ struct CinemaTVButtonStyle: ButtonStyle {
         switch cinemaStyle {
         case .primary: CinemaColor.primary
         case .ghost: CinemaColor.surfaceTint
-        case .accent: CinemaColor.tertiaryContainer
+        case .accent: themeManager.accentContainer
         }
     }
 }
