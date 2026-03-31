@@ -255,10 +255,12 @@ struct MediaDetailScreen: View {
                     HStack(spacing: CinemaSpacing.spacing2) {
                         Text(loc.localized("detail.play"))
                             .font(.system(size: buttonFontSize, weight: .bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                         Image(systemName: "play.fill")
                             .font(.system(size: buttonFontSize - 2, weight: .bold))
                     }
-                    .foregroundStyle(CinemaColor.onPrimary)
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, buttonVerticalPadding)
                     .padding(.horizontal, CinemaSpacing.spacing4)
@@ -520,7 +522,7 @@ struct MediaDetailScreen: View {
 
     private var buttonFontSize: CGFloat {
         #if os(tvOS)
-        CinemaScale.pt(28)
+        28
         #else
         18
         #endif
@@ -544,7 +546,7 @@ struct MediaDetailScreen: View {
 
     private var playButtonWidth: CGFloat {
         #if os(tvOS)
-        220
+        240
         #else
         160
         #endif

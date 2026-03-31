@@ -542,11 +542,11 @@ public final class JellyfinAPIClient: Sendable {
         }
 
         let decoder = JSONDecoder()
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let dateStr = try container.decode(String.self)
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             return isoFormatter.date(from: dateStr) ?? Date()
         }
         return try decoder.decode(PlaybackInfoResponse.self, from: data)

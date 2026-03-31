@@ -55,9 +55,15 @@ enum CinemaColor {
 /// all views and they pick up the new factor automatically.
 enum CinemaScale {
     /// Reads the persisted scale factor. Default 1.0 (= 100%).
+    /// On tvOS a 1.4× base multiplier is applied on top, since base sizes
+    /// are defined for iOS (~10 pt/m) but tvOS is viewed from ~3 m away.
     static var factor: CGFloat {
         let stored = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
+        #if os(tvOS)
+        return CGFloat(stored) * 1.4
+        #else
         return CGFloat(stored)
+        #endif
     }
 
     /// Returns a point size multiplied by the global scale factor.

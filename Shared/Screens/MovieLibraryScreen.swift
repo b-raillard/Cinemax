@@ -6,12 +6,12 @@ import CinemaxKit
 // MARK: - Sort & Filter State
 
 struct LibrarySortFilterState: Equatable {
-    var sortBy: ItemSortBy = .sortName
-    var sortAscending: Bool = true
+    var sortBy: ItemSortBy = .dateCreated
+    var sortAscending: Bool = false
     var selectedGenres: Set<String> = []
 
     var isFiltered: Bool { !selectedGenres.isEmpty }
-    var isNonDefault: Bool { sortBy != .sortName || !sortAscending || isFiltered }
+    var isNonDefault: Bool { sortBy != .dateCreated || sortAscending || isFiltered }
 }
 
 // MARK: - View Model
@@ -45,13 +45,15 @@ final class MediaLibraryViewModel {
     private let pageSize = 40
     private let genreItemLimit = 12
     let genreLoadLimit = 8
+    private var hasLoaded = false
 
     init(itemType: BaseItemKind) {
         self.itemType = itemType
     }
 
     func loadInitial(using appState: AppState) async {
-        guard let userId = appState.currentUserId else { return }
+        guard !hasLoaded, let userId = appState.currentUserId else { return }
+        hasLoaded = true
         isLoading = true
         errorMessage = nil
 
@@ -83,34 +85,43 @@ final class MediaLibraryViewModel {
             )
             heroItem = heroResult.items.randomElement()
 
-            struct GenreResult: @unchecked Sendable {
-                let genre: String
-                let items: [BaseItemDto]
-            }
-            let genresToLoad = Array(fetchedGenres.prefix(genreLoadLimit))
-            try await withThrowingTaskGroup(of: GenreResult.self) { group in
-                for genre in genresToLoad {
-                    group.addTask {
-                        let result = try await appState.apiClient.getItems(
-                            userId: userId,
-                            includeItemTypes: [self.itemType],
-                            sortBy: [.random],
-                            sortOrder: [.ascending],
-                            genres: [genre],
-                            limit: self.genreItemLimit
-                        )
-                        return GenreResult(genre: genre, items: result.items)
-                    }
-                }
-                for try await entry in group {
-                    itemsByGenre[entry.genre] = entry.items
-                }
-            }
+            try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
         } catch {
             errorMessage = error.localizedDescription
         }
 
         isLoading = false
+    }
+
+    private func fetchGenreItems(using appState: AppState, userId: String, genres genreList: [String]) async throws {
+        struct GenreResult: @unchecked Sendable {
+            let genre: String
+            let items: [BaseItemDto]
+        }
+        let genresToLoad = Array(genreList.prefix(genreLoadLimit))
+        try await withThrowingTaskGroup(of: GenreResult.self) { group in
+            for genre in genresToLoad {
+                group.addTask {
+                    let result = try await appState.apiClient.getItems(
+                        userId: userId,
+                        includeItemTypes: [self.itemType],
+                        sortBy: [self.sortFilter.sortBy],
+                        sortOrder: self.sortFilter.sortAscending ? [.ascending] : [.descending],
+                        genres: [genre],
+                        limit: self.genreItemLimit
+                    )
+                    return GenreResult(genre: genre, items: result.items)
+                }
+            }
+            for try await entry in group {
+                itemsByGenre[entry.genre] = entry.items
+            }
+        }
+    }
+
+    func reloadGenreItems(using appState: AppState) async {
+        guard !genres.isEmpty, let userId = appState.currentUserId else { return }
+        try? await fetchGenreItems(using: appState, userId: userId, genres: genres)
     }
 
     func applyFilter(using appState: AppState) async {
@@ -227,8 +238,8 @@ struct MediaLibraryScreen: View {
                 tvFilterBar
                     .padding(.bottom, CinemaSpacing.spacing6)
 
-                if viewModel.sortFilter.isNonDefault {
-                    // Filtered grid
+                if viewModel.sortFilter.isFiltered {
+                    // Filtered grid (genre selected)
                     if viewModel.filteredItems.isEmpty && viewModel.filteredIsLoadingMore {
                         ProgressView()
                             .tint(CinemaColor.onSurfaceVariant)
@@ -267,8 +278,10 @@ struct MediaLibraryScreen: View {
         }
         .scrollClipDisabled()
         .task(id: viewModel.sortFilter) {
-            if viewModel.sortFilter.isNonDefault {
+            if viewModel.sortFilter.isFiltered {
                 await viewModel.applyFilter(using: appState)
+            } else if !viewModel.genres.isEmpty {
+                await viewModel.reloadGenreItems(using: appState)
             }
         }
     }
@@ -529,15 +542,15 @@ struct MediaLibraryScreen: View {
                                 viewModel.sortFilter.sortAscending.toggle()
                             } else {
                                 viewModel.sortFilter.sortBy = option.value
-                                viewModel.sortFilter.sortAscending = true
+                                viewModel.sortFilter.sortAscending = (option.value == .sortName || option.value == .communityRating)
                             }
                         } label: {
                             HStack(spacing: 6) {
                                 Text(option.label)
-                                    .font(.system(size: 18, weight: isSelected ? .bold : .medium))
+                                    .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
                                 if isSelected {
                                     Image(systemName: viewModel.sortFilter.sortAscending ? "arrow.up" : "arrow.down")
-                                        .font(.system(size: 14, weight: .bold))
+                                        .font(.system(size: CinemaScale.pt(14), weight: .bold))
                                 }
                             }
                             .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
@@ -573,7 +586,7 @@ struct MediaLibraryScreen: View {
                         viewModel.sortFilter.selectedGenres = []
                     } label: {
                         Text(loc.localized("tvShows.all"))
-                            .font(.system(size: 18, weight: allSelected ? .bold : .medium))
+                            .font(.system(size: CinemaScale.pt(18), weight: allSelected ? .bold : .medium))
                             .foregroundStyle(allSelected ? themeManager.onAccent : CinemaColor.onSurface)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 10)
@@ -598,7 +611,7 @@ struct MediaLibraryScreen: View {
                             }
                         } label: {
                             Text(genre)
-                                .font(.system(size: 18, weight: isSelected ? .bold : .medium))
+                                .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
                                 .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 10)
@@ -623,9 +636,9 @@ struct MediaLibraryScreen: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(.system(size: CinemaScale.pt(18), weight: .medium))
                         Text(loc.localized("action.reset"))
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: CinemaScale.pt(18), weight: .semibold))
                     }
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .padding(.horizontal, 20)
@@ -643,8 +656,8 @@ struct MediaLibraryScreen: View {
 
     private var tvSortOptions: [(label: String, value: ItemSortBy)] {
         [
-            (loc.localized("sort.name"), .sortName),
             (loc.localized("sort.dateAdded"), .dateCreated),
+            (loc.localized("sort.name"), .sortName),
             (loc.localized("sort.releaseYear"), .productionYear),
             (loc.localized("sort.rating"), .communityRating)
         ]
@@ -843,7 +856,7 @@ struct MediaLibraryScreen: View {
 
     private var heroTitleSize: CGFloat {
         #if os(tvOS)
-        72
+        CinemaScale.pt(72)
         #else
         40
         #endif
@@ -851,7 +864,7 @@ struct MediaLibraryScreen: View {
 
     private var overviewFontSize: CGFloat {
         #if os(tvOS)
-        18
+        CinemaScale.pt(18)
         #else
         14
         #endif
@@ -923,7 +936,7 @@ struct MediaLibraryScreen: View {
 
     private var badgeFontSize: CGFloat {
         #if os(tvOS)
-        12
+        CinemaScale.pt(12)
         #else
         10
         #endif
@@ -931,7 +944,7 @@ struct MediaLibraryScreen: View {
 
     private var metadataFontSize: CGFloat {
         #if os(tvOS)
-        16
+        CinemaScale.pt(16)
         #else
         13
         #endif
@@ -955,7 +968,7 @@ struct MediaLibraryScreen: View {
 
     private var filterIconSize: CGFloat {
         #if os(tvOS)
-        24
+        CinemaScale.pt(24)
         #else
         16
         #endif
@@ -963,7 +976,7 @@ struct MediaLibraryScreen: View {
 
     private var filterLabelSize: CGFloat {
         #if os(tvOS)
-        22
+        CinemaScale.pt(22)
         #else
         14
         #endif
@@ -1014,8 +1027,8 @@ private struct LibrarySortFilterSheet: View {
 
     private var sortOptions: [(label: String, value: ItemSortBy)] {
         [
-            (loc.localized("sort.name"), .sortName),
             (loc.localized("sort.dateAdded"), .dateCreated),
+            (loc.localized("sort.name"), .sortName),
             (loc.localized("sort.releaseYear"), .productionYear),
             (loc.localized("sort.rating"), .communityRating),
             (loc.localized("sort.runtime"), .runtime)
