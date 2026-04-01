@@ -93,9 +93,29 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 ### iOS Player (`VideoPlayerView`)
 `AVPlayerItem(url:)`, KVO on `playerItem.status`, cleanup on disappear (pause + nil + invalidate).
 
-## tvOS Settings
+## Settings Screen
 
-`@AppStorage` keys, all in `SettingsScreen`:
+### Layout — two-level navigation
+
+**Landing page** (both platforms):
+- **tvOS**: Split layout — left panel (brand: `AppLogo` image + title + version), right panel (4 nav category buttons). Centered accent bloom in `.background {}` persists across all settings pages. No intermediate panel backgrounds — dark base + bloom + content only.
+- **iOS**: Vertical scroll — logo header, 4 nav buttons (first is accent-highlighted), device info footer. Uses `NavigationStack` + `navigationDestination(item:)`.
+
+**Detail pages** (per category: Appearance, Account, Server, Interface):
+- tvOS: `ScrollView` with back button at top. Menu (remote) button triggers `.onExitCommand { selectedCategory = nil }`.
+- iOS: Pushed via `NavigationStack`, standard back button.
+
+### tvOS focus rules for Settings
+- Each settings row is a **single focusable unit** — never individual sub-items within a row.
+- Accent color row: left/right arrows cycle colors; select cycles to next. Uses `onMoveCommand`.
+- Language row: left/right or select toggles fr↔en. Uses `onMoveCommand`.
+- Category buttons on landing: pill shape, focused state = `accentContainer` fill + scale 1.05 + glow shadow.
+- Back button focus: `.focused($focusedItem, equals: .back)`, highlighted with accent color.
+
+### Assets
+- `AppLogo.imageset`: iOS uses `app_logo.png` (full icon with background); tvOS uses `app_logo_tv.png` (front parallax layer — transparent background, jellyfish only). No `clipShape` on tvOS logo — organic shape renders freely.
+
+### `@AppStorage` keys (all in `SettingsScreen`)
 | Key | Default | Effect |
 |-----|---------|--------|
 | `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |
@@ -127,6 +147,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 
 - **iOS**: `Resources/Assets.xcassets/AppIcon.appiconset/` — 1024×1024 in three variants (light, dark, tinted)
 - **tvOS**: `Resources/Assets.xcassets/App Icon & Top Shelf Image.brandassets/` — 3-layer parallax imagestack + Top Shelf (1920×720) + Top Shelf Wide (2320×720)
+- **In-app logo**: `Resources/Assets.xcassets/AppLogo.imageset/` — iOS: full icon; tvOS: front parallax layer only (transparent bg)
 - **Standalone source**: `appIcon.png` at project root
 
 ## Build
