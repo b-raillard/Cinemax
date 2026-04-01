@@ -1,163 +1,143 @@
 # Cinemax - Jellyfin Client for Apple Platforms
 
-## Project Overview
-Native Jellyfin media streaming client targeting iOS 18+ and tvOS 26+. Uses a "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
+Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. Uses a "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
 
 ## Architecture
+
 - **SwiftUI** multi-platform (single Xcode project, iOS + tvOS targets)
 - **CinemaxKit** local Swift Package at `Packages/CinemaxKit` — shared networking, models, persistence
 - **@Observable** + `@MainActor` for all state management
 - **Swift 6** strict concurrency
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable conformance
 
-## Key Dependencies
-- `jellyfin-sdk-swift` v0.6.0 — Jellyfin API client (uses Get/URLSession under the hood)
-- `Nuke` / `NukeUI` v12.9.0 — image loading + caching
-- `AVKit` / `AVPlayer` — video playback (VLCKit planned for broader codec support)
+**Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
 ## Project Structure
-- `Shared/DesignSystem/` — CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, Components/
-- `Shared/Navigation/` — AppNavigation (auth routing), MainTabView (tab bar/sidebar)
-- `Shared/Screens/` — HomeScreen, MediaDetailScreen, VideoPlayerView, SearchScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen
-- `iOS/` — iOS app entry point
-- `tvOS/` — tvOS app entry point
-- `Resources/fr.lproj/` — French localization (default language)
-- `Resources/en.lproj/` — English localization
-- `Packages/CinemaxKit/` — Models, Networking (JellyfinAPIClient, ImageURLBuilder), Persistence (KeychainService)
 
-## App Icons
-- **iOS**: `Resources/Assets.xcassets/AppIcon.appiconset/` — single 1024x1024 icon with three variants: `app_icon_1024.png` (light), `app_icon_1024_dark.png` (dark mode), `app_icon_1024_tinted.png` (tinted mode)
-- **macOS**: `AppIcon.appiconset/` (root-level) — full set of macOS sizes (16–512 @1x/@2x) plus the same three 1024x1024 iOS variants (light, dark, tinted)
-- **tvOS**: `Resources/Assets.xcassets/App Icon & Top Shelf Image.brandassets/` — layered brand assets: 3-layer parallax imagestack (Front/Middle/Back at 1x+2x), Top Shelf image (1920x720, full-width dark bg + centered jellyfish), Top Shelf Wide image (2320x720, same style)
-- **Standalone**: `appIcon.png` at project root (1024x1024 source file)
+```
+Shared/
+  DesignSystem/     CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, Components/
+  Navigation/       AppNavigation (auth routing), MainTabView (tab bar/sidebar)
+  Screens/          HomeScreen, MediaDetailScreen, VideoPlayerView, SearchScreen, MovieLibraryScreen, SettingsScreen
+iOS/                app entry point
+tvOS/               app entry point
+Resources/
+  fr.lproj/         French localization (default)
+  en.lproj/         English localization
+Packages/CinemaxKit/  Models, Networking (JellyfinAPIClient, ImageURLBuilder), Persistence (KeychainService)
+```
 
-## Design System Conventions
-- **No 1px borders** — use color shifts for boundaries
-- Static color tokens in `CinemaGlassTheme.swift` (CinemaColor, CinemaFont, CinemaSpacing, CinemaRadius)
-- **Dynamic accent colors** via `ThemeManager` (`@Observable`, injected from `AppNavigation`). Use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` instead of `CinemaColor.tertiary*` for all accent-colored elements
-- **Dark/Light mode** via `ThemeManager.darkModeEnabled` → applied as `.preferredColorScheme()` at root. Design system colors are dark-first; light mode only affects system controls for now
-- Glass panels: `.glassPanel()` modifier
-- **tvOS Focus states**: Custom focus via `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Focus indicator is a thin accent-colored `strokeBorder` (2px) — no scale, no white background. Cards use `CinemaTVCardButtonStyle` (brightness on focus, no scale). Shared via `.tvSettingsFocusable()` modifier in SettingsScreen. Season tabs use `SeasonTabButtonStyle` (capsule accent border).
-- **Motion Effects environment key**: `motionEffectsEnabled` (`EnvironmentKey` in `FocusScaleModifier.swift`), injected from `AppNavigation` on tvOS via `@AppStorage("motionEffects")`. When disabled, all `.animation()` calls use `nil` instead of animation curves. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, `tvSettingsFocusable()`, and toggle indicators.
-- **iOS Focus states**: `.cinemaFocus()` modifier (accent border + shadow)
-- Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass` checks
+## Design System
 
-## Video Playback Architecture
-Follows the same flow as Swiftfin (reference: https://github.com/jellyfin/swiftfin):
+- Static color tokens in `CinemaGlassTheme.swift` (`CinemaColor`, `CinemaFont`, `CinemaSpacing`, `CinemaRadius`)
+- **No 1px borders** — use color shifts for boundaries. Glass panels: `.glassPanel()` modifier
+- **Dynamic accent**: use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` — never `CinemaColor.tertiary*`
+- **Dark/Light mode**: `ThemeManager.darkModeEnabled` → `.preferredColorScheme()` at root. Colors are dark-first
+- **Font scaling**: `CinemaScale.factor` applies a 1.4× base multiplier on tvOS, then user `uiScale` (80–130%) on top. All `CinemaFont` and `CinemaScale.pt()` calls multiply by this. **Exception**: Play/Lecture button labels use hardcoded `28pt` on tvOS
+- **Focus — tvOS**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Indicator is a 2px accent `strokeBorder` — no scale, no white background. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. Season tabs: `SeasonTabButtonStyle`
+- **Focus — iOS**: `.cinemaFocus()` modifier (accent border + shadow)
+- **Motion Effects**: `motionEffectsEnabled` environment key (from `AppNavigation` via `@AppStorage("motionEffects")`). When off, all `.animation()` calls use `nil`. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators
+- Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass`
 
-### Playback Flow (`JellyfinAPIClient.getPlaybackInfo()`)
-1. **Get item** via `getItem()` — fetches full metadata
-2. **Resolve non-playable items**: Series → `getNextUp()` or first episode; Season → first episode
-3. **POST PlaybackInfo** with `DeviceProfile` (Swiftfin-style: `isAutoOpenLiveStream=true`, `mediaSourceID`, `userID` in body)
-4. **Build stream URL** from response:
-   - If server returns `transcodingURL` → use it (HLS transcode)
-   - Otherwise → direct stream `/Videos/{id}/stream?static=true&playSessionId=...&mediaSourceId={id}`
-5. **Fallback**: direct stream URL without PlaybackInfo session
+## Navigation
 
-### Key Playback Details
-- **Series/Season items have no media sources** — must resolve to an Episode first
-- **DeviceProfile** matches Swiftfin native player: DirectPlay for mp4/m4v/mov with h264/hevc; transcode to HLS mp4 container
-- `getPlaybackInfo()` accepts `maxBitrate` parameter (default 40 Mbps) — tvOS `VideoPlayerCoordinator` reads `@AppStorage("render4K")` and passes 120 Mbps (4K) or 20 Mbps (1080p)
-- Auth via `Authorization: MediaBrowser DeviceId=..., Token=...` header (injected by SDK)
-- Stream URLs use `api_key` query parameter for auth
-- `#if DEBUG` guards all playback logging via `debugLog()` helper
-- Raw URLSession POST used for PlaybackInfo to capture full error response body
+- `AppNavigation` → Keychain session check → `apiClient.reconnect()` + `fetchServerInfo()`
+- `AppNavigation` injects `ThemeManager` and `LocalizationManager`, applies `.preferredColorScheme()` at root
+- No server → `ServerSetupScreen` → `LoginScreen` → `MainTabView`
+- `MainTabView`: top tab bar on tvOS, sidebar on iPad, bottom tab bar on iPhone
+- All play buttons use `PlayLink<Label>` (Button+coordinator on tvOS, NavigationLink on iOS) — never direct `NavigationLink` to `VideoPlayerView`
 
-### AVPlayer Integration (`VideoPlayerView`)
-- `AVPlayerItem(url:)` with URL from PlaybackInfo
-- KVO on `playerItem.status` for `.readyToPlay` / `.failed`
-- Cleanup on disappear (pause + nil player + invalidate observation)
+## Media Library (`MediaLibraryScreen`)
 
-### tvOS Video Playback (UIKit-based, fully custom player)
-- **Critical**: On tvOS, video MUST be presented via UIKit modal (`UIViewController.present()`), NOT via SwiftUI. SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus state on dismiss.
-- **Do NOT use `AVPlayerViewController`** — its native transport bar shows "Unknown" for audio tracks and has no public API to remove or correct individual buttons. Use `TVPlayerHostViewController` (our custom UIKit VC) instead.
-- `TVVideoPresenter` handles UIKit modal presentation directly on the root VC. Calls `TVPlayerHostViewController(title:info:onTrackChange:)`.
-- `VideoPlayerCoordinator` (`@Observable`) reads `@AppStorage("forceSubtitles")` and `@AppStorage("render4K")`, fetches playback info, then calls `TVVideoPresenter.present(title:info:onTrackChange:)`.
-- `PlayLink<Label>` — cross-platform component: `Button` → coordinator on tvOS, `NavigationLink` on iOS.
-- All play buttons across screens use `PlayLink` instead of direct `NavigationLink` to `VideoPlayerView`.
+Unified screen parameterized by `BaseItemKind` (movies or series).
 
-### Custom tvOS Player (`TVCustomPlayerView.swift`, `#if os(tvOS)` only)
+**Sort & Filter state** (`LibrarySortFilterState`):
+- Default: `dateCreated` descending. `isNonDefault` is true when sort or filter differs from default
+- `isFiltered` is true only when genre chips are selected
+- **Browse vs filtered**: show browse view (genre rows) whenever `isFiltered == false`, regardless of sort. Only a genre chip selection switches to the flat filtered grid
+- **Title count**: uses `isFiltered` (not `isNonDefault`) — sort-only changes don't affect total count, only genre filtering does. Shows `filteredTotalCount` when filtered, `totalCount` otherwise
+- Sort change triggers `reloadGenreItems` (genre rows respect current sort); genre selection triggers `applyFilter` (flat paginated list)
+- `loadInitial` guarded by `hasLoaded` — prevents re-randomization on tab switch
+
+**tvOS filter bar**: inline (not modal) — sort pills (horizontal scroll) + genre chips (`FlowLayout`, multi-line) + reset button. `TVFilterChipButtonStyle` for chip focus.
+
+## Video Playback
+
+### Playback Flow
+1. `getItem()` — fetch full metadata
+2. Resolve non-playable items: Series → `getNextUp()` or first episode; Season → first episode (**Series/Season have no media sources — must resolve to Episode first**)
+3. POST PlaybackInfo with `DeviceProfile` (`isAutoOpenLiveStream=true`, `mediaSourceID`, `userID`)
+4. Build stream URL: use `transcodingURL` if present (HLS), otherwise direct stream `/Videos/{id}/stream?static=true&...`
+5. Fallback: direct stream without PlaybackInfo session
+
+**DeviceProfile**: DirectPlay for mp4/m4v/mov + h264/hevc; transcode to HLS mp4. `maxBitrate`: 120 Mbps (4K) or 20 Mbps (1080p) via `@AppStorage("render4K")`.
+
+### tvOS Player — Critical Constraints
+- **MUST present via UIKit modal** (`UIViewController.present()`), NOT SwiftUI — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss
+- **Do NOT use `AVPlayerViewController`** — shows "Unknown" for audio tracks, no public API to fix. Use `TVPlayerHostViewController` instead
+
+### Custom tvOS Player (`TVCustomPlayerView.swift`)
 All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 
-- **`TVPlayerState`** (`@MainActor @Observable`) — single source of truth: `currentTime`, `duration`, `isPlaying`, `isBuffering`, `showControls`, `currentAudioIdx`, `currentSubtitleIdx`. Computed: `progress`, `formattedCurrentTime`, `formattedRemaining`.
-- **`TVPlayerHostViewController`** — full-screen UIKit VC. Embeds `AVPlayerLayer` + a `UIHostingController<TVPlayerOverlayView>`. Owns the `AVPlayer`, KVO observations, periodic time observer (1 s interval), and remote press handling (`pressesBegan`).
-  - `pressesBegan`: `playPause` → toggle; `menu` → show controls or dismiss; `select` → toggle when controls visible; `leftArrow`/`rightArrow` → show controls + pass to super (SwiftUI `onMoveCommand` handles seeking, so we never seek unconditionally here).
-  - `restartWithCurrentTracks()`: pins `state.currentTime` before setting `isBuffering = true`, so the scrubber doesn't jump to 0 during a track switch. Time observer skips updates while `isBuffering`.
-- **`TVPlayerOverlayView`** — only observes `isBuffering` + `showControls`. Delegates time/track rendering to isolated sub-views to prevent Menu blinking on time updates.
-- **`TVControlsOverlay`** — owns the single `@FocusState<FocusItem?>` (`.scrubber`, `.audio`, `.subtitle`) for all interactive elements. This is required so SwiftUI reliably restores focus to the correct button after a `Menu` is dismissed with the back button. `onMoveCommand` for seeking lives here (not in the scrubber sub-view).
-  - Controls float directly on video — **no wrapping background container**. Buttons have individual `Circle()` glass backgrounds (`.white.opacity(0.15)`); time labels have drop shadows for readability.
-- **`TVPlayerScrubber`** — display-only (accepts `isFocused: Bool`, no `@FocusState`). Only re-renders when `state.progress`, `state.formattedCurrentTime`, or `state.formattedRemaining` change.
-- **`TVAudioTrackMenu`** / **`TVSubtitleTrackMenu`** — isolated sub-views that only observe `state.currentAudioIdx` / `state.currentSubtitleIdx`. Selecting the already-active track is a **no-op** (no stream restart). Use `Label(…, systemImage: "checkmark")` for the active track.
+- **`TVPlayerState`** — single source of truth: `currentTime`, `duration`, `isPlaying`, `isBuffering`, `showControls`, `currentAudioIdx`, `currentSubtitleIdx`
+- **`TVPlayerHostViewController`** — UIKit VC with `AVPlayerLayer` + `UIHostingController<TVPlayerOverlayView>`. Handles remote via `pressesBegan`: playPause → toggle; menu → show/dismiss controls; left/right → pass to super (SwiftUI `onMoveCommand` handles seeking)
+- **`TVControlsOverlay`** — owns the single `@FocusState<FocusItem?>` (`.scrubber`, `.audio`, `.subtitle`). `onMoveCommand` for seeking lives here. Controls float on video with no background container; buttons have individual `Circle()` glass backgrounds
+- **`TVPlayerScrubber`** — display-only, no `@FocusState`. Re-renders only on progress/time changes
+- **`TVAudioTrackMenu`** / **`TVSubtitleTrackMenu`** — isolated sub-views observing only their index. Same-track selection is a no-op
 
-**Key invariants:**
-- Never re-render Menus on time ticks — isolate to sub-views with only the properties they need.
-- Always set `state.currentTime = savedSeconds` before `state.isBuffering = true` in track-switch paths.
-- `@FocusState` must live in the parent (`TVControlsOverlay`), not inside each sub-view, for cross-element focus restoration to work.
+**Key invariants**:
+- Never re-render Menus on time ticks — isolate to sub-views
+- Always set `state.currentTime = savedSeconds` before `state.isBuffering = true` in track-switch paths
+- `@FocusState` must live in `TVControlsOverlay` (parent), not sub-views, for focus restoration after Menu back
 
-## Navigation Flow
-- `AppNavigation` → checks Keychain for stored session → restores via `apiClient.reconnect()` + `fetchServerInfo()`
-- `AppNavigation` injects `ThemeManager` and `LocalizationManager` and applies `.preferredColorScheme()` at root
-- No server → `ServerSetupScreen` → `LoginScreen` → `MainTabView`
-- `MainTabView`: **TabView (top tab bar) on tvOS**, sidebar on iPad, bottom tab bar on iPhone
-- Home hero Play → `PlayLink` → video; More Info → `MediaDetailScreen` (episodes/seasons auto-resolve to parent series)
-- Continue Watching → `PlayLink` → video; Recently Added → `MediaDetailScreen`
-- Libraries → `MediaDetailScreen` → Play → `PlayLink` → video
+### iOS Player (`VideoPlayerView`)
+`AVPlayerItem(url:)`, KVO on `playerItem.status`, cleanup on disappear (pause + nil + invalidate).
 
-## Completed Phases
-- **Phase 1**: Project setup, design system, navigation shell
-- **Phase 2**: Jellyfin API, authentication, Keychain persistence
-- **Phase 3**: Home screen, Movie/TV libraries with real data
-- **Phase 4**: Media detail screen, video player, search, navigation wiring
-- **Phase 5**: Sort & filter (movies/TV), voice search (iOS), settings redesign (tvOS tabbed layout), dynamic accent color system, dark/light mode toggle, tvOS video focus fix (UIKit presentation)
-- **Phase 6**: tvOS Settings rework — Cinema Glass design system, single-page two-column layout, profile management with server users + profile images, custom toggle indicators, server connection info, interface options (motion effects, subtitles, 4K rendering), premium focus style (thin accent border, no scale/zoom)
-- **Phase 7**: UI polish — tvOS focus without image overlap (border instead of scale), card image alignment (Color.clear container pattern), full i18n system (French default + English, in-app language switcher via `LocalizationManager`), accent color picker in settings, `@AppStorage`+`@Observable` reactivity fix (`_revision` counter pattern), series image fallback (`parentBackdropItemID` → `seriesID` → `id`)
-- **Phase 8**: Settings toggles wired up (Motion Effects → `motionEffectsEnabled` environment key disables all tvOS animations; Force Subtitles → auto-selects subtitle track on playback; 4K Rendering → adjusts max streaming bitrate 120/20 Mbps). MediaDetailScreen refactored: episodes/seasons auto-resolve to parent series for full detail, dead More Info button removed, tvOS scrolling fixed (`.focusable()` on overview text), backdrop height increased, action button spacing widened. Season tab buttons use custom `SeasonTabButtonStyle` (accent capsule border, no native focus effect).
-- **Phase 9**: MovieLibraryScreen + TVSeriesScreen unified into `MediaLibraryScreen` (parameterized by `BaseItemKind`). tvOS Sort & Filter reworked: replaced unusable modal sheet with inline filter bar — sort pills (horizontal scroll) + genre chips (wrapping `FlowLayout`, multi-line) + reset button on its own line below all filters. `TVFilterChipButtonStyle` for chip focus (thin accent capsule border). Sort options: Name, Date Added, Release Year, Rating (runtime removed).
-- **Phase 10**: Fully custom tvOS video player (`TVCustomPlayerView.swift`). Replaced `AVPlayerViewController` (showed "Unknown" for audio tracks, no public API to fix) with `TVPlayerHostViewController` — bare `AVPlayerLayer` + SwiftUI overlay. Custom transport bar: floating audio/subtitle `Menu` buttons (bottom-right, glass circles) + scrubber with time labels, all floating on video with no background container. Isolated sub-views prevent Menu blinking on time ticks. Centralized `@FocusState` in `TVControlsOverlay` restores focus to the correct button after Menu back. Same-track selection is a no-op. Scrubber pinned during track switch (no jump to 0). Remote input via `pressesBegan`; left/right only seeks when scrubber is focused (`onMoveCommand`).
-- **Phase 11**: tvOS Top Shelf images regenerated — replaced square app-icon-in-a-card with full-width dark background (`#1C1C1E`) + centered jellyfish logo (composited from app icon front layer). Standard (1920x720) and wide (2320x720) variants. PosterCard title alignment fix — title area now reserves 2 lines of space using a hidden placeholder (`Text("M\nM").hidden()` + overlay), ensuring all poster images in a row are top-aligned regardless of title length.
-- **Phase 12**: Bug fixes and UX polish:
-  - **Xcode warnings cleared**: Top Shelf images flattened to fully opaque (composited onto `#1C1C1E`); `jellyfin-android` directory moved out of `Assets.xcassets` (was causing hundreds of duplicate asset name warnings); Swift concurrency warning fixed in `JellyfinAPIClient` (ISO8601DateFormatter created inside closure instead of captured).
-  - **tvOS font scaling**: `CinemaScale.factor` now applies a **1.4× base multiplier on tvOS** so all `CinemaFont` tokens and `CinemaScale.pt()` calls are correctly sized for 10-foot viewing. iOS sizes unchanged. The `uiScale` setting (80%–130%) applies on top as a relative adjustment.
-  - **Play button consistency**: "Lecture" button now uses `.white` foreground (was `CinemaColor.onPrimary`), `.lineLimit(1)` + `.minimumScaleFactor(0.7)`, and width 240 on tvOS across HomeScreen, MovieLibraryScreen hero, and MediaDetailScreen. Button font size aligned to `28pt` on tvOS across all three (not scaled by `CinemaScale.pt()`).
-  - **Library default sort**: Changed from Name ascending to **Date d'ajout descending** (`dateCreated`, `sortAscending: false`). Sort pill order: Date d'ajout → Nom → Année de sortie → Note. New pills default to descending except Name/Rating.
-  - **Genre row sort**: Genre rows in the browse view now respect the selected sort option (was always `.random`). `fetchGenreItems` helper uses `sortFilter.sortBy/sortAscending`. Sort change triggers `reloadGenreItems` when no genre filter is active.
-  - **Browse vs filtered view**: Browse view (genre rows) is now shown whenever no genre chip is selected, regardless of sort — only a genre chip selection switches to the flat filtered grid. Previously any non-default sort also triggered the flat view.
-  - **Tab switch persistence**: `MediaLibraryViewModel.loadInitial` is guarded by `hasLoaded` — genre rows no longer re-randomize when switching between the Movies and Series tabs.
+## tvOS Settings
 
-## tvOS Interface Settings
-Three `@AppStorage` toggles + one picker in SettingsScreen (tvOS only):
-- **Motion Effects** (`motionEffects`, default: `true`) — controls all UI animations via `motionEffectsEnabled` environment key injected from `AppNavigation`. When off, `.animation(nil)` is used everywhere
-- **Force Subtitles** (`forceSubtitles`, default: `false`) — read by `VideoPlayerCoordinator`, passed to `TVVideoPresenter.present(url:forceSubtitles:)`. Disables `appliesMediaSelectionCriteriaAutomatically` and selects first `.legible` track
-- **4K Rendering** (`render4K`, default: `true`) — read by `VideoPlayerCoordinator`, sets `maxBitrate` to 120 Mbps (on) or 20 Mbps (off) in `getPlaybackInfo()` and `DeviceProfile`
-- **Text Size** (`uiScale`, default: `1.0`) — global font scale factor (80%–130%, 5% steps). Stored via `ThemeManager.uiScale` (`@AppStorage("uiScale")`). Read at render time by `CinemaScale.factor` (computed `static var` from UserDefaults). On tvOS, `CinemaScale.factor` applies a **1.4× base multiplier** before the user scale, so 100% on tvOS = 1.4× the iOS base sizes. All `CinemaFont` methods and `CinemaScale.pt()` calls multiply by this factor. Changing `uiScale` bumps `ThemeManager._accentRevision` to trigger a full re-render. UI: `Button` row with `.confirmationDialog` listing percentage options (80%–130%); same row style as toggles (`.tvSettingsFocusable`, `minHeight: 80`). **Note**: `confirmationDialog` does not support pre-focusing the current value — use a custom sheet with `@FocusState` + `.defaultFocus` if that behaviour is needed in future. **Exception**: Action button labels (Play/Lecture) use a hardcoded `28pt` on tvOS and do not scale with `CinemaScale`, keeping them consistent with the home page hero button.
+`@AppStorage` keys, all in `SettingsScreen`:
+| Key | Default | Effect |
+|-----|---------|--------|
+| `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |
+| `forceSubtitles` | `false` | Auto-selects first `.legible` track; disables `appliesMediaSelectionCriteriaAutomatically` |
+| `render4K` | `true` | `maxBitrate` 120 Mbps (on) / 20 Mbps (off) |
+| `uiScale` | `1.0` | Font scale 80–130%. Bumps `ThemeManager._accentRevision` to force re-render |
 
 ## MediaDetailScreen
-- `MediaDetailViewModel` auto-resolves Episode/Season items to their parent Series (fetches series by `seriesID`, loads seasons + episodes)
-- Uses `resolvedType` (not initial `itemType`) for layout decisions (show seasons, metadata format)
-- tvOS scrolling: overview text uses `.focusable()` to enable focus-driven scrolling past non-interactive content
-- Action buttons: Play only (no More Info — the user is already on the detail page)
+
+- `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes)
+- Uses `resolvedType` (not initial `itemType`) for layout decisions
+- tvOS: overview text uses `.focusable()` for focus-driven scrolling past non-interactive content
 
 ## Localization
-- In-app language switching via `LocalizationManager` (`@Observable`, injected from `AppNavigation`)
-- Default language: French (`fr`). Also supports English (`en`)
-- All UI strings use `loc.localized("key")` or `loc.localized("key", args...)` — never hardcoded
-- Strings files at `Resources/{lang}.lproj/Localizable.strings`
-- Uses `@ObservationIgnored` + `@AppStorage` + `_revision` counter pattern (same as `ThemeManager`) to trigger SwiftUI updates
 
-## Image URL Patterns
-- `ImageURLBuilder` builds Jellyfin `/Items/{id}/Images/{type}` URLs
-- **Series/episode backdrop fallback**: Episodes don't have their own backdrop — use `item.parentBackdropItemID ?? item.seriesID ?? item.id` for backdrop image IDs
-- **Card image containers**: Use `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { LazyImage }` + `.clipped()` for consistent sizing
-- **PosterCard title alignment**: Title area uses hidden 2-line placeholder (`Text("M\nM").hidden()`) with actual title overlaid top-aligned, ensuring all cards in a row have uniform height regardless of title length
+- `LocalizationManager` (`@Observable`, injected from `AppNavigation`). Default: French (`fr`), also English (`en`)
+- All strings via `loc.localized("key")` or `loc.localized("key", args...)` — never hardcoded
+- Strings at `Resources/{lang}.lproj/Localizable.strings`
+- Reactivity: `@ObservationIgnored` + `@AppStorage` + `_revision` counter pattern (same as `ThemeManager`)
+
+## Image Patterns
+
+- `ImageURLBuilder` → `/Items/{id}/Images/{type}` URLs
+- **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`
+- **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { LazyImage }` + `.clipped()`
+- **PosterCard title alignment**: hidden `Text("M\nM").hidden()` placeholder + actual title overlaid top-aligned → uniform row height regardless of title length
+
+## App Icons
+
+- **iOS**: `Resources/Assets.xcassets/AppIcon.appiconset/` — 1024×1024 in three variants (light, dark, tinted)
+- **tvOS**: `Resources/Assets.xcassets/App Icon & Top Shelf Image.brandassets/` — 3-layer parallax imagestack + Top Shelf (1920×720) + Top Shelf Wide (2320×720)
+- **Standalone source**: `appIcon.png` at project root
 
 ## Build
+
 ```bash
 # iOS
 xcodebuild build -project Cinemax.xcodeproj -scheme Cinemax -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 
 # tvOS
 xcodebuild build -project Cinemax.xcodeproj -scheme CinemaxTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
-```
 
-## Xcode Project Generation
-Uses XcodeGen: `cd Cinemax && xcodegen generate`
+# Regenerate Xcode project
+cd Cinemax && xcodegen generate
+```

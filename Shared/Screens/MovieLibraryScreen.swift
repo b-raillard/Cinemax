@@ -519,7 +519,7 @@ struct MediaLibraryScreen: View {
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
 
-                Text(loc.localized("movies.titles", viewModel.sortFilter.isNonDefault ? viewModel.filteredTotalCount : viewModel.totalCount))
+                Text(loc.localized("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredTotalCount : viewModel.totalCount))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
 
