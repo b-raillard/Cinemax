@@ -79,19 +79,31 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 ### Custom tvOS Player (`TVCustomPlayerView.swift`)
 All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 
-- **`TVPlayerState`** — single source of truth: `currentTime`, `duration`, `isPlaying`, `isBuffering`, `showControls`, `currentAudioIdx`, `currentSubtitleIdx`
-- **`TVPlayerHostViewController`** — UIKit VC with `AVPlayerLayer` + `UIHostingController<TVPlayerOverlayView>`. Handles remote via `pressesBegan`: playPause → toggle; menu → show/dismiss controls; left/right → pass to super (SwiftUI `onMoveCommand` handles seeking)
-- **`TVControlsOverlay`** — owns the single `@FocusState<FocusItem?>` (`.scrubber`, `.audio`, `.subtitle`). `onMoveCommand` for seeking lives here. Controls float on video with no background container; buttons have individual `Circle()` glass backgrounds
+- **`TVPlayerState`** — single source of truth: `currentTime`, `duration`, `isPlaying`, `isBuffering`, `showControls`, `currentAudioIdx`, `currentSubtitleIdx`, `title`, `previousEpisode`, `nextEpisode`
+- **`TVPlayerHostViewController`** — UIKit VC with `AVPlayerLayer` + `UIHostingController<TVPlayerOverlayView>`. Handles remote via `pressesBegan`: playPause → toggle; menu → show/dismiss controls; left/right → pass to super (SwiftUI `onMoveCommand` handles seeking). Accepts `episodeNavigator` for in-player episode switching via `navigateToEpisode(_:)`
+- **`TVControlsOverlay`** — owns the single `@FocusState<FocusItem?>` (`.scrubber`, `.audio`, `.subtitle`, `.previousEpisode`, `.nextEpisode`). `onMoveCommand` for seeking lives here. Controls float on video with no background container; buttons have individual `Capsule()` glass backgrounds
 - **`TVPlayerScrubber`** — display-only, no `@FocusState`. Re-renders only on progress/time changes
 - **`TVAudioTrackMenu`** / **`TVSubtitleTrackMenu`** — isolated sub-views observing only their index. Same-track selection is a no-op
+
+**HUD center area** (always visible when controls are shown):
+- Large `pause.circle.fill` / `play.circle.fill` icon reflects `state.isPlaying` in real-time
+- `gobackward.15` / `goforward.15` flash icons flank the play/pause icon; shown for 500 ms on each scrubber seek, cancelled and restarted on rapid consecutive seeks
+
+**Episode navigation** (`EpisodeRef` + `EpisodeNavigator` in `VideoPlayerView.swift`):
+- `EpisodeRef: Sendable { id, title }` — lightweight episode pointer
+- `EpisodeNavigator = @Sendable (String) async -> (PlaybackInfo, EpisodeRef?, EpisodeRef?)?` — fetches new PlaybackInfo and returns updated prev/next refs
+- `TVControlsOverlay` shows `backward.end.fill` / `forward.end.fill` capsule buttons when `state.previousEpisode` / `state.nextEpisode` are non-nil; update live after navigation
+- `navigateToEpisode()` resets `state.currentTime/duration`, swaps `AVPlayer` item, updates `state.title` + episode refs
+- `PlayLink` carries `previousEpisode`, `nextEpisode`, `episodeNavigator`; passes them through `VideoPlayerCoordinator` → `TVVideoPresenter` → `TVPlayerHostViewController`
 
 **Key invariants**:
 - Never re-render Menus on time ticks — isolate to sub-views
 - Always set `state.currentTime = savedSeconds` before `state.isBuffering = true` in track-switch paths
 - `@FocusState` must live in `TVControlsOverlay` (parent), not sub-views, for focus restoration after Menu back
+- `state.title` / `state.previousEpisode` / `state.nextEpisode` are updated by `navigateToEpisode()` so the overlay reflects the current episode without re-mounting
 
 ### iOS Player (`VideoPlayerView`)
-`AVPlayerItem(url:)`, KVO on `playerItem.status`, cleanup on disappear (pause + nil + invalidate).
+`AVPlayerItem(url:)`, KVO on `playerItem.status`, cleanup on disappear (pause + nil + invalidate). Uses `@State`-based mutable episode context (`currentItemId`, `currentTitle`, `currentStartTime`, `currentPrevEpisode`, `currentNextEpisode`) so episode navigation hot-swaps the player in place. Prev/next `backward.end.fill` / `forward.end.fill` icon buttons appear in the top-trailing overlay alongside the track picker.
 
 ## Settings Screen
 
@@ -125,9 +137,19 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 
 ## MediaDetailScreen
 
-- `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes)
+- `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes). Also calls `getNextUp()` for series to populate `nextUpEpisode`
 - Uses `resolvedType` (not initial `itemType`) for layout decisions
 - tvOS: overview text uses `.focusable()` for focus-driven scrolling past non-interactive content
+
+**Resume / next-up logic in `actionButtons`**:
+- Movie with `playbackPositionTicks > 0` and not `isPlayed`: shows progress bar (accent fill, `playButtonWidth` wide) + remaining time text (`home.remainingTime.*` keys) + "Lecture" button that resumes at saved position via `PlayLink(startTime:)`
+- Series: uses `viewModel.nextUpEpisode` (from `getNextUp`). In-progress episode → progress bar + remaining time + resume button. Finished/next episode → episode label + regular play button. Falls back to series-level play if no next-up
+- `userData.playbackPositionTicks` and `runTimeTicks` are both `Int?` (not `Int64`); `isPlayed` is `userData.isPlayed: Bool?`
+- Episode rows show a thin accent progress bar overlay at the bottom of the thumbnail for partially-watched episodes
+
+**Episode navigation wiring**:
+- `episodeNavigation(for:)` — computes `EpisodeRef` prev/next from `viewModel.episodes` and builds an `EpisodeNavigator` closure capturing `[EpisodeRef]` (Sendable), `apiClient`, and `userId`
+- Both `actionButtons` (next-up episode) and each `episodeRow` pass `previousEpisode`, `nextEpisode`, `episodeNavigator` to `PlayLink`
 
 ## Localization
 

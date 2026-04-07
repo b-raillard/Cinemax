@@ -18,6 +18,9 @@ final class TVPlayerState {
     var showControls: Bool = true
     var currentAudioIdx: Int?
     var currentSubtitleIdx: Int?
+    var title: String = ""
+    var previousEpisode: EpisodeRef?
+    var nextEpisode: EpisodeRef?
 
     var progress: Double {
         guard duration > 0 else { return 0 }
@@ -60,6 +63,8 @@ final class TVPlayerHostViewController: UIViewController {
     let info: JellyfinAPIClient.PlaybackInfo
     let itemTitle: String
     let onTrackChange: (Int?, Int?) async -> URL?
+    let episodeNavigator: EpisodeNavigator?
+    private var startTime: Double?
 
     // MARK: Observations
 
@@ -73,10 +78,16 @@ final class TVPlayerHostViewController: UIViewController {
     init(
         title: String,
         info: JellyfinAPIClient.PlaybackInfo,
+        startTime: Double? = nil,
+        previousEpisode: EpisodeRef? = nil,
+        nextEpisode: EpisodeRef? = nil,
+        episodeNavigator: EpisodeNavigator? = nil,
         onTrackChange: @escaping (Int?, Int?) async -> URL?
     ) {
         self.itemTitle = title
         self.info = info
+        self.startTime = startTime
+        self.episodeNavigator = episodeNavigator
         self.onTrackChange = onTrackChange
 
         let item = AVPlayerItem(url: info.url)
@@ -85,8 +96,11 @@ final class TVPlayerHostViewController: UIViewController {
         self.avPlayer.automaticallyWaitsToMinimizeStalling = true
 
         self.state = TVPlayerState()
+        self.state.title = title
         self.state.currentAudioIdx = info.selectedAudioIndex
         self.state.currentSubtitleIdx = info.selectedSubtitleIndex
+        self.state.previousEpisode = previousEpisode
+        self.state.nextEpisode = nextEpisode
 
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
@@ -134,7 +148,6 @@ final class TVPlayerHostViewController: UIViewController {
 
     private func mountOverlay() {
         let overlay = TVPlayerOverlayView(
-            title: itemTitle,
             state: state,
             info: info,
             onPlayPause: { [weak self] in self?.togglePlayPause() },
@@ -150,7 +163,15 @@ final class TVPlayerHostViewController: UIViewController {
                 restartWithCurrentTracks()
             },
             onDismiss: { [weak self] in self?.dismiss(animated: true) },
-            onInteraction: { [weak self] in self?.showControlsTemporarily() }
+            onInteraction: { [weak self] in self?.showControlsTemporarily() },
+            onPreviousEpisode: { [weak self] in
+                guard let ep = self?.state.previousEpisode else { return }
+                self?.navigateToEpisode(ep)
+            },
+            onNextEpisode: { [weak self] in
+                guard let ep = self?.state.nextEpisode else { return }
+                self?.navigateToEpisode(ep)
+            }
         )
 
         let hc = UIHostingController(rootView: AnyView(overlay))
@@ -177,6 +198,14 @@ final class TVPlayerHostViewController: UIViewController {
                     if let d = try? await item.asset.load(.duration),
                        d.isValid, d.seconds.isFinite, d.seconds > 0 {
                         self.state.duration = d.seconds
+                    }
+                    if let st = self.startTime, st > 0 {
+                        await self.avPlayer.seek(
+                            to: CMTime(seconds: st, preferredTimescale: 600),
+                            toleranceBefore: .zero,
+                            toleranceAfter: .zero
+                        )
+                        self.startTime = nil
                     }
                 case .failed:
                     tvPlayerLog.error("AVPlayer failed: \(item.error?.localizedDescription ?? "unknown")")
@@ -315,6 +344,54 @@ final class TVPlayerHostViewController: UIViewController {
         }
     }
 
+    func navigateToEpisode(_ ep: EpisodeRef) {
+        guard episodeNavigator != nil else { return }
+        state.currentTime = 0
+        state.duration = 0
+        state.isBuffering = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let (newInfo, newPrev, newNext) = await episodeNavigator?(ep.id) else {
+                state.isBuffering = false
+                return
+            }
+
+            state.title = ep.title
+            state.previousEpisode = newPrev
+            state.nextEpisode = newNext
+            state.currentAudioIdx = newInfo.selectedAudioIndex
+            state.currentSubtitleIdx = newInfo.selectedSubtitleIndex
+
+            let newItem = AVPlayerItem(url: newInfo.url)
+            newItem.preferredForwardBufferDuration = 5
+
+            statusObservation?.invalidate()
+            keepUpObservation?.invalidate()
+
+            statusObservation = newItem.observe(\.status) { [weak self] item, _ in
+                Task { @MainActor [weak self] in
+                    guard let self, item.status == .readyToPlay else { return }
+                    self.statusObservation?.invalidate()
+                    self.statusObservation = nil
+                    self.avPlayer.play()
+                    self.state.isPlaying = true
+                    self.state.isBuffering = false
+                    if let d = try? await item.asset.load(.duration),
+                       d.isValid, d.seconds.isFinite, d.seconds > 0 {
+                        self.state.duration = d.seconds
+                    }
+                    self.keepUpObservation = newItem.observe(\.isPlaybackLikelyToKeepUp) { [weak self] item, _ in
+                        Task { @MainActor [weak self] in
+                            self?.state.isBuffering = !item.isPlaybackLikelyToKeepUp
+                        }
+                    }
+                }
+            }
+            avPlayer.replaceCurrentItem(with: newItem)
+        }
+    }
+
     // MARK: - Remote Input
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -364,7 +441,6 @@ final class TVPlayerHostViewController: UIViewController {
 /// Time-dependent and track-dependent rendering is delegated to isolated sub-views
 /// so that the frequent currentTime updates do not re-render the Menu buttons.
 struct TVPlayerOverlayView: View {
-    let title: String
     let state: TVPlayerState
     let info: JellyfinAPIClient.PlaybackInfo
     let onPlayPause: () -> Void
@@ -373,6 +449,8 @@ struct TVPlayerOverlayView: View {
     let onSubtitleChange: (Int?) -> Void
     let onDismiss: () -> Void
     let onInteraction: () -> Void
+    let onPreviousEpisode: () -> Void
+    let onNextEpisode: () -> Void
 
     var body: some View {
         // Accesses only state.isBuffering + state.showControls — re-renders only on those.
@@ -385,13 +463,14 @@ struct TVPlayerOverlayView: View {
 
             if state.showControls {
                 TVControlsOverlay(
-                    title: title,
                     state: state,
                     info: info,
                     onSeek: onSeek,
                     onAudioChange: onAudioChange,
                     onSubtitleChange: onSubtitleChange,
-                    onInteraction: onInteraction
+                    onInteraction: onInteraction,
+                    onPreviousEpisode: onPreviousEpisode,
+                    onNextEpisode: onNextEpisode
                 )
                 .transition(.opacity)
             }
@@ -408,23 +487,30 @@ struct TVPlayerOverlayView: View {
 /// correct button after a Menu is dismissed with the back button.
 private struct TVControlsOverlay: View {
 
-    private enum FocusItem: Hashable { case scrubber, audio, subtitle }
+    private enum FocusItem: Hashable { case scrubber, audio, subtitle, previousEpisode, nextEpisode }
 
-    let title: String
     let state: TVPlayerState
     let info: JellyfinAPIClient.PlaybackInfo
     let onSeek: (Double) -> Void
     let onAudioChange: (Int?) -> Void
     let onSubtitleChange: (Int?) -> Void
     let onInteraction: () -> Void
+    let onPreviousEpisode: () -> Void
+    let onNextEpisode: () -> Void
 
     @FocusState private var focus: FocusItem?
 
+    // Seek flash indicators — local UI state only
+    @State private var showBackwardSeek = false
+    @State private var showForwardSeek = false
+    @State private var backwardSeekTask: Task<Void, Never>?
+    @State private var forwardSeekTask: Task<Void, Never>?
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Title floats at top — text shadow keeps it readable without a background
+            // Title floats at top — reads from state.title so it updates after episode navigation
             HStack {
-                Text(title)
+                Text(state.title)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 2)
@@ -435,10 +521,77 @@ private struct TVControlsOverlay: View {
             .padding(.horizontal, 72)
             .padding(.top, 48)
 
+            // Center: play/pause status + seek flash indicators
+            HStack(spacing: 80) {
+                Image(systemName: "gobackward.15")
+                    .font(.system(size: 52, weight: .light))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 8)
+                    .opacity(showBackwardSeek ? 1 : 0)
+                    .animation(.easeOut(duration: 0.15), value: showBackwardSeek)
+
+                Image(systemName: state.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 80, weight: .light))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .shadow(color: .black.opacity(0.5), radius: 10)
+
+                Image(systemName: "goforward.15")
+                    .font(.system(size: 52, weight: .light))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 8)
+                    .opacity(showForwardSeek ? 1 : 0)
+                    .animation(.easeOut(duration: 0.15), value: showForwardSeek)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            // Shift up slightly so it sits in the visual center above the scrubber strip
+            .padding(.bottom, 160)
+
             // Floating controls — no background container, elements float on video
             VStack(spacing: 12) {
                 HStack(spacing: 16) {
                     Spacer()
+                    if state.previousEpisode != nil {
+                        Button {
+                            onInteraction()
+                            onPreviousEpisode()
+                        } label: {
+                            Image(systemName: "backward.end.fill")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundStyle(focus == .previousEpisode ? Color.black.opacity(0.8) : .white)
+                                .padding(.horizontal, 22)
+                                .padding(.vertical, 14)
+                                .background(
+                                    focus == .previousEpisode
+                                        ? AnyShapeStyle(.white)
+                                        : AnyShapeStyle(.regularMaterial),
+                                    in: Capsule()
+                                )
+                                .animation(.easeInOut(duration: 0.15), value: focus == .previousEpisode)
+                        }
+                        .focused($focus, equals: .previousEpisode)
+                        .focusEffectDisabled()
+                    }
+                    if state.nextEpisode != nil {
+                        Button {
+                            onInteraction()
+                            onNextEpisode()
+                        } label: {
+                            Image(systemName: "forward.end.fill")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundStyle(focus == .nextEpisode ? Color.black.opacity(0.8) : .white)
+                                .padding(.horizontal, 22)
+                                .padding(.vertical, 14)
+                                .background(
+                                    focus == .nextEpisode
+                                        ? AnyShapeStyle(.white)
+                                        : AnyShapeStyle(.regularMaterial),
+                                    in: Capsule()
+                                )
+                                .animation(.easeInOut(duration: 0.15), value: focus == .nextEpisode)
+                        }
+                        .focused($focus, equals: .nextEpisode)
+                        .focusEffectDisabled()
+                    }
                     if !info.audioTracks.isEmpty {
                         TVAudioTrackMenu(
                             state: state,
@@ -473,8 +626,12 @@ private struct TVControlsOverlay: View {
                     .focusEffectDisabled()
                     .onMoveCommand { direction in
                         switch direction {
-                        case .left:  onSeek(-15)
-                        case .right: onSeek(15)
+                        case .left:
+                            onSeek(-15)
+                            flashSeekIndicator(forward: false)
+                        case .right:
+                            onSeek(15)
+                            flashSeekIndicator(forward: true)
                         default: break
                         }
                     }
@@ -486,6 +643,28 @@ private struct TVControlsOverlay: View {
         .onAppear { focus = .scrubber }
         // Reset auto-hide timer whenever focus moves to any interactive element
         .onChange(of: focus) { _, _ in onInteraction() }
+    }
+
+    /// Shows the seek flash indicator for 500 ms then fades it out.
+    /// Rapid consecutive seeks reset the timer so the icon stays visible throughout.
+    private func flashSeekIndicator(forward: Bool) {
+        if forward {
+            forwardSeekTask?.cancel()
+            showForwardSeek = true
+            forwardSeekTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                showForwardSeek = false
+            }
+        } else {
+            backwardSeekTask?.cancel()
+            showBackwardSeek = true
+            backwardSeekTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                showBackwardSeek = false
+            }
+        }
     }
 }
 

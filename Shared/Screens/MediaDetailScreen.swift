@@ -10,6 +10,7 @@ final class MediaDetailViewModel {
     var seasons: [BaseItemDto] = []
     var episodes: [BaseItemDto] = []
     var selectedSeasonId: String?
+    var nextUpEpisode: BaseItemDto?
     var isLoading = true
     var errorMessage: String?
 
@@ -47,6 +48,7 @@ final class MediaDetailViewModel {
                     selectedSeasonId = seasonId
                     episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
                 }
+                nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: seriesId, userId: userId)
             } else {
                 item = loadedItem
                 resolvedType = effectiveType
@@ -60,6 +62,7 @@ final class MediaDetailViewModel {
                         selectedSeasonId = seasonId
                         episodes = try await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
                     }
+                    nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: itemId, userId: userId)
                 }
             }
         } catch {
@@ -246,12 +249,108 @@ struct MediaDetailScreen: View {
             .font(.system(size: metadataFontSize, weight: .medium))
     }
 
+    // MARK: - Episode Navigation
+
+    /// Computes prev/next episode refs and builds an EpisodeNavigator for a given episode ID.
+    /// Returns nil navigator when there are fewer than 2 episodes in the current season.
+    private func episodeNavigation(for episodeId: String) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
+        let refs: [EpisodeRef] = viewModel.episodes.compactMap { ep in
+            guard let id = ep.id else { return nil }
+            return EpisodeRef(id: id, title: ep.name ?? "")
+        }
+        guard refs.count > 1, let idx = refs.firstIndex(where: { $0.id == episodeId }) else {
+            return (nil, nil, nil)
+        }
+        let prev: EpisodeRef? = idx > 0 ? refs[idx - 1] : nil
+        let next: EpisodeRef? = idx < refs.count - 1 ? refs[idx + 1] : nil
+
+        let apiClient = appState.apiClient
+        let userId = appState.currentUserId ?? ""
+        let navigator: EpisodeNavigator = { @Sendable targetId in
+            guard let targetIdx = refs.firstIndex(where: { $0.id == targetId }) else { return nil }
+            guard let info = try? await apiClient.getPlaybackInfo(itemId: refs[targetIdx].id, userId: userId) else { return nil }
+            let newPrev: EpisodeRef? = targetIdx > 0 ? refs[targetIdx - 1] : nil
+            let newNext: EpisodeRef? = targetIdx < refs.count - 1 ? refs[targetIdx + 1] : nil
+            return (info, newPrev, newNext)
+        }
+        return (prev, next, navigator)
+    }
+
     // MARK: - Action Buttons
 
     private func actionButtons(_ item: BaseItemDto) -> some View {
-        HStack(spacing: actionButtonSpacing) {
-            if let id = item.id {
-                PlayLink(itemId: id, title: item.name ?? "") {
+        let isSeries = viewModel.resolvedType == .series
+        let nextEp: BaseItemDto? = isSeries ? viewModel.nextUpEpisode : nil
+
+        // Determine resume position ticks and total ticks
+        let posTicks: Int = {
+            if !isSeries { return item.userData?.playbackPositionTicks ?? 0 }
+            return nextEp?.userData?.playbackPositionTicks ?? 0
+        }()
+        let totalTicks: Int = {
+            if !isSeries { return item.runTimeTicks ?? 0 }
+            return nextEp?.runTimeTicks ?? 0
+        }()
+        let isPlayed: Bool = isSeries
+            ? (nextEp?.userData?.isPlayed ?? false)
+            : (item.userData?.isPlayed ?? false)
+
+        let showResume = posTicks > 0 && !isPlayed && totalTicks > 0
+        let progress: Double = showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0
+        let remainingTicks = max(0, totalTicks - posTicks)
+        let remainingMinutes = remainingTicks / 600_000_000
+        let startSeconds: Double? = showResume ? Double(posTicks) / 10_000_000 : nil
+
+        let playItemId: String = nextEp?.id ?? item.id ?? ""
+        let playTitle: String = nextEp?.name ?? item.name ?? ""
+
+        return VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            // Episode label for series next-up
+            if let ep = nextEp {
+                let parts: [String] = [
+                    ep.indexNumber.map { loc.localized("detail.episode", $0) },
+                    ep.name
+                ].compactMap { $0 }
+                if !parts.isEmpty {
+                    Text(parts.joined(separator: " · "))
+                        .font(CinemaFont.label(.medium))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .lineLimit(1)
+                }
+            }
+
+            // Progress bar + remaining time when resuming
+            if showResume {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(CinemaColor.surfaceContainerHighest)
+                            .frame(height: 4)
+                        Capsule()
+                            .fill(themeManager.accent)
+                            .frame(width: geo.size.width * progress, height: 4)
+                    }
+                }
+                .frame(width: playButtonWidth, height: 4)
+
+                Text(remainingMinutes >= 60
+                    ? loc.localized("home.remainingTime.hours", remainingMinutes / 60, remainingMinutes % 60)
+                    : loc.localized("home.remainingTime.minutes", remainingMinutes))
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+
+            // Play button — include episode navigation when playing a series episode
+            let epNav = nextEp.flatMap { ep -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)? in
+                guard let id = ep.id else { return nil }
+                return episodeNavigation(for: id)
+            }
+            if !playItemId.isEmpty {
+                PlayLink(
+                    itemId: playItemId, title: playTitle, startTime: startSeconds,
+                    previousEpisode: epNav?.previous, nextEpisode: epNav?.next,
+                    episodeNavigator: epNav?.navigator
+                ) {
                     HStack(spacing: CinemaSpacing.spacing2) {
                         Text(loc.localized("detail.play"))
                             .font(.system(size: buttonFontSize, weight: .bold))
@@ -354,9 +453,22 @@ struct MediaDetailScreen: View {
         let builder = ImageURLBuilder(serverURL: serverURL)
 
         if let id = episode.id {
-            PlayLink(itemId: id, title: episode.name ?? "") {
+            let (epPrev, epNext, epNavigator) = episodeNavigation(for: id)
+            PlayLink(
+                itemId: id, title: episode.name ?? "",
+                previousEpisode: epPrev, nextEpisode: epNext,
+                episodeNavigator: epNavigator
+            ) {
                 HStack(spacing: 12) {
                     // Thumbnail
+                    let epProgress: Double? = {
+                        guard let ticks = episode.userData?.playbackPositionTicks,
+                              let total = episode.runTimeTicks,
+                              ticks > 0, total > 0,
+                              !(episode.userData?.isPlayed ?? false)
+                        else { return nil }
+                        return min(1.0, Double(ticks) / Double(total))
+                    }()
                     LazyImage(url: builder.imageURL(itemId: id, imageType: .primary, maxWidth: 300)) { state in
                         if let image = state.image {
                             image.resizable().aspectRatio(contentMode: .fill)
@@ -370,6 +482,23 @@ struct MediaDetailScreen: View {
                     }
                     .frame(width: episodeThumbnailWidth, height: episodeThumbnailWidth * 9 / 16)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
+                    .overlay(alignment: .bottom) {
+                        if let p = epProgress {
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.25))
+                                        .frame(height: 3)
+                                    Capsule()
+                                        .fill(themeManager.accent)
+                                        .frame(width: geo.size.width * p, height: 3)
+                                }
+                            }
+                            .frame(height: 3)
+                            .padding(.horizontal, 6)
+                            .padding(.bottom, 6)
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 4) {
                         if let num = episode.indexNumber {
