@@ -558,13 +558,12 @@ private struct TVControlsOverlay: View {
                             Image(systemName: "backward.end.fill")
                                 .font(.system(size: 22, weight: .medium))
                                 .foregroundStyle(focus == .previousEpisode ? Color.black.opacity(0.8) : .white)
-                                .padding(.horizontal, 22)
-                                .padding(.vertical, 14)
+                                .padding(14)
                                 .background(
                                     focus == .previousEpisode
                                         ? AnyShapeStyle(.white)
                                         : AnyShapeStyle(.regularMaterial),
-                                    in: Capsule()
+                                    in: Circle()
                                 )
                                 .animation(.easeInOut(duration: 0.15), value: focus == .previousEpisode)
                         }
@@ -579,13 +578,12 @@ private struct TVControlsOverlay: View {
                             Image(systemName: "forward.end.fill")
                                 .font(.system(size: 22, weight: .medium))
                                 .foregroundStyle(focus == .nextEpisode ? Color.black.opacity(0.8) : .white)
-                                .padding(.horizontal, 22)
-                                .padding(.vertical, 14)
+                                .padding(14)
                                 .background(
                                     focus == .nextEpisode
                                         ? AnyShapeStyle(.white)
                                         : AnyShapeStyle(.regularMaterial),
-                                    in: Capsule()
+                                    in: Circle()
                                 )
                                 .animation(.easeInOut(duration: 0.15), value: focus == .nextEpisode)
                         }
@@ -741,9 +739,8 @@ private struct TVAudioTrackMenu: View {
             Image(systemName: "speaker.wave.2.fill")
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(isFocused ? Color.black.opacity(0.8) : .white)
-                .padding(.horizontal, 22)
-                .padding(.vertical, 14)
-                .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Capsule())
+                .padding(14)
+                .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Circle())
                 .animation(.easeInOut(duration: 0.15), value: isFocused)
         }
     }
@@ -794,9 +791,8 @@ private struct TVSubtitleTrackMenu: View {
             Image(systemName: "captions.bubble.fill")
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(isFocused ? Color.black.opacity(0.8) : .white)
-                .padding(.horizontal, 22)
-                .padding(.vertical, 14)
-                .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Capsule())
+                .padding(14)
+                .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Circle())
                 .animation(.easeInOut(duration: 0.15), value: isFocused)
         }
     }
