@@ -21,6 +21,16 @@ struct TVPlayerViewController: UIViewControllerRepresentable {
 }
 #endif
 
+// MARK: - Episode Navigation
+
+struct EpisodeRef: Sendable {
+    let id: String
+    let title: String
+}
+
+/// Returns (new PlaybackInfo, new previousEpisode, new nextEpisode) for a given episode ID.
+typealias EpisodeNavigator = @Sendable (String) async -> (JellyfinAPIClient.PlaybackInfo, EpisodeRef?, EpisodeRef?)?
+
 // MARK: - Video Player View
 
 struct VideoPlayerView: View {
@@ -34,8 +44,29 @@ struct VideoPlayerView: View {
     @State private var playbackInfo: JellyfinAPIClient.PlaybackInfo?
     @State private var showTrackPicker = false
 
-    let itemId: String
-    let title: String
+    // Mutable episode context — updated when navigating between episodes
+    @State private var currentItemId: String
+    @State private var currentTitle: String
+    @State private var currentStartTime: Double?
+    @State private var currentPrevEpisode: EpisodeRef?
+    @State private var currentNextEpisode: EpisodeRef?
+    let episodeNavigator: EpisodeNavigator?
+
+    init(
+        itemId: String,
+        title: String,
+        startTime: Double? = nil,
+        previousEpisode: EpisodeRef? = nil,
+        nextEpisode: EpisodeRef? = nil,
+        episodeNavigator: EpisodeNavigator? = nil
+    ) {
+        _currentItemId = State(initialValue: itemId)
+        _currentTitle = State(initialValue: title)
+        _currentStartTime = State(initialValue: startTime)
+        _currentPrevEpisode = State(initialValue: previousEpisode)
+        _currentNextEpisode = State(initialValue: nextEpisode)
+        self.episodeNavigator = episodeNavigator
+    }
 
     var body: some View {
         ZStack {
@@ -49,15 +80,36 @@ struct VideoPlayerView: View {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
                     .overlay(alignment: .topTrailing) {
-                        if let info = playbackInfo, info.audioTracks.count > 1 || !info.subtitleTracks.isEmpty {
-                            Button { showTrackPicker = true } label: {
-                                Image(systemName: "ellipsis.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white)
-                                    .shadow(radius: 4)
-                                    .padding(16)
+                        HStack(spacing: 0) {
+                            if let prev = currentPrevEpisode, episodeNavigator != nil {
+                                Button { navigateToEpisode(prev) } label: {
+                                    Image(systemName: "backward.end.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.white)
+                                        .shadow(radius: 4)
+                                        .padding(12)
+                                }
+                            }
+                            if let next = currentNextEpisode, episodeNavigator != nil {
+                                Button { navigateToEpisode(next) } label: {
+                                    Image(systemName: "forward.end.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.white)
+                                        .shadow(radius: 4)
+                                        .padding(12)
+                                }
+                            }
+                            if let info = playbackInfo, info.audioTracks.count > 1 || !info.subtitleTracks.isEmpty {
+                                Button { showTrackPicker = true } label: {
+                                    Image(systemName: "ellipsis.circle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.white)
+                                        .shadow(radius: 4)
+                                        .padding(12)
+                                }
                             }
                         }
+                        .padding(.trailing, 4)
                     }
                     .sheet(isPresented: $showTrackPicker) {
                         if let info = playbackInfo {
@@ -103,7 +155,7 @@ struct VideoPlayerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text(title)
+                Text(currentTitle)
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurface)
             }
@@ -129,7 +181,7 @@ struct VideoPlayerView: View {
         }
 
         do {
-            let info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId)
+            let info = try await appState.apiClient.getPlaybackInfo(itemId: currentItemId, userId: userId)
             playMethod = info.playMethod
             self.playbackInfo = info
             logger.info("Starting playback: method=\(info.playMethod), url=\(info.url.absoluteString)")
@@ -140,6 +192,7 @@ struct VideoPlayerView: View {
             let avPlayer = AVPlayer(playerItem: playerItem)
             avPlayer.automaticallyWaitsToMinimizeStalling = true
 
+            let startTime = currentStartTime
             playerObservation = playerItem.observe(\.status) { item, _ in
                 Task { @MainActor in
                     switch item.status {
@@ -153,6 +206,13 @@ struct VideoPlayerView: View {
                         cleanup()
                     case .readyToPlay:
                         logger.info("AVPlayer ready to play")
+                        if let st = startTime, st > 0 {
+                            avPlayer.seek(
+                                to: CMTime(seconds: st, preferredTimescale: 600),
+                                toleranceBefore: .zero,
+                                toleranceAfter: .zero
+                            )
+                        }
                         isLoading = false
                     default:
                         break
@@ -166,6 +226,44 @@ struct VideoPlayerView: View {
             logger.error("Playback setup error: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+
+    private func navigateToEpisode(_ ep: EpisodeRef) {
+        guard let navigator = episodeNavigator else { return }
+        Task {
+            guard let (info, prev, next) = await navigator(ep.id) else { return }
+            cleanup()
+            currentItemId = ep.id
+            currentTitle = ep.title
+            currentStartTime = nil
+            currentPrevEpisode = prev
+            currentNextEpisode = next
+            isLoading = true
+            errorMessage = nil
+            playMethod = info.playMethod
+            playbackInfo = info
+
+            let playerItem = AVPlayerItem(url: info.url)
+            playerItem.preferredForwardBufferDuration = 5
+            let avPlayer = AVPlayer(playerItem: playerItem)
+            avPlayer.automaticallyWaitsToMinimizeStalling = true
+
+            playerObservation = playerItem.observe(\.status) { item, _ in
+                Task { @MainActor in
+                    switch item.status {
+                    case .readyToPlay:
+                        isLoading = false
+                    case .failed:
+                        logger.error("AVPlayer failed on episode nav: \(item.error?.localizedDescription ?? "unknown")")
+                        errorMessage = item.error?.localizedDescription ?? "Playback failed"
+                        cleanup()
+                    default: break
+                    }
+                }
+            }
+            self.player = avPlayer
+            avPlayer.play()
         }
     }
 
@@ -185,7 +283,7 @@ struct VideoPlayerView: View {
         errorMessage = nil
         do {
             let info = try await appState.apiClient.getPlaybackInfo(
-                itemId: itemId, userId: userId,
+                itemId: currentItemId, userId: userId,
                 audioStreamIndex: audioIndex,
                 subtitleStreamIndex: subtitleIndex
             )
@@ -232,6 +330,10 @@ final class TVVideoPresenter {
     static func present(
         title: String,
         info: JellyfinAPIClient.PlaybackInfo,
+        startTime: Double? = nil,
+        previousEpisode: EpisodeRef? = nil,
+        nextEpisode: EpisodeRef? = nil,
+        episodeNavigator: EpisodeNavigator? = nil,
         onTrackChange: @escaping (Int?, Int?) async -> URL?
     ) {
         guard let windowScene = UIApplication.shared.connectedScenes
@@ -249,6 +351,10 @@ final class TVVideoPresenter {
         let playerVC = TVPlayerHostViewController(
             title: title,
             info: info,
+            startTime: startTime,
+            previousEpisode: previousEpisode,
+            nextEpisode: nextEpisode,
+            episodeNavigator: episodeNavigator,
             onTrackChange: onTrackChange
         )
         topVC.present(playerVC, animated: true)
@@ -270,7 +376,12 @@ final class VideoPlayerCoordinator {
 
     var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
 
-    func play(itemId: String, title: String, using appState: AppState) {
+    func play(
+        itemId: String, title: String, startTime: Double? = nil,
+        previousEpisode: EpisodeRef? = nil, nextEpisode: EpisodeRef? = nil,
+        episodeNavigator: EpisodeNavigator? = nil,
+        using appState: AppState
+    ) {
         let bitrate = maxBitrate
         let apiClient = appState.apiClient
         Task {
@@ -281,7 +392,11 @@ final class VideoPlayerCoordinator {
             do {
                 let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
                 logger.info("tvOS play: method=\(info.playMethod), url=\(info.url.absoluteString)")
-                TVVideoPresenter.present(title: title, info: info) { audioIdx, subtitleIdx in
+                TVVideoPresenter.present(
+                    title: title, info: info, startTime: startTime,
+                    previousEpisode: previousEpisode, nextEpisode: nextEpisode,
+                    episodeNavigator: episodeNavigator
+                ) { audioIdx, subtitleIdx in
                     return try? await apiClient.getPlaybackInfo(
                         itemId: itemId, userId: userId, maxBitrate: bitrate,
                         audioStreamIndex: audioIdx, subtitleStreamIndex: subtitleIdx
@@ -302,6 +417,10 @@ final class VideoPlayerCoordinator {
 struct PlayLink<Label: View>: View {
     let itemId: String
     let title: String
+    var startTime: Double? = nil
+    var previousEpisode: EpisodeRef? = nil
+    var nextEpisode: EpisodeRef? = nil
+    var episodeNavigator: EpisodeNavigator? = nil
     @ViewBuilder let label: () -> Label
 
     #if os(tvOS)
@@ -312,13 +431,21 @@ struct PlayLink<Label: View>: View {
     var body: some View {
         #if os(tvOS)
         Button {
-            coordinator.play(itemId: itemId, title: title, using: appState)
+            coordinator.play(
+                itemId: itemId, title: title, startTime: startTime,
+                previousEpisode: previousEpisode, nextEpisode: nextEpisode,
+                episodeNavigator: episodeNavigator, using: appState
+            )
         } label: {
             label()
         }
         #else
         NavigationLink {
-            VideoPlayerView(itemId: itemId, title: title)
+            VideoPlayerView(
+                itemId: itemId, title: title, startTime: startTime,
+                previousEpisode: previousEpisode, nextEpisode: nextEpisode,
+                episodeNavigator: episodeNavigator
+            )
         } label: {
             label()
         }

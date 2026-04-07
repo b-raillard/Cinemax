@@ -109,6 +109,12 @@
 "settings.fontSize" = "Text Size";
 "settings.forceSubtitles" = "Force Subtitles";
 "settings.4kRendering" = "4K UI Rendering";
+"settings.systemSettings" = "System Settings";
+"settings.version" = "Version %@";
+"settings.systemInformation" = "System Information";
+"settings.deviceName" = "Device Name";
+"settings.network" = "Network";
+"settings.authenticatedDevice" = "Authenticated Device";
 
 // MARK: - Media Detail
 
