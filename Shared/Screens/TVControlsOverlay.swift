@@ -65,6 +65,7 @@ struct TVControlsOverlay: View {
     let onPreviousEpisode: () -> Void
     let onNextEpisode: () -> Void
 
+    @Environment(LocalizationManager.self) private var loc
     @FocusState private var focus: FocusItem?
 
     // Seek flash indicators — local UI state only
@@ -82,6 +83,7 @@ struct TVControlsOverlay: View {
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 2)
                     .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -117,7 +119,7 @@ struct TVControlsOverlay: View {
             VStack(spacing: 12) {
                 HStack(spacing: 16) {
                     Spacer()
-                    if state.previousEpisode != nil {
+                    if let prevEp = state.previousEpisode {
                         Button {
                             onInteraction()
                             onPreviousEpisode()
@@ -136,8 +138,10 @@ struct TVControlsOverlay: View {
                         }
                         .focused($focus, equals: .previousEpisode)
                         .focusEffectDisabled()
+                        .accessibilityLabel(loc.localized("accessibility.previousEpisode"))
+                        .accessibilityHint(prevEp.title)
                     }
-                    if state.nextEpisode != nil {
+                    if let nextEp = state.nextEpisode {
                         Button {
                             onInteraction()
                             onNextEpisode()
@@ -156,6 +160,8 @@ struct TVControlsOverlay: View {
                         }
                         .focused($focus, equals: .nextEpisode)
                         .focusEffectDisabled()
+                        .accessibilityLabel(loc.localized("accessibility.nextEpisode"))
+                        .accessibilityHint(nextEp.title)
                     }
                     if !info.audioTracks.isEmpty {
                         TVAudioTrackMenu(

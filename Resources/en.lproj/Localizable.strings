@@ -183,3 +183,13 @@
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
 "player.trackPicker.title" = "Playback Tracks";
+
+// MARK: - Accessibility
+
+"accessibility.clearSearch" = "Clear search";
+"accessibility.voiceSearch" = "Voice search";
+"accessibility.stopVoiceSearch" = "Stop voice search";
+"accessibility.previousEpisode" = "Previous episode";
+"accessibility.nextEpisode" = "Next episode";
+"accessibility.trackOptions" = "Playback tracks";
+"accessibility.removeGenreFilter" = "Remove %@ filter";

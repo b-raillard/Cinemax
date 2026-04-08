@@ -346,6 +346,12 @@ struct MediaDetailScreen: View {
     private func episodeRow(_ episode: BaseItemDto) -> some View {
         if let id = episode.id {
             let (epPrev, epNext, epNavigator) = episodeNavigation(for: id)
+            let epLabel: String = {
+                var parts: [String] = []
+                if let num = episode.indexNumber { parts.append(loc.localized("detail.episode", num)) }
+                if let name = episode.name { parts.append(name) }
+                return parts.joined(separator: ", ")
+            }()
             PlayLink(
                 itemId: id, title: episode.name ?? "",
                 previousEpisode: epPrev, nextEpisode: epNext,
@@ -402,6 +408,7 @@ struct MediaDetailScreen: View {
             #else
             .buttonStyle(.plain)
             #endif
+            .accessibilityLabel(epLabel)
         }
     }
 
@@ -430,6 +437,7 @@ struct MediaDetailScreen: View {
                 #else
                 .buttonStyle(.plain)
                 #endif
+                .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
             }
         }
     }

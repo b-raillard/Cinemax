@@ -96,6 +96,7 @@ struct SearchScreen: View {
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(loc.localized("accessibility.clearSearch"))
             }
         }
         .padding(.horizontal, 16)
@@ -131,6 +132,9 @@ struct SearchScreen: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(viewModel.isListening
+            ? loc.localized("accessibility.stopVoiceSearch")
+            : loc.localized("accessibility.voiceSearch"))
         .onChange(of: viewModel.isListening) { _, newValue in
             isPulsing = newValue
         }
@@ -192,6 +196,7 @@ struct SearchScreen: View {
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .padding(.horizontal, gridPadding)
+                    .accessibilityAddTraits(.isHeader)
 
                 LazyVGrid(columns: columns, spacing: gridSpacing) {
                     ForEach(viewModel.results, id: \.id) { item in
@@ -237,6 +242,7 @@ struct SearchScreen: View {
         #else
         .buttonStyle(.plain)
         #endif
+        .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
     }
 
     // MARK: - Sizing

@@ -21,6 +21,7 @@ struct PosterCard: View {
                 .font(CinemaFont.label(.large))
                 .lineLimit(2)
                 .hidden()
+                .accessibilityHidden(true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay(alignment: .topLeading) {
                     Text(title)

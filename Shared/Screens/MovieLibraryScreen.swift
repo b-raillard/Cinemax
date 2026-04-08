@@ -179,6 +179,7 @@ struct MediaLibraryScreen: View {
                                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(loc.localized("accessibility.removeGenreFilter", genre))
                             }
                             .padding(.horizontal, CinemaSpacing.spacing3)
                             .padding(.vertical, CinemaSpacing.spacing1)
@@ -343,6 +344,7 @@ struct MediaLibraryScreen: View {
                 Text(screenTitle)
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(loc.localized("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredLoader.totalCount : viewModel.totalCount))
                     .font(CinemaFont.label(.large))
@@ -511,6 +513,7 @@ struct MediaLibraryScreen: View {
                 .font(CinemaFont.headline(.large))
                 .foregroundStyle(CinemaColor.onSurface)
                 .padding(.horizontal, browseGenresPadding)
+                .accessibilityAddTraits(.isHeader)
 
             LazyVGrid(columns: browseGenresColumns, spacing: CinemaSpacing.spacing3) {
                 ForEach(viewModel.genres, id: \.self) { genre in
@@ -580,6 +583,7 @@ struct MediaLibraryScreen: View {
         #else
         .buttonStyle(.plain)
         #endif
+        .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
     }
 
     // MARK: - Filter Button

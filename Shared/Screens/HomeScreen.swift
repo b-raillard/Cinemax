@@ -244,6 +244,7 @@ struct HomeScreen: View {
         #else
         .buttonStyle(.plain)
         #endif
+        .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
     }
 
     // MARK: - Helpers

@@ -11,6 +11,7 @@ struct ErrorStateView: View {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: CinemaScale.pt(48)))
                 .foregroundStyle(CinemaColor.error)
+                .accessibilityHidden(true)
             Text(message)
                 .font(CinemaFont.body)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)

@@ -13,6 +13,8 @@ struct TVAudioTrackMenu: View {
     let onInteraction: () -> Void
     let onAudioChange: (Int?) -> Void
 
+    @Environment(LocalizationManager.self) private var loc
+
     var body: some View {
         Menu {
             ForEach(tracks) { track in
@@ -35,6 +37,7 @@ struct TVAudioTrackMenu: View {
                 .padding(14)
                 .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Circle())
                 .animation(.easeInOut(duration: 0.15), value: isFocused)
+                .accessibilityLabel(loc.localized("player.audio"))
         }
     }
 }
@@ -49,6 +52,8 @@ struct TVSubtitleTrackMenu: View {
     let isFocused: Bool
     let onInteraction: () -> Void
     let onSubtitleChange: (Int?) -> Void
+
+    @Environment(LocalizationManager.self) private var loc
 
     private var lang: String { UserDefaults.standard.string(forKey: "language") ?? "fr" }
     private var offLabel: String { lang == "fr" ? "Désactivé" : "Off" }
@@ -87,6 +92,7 @@ struct TVSubtitleTrackMenu: View {
                 .padding(14)
                 .background(isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.regularMaterial), in: Circle())
                 .animation(.easeInOut(duration: 0.15), value: isFocused)
+                .accessibilityLabel(loc.localized("player.subtitles"))
         }
     }
 }

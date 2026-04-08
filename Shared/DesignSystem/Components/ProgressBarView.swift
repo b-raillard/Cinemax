@@ -23,5 +23,6 @@ struct ProgressBarView: View {
             .frame(maxHeight: .infinity, alignment: .center)
         }
         .frame(height: height)
+        .accessibilityHidden(true)
     }
 }

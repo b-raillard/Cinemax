@@ -60,6 +60,8 @@ struct VideoPlayerView: View {
                                         .shadow(radius: 4)
                                         .padding(12)
                                 }
+                                .accessibilityLabel(loc.localized("accessibility.previousEpisode"))
+                                .accessibilityHint(prev.title)
                             }
                             if let next = currentNextEpisode, episodeNavigator != nil {
                                 Button { navigateToEpisode(next) } label: {
@@ -69,6 +71,8 @@ struct VideoPlayerView: View {
                                         .shadow(radius: 4)
                                         .padding(12)
                                 }
+                                .accessibilityLabel(loc.localized("accessibility.nextEpisode"))
+                                .accessibilityHint(next.title)
                             }
                             if let info = playbackInfo, info.audioTracks.count > 1 || !info.subtitleTracks.isEmpty {
                                 Button { showTrackPicker = true } label: {
@@ -78,6 +82,7 @@ struct VideoPlayerView: View {
                                         .shadow(radius: 4)
                                         .padding(12)
                                 }
+                                .accessibilityLabel(loc.localized("accessibility.trackOptions"))
                             }
                         }
                         .padding(.trailing, 4)

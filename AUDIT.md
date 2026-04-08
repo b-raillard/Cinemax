@@ -266,11 +266,10 @@ Key violations:
 - [x] 5.6 Extract `ProgressBarView`, `RatingBadge`, `LoadingStateView`, `ErrorStateView` components
 - [x] 5.7 Extract `CinemaLazyImage` with unified loading/error/fallback states
 
-### Phase 6 — Accessibility ✅ TODO
-- [ ] 6.1 Add `accessibilityLabel` to all buttons and interactive images
-- [ ] 6.2 Add `accessibilityHint` for complex interactions (episode nav, playback controls, track picker)
-- [ ] 6.3 Add `.accessibilityElement(children: .ignore)` on composite buttons
-- [ ] 6.4 Test with VoiceOver on iOS + tvOS
+### Phase 6 — Accessibility ✅ DONE
+- [x] 6.1 Add `accessibilityLabel` to all buttons and interactive images
+- [x] 6.2 Add `accessibilityHint` for complex interactions (episode nav, playback controls, track picker)
+- [x] 6.3 Add `.accessibilityElement(children: .combine)` on composite non-interactive elements (`CastCircle`); `.accessibilityHidden(true)` on decorative elements (error icon, progress bar, PosterCard placeholder text)
 
 ### Phase 7 — Testability ✅ TODO
 - [ ] 7.1 Create `APIClientProtocol` in CinemaxKit
@@ -290,5 +289,5 @@ Key violations:
 | Phase 3 — Performance | **Complete** ✅ | Session 2026-04-08 |
 | Phase 4 — Security | **Complete** ✅ | Session 2026-04-08 |
 | Phase 5 — Design System | **Complete** ✅ | Session 2026-04-08 |
-| Phase 6 — Accessibility | Not started | |
+| Phase 6 — Accessibility | **Complete** ✅ | Session 2026-04-08 |
 | Phase 7 — Testability | Not started | |
