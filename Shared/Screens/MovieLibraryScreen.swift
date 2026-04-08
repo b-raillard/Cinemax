@@ -1,169 +1,6 @@
 import SwiftUI
-import NukeUI
 import CinemaxKit
 @preconcurrency import JellyfinAPI
-
-// MARK: - Sort & Filter State
-
-struct LibrarySortFilterState: Equatable {
-    var sortBy: ItemSortBy = .dateCreated
-    var sortAscending: Bool = false
-    var selectedGenres: Set<String> = []
-
-    var isFiltered: Bool { !selectedGenres.isEmpty }
-    var isNonDefault: Bool { sortBy != .dateCreated || sortAscending || isFiltered }
-}
-
-// MARK: - View Model
-
-@MainActor @Observable
-final class MediaLibraryViewModel {
-    let itemType: BaseItemKind
-
-    // Hero
-    var heroItem: BaseItemDto?
-
-    // Genre rows
-    var genres: [String] = []
-    var itemsByGenre: [String: [BaseItemDto]] = [:]
-
-    // Filtered flat list
-    var filteredItems: [BaseItemDto] = []
-    var filteredTotalCount = 0
-    var filteredIsLoadingMore = false
-    private var filteredHasLoadedAll = false
-
-    // Shared state
-    var totalCount = 0
-    var isLoading = true
-    var errorMessage: String?
-
-    // Sort & filter
-    var sortFilter = LibrarySortFilterState()
-
-    // Internal
-    private let pageSize = 40
-    private let genreItemLimit = 12
-    let genreLoadLimit = 8
-    private var hasLoaded = false
-
-    init(itemType: BaseItemKind) {
-        self.itemType = itemType
-    }
-
-    func loadInitial(using appState: AppState) async {
-        guard !hasLoaded, let userId = appState.currentUserId else { return }
-        hasLoaded = true
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            async let genresResult = appState.apiClient.getGenres(
-                userId: userId,
-                includeItemTypes: [itemType]
-            )
-            async let countResult = appState.apiClient.getItems(
-                userId: userId,
-                includeItemTypes: [itemType],
-                sortBy: [.random],
-                sortOrder: [.ascending],
-                limit: 1
-            )
-
-            let fetchedGenres = try await genresResult
-            let countData = try await countResult
-
-            genres = fetchedGenres
-            totalCount = countData.totalCount
-
-            let heroResult = try await appState.apiClient.getItems(
-                userId: userId,
-                includeItemTypes: [itemType],
-                sortBy: [.random],
-                sortOrder: [.ascending],
-                limit: 20
-            )
-            heroItem = heroResult.items.randomElement()
-
-            try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isLoading = false
-    }
-
-    private func fetchGenreItems(using appState: AppState, userId: String, genres genreList: [String]) async throws {
-        struct GenreResult: @unchecked Sendable {
-            let genre: String
-            let items: [BaseItemDto]
-        }
-        let genresToLoad = Array(genreList.prefix(genreLoadLimit))
-        try await withThrowingTaskGroup(of: GenreResult.self) { group in
-            for genre in genresToLoad {
-                group.addTask {
-                    let result = try await appState.apiClient.getItems(
-                        userId: userId,
-                        includeItemTypes: [self.itemType],
-                        sortBy: [self.sortFilter.sortBy],
-                        sortOrder: self.sortFilter.sortAscending ? [.ascending] : [.descending],
-                        genres: [genre],
-                        limit: self.genreItemLimit
-                    )
-                    return GenreResult(genre: genre, items: result.items)
-                }
-            }
-            for try await entry in group {
-                itemsByGenre[entry.genre] = entry.items
-            }
-        }
-    }
-
-    func reloadGenreItems(using appState: AppState) async {
-        guard !genres.isEmpty, let userId = appState.currentUserId else { return }
-        try? await fetchGenreItems(using: appState, userId: userId, genres: genres)
-    }
-
-    func applyFilter(using appState: AppState) async {
-        guard let userId = appState.currentUserId else { return }
-        filteredItems = []
-        filteredHasLoadedAll = false
-        filteredIsLoadingMore = false
-        await loadFilteredPage(using: appState, userId: userId, startIndex: 0)
-    }
-
-    func loadMoreFiltered(using appState: AppState) async {
-        guard !filteredHasLoadedAll, !filteredIsLoadingMore,
-              let userId = appState.currentUserId else { return }
-        await loadFilteredPage(using: appState, userId: userId, startIndex: filteredItems.count)
-    }
-
-    private func loadFilteredPage(using appState: AppState, userId: String, startIndex: Int) async {
-        filteredIsLoadingMore = true
-        do {
-            let genres = sortFilter.selectedGenres.isEmpty ? nil : Array(sortFilter.selectedGenres)
-            let result = try await appState.apiClient.getItems(
-                userId: userId,
-                includeItemTypes: [itemType],
-                sortBy: [sortFilter.sortBy],
-                sortOrder: sortFilter.sortAscending ? [.ascending] : [.descending],
-                genres: genres,
-                limit: pageSize,
-                startIndex: startIndex
-            )
-            if startIndex == 0 {
-                filteredItems = result.items
-            } else {
-                filteredItems.append(contentsOf: result.items)
-            }
-            filteredTotalCount = result.totalCount
-            filteredHasLoadedAll = filteredItems.count >= result.totalCount
-        } catch {
-            // Silently fail on pagination
-        }
-        filteredIsLoadingMore = false
-    }
-}
 
 // MARK: - Unified Media Library Screen
 
@@ -392,18 +229,13 @@ struct MediaLibraryScreen: View {
 
     @ViewBuilder
     private func heroSection(_ item: BaseItemDto) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         ZStack(alignment: .bottomLeading) {
             if let id = item.id {
-                LazyImage(url: builder.imageURL(itemId: id, imageType: .backdrop, maxWidth: 1920)) { state in
-                    if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        Rectangle().fill(CinemaColor.surfaceContainerLow)
-                    }
-                }
+                CinemaLazyImage(
+                    url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: 1920),
+                    fallbackIcon: nil,
+                    fallbackBackground: CinemaColor.surfaceContainerLow
+                )
             }
 
             CinemaGradient.heroOverlay
@@ -412,14 +244,7 @@ struct MediaLibraryScreen: View {
                 // Metadata badges
                 HStack(spacing: 8) {
                     if let rating = item.officialRating {
-                        Text(rating)
-                            .font(.system(size: badgeFontSize, weight: .bold))
-                            .tracking(1)
-                            .textCase(.uppercase)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.small))
+                        RatingBadge(rating: rating)
                     }
                     heroMetadataText(for: item)
                 }
@@ -724,9 +549,6 @@ struct MediaLibraryScreen: View {
 
     @ViewBuilder
     private func posterCard(_ item: BaseItemDto) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
@@ -749,7 +571,7 @@ struct MediaLibraryScreen: View {
         } label: {
             PosterCard(
                 title: item.name ?? "",
-                imageURL: item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
+                imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
                 subtitle: subtitle
             )
         }
@@ -791,25 +613,11 @@ struct MediaLibraryScreen: View {
 
     // MARK: - Loading & Error
 
-    private var loadingView: some View {
-        ProgressView()
-            .tint(CinemaColor.onSurfaceVariant)
-            .scaleEffect(1.5)
-    }
+    private var loadingView: some View { LoadingStateView() }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: CinemaSpacing.spacing3) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
-                .foregroundStyle(CinemaColor.error)
-            Text(message)
-                .font(CinemaFont.body)
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .multilineTextAlignment(.center)
-            CinemaButton(title: loc.localized("action.retry"), style: .ghost) {
-                Task { await viewModel.loadInitial(using: appState) }
-            }
-            .frame(width: 160)
+        ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
+            Task { await viewModel.loadInitial(using: appState) }
         }
     }
 
@@ -820,10 +628,7 @@ struct MediaLibraryScreen: View {
             item.productionYear.map(String.init),
             itemType == .series
                 ? item.childCount.map { loc.localized($0 == 1 ? "tvShows.season" : "tvShows.seasonsPlural", $0) }
-                : item.runTimeTicks.map { ticks in
-                    let minutes = ticks / 600_000_000
-                    return minutes > 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
-                },
+                : item.formattedRuntime,
             item.genres?.first
         ].compactMap { $0 }
 
@@ -934,19 +739,11 @@ struct MediaLibraryScreen: View {
         #endif
     }
 
-    private var badgeFontSize: CGFloat {
-        #if os(tvOS)
-        CinemaScale.pt(12)
-        #else
-        10
-        #endif
-    }
-
     private var metadataFontSize: CGFloat {
         #if os(tvOS)
         CinemaScale.pt(16)
         #else
-        13
+        CinemaScale.pt(13)
         #endif
     }
 
@@ -970,7 +767,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         CinemaScale.pt(24)
         #else
-        16
+        CinemaScale.pt(16)
         #endif
     }
 
@@ -978,7 +775,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         CinemaScale.pt(22)
         #else
-        14
+        CinemaScale.pt(14)
         #endif
     }
 
@@ -1063,7 +860,7 @@ private struct LibrarySortFilterSheet: View {
                         onApply()
                         dismiss()
                     }
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                     .foregroundStyle(themeManager.accent)
                 }
                 ToolbarItem(placement: .cancellationAction) {
@@ -1072,7 +869,7 @@ private struct LibrarySortFilterSheet: View {
                         onApply()
                         dismiss()
                     }
-                    .font(.system(size: 17, weight: .regular))
+                    .font(CinemaFont.body)
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
             }

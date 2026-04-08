@@ -1,49 +1,6 @@
 import SwiftUI
 import CinemaxKit
 
-@MainActor @Observable
-final class ServerSetupViewModel {
-    var serverURL: String = ""
-    var isConnecting = false
-    var errorMessage: String?
-    var serverInfo: ServerInfo?
-
-    func connect(using appState: AppState) async {
-        let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            errorMessage = "Please enter a server address."
-            return
-        }
-
-        // Prepend https:// if no scheme
-        var urlString = trimmed
-        if !urlString.contains("://") {
-            urlString = "https://\(urlString)"
-        }
-
-        guard let url = URL(string: urlString) else {
-            errorMessage = "Invalid URL format."
-            return
-        }
-
-        isConnecting = true
-        errorMessage = nil
-
-        do {
-            let info = try await appState.apiClient.connectToServer(url: url)
-            try appState.keychain.saveServerURL(url)
-            serverInfo = info
-            appState.serverURL = url
-            appState.serverInfo = info
-            appState.hasServer = true
-        } catch {
-            errorMessage = "Unable to connect: \(error.localizedDescription)"
-        }
-
-        isConnecting = false
-    }
-}
-
 struct ServerSetupScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -75,7 +32,7 @@ struct ServerSetupScreen: View {
             VStack(spacing: 0) {
                 // Header
                 Text(loc.localized("server.header"))
-                    .font(.system(size: 28, weight: .bold))
+                    .font(CinemaFont.headline(.medium))
                     .tracking(4)
                     .foregroundStyle(CinemaColor.onSurface)
                     .padding(.top, 64)
@@ -90,7 +47,7 @@ struct ServerSetupScreen: View {
                         .tracking(-1)
 
                     Text(loc.localized("server.subtitle"))
-                        .font(.system(size: 20, weight: .medium))
+                        .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 500)
@@ -171,17 +128,17 @@ struct ServerSetupScreen: View {
                     .shadow(color: .black.opacity(0.3), radius: 20)
 
                     Text(loc.localized("server.header"))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(CinemaFont.label(.small))
                         .tracking(3)
                         .foregroundStyle(CinemaColor.onSurface)
 
                     Text(loc.localized("server.mobileTitle"))
-                        .font(.system(size: 28, weight: .black))
+                        .font(.system(size: CinemaScale.pt(28), weight: .black))
                         .tracking(-0.5)
                         .foregroundStyle(.white)
 
                     Text(loc.localized("server.mobileSubtitle"))
-                        .font(.system(size: 14))
+                        .font(CinemaFont.label(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 280)
@@ -260,7 +217,7 @@ struct ServerSetupScreen: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(CinemaColor.error)
             Text(message)
-                .font(.system(size: 13, weight: .semibold))
+                .font(CinemaFont.label(.small))
                 .foregroundStyle(CinemaColor.error)
         }
         .padding(12)
@@ -279,7 +236,7 @@ struct ServerSetupScreen: View {
                 Image(systemName: icon)
                 Text(title)
             }
-            .font(.system(size: 16, weight: .semibold))
+            .font(CinemaFont.label(.medium))
             .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
         .buttonStyle(.plain)
@@ -291,7 +248,7 @@ struct ServerSetupScreen: View {
                 .fill(viewModel.isConnecting ? themeManager.accent : CinemaColor.error)
                 .frame(width: 6, height: 6)
             Text(viewModel.isConnecting ? loc.localized("server.connecting") : loc.localized("server.offline"))
-                .font(.system(size: 13, weight: .medium))
+                .font(CinemaFont.label(.small))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
         .padding(.horizontal, 16)

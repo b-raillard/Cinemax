@@ -1,47 +1,6 @@
 import SwiftUI
 import CinemaxKit
 
-@MainActor @Observable
-final class LoginViewModel {
-    var username: String = ""
-    var password: String = ""
-    var isAuthenticating = false
-    var errorMessage: String?
-    var showSuccess = false
-
-    func authenticate(using appState: AppState) async {
-        guard !username.trimmingCharacters(in: .whitespaces).isEmpty else {
-            errorMessage = "Please enter your username."
-            return
-        }
-
-        isAuthenticating = true
-        errorMessage = nil
-
-        do {
-            let session = try await appState.apiClient.authenticate(
-                username: username,
-                password: password
-            )
-            try appState.keychain.saveAccessToken(session.accessToken)
-            try appState.keychain.saveUserSession(session)
-
-            appState.accessToken = session.accessToken
-            appState.currentUserId = session.userID
-
-            showSuccess = true
-
-            try? await Task.sleep(for: .seconds(1))
-
-            appState.isAuthenticated = true
-        } catch {
-            errorMessage = "Authentication failed: \(error.localizedDescription)"
-        }
-
-        isAuthenticating = false
-    }
-}
-
 struct LoginScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -71,7 +30,7 @@ struct LoginScreen: View {
             VStack(spacing: 0) {
                 // Header
                 Text(loc.localized("login.header"))
-                    .font(.system(size: 28, weight: .bold))
+                    .font(CinemaFont.headline(.medium))
                     .tracking(4)
                     .foregroundStyle(CinemaColor.onSurface)
                     .padding(.top, 64)
@@ -95,12 +54,12 @@ struct LoginScreen: View {
                     // Title
                     VStack(spacing: CinemaSpacing.spacing2) {
                         Text(loc.localized("login.title"))
-                            .font(.system(size: 40, weight: .heavy))
+                            .font(.system(size: CinemaScale.pt(40), weight: .heavy))
                             .tracking(1)
                             .foregroundStyle(CinemaColor.onSurface)
 
                         Text(loc.localized("login.subtitle"))
-                            .font(.system(size: 18))
+                            .font(CinemaFont.bodyLarge)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                     }
 
@@ -190,12 +149,12 @@ struct LoginScreen: View {
                         }
 
                         Text(loc.localized("login.header"))
-                            .font(.system(size: 32, weight: .black))
+                            .font(.system(size: CinemaScale.pt(32), weight: .black))
                             .tracking(-1)
                             .foregroundStyle(.white)
 
                         Text(loc.localized("login.tagline"))
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: CinemaScale.pt(12), weight: .medium))
                             .tracking(2)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .textCase(.uppercase)
@@ -205,7 +164,7 @@ struct LoginScreen: View {
                     // Form
                     VStack(spacing: CinemaSpacing.spacing4) {
                         Text(loc.localized("login.mobileTitle"))
-                            .font(.system(size: 24, weight: .bold))
+                            .font(CinemaFont.headline(.small))
                             .foregroundStyle(.white)
 
                         GlassTextField(
@@ -245,7 +204,7 @@ struct LoginScreen: View {
                                     .font(CinemaFont.label(.large))
                                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                                 Button(loc.localized("login.joinCommunity")) {}
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(.system(size: CinemaScale.pt(15), weight: .semibold))
                                     .foregroundStyle(themeManager.accent)
                                     .buttonStyle(.plain)
                             }
@@ -304,7 +263,7 @@ struct LoginScreen: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(CinemaColor.error)
             Text(message)
-                .font(.system(size: 13, weight: .semibold))
+                .font(CinemaFont.label(.small))
                 .foregroundStyle(CinemaColor.error)
         }
         .padding(12)
@@ -318,7 +277,7 @@ struct LoginScreen: View {
     private func secondaryButton(_ title: String) -> some View {
         Button {} label: {
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(CinemaFont.label(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
         .buttonStyle(.plain)
@@ -332,7 +291,7 @@ struct LoginScreen: View {
                 .frame(width: 5, height: 5)
             Text(loc.localized("login.version", info.version))
         }
-        .font(.system(size: 13, weight: .medium))
+        .font(CinemaFont.label(.small))
         .tracking(1)
         .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.4))
         .textCase(.uppercase)
@@ -350,7 +309,7 @@ struct LoginScreen: View {
                         .foregroundStyle(themeManager.onAccent)
                 }
                 Text(message)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(15), weight: .semibold))
                     .foregroundStyle(CinemaColor.onSurface)
             }
             .padding(.horizontal, 24)

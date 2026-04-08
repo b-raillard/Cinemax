@@ -286,6 +286,9 @@ public final class JellyfinAPIClient: Sendable {
         public let subtitleTracks: [MediaTrackInfo]
         public let selectedAudioIndex: Int?    // default or caller-requested audio stream index
         public let selectedSubtitleIndex: Int? // default or caller-requested subtitle index (-1 = off)
+        /// Access token for Authorization header injection into AVURLAsset.
+        /// Nil for transcoding URLs where Jellyfin already embeds the token in the path.
+        public let authToken: String?
     }
 
     /// Builds the best streaming URL for the given item.
@@ -444,7 +447,8 @@ public final class JellyfinAPIClient: Sendable {
                     audioTracks: audioTracks,
                     subtitleTracks: subtitleTracks,
                     selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
-                    selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex
+                    selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
+                    authToken: nil // token already embedded in Jellyfin's HLS URL
                 )
             }
         }
@@ -464,7 +468,7 @@ public final class JellyfinAPIClient: Sendable {
             URLQueryItem(name: "mediaSourceId", value: mediaSource.id ?? effectiveItemId),
         ]
         if let tag = item.etag { queryItems.append(URLQueryItem(name: "tag", value: tag)) }
-        if let token { queryItems.append(URLQueryItem(name: "api_key", value: token)) }
+        // Token passed via Authorization header on AVURLAsset, not in URL query params
         components.queryItems = queryItems
 
         guard let url = components.url else {
@@ -485,7 +489,8 @@ public final class JellyfinAPIClient: Sendable {
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
             selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
-            selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex
+            selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
+            authToken: token
         )
     }
 
@@ -564,7 +569,7 @@ public final class JellyfinAPIClient: Sendable {
             URLQueryItem(name: "deviceId", value: deviceID),
         ]
         if let etag { queryItems.append(URLQueryItem(name: "tag", value: etag)) }
-        if let token { queryItems.append(URLQueryItem(name: "api_key", value: token)) }
+        // Token passed via Authorization header on AVURLAsset, not in URL query params
         components.queryItems = queryItems
 
         let url = components.url ?? serverURL
@@ -572,7 +577,8 @@ public final class JellyfinAPIClient: Sendable {
         debugLog("Direct stream fallback URL: \(url)")
         #endif
         return PlaybackInfo(url: url, playSessionId: nil, mediaSourceId: itemId, playMethod: "DirectStream",
-                            audioTracks: [], subtitleTracks: [], selectedAudioIndex: nil, selectedSubtitleIndex: nil)
+                            audioTracks: [], subtitleTracks: [], selectedAudioIndex: nil, selectedSubtitleIndex: nil,
+                            authToken: token)
     }
 
     /// Extracts audio and subtitle track info from a media source's stream list.
@@ -595,67 +601,69 @@ public final class JellyfinAPIClient: Sendable {
         return (audio, subtitles)
     }
 
+    // Cached constant arrays — built once at class load time, reused on every playback request.
+    nonisolated(unsafe) private static let _directPlayProfiles: [DirectPlayProfile] = [
+        DirectPlayProfile(
+            audioCodec: "aac,ac3,alac,eac3,flac",
+            container: "mp4,m4v",
+            type: .video,
+            videoCodec: "h264,hevc,mpeg4"
+        ),
+        DirectPlayProfile(
+            audioCodec: "aac,ac3,alac,eac3,mp3,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le",
+            container: "mov",
+            type: .video,
+            videoCodec: "h264,hevc,mjpeg,mpeg4"
+        ),
+        DirectPlayProfile(
+            audioCodec: "aac,ac3,eac3,mp3",
+            container: "mpegts",
+            type: .video,
+            videoCodec: "h264,hevc"
+        ),
+    ]
+    nonisolated(unsafe) private static let _transcodingProfiles: [TranscodingProfile] = [
+        TranscodingProfile(
+            audioCodec: "aac,ac3,alac,eac3,flac",
+            isBreakOnNonKeyFrames: true,
+            container: "mp4",
+            context: .streaming,
+            enableSubtitlesInManifest: false,
+            maxAudioChannels: "8",
+            minSegments: 2,
+            protocol: .hls,
+            type: .video,
+            videoCodec: "hevc,h264,mpeg4"
+        ),
+    ]
+    // All subtitles are burned (encoded) into the video by the server.
+    // This prevents AVPlayerViewController from showing its native subtitle picker button
+    // (which appears only when the HLS manifest contains subtitle media groups).
+    // Subtitle selection is handled exclusively via our custom transport-bar menu,
+    // which re-requests the stream with the desired SubtitleStreamIndex.
+    // Burning preserves full ASS/SSA styling that AVPlayer's WebVTT conversion would strip.
+    nonisolated(unsafe) private static let _subtitleProfiles: [SubtitleProfile] = [
+        SubtitleProfile(format: "srt",    method: .encode),
+        SubtitleProfile(format: "subrip", method: .encode),
+        SubtitleProfile(format: "vtt",    method: .encode),
+        SubtitleProfile(format: "webvtt", method: .encode),
+        SubtitleProfile(format: "ass",    method: .encode),
+        SubtitleProfile(format: "ssa",    method: .encode),
+        SubtitleProfile(format: "ttml",   method: .encode),
+        SubtitleProfile(format: "pgs",    method: .encode),
+        SubtitleProfile(format: "pgssub", method: .encode),
+        SubtitleProfile(format: "dvbsub", method: .encode),
+        SubtitleProfile(format: "dvdsub", method: .encode),
+        SubtitleProfile(format: "sub",    method: .encode),
+    ]
+
     /// Builds a DeviceProfile matching Swiftfin's native player profile.
     private static func buildAppleDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
-        let directPlayProfiles = [
-            DirectPlayProfile(
-                audioCodec: "aac,ac3,alac,eac3,flac",
-                container: "mp4,m4v",
-                type: .video,
-                videoCodec: "h264,hevc,mpeg4"
-            ),
-            DirectPlayProfile(
-                audioCodec: "aac,ac3,alac,eac3,mp3,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le",
-                container: "mov",
-                type: .video,
-                videoCodec: "h264,hevc,mjpeg,mpeg4"
-            ),
-            DirectPlayProfile(
-                audioCodec: "aac,ac3,eac3,mp3",
-                container: "mpegts",
-                type: .video,
-                videoCodec: "h264,hevc"
-            ),
-        ]
-        let transcodingProfiles = [
-            TranscodingProfile(
-                audioCodec: "aac,ac3,alac,eac3,flac",
-                isBreakOnNonKeyFrames: true,
-                container: "mp4",
-                context: .streaming,
-                enableSubtitlesInManifest: false,
-                maxAudioChannels: "8",
-                minSegments: 2,
-                protocol: .hls,
-                type: .video,
-                videoCodec: "hevc,h264,mpeg4"
-            ),
-        ]
-        // All subtitles are burned (encoded) into the video by the server.
-        // This prevents AVPlayerViewController from showing its native subtitle picker button
-        // (which appears only when the HLS manifest contains subtitle media groups).
-        // Subtitle selection is handled exclusively via our custom transport-bar menu,
-        // which re-requests the stream with the desired SubtitleStreamIndex.
-        // Burning preserves full ASS/SSA styling that AVPlayer's WebVTT conversion would strip.
-        let subtitleProfiles: [SubtitleProfile] = [
-            SubtitleProfile(format: "srt",    method: .encode),
-            SubtitleProfile(format: "subrip", method: .encode),
-            SubtitleProfile(format: "vtt",    method: .encode),
-            SubtitleProfile(format: "webvtt", method: .encode),
-            SubtitleProfile(format: "ass",    method: .encode),
-            SubtitleProfile(format: "ssa",    method: .encode),
-            SubtitleProfile(format: "ttml",   method: .encode),
-            SubtitleProfile(format: "pgs",    method: .encode),
-            SubtitleProfile(format: "pgssub", method: .encode),
-            SubtitleProfile(format: "dvbsub", method: .encode),
-            SubtitleProfile(format: "dvdsub", method: .encode),
-            SubtitleProfile(format: "sub",    method: .encode),
-        ]
-        return DeviceProfile(
-            directPlayProfiles: directPlayProfiles,
+        DeviceProfile(
+            directPlayProfiles: _directPlayProfiles,
             maxStreamingBitrate: maxBitrate,
-            subtitleProfiles: subtitleProfiles,
-            transcodingProfiles: transcodingProfiles
+            subtitleProfiles: _subtitleProfiles,
+            transcodingProfiles: _transcodingProfiles
         )
     }
 
@@ -684,12 +692,7 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     private var deviceID: String {
-        if let stored = UserDefaults.standard.string(forKey: "cinemax_device_id") {
-            return stored
-        }
-        let id = UUID().uuidString
-        UserDefaults.standard.set(id, forKey: "cinemax_device_id")
-        return id
+        KeychainService.getOrCreateDeviceID()
     }
 
     private var appVersion: String {

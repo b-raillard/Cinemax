@@ -13,6 +13,9 @@ final class AppState {
     let apiClient = JellyfinAPIClient()
     let keychain = KeychainService()
 
+    var imageServerURL: URL { serverURL ?? URL(string: "http://localhost")! }
+    var imageBuilder: ImageURLBuilder { ImageURLBuilder(serverURL: imageServerURL) }
+
     func restoreSession() async {
         guard let serverURL = keychain.getServerURL(),
               let session = keychain.getUserSession() else {
@@ -86,9 +89,7 @@ struct AppNavigation: View {
     private var launchScreen: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
-            ProgressView()
-                .tint(CinemaColor.onSurfaceVariant)
-                .scaleEffect(1.5)
+            LoadingStateView()
         }
     }
 }

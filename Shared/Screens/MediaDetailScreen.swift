@@ -1,87 +1,6 @@
 import SwiftUI
-import NukeUI
 import CinemaxKit
 import JellyfinAPI
-
-@MainActor @Observable
-final class MediaDetailViewModel {
-    var item: BaseItemDto?
-    var similarItems: [BaseItemDto] = []
-    var seasons: [BaseItemDto] = []
-    var episodes: [BaseItemDto] = []
-    var selectedSeasonId: String?
-    var nextUpEpisode: BaseItemDto?
-    var isLoading = true
-    var errorMessage: String?
-
-    // The resolved type after loading (episode/season → series)
-    var resolvedType: BaseItemKind = .movie
-
-    let itemId: String
-    let itemType: BaseItemKind
-
-    init(itemId: String, itemType: BaseItemKind) {
-        self.itemId = itemId
-        self.itemType = itemType
-    }
-
-    func load(using appState: AppState) async {
-        guard let userId = appState.currentUserId else { return }
-        isLoading = true
-
-        do {
-            let loadedItem = try await appState.apiClient.getItem(userId: userId, itemId: itemId)
-
-            // Resolve episodes/seasons to their parent series for full detail
-            let effectiveType = loadedItem.type ?? itemType
-            if effectiveType == .episode || effectiveType == .season,
-               let seriesId = loadedItem.seriesID {
-                let seriesItem = try await appState.apiClient.getItem(userId: userId, itemId: seriesId)
-                item = seriesItem
-                resolvedType = .series
-
-                async let similar = appState.apiClient.getSimilarItems(itemId: seriesId, userId: userId, limit: 12)
-                similarItems = try await similar
-
-                seasons = try await appState.apiClient.getSeasons(seriesId: seriesId, userId: userId)
-                if let firstSeason = seasons.first, let seasonId = firstSeason.id {
-                    selectedSeasonId = seasonId
-                    episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
-                }
-                nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: seriesId, userId: userId)
-            } else {
-                item = loadedItem
-                resolvedType = effectiveType
-
-                async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
-                similarItems = try await similar
-
-                if effectiveType == .series {
-                    seasons = try await appState.apiClient.getSeasons(seriesId: itemId, userId: userId)
-                    if let firstSeason = seasons.first, let seasonId = firstSeason.id {
-                        selectedSeasonId = seasonId
-                        episodes = try await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
-                    }
-                    nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: itemId, userId: userId)
-                }
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isLoading = false
-    }
-
-    func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {
-        guard let userId = appState.currentUserId else { return }
-        selectedSeasonId = seasonId
-        do {
-            episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
-        } catch {
-            // Keep existing episodes on error
-        }
-    }
-}
 
 struct MediaDetailScreen: View {
     @Environment(AppState.self) private var appState
@@ -98,9 +17,7 @@ struct MediaDetailScreen: View {
             CinemaColor.surface.ignoresSafeArea()
 
             if viewModel.isLoading {
-                ProgressView()
-                    .tint(CinemaColor.onSurfaceVariant)
-                    .scaleEffect(1.5)
+                LoadingStateView()
             } else if let error = viewModel.errorMessage {
                 errorView(error)
             } else if let item = viewModel.item {
@@ -167,18 +84,13 @@ struct MediaDetailScreen: View {
 
     @ViewBuilder
     private func backdropSection(_ item: BaseItemDto) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         ZStack(alignment: .bottomLeading) {
             if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
-                LazyImage(url: builder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920)) { state in
-                    if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        Rectangle().fill(CinemaColor.surfaceContainerLow)
-                    }
-                }
+                CinemaLazyImage(
+                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920),
+                    fallbackIcon: nil,
+                    fallbackBackground: CinemaColor.surfaceContainerLow
+                )
             }
 
             CinemaGradient.heroOverlay
@@ -187,12 +99,7 @@ struct MediaDetailScreen: View {
                 // Badges
                 HStack(spacing: 8) {
                     if let rating = item.officialRating {
-                        Text(rating)
-                            .font(.system(size: badgeFontSize, weight: .bold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        RatingBadge(rating: rating)
                     }
 
                     metadataLine(item)
@@ -239,7 +146,7 @@ struct MediaDetailScreen: View {
         let parts: [String] = [
             item.productionYear.map(String.init),
             item.runTimeTicks.map { ticks in
-                let minutes = ticks / 600_000_000
+                let minutes = ticks.jellyfinMinutes
                 return minutes > 60 ? loc.localized("detail.runtime.hours", minutes / 60, minutes % 60) : loc.localized("detail.runtime.minutes", minutes)
             },
             viewModel.resolvedType == .series ? item.childCount.map { loc.localized("detail.seasons", $0) } : nil
@@ -298,8 +205,8 @@ struct MediaDetailScreen: View {
         let showResume = posTicks > 0 && !isPlayed && totalTicks > 0
         let progress: Double = showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0
         let remainingTicks = max(0, totalTicks - posTicks)
-        let remainingMinutes = remainingTicks / 600_000_000
-        let startSeconds: Double? = showResume ? Double(posTicks) / 10_000_000 : nil
+        let remainingMinutes = remainingTicks.jellyfinMinutes
+        let startSeconds: Double? = showResume ? posTicks.jellyfinSeconds : nil
 
         let playItemId: String = nextEp?.id ?? item.id ?? ""
         let playTitle: String = nextEp?.name ?? item.name ?? ""
@@ -321,17 +228,8 @@ struct MediaDetailScreen: View {
 
             // Progress bar + remaining time when resuming
             if showResume {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(CinemaColor.surfaceContainerHighest)
-                            .frame(height: 4)
-                        Capsule()
-                            .fill(themeManager.accent)
-                            .frame(width: geo.size.width * progress, height: 4)
-                    }
-                }
-                .frame(width: playButtonWidth, height: 4)
+                ProgressBarView(progress: progress)
+                    .frame(width: playButtonWidth)
 
                 Text(remainingMinutes >= 60
                     ? loc.localized("home.remainingTime.hours", remainingMinutes / 60, remainingMinutes % 60)
@@ -382,16 +280,13 @@ struct MediaDetailScreen: View {
     // MARK: - Cast
 
     private func castSection(_ people: [BaseItemPerson]) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         return ContentRow(title: loc.localized("detail.castCrew")) {
             ForEach(people.prefix(20), id: \.id) { person in
                 CastCircle(
                     name: person.name ?? "",
                     role: person.role,
                     imageURL: person.id.map {
-                        builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200)
+                        appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200)
                     }
                 )
             }
@@ -449,9 +344,6 @@ struct MediaDetailScreen: View {
 
     @ViewBuilder
     private func episodeRow(_ episode: BaseItemDto) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         if let id = episode.id {
             let (epPrev, epNext, epNavigator) = episodeNavigation(for: id)
             PlayLink(
@@ -469,36 +361,16 @@ struct MediaDetailScreen: View {
                         else { return nil }
                         return min(1.0, Double(ticks) / Double(total))
                     }()
-                    LazyImage(url: builder.imageURL(itemId: id, imageType: .primary, maxWidth: 300)) { state in
-                        if let image = state.image {
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        } else {
-                            Rectangle().fill(CinemaColor.surfaceContainerHigh)
-                                .overlay {
-                                    Image(systemName: "play.circle")
-                                        .foregroundStyle(CinemaColor.outlineVariant)
-                                }
-                        }
-                    }
-                    .frame(width: episodeThumbnailWidth, height: episodeThumbnailWidth * 9 / 16)
-                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
-                    .overlay(alignment: .bottom) {
-                        if let p = epProgress {
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Capsule()
-                                        .fill(Color.white.opacity(0.25))
-                                        .frame(height: 3)
-                                    Capsule()
-                                        .fill(themeManager.accent)
-                                        .frame(width: geo.size.width * p, height: 3)
-                                }
+                    CinemaLazyImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 300), fallbackIcon: "play.circle")
+                        .frame(width: episodeThumbnailWidth, height: episodeThumbnailWidth * 9 / 16)
+                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
+                        .overlay(alignment: .bottom) {
+                            if let p = epProgress {
+                                ProgressBarView(progress: p, height: 3, trackColor: Color.white.opacity(0.25))
+                                    .padding(.horizontal, 6)
+                                    .padding(.bottom, 6)
                             }
-                            .frame(height: 3)
-                            .padding(.horizontal, 6)
-                            .padding(.bottom, 6)
                         }
-                    }
 
                     VStack(alignment: .leading, spacing: 4) {
                         if let num = episode.indexNumber {
@@ -512,7 +384,7 @@ struct MediaDetailScreen: View {
                             .lineLimit(2)
 
                         if let runtime = episode.runTimeTicks {
-                            let minutes = runtime / 600_000_000
+                            let minutes = runtime.jellyfinMinutes
                             Text(loc.localized("detail.runtime.min", minutes))
                                 .font(CinemaFont.label(.medium))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -536,9 +408,6 @@ struct MediaDetailScreen: View {
     // MARK: - Similar Items
 
     private var similarSection: some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         return ContentRow(title: loc.localized("detail.moreLikeThis")) {
             ForEach(viewModel.similarItems, id: \.id) { item in
                 NavigationLink {
@@ -551,7 +420,7 @@ struct MediaDetailScreen: View {
                 } label: {
                     PosterCard(
                         title: item.name ?? "",
-                        imageURL: item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
+                        imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
                         subtitle: item.productionYear.map(String.init)
                     )
                     .frame(width: similarCardWidth)
@@ -568,18 +437,8 @@ struct MediaDetailScreen: View {
     // MARK: - Error
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: CinemaSpacing.spacing3) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
-                .foregroundStyle(CinemaColor.error)
-            Text(message)
-                .font(CinemaFont.body)
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .multilineTextAlignment(.center)
-            CinemaButton(title: loc.localized("action.retry"), style: .ghost) {
-                Task { await viewModel.load(using: appState) }
-            }
-            .frame(width: 160)
+        ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
+            Task { await viewModel.load(using: appState) }
         }
     }
 
@@ -614,14 +473,6 @@ struct MediaDetailScreen: View {
         CinemaSpacing.spacing20
         #else
         CinemaSpacing.spacing4
-        #endif
-    }
-
-    private var badgeFontSize: CGFloat {
-        #if os(tvOS)
-        CinemaScale.pt(17)
-        #else
-        11
         #endif
     }
 
