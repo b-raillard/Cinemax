@@ -9,7 +9,7 @@ import CinemaxKit
 /// so that the frequent currentTime updates do not re-render the Menu buttons.
 struct TVPlayerOverlayView: View {
     let state: TVPlayerState
-    let info: JellyfinAPIClient.PlaybackInfo
+    let info: PlaybackInfo
     let onPlayPause: () -> Void
     let onSeek: (Double) -> Void
     let onAudioChange: (Int?) -> Void
@@ -57,7 +57,7 @@ struct TVControlsOverlay: View {
     private enum FocusItem: Hashable { case scrubber, audio, subtitle, previousEpisode, nextEpisode }
 
     let state: TVPlayerState
-    let info: JellyfinAPIClient.PlaybackInfo
+    let info: PlaybackInfo
     let onSeek: (Double) -> Void
     let onAudioChange: (Int?) -> Void
     let onSubtitleChange: (Int?) -> Void

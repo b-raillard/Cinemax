@@ -17,11 +17,12 @@ final class TVVideoPresenter {
 
     static func present(
         title: String,
-        info: JellyfinAPIClient.PlaybackInfo,
+        info: PlaybackInfo,
         startTime: Double? = nil,
         previousEpisode: EpisodeRef? = nil,
         nextEpisode: EpisodeRef? = nil,
         episodeNavigator: EpisodeNavigator? = nil,
+        localizationManager: LocalizationManager,
         onTrackChange: @escaping (Int?, Int?) async -> URL?
     ) {
         guard let windowScene = UIApplication.shared.connectedScenes
@@ -43,6 +44,7 @@ final class TVVideoPresenter {
             previousEpisode: previousEpisode,
             nextEpisode: nextEpisode,
             episodeNavigator: episodeNavigator,
+            localizationManager: localizationManager,
             onTrackChange: onTrackChange
         )
         topVC.present(playerVC, animated: true)
@@ -62,6 +64,8 @@ final class VideoPlayerCoordinator {
     @ObservationIgnored
     @AppStorage("render4K") private var render4K: Bool = true
 
+    var localizationManager: LocalizationManager?
+
     var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
 
     func play(
@@ -70,6 +74,10 @@ final class VideoPlayerCoordinator {
         episodeNavigator: EpisodeNavigator? = nil,
         using appState: AppState
     ) {
+        guard let loc = localizationManager else {
+            logger.error("VideoPlayerCoordinator: localizationManager not set")
+            return
+        }
         let bitrate = maxBitrate
         let apiClient = appState.apiClient
         Task {
@@ -79,11 +87,12 @@ final class VideoPlayerCoordinator {
             }
             do {
                 let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
-                logger.info("tvOS play: method=\(info.playMethod), url=\(info.url.absoluteString)")
+                logger.info("tvOS play: method=\(info.playMethod.rawValue), url=\(info.url.absoluteString)")
                 TVVideoPresenter.present(
                     title: title, info: info, startTime: startTime,
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,
-                    episodeNavigator: episodeNavigator
+                    episodeNavigator: episodeNavigator,
+                    localizationManager: loc
                 ) { audioIdx, subtitleIdx in
                     return try? await apiClient.getPlaybackInfo(
                         itemId: itemId, userId: userId, maxBitrate: bitrate,

@@ -13,10 +13,10 @@ struct VideoPlayerView: View {
     @Environment(LocalizationManager.self) private var loc
     @State private var player: AVPlayer?
     @State private var errorMessage: String?
-    @State private var playMethod: String?
+    @State private var playMethod: PlayMethod?
     @State private var isLoading = true
     @State private var playerObservation: NSKeyValueObservation?
-    @State private var playbackInfo: JellyfinAPIClient.PlaybackInfo?
+    @State private var playbackInfo: PlaybackInfo?
     @State private var showTrackPicker = false
 
     // Mutable episode context — updated when navigating between episodes
@@ -106,7 +106,7 @@ struct VideoPlayerView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                     if let method = playMethod {
-                        Text(loc.localized("player.method", method))
+                        Text(loc.localized("player.method", method.rawValue))
                             .font(CinemaFont.label(.medium))
                             .foregroundStyle(CinemaColor.outline)
                     }
@@ -159,7 +159,7 @@ struct VideoPlayerView: View {
             let info = try await appState.apiClient.getPlaybackInfo(itemId: currentItemId, userId: userId)
             playMethod = info.playMethod
             self.playbackInfo = info
-            logger.info("Starting playback: method=\(info.playMethod), url=\(info.url.absoluteString)")
+            logger.info("Starting playback: method=\(info.playMethod.rawValue), url=\(info.url.absoluteString)")
 
             let playerItem = makePlayerItem(for: info)
             let avPlayer = AVPlayer(playerItem: playerItem)
@@ -247,7 +247,7 @@ struct VideoPlayerView: View {
         player = nil
     }
 
-    private func makePlayerItem(for info: JellyfinAPIClient.PlaybackInfo) -> AVPlayerItem {
+    private func makePlayerItem(for info: PlaybackInfo) -> AVPlayerItem {
         let item: AVPlayerItem
         if let token = info.authToken {
             let asset = AVURLAsset(url: info.url, options: [

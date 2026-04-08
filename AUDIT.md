@@ -271,12 +271,12 @@ Key violations:
 - [x] 6.2 Add `accessibilityHint` for complex interactions (episode nav, playback controls, track picker)
 - [x] 6.3 Add `.accessibilityElement(children: .combine)` on composite non-interactive elements (`CastCircle`); `.accessibilityHidden(true)` on decorative elements (error icon, progress bar, PosterCard placeholder text)
 
-### Phase 7 — Testability ✅ TODO
-- [ ] 7.1 Create `APIClientProtocol` in CinemaxKit
-- [ ] 7.2 Create `SecureStorageProtocol` in CinemaxKit
-- [ ] 7.3 Add unit tests for ViewModels (after extracting to separate files in Phase 2)
-- [ ] 7.4 Add playback method enum instead of String
-- [ ] 7.5 Tighten `Package.swift` version constraints to `.upToNextMajor()`
+### Phase 7 — Testability ✅ DONE
+- [x] 7.1 Create `APIClientProtocol` in CinemaxKit
+- [x] 7.2 Create `SecureStorageProtocol` in CinemaxKit
+- [x] 7.3 Add unit tests for ViewModels (after extracting to separate files in Phase 2)
+- [x] 7.4 Add playback method enum instead of String
+- [x] 7.5 Tighten `Package.swift` version constraints to `.upToNextMajor()`
 
 ---
 
@@ -290,4 +290,4 @@ Key violations:
 | Phase 4 — Security | **Complete** ✅ | Session 2026-04-08 |
 | Phase 5 — Design System | **Complete** ✅ | Session 2026-04-08 |
 | Phase 6 — Accessibility | **Complete** ✅ | Session 2026-04-08 |
-| Phase 7 — Testability | Not started | |
+| Phase 7 — Testability | **Complete** ✅ | Session 2026-04-08 |

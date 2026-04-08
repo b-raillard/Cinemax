@@ -12,8 +12,16 @@ final class AppState {
     var currentUserId: String?
     var accessToken: String?
 
-    let apiClient = JellyfinAPIClient()
-    let keychain = KeychainService()
+    let apiClient: any APIClientProtocol
+    let keychain: any SecureStorageProtocol
+
+    init(
+        apiClient: any APIClientProtocol = JellyfinAPIClient(),
+        keychain: any SecureStorageProtocol = KeychainService()
+    ) {
+        self.apiClient = apiClient
+        self.keychain = keychain
+    }
 
     // Stored so it is only rebuilt when serverURL changes, not on every access.
     var imageBuilder = ImageURLBuilder(serverURL: URL(string: "http://localhost")!)

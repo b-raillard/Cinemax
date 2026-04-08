@@ -298,21 +298,6 @@ public final class JellyfinAPIClient: Sendable {
 
     // MARK: - Playback
 
-    /// Playback info returned after negotiating with the server.
-    public struct PlaybackInfo: Sendable {
-        public let url: URL
-        public let playSessionId: String?
-        public let mediaSourceId: String?
-        public let playMethod: String // "DirectPlay", "DirectStream", "Transcode"
-        public let audioTracks: [MediaTrackInfo]
-        public let subtitleTracks: [MediaTrackInfo]
-        public let selectedAudioIndex: Int?    // default or caller-requested audio stream index
-        public let selectedSubtitleIndex: Int? // default or caller-requested subtitle index (-1 = off)
-        /// Access token for Authorization header injection into AVURLAsset.
-        /// Nil for transcoding URLs where Jellyfin already embeds the token in the path.
-        public let authToken: String?
-    }
-
     /// Builds the best streaming URL for the given item.
     /// Follows Swiftfin's exact flow:
     /// 1. Get full item → extract initial media source
@@ -465,7 +450,7 @@ public final class JellyfinAPIClient: Sendable {
                     url: url,
                     playSessionId: playSessionId,
                     mediaSourceId: mediaSource.id,
-                    playMethod: "Transcode",
+                    playMethod: .transcode,
                     audioTracks: audioTracks,
                     subtitleTracks: subtitleTracks,
                     selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
@@ -507,7 +492,7 @@ public final class JellyfinAPIClient: Sendable {
             url: url,
             playSessionId: playSessionId,
             mediaSourceId: mediaSource.id,
-            playMethod: "DirectStream",
+            playMethod: .directStream,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
             selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
@@ -598,7 +583,7 @@ public final class JellyfinAPIClient: Sendable {
         #if DEBUG
         debugLog("Direct stream fallback URL: \(url)")
         #endif
-        return PlaybackInfo(url: url, playSessionId: nil, mediaSourceId: itemId, playMethod: "DirectStream",
+        return PlaybackInfo(url: url, playSessionId: nil, mediaSourceId: itemId, playMethod: .directStream,
                             audioTracks: [], subtitleTracks: [], selectedAudioIndex: nil, selectedSubtitleIndex: nil,
                             authToken: token)
     }

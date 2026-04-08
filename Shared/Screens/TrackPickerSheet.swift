@@ -5,7 +5,7 @@ import CinemaxKit
 
 /// Unified audio + subtitle track picker, used on both iOS (sheet) and tvOS (pre-play sheet).
 struct TrackPickerSheet: View {
-    let info: JellyfinAPIClient.PlaybackInfo
+    let info: PlaybackInfo
     /// Called with (audioStreamIndex, subtitleStreamIndex). nil = keep current / off.
     let onConfirm: (Int?, Int?) -> Void
 
@@ -15,7 +15,7 @@ struct TrackPickerSheet: View {
 
     private let noSubtitle = -1
 
-    init(info: JellyfinAPIClient.PlaybackInfo, onConfirm: @escaping (Int?, Int?) -> Void) {
+    init(info: PlaybackInfo, onConfirm: @escaping (Int?, Int?) -> Void) {
         self.info = info
         self.onConfirm = onConfirm
         _audioId = State(initialValue: info.selectedAudioIndex ?? info.audioTracks.first(where: { $0.isDefault })?.id ?? info.audioTracks.first?.id)

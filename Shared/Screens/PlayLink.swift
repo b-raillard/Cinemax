@@ -9,7 +9,7 @@ struct EpisodeRef: Sendable {
 }
 
 /// Returns (new PlaybackInfo, new previousEpisode, new nextEpisode) for a given episode ID.
-typealias EpisodeNavigator = @Sendable (String) async -> (JellyfinAPIClient.PlaybackInfo, EpisodeRef?, EpisodeRef?)?
+typealias EpisodeNavigator = @Sendable (String) async -> (PlaybackInfo, EpisodeRef?, EpisodeRef?)?
 
 // MARK: - Cross-platform Play Link
 

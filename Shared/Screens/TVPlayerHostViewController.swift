@@ -21,12 +21,13 @@ final class TVPlayerHostViewController: UIViewController {
     private var hostingController: UIHostingController<AnyView>?
 
     private(set) var state: TVPlayerState
-    let info: JellyfinAPIClient.PlaybackInfo
+    let info: PlaybackInfo
     let itemTitle: String
     let onTrackChange: (Int?, Int?) async -> URL?
     let episodeNavigator: EpisodeNavigator?
     private var startTime: Double?
     private let authToken: String?
+    private let localizationManager: LocalizationManager
 
     // MARK: Observations
 
@@ -39,17 +40,19 @@ final class TVPlayerHostViewController: UIViewController {
 
     init(
         title: String,
-        info: JellyfinAPIClient.PlaybackInfo,
+        info: PlaybackInfo,
         startTime: Double? = nil,
         previousEpisode: EpisodeRef? = nil,
         nextEpisode: EpisodeRef? = nil,
         episodeNavigator: EpisodeNavigator? = nil,
+        localizationManager: LocalizationManager,
         onTrackChange: @escaping (Int?, Int?) async -> URL?
     ) {
         self.itemTitle = title
         self.info = info
         self.startTime = startTime
         self.episodeNavigator = episodeNavigator
+        self.localizationManager = localizationManager
         self.onTrackChange = onTrackChange
         self.authToken = info.authToken
 
@@ -136,7 +139,7 @@ final class TVPlayerHostViewController: UIViewController {
             }
         )
 
-        let hc = UIHostingController(rootView: AnyView(overlay))
+        let hc = UIHostingController(rootView: AnyView(overlay.environment(localizationManager)))
         hc.view.backgroundColor = .clear
         addChild(hc)
         view.addSubview(hc.view)

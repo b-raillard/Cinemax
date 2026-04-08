@@ -1,4 +1,6 @@
 import Testing
+import Foundation
+import JellyfinAPI
 @testable import CinemaxKit
 
 @Suite("CinemaxKit Tests")
