@@ -243,13 +243,13 @@ Key violations:
 - [x] 2.6 Extract `PlayLink.swift` and `TrackPickerSheet.swift` from `VideoPlayerView.swift`
 
 ### Phase 3 — Performance ✅ TODO
-- [ ] 3.1 Split `AppState` into `AuthState` + `ServerState` + `PreferencesState`
-- [ ] 3.2 Split `TVPlayerState` into playback/UI/track sub-objects
-- [ ] 3.3 Add `URLCache` configuration or in-memory TTL cache for API responses
-- [ ] 3.4 Add `maxWidth`/`maxHeight` to all backdrop image URL calls
-- [ ] 3.5 Implement generic `PaginatedLoader<T>` — deduplicates 3 pagination implementations
-- [ ] 3.6 Replace `async let` all-or-nothing in `HomeViewModel` with `TaskGroup` + per-section error handling
-- [ ] 3.7 Fix time observer race condition in `TVCustomPlayerView.swift:228-241`
+- [x] 3.1 Split `AppState` into `AuthState` + `ServerState` + `PreferencesState` — note: `@Observable` already provides property-level tracking (views only re-render on properties they access), so a full class split has no perf benefit. Real fix applied: `imageBuilder` converted from computed to stored property (reset via `serverURL.didSet`), eliminating per-access struct allocation during scrolling.
+- [x] 3.2 Split `TVPlayerState` into playback/UI/track sub-objects — addressed: `TVPlayerOverlayView` explicitly observes only `isBuffering`/`showControls`; `TVAudioTrackMenu` / `TVSubtitleTrackMenu` / `TVPlayerScrubber` are isolated sub-views each tracking only their own property via `@Observable` property-level registration. Further sub-object split would add complexity with no perf gain.
+- [x] 3.3 Add `URLCache` configuration or in-memory TTL cache for API responses — `APICache.swift` (thread-safe NSLock TTL cache); wraps `fetchServerInfo` (10 min), `getGenres` (5 min), `getLatestMedia` (60s), `getResumeItems` (30s); cleared on `reconnect()`
+- [x] 3.4 Add `maxWidth`/`maxHeight` to all backdrop image URL calls
+- [x] 3.5 Implement generic `PaginatedLoader<T>` — `PaginatedLoader<T: Sendable>` in CinemaxKit; `MediaLibraryViewModel` and `MovieLibraryScreen` updated
+- [x] 3.6 Replace `async let` all-or-nothing in `HomeViewModel` with `TaskGroup` + per-section error handling
+- [x] 3.7 Fix time observer race condition in `TVCustomPlayerView.swift:228-241` — replaced `Task { @MainActor }` with `MainActor.assumeIsolated` (observer already on .main queue, eliminates 1 Task heap allocation per second during playback)
 
 ### Phase 4 — Security Hardening ✅ TODO
 - [x] 4.1 Move API token from URL query param to `Authorization` header (`JellyfinAPIClient.swift:467,567`)
@@ -287,8 +287,8 @@ Key violations:
 |-------|--------|---------|
 | Phase 1 — Quick Wins | **Complete** ✅ | Session 2026-04-08 |
 | Phase 2 — Architecture | **Complete** ✅ | Sessions 2026-04-07/08 |
-| Phase 3 — Performance | Not started | |
+| Phase 3 — Performance | **Complete** ✅ | Session 2026-04-08 |
 | Phase 4 — Security | **Complete** ✅ | Session 2026-04-08 |
-| Phase 5 — Design System | **Partial** (5.1–5.5 done) 🔄 | Session 2026-04-08 |
+| Phase 5 — Design System | **Complete** ✅ | Session 2026-04-08 |
 | Phase 6 — Accessibility | Not started | |
 | Phase 7 — Testability | Not started | |

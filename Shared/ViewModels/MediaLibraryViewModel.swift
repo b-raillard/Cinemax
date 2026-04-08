@@ -28,10 +28,7 @@ final class MediaLibraryViewModel {
     var itemsByGenre: [String: [BaseItemDto]] = [:]
 
     // Filtered flat list
-    var filteredItems: [BaseItemDto] = []
-    var filteredTotalCount = 0
-    var filteredIsLoadingMore = false
-    private var filteredHasLoadedAll = false
+    let filteredLoader = PaginatedLoader<BaseItemDto>(pageSize: 40)
 
     // Shared state
     var totalCount = 0
@@ -42,7 +39,6 @@ final class MediaLibraryViewModel {
     var sortFilter = LibrarySortFilterState()
 
     // Internal
-    private let pageSize = 40
     private let genreItemLimit = 12
     let genreLoadLimit = 8
     private var hasLoaded = false
@@ -126,41 +122,30 @@ final class MediaLibraryViewModel {
 
     func applyFilter(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
-        filteredItems = []
-        filteredHasLoadedAll = false
-        filteredIsLoadingMore = false
-        await loadFilteredPage(using: appState, userId: userId, startIndex: 0)
+        filteredLoader.reset()
+        await loadMoreFiltered(using: appState, userId: userId)
     }
 
     func loadMoreFiltered(using appState: AppState) async {
-        guard !filteredHasLoadedAll, !filteredIsLoadingMore,
-              let userId = appState.currentUserId else { return }
-        await loadFilteredPage(using: appState, userId: userId, startIndex: filteredItems.count)
+        guard let userId = appState.currentUserId else { return }
+        await loadMoreFiltered(using: appState, userId: userId)
     }
 
-    private func loadFilteredPage(using appState: AppState, userId: String, startIndex: Int) async {
-        filteredIsLoadingMore = true
-        do {
-            let genres = sortFilter.selectedGenres.isEmpty ? nil : Array(sortFilter.selectedGenres)
+    private func loadMoreFiltered(using appState: AppState, userId: String) async {
+        let currentSortFilter = sortFilter
+        let currentItemType = itemType
+        await filteredLoader.loadMore { startIndex in
+            let genres = currentSortFilter.selectedGenres.isEmpty ? nil : Array(currentSortFilter.selectedGenres)
             let result = try await appState.apiClient.getItems(
                 userId: userId,
-                includeItemTypes: [itemType],
-                sortBy: [sortFilter.sortBy],
-                sortOrder: sortFilter.sortAscending ? [.ascending] : [.descending],
+                includeItemTypes: [currentItemType],
+                sortBy: [currentSortFilter.sortBy],
+                sortOrder: currentSortFilter.sortAscending ? [.ascending] : [.descending],
                 genres: genres,
-                limit: pageSize,
+                limit: 40,
                 startIndex: startIndex
             )
-            if startIndex == 0 {
-                filteredItems = result.items
-            } else {
-                filteredItems.append(contentsOf: result.items)
-            }
-            filteredTotalCount = result.totalCount
-            filteredHasLoadedAll = filteredItems.count >= result.totalCount
-        } catch {
-            // Silently fail on pagination
+            return (items: result.items, total: result.totalCount)
         }
-        filteredIsLoadingMore = false
     }
 }

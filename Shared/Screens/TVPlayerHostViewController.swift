@@ -192,8 +192,8 @@ final class TVPlayerHostViewController: UIViewController {
         let interval = CMTime(seconds: 1, preferredTimescale: 600)
         timeObserver = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self, time.isValid, time.seconds.isFinite else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            // Delivered on .main queue — use assumeIsolated to avoid a Task allocation every second.
+            MainActor.assumeIsolated {
                 // Skip time updates while buffering during a track switch so the
                 // scrubber stays pinned at the saved position instead of jumping to 0.
                 guard !self.state.isBuffering else { return }

@@ -26,6 +26,7 @@ public final class JellyfinAPIClient: Sendable {
     private let lock = NSLock()
     nonisolated(unsafe) private var _jellyfinClient: JellyfinClient?
     nonisolated(unsafe) private var _serverURL: URL?
+    private let cache = APICache()
 
     public init() {}
 
@@ -74,6 +75,9 @@ public final class JellyfinAPIClient: Sendable {
 
     /// Fetches server info using the existing client (does NOT replace it).
     public func fetchServerInfo() async throws -> ServerInfo {
+        let cacheKey = "serverInfo"
+        if let cached: ServerInfo = cache.get(cacheKey) { return cached }
+
         guard let client = getClient(),
               let url = getServerURL() else {
             throw JellyfinError.notConnected
@@ -82,12 +86,14 @@ public final class JellyfinAPIClient: Sendable {
         let response = try await client.send(Paths.getPublicSystemInfo)
         let info = response.value
 
-        return ServerInfo(
+        let result = ServerInfo(
             name: info.serverName ?? "Jellyfin Server",
             serverID: info.id ?? "",
             version: info.version ?? "",
             url: url
         )
+        cache.set(cacheKey, value: result, ttl: 600)
+        return result
     }
 
     public func authenticate(username: String, password: String) async throws -> UserSession {
@@ -145,6 +151,9 @@ public final class JellyfinAPIClient: Sendable {
     // MARK: - Media Queries
 
     public func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
+        let cacheKey = "resume-\(userId)-\(limit)"
+        if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
+
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetResumeItemsParameters(
             userID: userId,
@@ -153,10 +162,15 @@ public final class JellyfinAPIClient: Sendable {
             enableImageTypes: [.primary, .backdrop, .thumb]
         )
         let response = try await client.send(Paths.getResumeItems(parameters: params))
-        return response.value.items ?? []
+        let result = response.value.items ?? []
+        cache.set(cacheKey, value: result, ttl: 30)
+        return result
     }
 
     public func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
+        let cacheKey = "latest-\(userId)-\(limit)"
+        if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
+
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetLatestMediaParameters(
             userID: userId,
@@ -167,7 +181,9 @@ public final class JellyfinAPIClient: Sendable {
             limit: limit
         )
         let response = try await client.send(Paths.getLatestMedia(parameters: params))
-        return response.value
+        let result = response.value
+        cache.set(cacheKey, value: result, ttl: 60)
+        return result
     }
 
     public func getItems(
@@ -205,6 +221,10 @@ public final class JellyfinAPIClient: Sendable {
         userId: String,
         includeItemTypes: [BaseItemKind]? = nil
     ) async throws -> [String] {
+        let itemTypes = includeItemTypes?.map(\.rawValue).sorted().joined(separator: ",") ?? ""
+        let cacheKey = "genres-\(userId)-\(itemTypes)"
+        if let cached: [String] = cache.get(cacheKey) { return cached }
+
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetQueryFiltersParameters(
             userID: userId,
@@ -212,7 +232,9 @@ public final class JellyfinAPIClient: Sendable {
             isRecursive: true
         )
         let response = try await client.send(Paths.getQueryFilters(parameters: params))
-        return response.value.genres?.compactMap(\.name) ?? []
+        let result = response.value.genres?.compactMap(\.name) ?? []
+        cache.set(cacheKey, value: result, ttl: 300)
+        return result
     }
 
     public func getUserViews(userId: String) async throws -> [BaseItemDto] {
@@ -668,6 +690,7 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     public func reconnect(url: URL, accessToken: String) {
+        cache.clear()
         let client = JellyfinClient(
             configuration: .init(
                 url: url,

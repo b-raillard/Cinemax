@@ -77,17 +77,17 @@ struct MediaLibraryScreen: View {
 
                 if viewModel.sortFilter.isFiltered {
                     // Filtered grid (genre selected)
-                    if viewModel.filteredItems.isEmpty && viewModel.filteredIsLoadingMore {
+                    if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
                         ProgressView()
                             .tint(CinemaColor.onSurfaceVariant)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, CinemaSpacing.spacing10)
                     } else {
                         LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
-                            ForEach(viewModel.filteredItems, id: \.id) { item in
+                            ForEach(viewModel.filteredLoader.items, id: \.id) { item in
                                 posterCard(item)
                                     .onAppear {
-                                        if item.id == viewModel.filteredItems.last?.id {
+                                        if item.id == viewModel.filteredLoader.items.last?.id {
                                             Task { await viewModel.loadMoreFiltered(using: appState) }
                                         }
                                     }
@@ -189,7 +189,7 @@ struct MediaLibraryScreen: View {
 
                     Spacer()
 
-                    Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredTotalCount))
+                    Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredLoader.totalCount))
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
 
@@ -197,17 +197,17 @@ struct MediaLibraryScreen: View {
                 }
                 .padding(.horizontal, gridPadding)
 
-                if viewModel.filteredItems.isEmpty && viewModel.filteredIsLoadingMore {
+                if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
                     ProgressView()
                         .tint(CinemaColor.onSurfaceVariant)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, CinemaSpacing.spacing10)
                 } else {
                     LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
-                        ForEach(viewModel.filteredItems, id: \.id) { item in
+                        ForEach(viewModel.filteredLoader.items, id: \.id) { item in
                             posterCard(item)
                                 .onAppear {
-                                    if item.id == viewModel.filteredItems.last?.id {
+                                    if item.id == viewModel.filteredLoader.items.last?.id {
                                         Task { await viewModel.loadMoreFiltered(using: appState) }
                                     }
                                 }
@@ -344,7 +344,7 @@ struct MediaLibraryScreen: View {
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
 
-                Text(loc.localized("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredTotalCount : viewModel.totalCount))
+                Text(loc.localized("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredLoader.totalCount : viewModel.totalCount))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
 
