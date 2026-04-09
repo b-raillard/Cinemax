@@ -28,6 +28,16 @@ final class TVPlayerHostViewController: UIViewController {
     private var startTime: Double?
     private let authToken: String?
     private let localizationManager: LocalizationManager
+    private let onDismiss: (() -> Void)?
+
+    // Playback reporting
+    private let apiClient: any APIClientProtocol
+    private let userId: String
+    /// The item being played right now — updated on episode navigation.
+    private var currentItemId: String
+    private var currentPlaySessionId: String?
+    private var currentMediaSourceId: String?
+    private var currentPlayMethod: PlayMethod
 
     // MARK: Observations
 
@@ -35,24 +45,40 @@ final class TVPlayerHostViewController: UIViewController {
     private var keepUpObservation: NSKeyValueObservation?
     private var timeObserver: Any?
     private var hideControlsTask: Task<Void, Never>?
+    private var progressReportingTask: Task<Void, Never>?
+
+    // Touch-surface scrubbing state
+    private var isScrubbing = false
+    private var scrubStartTime: Double = 0
 
     // MARK: Init
 
     init(
         title: String,
+        itemId: String,
+        userId: String,
+        apiClient: any APIClientProtocol,
         info: PlaybackInfo,
         startTime: Double? = nil,
         previousEpisode: EpisodeRef? = nil,
         nextEpisode: EpisodeRef? = nil,
         episodeNavigator: EpisodeNavigator? = nil,
         localizationManager: LocalizationManager,
+        onDismiss: (() -> Void)? = nil,
         onTrackChange: @escaping (Int?, Int?) async -> URL?
     ) {
         self.itemTitle = title
+        self.apiClient = apiClient
+        self.userId = userId
+        self.currentItemId = itemId
+        self.currentPlaySessionId = info.playSessionId
+        self.currentMediaSourceId = info.mediaSourceId
+        self.currentPlayMethod = info.playMethod
         self.info = info
         self.startTime = startTime
         self.episodeNavigator = episodeNavigator
         self.localizationManager = localizationManager
+        self.onDismiss = onDismiss
         self.onTrackChange = onTrackChange
         self.authToken = info.authToken
 
@@ -88,6 +114,7 @@ final class TVPlayerHostViewController: UIViewController {
         observeCurrentItem()
         addTimeObserver()
         mountOverlay()
+        setupScrubGesture()
         scheduleHideControls()
     }
 
@@ -101,12 +128,17 @@ final class TVPlayerHostViewController: UIViewController {
         super.viewDidAppear(animated)
         avPlayer.play()
         state.isPlaying = true
+        reportPlaybackStart()
+        startProgressReporting()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         avPlayer.pause()
+        stopProgressReporting()
+        reportPlaybackStop()
         teardown()
+        onDismiss?()
     }
 
     // MARK: - Setup
@@ -197,9 +229,9 @@ final class TVPlayerHostViewController: UIViewController {
             guard let self, time.isValid, time.seconds.isFinite else { return }
             // Delivered on .main queue — use assumeIsolated to avoid a Task allocation every second.
             MainActor.assumeIsolated {
-                // Skip time updates while buffering during a track switch so the
-                // scrubber stays pinned at the saved position instead of jumping to 0.
-                guard !self.state.isBuffering else { return }
+                // Skip time updates while buffering (track switch) or scrubbing (touch surface)
+                // so the scrubber stays pinned at the user-driven position.
+                guard !self.state.isBuffering, !self.isScrubbing else { return }
                 self.state.currentTime = time.seconds
                 self.state.isPlaying = self.avPlayer.rate != 0
             }
@@ -208,6 +240,7 @@ final class TVPlayerHostViewController: UIViewController {
 
     private func teardown() {
         hideControlsTask?.cancel()
+        progressReportingTask?.cancel()
         statusObservation?.invalidate()
         keepUpObservation?.invalidate()
         statusObservation = nil
@@ -216,6 +249,76 @@ final class TVPlayerHostViewController: UIViewController {
             avPlayer.removeTimeObserver(obs)
             timeObserver = nil
         }
+    }
+
+    // MARK: - Playback Reporting
+
+    private func positionTicksNow() -> Int {
+        Int(state.currentTime * 10_000_000)
+    }
+
+    private func reportPlaybackStart() {
+        let ticks = positionTicksNow()
+        let itemId = currentItemId
+        let sessionId = currentPlaySessionId
+        let sourceId = currentMediaSourceId
+        let method = currentPlayMethod
+        let uid = userId
+        Task.detached { [apiClient] in
+            await apiClient.reportPlaybackStart(
+                itemId: itemId, userId: uid,
+                mediaSourceId: sourceId, playSessionId: sessionId,
+                positionTicks: ticks, playMethod: method
+            )
+        }
+    }
+
+    private func reportProgress() {
+        let ticks = positionTicksNow()
+        let isPaused = !state.isPlaying
+        let itemId = currentItemId
+        let sessionId = currentPlaySessionId
+        let sourceId = currentMediaSourceId
+        let method = currentPlayMethod
+        let uid = userId
+        Task.detached { [apiClient] in
+            await apiClient.reportPlaybackProgress(
+                itemId: itemId, userId: uid,
+                mediaSourceId: sourceId, playSessionId: sessionId,
+                positionTicks: ticks, isPaused: isPaused, playMethod: method
+            )
+        }
+    }
+
+    private func reportPlaybackStop() {
+        let ticks = positionTicksNow()
+        let itemId = currentItemId
+        let sessionId = currentPlaySessionId
+        let sourceId = currentMediaSourceId
+        let uid = userId
+        Task.detached { [apiClient] in
+            await apiClient.reportPlaybackStopped(
+                itemId: itemId, userId: uid,
+                mediaSourceId: sourceId, playSessionId: sessionId,
+                positionTicks: ticks
+            )
+        }
+    }
+
+    private func startProgressReporting() {
+        progressReportingTask?.cancel()
+        progressReportingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled, let self else { return }
+                self.reportProgress()
+            }
+        }
+    }
+
+    private func stopProgressReporting() {
+        progressReportingTask?.cancel()
+        progressReportingTask = nil
     }
 
     // MARK: - Control Visibility
@@ -326,6 +429,7 @@ final class TVPlayerHostViewController: UIViewController {
 
     func navigateToEpisode(_ ep: EpisodeRef) {
         guard episodeNavigator != nil else { return }
+        reportPlaybackStop()
         state.currentTime = 0
         state.duration = 0
         state.isBuffering = true
@@ -336,6 +440,11 @@ final class TVPlayerHostViewController: UIViewController {
                 state.isBuffering = false
                 return
             }
+
+            currentItemId = ep.id
+            currentPlaySessionId = newInfo.playSessionId
+            currentMediaSourceId = newInfo.mediaSourceId
+            currentPlayMethod = newInfo.playMethod
 
             state.title = ep.title
             state.previousEpisode = newPrev
@@ -356,6 +465,7 @@ final class TVPlayerHostViewController: UIViewController {
                     self.avPlayer.play()
                     self.state.isPlaying = true
                     self.state.isBuffering = false
+                    self.reportPlaybackStart()
                     if let d = try? await item.asset.load(.duration),
                        d.isValid, d.seconds.isFinite, d.seconds > 0 {
                         self.state.duration = d.seconds
@@ -368,6 +478,47 @@ final class TVPlayerHostViewController: UIViewController {
                 }
             }
             avPlayer.replaceCurrentItem(with: newItem)
+        }
+    }
+
+    // MARK: - Touch Surface Scrubbing
+
+    private func setupScrubGesture() {
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleScrubPan(_:)))
+        // Restrict to the Siri Remote touch surface (indirect input), not on-screen touches.
+        pan.allowedTouchTypes = [UITouch.TouchType.indirect.rawValue as NSNumber]
+        view.addGestureRecognizer(pan)
+    }
+
+    @objc private func handleScrubPan(_ gesture: UIPanGestureRecognizer) {
+        // UIKit always calls gesture handlers on the main thread; assumeIsolated is safe here.
+        MainActor.assumeIsolated {
+            switch gesture.state {
+            case .began:
+                scrubStartTime = state.currentTime
+                isScrubbing = true
+                showControlsTemporarily()
+
+            case .changed:
+                let tx = gesture.translation(in: view).x
+                // 300 logical points across the touch surface maps to ~90 seconds of content,
+                // capped at 5 minutes so long videos don't jump too far on a full swipe.
+                let sensitivity: Double = min(state.duration * 0.05, 300.0) / 300.0
+                let target = max(0, min(state.duration, scrubStartTime + tx * sensitivity))
+                state.currentTime = target
+                showControlsTemporarily()
+
+            case .ended, .cancelled:
+                isScrubbing = false
+                avPlayer.seek(
+                    to: CMTime(seconds: state.currentTime, preferredTimescale: 600),
+                    toleranceBefore: CMTime(seconds: 1, preferredTimescale: 600),
+                    toleranceAfter: CMTime(seconds: 1, preferredTimescale: 600)
+                )
+
+            default:
+                break
+            }
         }
     }
 

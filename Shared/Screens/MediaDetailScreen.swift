@@ -6,6 +6,9 @@ struct MediaDetailScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    #if os(tvOS)
+    @Environment(VideoPlayerCoordinator.self) private var coordinator
+    #endif
     @State var viewModel: MediaDetailViewModel
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
@@ -30,6 +33,11 @@ struct MediaDetailScreen: View {
         .task {
             await viewModel.load(using: appState)
         }
+        #if os(tvOS)
+        .onChange(of: coordinator.lastDismissedAt) { _, _ in
+            Task { await viewModel.load(using: appState) }
+        }
+        #endif
     }
 
     // MARK: - Detail Content
@@ -161,26 +169,14 @@ struct MediaDetailScreen: View {
     /// Computes prev/next episode refs and builds an EpisodeNavigator for a given episode ID.
     /// Returns nil navigator when there are fewer than 2 episodes in the current season.
     private func episodeNavigation(for episodeId: String) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
-        let refs: [EpisodeRef] = viewModel.episodes.compactMap { ep in
-            guard let id = ep.id else { return nil }
-            return EpisodeRef(id: id, title: ep.name ?? "")
-        }
-        guard refs.count > 1, let idx = refs.firstIndex(where: { $0.id == episodeId }) else {
-            return (nil, nil, nil)
-        }
-        let prev: EpisodeRef? = idx > 0 ? refs[idx - 1] : nil
-        let next: EpisodeRef? = idx < refs.count - 1 ? refs[idx + 1] : nil
-
-        let apiClient = appState.apiClient
-        let userId = appState.currentUserId ?? ""
-        let navigator: EpisodeNavigator = { @Sendable targetId in
-            guard let targetIdx = refs.firstIndex(where: { $0.id == targetId }) else { return nil }
-            guard let info = try? await apiClient.getPlaybackInfo(itemId: refs[targetIdx].id, userId: userId) else { return nil }
-            let newPrev: EpisodeRef? = targetIdx > 0 ? refs[targetIdx - 1] : nil
-            let newNext: EpisodeRef? = targetIdx < refs.count - 1 ? refs[targetIdx + 1] : nil
-            return (info, newPrev, newNext)
-        }
-        return (prev, next, navigator)
+        // Use the current season's episodes; fall back to nextUpEpisodes when the episode
+        // lives in a different season (e.g. next-up crosses a season boundary).
+        let inCurrentSeason = viewModel.episodes.contains { $0.id == episodeId }
+        let sourceEpisodes = inCurrentSeason ? viewModel.episodes : viewModel.nextUpEpisodes
+        return buildEpisodeNavigation(
+            for: episodeId, in: sourceEpisodes,
+            apiClient: appState.apiClient, userId: appState.currentUserId ?? ""
+        )
     }
 
     // MARK: - Action Buttons

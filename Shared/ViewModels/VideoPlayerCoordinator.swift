@@ -17,12 +17,16 @@ final class TVVideoPresenter {
 
     static func present(
         title: String,
+        itemId: String,
+        userId: String,
+        apiClient: any APIClientProtocol,
         info: PlaybackInfo,
         startTime: Double? = nil,
         previousEpisode: EpisodeRef? = nil,
         nextEpisode: EpisodeRef? = nil,
         episodeNavigator: EpisodeNavigator? = nil,
         localizationManager: LocalizationManager,
+        onDismiss: (() -> Void)? = nil,
         onTrackChange: @escaping (Int?, Int?) async -> URL?
     ) {
         guard let windowScene = UIApplication.shared.connectedScenes
@@ -39,12 +43,16 @@ final class TVVideoPresenter {
 
         let playerVC = TVPlayerHostViewController(
             title: title,
+            itemId: itemId,
+            userId: userId,
+            apiClient: apiClient,
             info: info,
             startTime: startTime,
             previousEpisode: previousEpisode,
             nextEpisode: nextEpisode,
             episodeNavigator: episodeNavigator,
             localizationManager: localizationManager,
+            onDismiss: onDismiss,
             onTrackChange: onTrackChange
         )
         topVC.present(playerVC, animated: true)
@@ -65,6 +73,9 @@ final class VideoPlayerCoordinator {
     @AppStorage("render4K") private var render4K: Bool = true
 
     var localizationManager: LocalizationManager?
+    /// Updated each time a playback session ends (player dismissed). MediaDetailScreen
+    /// observes this to refresh its content after the user returns from the player.
+    var lastDismissedAt: Date?
 
     var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
 
@@ -89,10 +100,12 @@ final class VideoPlayerCoordinator {
                 let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
                 logger.info("tvOS play: method=\(info.playMethod.rawValue), url=\(info.url.absoluteString)")
                 TVVideoPresenter.present(
-                    title: title, info: info, startTime: startTime,
+                    title: title, itemId: itemId, userId: userId,
+                    apiClient: apiClient, info: info, startTime: startTime,
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                     episodeNavigator: episodeNavigator,
-                    localizationManager: loc
+                    localizationManager: loc,
+                    onDismiss: { [weak self] in self?.lastDismissedAt = Date() }
                 ) { audioIdx, subtitleIdx in
                     return try? await apiClient.getPlaybackInfo(
                         itemId: itemId, userId: userId, maxBitrate: bitrate,

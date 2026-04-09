@@ -97,6 +97,10 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] { [] }
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
 
+    func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {}
+    func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {}
+    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async {}
+
     func getPlaybackInfo(
         itemId: String, userId: String, maxBitrate: Int,
         audioStreamIndex: Int?, subtitleStreamIndex: Int?
