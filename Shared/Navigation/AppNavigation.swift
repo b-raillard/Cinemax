@@ -5,13 +5,28 @@ import CinemaxKit
 final class AppState {
     var isAuthenticated = false
     var hasServer = false
-    var serverURL: URL?
+    var serverURL: URL? {
+        didSet { imageBuilder = ImageURLBuilder(serverURL: serverURL ?? URL(string: "http://localhost")!) }
+    }
     var serverInfo: ServerInfo?
     var currentUserId: String?
     var accessToken: String?
 
-    let apiClient = JellyfinAPIClient()
-    let keychain = KeychainService()
+    let apiClient: any APIClientProtocol
+    let keychain: any SecureStorageProtocol
+
+    init(
+        apiClient: any APIClientProtocol = JellyfinAPIClient(),
+        keychain: any SecureStorageProtocol = KeychainService()
+    ) {
+        self.apiClient = apiClient
+        self.keychain = keychain
+    }
+
+    // Stored so it is only rebuilt when serverURL changes, not on every access.
+    var imageBuilder = ImageURLBuilder(serverURL: URL(string: "http://localhost")!)
+
+    var imageServerURL: URL { serverURL ?? URL(string: "http://localhost")! }
 
     func restoreSession() async {
         guard let serverURL = keychain.getServerURL(),
@@ -19,7 +34,7 @@ final class AppState {
             return
         }
 
-        self.serverURL = serverURL
+        self.serverURL = serverURL   // triggers imageBuilder didSet
         self.hasServer = true
         self.accessToken = session.accessToken
         self.currentUserId = session.userID
@@ -86,9 +101,7 @@ struct AppNavigation: View {
     private var launchScreen: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
-            ProgressView()
-                .tint(CinemaColor.onSurfaceVariant)
-                .scaleEffect(1.5)
+            LoadingStateView()
         }
     }
 }

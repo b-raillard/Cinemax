@@ -59,6 +59,48 @@ public struct KeychainService: Sendable {
         deleteAccessToken()
         deleteServerURL()
         deleteUserSession()
+        // Device ID intentionally preserved — identifies the device across sessions
+    }
+
+    // MARK: - Device ID (static — persists for the lifetime of the app install)
+
+    /// Returns the persistent device identifier, creating and storing it on first call.
+    /// Migrates from UserDefaults if a legacy value exists.
+    public static func getOrCreateDeviceID() -> String {
+        let account = "device_id"
+        // Try Keychain first
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+           let data = result as? Data,
+           let id = String(data: data, encoding: .utf8) {
+            return id
+        }
+
+        // Migrate from UserDefaults or create a new identifier
+        let id: String
+        if let legacy = UserDefaults.standard.string(forKey: "cinemax_device_id") {
+            id = legacy
+            UserDefaults.standard.removeObject(forKey: "cinemax_device_id")
+        } else {
+            id = UUID().uuidString
+        }
+
+        let saveQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: Data(id.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+        SecItemAdd(saveQuery as CFDictionary, nil)
+        return id
     }
 
     // MARK: - Private
@@ -71,7 +113,7 @@ public struct KeychainService: Sendable {
             kSecAttrService as String: Self.serviceName,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)

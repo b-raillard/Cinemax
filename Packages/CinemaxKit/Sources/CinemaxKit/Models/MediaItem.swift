@@ -31,8 +31,7 @@ public struct MediaItem: Sendable, Codable, Identifiable {
     }
 
     public var runtimeMinutes: Int? {
-        guard let ticks = runTimeTicks else { return nil }
-        return Int(ticks / 600_000_000)
+        runTimeTicks?.jellyfinMinutes
     }
 }
 

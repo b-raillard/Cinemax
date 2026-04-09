@@ -183,3 +183,13 @@
 "player.subtitles" = "Sous-titres";
 "player.subtitles.off" = "Désactivé";
 "player.trackPicker.title" = "Pistes de lecture";
+
+// MARK: - Accessibility
+
+"accessibility.clearSearch" = "Effacer la recherche";
+"accessibility.voiceSearch" = "Recherche vocale";
+"accessibility.stopVoiceSearch" = "Arrêter la recherche vocale";
+"accessibility.previousEpisode" = "Épisode précédent";
+"accessibility.nextEpisode" = "Épisode suivant";
+"accessibility.trackOptions" = "Pistes de lecture";
+"accessibility.removeGenreFilter" = "Retirer le filtre %@";

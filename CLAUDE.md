@@ -30,6 +30,7 @@ Packages/CinemaxKit/  Models, Networking (JellyfinAPIClient, ImageURLBuilder), P
 ## Design System
 
 - Static color tokens in `CinemaGlassTheme.swift` (`CinemaColor`, `CinemaFont`, `CinemaSpacing`, `CinemaRadius`)
+- **Reusable components** in `Shared/DesignSystem/Components/`: `CinemaLazyImage`, `ProgressBarView`, `RatingBadge`, `LoadingStateView`, `ErrorStateView`, `PosterCard`, `WideCard`, `ContentRow`, `CinemaButton`
 - **No 1px borders** — use color shifts for boundaries. Glass panels: `.glassPanel()` modifier
 - **Dynamic accent**: use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` — never `CinemaColor.tertiary*`
 - **Dark/Light mode**: `ThemeManager.darkModeEnabled` → `.preferredColorScheme()` at root. Colors are dark-first
@@ -162,7 +163,8 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 
 - `ImageURLBuilder` → `/Items/{id}/Images/{type}` URLs
 - **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`
-- **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { LazyImage }` + `.clipped()`
+- **All image loading via `CinemaLazyImage`** — never use `LazyImage` directly. Params: `url`, `fallbackIcon: String?` (nil = no icon), `fallbackBackground: Color`, `showLoadingIndicator: Bool`
+- **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`
 - **PosterCard title alignment**: hidden `Text("M\nM").hidden()` placeholder + actual title overlaid top-aligned → uniform row height regardless of title length
 
 ## App Icons

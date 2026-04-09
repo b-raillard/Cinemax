@@ -11,8 +11,8 @@ let package = Package(
         .library(name: "CinemaxKit", targets: ["CinemaxKit"])
     ],
     dependencies: [
-        .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift.git", from: "0.4.1"),
-        .package(url: "https://github.com/kean/Nuke.git", from: "12.8.0")
+        .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift.git", .upToNextMajor(from: "0.4.1")),
+        .package(url: "https://github.com/kean/Nuke.git", .upToNextMajor(from: "12.8.0"))
     ],
     targets: [
         .target(

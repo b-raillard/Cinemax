@@ -1,36 +1,6 @@
 import SwiftUI
-import NukeUI
 import CinemaxKit
 import JellyfinAPI
-
-@MainActor @Observable
-final class HomeViewModel {
-    var heroItem: BaseItemDto?
-    var resumeItems: [BaseItemDto] = []
-    var latestItems: [BaseItemDto] = []
-    var isLoading = true
-    var errorMessage: String?
-
-    func load(using appState: AppState) async {
-        guard let userId = appState.currentUserId else { return }
-        isLoading = true
-
-        do {
-            async let resume = appState.apiClient.getResumeItems(userId: userId, limit: 20)
-            async let latest = appState.apiClient.getLatestMedia(userId: userId, limit: 20)
-
-            resumeItems = try await resume
-            latestItems = try await latest
-
-            // Pick first resume item or first latest as hero
-            heroItem = resumeItems.first ?? latestItems.first
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isLoading = false
-    }
-}
 
 struct HomeScreen: View {
     @Environment(AppState.self) private var appState
@@ -43,9 +13,7 @@ struct HomeScreen: View {
             CinemaColor.surface.ignoresSafeArea()
 
             if viewModel.isLoading {
-                ProgressView()
-                    .tint(CinemaColor.onSurfaceVariant)
-                    .scaleEffect(1.5)
+                LoadingStateView()
             } else {
                 content
             }
@@ -89,21 +57,14 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func heroSection(_ item: BaseItemDto) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         ZStack(alignment: .bottomLeading) {
             // Backdrop — episodes/seasons don't have their own backdrop; use the parent (series)
             if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
-                LazyImage(url: builder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920)) { state in
-                    if let image = state.image {
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } else {
-                        Rectangle().fill(CinemaColor.surfaceContainerLow)
-                    }
-                }
+                CinemaLazyImage(
+                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920),
+                    fallbackIcon: nil,
+                    fallbackBackground: CinemaColor.surfaceContainerLow
+                )
             }
 
             // Gradient overlays
@@ -114,14 +75,7 @@ struct HomeScreen: View {
                 // Badges
                 HStack(spacing: 8) {
                     if let rating = item.officialRating {
-                        Text(rating)
-                            .font(.system(size: badgeFontSize, weight: .bold))
-                            .tracking(1)
-                            .textCase(.uppercase)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        RatingBadge(rating: rating)
                     }
 
                     metadataText(for: item)
@@ -228,9 +182,6 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func continueWatchingCard(_ item: BaseItemDto) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         let progress: Double = {
             guard let position = item.userData?.playbackPositionTicks,
                   let total = item.runTimeTicks,
@@ -242,7 +193,7 @@ struct HomeScreen: View {
             guard let position = item.userData?.playbackPositionTicks,
                   let total = item.runTimeTicks else { return "" }
             let remainingTicks = total - position
-            let minutes = remainingTicks / 600_000_000
+            let minutes = remainingTicks.jellyfinMinutes
             if minutes > 60 {
                 return loc.localized("home.remainingTime.hours", minutes / 60, minutes % 60)
             }
@@ -251,7 +202,7 @@ struct HomeScreen: View {
 
         WideCard(
             title: item.name ?? "",
-            imageURL: (item.parentBackdropItemID ?? item.seriesID ?? item.id).map { builder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
+            imageURL: (item.parentBackdropItemID ?? item.seriesID ?? item.id).map { appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
             progress: progress,
             subtitle: remaining
         )
@@ -270,9 +221,6 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func recentlyAddedCard(_ item: BaseItemDto) -> some View {
-        let serverURL = appState.serverURL ?? URL(string: "http://localhost")!
-        let builder = ImageURLBuilder(serverURL: serverURL)
-
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
@@ -287,7 +235,7 @@ struct HomeScreen: View {
         } label: {
             PosterCard(
                 title: item.name ?? "",
-                imageURL: item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
+                imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
                 subtitle: subtitle
             )
         }
@@ -296,6 +244,7 @@ struct HomeScreen: View {
         #else
         .buttonStyle(.plain)
         #endif
+        .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
     }
 
     // MARK: - Helpers
@@ -303,10 +252,7 @@ struct HomeScreen: View {
     private func metadataText(for item: BaseItemDto) -> some View {
         let parts: [String] = [
             item.productionYear.map(String.init),
-            item.runTimeTicks.map { ticks in
-                let minutes = ticks / 600_000_000
-                return minutes > 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
-            },
+            item.formattedRuntime,
             item.genres?.first
         ].compactMap { $0 }
 
@@ -377,14 +323,6 @@ struct HomeScreen: View {
         200
         #else
         140
-        #endif
-    }
-
-    private var badgeFontSize: CGFloat {
-        #if os(tvOS)
-        12
-        #else
-        10
         #endif
     }
 

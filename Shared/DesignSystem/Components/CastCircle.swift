@@ -38,5 +38,7 @@ struct CastCircle: View {
             }
         }
         .frame(width: size + 20)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel([name, role].compactMap { $0 }.joined(separator: ", "))
     }
 }

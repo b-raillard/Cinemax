@@ -36,8 +36,8 @@ targets:
       path: iOS/Info.plist
       properties:
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
           NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoadsForMedia: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIApplicationSupportsIndirectInputEvents: true
@@ -78,8 +78,8 @@ targets:
       path: tvOS/Info.plist
       properties:
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
           NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoadsForMedia: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen: {}
@@ -102,7 +102,6 @@ targets:
       - path: Tests/CinemaxKitTests
     dependencies:
       - target: Cinemax
-      - package: CinemaxKit
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

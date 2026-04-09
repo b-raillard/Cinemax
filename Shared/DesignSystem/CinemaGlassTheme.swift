@@ -43,6 +43,9 @@ enum CinemaColor {
     static let errorContainer = Color(hex: 0x7F2927)
     static let onErrorContainer = Color(hex: 0xFF9993)
 
+    // Success
+    static let success = Color(hex: 0x34C759)
+
     // Surface tint
     static let surfaceTint = Color(hex: 0xC6C6C7)
 }
@@ -127,6 +130,12 @@ enum CinemaRadius {
     static let large: CGFloat = 16
     static let extraLarge: CGFloat = 24
     static let full: CGFloat = 9999
+}
+
+// MARK: - Motion
+
+enum CinemaMotion {
+    static let standard: Double = 0.3
 }
 
 // MARK: - Gradients

@@ -14,6 +14,7 @@ struct MainTabView: View {
         #if os(tvOS)
         tvTabLayout
             .environment(playerCoordinator)
+            .task { playerCoordinator.localizationManager = loc }
         #else
         if sizeClass == .regular {
             sidebarLayout
