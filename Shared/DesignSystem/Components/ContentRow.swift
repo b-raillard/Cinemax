@@ -15,6 +15,7 @@ struct ContentRow<Content: View>: View {
                 Text(title)
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
 
                 Spacer()

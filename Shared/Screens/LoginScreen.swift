@@ -171,7 +171,8 @@ struct LoginScreen: View {
                             label: "",
                             text: $viewModel.username,
                             placeholder: loc.localized("login.username"),
-                            icon: "person"
+                            icon: "person",
+                            keyboardType: .asciiCapable
                         )
 
                         GlassTextField(

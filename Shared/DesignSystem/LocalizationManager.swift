@@ -9,7 +9,10 @@ final class LocalizationManager {
     private var _revision: Int = 0
 
     var languageCode: String {
-        get { _languageCode }
+        get {
+            _ = _revision
+            return _languageCode
+        }
         set {
             _languageCode = newValue
             _bundle = nil
