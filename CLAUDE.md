@@ -39,7 +39,7 @@ Packages/CinemaxKit/  Models, Networking (JellyfinAPIClient, ImageURLBuilder), P
 - **Font scaling**: `CinemaScale.factor` applies a 1.4× base multiplier on tvOS, then user `uiScale` (80–130%) on top. All `CinemaFont` and `CinemaScale.pt()` calls multiply by this. **Exception**: Play/Lecture button labels use hardcoded `28pt` on tvOS
 - **Focus — tvOS**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Indicator is a 2px accent `strokeBorder` — no scale, no white background. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. Season tabs: `SeasonTabButtonStyle`
 - **Focus — iOS**: `.cinemaFocus()` modifier (accent border + shadow)
-- **Motion Effects**: `motionEffectsEnabled` environment key (from `AppNavigation` via `@AppStorage("motionEffects")`). When off, all `.animation()` calls use `nil`. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators
+- **Motion Effects**: `motionEffectsEnabled` environment key (from `AppNavigation` via `@AppStorage("motionEffects")`). When off, all `.animation()` calls use `nil`. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators. Injected on both iOS and tvOS.
 - Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass`
 
 ## Navigation
@@ -132,7 +132,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 ### Assets
 - `AppLogo.imageset`: iOS uses `app_logo.png` (full icon with background); tvOS uses `app_logo_tv.png` (front parallax layer — transparent background, jellyfish only). No `clipShape` on tvOS logo — organic shape renders freely.
 
-### `@AppStorage` keys (all in `SettingsScreen`)
+### `@AppStorage` keys (shared between iOS and tvOS, declared in `SettingsScreen`)
 | Key | Default | Effect |
 |-----|---------|--------|
 | `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |

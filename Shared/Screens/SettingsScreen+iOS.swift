@@ -267,19 +267,72 @@ extension SettingsScreen {
                 settingsRow {
                     HStack {
                         rowIcon(systemName: "sparkles", color: themeManager.accent)
-
                         Text(loc.localized("settings.motionEffects"))
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
-
                         Spacer()
+                        Toggle("", isOn: $motionEffects)
+                            .labelsHidden()
+                            .tint(themeManager.accentContainer)
+                    }
+                }
 
-                        Toggle("", isOn: .init(
-                            get: { UserDefaults.standard.bool(forKey: "motionEffects") },
-                            set: { UserDefaults.standard.set($0, forKey: "motionEffects") }
-                        ))
-                        .labelsHidden()
-                        .tint(themeManager.accentContainer)
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "captions.bubble", color: themeManager.accent)
+                        Text(loc.localized("settings.forceSubtitles"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Toggle("", isOn: $forceSubtitles)
+                            .labelsHidden()
+                            .tint(themeManager.accentContainer)
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "4k.tv", color: themeManager.accent)
+                        Text(loc.localized("settings.4kRendering"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Toggle("", isOn: $render4K)
+                            .labelsHidden()
+                            .tint(themeManager.accentContainer)
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "textformat.size", color: themeManager.accent)
+                        Text(loc.localized("settings.fontSize"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Stepper(
+                            "\(Int(fontScale * 100))%",
+                            onIncrement: {
+                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx < fontScaleOptions.count - 1 {
+                                    fontScale = fontScaleOptions[idx + 1]
+                                    themeManager.uiScale = fontScale
+                                }
+                            },
+                            onDecrement: {
+                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx > 0 {
+                                    fontScale = fontScaleOptions[idx - 1]
+                                    themeManager.uiScale = fontScale
+                                }
+                            }
+                        )
+                        .fixedSize()
+                        .tint(themeManager.accent)
                     }
                 }
             }

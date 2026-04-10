@@ -92,11 +92,7 @@ struct SettingsScreen: View {
     @State var showLogOutAlert = false
     @State var selectedCategory: SettingsCategory? = nil
 
-    // tvOS-only stored properties — kept here so extensions can access them
-    #if os(tvOS)
-    @FocusState var focusedItem: SettingsFocus?
-    @State var serverUsers: [UserDto] = []
-    @State var showSwitchAccountAlert = false
+    // Shared stored properties
     @AppStorage("motionEffects") var motionEffects: Bool = true
     @AppStorage("forceSubtitles") var forceSubtitles: Bool = false
     @AppStorage("render4K") var render4K: Bool = true
@@ -104,6 +100,12 @@ struct SettingsScreen: View {
     @State var fontScale: Double = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
     @State var showFontSizePicker = false
     let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]
+
+    // tvOS-only stored properties
+    #if os(tvOS)
+    @FocusState var focusedItem: SettingsFocus?
+    @State var serverUsers: [UserDto] = []
+    @State var showSwitchAccountAlert = false
     #endif
 
     // MARK: Shared Computed Properties
