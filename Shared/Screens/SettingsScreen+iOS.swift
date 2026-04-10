@@ -45,7 +45,7 @@ extension SettingsScreen {
             VStack(spacing: CinemaSpacing.spacing1) {
                 Text(loc.localized("settings.systemSettings"))
                     .font(.system(size: CinemaScale.pt(28), weight: .heavy, design: .default))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(CinemaColor.onSurface)
                     .tracking(-0.5)
 
                 Text(loc.localized("settings.version", appVersion))
@@ -80,7 +80,7 @@ extension SettingsScreen {
                 // Icon circle
                 ZStack {
                     Circle()
-                        .fill(isFirst ? Color.white.opacity(0.2) : CinemaColor.surfaceContainerHighest)
+                        .fill(isFirst ? themeManager.accent.opacity(0.18) : CinemaColor.surfaceContainerHighest)
                         .frame(width: 40, height: 40)
 
                     Image(systemName: category.icon)
@@ -99,7 +99,7 @@ extension SettingsScreen {
                 // Chevron
                 Image(systemName: "chevron.right")
                     .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-                    .foregroundStyle(isFirst ? Color.white.opacity(0.8) : CinemaColor.onSurfaceVariant.opacity(0.6))
+                    .foregroundStyle(isFirst ? CinemaColor.onSurface.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
@@ -119,7 +119,7 @@ extension SettingsScreen {
             .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
             .overlay(
                 RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                    .strokeBorder(Color.white.opacity(isFirst ? 0.1 : 0.05), lineWidth: 1)
+                    .strokeBorder(CinemaColor.onSurface.opacity(isFirst ? 0.12 : 0.06), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -271,9 +271,10 @@ extension SettingsScreen {
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
                         Spacer()
-                        Toggle("", isOn: $motionEffects)
-                            .labelsHidden()
-                            .tint(themeManager.accentContainer)
+                        Button { motionEffects.toggle() } label: {
+                            CinemaToggleIndicator(isOn: motionEffects, accent: themeManager.accent, animated: motionEffects)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -286,9 +287,10 @@ extension SettingsScreen {
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
                         Spacer()
-                        Toggle("", isOn: $forceSubtitles)
-                            .labelsHidden()
-                            .tint(themeManager.accentContainer)
+                        Button { forceSubtitles.toggle() } label: {
+                            CinemaToggleIndicator(isOn: forceSubtitles, accent: themeManager.accent, animated: motionEffects)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -301,9 +303,26 @@ extension SettingsScreen {
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
                         Spacer()
-                        Toggle("", isOn: $render4K)
-                            .labelsHidden()
-                            .tint(themeManager.accentContainer)
+                        Button { render4K.toggle() } label: {
+                            CinemaToggleIndicator(isOn: render4K, accent: themeManager.accent, animated: motionEffects)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "play.square.stack", color: themeManager.accent)
+                        Text(loc.localized("settings.autoPlayNextEpisode"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Button { autoPlayNextEpisode.toggle() } label: {
+                            CinemaToggleIndicator(isOn: autoPlayNextEpisode, accent: themeManager.accent, animated: motionEffects)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -458,6 +477,7 @@ extension SettingsScreen {
 private struct IOSAppearanceDetailView: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
+    @AppStorage("motionEffects") private var motionEffects: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -466,20 +486,18 @@ private struct IOSAppearanceDetailView: View {
             VStack(spacing: 0) {
                 settingsRow {
                     HStack {
-                        rowIcon(systemName: "moon.fill", color: themeManager.accent)
+                        rowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
 
-                        Text(loc.localized("settings.darkMode"))
+                        Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
 
                         Spacer()
 
-                        Toggle("", isOn: Binding(
-                            get: { themeManager.darkModeEnabled },
-                            set: { themeManager.darkModeEnabled = $0 }
-                        ))
-                        .labelsHidden()
-                        .tint(themeManager.accentContainer)
+                        Button { themeManager.darkModeEnabled.toggle() } label: {
+                            CinemaToggleIndicator(isOn: themeManager.darkModeEnabled, accent: themeManager.accent, animated: motionEffects)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -503,6 +521,7 @@ private struct IOSAppearanceDetailView: View {
                             }
                         }
                     }
+                    .hoverEffectDisabled()
                 }
 
                 divider
@@ -579,6 +598,7 @@ private struct IOSAppearanceDetailView: View {
             }
         }
         .buttonStyle(.plain)
+        .hoverEffectDisabled()
         .scaleEffect(isSelected ? 1.1 : 1.0)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
     }

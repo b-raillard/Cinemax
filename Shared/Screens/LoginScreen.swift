@@ -167,6 +167,7 @@ struct LoginScreen: View {
                             .font(CinemaFont.headline(.small))
                             .foregroundStyle(.white)
 
+                        #if os(iOS)
                         GlassTextField(
                             label: "",
                             text: $viewModel.username,
@@ -174,6 +175,14 @@ struct LoginScreen: View {
                             icon: "person",
                             keyboardType: .asciiCapable
                         )
+                        #else
+                        GlassTextField(
+                            label: "",
+                            text: $viewModel.username,
+                            placeholder: loc.localized("login.username"),
+                            icon: "person"
+                        )
+                        #endif
 
                         GlassTextField(
                             label: "",

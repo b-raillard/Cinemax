@@ -19,6 +19,8 @@ struct VideoPlayerView: View {
     @State private var playbackInfo: PlaybackInfo?
     @State private var showTrackPicker = false
     @State private var progressReportTask: Task<Void, Never>?
+    @State private var itemEndObserver: NSObjectProtocol?
+    @AppStorage("autoPlayNextEpisode") private var autoPlayNextEpisode: Bool = true
 
     // Mutable episode context — updated when navigating between episodes
     @State private var currentItemId: String
@@ -245,10 +247,24 @@ struct VideoPlayerView: View {
             avPlayer.play()
             reportPlaybackStart()
             startProgressReporting()
+            observeItemEnd(playerItem)
         } catch {
             logger.error("Playback setup error: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+
+    private func observeItemEnd(_ item: AVPlayerItem) {
+        if let obs = itemEndObserver { NotificationCenter.default.removeObserver(obs) }
+        itemEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [self] _ in
+            if autoPlayNextEpisode, let next = currentNextEpisode, episodeNavigator != nil {
+                navigateToEpisode(next)
+            }
         }
     }
 
@@ -289,6 +305,7 @@ struct VideoPlayerView: View {
             avPlayer.play()
             reportPlaybackStart()
             startProgressReporting()
+            observeItemEnd(playerItem)
         }
     }
 
@@ -297,6 +314,10 @@ struct VideoPlayerView: View {
         progressReportTask = nil
         playerObservation?.invalidate()
         playerObservation = nil
+        if let obs = itemEndObserver {
+            NotificationCenter.default.removeObserver(obs)
+            itemEndObserver = nil
+        }
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil

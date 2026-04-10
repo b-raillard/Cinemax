@@ -6,6 +6,30 @@ import UIKit
 #endif
 import Network
 
+// MARK: - Shared Toggle Indicator
+
+/// Custom toggle capsule used on both iOS and tvOS to ensure visual consistency.
+/// Renders a pill-shaped track that fills with `accent` when on, with a white
+/// sliding knob. Interaction is handled by the parent row / button.
+struct CinemaToggleIndicator: View {
+    let isOn: Bool
+    let accent: Color
+    var animated: Bool = true
+
+    var body: some View {
+        Capsule()
+            .fill(isOn ? accent : CinemaColor.surfaceContainerHighest)
+            .frame(width: 52, height: 32)
+            .overlay(alignment: isOn ? .trailing : .leading) {
+                Circle()
+                    .fill(.white)
+                    .frame(width: 26, height: 26)
+                    .padding(3)
+            }
+            .animation(animated ? .easeInOut(duration: 0.15) : nil, value: isOn)
+    }
+}
+
 // MARK: - Accent Color Definition
 
 enum AccentOption: String, CaseIterable, Identifiable {
@@ -96,6 +120,7 @@ struct SettingsScreen: View {
     @AppStorage("motionEffects") var motionEffects: Bool = true
     @AppStorage("forceSubtitles") var forceSubtitles: Bool = false
     @AppStorage("render4K") var render4K: Bool = true
+    @AppStorage("autoPlayNextEpisode") var autoPlayNextEpisode: Bool = true
     @AppStorage("darkMode") var darkModeStorage: Bool = true
     @State var fontScale: Double = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
     @State var showFontSizePicker = false

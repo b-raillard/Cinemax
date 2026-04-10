@@ -31,13 +31,15 @@ Packages/CinemaxKit/  Models, Networking (JellyfinAPIClient, ImageURLBuilder), P
 
 ## Design System
 
-- Static color tokens in `CinemaGlassTheme.swift` (`CinemaColor`, `CinemaFont`, `CinemaSpacing`, `CinemaRadius`)
+- Dynamic color tokens in `CinemaGlassTheme.swift` (`CinemaColor`, `CinemaFont`, `CinemaSpacing`, `CinemaRadius`). All `CinemaColor` tokens use `Color.dynamic(light:dark:)` backed by `UIColor(dynamicProvider:)` — they resolve against the active `UITraitCollection` automatically. **Never use `Color(hex:)` for new tokens** — always use `Color.dynamic(light:dark:)` so they work in both modes.
 - **Reusable components** in `Shared/DesignSystem/Components/`: `CinemaLazyImage`, `ProgressBarView`, `RatingBadge`, `LoadingStateView`, `ErrorStateView`, `PosterCard`, `WideCard`, `ContentRow`, `CinemaButton`
+- **Shared toggle**: `CinemaToggleIndicator` (Capsule+Circle pill, in `SettingsScreen.swift`) — used on both iOS and tvOS for all boolean settings. Interaction is parent-driven (wrap in `Button { value.toggle() }`). Never use system `Toggle` in settings.
 - **No 1px borders** — use color shifts for boundaries. Glass panels: `.glassPanel()` modifier
-- **Dynamic accent**: use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` — never `CinemaColor.tertiary*`
-- **Dark/Light mode**: `ThemeManager.darkModeEnabled` → `.preferredColorScheme()` at root. Colors are dark-first
+- **Dynamic accent**: use `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` — never `CinemaColor.tertiary*`. All four sub-tokens are dual-mode via `Color.dynamic`.
+- **Dark/Light mode**: `ThemeManager.darkModeEnabled` → `.preferredColorScheme()` at root (set in `AppNavigation`, nowhere else). Colors flip automatically via `UITraitCollection`. **Always route dark mode changes through `themeManager.darkModeEnabled =` setter** — direct `@AppStorage("darkMode")` writes bypass `_accentRevision` and break reactivity.
+- **Hardcoded `.white` / `.black` rule**: `.white` and `.black` are only acceptable inside the video player (always dark) and on elements that sit directly on a saturated `accentContainer` background. Everywhere else use `CinemaColor.onSurface` / `CinemaColor.onSurfaceVariant`.
 - **Font scaling**: `CinemaScale.factor` applies a 1.4× base multiplier on tvOS, then user `uiScale` (80–130%) on top. All `CinemaFont` and `CinemaScale.pt()` calls multiply by this. **Exception**: Play/Lecture button labels use hardcoded `28pt` on tvOS
-- **Focus — tvOS**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Indicator is a 2px accent `strokeBorder` — no scale, no white background. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. Season tabs: `SeasonTabButtonStyle`
+- **Focus — tvOS**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Indicator is a 2px accent `strokeBorder` — no scale, no white background. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. Season tabs: `SeasonTabButtonStyle`. **tvOS focus trait-collection caveat**: when a `Button` receives focus, tvOS overrides the `UITraitCollection` inside the button label, flipping all `Color.dynamic` tokens to their light-mode values. `tvSettingsFocusable` takes a `colorScheme` parameter and injects `.environment(\.colorScheme, colorScheme)` on both the content and the background shape to prevent this. Always pass `colorScheme: themeManager.darkModeEnabled ? .dark : .light` at call sites.
 - **Focus — iOS**: `.cinemaFocus()` modifier (accent border + shadow)
 - **Motion Effects**: `motionEffectsEnabled` environment key (from `AppNavigation` via `@AppStorage("motionEffects")`). When off, all `.animation()` calls use `nil`. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators. Injected on both iOS and tvOS.
 - Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass`
@@ -138,7 +140,10 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 | `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |
 | `forceSubtitles` | `false` | Auto-selects first `.legible` track; disables `appliesMediaSelectionCriteriaAutomatically` |
 | `render4K` | `true` | `maxBitrate` 120 Mbps (on) / 20 Mbps (off) |
+| `autoPlayNextEpisode` | `true` | Auto-navigates to next episode via `AVPlayerItem.didPlayToEndTime` in both `TVPlayerHostViewController` and `VideoPlayerView` |
 | `uiScale` | `1.0` | Font scale 80–130%. Bumps `ThemeManager._accentRevision` to force re-render |
+| `darkMode` | `true` | **Must be toggled via `themeManager.darkModeEnabled`**, not directly — direct writes don't bump `_accentRevision` |
+| `accentColor` | `"blue"` | Set via `themeManager.accentColorKey` for same reason |
 
 ## MediaDetailScreen
 
