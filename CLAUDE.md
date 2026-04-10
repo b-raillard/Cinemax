@@ -6,7 +6,7 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. Uses a "Cinema 
 
 - **SwiftUI** multi-platform (single Xcode project, iOS + tvOS targets)
 - **CinemaxKit** local Swift Package at `Packages/CinemaxKit` — shared networking, models, persistence
-- **@Observable** + `@MainActor` for all state management
+- **@Observable** + `@MainActor` for all state management. **iOS `NavigationStack` caveat**: destination views pushed via `navigationDestination(item:)` render in a separate context — `@Observable` changes to environment objects won't re-render the destination unless it is a standalone `View` struct with its own `@Environment` properties. Always use a proper struct (not an extension method returning `some View`) for interactive pushed destinations.
 - **Swift 6** strict concurrency
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable conformance
 
@@ -180,6 +180,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`
 - **All image loading via `CinemaLazyImage`** — never use `LazyImage` directly. Params: `url`, `fallbackIcon: String?` (nil = no icon), `fallbackBackground: Color`, `showLoadingIndicator: Bool`
 - **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`
+- **Backdrop (full-bleed ZStack)**: `CinemaLazyImage` used directly inside a `ZStack` must have `.frame(maxWidth: .infinity, maxHeight: .infinity)` — without it, the ZStack sizes from the image's natural dimensions (e.g. 1920px), pushing the title VStack off-screen. Also use `LazyVStack(alignment: .leading)` as the outer container.
 - **PosterCard title alignment**: hidden `Text("M\nM").hidden()` placeholder + actual title overlaid top-aligned → uniform row height regardless of title length
 
 ## App Icons

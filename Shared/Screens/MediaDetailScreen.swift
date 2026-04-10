@@ -44,7 +44,7 @@ struct MediaDetailScreen: View {
 
     private func detailContent(_ item: BaseItemDto) -> some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 // Backdrop hero
                 backdropSection(item)
 
@@ -99,6 +99,7 @@ struct MediaDetailScreen: View {
                     fallbackIcon: nil,
                     fallbackBackground: CinemaColor.surfaceContainerLow
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             CinemaGradient.heroOverlay
@@ -140,8 +141,10 @@ struct MediaDetailScreen: View {
                     .foregroundStyle(CinemaColor.onSurface)
                 }
             }
-            .padding(contentPadding)
-            .padding(.bottom, CinemaSpacing.spacing4)
+            .padding(.horizontal, contentPadding)
+            .padding(.top, contentPadding)
+            .padding(.bottom, contentPadding + CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
         .frame(height: backdropHeight)
@@ -258,7 +261,7 @@ struct MediaDetailScreen: View {
                     .padding(.vertical, buttonVerticalPadding)
                     .padding(.horizontal, CinemaSpacing.spacing4)
                     #if os(iOS)
-                    .background(CinemaGradient.primaryButton)
+                    .background(themeManager.accentContainer)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
                     #endif
                 }
@@ -452,7 +455,7 @@ struct MediaDetailScreen: View {
         #if os(tvOS)
         760
         #else
-        420
+        310
         #endif
     }
 
@@ -460,7 +463,7 @@ struct MediaDetailScreen: View {
         #if os(tvOS)
         CinemaScale.pt(64)
         #else
-        32
+        26
         #endif
     }
 
