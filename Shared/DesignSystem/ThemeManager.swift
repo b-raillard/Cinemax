@@ -16,7 +16,10 @@ final class ThemeManager {
     @AppStorage("accentColor") private var _accentColorKey: String = "blue"
 
     var accentColorKey: String {
-        get { _accentColorKey }
+        get {
+            _ = _accentRevision
+            return _accentColorKey
+        }
         set {
             _accentColorKey = newValue
             _accentRevision += 1

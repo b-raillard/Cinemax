@@ -51,43 +51,6 @@ struct VideoPlayerView: View {
             if let player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
-                    .overlay(alignment: .topTrailing) {
-                        HStack(spacing: 0) {
-                            if let prev = currentPrevEpisode, episodeNavigator != nil {
-                                Button { navigateToEpisode(prev) } label: {
-                                    Image(systemName: "backward.end.fill")
-                                        .font(.title2)
-                                        .foregroundStyle(.white)
-                                        .shadow(radius: 4)
-                                        .padding(12)
-                                }
-                                .accessibilityLabel(loc.localized("accessibility.previousEpisode"))
-                                .accessibilityHint(prev.title)
-                            }
-                            if let next = currentNextEpisode, episodeNavigator != nil {
-                                Button { navigateToEpisode(next) } label: {
-                                    Image(systemName: "forward.end.fill")
-                                        .font(.title2)
-                                        .foregroundStyle(.white)
-                                        .shadow(radius: 4)
-                                        .padding(12)
-                                }
-                                .accessibilityLabel(loc.localized("accessibility.nextEpisode"))
-                                .accessibilityHint(next.title)
-                            }
-                            if let info = playbackInfo, info.audioTracks.count > 1 || !info.subtitleTracks.isEmpty {
-                                Button { showTrackPicker = true } label: {
-                                    Image(systemName: "ellipsis.circle.fill")
-                                        .font(.title2)
-                                        .foregroundStyle(.white)
-                                        .shadow(radius: 4)
-                                        .padding(12)
-                                }
-                                .accessibilityLabel(loc.localized("accessibility.trackOptions"))
-                            }
-                        }
-                        .padding(.trailing, 4)
-                    }
                     .sheet(isPresented: $showTrackPicker) {
                         if let info = playbackInfo {
                             TrackPickerSheet(info: info) { audioIdx, subtitleIdx in
@@ -129,11 +92,42 @@ struct VideoPlayerView: View {
         }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text(currentTitle)
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurface)
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 4) {
+                    if let prev = currentPrevEpisode, episodeNavigator != nil {
+                        Button { navigateToEpisode(prev) } label: {
+                            Image(systemName: "backward.end.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                        .accessibilityLabel(loc.localized("accessibility.previousEpisode"))
+                        .accessibilityHint(prev.title)
+                    }
+                    if let next = currentNextEpisode, episodeNavigator != nil {
+                        Button { navigateToEpisode(next) } label: {
+                            Image(systemName: "forward.end.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                        .accessibilityLabel(loc.localized("accessibility.nextEpisode"))
+                        .accessibilityHint(next.title)
+                    }
+                    if let info = playbackInfo, info.audioTracks.count > 1 || !info.subtitleTracks.isEmpty {
+                        Button { showTrackPicker = true } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                        .accessibilityLabel(loc.localized("accessibility.trackOptions"))
+                    }
+                }
             }
         }
         #endif

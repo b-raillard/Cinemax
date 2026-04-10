@@ -7,6 +7,9 @@ struct GlassTextField: View {
     var placeholder: String = ""
     var icon: String? = nil
     var isSecure: Bool = false
+    #if os(iOS)
+    var keyboardType: UIKeyboardType = .default
+    #endif
 
     @FocusState private var isFocused: Bool
 
@@ -94,6 +97,7 @@ struct GlassTextField: View {
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
                     .tint(themeManager.accent)
+                    .keyboardType(keyboardType)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }

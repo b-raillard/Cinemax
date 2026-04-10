@@ -29,7 +29,7 @@ struct HomeScreen: View {
 
     private var content: some View {
         ScrollView {
-            LazyVStack(spacing: CinemaSpacing.spacing6) {
+            LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
                 // Hero
                 if let hero = viewModel.heroItem {
                     heroSection(hero)
@@ -90,7 +90,8 @@ struct HomeScreen: View {
                     .textCase(.uppercase)
                     .lineLimit(2)
 
-                // Overview
+                // Overview — hidden on iOS to keep hero compact
+                #if os(tvOS)
                 if let overview = item.overview {
                     Text(overview)
                         .font(.system(size: overviewFontSize))
@@ -98,6 +99,7 @@ struct HomeScreen: View {
                         .lineLimit(3)
                         .frame(maxWidth: maxOverviewWidth, alignment: .leading)
                 }
+                #endif
 
                 // Action buttons
                 HStack(spacing: 12) {
@@ -162,8 +164,10 @@ struct HomeScreen: View {
                     }
                 }
             }
-            .padding(heroPadding)
-            .padding(.bottom, CinemaSpacing.spacing6)
+            .padding(.horizontal, heroPadding)
+            .padding(.top, heroPadding)
+            .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
         .frame(height: heroHeight)
@@ -286,7 +290,7 @@ struct HomeScreen: View {
         #if os(tvOS)
         820
         #else
-        500
+        360
         #endif
     }
 
@@ -294,7 +298,7 @@ struct HomeScreen: View {
         #if os(tvOS)
         72
         #else
-        40
+        20
         #endif
     }
 
