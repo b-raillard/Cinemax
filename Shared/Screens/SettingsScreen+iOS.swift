@@ -156,7 +156,7 @@ extension SettingsScreen {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                 switch category {
                 case .appearance:
-                    iOSAppearanceDetail
+                    IOSAppearanceDetailView()
                 case .account:
                     iOSAccountDetail
                 case .server:
@@ -171,74 +171,6 @@ extension SettingsScreen {
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(category.localizedName(loc))
         .navigationBarTitleDisplayMode(.large)
-    }
-
-    // MARK: Appearance Detail (iOS)
-
-    var iOSAppearanceDetail: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            sectionHeader(loc.localized("settings.personalization"))
-
-            VStack(spacing: 0) {
-                settingsRow {
-                    HStack {
-                        rowIcon(systemName: "moon.fill", color: themeManager.accent)
-
-                        Text(loc.localized("settings.darkMode"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Spacer()
-
-                        Toggle("", isOn: Binding(
-                            get: { themeManager.darkModeEnabled },
-                            set: { themeManager.darkModeEnabled = $0 }
-                        ))
-                        .labelsHidden()
-                        .tint(themeManager.accentContainer)
-                    }
-                }
-
-                divider
-
-                settingsRow {
-                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                        HStack {
-                            rowIcon(systemName: "paintpalette.fill", color: selectedAccent.color)
-
-                            Text(loc.localized("settings.accentColor"))
-                                .font(CinemaFont.label(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-
-                            Spacer()
-                        }
-
-                        HStack(spacing: CinemaSpacing.spacing2) {
-                            ForEach(AccentOption.allCases) { option in
-                                accentDot(option)
-                            }
-                        }
-                    }
-                }
-
-                divider
-
-                settingsRow {
-                    HStack {
-                        rowIcon(systemName: "globe", color: themeManager.accent)
-
-                        Text(loc.localized("settings.language"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Spacer()
-
-                        languagePicker
-                    }
-                }
-            }
-            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-        }
     }
 
     // MARK: Account Detail (iOS)
@@ -335,19 +267,72 @@ extension SettingsScreen {
                 settingsRow {
                     HStack {
                         rowIcon(systemName: "sparkles", color: themeManager.accent)
-
                         Text(loc.localized("settings.motionEffects"))
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
-
                         Spacer()
+                        Toggle("", isOn: $motionEffects)
+                            .labelsHidden()
+                            .tint(themeManager.accentContainer)
+                    }
+                }
 
-                        Toggle("", isOn: .init(
-                            get: { UserDefaults.standard.bool(forKey: "motionEffects") },
-                            set: { UserDefaults.standard.set($0, forKey: "motionEffects") }
-                        ))
-                        .labelsHidden()
-                        .tint(themeManager.accentContainer)
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "captions.bubble", color: themeManager.accent)
+                        Text(loc.localized("settings.forceSubtitles"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Toggle("", isOn: $forceSubtitles)
+                            .labelsHidden()
+                            .tint(themeManager.accentContainer)
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "4k.tv", color: themeManager.accent)
+                        Text(loc.localized("settings.4kRendering"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Toggle("", isOn: $render4K)
+                            .labelsHidden()
+                            .tint(themeManager.accentContainer)
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "textformat.size", color: themeManager.accent)
+                        Text(loc.localized("settings.fontSize"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Stepper(
+                            "\(Int(fontScale * 100))%",
+                            onIncrement: {
+                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx < fontScaleOptions.count - 1 {
+                                    fontScale = fontScaleOptions[idx + 1]
+                                    themeManager.uiScale = fontScale
+                                }
+                            },
+                            onDecrement: {
+                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx > 0 {
+                                    fontScale = fontScaleOptions[idx - 1]
+                                    themeManager.uiScale = fontScale
+                                }
+                            }
+                        )
+                        .fixedSize()
+                        .tint(themeManager.accent)
                     }
                 }
             }
@@ -407,6 +392,145 @@ extension SettingsScreen {
         .background(Capsule().fill(CinemaColor.success.opacity(0.12)))
     }
 
+    @ViewBuilder
+    func navigationRow(icon: String, label: String, action: @escaping () -> Void) -> some View {
+        settingsRow {
+            Button(action: action) {
+                HStack {
+                    rowIcon(systemName: icon, color: CinemaColor.onSurfaceVariant)
+
+                    Text(label)
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurface)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
+                        .foregroundStyle(CinemaColor.outlineVariant)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    func settingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+    }
+
+    @ViewBuilder
+    func rowIcon(systemName: String, color: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: CinemaRadius.small)
+                .fill(color.opacity(0.12))
+                .frame(width: 32, height: 32)
+
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(color)
+        }
+        .padding(.trailing, CinemaSpacing.spacing2)
+    }
+
+    var divider: some View {
+        Rectangle()
+            .fill(CinemaColor.surfaceContainerHighest.opacity(0.6))
+            .frame(height: 1)
+            .padding(.leading, CinemaSpacing.spacing4 + 32 + CinemaSpacing.spacing2)
+    }
+
+    func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(CinemaFont.label(.small))
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .tracking(1.2)
+            .padding(.horizontal, CinemaSpacing.spacing2)
+    }
+}
+
+// MARK: - Appearance Detail View (iOS)
+// Standalone View struct so NavigationStack destination has its own
+// @Observable observation tracking for ThemeManager and LocalizationManager.
+
+private struct IOSAppearanceDetailView: View {
+    @Environment(ThemeManager.self) var themeManager
+    @Environment(LocalizationManager.self) var loc
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            sectionHeader(loc.localized("settings.personalization"))
+
+            VStack(spacing: 0) {
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "moon.fill", color: themeManager.accent)
+
+                        Text(loc.localized("settings.darkMode"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { themeManager.darkModeEnabled },
+                            set: { themeManager.darkModeEnabled = $0 }
+                        ))
+                        .labelsHidden()
+                        .tint(themeManager.accentContainer)
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                        HStack {
+                            rowIcon(systemName: "paintpalette.fill", color: selectedAccent.color)
+
+                            Text(loc.localized("settings.accentColor"))
+                                .font(CinemaFont.label(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+
+                            Spacer()
+                        }
+
+                        HStack(spacing: CinemaSpacing.spacing2) {
+                            ForEach(AccentOption.allCases) { option in
+                                accentDot(option)
+                            }
+                        }
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    HStack {
+                        rowIcon(systemName: "globe", color: themeManager.accent)
+
+                        Text(loc.localized("settings.language"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+
+                        Spacer()
+
+                        languagePicker
+                    }
+                }
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        }
+    }
+
+    // MARK: - Appearance-specific helpers
+
+    var selectedAccent: AccentOption {
+        AccentOption(rawValue: themeManager.accentColorKey) ?? .blue
+    }
+
     var languagePicker: some View {
         HStack(spacing: CinemaSpacing.spacing2) {
             languageButton("fr", label: "FR")
@@ -429,10 +553,6 @@ extension SettingsScreen {
                 )
         }
         .buttonStyle(.plain)
-    }
-
-    var selectedAccent: AccentOption {
-        AccentOption(rawValue: themeManager.accentColorKey) ?? .blue
     }
 
     @ViewBuilder
@@ -463,27 +583,7 @@ extension SettingsScreen {
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
     }
 
-    @ViewBuilder
-    func navigationRow(icon: String, label: String, action: @escaping () -> Void) -> some View {
-        settingsRow {
-            Button(action: action) {
-                HStack {
-                    rowIcon(systemName: icon, color: CinemaColor.onSurfaceVariant)
-
-                    Text(label)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurface)
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
-                        .foregroundStyle(CinemaColor.outlineVariant)
-                }
-            }
-            .buttonStyle(.plain)
-        }
-    }
+    // MARK: - Shared layout helpers
 
     @ViewBuilder
     func settingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {

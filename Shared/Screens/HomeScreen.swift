@@ -102,7 +102,17 @@ struct HomeScreen: View {
                 // Action buttons
                 HStack(spacing: 12) {
                     if let id = item.id {
-                        PlayLink(itemId: id, title: item.name ?? "") {
+                        let heroNav = viewModel.resumeNavigation[id]
+                        let heroStart: Double? = {
+                            guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
+                            return Double(ticks) / 10_000_000
+                        }()
+                        PlayLink(
+                            itemId: id, title: item.name ?? "",
+                            startTime: heroStart,
+                            previousEpisode: heroNav?.previous, nextEpisode: heroNav?.next,
+                            episodeNavigator: heroNav?.navigator
+                        ) {
                             HStack(spacing: CinemaSpacing.spacing2) {
                                 Text(loc.localized("action.play"))
                                     .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
@@ -166,7 +176,17 @@ struct HomeScreen: View {
         ContentRow(title: loc.localized("home.continueWatching")) {
             ForEach(viewModel.resumeItems, id: \.id) { item in
                 if let id = item.id {
-                    PlayLink(itemId: id, title: item.name ?? "") {
+                    let nav = viewModel.resumeNavigation[id]
+                    let startSeconds: Double? = {
+                        guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
+                        return Double(ticks) / 10_000_000
+                    }()
+                    PlayLink(
+                        itemId: id, title: item.name ?? "",
+                        startTime: startSeconds,
+                        previousEpisode: nav?.previous, nextEpisode: nav?.next,
+                        episodeNavigator: nav?.navigator
+                    ) {
                         continueWatchingCard(item)
                             .frame(width: wideCardWidth)
                     }

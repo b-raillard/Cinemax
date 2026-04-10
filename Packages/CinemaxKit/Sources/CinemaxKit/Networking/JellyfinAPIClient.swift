@@ -588,6 +588,48 @@ public final class JellyfinAPIClient: Sendable {
                             authToken: token)
     }
 
+    // MARK: - Playback Reporting
+
+    public func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {
+        guard let client = getClient() else { return }
+        let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
+        let body = PlaybackStartInfo(
+            canSeek: true,
+            itemID: itemId,
+            mediaSourceID: mediaSourceId,
+            playMethod: jellyfinMethod,
+            playSessionID: playSessionId,
+            positionTicks: positionTicks
+        )
+        _ = try? await client.send(Paths.reportPlaybackStart(body))
+    }
+
+    public func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {
+        guard let client = getClient() else { return }
+        let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
+        let body = PlaybackProgressInfo(
+            canSeek: true,
+            isPaused: isPaused,
+            itemID: itemId,
+            mediaSourceID: mediaSourceId,
+            playMethod: jellyfinMethod,
+            playSessionID: playSessionId,
+            positionTicks: positionTicks
+        )
+        _ = try? await client.send(Paths.reportPlaybackProgress(body))
+    }
+
+    public func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async {
+        guard let client = getClient() else { return }
+        let body = PlaybackStopInfo(
+            itemID: itemId,
+            mediaSourceID: mediaSourceId,
+            playSessionID: playSessionId,
+            positionTicks: positionTicks
+        )
+        _ = try? await client.send(Paths.reportPlaybackStopped(body))
+    }
+
     /// Extracts audio and subtitle track info from a media source's stream list.
     private static func extractTracks(from source: MediaSourceInfo) -> (audio: [MediaTrackInfo], subtitles: [MediaTrackInfo]) {
         let streams = source.mediaStreams ?? []
@@ -614,13 +656,13 @@ public final class JellyfinAPIClient: Sendable {
             audioCodec: "aac,ac3,alac,eac3,flac",
             container: "mp4,m4v",
             type: .video,
-            videoCodec: "h264,hevc,mpeg4"
+            videoCodec: "h264,hevc"
         ),
         DirectPlayProfile(
             audioCodec: "aac,ac3,alac,eac3,mp3,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le",
             container: "mov",
             type: .video,
-            videoCodec: "h264,hevc,mjpeg,mpeg4"
+            videoCodec: "h264,hevc,mjpeg"
         ),
         DirectPlayProfile(
             audioCodec: "aac,ac3,eac3,mp3",
@@ -630,6 +672,8 @@ public final class JellyfinAPIClient: Sendable {
         ),
     ]
     nonisolated(unsafe) private static let _transcodingProfiles: [TranscodingProfile] = [
+        // hevc,h264 only — MPEG-4 ASP is not a valid HLS transcode target on Apple devices
+        // and causes Jellyfin to inject mpeg4-* URL parameters that AVFoundation doesn't recognise.
         TranscodingProfile(
             audioCodec: "aac,ac3,alac,eac3,flac",
             isBreakOnNonKeyFrames: true,
@@ -640,7 +684,7 @@ public final class JellyfinAPIClient: Sendable {
             minSegments: 2,
             protocol: .hls,
             type: .video,
-            videoCodec: "hevc,h264,mpeg4"
+            videoCodec: "hevc,h264"
         ),
     ]
     // All subtitles are burned (encoded) into the video by the server.

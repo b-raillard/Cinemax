@@ -18,6 +18,7 @@ struct VideoPlayerView: View {
     @State private var playerObservation: NSKeyValueObservation?
     @State private var playbackInfo: PlaybackInfo?
     @State private var showTrackPicker = false
+    @State private var progressReportTask: Task<Void, Never>?
 
     // Mutable episode context — updated when navigating between episodes
     @State private var currentItemId: String
@@ -140,9 +141,62 @@ struct VideoPlayerView: View {
             await startPlayback()
         }
         .onDisappear {
+            reportPlaybackStop()
             cleanup()
         }
     }
+
+    // MARK: - Playback Reporting
+
+    private func reportPlaybackStart() {
+        guard let info = playbackInfo, let userId = appState.currentUserId else { return }
+        let positionTicks = currentStartTime.map { Int($0 * 10_000_000) } ?? 0
+        let itemId = currentItemId
+        let apiClient = appState.apiClient
+        Task.detached {
+            await apiClient.reportPlaybackStart(
+                itemId: itemId, userId: userId,
+                mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
+                positionTicks: positionTicks, playMethod: info.playMethod
+            )
+        }
+    }
+
+    private func reportPlaybackStop() {
+        guard let info = playbackInfo, let userId = appState.currentUserId else { return }
+        let positionTicks = Int((player?.currentTime().seconds ?? 0) * 10_000_000)
+        let itemId = currentItemId
+        let apiClient = appState.apiClient
+        Task.detached {
+            await apiClient.reportPlaybackStopped(
+                itemId: itemId, userId: userId,
+                mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
+                positionTicks: positionTicks
+            )
+        }
+    }
+
+    private func startProgressReporting() {
+        progressReportTask?.cancel()
+        guard let info = playbackInfo, let userId = appState.currentUserId else { return }
+        let itemId = currentItemId
+        let apiClient = appState.apiClient
+        progressReportTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+                let ticks = Int((player?.currentTime().seconds ?? 0) * 10_000_000)
+                let isPaused = player?.rate == 0
+                await apiClient.reportPlaybackProgress(
+                    itemId: itemId, userId: userId,
+                    mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
+                    positionTicks: ticks, isPaused: isPaused, playMethod: info.playMethod
+                )
+            }
+        }
+    }
+
+    // MARK: - Playback
 
     private func startPlayback() async {
         cleanup()
@@ -195,6 +249,8 @@ struct VideoPlayerView: View {
 
             self.player = avPlayer
             avPlayer.play()
+            reportPlaybackStart()
+            startProgressReporting()
         } catch {
             logger.error("Playback setup error: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
@@ -205,6 +261,7 @@ struct VideoPlayerView: View {
     private func navigateToEpisode(_ ep: EpisodeRef) {
         guard let navigator = episodeNavigator else { return }
         Task {
+            reportPlaybackStop()
             guard let (info, prev, next) = await navigator(ep.id) else { return }
             cleanup()
             currentItemId = ep.id
@@ -236,10 +293,14 @@ struct VideoPlayerView: View {
             }
             self.player = avPlayer
             avPlayer.play()
+            reportPlaybackStart()
+            startProgressReporting()
         }
     }
 
     private func cleanup() {
+        progressReportTask?.cancel()
+        progressReportTask = nil
         playerObservation?.invalidate()
         playerObservation = nil
         player?.pause()

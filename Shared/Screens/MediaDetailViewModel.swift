@@ -10,6 +10,9 @@ final class MediaDetailViewModel {
     var episodes: [BaseItemDto] = []
     var selectedSeasonId: String?
     var nextUpEpisode: BaseItemDto?
+    /// Episodes from the next-up episode's season, when it differs from the currently displayed season.
+    /// Used so episodeNavigation can build prev/next refs for the resume action button.
+    var nextUpEpisodes: [BaseItemDto] = []
     var isLoading = true
     var errorMessage: String?
 
@@ -48,6 +51,11 @@ final class MediaDetailViewModel {
                     episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
                 }
                 nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: seriesId, userId: userId)
+                if let nextUp = nextUpEpisode,
+                   let nextUpSeasonId = nextUp.seasonID,
+                   nextUpSeasonId != selectedSeasonId {
+                    nextUpEpisodes = (try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: nextUpSeasonId, userId: userId)) ?? []
+                }
             } else {
                 item = loadedItem
                 resolvedType = effectiveType
@@ -62,6 +70,11 @@ final class MediaDetailViewModel {
                         episodes = try await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
                     }
                     nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: itemId, userId: userId)
+                    if let nextUp = nextUpEpisode,
+                       let nextUpSeasonId = nextUp.seasonID,
+                       nextUpSeasonId != selectedSeasonId {
+                        nextUpEpisodes = (try? await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: nextUpSeasonId, userId: userId)) ?? []
+                    }
                 }
             }
         } catch {

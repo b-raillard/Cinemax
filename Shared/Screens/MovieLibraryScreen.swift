@@ -164,39 +164,10 @@ struct MediaLibraryScreen: View {
     private var filteredView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                HStack {
-                    if !viewModel.sortFilter.selectedGenres.isEmpty {
-                        ForEach(Array(viewModel.sortFilter.selectedGenres), id: \.self) { genre in
-                            HStack(spacing: CinemaSpacing.spacing2) {
-                                Text(genre)
-                                    .font(CinemaFont.label(.large))
-                                    .foregroundStyle(themeManager.accent)
-                                Button {
-                                    viewModel.sortFilter.selectedGenres.remove(genre)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(loc.localized("accessibility.removeGenreFilter", genre))
-                            }
-                            .padding(.horizontal, CinemaSpacing.spacing3)
-                            .padding(.vertical, CinemaSpacing.spacing1)
-                            .background(CinemaColor.surfaceContainerHigh)
-                            .clipShape(Capsule())
-                        }
-                    }
-
-                    Spacer()
-
-                    Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredLoader.totalCount))
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-
-                    filterButton
-                }
-                .padding(.horizontal, gridPadding)
+                Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredLoader.totalCount))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .padding(.horizontal, gridPadding)
 
                 if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
                     ProgressView()
@@ -259,7 +230,8 @@ struct MediaLibraryScreen: View {
                     .textCase(.uppercase)
                     .lineLimit(2)
 
-                // Overview
+                // Overview — hidden on iOS to keep hero compact
+                #if os(tvOS)
                 if let overview = item.overview {
                     Text(overview)
                         .font(.system(size: overviewFontSize))
@@ -267,14 +239,17 @@ struct MediaLibraryScreen: View {
                         .lineLimit(3)
                         .frame(maxWidth: maxOverviewWidth, alignment: .leading)
                 }
+                #endif
 
                 // Action buttons
                 if let id = item.id {
                     heroActionButtons(id: id, item: item)
                 }
             }
-            .padding(heroPadding)
-            .padding(.bottom, CinemaSpacing.spacing6)
+            .padding(.horizontal, heroPadding)
+            .padding(.top, heroPadding)
+            .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
         .frame(height: heroHeight)
@@ -313,11 +288,14 @@ struct MediaLibraryScreen: View {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     Text(loc.localized("action.moreInfo"))
                         .font(.system(size: heroButtonFontSize, weight: .bold))
+                        .lineLimit(1)
                     Image(systemName: "info.circle")
                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                 }
                 .foregroundStyle(CinemaColor.onSurface)
+                #if os(tvOS)
                 .frame(maxWidth: .infinity)
+                #endif
                 .padding(.vertical, heroButtonVerticalPadding)
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 #if os(iOS)
@@ -327,10 +305,11 @@ struct MediaLibraryScreen: View {
             }
             #if os(tvOS)
             .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+            .frame(width: heroButtonWidth)
             #else
             .buttonStyle(.plain)
+            .fixedSize()
             #endif
-            .frame(width: heroButtonWidth)
         }
     }
 
@@ -597,6 +576,15 @@ struct MediaLibraryScreen: View {
                     .font(.system(size: filterIconSize, weight: .semibold))
                 Text(loc.localized("movies.sortFilter"))
                     .font(.system(size: filterLabelSize, weight: .semibold))
+                if viewModel.sortFilter.isFiltered {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.25))
+                        Text("\(viewModel.sortFilter.selectedGenres.count)")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .frame(width: 20, height: 20)
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
@@ -659,7 +647,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         820
         #else
-        500
+        360
         #endif
     }
 
@@ -667,7 +655,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         CinemaScale.pt(72)
         #else
-        40
+        20
         #endif
     }
 
@@ -715,7 +703,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         28
         #else
-        18
+        16
         #endif
     }
 

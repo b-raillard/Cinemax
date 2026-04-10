@@ -6,11 +6,13 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. Uses a "Cinema 
 
 - **SwiftUI** multi-platform (single Xcode project, iOS + tvOS targets)
 - **CinemaxKit** local Swift Package at `Packages/CinemaxKit` — shared networking, models, persistence
-- **@Observable** + `@MainActor` for all state management
+- **@Observable** + `@MainActor` for all state management. **iOS `NavigationStack` caveat**: destination views pushed via `navigationDestination(item:)` render in a separate context — `@Observable` changes to environment objects won't re-render the destination unless it is a standalone `View` struct with its own `@Environment` properties. Always use a proper struct (not an extension method returning `some View`) for interactive pushed destinations.
 - **Swift 6** strict concurrency
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable conformance
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
+
+**Playback reporting**: `APIClientProtocol` defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. Both `TVPlayerHostViewController` (tvOS) and `VideoPlayerView` (iOS) call these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale.
 
 ## Project Structure
 
@@ -37,7 +39,7 @@ Packages/CinemaxKit/  Models, Networking (JellyfinAPIClient, ImageURLBuilder), P
 - **Font scaling**: `CinemaScale.factor` applies a 1.4× base multiplier on tvOS, then user `uiScale` (80–130%) on top. All `CinemaFont` and `CinemaScale.pt()` calls multiply by this. **Exception**: Play/Lecture button labels use hardcoded `28pt` on tvOS
 - **Focus — tvOS**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Indicator is a 2px accent `strokeBorder` — no scale, no white background. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. Season tabs: `SeasonTabButtonStyle`
 - **Focus — iOS**: `.cinemaFocus()` modifier (accent border + shadow)
-- **Motion Effects**: `motionEffectsEnabled` environment key (from `AppNavigation` via `@AppStorage("motionEffects")`). When off, all `.animation()` calls use `nil`. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators
+- **Motion Effects**: `motionEffectsEnabled` environment key (from `AppNavigation` via `@AppStorage("motionEffects")`). When off, all `.animation()` calls use `nil`. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators. Injected on both iOS and tvOS.
 - Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass`
 
 ## Navigation
@@ -71,7 +73,7 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 4. Build stream URL: use `transcodingURL` if present (HLS), otherwise direct stream `/Videos/{id}/stream?static=true&...`
 5. Fallback: direct stream without PlaybackInfo session
 
-**DeviceProfile**: DirectPlay for mp4/m4v/mov + h264/hevc; transcode to HLS mp4. `maxBitrate`: 120 Mbps (4K) or 20 Mbps (1080p) via `@AppStorage("render4K")`.
+**DeviceProfile**: DirectPlay for mp4/m4v/mov + h264/hevc; transcode to HLS mp4 with `hevc,h264` only. **Never include `mpeg4`** in video codec lists — MPEG-4 ASP is not a valid HLS transcode target on Apple platforms and causes Jellyfin to inject `mpeg4-*` URL parameters that AVFoundation doesn't recognise. `maxBitrate`: 120 Mbps (4K) or 20 Mbps (1080p) via `@AppStorage("render4K")`.
 
 ### tvOS Player — Critical Constraints
 - **MUST present via UIKit modal** (`UIViewController.present()`), NOT SwiftUI — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss
@@ -81,7 +83,7 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 
 - **`TVPlayerState`** — single source of truth: `currentTime`, `duration`, `isPlaying`, `isBuffering`, `showControls`, `currentAudioIdx`, `currentSubtitleIdx`, `title`, `previousEpisode`, `nextEpisode`
-- **`TVPlayerHostViewController`** — UIKit VC with `AVPlayerLayer` + `UIHostingController<TVPlayerOverlayView>`. Handles remote via `pressesBegan`: playPause → toggle; menu → show/dismiss controls; left/right → pass to super (SwiftUI `onMoveCommand` handles seeking). Accepts `episodeNavigator` for in-player episode switching via `navigateToEpisode(_:)`
+- **`TVPlayerHostViewController`** — UIKit VC with `AVPlayerLayer` + `UIHostingController<TVPlayerOverlayView>`. Handles remote via `pressesBegan`: playPause → toggle; menu → show/dismiss controls; left/right → pass to super (SwiftUI `onMoveCommand` handles seeking). Accepts `episodeNavigator` for in-player episode switching via `navigateToEpisode(_:)`. Reports playback start/progress/stop to Jellyfin. **Touch-surface scrubbing**: `UIPanGestureRecognizer` with `allowedTouchTypes = [.indirect]` tracks swipe gestures on the Siri Remote touch pad; during scrub `state.currentTime` updates visually while the time observer is gated (`isScrubbing`), and a single `avPlayer.seek()` fires on gesture end.
 - **`TVControlsOverlay`** — owns the single `@FocusState<FocusItem?>` (`.scrubber`, `.audio`, `.subtitle`, `.previousEpisode`, `.nextEpisode`). `onMoveCommand` for seeking lives here. Controls float on video with no background container; buttons have individual `Capsule()` glass backgrounds
 - **`TVPlayerScrubber`** — display-only, no `@FocusState`. Re-renders only on progress/time changes
 - **`TVAudioTrackMenu`** / **`TVSubtitleTrackMenu`** — isolated sub-views observing only their index. Same-track selection is a no-op
@@ -90,11 +92,12 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - Large `pause.circle.fill` / `play.circle.fill` icon reflects `state.isPlaying` in real-time
 - `gobackward.15` / `goforward.15` flash icons flank the play/pause icon; shown for 500 ms on each scrubber seek, cancelled and restarted on rapid consecutive seeks
 
-**Episode navigation** (`EpisodeRef` + `EpisodeNavigator` in `VideoPlayerView.swift`):
+**Episode navigation** (`EpisodeRef` + `EpisodeNavigator` + `buildEpisodeNavigation` in `PlayLink.swift`):
 - `EpisodeRef: Sendable { id, title }` — lightweight episode pointer
 - `EpisodeNavigator = @Sendable (String) async -> (PlaybackInfo, EpisodeRef?, EpisodeRef?)?` — fetches new PlaybackInfo and returns updated prev/next refs
+- `buildEpisodeNavigation(for:in:apiClient:userId:)` — free function that builds `(previous, next, navigator)` from a flat `[BaseItemDto]` list; used by both `MediaDetailScreen` and `HomeViewModel` to avoid duplication
 - `TVControlsOverlay` shows `backward.end.fill` / `forward.end.fill` capsule buttons when `state.previousEpisode` / `state.nextEpisode` are non-nil; update live after navigation
-- `navigateToEpisode()` resets `state.currentTime/duration`, swaps `AVPlayer` item, updates `state.title` + episode refs
+- `navigateToEpisode()` reports playback stop for the old item, then start for the new one; resets `state.currentTime/duration`, swaps `AVPlayer` item, updates `state.title` + episode refs
 - `PlayLink` carries `previousEpisode`, `nextEpisode`, `episodeNavigator`; passes them through `VideoPlayerCoordinator` → `TVVideoPresenter` → `TVPlayerHostViewController`
 
 **Key invariants**:
@@ -102,9 +105,10 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - Always set `state.currentTime = savedSeconds` before `state.isBuffering = true` in track-switch paths
 - `@FocusState` must live in `TVControlsOverlay` (parent), not sub-views, for focus restoration after Menu back
 - `state.title` / `state.previousEpisode` / `state.nextEpisode` are updated by `navigateToEpisode()` so the overlay reflects the current episode without re-mounting
+- `isScrubbing = true` blocks the periodic time observer from overriding the scrubber position during touch-pad swipes
 
 ### iOS Player (`VideoPlayerView`)
-`AVPlayerItem(url:)`, KVO on `playerItem.status`, cleanup on disappear (pause + nil + invalidate). Uses `@State`-based mutable episode context (`currentItemId`, `currentTitle`, `currentStartTime`, `currentPrevEpisode`, `currentNextEpisode`) so episode navigation hot-swaps the player in place. Prev/next `backward.end.fill` / `forward.end.fill` icon buttons appear in the top-trailing overlay alongside the track picker.
+`AVPlayerItem(url:)`, KVO on `playerItem.status`, cleanup on disappear (pause + nil + invalidate). Uses `@State`-based mutable episode context (`currentItemId`, `currentTitle`, `currentStartTime`, `currentPrevEpisode`, `currentNextEpisode`) so episode navigation hot-swaps the player in place. Prev/next `backward.end.fill` / `forward.end.fill` icon buttons appear in the top-trailing overlay alongside the track picker. Reports playback start/progress (10 s loop) /stop to Jellyfin; `progressReportTask` is cancelled in `cleanup()`.
 
 ## Settings Screen
 
@@ -128,7 +132,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 ### Assets
 - `AppLogo.imageset`: iOS uses `app_logo.png` (full icon with background); tvOS uses `app_logo_tv.png` (front parallax layer — transparent background, jellyfish only). No `clipShape` on tvOS logo — organic shape renders freely.
 
-### `@AppStorage` keys (all in `SettingsScreen`)
+### `@AppStorage` keys (shared between iOS and tvOS, declared in `SettingsScreen`)
 | Key | Default | Effect |
 |-----|---------|--------|
 | `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |
@@ -139,8 +143,10 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 ## MediaDetailScreen
 
 - `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes). Also calls `getNextUp()` for series to populate `nextUpEpisode`
+- `nextUpEpisodes: [BaseItemDto]` — when `nextUpEpisode.seasonID ≠ selectedSeasonId` (e.g. series season boundary), the next-up's season episodes are fetched separately so `episodeNavigation(for:)` can build prev/next refs for the resume button
 - Uses `resolvedType` (not initial `itemType`) for layout decisions
 - tvOS: overview text uses `.focusable()` for focus-driven scrolling past non-interactive content
+- **tvOS detail refresh**: `VideoPlayerCoordinator` has `lastDismissedAt: Date?`; updated via `onDismiss` callback in `TVPlayerHostViewController.viewWillDisappear`; `MediaDetailScreen` observes `.onChange(of: coordinator.lastDismissedAt)` to reload after the player is dismissed (iOS reloads automatically via `.task` on NavigationLink pop)
 
 **Resume / next-up logic in `actionButtons`**:
 - Movie with `playbackPositionTicks > 0` and not `isPlayed`: shows progress bar (accent fill, `playButtonWidth` wide) + remaining time text (`home.remainingTime.*` keys) + "Lecture" button that resumes at saved position via `PlayLink(startTime:)`
@@ -149,8 +155,17 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - Episode rows show a thin accent progress bar overlay at the bottom of the thumbnail for partially-watched episodes
 
 **Episode navigation wiring**:
-- `episodeNavigation(for:)` — computes `EpisodeRef` prev/next from `viewModel.episodes` and builds an `EpisodeNavigator` closure capturing `[EpisodeRef]` (Sendable), `apiClient`, and `userId`
+- `episodeNavigation(for:)` — delegates to the shared `buildEpisodeNavigation(for:in:apiClient:userId:)` using `viewModel.episodes` (current season) or `viewModel.nextUpEpisodes` (fallback for cross-season next-up)
 - Both `actionButtons` (next-up episode) and each `episodeRow` pass `previousEpisode`, `nextEpisode`, `episodeNavigator` to `PlayLink`
+
+## HomeScreen
+
+- `HomeViewModel` loads `resumeItems` (in-progress items) and `latestItems` in parallel via `TaskGroup`
+- `heroItem = resumeItems.first ?? latestItems.first`
+- **Resume navigation**: after the initial load, for each episode in `resumeItems`, the season's episode list is fetched (grouped by `seasonID` to avoid duplicate requests). Results are stored in `resumeNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)]` via `buildEpisodeNavigation`
+- Both the hero `PlayLink` and each "Reprendre" card `PlayLink` pass:
+  - `startTime` — from `playbackPositionTicks / 10_000_000` (nil for items with no progress)
+  - `previousEpisode`, `nextEpisode`, `episodeNavigator` — looked up from `resumeNavigation[id]` (nil for movies)
 
 ## Localization
 
@@ -165,6 +180,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`
 - **All image loading via `CinemaLazyImage`** — never use `LazyImage` directly. Params: `url`, `fallbackIcon: String?` (nil = no icon), `fallbackBackground: Color`, `showLoadingIndicator: Bool`
 - **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`
+- **Backdrop (full-bleed ZStack)**: `CinemaLazyImage` used directly inside a `ZStack` must have `.frame(maxWidth: .infinity, maxHeight: .infinity)` — without it, the ZStack sizes from the image's natural dimensions (e.g. 1920px), pushing the title VStack off-screen. Also use `LazyVStack(alignment: .leading)` as the outer container.
 - **PosterCard title alignment**: hidden `Text("M\nM").hidden()` placeholder + actual title overlaid top-aligned → uniform row height regardless of title length
 
 ## App Icons
