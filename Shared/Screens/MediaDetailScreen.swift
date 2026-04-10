@@ -371,7 +371,7 @@ struct MediaDetailScreen: View {
                         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
                         .overlay(alignment: .bottom) {
                             if let p = epProgress {
-                                ProgressBarView(progress: p, height: 3, trackColor: Color.white.opacity(0.25))
+                                ProgressBarView(progress: p, height: 3, trackColor: CinemaColor.onSurface.opacity(0.25))
                                     .padding(.horizontal, 6)
                                     .padding(.bottom, 6)
                             }

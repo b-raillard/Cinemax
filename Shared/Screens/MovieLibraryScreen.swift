@@ -579,7 +579,7 @@ struct MediaLibraryScreen: View {
                 if viewModel.sortFilter.isFiltered {
                     ZStack {
                         Circle()
-                            .fill(Color.white.opacity(0.25))
+                            .fill(CinemaColor.onSurface.opacity(0.25))
                         Text("\(viewModel.sortFilter.selectedGenres.count)")
                             .font(.system(size: 11, weight: .bold))
                     }

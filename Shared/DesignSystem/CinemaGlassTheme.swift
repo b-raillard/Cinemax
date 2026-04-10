@@ -1,53 +1,81 @@
 import SwiftUI
+import UIKit
+
+// MARK: - Dynamic Color Helper
+
+extension Color {
+    /// Resolves to `dark` hex when the trait collection is dark, otherwise `light` hex.
+    /// Drives Cinemax's dual-mode color tokens. The scheme is set at the root via
+    /// `.preferredColorScheme(themeManager.colorScheme)` in AppNavigation, so the
+    /// UITraitCollection propagates to every UIHostingController automatically.
+    static func dynamic(light: UInt, dark: UInt) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .light
+                ? UIColor(hexInt: light)
+                : UIColor(hexInt: dark)
+        })
+    }
+}
+
+private extension UIColor {
+    convenience init(hexInt hex: UInt, alpha: CGFloat = 1.0) {
+        self.init(
+            red:   CGFloat((hex >> 16) & 0xFF) / 255.0,
+            green: CGFloat((hex >>  8) & 0xFF) / 255.0,
+            blue:  CGFloat( hex        & 0xFF) / 255.0,
+            alpha: alpha
+        )
+    }
+}
 
 // MARK: - Color Tokens
 
 enum CinemaColor {
     // Surface hierarchy
-    static let surface = Color(hex: 0x0E0E0E)
-    static let surfaceContainerLowest = Color(hex: 0x000000)
-    static let surfaceContainerLow = Color(hex: 0x131313)
-    static let surfaceContainer = Color(hex: 0x191A1A)
-    static let surfaceContainerHigh = Color(hex: 0x1F2020)
-    static let surfaceContainerHighest = Color(hex: 0x252626)
-    static let surfaceVariant = Color(hex: 0x252626)
-    static let surfaceBright = Color(hex: 0x2C2C2C)
+    static let surface                 = Color.dynamic(light: 0xF7F7F8, dark: 0x0E0E0E)
+    static let surfaceContainerLowest  = Color.dynamic(light: 0xFFFFFF, dark: 0x000000)
+    static let surfaceContainerLow     = Color.dynamic(light: 0xF1F1F2, dark: 0x131313)
+    static let surfaceContainer        = Color.dynamic(light: 0xEAEAEC, dark: 0x191A1A)
+    static let surfaceContainerHigh    = Color.dynamic(light: 0xE2E2E5, dark: 0x1F2020)
+    static let surfaceContainerHighest = Color.dynamic(light: 0xD9D9DD, dark: 0x252626)
+    static let surfaceVariant          = Color.dynamic(light: 0xE2E2E5, dark: 0x252626)
+    static let surfaceBright           = Color.dynamic(light: 0xFFFFFF, dark: 0x2C2C2C)
 
     // Text
-    static let onSurface = Color(hex: 0xE7E5E4)
-    static let onSurfaceVariant = Color(hex: 0xACABAA)
-    static let onBackground = Color(hex: 0xE7E5E4)
+    static let onSurface        = Color.dynamic(light: 0x14161A, dark: 0xE7E5E4)
+    static let onSurfaceVariant = Color.dynamic(light: 0x55585E, dark: 0xACABAA)
+    static let onBackground     = Color.dynamic(light: 0x14161A, dark: 0xE7E5E4)
 
     // Primary
-    static let primary = Color(hex: 0xC6C6C7)
-    static let primaryDim = Color(hex: 0xB8B9B9)
-    static let primaryContainer = Color(hex: 0x454747)
-    static let onPrimary = Color(hex: 0x3F4041)
+    static let primary          = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
+    static let primaryDim       = Color.dynamic(light: 0x4A4B4D, dark: 0xB8B9B9)
+    static let primaryContainer = Color.dynamic(light: 0xD0D1D4, dark: 0x454747)
+    static let onPrimary        = Color.dynamic(light: 0xFFFFFF, dark: 0x3F4041)
 
     // Secondary
-    static let secondary = Color(hex: 0x9D9E9E)
-    static let secondaryContainer = Color(hex: 0x3A3C3C)
+    static let secondary          = Color.dynamic(light: 0x55585E, dark: 0x9D9E9E)
+    static let secondaryContainer = Color.dynamic(light: 0xC8CACE, dark: 0x3A3C3C)
 
-    // Tertiary (accent blue)
-    static let tertiary = Color(hex: 0x679CFF)
-    static let tertiaryContainer = Color(hex: 0x007AFF)
-    static let tertiaryDim = Color(hex: 0x0070EB)
-    static let onTertiary = Color(hex: 0x001F4A)
+    // Tertiary (legacy accent — kept for lingering call sites)
+    static let tertiary          = Color.dynamic(light: 0x0060D6, dark: 0x679CFF)
+    static let tertiaryContainer = Color.dynamic(light: 0x007AFF, dark: 0x007AFF)
+    static let tertiaryDim       = Color.dynamic(light: 0x0050B8, dark: 0x0070EB)
+    static let onTertiary        = Color.dynamic(light: 0xFFFFFF, dark: 0x001F4A)
 
     // Outline
-    static let outline = Color(hex: 0x767575)
-    static let outlineVariant = Color(hex: 0x484848)
+    static let outline        = Color.dynamic(light: 0xB0B1B5, dark: 0x767575)
+    static let outlineVariant = Color.dynamic(light: 0xCFD0D3, dark: 0x484848)
 
     // Error
-    static let error = Color(hex: 0xEE7D77)
-    static let errorContainer = Color(hex: 0x7F2927)
-    static let onErrorContainer = Color(hex: 0xFF9993)
+    static let error            = Color.dynamic(light: 0xC0392B, dark: 0xEE7D77)
+    static let errorContainer   = Color.dynamic(light: 0xFADBD8, dark: 0x7F2927)
+    static let onErrorContainer = Color.dynamic(light: 0x7B1A12, dark: 0xFF9993)
 
     // Success
-    static let success = Color(hex: 0x34C759)
+    static let success = Color.dynamic(light: 0x1F9D45, dark: 0x34C759)
 
     // Surface tint
-    static let surfaceTint = Color(hex: 0xC6C6C7)
+    static let surfaceTint = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
 }
 
 // MARK: - Global UI Scale
