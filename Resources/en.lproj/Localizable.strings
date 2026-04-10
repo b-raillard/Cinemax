@@ -109,6 +109,7 @@
 "settings.fontSize" = "Text Size";
 "settings.forceSubtitles" = "Force Subtitles";
 "settings.4kRendering" = "4K UI Rendering";
+"settings.autoPlayNextEpisode" = "Auto-play Next Episode";
 "settings.systemSettings" = "System Settings";
 "settings.version" = "Version %@";
 "settings.systemInformation" = "System Information";

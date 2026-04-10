@@ -312,6 +312,7 @@ extension SettingsScreen {
             tvGlassToggle(icon: "sparkles", label: loc.localized("settings.motionEffects"), key: "motion", value: $motionEffects)
             tvGlassToggle(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), key: "subtitles", value: $forceSubtitles)
             tvGlassToggle(icon: "4k.tv", label: loc.localized("settings.4kRendering"), key: "4k", value: $render4K)
+            tvGlassToggle(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), key: "autoPlayNext", value: $autoPlayNextEpisode)
 
             tvFontSizeRow
         }
@@ -353,7 +354,7 @@ extension SettingsScreen {
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -415,7 +416,7 @@ extension SettingsScreen {
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -548,7 +549,7 @@ extension SettingsScreen {
             }
             .frame(maxWidth: .infinity, minHeight: 80)
             .padding(.vertical, CinemaSpacing.spacing3)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -575,7 +576,7 @@ extension SettingsScreen {
             }
             .frame(maxWidth: .infinity, minHeight: 80)
             .padding(.vertical, CinemaSpacing.spacing3)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -623,7 +624,7 @@ extension SettingsScreen {
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -657,7 +658,7 @@ extension SettingsScreen {
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -695,7 +696,7 @@ extension SettingsScreen {
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -716,11 +717,15 @@ extension SettingsScreen {
 // MARK: - tvOS Settings Focus Style
 
 extension View {
-    func tvSettingsFocusable(isFocused: Bool, accent: Color, animated: Bool = true) -> some View {
+    func tvSettingsFocusable(isFocused: Bool, accent: Color, animated: Bool = true, colorScheme: ColorScheme = .dark) -> some View {
         self
+            // Prevent tvOS's focus-induced trait collection override from flipping Color.dynamic
+            // tokens (texts, chips, icons) inside the button label to their light-mode values.
+            .environment(\.colorScheme, colorScheme)
             .background(
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
                     .fill(CinemaColor.surfaceContainerHigh)
+                    .environment(\.colorScheme, colorScheme)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: CinemaRadius.large)

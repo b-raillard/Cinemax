@@ -145,7 +145,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .home: "house.fill"
         case .movies: "film"
-        case .tvShows: "tv"
+        case .tvShows: "tv.fill"
         case .search: "magnifyingglass"
         case .settings: "gearshape"
         }

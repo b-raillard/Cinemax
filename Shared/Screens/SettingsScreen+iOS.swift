@@ -314,6 +314,22 @@ extension SettingsScreen {
 
                 settingsRow {
                     HStack {
+                        rowIcon(systemName: "play.square.stack", color: themeManager.accent)
+                        Text(loc.localized("settings.autoPlayNextEpisode"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Button { autoPlayNextEpisode.toggle() } label: {
+                            CinemaToggleIndicator(isOn: autoPlayNextEpisode, accent: themeManager.accent, animated: motionEffects)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                divider
+
+                settingsRow {
+                    HStack {
                         rowIcon(systemName: "textformat.size", color: themeManager.accent)
                         Text(loc.localized("settings.fontSize"))
                             .font(CinemaFont.label(.large))
@@ -505,6 +521,7 @@ private struct IOSAppearanceDetailView: View {
                             }
                         }
                     }
+                    .hoverEffectDisabled()
                 }
 
                 divider
@@ -581,6 +598,7 @@ private struct IOSAppearanceDetailView: View {
             }
         }
         .buttonStyle(.plain)
+        .hoverEffectDisabled()
         .scaleEffect(isSelected ? 1.1 : 1.0)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
     }

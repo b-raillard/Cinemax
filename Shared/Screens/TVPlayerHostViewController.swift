@@ -44,6 +44,7 @@ final class TVPlayerHostViewController: UIViewController {
     private var statusObservation: NSKeyValueObservation?
     private var keepUpObservation: NSKeyValueObservation?
     private var timeObserver: Any?
+    private var itemEndObserver: NSObjectProtocol?
     private var hideControlsTask: Task<Void, Never>?
     private var progressReportingTask: Task<Void, Never>?
 
@@ -185,6 +186,18 @@ final class TVPlayerHostViewController: UIViewController {
         guard let item = avPlayer.currentItem else { return }
         statusObservation?.invalidate()
         keepUpObservation?.invalidate()
+        if let obs = itemEndObserver { NotificationCenter.default.removeObserver(obs) }
+        itemEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            let autoPlay = UserDefaults.standard.object(forKey: "autoPlayNextEpisode") as? Bool ?? true
+            if autoPlay, let next = self.state.nextEpisode {
+                self.navigateToEpisode(next)
+            }
+        }
 
         statusObservation = item.observe(\.status) { [weak self] item, _ in
             Task { @MainActor [weak self] in
@@ -248,6 +261,10 @@ final class TVPlayerHostViewController: UIViewController {
         if let obs = timeObserver {
             avPlayer.removeTimeObserver(obs)
             timeObserver = nil
+        }
+        if let obs = itemEndObserver {
+            NotificationCenter.default.removeObserver(obs)
+            itemEndObserver = nil
         }
     }
 
