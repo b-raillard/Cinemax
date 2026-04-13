@@ -135,6 +135,7 @@ final class NativeVideoPresenter {
     private var playerObservation: NSKeyValueObservation?
     private var itemEndObserver: NSObjectProtocol?
     private var progressReportTask: Task<Void, Never>?
+    private var hasRetriedDirectURL = false
     private var playbackInfo: PlaybackInfo?
 
     private let itemId: String
@@ -260,7 +261,7 @@ final class NativeVideoPresenter {
             let playerItem = self.makePlayerItem(for: info)
             applyTitleMetadata(to: playerItem, title: self.title)
 
-            playerObservation = playerItem.observe(\.status) { [weak avPlayer] item, _ in
+            playerObservation = playerItem.observe(\.status) { [weak self, weak avPlayer] item, _ in
                 Task { @MainActor in
                     switch item.status {
                     case .readyToPlay:
@@ -270,6 +271,11 @@ final class NativeVideoPresenter {
                         }
                     case .failed:
                         logger.error("AVPlayer failed: \(item.error?.localizedDescription ?? "unknown")")
+                        #if os(iOS)
+                        if let self, let avPlayer {
+                            self.retryWithDirectURL(player: avPlayer, startTime: st)
+                        }
+                        #endif
                     default: break
                     }
                 }
@@ -282,6 +288,55 @@ final class NativeVideoPresenter {
             observeItemEnd(playerItem, player: avPlayer)
         }
     }
+
+    // MARK: - Direct URL Fallback (iOS)
+
+    #if os(iOS)
+    /// When `HLSManifestLoader` (custom-scheme `AVAssetResourceLoaderDelegate`) fails with
+    /// errors like -12881, retry playback using the direct HLS URL without manifest interception.
+    /// Subtitles may show raw ASS tags, but playback works.
+    private func retryWithDirectURL(player: AVPlayer, startTime: Double?) {
+        guard let info = playbackInfo, !hasRetriedDirectURL else { return }
+        hasRetriedDirectURL = true
+        logger.info("Retrying playback without HLSManifestLoader (direct URL fallback)")
+
+        let playerItem: AVPlayerItem
+        if let token = info.authToken {
+            let asset = AVURLAsset(url: info.url, options: [
+                "AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "MediaBrowser Token=\(token)"]
+            ])
+            playerItem = AVPlayerItem(asset: asset)
+        } else {
+            playerItem = AVPlayerItem(url: info.url)
+        }
+        playerItem.preferredForwardBufferDuration = 30
+        applyTitleMetadata(to: playerItem, title: title)
+
+        playerObservation?.invalidate()
+        playerObservation = playerItem.observe(\.status) { item, _ in
+            Task { @MainActor in
+                switch item.status {
+                case .readyToPlay:
+                    if let st = startTime, st > 0 {
+                        player.seek(to: CMTime(seconds: st, preferredTimescale: 600),
+                                    toleranceBefore: .zero, toleranceAfter: .zero)
+                    }
+                case .failed:
+                    logger.error("AVPlayer failed on direct URL fallback: \(item.error?.localizedDescription ?? "unknown")")
+                default: break
+                }
+            }
+        }
+
+        if let obs = itemEndObserver {
+            NotificationCenter.default.removeObserver(obs)
+            itemEndObserver = nil
+        }
+        player.replaceCurrentItem(with: playerItem)
+        player.play()
+        observeItemEnd(playerItem, player: player)
+    }
+    #endif
 
     // MARK: - Remote Command Center (prev/next in native HUD)
 
@@ -422,6 +477,7 @@ final class NativeVideoPresenter {
             reportPlaybackStop()
             guard let (info, prev, next) = await navigator(ep.id) else { return }
             cleanupPlayer()
+            self.hasRetriedDirectURL = false
             self.playbackInfo = info
             self.previousEpisode = prev
             self.nextEpisode = next
@@ -555,7 +611,7 @@ final class NativeVideoPresenter {
                 let asset = AVURLAsset(url: customURL)
                 asset.resourceLoader.setDelegate(manifestLoader, queue: manifestLoader.delegateQueue)
                 item = AVPlayerItem(asset: asset)
-                item.preferredForwardBufferDuration = 5
+                item.preferredForwardBufferDuration = 30
                 return item
             }
         }
@@ -569,7 +625,7 @@ final class NativeVideoPresenter {
         } else {
             item = AVPlayerItem(url: info.url)
         }
-        item.preferredForwardBufferDuration = 5
+        item.preferredForwardBufferDuration = 30
         return item
     }
 
