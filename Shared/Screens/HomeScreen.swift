@@ -213,22 +213,39 @@ struct HomeScreen: View {
             return Double(position) / Double(total)
         }()
 
-        let remaining: String = {
-            guard let position = item.userData?.playbackPositionTicks,
-                  let total = item.runTimeTicks else { return "" }
-            let remainingTicks = total - position
-            let minutes = remainingTicks.jellyfinMinutes
-            if minutes > 60 {
-                return loc.localized("home.remainingTime.hours", minutes / 60, minutes % 60)
+        let isEpisode = item.type == .episode
+
+        let cardTitle: String = isEpisode
+            ? (item.seriesName ?? item.name ?? "")
+            : (item.name ?? "")
+
+        let cardSubtitle: String? = {
+            if isEpisode {
+                var label = ""
+                if let season = item.parentIndexNumber, let ep = item.indexNumber {
+                    label = "S\(season):E\(ep)"
+                }
+                if let name = item.name, !name.isEmpty {
+                    label = label.isEmpty ? name : "\(label) - \(name)"
+                }
+                return label.isEmpty ? nil : label
+            } else {
+                guard let position = item.userData?.playbackPositionTicks,
+                      let total = item.runTimeTicks else { return nil }
+                let remainingTicks = total - position
+                let minutes = remainingTicks.jellyfinMinutes
+                if minutes > 60 {
+                    return loc.localized("home.remainingTime.hours", minutes / 60, minutes % 60)
+                }
+                return loc.localized("home.remainingTime.minutes", minutes)
             }
-            return loc.localized("home.remainingTime.minutes", minutes)
         }()
 
         WideCard(
-            title: item.name ?? "",
+            title: cardTitle,
             imageURL: (item.parentBackdropItemID ?? item.seriesID ?? item.id).map { appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
             progress: progress,
-            subtitle: remaining
+            subtitle: cardSubtitle
         )
     }
 

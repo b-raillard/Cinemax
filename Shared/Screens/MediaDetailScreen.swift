@@ -10,6 +10,7 @@ struct MediaDetailScreen: View {
     @Environment(VideoPlayerCoordinator.self) private var coordinator
     #endif
     @State var viewModel: MediaDetailViewModel
+    @State private var episodeOverview: EpisodeOverviewItem?
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
@@ -38,6 +39,10 @@ struct MediaDetailScreen: View {
             Task { await viewModel.load(using: appState) }
         }
         #endif
+        .sheet(item: $episodeOverview) { ep in
+            EpisodeOverviewSheet(item: ep)
+                .environment(themeManager)
+        }
     }
 
     // MARK: - Detail Content
@@ -296,9 +301,12 @@ struct MediaDetailScreen: View {
 
     private func seasonsSection(_ item: BaseItemDto) -> some View {
         let seriesId = item.id ?? viewModel.itemId
+        let currentSeasonName = viewModel.seasons.first { $0.id == viewModel.selectedSeasonId }?.name
+            ?? loc.localized("detail.season")
 
         return VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            // Season picker
+            #if os(tvOS)
+            // tvOS: horizontal scroll of season pills
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(viewModel.seasons, id: \.id) { season in
@@ -319,28 +327,151 @@ struct MediaDetailScreen: View {
                                         : Capsule().fill(CinemaColor.surfaceContainerHigh)
                                 )
                         }
-                        #if os(tvOS)
                         .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
                         .focusEffectDisabled()
                         .hoverEffectDisabled()
-                        #else
-                        .buttonStyle(.plain)
-                        #endif
                     }
                 }
                 .padding(.horizontal, contentPadding)
             }
-
-            // Episodes list
+            // tvOS: vertical list of unified episode rows
             VStack(spacing: 12) {
                 ForEach(viewModel.episodes, id: \.id) { episode in
                     episodeRow(episode)
                 }
             }
             .padding(.horizontal, contentPadding)
+            #else
+            // iOS: dropdown Menu for season selection
+            Menu {
+                ForEach(viewModel.seasons, id: \.id) { season in
+                    Button {
+                        if let id = season.id {
+                            Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
+                        }
+                    } label: {
+                        Text(season.name ?? loc.localized("detail.season"))
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(currentSeasonName)
+                        .font(.system(size: seasonTabFontSize, weight: .bold))
+                        .foregroundStyle(themeManager.accent)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(themeManager.accent)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(CinemaColor.surfaceContainerHigh)
+                .clipShape(Capsule())
+            }
+            .padding(.horizontal, contentPadding)
+            // iOS: horizontal scroll of episode cards
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 16) {
+                    ForEach(viewModel.episodes, id: \.id) { episode in
+                        iOSEpisodeCard(episode)
+                            .containerRelativeFrame(.horizontal) { w, _ in w - contentPadding * 2 - 32 }
+                    }
+                }
+                .scrollTargetLayout()
+                .padding(.horizontal, contentPadding)
+            }
+            .scrollTargetBehavior(.viewAligned)
+            #endif
         }
     }
 
+    // MARK: - iOS Episode Card (horizontal scroll, vertical layout)
+
+    #if os(iOS)
+    @ViewBuilder
+    private func iOSEpisodeCard(_ episode: BaseItemDto) -> some View {
+        if let id = episode.id {
+            let (epPrev, epNext, epNavigator) = episodeNavigation(for: id)
+            let overview = episode.overview.flatMap { $0.isEmpty ? nil : $0 }
+            let isPlayed = episode.userData?.isPlayed ?? false
+            let epProgress: Double? = {
+                guard let ticks = episode.userData?.playbackPositionTicks,
+                      let total = episode.runTimeTicks,
+                      ticks > 0, total > 0, !isPlayed
+                else { return nil }
+                return min(1.0, Double(ticks) / Double(total))
+            }()
+
+            VStack(alignment: .leading, spacing: 8) {
+                // Image + overlays
+                PlayLink(
+                    itemId: id, title: episode.name ?? "",
+                    previousEpisode: epPrev, nextEpisode: epNext,
+                    episodeNavigator: epNavigator
+                ) {
+                    Color.clear
+                        .aspectRatio(16/9, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .overlay {
+                            CinemaLazyImage(
+                                url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 600),
+                                fallbackIcon: "play.circle"
+                            )
+                        }
+                        .overlay(alignment: .bottom) {
+                            if let p = epProgress {
+                                ProgressBarView(progress: p, height: 3, trackColor: CinemaColor.onSurface.opacity(0.25))
+                                    .padding(.horizontal, 6).padding(.bottom, 6)
+                            }
+                        }
+                        .overlay(alignment: .bottomTrailing) {
+                            if isPlayed {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 28, weight: .semibold))
+                                    .foregroundStyle(.white, CinemaColor.surface.opacity(0.8))
+                                    .padding(10)
+                            }
+                        }
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
+                }
+                .buttonStyle(.plain)
+
+                // Info below image
+                VStack(alignment: .leading, spacing: 4) {
+                    if let num = episode.indexNumber {
+                        Text(loc.localized("detail.episode", num))
+                            .font(CinemaFont.label(.medium))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    }
+                    Text(episode.name ?? "")
+                        .font(.system(size: episodeTitleFontSize, weight: .bold))
+                        .foregroundStyle(CinemaColor.onSurface)
+                        .lineLimit(2)
+
+                    if let ov = overview {
+                        Text(ov)
+                            .font(CinemaFont.body)
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .lineLimit(3)
+                            .padding(.top, 2)
+                        Button {
+                            episodeOverview = EpisodeOverviewItem(id: id, title: episode.name ?? "", overview: ov)
+                        } label: {
+                            Text(loc.localized("detail.seeMore"))
+                                .font(CinemaFont.label(.medium))
+                                .foregroundStyle(themeManager.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+    #endif
+
+    // MARK: - tvOS Episode Row (unified card with two focusable zones)
+
+    #if os(tvOS)
     @ViewBuilder
     private func episodeRow(_ episode: BaseItemDto) -> some View {
         if let id = episode.id {
@@ -351,65 +482,98 @@ struct MediaDetailScreen: View {
                 if let name = episode.name { parts.append(name) }
                 return parts.joined(separator: ", ")
             }()
-            PlayLink(
-                itemId: id, title: episode.name ?? "",
-                previousEpisode: epPrev, nextEpisode: epNext,
-                episodeNavigator: epNavigator
-            ) {
-                HStack(spacing: 12) {
-                    // Thumbnail
-                    let epProgress: Double? = {
-                        guard let ticks = episode.userData?.playbackPositionTicks,
-                              let total = episode.runTimeTicks,
-                              ticks > 0, total > 0,
-                              !(episode.userData?.isPlayed ?? false)
-                        else { return nil }
-                        return min(1.0, Double(ticks) / Double(total))
-                    }()
-                    CinemaLazyImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 300), fallbackIcon: "play.circle")
-                        .frame(width: episodeThumbnailWidth, height: episodeThumbnailWidth * 9 / 16)
-                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
-                        .overlay(alignment: .bottom) {
-                            if let p = epProgress {
-                                ProgressBarView(progress: p, height: 3, trackColor: CinemaColor.onSurface.opacity(0.25))
-                                    .padding(.horizontal, 6)
-                                    .padding(.bottom, 6)
+            let overview = episode.overview.flatMap { $0.isEmpty ? nil : $0 }
+            let epProgress: Double? = {
+                guard let ticks = episode.userData?.playbackPositionTicks,
+                      let total = episode.runTimeTicks,
+                      ticks > 0, total > 0,
+                      !(episode.userData?.isPlayed ?? false)
+                else { return nil }
+                return min(1.0, Double(ticks) / Double(total))
+            }()
+
+            // One shared card background, two independent focusable zones inside
+            HStack(alignment: .top, spacing: 0) {
+
+                // Zone 1 — 40% width, plays the episode
+                PlayLink(
+                    itemId: id, title: episode.name ?? "",
+                    previousEpisode: epPrev, nextEpisode: epNext,
+                    episodeNavigator: epNavigator
+                ) {
+                    HStack(spacing: 12) {
+                        CinemaLazyImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 300), fallbackIcon: "play.circle")
+                            .frame(width: episodeThumbnailWidth, height: episodeThumbnailWidth * 9 / 16)
+                            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
+                            .overlay(alignment: .bottom) {
+                                if let p = epProgress {
+                                    ProgressBarView(progress: p, height: 3, trackColor: CinemaColor.onSurface.opacity(0.25))
+                                        .padding(.horizontal, 6).padding(.bottom, 6)
+                                }
+                            }
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let num = episode.indexNumber {
+                                Text(loc.localized("detail.episode", num))
+                                    .font(CinemaFont.label(.medium))
+                                    .foregroundStyle(themeManager.accent)
+                            }
+                            Text(episode.name ?? "")
+                                .font(.system(size: episodeTitleFontSize, weight: .semibold))
+                                .foregroundStyle(CinemaColor.onSurface)
+                                .lineLimit(2)
+                            if let runtime = episode.runTimeTicks {
+                                Text(loc.localized("detail.runtime.min", runtime.jellyfinMinutes))
+                                    .font(CinemaFont.label(.medium))
+                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
+                // 40% of the full screen width — consistent across all rows
+                .containerRelativeFrame(.horizontal, count: 5, span: 2, spacing: 0)
+                .accessibilityLabel(epLabel)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let num = episode.indexNumber {
-                            Text(loc.localized("detail.episode", num))
+                // Divider
+                if overview != nil {
+                    Rectangle()
+                        .fill(CinemaColor.outline.opacity(0.2))
+                        .frame(width: 1)
+                        .padding(.vertical, 12)
+                }
+
+                // Zone 2 — fills rest, opens overview sheet
+                if let ov = overview {
+                    Button {
+                        episodeOverview = EpisodeOverviewItem(id: id, title: episode.name ?? "", overview: ov)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(ov)
+                                .font(CinemaFont.body)
+                                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                .lineLimit(4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Spacer(minLength: 0)
+                            Text(loc.localized("detail.seeMore") + "...")
                                 .font(CinemaFont.label(.medium))
                                 .foregroundStyle(themeManager.accent)
                         }
-                        Text(episode.name ?? "")
-                            .font(.system(size: episodeTitleFontSize, weight: .semibold))
-                            .foregroundStyle(CinemaColor.onSurface)
-                            .lineLimit(2)
-
-                        if let runtime = episode.runTimeTicks {
-                            let minutes = runtime.jellyfinMinutes
-                            Text(loc.localized("detail.runtime.min", minutes))
-                                .font(CinemaFont.label(.medium))
-                                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
-
-                    Spacer()
+                    .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(12)
-                .background(CinemaColor.surfaceContainerHigh)
-                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
             }
-            #if os(tvOS)
-            .buttonStyle(CinemaTVCardButtonStyle())
-            #else
-            .buttonStyle(.plain)
-            #endif
-            .accessibilityLabel(epLabel)
+            .background(CinemaColor.surfaceContainerHigh)
+            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            .frame(maxWidth: .infinity)
         }
     }
+    #endif
 
     // MARK: - Similar Items
 
@@ -572,9 +736,82 @@ struct MediaDetailScreen: View {
     }
 }
 
-// MARK: - tvOS Season Tab Button Style
+// MARK: - Episode Overview
+
+private struct EpisodeOverviewItem: Identifiable {
+    let id: String
+    let title: String
+    let overview: String
+}
+
+private struct EpisodeOverviewSheet: View {
+    let item: EpisodeOverviewItem
+    @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(alignment: .center) {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(10)
+                        .background(themeManager.accentContainer)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text(item.title)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .multilineTextAlignment(.center)
+
+                Spacer()
+
+                Color.clear.frame(width: 36, height: 36)
+            }
+
+            ScrollView {
+                Text(item.overview)
+                    .font(CinemaFont.body)
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(24)
+        .background(CinemaColor.surface.ignoresSafeArea())
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #endif
+    }
+}
+
+// MARK: - tvOS Button Styles
 
 #if os(tvOS)
+/// Focus indicator for an individual zone inside a shared card background.
+/// Shows an accent stroke around the focused zone without adding its own background.
+private struct TVEpisodeZoneButtonStyle: ButtonStyle {
+    let accent: Color
+    @Environment(\.isFocused) private var isFocused
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .brightness(isFocused ? 0.06 : 0)
+            .overlay(
+                RoundedRectangle(cornerRadius: CinemaRadius.large)
+                    .strokeBorder(accent.opacity(isFocused ? 0.75 : 0), lineWidth: 2)
+                    .padding(1)
+            )
+            .animation(motionEnabled ? .easeOut(duration: 0.15) : nil, value: isFocused)
+    }
+}
+
 private struct SeasonTabButtonStyle: ButtonStyle {
     let isSelected: Bool
     let accent: Color
