@@ -100,7 +100,7 @@ struct MediaDetailScreen: View {
         ZStack(alignment: .bottomLeading) {
             if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
                 CinemaLazyImage(
-                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920),
+                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
                     fallbackIcon: nil,
                     fallbackBackground: CinemaColor.surfaceContainerLow
                 )
@@ -174,17 +174,15 @@ struct MediaDetailScreen: View {
 
     // MARK: - Episode Navigation
 
-    /// Computes prev/next episode refs and builds an EpisodeNavigator for a given episode ID.
-    /// Returns nil navigator when there are fewer than 2 episodes in the current season.
+    /// Looks up precomputed prev/next episode refs from the ViewModel's navigation maps.
     private func episodeNavigation(for episodeId: String) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
-        // Use the current season's episodes; fall back to nextUpEpisodes when the episode
-        // lives in a different season (e.g. next-up crosses a season boundary).
-        let inCurrentSeason = viewModel.episodes.contains { $0.id == episodeId }
-        let sourceEpisodes = inCurrentSeason ? viewModel.episodes : viewModel.nextUpEpisodes
-        return buildEpisodeNavigation(
-            for: episodeId, in: sourceEpisodes,
-            apiClient: appState.apiClient, userId: appState.currentUserId ?? ""
-        )
+        if let nav = viewModel.episodeNavigationMap[episodeId] {
+            return nav
+        }
+        if let nav = viewModel.nextUpNavigationMap[episodeId] {
+            return nav
+        }
+        return (nil, nil, nil)
     }
 
     // MARK: - Action Buttons

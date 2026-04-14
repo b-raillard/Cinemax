@@ -20,8 +20,6 @@
 "action.apply" = "Appliquer";
 "action.reset" = "Réinitialiser";
 "action.clear" = "Effacer";
-"action.connect" = "Connexion";
-"action.login" = "Connexion";
 "action.logOut" = "Déconnexion";
 "action.viewAll" = "Tout voir";
 
@@ -36,7 +34,6 @@
 
 "movies.title" = "Films";
 "movies.sortFilter" = "Trier et filtrer";
-"movies.playNow" = "Lecture";
 "movies.count" = "%d films";
 "movies.titles" = "%d titres";
 "sort.ascending" = "Croissant";
@@ -48,16 +45,13 @@
 "sort.releaseYear" = "Année de sortie";
 "sort.rating" = "Note";
 "sort.runtime" = "Durée";
-"sort.random" = "Aléatoire";
 "filter.byGenre" = "Genre";
 
 // MARK: - TV Series
 
 "tvShows.title" = "Séries";
-"tvShows.myList" = "Ma liste";
 "tvShows.browseGenres" = "Parcourir les genres";
 "tvShows.count" = "%d séries";
-"tvShows.genre" = "Genre";
 "tvShows.all" = "Tout";
 "tvShows.seasons" = "%d saison(s)";
 "tvShows.season" = "%d saison";
@@ -120,7 +114,6 @@
 // MARK: - Media Detail
 
 "detail.play" = "Lecture";
-"detail.moreInfo" = "Plus d'infos";
 "detail.castCrew" = "Casting";
 "detail.moreLikeThis" = "Titres similaires";
 "detail.episode" = "Épisode %d";
@@ -150,8 +143,6 @@
 "login.noServer" = "Pas de serveur ?";
 "login.serverConnected" = "Serveur connecté !";
 "login.authenticated" = "Authentifié !";
-"login.emptyUsername" = "Veuillez entrer votre nom d'utilisateur.";
-"login.authFailed" = "Échec de l'authentification : %@";
 "login.server" = "Serveur : %@";
 "login.version" = "Version %@";
 
@@ -171,16 +162,10 @@
 "server.networkSettings" = "Paramètres réseau";
 "server.connecting" = "Connexion en cours...";
 "server.offline" = "Hors ligne";
-"server.emptyAddress" = "Veuillez entrer une adresse de serveur.";
-"server.invalidURL" = "Format d'URL invalide.";
-"server.connectFailed" = "Connexion impossible : %@";
 
 // MARK: - Video Player
 
 "player.preparing" = "Préparation du flux...";
-"player.notAuthenticated" = "Non authentifié";
-"player.playbackFailed" = "Échec de la lecture";
-"player.method" = "Méthode : %@";
 "player.audio" = "Audio";
 "player.subtitles" = "Sous-titres";
 "player.subtitles.off" = "Désactivé";
@@ -193,5 +178,3 @@
 "accessibility.stopVoiceSearch" = "Arrêter la recherche vocale";
 "accessibility.previousEpisode" = "Épisode précédent";
 "accessibility.nextEpisode" = "Épisode suivant";
-"accessibility.trackOptions" = "Pistes de lecture";
-"accessibility.removeGenreFilter" = "Retirer le filtre %@";

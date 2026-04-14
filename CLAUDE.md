@@ -12,15 +12,15 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. Uses a "Cinema 
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
-**Playback reporting**: `APIClientProtocol` defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. Both `TVPlayerHostViewController` (tvOS) and `VideoPlayerView` (iOS) call these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale.
+**Playback reporting**: `APIClientProtocol` defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. `NativeVideoPresenter` (both platforms) calls these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale.
 
 ## Project Structure
 
 ```
 Shared/
-  DesignSystem/     CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, Components/
+  DesignSystem/     CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, Components/, TVButtonStyles
   Navigation/       AppNavigation (auth routing), MainTabView (tab bar/sidebar)
-  Screens/          HomeScreen, MediaDetailScreen, VideoPlayerView, SearchScreen, MovieLibraryScreen, SettingsScreen
+  Screens/          HomeScreen, MediaDetailScreen, VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, SearchScreen, MovieLibraryScreen, LibrarySortFilterSheet, SettingsScreen
 iOS/                app entry point
 tvOS/               app entry point
 Resources/
@@ -77,7 +77,7 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 
 **DeviceProfile**: DirectPlay for mp4/m4v/mov + h264/hevc; transcode to HLS mp4 with `hevc,h264` only. **Never include `mpeg4`** in video codec lists — MPEG-4 ASP is not a valid HLS transcode target on Apple platforms and causes Jellyfin to inject `mpeg4-*` URL parameters that AVFoundation doesn't recognise. `maxBitrate`: 120 Mbps (4K) or 20 Mbps (1080p) via `@AppStorage("render4K")`.
 
-### Native Player — Both Platforms (`NativeVideoPresenter` in `VideoPlayerView.swift`)
+### Native Player — Both Platforms (`NativeVideoPresenter.swift`)
 Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal (`UIViewController.present()`). The shared `NativeVideoPresenter` class handles playback, track menus, episode navigation, and playback reporting on both platforms.
 
 - **MUST present via UIKit modal**, NOT SwiftUI — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss
@@ -97,8 +97,6 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 
 **Auto-play next episode**: `AVPlayerItem.didPlayToEndTime` observer → `navigateToEpisode(next)` when `autoPlayNextEpisode` setting is on
 
-### Legacy Custom tvOS Player (`TVCustomPlayerView.swift`) — DEAD CODE
-The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOverlay`, `TVPlayerScrubber`, `TVAudioTrackMenu`, `TVSubtitleTrackMenu`) is no longer used. tvOS now uses `NativeVideoPresenter` with native `AVPlayerViewController`. The old code remains in `Shared/Screens/TVCustomPlayerView.swift` and `TVPlayerHostViewController.swift` but is unreachable — `VideoPlayerCoordinator` creates `NativeVideoPresenter` instead of `TVVideoPresenter`.
 
 ## Settings Screen
 
@@ -148,7 +146,7 @@ The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOve
 - Episode rows show a thin accent progress bar overlay at the bottom of the thumbnail for partially-watched episodes
 
 **Episode navigation wiring**:
-- `episodeNavigation(for:)` — delegates to the shared `buildEpisodeNavigation(for:in:apiClient:userId:)` using `viewModel.episodes` (current season) or `viewModel.nextUpEpisodes` (fallback for cross-season next-up)
+- `episodeNavigation(for:)` — O(1) lookup from precomputed `viewModel.episodeNavigationMap` (current season) or `viewModel.nextUpNavigationMap` (cross-season next-up). Maps are rebuilt in `MediaDetailViewModel` whenever episodes change
 - Both `actionButtons` (next-up episode) and each `episodeRow` pass `previousEpisode`, `nextEpisode`, `episodeNavigator` to `PlayLink`
 
 ## HomeScreen

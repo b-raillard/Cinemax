@@ -26,6 +26,7 @@ final class VideoPlayerCoordinator {
 
     /// Retained so the presenter isn't deallocated during playback.
     private var presenter: NativeVideoPresenter?
+    private var playTask: Task<Void, Never>?
 
     var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
 
@@ -41,14 +42,17 @@ final class VideoPlayerCoordinator {
         }
         let bitrate = maxBitrate
         let apiClient = appState.apiClient
-        Task {
+        playTask?.cancel()
+        playTask = Task {
             guard let userId = appState.currentUserId else {
                 logger.error("VideoPlayerCoordinator: not authenticated")
                 return
             }
             do {
                 let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
+                #if DEBUG
                 logger.info("tvOS play: method=\(info.playMethod.rawValue), url=\(info.url.absoluteString)")
+                #endif
                 let p = NativeVideoPresenter(
                     itemId: itemId, title: title, startTime: startTime,
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,

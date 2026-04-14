@@ -61,7 +61,7 @@ struct HomeScreen: View {
             // Backdrop — episodes/seasons don't have their own backdrop; use the parent (series)
             if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
                 CinemaLazyImage(
-                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 1920),
+                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
                     fallbackIcon: nil,
                     fallbackBackground: CinemaColor.surfaceContainerLow
                 )

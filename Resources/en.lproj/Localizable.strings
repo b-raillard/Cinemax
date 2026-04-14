@@ -20,8 +20,6 @@
 "action.apply" = "Apply";
 "action.reset" = "Reset";
 "action.clear" = "Clear";
-"action.connect" = "Connect";
-"action.login" = "Login";
 "action.logOut" = "Log Out";
 "action.viewAll" = "View All";
 
@@ -36,7 +34,6 @@
 
 "movies.title" = "Movies";
 "movies.sortFilter" = "Sort & Filter";
-"movies.playNow" = "Play Now";
 "movies.count" = "%d Movies";
 "movies.titles" = "%d titles";
 "sort.ascending" = "Ascending";
@@ -48,16 +45,13 @@
 "sort.releaseYear" = "Release Year";
 "sort.rating" = "Rating";
 "sort.runtime" = "Runtime";
-"sort.random" = "Random";
 "filter.byGenre" = "Genre";
 
 // MARK: - TV Series
 
 "tvShows.title" = "TV Shows";
-"tvShows.myList" = "My List";
 "tvShows.browseGenres" = "Browse Genres";
 "tvShows.count" = "%d Series";
-"tvShows.genre" = "Genre";
 "tvShows.all" = "All";
 "tvShows.seasons" = "%d Season(s)";
 "tvShows.season" = "%d Season";
@@ -120,7 +114,6 @@
 // MARK: - Media Detail
 
 "detail.play" = "Play";
-"detail.moreInfo" = "More Info";
 "detail.castCrew" = "Cast & Crew";
 "detail.moreLikeThis" = "More Like This";
 "detail.episode" = "Episode %d";
@@ -150,8 +143,6 @@
 "login.noServer" = "Don't have a server?";
 "login.serverConnected" = "Server Connected!";
 "login.authenticated" = "Authenticated!";
-"login.emptyUsername" = "Please enter your username.";
-"login.authFailed" = "Authentication failed: %@";
 "login.server" = "Server: %@";
 "login.version" = "Version %@";
 
@@ -171,16 +162,10 @@
 "server.networkSettings" = "Network Settings";
 "server.connecting" = "Connecting...";
 "server.offline" = "Offline";
-"server.emptyAddress" = "Please enter a server address.";
-"server.invalidURL" = "Invalid URL format.";
-"server.connectFailed" = "Unable to connect: %@";
 
 // MARK: - Video Player
 
 "player.preparing" = "Preparing stream...";
-"player.notAuthenticated" = "Not authenticated";
-"player.playbackFailed" = "Playback failed";
-"player.method" = "Method: %@";
 "player.audio" = "Audio";
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
@@ -193,5 +178,3 @@
 "accessibility.stopVoiceSearch" = "Stop voice search";
 "accessibility.previousEpisode" = "Previous episode";
 "accessibility.nextEpisode" = "Next episode";
-"accessibility.trackOptions" = "Playback tracks";
-"accessibility.removeGenreFilter" = "Remove %@ filter";

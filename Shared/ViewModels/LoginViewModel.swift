@@ -30,6 +30,7 @@ final class LoginViewModel {
             appState.accessToken = session.accessToken
             appState.currentUserId = session.userID
 
+            password = ""
             showSuccess = true
 
             try? await Task.sleep(for: .seconds(1))

@@ -1,5 +1,6 @@
 import SwiftUI
 import CinemaxKit
+import Nuke
 
 @MainActor @Observable
 final class AppState {
@@ -70,6 +71,13 @@ struct AppNavigation: View {
     @State private var hasCheckedSession = false
 
     @AppStorage("motionEffects") private var motionEffects: Bool = true
+
+    init() {
+        ImagePipeline.shared = ImagePipeline(configuration: .withDataCache(
+            name: "com.cinemax.images",
+            sizeLimit: 500 * 1024 * 1024 // 500 MB disk cache
+        ))
+    }
 
     var body: some View {
         Group {
