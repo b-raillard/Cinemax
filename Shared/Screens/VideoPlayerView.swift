@@ -392,6 +392,31 @@ final class NativeVideoPresenter {
         guard let vc = playerVC else { return }
         var items: [UIMenuElement] = []
 
+        // Episode navigation buttons — appear as tappable icons in the transport bar
+        if previousEpisode != nil, episodeNavigator != nil {
+            items.append(UIAction(
+                title: loc.localized("accessibility.previousEpisode"),
+                image: UIImage(systemName: "backward.end.fill")
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, let prev = self.previousEpisode else { return }
+                    self.navigateToEpisode(prev)
+                }
+            })
+        }
+
+        if nextEpisode != nil, episodeNavigator != nil {
+            items.append(UIAction(
+                title: loc.localized("accessibility.nextEpisode"),
+                image: UIImage(systemName: "forward.end.fill")
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, let next = self.nextEpisode else { return }
+                    self.navigateToEpisode(next)
+                }
+            })
+        }
+
         if audioTracks.count > 1 {
             let current = currentAudioIndex
             items.append(UIMenu(
