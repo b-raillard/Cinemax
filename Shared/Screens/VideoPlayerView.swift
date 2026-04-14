@@ -1,7 +1,4 @@
 import SwiftUI
-import AVKit
-import AVFoundation
-import MediaPlayer
 import OSLog
 import CinemaxKit
 

@@ -18,9 +18,15 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. Uses a "Cinema 
 
 ```
 Shared/
-  DesignSystem/     CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, Components/, TVButtonStyles
+  DesignSystem/     CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, TVButtonStyles
+    Components/     CinemaLazyImage, ProgressBarView, RatingBadge, LoadingStateView, ErrorStateView, PosterCard, WideCard, ContentRow, CinemaButton, FlowLayout
   Navigation/       AppNavigation (auth routing), MainTabView (tab bar/sidebar)
-  Screens/          HomeScreen, MediaDetailScreen, VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, SearchScreen, MovieLibraryScreen, LibrarySortFilterSheet, SettingsScreen
+  Screens/          HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen,
+                    MovieLibraryScreen, LibrarySortFilterSheet, TVSeriesScreen,
+                    VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet,
+                    SettingsScreen (+iOS, +tvOS platform variants)
+  ViewModels/       HomeViewModel, LoginViewModel, SearchViewModel, ServerSetupViewModel,
+                    MediaDetailViewModel, MediaLibraryViewModel, VideoPlayerCoordinator
 iOS/                app entry point
 tvOS/               app entry point
 Resources/

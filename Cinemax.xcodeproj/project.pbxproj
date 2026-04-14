@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		082182AE9E94BB018DAD024D /* SettingsRowHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4049AE456C81ACB9DD77BA6B /* SettingsRowHelpers.swift */; };
 		0E09FF53825D339001BB6137 /* VideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D97F65D618EBC05344F98AD7 /* VideoPlayerView.swift */; };
 		0E89D264CCF6B086910782A7 /* ServerSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0A552AFA2A46BB879FE87B /* ServerSetupViewModel.swift */; };
 		100AA327B088A392E7732C98 /* MediaDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */; };
@@ -14,7 +15,6 @@
 		130625B99997A1EAB31AF7C9 /* CinemaxKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9741846667BDD8F1C021426D /* CinemaxKit */; };
 		1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611E44F72064D91AE6DBCC6C /* SearchViewModel.swift */; };
 		172A4AE31E117BAB19C89CA6 /* PosterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE5FB096BB1BE0581798DFD /* PosterCard.swift */; };
-		1853EA9F09A0EACE6CCBDFB9 /* MediaDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7574F55BA72A352BA19F86E0 /* MediaDetailViewModel.swift */; };
 		18D5366C4AD5FA663CF6EC03 /* TVButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */; };
 		18D85464EB601F8113743C4D /* ProgressBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3DF8C441837A8A10C480077 /* ProgressBarView.swift */; };
 		1B6075E5B54067D4015EC06F /* LoginViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */; };
@@ -42,8 +42,10 @@
 		46E0FC9041E6B386190D5B6C /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C346F0B7AFF504DA6593370E /* HomeViewModel.swift */; };
 		47242004DB5BA9497108DE62 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */; };
 		473F59EC7FA3CB025D4F5D35 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAA0B8314F73A80686E650D /* SettingsScreen.swift */; };
+		4BE51C7C783DC5665E32AB27 /* MediaDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */; };
 		4E6ACB12C22F88F40EF8DC8A /* ContentRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAFD25D98FA0E18A0F441F5 /* ContentRow.swift */; };
 		5782D05B40C908DB8241AAE6 /* CinemaxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A70C2603459BCEE70535BB4 /* CinemaxApp.swift */; };
+		57D52614B1AC3B7D6A3847D8 /* MediaDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */; };
 		5F7645BF5DDCF276733DD2AB /* GlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9A353B49C5117D5F686F07B /* GlassModifiers.swift */; };
 		5FA751E81BBEE26DE820FA36 /* ServerSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0A552AFA2A46BB879FE87B /* ServerSetupViewModel.swift */; };
 		5FD3234EE63A765E0C82E5C7 /* MediaDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */; };
@@ -54,7 +56,6 @@
 		6D40EAF27B0800AE33161733 /* WideCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0B2775D4776FF99A90FB12 /* WideCard.swift */; };
 		6F9AEB4561324499DA1F1F4E /* NativeVideoPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07FE737816B4F86FC1A9D144 /* NativeVideoPresenter.swift */; };
 		70247C5A32673CC464D68A32 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */; };
-		7141A3EC32D60AD2452DC24C /* MediaDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7574F55BA72A352BA19F86E0 /* MediaDetailViewModel.swift */; };
 		72281CF32299F9545AA48ED7 /* SearchScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C144D0A57021E0A0A783977B /* SearchScreen.swift */; };
 		735403600F051C38E050FBDE /* VideoPlayerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14D3FE509DDFB9EA6569161 /* VideoPlayerCoordinator.swift */; };
 		73713753B981A3971272B7E3 /* FocusScaleModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */; };
@@ -84,6 +85,7 @@
 		A3B5BCE46E4207582861DBBE /* TVSeriesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0A181A9E709E7700EC2E95 /* TVSeriesScreen.swift */; };
 		A457ECA5B1E6FC13546B3306 /* ErrorStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929537FA4254CCBD87E276B3 /* ErrorStateView.swift */; };
 		A5BDB9B097C212892B4AEB36 /* BaseItemDto+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */; };
+		AE92C836D641772893016E26 /* SettingsRowHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4049AE456C81ACB9DD77BA6B /* SettingsRowHelpers.swift */; };
 		B17B6055000707C83658C8DF /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */; };
 		B80500609E8D56844738FB4A /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611E44F72064D91AE6DBCC6C /* SearchViewModel.swift */; };
 		BB60281C449D13F7F5398F6F /* CinemaLazyImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F3D66A0647688B34958DEF /* CinemaLazyImage.swift */; };
@@ -136,6 +138,7 @@
 		32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationManager.swift; sourceTree = "<group>"; };
 		3A70C2603459BCEE70535BB4 /* CinemaxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxApp.swift; sourceTree = "<group>"; };
 		3D4F7E03E3AA68A284C0FD7E /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		4049AE456C81ACB9DD77BA6B /* SettingsRowHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRowHelpers.swift; sourceTree = "<group>"; };
 		48BB9B833D705FD5AFFFB56B /* LibrarySortFilterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySortFilterSheet.swift; sourceTree = "<group>"; };
 		4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewModel.swift; sourceTree = "<group>"; };
 		58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BaseItemDto+Metadata.swift"; sourceTree = "<group>"; };
@@ -145,7 +148,6 @@
 		69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModelTests.swift; sourceTree = "<group>"; };
 		6EAA0B8314F73A80686E650D /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		71EDA47106672004DE07BDCF /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		7574F55BA72A352BA19F86E0 /* MediaDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailViewModel.swift; sourceTree = "<group>"; };
 		78377E8E832D65F7226A2A06 /* AppNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigation.swift; sourceTree = "<group>"; };
 		7D88DF3FEF51CF7E5E1C948A /* Cinemax.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Cinemax.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailScreen.swift; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 		D97F65D618EBC05344F98AD7 /* VideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerView.swift; sourceTree = "<group>"; };
 		DB5D31C0A9CB664FEB840DA3 /* TrackPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackPickerSheet.swift; sourceTree = "<group>"; };
 		DC1B61BF8E4B4D7BFFEEDF40 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailViewModel.swift; sourceTree = "<group>"; };
 		DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
 		DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryViewModel.swift; sourceTree = "<group>"; };
 		E61944A0EB692FE3706F500B /* ThemeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeManager.swift; sourceTree = "<group>"; };
@@ -283,12 +286,12 @@
 				48BB9B833D705FD5AFFFB56B /* LibrarySortFilterSheet.swift */,
 				DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */,
 				8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */,
-				7574F55BA72A352BA19F86E0 /* MediaDetailViewModel.swift */,
 				A6A30840A8AEBE5AA59B722F /* MovieLibraryScreen.swift */,
 				07FE737816B4F86FC1A9D144 /* NativeVideoPresenter.swift */,
 				AEA4717DCFEE46C5BE3F4787 /* PlayLink.swift */,
 				C144D0A57021E0A0A783977B /* SearchScreen.swift */,
 				171E69387E1D6BAAB538ECA0 /* ServerSetupScreen.swift */,
+				4049AE456C81ACB9DD77BA6B /* SettingsRowHelpers.swift */,
 				6EAA0B8314F73A80686E650D /* SettingsScreen.swift */,
 				275DFD6B409E3B37C05FD3FB /* SettingsScreen+iOS.swift */,
 				C0E9157A106817FC0C04B450 /* SettingsScreen+tvOS.swift */,
@@ -316,6 +319,7 @@
 			children = (
 				C346F0B7AFF504DA6593370E /* HomeViewModel.swift */,
 				4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */,
+				DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */,
 				DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */,
 				611E44F72064D91AE6DBCC6C /* SearchViewModel.swift */,
 				FF0A552AFA2A46BB879FE87B /* ServerSetupViewModel.swift */,
@@ -542,7 +546,7 @@
 				C66DEBC7160DF78205F50CAB /* LoginViewModel.swift in Sources */,
 				276021C21CB270437185ACF2 /* MainTabView.swift in Sources */,
 				5FD3234EE63A765E0C82E5C7 /* MediaDetailScreen.swift in Sources */,
-				1853EA9F09A0EACE6CCBDFB9 /* MediaDetailViewModel.swift in Sources */,
+				57D52614B1AC3B7D6A3847D8 /* MediaDetailViewModel.swift in Sources */,
 				D204B5A74016A5CBB00FE986 /* MediaLibraryViewModel.swift in Sources */,
 				1F8DDF74B6AA98658B045CF5 /* MovieLibraryScreen.swift in Sources */,
 				FB6FC7ADD24BFD093F9D6098 /* NativeVideoPresenter.swift in Sources */,
@@ -554,6 +558,7 @@
 				B80500609E8D56844738FB4A /* SearchViewModel.swift in Sources */,
 				97AF9B841BA015AD94A9B390 /* ServerSetupScreen.swift in Sources */,
 				0E89D264CCF6B086910782A7 /* ServerSetupViewModel.swift in Sources */,
+				082182AE9E94BB018DAD024D /* SettingsRowHelpers.swift in Sources */,
 				9150233715D09CEFDBC66E64 /* SettingsScreen+iOS.swift in Sources */,
 				43C558D639F56A03ABE38F41 /* SettingsScreen+tvOS.swift in Sources */,
 				473F59EC7FA3CB025D4F5D35 /* SettingsScreen.swift in Sources */,
@@ -594,7 +599,7 @@
 				1B6075E5B54067D4015EC06F /* LoginViewModel.swift in Sources */,
 				389E81F4513E0CE8A622D08F /* MainTabView.swift in Sources */,
 				100AA327B088A392E7732C98 /* MediaDetailScreen.swift in Sources */,
-				7141A3EC32D60AD2452DC24C /* MediaDetailViewModel.swift in Sources */,
+				4BE51C7C783DC5665E32AB27 /* MediaDetailViewModel.swift in Sources */,
 				7F6D160EABA133540130AABC /* MediaLibraryViewModel.swift in Sources */,
 				FF21EDCBFAE6F61736975202 /* MovieLibraryScreen.swift in Sources */,
 				6F9AEB4561324499DA1F1F4E /* NativeVideoPresenter.swift in Sources */,
@@ -606,6 +611,7 @@
 				1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */,
 				91ED326A57E034CF33FCA565 /* ServerSetupScreen.swift in Sources */,
 				5FA751E81BBEE26DE820FA36 /* ServerSetupViewModel.swift in Sources */,
+				AE92C836D641772893016E26 /* SettingsRowHelpers.swift in Sources */,
 				F9F825B65BAE3868DDB5E7E6 /* SettingsScreen+iOS.swift in Sources */,
 				F7B67A97F9967068E9FDA7A1 /* SettingsScreen+tvOS.swift in Sources */,
 				7F7723CF469BF94B2314A645 /* SettingsScreen.swift in Sources */,
