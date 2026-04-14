@@ -147,6 +147,7 @@ struct LoginScreen: View {
                                 .font(.system(size: 40))
                                 .foregroundStyle(CinemaColor.onSurface)
                         }
+                        .accessibilityHidden(true)
 
                         Text(loc.localized("login.header"))
                             .font(.system(size: CinemaScale.pt(32), weight: .black))

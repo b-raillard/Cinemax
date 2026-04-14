@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public enum ImageType: String, Sendable {
     case primary = "Primary"
@@ -27,6 +30,17 @@ public struct ImageURLBuilder: Sendable {
         components.queryItems = queryItems.isEmpty ? nil : queryItems
 
         return components.url!
+    }
+
+    /// Returns `maxWidth` based on the device's native screen width in pixels.
+    /// Falls back to 1920 when UIKit is unavailable.
+    @MainActor
+    public static var screenPixelWidth: Int {
+        #if canImport(UIKit)
+        Int(UIScreen.main.bounds.width * UIScreen.main.scale)
+        #else
+        1920
+        #endif
     }
 
     public func userImageURL(userId: String, tag: String? = nil, maxWidth: Int? = nil) -> URL {

@@ -126,6 +126,7 @@ struct ServerSetupScreen: View {
                             .foregroundStyle(themeManager.accent)
                     }
                     .shadow(color: .black.opacity(0.3), radius: 20)
+                    .accessibilityHidden(true)
 
                     Text(loc.localized("server.header"))
                         .font(CinemaFont.label(.small))

@@ -58,6 +58,7 @@ extension SettingsScreen {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 400, height: 400)
                 .shadow(color: themeManager.accent.opacity(0.5), radius: 40)
+                .accessibilityHidden(true)
 
             VStack(spacing: CinemaSpacing.spacing2) {
                 Text(loc.localized("settings.systemSettings"))
@@ -302,7 +303,41 @@ extension SettingsScreen {
                             .fill(CinemaColor.surfaceVariant.opacity(0.6))
                     )
             )
+
+            tvLicensesButton
         }
+    }
+
+    var tvLicensesButton: some View {
+        let isFocused = focusedItem == .toggle("licenses")
+
+        return Button {
+            showLicenses = true
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+
+                Text(loc.localized("settings.licenses"))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle("licenses"))
     }
 
     // MARK: Interface Detail (tvOS)

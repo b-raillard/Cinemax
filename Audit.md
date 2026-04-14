@@ -172,15 +172,46 @@ tvShows.title
 
 ### Top 10 Actions by Impact
 
-| # | Action | Category | Effort |
-|---|--------|----------|--------|
-| 1 | Guard playback URL log with `#if DEBUG` | Security | 5 min |
-| 2 | Delete 6 dead custom player files | Dead code | 5 min |
-| 3 | Clear password after login | Security | 5 min |
-| 4 | Precompute episode navigation map in ViewModel | Performance | 1 hr |
-| 5 | Configure NukeUI cache limits | Performance | 30 min |
-| 6 | Use responsive image sizing (GeometryReader) | Performance | 2 hr |
-| 7 | Fix season selection race condition | Performance | 30 min |
-| 8 | Cancel previous task in `VideoPlayerCoordinator.play()` | Performance | 15 min |
-| 9 | Remove 33 unused localization keys | Dead code | 15 min |
-| 10 | Extract large files into focused components | Refactoring | 4-6 hr |
+| # | Action | Category | Effort | Status |
+|---|--------|----------|--------|--------|
+| 1 | Guard playback URL log with `#if DEBUG` | Security | 5 min | **DONE** (audit 1.1) |
+| 2 | Delete 6 dead custom player files | Dead code | 5 min | **DONE** (audit 1.1) |
+| 3 | Clear password after login | Security | 5 min | **DONE** (audit 1.1) |
+| 4 | Precompute episode navigation map in ViewModel | Performance | 1 hr | **DONE** (audit 1.1) |
+| 5 | Configure NukeUI cache limits | Performance | 30 min | **DONE** (audit 1.1) |
+| 6 | Use responsive image sizing (GeometryReader) | Performance | 2 hr | **DONE** (audit 1.1) |
+| 7 | Fix season selection race condition | Performance | 30 min | **DONE** (audit 1.1) |
+| 8 | Cancel previous task in `VideoPlayerCoordinator.play()` | Performance | 15 min | **DONE** (audit 1.1.1) |
+| 9 | Remove 33 unused localization keys | Dead code | 15 min | **DONE** (audit 1.1) |
+| 10 | Extract large files into focused components | Refactoring | 4-6 hr | Open |
+
+---
+
+## 6. App Store Readiness (audit 1.1.1 — 2026-04-14)
+
+### Completed
+
+| # | Action | Status |
+|---|--------|--------|
+| 1 | Create `PrivacyInfo.xcprivacy` for both targets | **DONE** — `Resources/PrivacyInfo.xcprivacy` declares UserDefaults API usage, no tracking |
+| 2 | Add OSS license attribution | **DONE** — `LicensesView.swift` accessible from Settings > Server on both iOS and tvOS |
+| 3 | Guard auth token log with `#if DEBUG` | **DONE** (already fixed in audit 1.1) |
+| 4 | Delete dead tvOS player files | **DONE** (already fixed in audit 1.1) |
+| 5 | Clear password after login | **DONE** (already fixed in audit 1.1) |
+| 6 | Remove unused localization keys | **DONE** (already fixed in audit 1.1) |
+
+| 7 | Accessibility pass — decorative images hidden, cards labeled | **DONE** |
+| 8 | Handle `scenePhase` — report playback progress on background | **DONE** |
+| 9 | Fix tvOS deployment target mismatch (Package.swift → tvOS v26, swift-tools-version 6.2) | **DONE** |
+
+### Remaining for App Store Submission
+
+| # | Action | Priority |
+|---|--------|----------|
+| 1 | Respect iOS Dynamic Type settings | Medium |
+| 2 | Configure App Store distribution signing | Required |
+| 3 | Prepare demo Jellyfin server for App Review | Required |
+| 4 | App Store metadata + screenshots | Required |
+| 5 | Replace force unwraps with safe unwrapping in URL construction | Low |
+
+See `APP_STORE_AUDIT.md` for full audit and future roadmap.

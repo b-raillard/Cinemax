@@ -24,6 +24,7 @@ struct WideCard: View {
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
                 .cinemaFocus()
+                .accessibilityHidden(true)
 
             Text(title)
                 .font(CinemaFont.label(.large))

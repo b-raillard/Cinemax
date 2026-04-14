@@ -13,11 +13,18 @@ final class MediaDetailViewModel {
     /// Episodes from the next-up episode's season, when it differs from the currently displayed season.
     /// Used so episodeNavigation can build prev/next refs for the resume action button.
     var nextUpEpisodes: [BaseItemDto] = []
+    /// Precomputed episode navigation map — O(1) lookups by episode ID.
+    var episodeNavigationMap: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
+    /// Same map but for nextUpEpisodes (cross-season next-up).
+    var nextUpNavigationMap: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     var isLoading = true
     var errorMessage: String?
 
     // The resolved type after loading (episode/season → series)
     var resolvedType: BaseItemKind = .movie
+
+    /// Generation counter to discard stale season results on rapid selection.
+    private var seasonGeneration: Int = 0
 
     let itemId: String
     let itemType: BaseItemKind
@@ -56,6 +63,7 @@ final class MediaDetailViewModel {
                    nextUpSeasonId != selectedSeasonId {
                     nextUpEpisodes = (try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: nextUpSeasonId, userId: userId)) ?? []
                 }
+                rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
             } else {
                 item = loadedItem
                 resolvedType = effectiveType
@@ -75,6 +83,7 @@ final class MediaDetailViewModel {
                        nextUpSeasonId != selectedSeasonId {
                         nextUpEpisodes = (try? await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: nextUpSeasonId, userId: userId)) ?? []
                     }
+                    rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
                 }
             }
         } catch {
@@ -87,10 +96,29 @@ final class MediaDetailViewModel {
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         selectedSeasonId = seasonId
+        seasonGeneration += 1
+        let expectedGeneration = seasonGeneration
         do {
-            episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
+            let newEpisodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
+            guard seasonGeneration == expectedGeneration else { return }
+            episodes = newEpisodes
+            rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
         } catch {
             // Keep existing episodes on error
+        }
+    }
+
+    /// Rebuilds the precomputed episode navigation maps from current episode lists.
+    private func rebuildNavigationMaps(apiClient: any APIClientProtocol, userId: String) {
+        episodeNavigationMap = [:]
+        for episode in episodes {
+            guard let id = episode.id else { continue }
+            episodeNavigationMap[id] = buildEpisodeNavigation(for: id, in: episodes, apiClient: apiClient, userId: userId)
+        }
+        nextUpNavigationMap = [:]
+        for episode in nextUpEpisodes {
+            guard let id = episode.id else { continue }
+            nextUpNavigationMap[id] = buildEpisodeNavigation(for: id, in: nextUpEpisodes, apiClient: apiClient, userId: userId)
         }
     }
 }

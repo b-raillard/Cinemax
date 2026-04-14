@@ -61,6 +61,7 @@ struct SearchScreen: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .font(.system(size: searchIconSize))
+                .accessibilityHidden(true)
 
             TextField(loc.localized("search.placeholder"), text: Bindable(viewModel).searchText)
                 #if os(iOS)
@@ -168,6 +169,7 @@ struct SearchScreen: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 48))
                     .foregroundStyle(CinemaColor.outlineVariant)
+                    .accessibilityHidden(true)
                 Text(loc.localized("search.noResults"))
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -179,6 +181,7 @@ struct SearchScreen: View {
                 Image(systemName: "sparkle.magnifyingglass")
                     .font(.system(size: 48))
                     .foregroundStyle(CinemaColor.outlineVariant)
+                    .accessibilityHidden(true)
                 Text(loc.localized("search.searchLibrary"))
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)

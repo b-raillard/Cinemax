@@ -12,15 +12,21 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. Uses a "Cinema 
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
-**Playback reporting**: `APIClientProtocol` defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. Both `TVPlayerHostViewController` (tvOS) and `VideoPlayerView` (iOS) call these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale.
+**Playback reporting**: `APIClientProtocol` defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. `NativeVideoPresenter` (both platforms) calls these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale.
 
 ## Project Structure
 
 ```
 Shared/
-  DesignSystem/     CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, Components/
+  DesignSystem/     CinemaGlassTheme, ThemeManager, GlassModifiers, FocusScaleModifier, LocalizationManager, TVButtonStyles
+    Components/     CinemaLazyImage, ProgressBarView, RatingBadge, LoadingStateView, ErrorStateView, PosterCard, WideCard, ContentRow, CinemaButton, FlowLayout
   Navigation/       AppNavigation (auth routing), MainTabView (tab bar/sidebar)
-  Screens/          HomeScreen, MediaDetailScreen, VideoPlayerView, SearchScreen, MovieLibraryScreen, SettingsScreen
+  Screens/          HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen,
+                    MovieLibraryScreen, LibrarySortFilterSheet, TVSeriesScreen,
+                    VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet,
+                    SettingsScreen (+iOS, +tvOS platform variants), SettingsRowHelpers
+  ViewModels/       HomeViewModel, LoginViewModel, SearchViewModel, ServerSetupViewModel,
+                    MediaDetailViewModel, MediaLibraryViewModel, VideoPlayerCoordinator
 iOS/                app entry point
 tvOS/               app entry point
 Resources/
@@ -77,7 +83,7 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 
 **DeviceProfile**: DirectPlay for mp4/m4v/mov + h264/hevc; transcode to HLS mp4 with `hevc,h264` only. **Never include `mpeg4`** in video codec lists — MPEG-4 ASP is not a valid HLS transcode target on Apple platforms and causes Jellyfin to inject `mpeg4-*` URL parameters that AVFoundation doesn't recognise. `maxBitrate`: 120 Mbps (4K) or 20 Mbps (1080p) via `@AppStorage("render4K")`.
 
-### Native Player — Both Platforms (`NativeVideoPresenter` in `VideoPlayerView.swift`)
+### Native Player — Both Platforms (`NativeVideoPresenter.swift`)
 Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal (`UIViewController.present()`). The shared `NativeVideoPresenter` class handles playback, track menus, episode navigation, and playback reporting on both platforms.
 
 - **MUST present via UIKit modal**, NOT SwiftUI — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss
@@ -97,8 +103,6 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 
 **Auto-play next episode**: `AVPlayerItem.didPlayToEndTime` observer → `navigateToEpisode(next)` when `autoPlayNextEpisode` setting is on
 
-### Legacy Custom tvOS Player (`TVCustomPlayerView.swift`) — DEAD CODE
-The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOverlay`, `TVPlayerScrubber`, `TVAudioTrackMenu`, `TVSubtitleTrackMenu`) is no longer used. tvOS now uses `NativeVideoPresenter` with native `AVPlayerViewController`. The old code remains in `Shared/Screens/TVCustomPlayerView.swift` and `TVPlayerHostViewController.swift` but is unreachable — `VideoPlayerCoordinator` creates `NativeVideoPresenter` instead of `TVVideoPresenter`.
 
 ## Settings Screen
 
@@ -119,6 +123,13 @@ The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOve
 - Category buttons on landing: pill shape, focused state = `accentContainer` fill + scale 1.05 + glow shadow.
 - Back button focus: `.focused($focusedItem, equals: .back)`, highlighted with accent color.
 
+### iOS Settings Row Helpers (`SettingsRowHelpers.swift`)
+- `iOSSettingsRow` — padded row container
+- `iOSRowIcon` — colored icon badge (leading element)
+- `iOSSettingsDivider` — inset divider aligned past icon
+- `iOSSettingsSectionHeader` — uppercase section label
+- `iOSToggleRow` — complete toggle row (icon + label + `CinemaToggleIndicator`), equivalent to tvOS's `tvGlassToggle`
+
 ### Assets
 - `AppLogo.imageset`: iOS uses `app_logo.png` (full icon with background); tvOS uses `app_logo_tv.png` (front parallax layer — transparent background, jellyfish only). No `clipShape` on tvOS logo — organic shape renders freely.
 
@@ -135,7 +146,7 @@ The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOve
 
 ## MediaDetailScreen
 
-- `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes). Also calls `getNextUp()` for series to populate `nextUpEpisode`
+- `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes). Also calls `getNextUp()` for series to populate `nextUpEpisode`. `selectSeason()` uses a generation counter to discard stale results on rapid selection
 - `nextUpEpisodes: [BaseItemDto]` — when `nextUpEpisode.seasonID ≠ selectedSeasonId` (e.g. series season boundary), the next-up's season episodes are fetched separately so `episodeNavigation(for:)` can build prev/next refs for the resume button
 - Uses `resolvedType` (not initial `itemType`) for layout decisions
 - tvOS: overview text uses `.focusable()` for focus-driven scrolling past non-interactive content
@@ -148,7 +159,7 @@ The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOve
 - Episode rows show a thin accent progress bar overlay at the bottom of the thumbnail for partially-watched episodes
 
 **Episode navigation wiring**:
-- `episodeNavigation(for:)` — delegates to the shared `buildEpisodeNavigation(for:in:apiClient:userId:)` using `viewModel.episodes` (current season) or `viewModel.nextUpEpisodes` (fallback for cross-season next-up)
+- `episodeNavigation(for:)` — O(1) lookup from precomputed `viewModel.episodeNavigationMap` (current season) or `viewModel.nextUpNavigationMap` (cross-season next-up). Maps are rebuilt in `MediaDetailViewModel` whenever episodes change
 - Both `actionButtons` (next-up episode) and each `episodeRow` pass `previousEpisode`, `nextEpisode`, `episodeNavigator` to `PlayLink`
 
 ## HomeScreen
@@ -170,6 +181,8 @@ The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOve
 ## Image Patterns
 
 - `ImageURLBuilder` → `/Items/{id}/Images/{type}` URLs
+- **Backdrop sizing**: Use `ImageURLBuilder.screenPixelWidth` (device pixel width) for backdrops — never hardcode `1920`. Matches actual display density on all devices
+- **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with a 500 MB disk cache (`com.cinemax.images`)
 - **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`
 - **All image loading via `CinemaLazyImage`** — never use `LazyImage` directly. Params: `url`, `fallbackIcon: String?` (nil = no icon), `fallbackBackground: Color`, `showLoadingIndicator: Bool`
 - **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`

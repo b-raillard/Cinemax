@@ -40,6 +40,7 @@ extension SettingsScreen {
                     .frame(width: 112, height: 112)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
                     .shadow(color: themeManager.accent.opacity(0.4), radius: 15)
+                    .accessibilityHidden(true)
             }
 
             VStack(spacing: CinemaSpacing.spacing1) {
@@ -180,23 +181,23 @@ extension SettingsScreen {
             profileHeader
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                sectionHeader(loc.localized("settings.account"))
+                iOSSettingsSectionHeader(loc.localized("settings.account"))
 
                 VStack(spacing: 0) {
                     navigationRow(icon: "person.crop.circle", label: loc.localized("settings.profileSettings")) {}
 
-                    divider
+                    iOSSettingsDivider
 
                     navigationRow(icon: "lock.shield", label: loc.localized("settings.privacySecurity")) {}
 
-                    divider
+                    iOSSettingsDivider
 
-                    settingsRow {
+                    iOSSettingsRow {
                         Button {
                             showLogOutAlert = true
                         } label: {
                             HStack {
-                                rowIcon(systemName: "rectangle.portrait.and.arrow.right", color: CinemaColor.error)
+                                iOSRowIcon(systemName: "rectangle.portrait.and.arrow.right", color: CinemaColor.error)
 
                                 Text(loc.localized("action.logOut"))
                                     .font(CinemaFont.label(.large))
@@ -216,43 +217,65 @@ extension SettingsScreen {
     // MARK: Server Detail (iOS)
 
     var iOSServerDetail: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            sectionHeader(loc.localized("settings.infrastructure"))
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                iOSSettingsSectionHeader(loc.localized("settings.infrastructure"))
 
-            HStack(spacing: CinemaSpacing.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                        .fill(themeManager.accent.opacity(0.15))
-                        .frame(width: 40, height: 40)
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                            .fill(themeManager.accent.opacity(0.15))
+                            .frame(width: 40, height: 40)
 
-                    Image(systemName: "server.rack")
-                        .font(.system(size: CinemaScale.pt(20), weight: .semibold))
-                        .foregroundStyle(themeManager.accent)
+                        Image(systemName: "server.rack")
+                            .font(.system(size: CinemaScale.pt(20), weight: .semibold))
+                            .foregroundStyle(themeManager.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(serverName)
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+
+                        Text(serverAddress)
+                            .font(CinemaFont.label(.medium))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: CinemaSpacing.spacing2) {
+                        liveBadge
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: CinemaScale.pt(15), weight: .semibold))
+                            .foregroundStyle(CinemaColor.outlineVariant)
+                    }
                 }
+                .padding(CinemaSpacing.spacing4)
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(serverName)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurface)
-
-                    Text(serverAddress)
-                        .font(CinemaFont.label(.medium))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-
-                Spacer()
-
-                HStack(spacing: CinemaSpacing.spacing2) {
-                    liveBadge
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
-                        .foregroundStyle(CinemaColor.outlineVariant)
+            // Licenses
+            VStack(spacing: 0) {
+                iOSSettingsRow {
+                    Button { showLicenses = true } label: {
+                        HStack {
+                            iOSRowIcon(systemName: "doc.text", color: CinemaColor.onSurfaceVariant)
+                            Text(loc.localized("settings.licenses"))
+                                .font(CinemaFont.label(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: CinemaScale.pt(15), weight: .semibold))
+                                .foregroundStyle(CinemaColor.outlineVariant)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(CinemaSpacing.spacing4)
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
         }
     }
@@ -261,76 +284,25 @@ extension SettingsScreen {
 
     var iOSInterfaceDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            sectionHeader(loc.localized("settings.interface"))
+            iOSSettingsSectionHeader(loc.localized("settings.interface"))
 
             VStack(spacing: 0) {
-                settingsRow {
+                iOSToggleRow(icon: "sparkles", label: loc.localized("settings.motionEffects"),
+                             value: $motionEffects, accent: themeManager.accent, animated: motionEffects)
+                iOSSettingsDivider
+                iOSToggleRow(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"),
+                             value: $forceSubtitles, accent: themeManager.accent, animated: motionEffects)
+                iOSSettingsDivider
+                iOSToggleRow(icon: "4k.tv", label: loc.localized("settings.4kRendering"),
+                             value: $render4K, accent: themeManager.accent, animated: motionEffects)
+                iOSSettingsDivider
+                iOSToggleRow(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"),
+                             value: $autoPlayNextEpisode, accent: themeManager.accent, animated: motionEffects)
+                iOSSettingsDivider
+
+                iOSSettingsRow {
                     HStack {
-                        rowIcon(systemName: "sparkles", color: themeManager.accent)
-                        Text(loc.localized("settings.motionEffects"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
-                        Button { motionEffects.toggle() } label: {
-                            CinemaToggleIndicator(isOn: motionEffects, accent: themeManager.accent, animated: motionEffects)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                divider
-
-                settingsRow {
-                    HStack {
-                        rowIcon(systemName: "captions.bubble", color: themeManager.accent)
-                        Text(loc.localized("settings.forceSubtitles"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
-                        Button { forceSubtitles.toggle() } label: {
-                            CinemaToggleIndicator(isOn: forceSubtitles, accent: themeManager.accent, animated: motionEffects)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                divider
-
-                settingsRow {
-                    HStack {
-                        rowIcon(systemName: "4k.tv", color: themeManager.accent)
-                        Text(loc.localized("settings.4kRendering"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
-                        Button { render4K.toggle() } label: {
-                            CinemaToggleIndicator(isOn: render4K, accent: themeManager.accent, animated: motionEffects)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                divider
-
-                settingsRow {
-                    HStack {
-                        rowIcon(systemName: "play.square.stack", color: themeManager.accent)
-                        Text(loc.localized("settings.autoPlayNextEpisode"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
-                        Button { autoPlayNextEpisode.toggle() } label: {
-                            CinemaToggleIndicator(isOn: autoPlayNextEpisode, accent: themeManager.accent, animated: motionEffects)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                divider
-
-                settingsRow {
-                    HStack {
-                        rowIcon(systemName: "textformat.size", color: themeManager.accent)
+                        iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
                         Text(loc.localized("settings.fontSize"))
                             .font(CinemaFont.label(.large))
                             .foregroundStyle(CinemaColor.onSurface)
@@ -413,10 +385,10 @@ extension SettingsScreen {
 
     @ViewBuilder
     func navigationRow(icon: String, label: String, action: @escaping () -> Void) -> some View {
-        settingsRow {
+        iOSSettingsRow {
             Button(action: action) {
                 HStack {
-                    rowIcon(systemName: icon, color: CinemaColor.onSurfaceVariant)
+                    iOSRowIcon(systemName: icon, color: CinemaColor.onSurfaceVariant)
 
                     Text(label)
                         .font(CinemaFont.label(.large))
@@ -432,42 +404,6 @@ extension SettingsScreen {
             .buttonStyle(.plain)
         }
     }
-
-    @ViewBuilder
-    func settingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .padding(.vertical, CinemaSpacing.spacing3)
-    }
-
-    @ViewBuilder
-    func rowIcon(systemName: String, color: Color) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: CinemaRadius.small)
-                .fill(color.opacity(0.12))
-                .frame(width: 32, height: 32)
-
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(color)
-        }
-        .padding(.trailing, CinemaSpacing.spacing2)
-    }
-
-    var divider: some View {
-        Rectangle()
-            .fill(CinemaColor.surfaceContainerHighest.opacity(0.6))
-            .frame(height: 1)
-            .padding(.leading, CinemaSpacing.spacing4 + 32 + CinemaSpacing.spacing2)
-    }
-
-    func sectionHeader(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(CinemaFont.label(.small))
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            .tracking(1.2)
-            .padding(.horizontal, CinemaSpacing.spacing2)
-    }
 }
 
 // MARK: - Appearance Detail View (iOS)
@@ -477,16 +413,16 @@ extension SettingsScreen {
 private struct IOSAppearanceDetailView: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
-    @AppStorage("motionEffects") private var motionEffects: Bool = true
+    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            sectionHeader(loc.localized("settings.personalization"))
+            iOSSettingsSectionHeader(loc.localized("settings.personalization"))
 
             VStack(spacing: 0) {
-                settingsRow {
+                iOSSettingsRow {
                     HStack {
-                        rowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
+                        iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
 
                         Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
                             .font(CinemaFont.label(.large))
@@ -501,12 +437,12 @@ private struct IOSAppearanceDetailView: View {
                     }
                 }
 
-                divider
+                iOSSettingsDivider
 
-                settingsRow {
+                iOSSettingsRow {
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                         HStack {
-                            rowIcon(systemName: "paintpalette.fill", color: selectedAccent.color)
+                            iOSRowIcon(systemName: "paintpalette.fill", color: selectedAccent.color)
 
                             Text(loc.localized("settings.accentColor"))
                                 .font(CinemaFont.label(.large))
@@ -524,11 +460,11 @@ private struct IOSAppearanceDetailView: View {
                     .hoverEffectDisabled()
                 }
 
-                divider
+                iOSSettingsDivider
 
-                settingsRow {
+                iOSSettingsRow {
                     HStack {
-                        rowIcon(systemName: "globe", color: themeManager.accent)
+                        iOSRowIcon(systemName: "globe", color: themeManager.accent)
 
                         Text(loc.localized("settings.language"))
                             .font(CinemaFont.label(.large))
@@ -603,42 +539,5 @@ private struct IOSAppearanceDetailView: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
     }
 
-    // MARK: - Shared layout helpers
-
-    @ViewBuilder
-    func settingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .padding(.vertical, CinemaSpacing.spacing3)
-    }
-
-    @ViewBuilder
-    func rowIcon(systemName: String, color: Color) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: CinemaRadius.small)
-                .fill(color.opacity(0.12))
-                .frame(width: 32, height: 32)
-
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(color)
-        }
-        .padding(.trailing, CinemaSpacing.spacing2)
-    }
-
-    var divider: some View {
-        Rectangle()
-            .fill(CinemaColor.surfaceContainerHighest.opacity(0.6))
-            .frame(height: 1)
-            .padding(.leading, CinemaSpacing.spacing4 + 32 + CinemaSpacing.spacing2)
-    }
-
-    func sectionHeader(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(CinemaFont.label(.small))
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            .tracking(1.2)
-            .padding(.horizontal, CinemaSpacing.spacing2)
-    }
 }
 #endif
