@@ -77,40 +77,28 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 
 **DeviceProfile**: DirectPlay for mp4/m4v/mov + h264/hevc; transcode to HLS mp4 with `hevc,h264` only. **Never include `mpeg4`** in video codec lists — MPEG-4 ASP is not a valid HLS transcode target on Apple platforms and causes Jellyfin to inject `mpeg4-*` URL parameters that AVFoundation doesn't recognise. `maxBitrate`: 120 Mbps (4K) or 20 Mbps (1080p) via `@AppStorage("render4K")`.
 
-### tvOS Player — Critical Constraints
-- **MUST present via UIKit modal** (`UIViewController.present()`), NOT SwiftUI — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss
-- **Do NOT use `AVPlayerViewController`** — shows "Unknown" for audio tracks, no public API to fix. Use `TVPlayerHostViewController` instead
+### Native Player — Both Platforms (`NativeVideoPresenter` in `VideoPlayerView.swift`)
+Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal (`UIViewController.present()`). The shared `NativeVideoPresenter` class handles playback, track menus, episode navigation, and playback reporting on both platforms.
 
-### Custom tvOS Player (`TVCustomPlayerView.swift`)
-All types live in `Shared/Screens/TVCustomPlayerView.swift`:
+- **MUST present via UIKit modal**, NOT SwiftUI — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss
+- **iOS dismiss detection**: `PlayerHostingVC` wrapper (child VC) with `viewWillDisappear(isBeingDismissed:)`
+- **tvOS dismiss detection**: `TVDismissDelegate` using `AVPlayerViewControllerDelegate.playerViewControllerDidEndDismissalTransition` (tvOS-only API). Do NOT embed `AVPlayerViewController` as a child VC on tvOS — causes internal constraint conflicts and `-12881` playback errors
 
-- **`TVPlayerState`** — single source of truth: `currentTime`, `duration`, `isPlaying`, `isBuffering`, `showControls`, `currentAudioIdx`, `currentSubtitleIdx`, `title`, `previousEpisode`, `nextEpisode`
-- **`TVPlayerHostViewController`** — UIKit VC with `AVPlayerLayer` + `UIHostingController<TVPlayerOverlayView>`. Handles remote via `pressesBegan`: playPause → toggle; menu → show/dismiss controls; left/right → pass to super (SwiftUI `onMoveCommand` handles seeking). Accepts `episodeNavigator` for in-player episode switching via `navigateToEpisode(_:)`. Reports playback start/progress/stop to Jellyfin. **Touch-surface scrubbing**: `UIPanGestureRecognizer` with `allowedTouchTypes = [.indirect]` tracks swipe gestures on the Siri Remote touch pad; during scrub `state.currentTime` updates visually while the time observer is gated (`isScrubbing`), and a single `avPlayer.seek()` fires on gesture end.
-- **`TVControlsOverlay`** — owns the single `@FocusState<FocusItem?>` (`.scrubber`, `.audio`, `.subtitle`, `.previousEpisode`, `.nextEpisode`). `onMoveCommand` for seeking lives here. Controls float on video with no background container; buttons have individual `Capsule()` glass backgrounds
-- **`TVPlayerScrubber`** — display-only, no `@FocusState`. Re-renders only on progress/time changes
-- **`TVAudioTrackMenu`** / **`TVSubtitleTrackMenu`** — isolated sub-views observing only their index. Same-track selection is a no-op
+**Audio track menus**: injected via `transportBarCustomMenuItems` — first-class public API on tvOS, accessed via ObjC runtime KVC on iOS (marked `API_UNAVAILABLE(ios)` in Swift SDK but exists at runtime on iOS 16+). Custom audio menu shows Jellyfin track names instead of AVKit's default "Unknown" labels
 
-**HUD center area** (always visible when controls are shown):
-- Large `pause.circle.fill` / `play.circle.fill` icon reflects `state.isPlaying` in real-time
-- `gobackward.15` / `goforward.15` flash icons flank the play/pause icon; shown for 500 ms on each scrubber seek, cancelled and restarted on rapid consecutive seeks
+**Subtitle handling** (platform-split):
+- **iOS**: `enableSubtitlesInManifest: true` + subtitle profiles `.hls` → Jellyfin includes WebVTT renditions in the HLS manifest. `HLSManifestLoader` (`AVAssetResourceLoaderDelegate` with `cinemax-https://` custom scheme) strips `#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS` from playlists and ASS/SSA override tags (`{\i1}`, `{\b}`, `{comments}`) from VTT segments. AVKit shows ONE unified native Subtitles menu. **iOS fallback**: `HLSManifestLoader` can also fail with `-12881` on iOS (not just tvOS) — `retryWithDirectURL` in `NativeVideoPresenter` automatically retries with the direct HLS URL (no custom scheme) when the player item fails. ASS tags won't be stripped on fallback (same as tvOS). Flag `hasRetriedDirectURL` resets on episode navigation so each episode gets its own retry
+- **tvOS**: Same `enableSubtitlesInManifest: true` + `.hls` profiles. `HLSManifestLoader` does NOT work on tvOS (`AVAssetResourceLoaderDelegate` causes `-12881` with `AVPlayerViewController`), so the HLS URL is used directly. AVKit shows native Subtitles menu, but ASS tags may appear in subtitle text (known Jellyfin server-side limitation)
+- **`HLSManifestLoader` key constraint**: `contentInformationRequest.contentType` must be a **UTI**, not a MIME type. Use `"public.m3u-playlist"` for M3U8, `"org.w3.webvtt"` for VTT. For segment types, skip `contentType` to let AVFoundation infer it
 
-**Episode navigation** (`EpisodeRef` + `EpisodeNavigator` + `buildEpisodeNavigation` in `PlayLink.swift`):
-- `EpisodeRef: Sendable { id, title }` — lightweight episode pointer
-- `EpisodeNavigator = @Sendable (String) async -> (PlaybackInfo, EpisodeRef?, EpisodeRef?)?` — fetches new PlaybackInfo and returns updated prev/next refs
-- `buildEpisodeNavigation(for:in:apiClient:userId:)` — free function that builds `(previous, next, navigator)` from a flat `[BaseItemDto]` list; used by both `MediaDetailScreen` and `HomeViewModel` to avoid duplication
-- `TVControlsOverlay` shows `backward.end.fill` / `forward.end.fill` capsule buttons when `state.previousEpisode` / `state.nextEpisode` are non-nil; update live after navigation
-- `navigateToEpisode()` reports playback stop for the old item, then start for the new one; resets `state.currentTime/duration`, swaps `AVPlayer` item, updates `state.title` + episode refs
-- `PlayLink` carries `previousEpisode`, `nextEpisode`, `episodeNavigator`; passes them through `VideoPlayerCoordinator` → `TVVideoPresenter` → `TVPlayerHostViewController`
+**Episode navigation**: `MPRemoteCommandCenter` prev/next track commands on both platforms. `EpisodeRef` + `EpisodeNavigator` + `buildEpisodeNavigation` (shared free function in `PlayLink.swift`). `PlayLink` carries `previousEpisode`, `nextEpisode`, `episodeNavigator`; passes through `VideoPlayerCoordinator` (tvOS) or `VideoPlayerView` (iOS) → `NativeVideoPresenter`
 
-**Key invariants**:
-- Never re-render Menus on time ticks — isolate to sub-views
-- Always set `state.currentTime = savedSeconds` before `state.isBuffering = true` in track-switch paths
-- `@FocusState` must live in `TVControlsOverlay` (parent), not sub-views, for focus restoration after Menu back
-- `state.title` / `state.previousEpisode` / `state.nextEpisode` are updated by `navigateToEpisode()` so the overlay reflects the current episode without re-mounting
-- `isScrubbing = true` blocks the periodic time observer from overriding the scrubber position during touch-pad swipes
+**Playback reporting**: `reportPlaybackStart`, `reportPlaybackProgress` (10 s loop), `reportPlaybackStopped` — called on start, periodically, and on dismiss/episode-nav
 
-### iOS Player (`VideoPlayerView`)
-`AVPlayerItem(url:)`, KVO on `playerItem.status`, cleanup on disappear (pause + nil + invalidate). Uses `@State`-based mutable episode context (`currentItemId`, `currentTitle`, `currentStartTime`, `currentPrevEpisode`, `currentNextEpisode`) so episode navigation hot-swaps the player in place. Prev/next `backward.end.fill` / `forward.end.fill` icon buttons appear in the top-trailing overlay alongside the track picker. Reports playback start/progress (10 s loop) /stop to Jellyfin; `progressReportTask` is cancelled in `cleanup()`.
+**Auto-play next episode**: `AVPlayerItem.didPlayToEndTime` observer → `navigateToEpisode(next)` when `autoPlayNextEpisode` setting is on
+
+### Legacy Custom tvOS Player (`TVCustomPlayerView.swift`) — DEAD CODE
+The custom player (`TVPlayerHostViewController`, `TVPlayerState`, `TVControlsOverlay`, `TVPlayerScrubber`, `TVAudioTrackMenu`, `TVSubtitleTrackMenu`) is no longer used. tvOS now uses `NativeVideoPresenter` with native `AVPlayerViewController`. The old code remains in `Shared/Screens/TVCustomPlayerView.swift` and `TVPlayerHostViewController.swift` but is unreachable — `VideoPlayerCoordinator` creates `NativeVideoPresenter` instead of `TVVideoPresenter`.
 
 ## Settings Screen
 
@@ -140,7 +128,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 | `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |
 | `forceSubtitles` | `false` | Auto-selects first `.legible` track; disables `appliesMediaSelectionCriteriaAutomatically` |
 | `render4K` | `true` | `maxBitrate` 120 Mbps (on) / 20 Mbps (off) |
-| `autoPlayNextEpisode` | `true` | Auto-navigates to next episode via `AVPlayerItem.didPlayToEndTime` in both `TVPlayerHostViewController` and `VideoPlayerView` |
+| `autoPlayNextEpisode` | `true` | Auto-navigates to next episode via `AVPlayerItem.didPlayToEndTime` in `NativeVideoPresenter` (both platforms) |
 | `uiScale` | `1.0` | Font scale 80–130%. Bumps `ThemeManager._accentRevision` to force re-render |
 | `darkMode` | `true` | **Must be toggled via `themeManager.darkModeEnabled`**, not directly — direct writes don't bump `_accentRevision` |
 | `accentColor` | `"blue"` | Set via `themeManager.accentColorKey` for same reason |
@@ -151,7 +139,7 @@ All types live in `Shared/Screens/TVCustomPlayerView.swift`:
 - `nextUpEpisodes: [BaseItemDto]` — when `nextUpEpisode.seasonID ≠ selectedSeasonId` (e.g. series season boundary), the next-up's season episodes are fetched separately so `episodeNavigation(for:)` can build prev/next refs for the resume button
 - Uses `resolvedType` (not initial `itemType`) for layout decisions
 - tvOS: overview text uses `.focusable()` for focus-driven scrolling past non-interactive content
-- **tvOS detail refresh**: `VideoPlayerCoordinator` has `lastDismissedAt: Date?`; updated via `onDismiss` callback in `TVPlayerHostViewController.viewWillDisappear`; `MediaDetailScreen` observes `.onChange(of: coordinator.lastDismissedAt)` to reload after the player is dismissed (iOS reloads automatically via `.task` on NavigationLink pop)
+- **tvOS detail refresh**: `VideoPlayerCoordinator` has `lastDismissedAt: Date?`; updated via `onDismiss` callback in `NativeVideoPresenter` (triggered by `TVDismissDelegate`); `MediaDetailScreen` observes `.onChange(of: coordinator.lastDismissedAt)` to reload after the player is dismissed (iOS reloads automatically via `.task` on NavigationLink pop)
 
 **Resume / next-up logic in `actionButtons`**:
 - Movie with `playbackPositionTicks > 0` and not `isPlayed`: shows progress bar (accent fill, `playButtonWidth` wide) + remaining time text (`home.remainingTime.*` keys) + "Lecture" button that resumes at saved position via `PlayLink(startTime:)`

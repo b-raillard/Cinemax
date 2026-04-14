@@ -279,7 +279,7 @@ public final class JellyfinAPIClient: Sendable {
 
     public func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] {
         guard let client = getClient() else { throw JellyfinError.notConnected }
-        let params = Paths.GetEpisodesParameters(userID: userId, seasonID: seasonId, enableUserData: true)
+        let params = Paths.GetEpisodesParameters(userID: userId, fields: [.overview], seasonID: seasonId, enableUserData: true)
         let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
         return response.value.items ?? []
     }
@@ -671,15 +671,19 @@ public final class JellyfinAPIClient: Sendable {
             videoCodec: "h264,hevc"
         ),
     ]
+    // hevc,h264 only — MPEG-4 ASP is not a valid HLS transcode target on Apple devices
+    // and causes Jellyfin to inject mpeg4-* URL parameters that AVFoundation doesn't recognise.
+    // enableSubtitlesInManifest = true → Jellyfin includes WebVTT renditions in the HLS manifest.
+    // AVKit shows them natively in ONE unified Subtitles menu on both iOS and tvOS.
+    // On iOS, HLSManifestLoader strips ASS/SSA tags from WebVTT segments.
+    // On tvOS, AVAssetResourceLoaderDelegate doesn't work, so ASS tags may appear in subtitles.
     nonisolated(unsafe) private static let _transcodingProfiles: [TranscodingProfile] = [
-        // hevc,h264 only — MPEG-4 ASP is not a valid HLS transcode target on Apple devices
-        // and causes Jellyfin to inject mpeg4-* URL parameters that AVFoundation doesn't recognise.
         TranscodingProfile(
             audioCodec: "aac,ac3,alac,eac3,flac",
             isBreakOnNonKeyFrames: true,
             container: "mp4",
             context: .streaming,
-            enableSubtitlesInManifest: false,
+            enableSubtitlesInManifest: true,
             maxAudioChannels: "8",
             minSegments: 2,
             protocol: .hls,
@@ -687,20 +691,14 @@ public final class JellyfinAPIClient: Sendable {
             videoCodec: "hevc,h264"
         ),
     ]
-    // All subtitles are burned (encoded) into the video by the server.
-    // This prevents AVPlayerViewController from showing its native subtitle picker button
-    // (which appears only when the HLS manifest contains subtitle media groups).
-    // Subtitle selection is handled exclusively via our custom transport-bar menu,
-    // which re-requests the stream with the desired SubtitleStreamIndex.
-    // Burning preserves full ASS/SSA styling that AVPlayer's WebVTT conversion would strip.
     nonisolated(unsafe) private static let _subtitleProfiles: [SubtitleProfile] = [
-        SubtitleProfile(format: "srt",    method: .encode),
-        SubtitleProfile(format: "subrip", method: .encode),
-        SubtitleProfile(format: "vtt",    method: .encode),
-        SubtitleProfile(format: "webvtt", method: .encode),
-        SubtitleProfile(format: "ass",    method: .encode),
-        SubtitleProfile(format: "ssa",    method: .encode),
-        SubtitleProfile(format: "ttml",   method: .encode),
+        SubtitleProfile(format: "srt",    method: .hls),
+        SubtitleProfile(format: "subrip", method: .hls),
+        SubtitleProfile(format: "vtt",    method: .hls),
+        SubtitleProfile(format: "webvtt", method: .hls),
+        SubtitleProfile(format: "ass",    method: .hls),
+        SubtitleProfile(format: "ssa",    method: .hls),
+        SubtitleProfile(format: "ttml",   method: .hls),
         SubtitleProfile(format: "pgs",    method: .encode),
         SubtitleProfile(format: "pgssub", method: .encode),
         SubtitleProfile(format: "dvbsub", method: .encode),

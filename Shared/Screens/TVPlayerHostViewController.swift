@@ -192,10 +192,12 @@ final class TVPlayerHostViewController: UIViewController {
             object: item,
             queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            let autoPlay = UserDefaults.standard.object(forKey: "autoPlayNextEpisode") as? Bool ?? true
-            if autoPlay, let next = self.state.nextEpisode {
-                self.navigateToEpisode(next)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let autoPlay = UserDefaults.standard.object(forKey: "autoPlayNextEpisode") as? Bool ?? true
+                if autoPlay, let next = self.state.nextEpisode {
+                    self.navigateToEpisode(next)
+                }
             }
         }
 

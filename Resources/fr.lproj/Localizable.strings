@@ -129,6 +129,7 @@
 "detail.runtime.min" = "%d min";
 "detail.seasons" = "%d saisons";
 "detail.season" = "Saison";
+"detail.seeMore" = "Voir plus";
 
 // MARK: - Login
 

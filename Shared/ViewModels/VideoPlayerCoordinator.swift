@@ -5,65 +5,10 @@ import CinemaxKit
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Playback")
 
-// MARK: - tvOS UIKit Video Presentation
-
-/// Presents TVPlayerHostViewController via UIKit modal presentation,
-/// completely bypassing SwiftUI's view hierarchy. This prevents
-/// NavigationSplitView focus corruption on dismiss, and gives us a
-/// fully custom transport bar with correct Jellyfin track metadata.
-#if os(tvOS)
-@MainActor
-final class TVVideoPresenter {
-
-    static func present(
-        title: String,
-        itemId: String,
-        userId: String,
-        apiClient: any APIClientProtocol,
-        info: PlaybackInfo,
-        startTime: Double? = nil,
-        previousEpisode: EpisodeRef? = nil,
-        nextEpisode: EpisodeRef? = nil,
-        episodeNavigator: EpisodeNavigator? = nil,
-        localizationManager: LocalizationManager,
-        onDismiss: (() -> Void)? = nil,
-        onTrackChange: @escaping (Int?, Int?) async -> URL?
-    ) {
-        guard let windowScene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = windowScene.windows.first?.rootViewController else {
-            logger.error("TVVideoPresenter: no root view controller")
-            return
-        }
-
-        var topVC = rootVC
-        while let presented = topVC.presentedViewController {
-            topVC = presented
-        }
-
-        let playerVC = TVPlayerHostViewController(
-            title: title,
-            itemId: itemId,
-            userId: userId,
-            apiClient: apiClient,
-            info: info,
-            startTime: startTime,
-            previousEpisode: previousEpisode,
-            nextEpisode: nextEpisode,
-            episodeNavigator: episodeNavigator,
-            localizationManager: localizationManager,
-            onDismiss: onDismiss,
-            onTrackChange: onTrackChange
-        )
-        topVC.present(playerVC, animated: true)
-    }
-}
-#endif
-
 // MARK: - Video Player Coordinator (tvOS)
 
 /// Coordinates playback on tvOS. Fetches the stream URL via the API client,
-/// then hands off to TVVideoPresenter for pure-UIKit modal presentation.
+/// then presents the native AVPlayerViewController via NativeVideoPresenter.
 #if os(tvOS)
 @MainActor @Observable
 final class VideoPlayerCoordinator {
@@ -71,11 +16,16 @@ final class VideoPlayerCoordinator {
     @AppStorage("forceSubtitles") private var forceSubtitles: Bool = false
     @ObservationIgnored
     @AppStorage("render4K") private var render4K: Bool = true
+    @ObservationIgnored
+    @AppStorage("autoPlayNextEpisode") private var autoPlayNextEpisode: Bool = true
 
     var localizationManager: LocalizationManager?
     /// Updated each time a playback session ends (player dismissed). MediaDetailScreen
     /// observes this to refresh its content after the user returns from the player.
     var lastDismissedAt: Date?
+
+    /// Retained so the presenter isn't deallocated during playback.
+    private var presenter: NativeVideoPresenter?
 
     var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
 
@@ -99,19 +49,20 @@ final class VideoPlayerCoordinator {
             do {
                 let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
                 logger.info("tvOS play: method=\(info.playMethod.rawValue), url=\(info.url.absoluteString)")
-                TVVideoPresenter.present(
-                    title: title, itemId: itemId, userId: userId,
-                    apiClient: apiClient, info: info, startTime: startTime,
+                let p = NativeVideoPresenter(
+                    itemId: itemId, title: title, startTime: startTime,
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                     episodeNavigator: episodeNavigator,
-                    localizationManager: loc,
-                    onDismiss: { [weak self] in self?.lastDismissedAt = Date() }
-                ) { audioIdx, subtitleIdx in
-                    return try? await apiClient.getPlaybackInfo(
-                        itemId: itemId, userId: userId, maxBitrate: bitrate,
-                        audioStreamIndex: audioIdx, subtitleStreamIndex: subtitleIdx
-                    ).url
-                }
+                    apiClient: apiClient, userId: userId,
+                    maxBitrate: bitrate, loc: loc,
+                    autoPlayNextEpisode: autoPlayNextEpisode,
+                    onDismiss: { [weak self] in
+                        self?.presenter = nil
+                        self?.lastDismissedAt = Date()
+                    }
+                )
+                self.presenter = p
+                p.present(info: info)
             } catch {
                 logger.error("tvOS playback error: \(error.localizedDescription)")
             }
