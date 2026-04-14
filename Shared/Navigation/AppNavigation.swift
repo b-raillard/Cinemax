@@ -69,6 +69,7 @@ struct AppNavigation: View {
     @State private var themeManager = ThemeManager()
     @State private var loc = LocalizationManager()
     @State private var hasCheckedSession = false
+    @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage("motionEffects") private var motionEffects: Bool = true
 
@@ -100,9 +101,21 @@ struct AppNavigation: View {
             await appState.restoreSession()
             hasCheckedSession = true
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
+            }
+        }
     }
 
-    private var launchScreen: some View {
+}
+
+extension Notification.Name {
+    static let cinemaxDidEnterBackground = Notification.Name("cinemaxDidEnterBackground")
+}
+
+private extension AppNavigation {
+    var launchScreen: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
             LoadingStateView()

@@ -37,6 +37,7 @@ final class NativeVideoPresenter {
 
     // Retained for the lifetime of the asset — AVAssetResourceLoader holds only a weak ref.
     private var manifestLoader = HLSManifestLoader()
+    private var backgroundObserver: NSObjectProtocol?
 
     // Track state
     private var audioTracks: [MediaTrackInfo] = []
@@ -109,6 +110,7 @@ final class NativeVideoPresenter {
         self.playerVC = vc
         setupRemoteCommands()
         setupTrackMenus()
+        setupBackgroundObserver()
 
         #if os(tvOS)
         // tvOS: present AVPlayerViewController directly — embedding as a child VC causes
@@ -538,6 +540,31 @@ final class NativeVideoPresenter {
         return item
     }
 
+    private func setupBackgroundObserver() {
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: .cinemaxDidEnterBackground, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.reportPlaybackProgress()
+            }
+        }
+    }
+
+    private func reportPlaybackProgress() {
+        guard let info = playbackInfo, let player = playerVC?.player else { return }
+        let positionTicks = Int(player.currentTime().seconds * 10_000_000)
+        let id = itemId
+        let client = apiClient
+        let uid = userId
+        Task.detached {
+            await client.reportPlaybackProgress(
+                itemId: id, userId: uid,
+                mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
+                positionTicks: positionTicks, isPaused: true, playMethod: info.playMethod
+            )
+        }
+    }
+
     private func cleanupPlayer() {
         progressReportTask?.cancel()
         progressReportTask = nil
@@ -546,6 +573,10 @@ final class NativeVideoPresenter {
         if let obs = itemEndObserver {
             NotificationCenter.default.removeObserver(obs)
             itemEndObserver = nil
+        }
+        if let obs = backgroundObserver {
+            NotificationCenter.default.removeObserver(obs)
+            backgroundObserver = nil
         }
         playerVC?.player?.pause()
         playerVC?.player?.replaceCurrentItem(with: nil)

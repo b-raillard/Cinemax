@@ -65,6 +65,7 @@ struct HomeScreen: View {
                     fallbackIcon: nil,
                     fallbackBackground: CinemaColor.surfaceContainerLow
                 )
+                .accessibilityHidden(true)
             }
 
             // Gradient overlays
@@ -199,6 +200,7 @@ struct HomeScreen: View {
                     #else
                     .buttonStyle(.plain)
                     #endif
+                    .accessibilityLabel(item.name ?? "")
                 }
             }
         }

@@ -40,6 +40,7 @@ extension SettingsScreen {
                     .frame(width: 112, height: 112)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
                     .shadow(color: themeManager.accent.opacity(0.4), radius: 15)
+                    .accessibilityHidden(true)
             }
 
             VStack(spacing: CinemaSpacing.spacing1) {
@@ -216,43 +217,65 @@ extension SettingsScreen {
     // MARK: Server Detail (iOS)
 
     var iOSServerDetail: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            iOSSettingsSectionHeader(loc.localized("settings.infrastructure"))
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                iOSSettingsSectionHeader(loc.localized("settings.infrastructure"))
 
-            HStack(spacing: CinemaSpacing.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                        .fill(themeManager.accent.opacity(0.15))
-                        .frame(width: 40, height: 40)
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                            .fill(themeManager.accent.opacity(0.15))
+                            .frame(width: 40, height: 40)
 
-                    Image(systemName: "server.rack")
-                        .font(.system(size: CinemaScale.pt(20), weight: .semibold))
-                        .foregroundStyle(themeManager.accent)
+                        Image(systemName: "server.rack")
+                            .font(.system(size: CinemaScale.pt(20), weight: .semibold))
+                            .foregroundStyle(themeManager.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(serverName)
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+
+                        Text(serverAddress)
+                            .font(CinemaFont.label(.medium))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: CinemaSpacing.spacing2) {
+                        liveBadge
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: CinemaScale.pt(15), weight: .semibold))
+                            .foregroundStyle(CinemaColor.outlineVariant)
+                    }
                 }
+                .padding(CinemaSpacing.spacing4)
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(serverName)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurface)
-
-                    Text(serverAddress)
-                        .font(CinemaFont.label(.medium))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-
-                Spacer()
-
-                HStack(spacing: CinemaSpacing.spacing2) {
-                    liveBadge
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
-                        .foregroundStyle(CinemaColor.outlineVariant)
+            // Licenses
+            VStack(spacing: 0) {
+                iOSSettingsRow {
+                    Button { showLicenses = true } label: {
+                        HStack {
+                            iOSRowIcon(systemName: "doc.text", color: CinemaColor.onSurfaceVariant)
+                            Text(loc.localized("settings.licenses"))
+                                .font(CinemaFont.label(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: CinemaScale.pt(15), weight: .semibold))
+                                .foregroundStyle(CinemaColor.outlineVariant)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(CinemaSpacing.spacing4)
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
         }
     }

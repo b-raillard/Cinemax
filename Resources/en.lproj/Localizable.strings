@@ -171,6 +171,11 @@
 "player.subtitles.off" = "Off";
 "player.trackPicker.title" = "Playback Tracks";
 
+// MARK: - Licenses
+
+"settings.licenses" = "Open Source Licenses";
+"settings.licenses.description" = "Cinemax uses the following open source libraries:";
+
 // MARK: - Accessibility
 
 "accessibility.clearSearch" = "Clear search";

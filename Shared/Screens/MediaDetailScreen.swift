@@ -105,6 +105,7 @@ struct MediaDetailScreen: View {
                     fallbackBackground: CinemaColor.surfaceContainerLow
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityHidden(true)
             }
 
             CinemaGradient.heroOverlay

@@ -208,6 +208,7 @@ struct MediaLibraryScreen: View {
                     fallbackIcon: nil,
                     fallbackBackground: CinemaColor.surfaceContainerLow
                 )
+                .accessibilityHidden(true)
             }
 
             CinemaGradient.heroOverlay

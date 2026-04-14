@@ -114,6 +114,7 @@ struct SettingsScreen: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @State var showLogOutAlert = false
+    @State var showLicenses = false
     @State var selectedCategory: SettingsCategory? = nil
 
     // Shared stored properties
@@ -186,6 +187,9 @@ struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         #endif
+        .sheet(isPresented: $showLicenses) {
+            LicensesView()
+        }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
                 appState.logout()
