@@ -24,7 +24,7 @@ Shared/
   Screens/          HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen,
                     MovieLibraryScreen, LibrarySortFilterSheet, TVSeriesScreen,
                     VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet,
-                    SettingsScreen (+iOS, +tvOS platform variants)
+                    SettingsScreen (+iOS, +tvOS platform variants), SettingsRowHelpers
   ViewModels/       HomeViewModel, LoginViewModel, SearchViewModel, ServerSetupViewModel,
                     MediaDetailViewModel, MediaLibraryViewModel, VideoPlayerCoordinator
 iOS/                app entry point
@@ -123,6 +123,13 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 - Category buttons on landing: pill shape, focused state = `accentContainer` fill + scale 1.05 + glow shadow.
 - Back button focus: `.focused($focusedItem, equals: .back)`, highlighted with accent color.
 
+### iOS Settings Row Helpers (`SettingsRowHelpers.swift`)
+- `iOSSettingsRow` — padded row container
+- `iOSRowIcon` — colored icon badge (leading element)
+- `iOSSettingsDivider` — inset divider aligned past icon
+- `iOSSettingsSectionHeader` — uppercase section label
+- `iOSToggleRow` — complete toggle row (icon + label + `CinemaToggleIndicator`), equivalent to tvOS's `tvGlassToggle`
+
 ### Assets
 - `AppLogo.imageset`: iOS uses `app_logo.png` (full icon with background); tvOS uses `app_logo_tv.png` (front parallax layer — transparent background, jellyfish only). No `clipShape` on tvOS logo — organic shape renders freely.
 
@@ -139,7 +146,7 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 
 ## MediaDetailScreen
 
-- `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes). Also calls `getNextUp()` for series to populate `nextUpEpisode`
+- `MediaDetailViewModel` auto-resolves Episode/Season → parent Series (fetches by `seriesID`, loads seasons + episodes). Also calls `getNextUp()` for series to populate `nextUpEpisode`. `selectSeason()` uses a generation counter to discard stale results on rapid selection
 - `nextUpEpisodes: [BaseItemDto]` — when `nextUpEpisode.seasonID ≠ selectedSeasonId` (e.g. series season boundary), the next-up's season episodes are fetched separately so `episodeNavigation(for:)` can build prev/next refs for the resume button
 - Uses `resolvedType` (not initial `itemType`) for layout decisions
 - tvOS: overview text uses `.focusable()` for focus-driven scrolling past non-interactive content
@@ -174,6 +181,8 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 ## Image Patterns
 
 - `ImageURLBuilder` → `/Items/{id}/Images/{type}` URLs
+- **Backdrop sizing**: Use `ImageURLBuilder.screenPixelWidth` (device pixel width) for backdrops — never hardcode `1920`. Matches actual display density on all devices
+- **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with a 500 MB disk cache (`com.cinemax.images`)
 - **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`
 - **All image loading via `CinemaLazyImage`** — never use `LazyImage` directly. Params: `url`, `fallbackIcon: String?` (nil = no icon), `fallbackBackground: Color`, `showLoadingIndicator: Bool`
 - **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`
