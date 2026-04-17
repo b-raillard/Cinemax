@@ -508,10 +508,37 @@ Cinemax is in **strong shape for App Store submission**. No critical blockers. S
 | # | Action | Category | Effort | Impact |
 |---|--------|----------|--------|--------|
 | 1 | Extract shared `SettingsRowModel` + platform wrappers | Code Quality | 4-6 hr | High — ~350 LOC removed, future rows are one edit |
-| 2 | Pagination spinner → footer row (centered only for initial) | UX | 30-60 min | Medium — cheap fix, clear win |
-| 3 | Unit tests: `MediaDetailViewModel.selectSeason` race, `SearchViewModel` cancel, cache TTL | Testing | 2-3 hr | High — pre-submission confidence |
+| 2 | ~~Pagination spinner → footer row (centered only for initial)~~ | UX | 30-60 min | **DONE** (audit 2.1, 2026-04-17) |
+| 3 | ~~Unit tests: `MediaDetailViewModel.selectSeason` race, `SearchViewModel` cancel, cache TTL~~ | Testing | 2-3 hr | **DONE** (audit 2.1, 2026-04-17) |
 | 4 | Extract `LibraryHeroSection` + `LibraryGenreRow` from `MovieLibraryScreen` | Code Quality | 2-3 hr | Medium — readability, sets pattern |
 | 5 | Extract playback sub-controllers (sleep / skip / reporting) | Code Quality | 3-4 hr | Medium — deferred from 1.4 |
-| 6 | Filter grid: centered spinner → `ContentUnavailableView` with spinner | UX | 30 min | Low — polish |
+| 6 | ~~Filter grid: centered spinner → `ContentUnavailableView` with spinner~~ | UX | 30 min | **DONE** (audit 2.1, 2026-04-17) |
 | 7 | Split `APIClientProtocol` by domain | Code Quality | 4-6 hr | Low-Medium — nice-to-have; defer |
+
+---
+
+## 14. Audit 2.1 — UX spinners + test coverage (2026-04-17)
+
+### Completed this batch
+
+| # | Action | Category | Effort | Notes |
+|---|--------|----------|--------|-------|
+| 1 | Filter grid: initial-load spinner gains explanatory label | UX (#6) | 20 min | `MovieLibraryScreen.filteredLoadingState` centers a spinner + localized "Loading movies…" / "Loading series…" label below. Replaces the bare `ProgressView()` that was visually indistinguishable from a hung fetch. Both tvOS (line 88) and iOS (line 189) sites now reference the helper. New keys `library.loading.movies` / `library.loading.series` in fr + en. |
+| 2 | Filter grid: pagination spinner becomes a footer row | UX (#2) | 15 min | `filteredPaginationFooter` renders a low-profile centered spinner *below* the grid when `isLoadingMore` fires with existing items, preserving visual continuity during scroll. Keeps the full-card `filteredLoadingState` only for `items.isEmpty && isLoadingMore` (initial page). Applied to both tvOS and iOS. |
+| 3 | Test coverage: `MediaDetailViewModel.selectSeason` race | Testing (#3) | 45 min | New `MediaDetailViewModelTests` suite with a race test — Season A handler sleeps 200 ms, Season B sleeps 20 ms; `selectSeason` invoked concurrently via `async let`. Asserts the generation counter discards the late-arriving Season A result and keeps Season B's episodes. Plus two scaffold tests (happy path, nil userId short-circuit). `MockAPIClient.getEpisodesHandler` added so tests can inject per-season delays. |
+| 4 | Test coverage: `SearchViewModel` cancellation | Testing (#3) | 40 min | New `SearchViewModelTests` suite: empty-query no-op, success path, cancellation-does-not-stick (replaces in-flight query mid-await, verifies `isSearching` flips back to false via `defer`), API-failure path, `fetchRandomMovie` happy + error. `MockAPIClient.searchItemsHandler` added for injecting delays/errors. Cancellation test completes in ~1.4 s. |
+| 5 | Test coverage: `APICache` TTL | Testing (#3) | 20 min | New `APICacheTests` suite (seven tests): pre-expiry hit, post-expiry miss (50 ms TTL + 120 ms sleep), type-mismatched read, `invalidate(prefix:)` scoping, `clear()`, overwrite-with-newer-TTL. Lives in the Xcode `CinemaxTests` target (not the SPM package tests) because SPM would need a macOS platform declaration; reaching `APICache` requires `@testable import CinemaxKit` which works fine from the app-linked test target. |
+
+**Build & test verification**: iOS — `xcodebuild test -scheme Cinemax -only-testing:CinemaxTests` → `36 tests in 8 suites passed after 4.876 seconds` (`** TEST SUCCEEDED **`). tvOS — `xcodebuild build -scheme CinemaxTV` → `** BUILD SUCCEEDED **`.
+
+### Remaining after this batch
+
+**Refactoring** (from §13 suggested batch)
+- `SettingsRowModel` extraction (~350 LOC reduction) — largest remaining code-quality win
+- `LibraryHeroSection` / `LibraryGenreRow` extraction from `MovieLibraryScreen` (977 lines)
+- `NativeVideoPresenter` sub-controller extraction (sleep / skip / reporting)
+- `APIClientProtocol` domain split
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
 

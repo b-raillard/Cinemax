@@ -75,6 +75,8 @@
 "empty.library.filtered.title" = "No matches";
 "empty.library.filtered.subtitle" = "Try adjusting your filters or clearing them.";
 "empty.library.filtered.action" = "Clear filters";
+"library.loading.movies" = "Loading movies…";
+"library.loading.series" = "Loading series…";
 "empty.library.title" = "No titles here yet";
 "empty.library.subtitle" = "Add content to your Jellyfin server to get started.";
 "empty.home.title" = "Your library is empty";

@@ -86,10 +86,7 @@ struct MediaLibraryScreen: View {
                     if viewModel.sortFilter.isFiltered {
                         // Filtered grid (genre selected)
                         if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
-                            ProgressView()
-                                .tint(CinemaColor.onSurfaceVariant)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, CinemaSpacing.spacing10)
+                            filteredLoadingState
                         } else if viewModel.filteredLoader.items.isEmpty {
                             filteredEmptyState
                         } else {
@@ -100,6 +97,10 @@ struct MediaLibraryScreen: View {
                                 }
                             }
                             .padding(.horizontal, CinemaSpacing.spacing20)
+
+                            if viewModel.filteredLoader.isLoadingMore {
+                                filteredPaginationFooter
+                            }
                         }
                     } else {
                         // Browse genre rows
@@ -187,10 +188,7 @@ struct MediaLibraryScreen: View {
                         .padding(.horizontal, gridPadding)
 
                     if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
-                        ProgressView()
-                            .tint(CinemaColor.onSurfaceVariant)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, CinemaSpacing.spacing10)
+                        filteredLoadingState
                     } else if viewModel.filteredLoader.items.isEmpty {
                         filteredEmptyState
                     } else {
@@ -202,6 +200,10 @@ struct MediaLibraryScreen: View {
                             }
                         }
                         .padding(.horizontal, gridPadding)
+
+                        if viewModel.filteredLoader.isLoadingMore {
+                            filteredPaginationFooter
+                        }
                     }
 
                     Spacer(minLength: 80)
@@ -782,6 +784,31 @@ struct MediaLibraryScreen: View {
         ) {
             viewModel.sortFilter = LibrarySortFilterState()
         }
+    }
+
+    /// Shown in place of the filtered grid on the *initial* load (items still empty,
+    /// `isLoadingMore` is true). Pairs the spinner with an explanatory label so the
+    /// UI doesn't look like a hung fetch.
+    private var filteredLoadingState: some View {
+        VStack(spacing: CinemaSpacing.spacing4) {
+            ProgressView()
+                .tint(CinemaColor.onSurfaceVariant)
+                .scaleEffect(1.3)
+            Text(loc.localized(itemType == .series ? "library.loading.series" : "library.loading.movies"))
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, CinemaSpacing.spacing10)
+    }
+
+    /// Footer row under the filtered grid when paginating additional pages. Keeps the
+    /// visual continuity of the grid instead of centering a mid-screen spinner.
+    private var filteredPaginationFooter: some View {
+        ProgressView()
+            .tint(CinemaColor.onSurfaceVariant)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, CinemaSpacing.spacing6)
     }
 
     // MARK: - Hero Helpers

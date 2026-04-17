@@ -75,6 +75,8 @@
 "empty.library.filtered.title" = "Aucun résultat";
 "empty.library.filtered.subtitle" = "Essayez d'ajuster vos filtres ou de les effacer.";
 "empty.library.filtered.action" = "Effacer les filtres";
+"library.loading.movies" = "Chargement des films…";
+"library.loading.series" = "Chargement des séries…";
 "empty.library.title" = "Aucun titre pour le moment";
 "empty.library.subtitle" = "Ajoutez du contenu à votre serveur Jellyfin pour commencer.";
 "empty.home.title" = "Votre bibliothèque est vide";
