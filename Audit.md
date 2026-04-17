@@ -510,7 +510,7 @@ Cinemax is in **strong shape for App Store submission**. No critical blockers. S
 | 1 | Extract shared `SettingsRowModel` + platform wrappers | Code Quality | 4-6 hr | High — ~350 LOC removed, future rows are one edit |
 | 2 | ~~Pagination spinner → footer row (centered only for initial)~~ | UX | 30-60 min | **DONE** (audit 2.1, 2026-04-17) |
 | 3 | ~~Unit tests: `MediaDetailViewModel.selectSeason` race, `SearchViewModel` cancel, cache TTL~~ | Testing | 2-3 hr | **DONE** (audit 2.1, 2026-04-17) |
-| 4 | Extract `LibraryHeroSection` + `LibraryGenreRow` from `MovieLibraryScreen` | Code Quality | 2-3 hr | Medium — readability, sets pattern |
+| 4 | ~~Extract `LibraryHeroSection` + `LibraryGenreRow` from `MovieLibraryScreen`~~ | Code Quality | 2-3 hr | **DONE** (audit 2.2, 2026-04-17) |
 | 5 | Extract playback sub-controllers (sleep / skip / reporting) | Code Quality | 3-4 hr | Medium — deferred from 1.4 |
 | 6 | ~~Filter grid: centered spinner → `ContentUnavailableView` with spinner~~ | UX | 30 min | **DONE** (audit 2.1, 2026-04-17) |
 | 7 | Split `APIClientProtocol` by domain | Code Quality | 4-6 hr | Low-Medium — nice-to-have; defer |
@@ -536,6 +536,31 @@ Cinemax is in **strong shape for App Store submission**. No critical blockers. S
 **Refactoring** (from §13 suggested batch)
 - `SettingsRowModel` extraction (~350 LOC reduction) — largest remaining code-quality win
 - `LibraryHeroSection` / `LibraryGenreRow` extraction from `MovieLibraryScreen` (977 lines)
+- `NativeVideoPresenter` sub-controller extraction (sleep / skip / reporting)
+- `APIClientProtocol` domain split
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
+
+---
+
+## 15. Audit 2.2 — Library view decomposition (2026-04-17)
+
+### Completed this batch
+
+| # | Action | Category | Effort | Notes |
+|---|--------|----------|--------|-------|
+| 1 | Extract `LibraryPosterCard` | Code Quality (#4) | 20 min | `Shared/Screens/LibraryPosterCard.swift`. Self-contained `NavigationLink → MediaDetailScreen` with subtitle composition (year · seasons for series, year · rating for movies). Consumed by `LibraryGenreRow` and by both filtered grids (iOS + tvOS) in `MediaLibraryScreen`. `.onAppear { maybeLoadMore }` modifiers stay on the call site. |
+| 2 | Extract `LibraryGenreRow` | Code Quality (#4) | 10 min | `Shared/Screens/LibraryGenreRow.swift`. Thin wrapper over `ContentRow` that embeds `LibraryPosterCard`. Caller owns the "See all" callback (set genre filter), keeping the row itself viewmodel-agnostic. |
+| 3 | Extract `LibraryHeroSection` | Code Quality (#4) | 40 min | `Shared/Screens/LibraryHeroSection.swift`. Full-bleed backdrop + rating badge + metadata line + title + (tvOS overview) + Play / More info buttons. Owns all hero-specific adaptive sizing (11 private sizing vars). iOS-only in practice — tvOS library leads with the inline filter bar. |
+| 4 | Slim `MediaLibraryScreen` | Code Quality (#4) | 30 min | Deleted `heroSection`, `heroActionButtons`, `heroMetadataText`, `genreRow`, `posterCard`, and 11 hero-only sizing helpers from `MovieLibraryScreen.swift`. File went from 1005 → 726 lines (−279, −28%). Remaining helpers (`gridPadding`, `gridSpacing`, `filterIconSize`, `filterLabelSize`, `genreCardHeight`, `browseGenresPadding`, `browseGenresColumns`) are still referenced by the surviving filter bar + browse-genres + filter-button code. |
+
+**Build & test verification**: iOS build → `** BUILD SUCCEEDED **`; tvOS build → `** BUILD SUCCEEDED **`; `xcodebuild test -scheme Cinemax -only-testing:CinemaxTests` → `36 tests in 8 suites passed after 4.853 seconds` (`** TEST SUCCEEDED **`). Refactor is behavior-preserving — no visual, behavioral, or test changes.
+
+### Remaining after this batch
+
+**Refactoring** (from §13 suggested batch)
+- `SettingsRowModel` extraction (~350 LOC reduction) — largest remaining code-quality win
 - `NativeVideoPresenter` sub-controller extraction (sleep / skip / reporting)
 - `APIClientProtocol` domain split
 
