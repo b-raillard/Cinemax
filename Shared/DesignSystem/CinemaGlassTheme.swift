@@ -131,6 +131,45 @@ enum CinemaFont {
         }
     }
 
+    // MARK: - Dynamic Type-aware variants
+    //
+    // The methods above return *fixed-size* `.system(size:)` fonts which do NOT
+    // respond to the user's OS-level text-size preference (Settings > Display &
+    // Brightness > Text Size on iOS, or system accessibility text scaling).
+    //
+    // The variants below layer `UIFontMetrics` on top of the existing
+    // `CinemaScale.factor` so the final size = `baseSize × appScale ×
+    // dynamicTypeMultiplier`. Use for reading-heavy text (setting rows, detail
+    // overviews, episode titles, chat/list cells). Keep the fixed variants for
+    // display/headline where precise layout control matters (hero titles).
+
+    /// Reading-optimized body font. Scales with both app `uiScale` and OS Dynamic Type.
+    static var dynamicBody: Font {
+        .system(size: scaledPoint(17, relativeTo: .body), weight: .regular)
+    }
+
+    /// Larger reading font for overviews / detail screens.
+    static var dynamicBodyLarge: Font {
+        .system(size: scaledPoint(19, relativeTo: .body), weight: .regular)
+    }
+
+    /// Dynamic Type-aware label font. Follows the same `large / medium / small`
+    /// sizing as `label(_:)` but scales with OS text-size preference.
+    static func dynamicLabel(_ size: LabelSize = .medium) -> Font {
+        switch size {
+        case .large:  .system(size: scaledPoint(19, relativeTo: .callout),     weight: .medium)
+        case .medium: .system(size: scaledPoint(16, relativeTo: .subheadline), weight: .medium)
+        case .small:  .system(size: scaledPoint(14, relativeTo: .footnote),    weight: .medium)
+        }
+    }
+
+    /// Helper that combines the app's `uiScale` and the OS's Dynamic Type scaling
+    /// into a final point size. On non-UIKit platforms falls back to `CinemaScale.pt`.
+    private static func scaledPoint(_ baseSize: CGFloat, relativeTo style: UIFont.TextStyle) -> CGFloat {
+        let appScaled = baseSize * CinemaScale.factor
+        return UIFontMetrics(forTextStyle: style).scaledValue(for: appScaled).rounded()
+    }
+
     enum DisplaySize { case large, medium, small }
     enum HeadlineSize { case large, medium, small }
     enum LabelSize { case large, medium, small }

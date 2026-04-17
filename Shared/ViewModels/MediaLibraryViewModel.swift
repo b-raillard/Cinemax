@@ -9,9 +9,18 @@ struct LibrarySortFilterState: Equatable {
     var sortBy: ItemSortBy = .dateCreated
     var sortAscending: Bool = false
     var selectedGenres: Set<String> = []
+    var showUnwatchedOnly: Bool = false
+    /// Selected decades, stored as the starting year (e.g. 1980 → "1980s"). Empty == no decade filter.
+    var selectedDecades: Set<Int> = []
 
-    var isFiltered: Bool { !selectedGenres.isEmpty }
+    var isFiltered: Bool { !selectedGenres.isEmpty || showUnwatchedOnly || !selectedDecades.isEmpty }
     var isNonDefault: Bool { sortBy != .dateCreated || sortAscending || isFiltered }
+
+    /// Expands `selectedDecades` into every year covered. `nil` when no decade filter is active.
+    var expandedYears: [Int]? {
+        guard !selectedDecades.isEmpty else { return nil }
+        return selectedDecades.sorted().flatMap { start in Array(start..<(start + 10)) }
+    }
 }
 
 // MARK: - View Model
@@ -48,8 +57,20 @@ final class MediaLibraryViewModel {
     }
 
     func loadInitial(using appState: AppState) async {
-        guard !hasLoaded, let userId = appState.currentUserId else { return }
+        guard !hasLoaded else { return }
         hasLoaded = true
+        await performLoad(using: appState)
+    }
+
+    func reload(using appState: AppState) async {
+        await performLoad(using: appState)
+        if sortFilter.isFiltered {
+            await applyFilter(using: appState)
+        }
+    }
+
+    private func performLoad(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
         isLoading = true
         errorMessage = nil
 
@@ -136,12 +157,16 @@ final class MediaLibraryViewModel {
         let currentItemType = itemType
         await filteredLoader.loadMore { startIndex in
             let genres = currentSortFilter.selectedGenres.isEmpty ? nil : Array(currentSortFilter.selectedGenres)
+            let filters: [ItemFilter]? = currentSortFilter.showUnwatchedOnly ? [.isUnplayed] : nil
+            let years = currentSortFilter.expandedYears
             let result = try await appState.apiClient.getItems(
                 userId: userId,
                 includeItemTypes: [currentItemType],
                 sortBy: [currentSortFilter.sortBy],
                 sortOrder: currentSortFilter.sortAscending ? [.ascending] : [.descending],
                 genres: genres,
+                years: years,
+                filters: filters,
                 limit: 40,
                 startIndex: startIndex
             )

@@ -86,6 +86,7 @@ struct VideoPlayerView: View {
                 apiClient: appState.apiClient, userId: userId,
                 maxBitrate: bitrate, loc: loc,
                 autoPlayNextEpisode: autoPlayNextEpisode,
+                imageBuilder: appState.imageBuilder,
                 onDismiss: { dismiss() }
             )
             presenter = p

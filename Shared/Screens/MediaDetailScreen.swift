@@ -11,6 +11,7 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    @AppStorage("detail.showQualityBadges") private var showQualityBadges: Bool = true
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
@@ -57,16 +58,26 @@ struct MediaDetailScreen: View {
                     // Action buttons
                     actionButtons(item)
 
-                    // Overview
+                    // Quality badges
+                    if showQualityBadges {
+                        MediaQualityBadges(item: item)
+                            .padding(.horizontal, contentPadding)
+                    }
+
+                    // Overview — Dynamic Type-aware since users read this prose.
                     if let overview = item.overview {
                         Text(overview)
-                            .font(CinemaFont.body)
+                            .font(CinemaFont.dynamicBody)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .padding(.horizontal, contentPadding)
                             #if os(tvOS)
                             .focusable()
                             #endif
                     }
+
+                    // Studio / Network
+                    studioLine(item)
+                        .padding(.horizontal, contentPadding)
 
                     // Cast
                     if let people = item.people, !people.isEmpty {
@@ -135,17 +146,8 @@ struct MediaDetailScreen: View {
                         .foregroundStyle(themeManager.accent)
                 }
 
-                // Community rating
-                if let rating = item.communityRating {
-                    HStack(spacing: 4) {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(.yellow)
-                        Text(String(format: "%.1f", rating))
-                            .fontWeight(.bold)
-                    }
-                    .font(.system(size: ratingFontSize))
-                    .foregroundStyle(CinemaColor.onSurface)
-                }
+                // Community + critic ratings (audience on left, critics on right)
+                ratingsRow(item)
             }
             .padding(.horizontal, contentPadding)
             .padding(.top, contentPadding)
@@ -155,6 +157,68 @@ struct MediaDetailScreen: View {
         .frame(maxWidth: .infinity)
         .frame(height: backdropHeight)
         .clipped()
+    }
+
+    // MARK: - Ratings Row (backdrop)
+
+    @ViewBuilder
+    private func ratingsRow(_ item: BaseItemDto) -> some View {
+        let hasCommunity = item.communityRating != nil
+        let hasCritic = item.criticRating != nil
+
+        if hasCommunity || hasCritic {
+            HStack(spacing: CinemaSpacing.spacing4) {
+                if let rating = item.communityRating {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                        Text(String(format: "%.1f", rating))
+                            .fontWeight(.bold)
+                    }
+                    .font(.system(size: ratingFontSize))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .accessibilityLabel("\(loc.localized("detail.audienceRating")) \(String(format: "%.1f", rating))")
+                }
+
+                if let critic = item.criticRating {
+                    let isFresh = critic >= 60
+                    HStack(spacing: 4) {
+                        // Rotten Tomatoes-style — green when ≥ 60, red otherwise.
+                        Image(systemName: isFresh ? "applescript.fill" : "takeoutbag.and.cup.and.straw.fill")
+                            .foregroundStyle(isFresh ? .green : .red)
+                        Text("\(Int(critic.rounded()))%")
+                            .fontWeight(.bold)
+                    }
+                    .font(.system(size: ratingFontSize))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .accessibilityLabel("\(loc.localized("detail.criticRating")) \(Int(critic.rounded())) percent")
+                }
+            }
+        }
+    }
+
+    // MARK: - Studio / Network
+
+    /// Comma-separated list of up to 2 studios (or network label for series).
+    /// Rendered below the overview text. Returns `EmptyView` when no studios are present.
+    @ViewBuilder
+    private func studioLine(_ item: BaseItemDto) -> some View {
+        let names = (item.studios ?? []).compactMap { $0.name }.filter { !$0.isEmpty }
+        if !names.isEmpty {
+            let isSeries = viewModel.resolvedType == .series
+            let labelKey = isSeries ? "detail.network" : "detail.studio"
+            HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
+                Text(loc.localized(labelKey))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+                Text(names.prefix(2).joined(separator: ", "))
+                    .font(CinemaFont.body)
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(1)
+            }
+        }
     }
 
     // MARK: - Metadata
@@ -275,6 +339,38 @@ struct MediaDetailScreen: View {
                 .buttonStyle(.plain)
                 #endif
                 .frame(width: playButtonWidth)
+
+                // Secondary — Play from beginning (only when resuming)
+                if showResume {
+                    PlayLink(
+                        itemId: playItemId, title: playTitle, startTime: nil,
+                        previousEpisode: epNav?.previous, nextEpisode: epNav?.next,
+                        episodeNavigator: epNav?.navigator
+                    ) {
+                        HStack(spacing: CinemaSpacing.spacing2) {
+                            Image(systemName: "backward.end.fill")
+                                .font(.system(size: buttonFontSize - 2, weight: .bold))
+                            Text(loc.localized("detail.playFromBeginning"))
+                                .font(.system(size: buttonFontSize, weight: .bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .foregroundStyle(CinemaColor.onSurface)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, buttonVerticalPadding)
+                        .padding(.horizontal, CinemaSpacing.spacing4)
+                        #if os(iOS)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                        #endif
+                    }
+                    #if os(tvOS)
+                    .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+                    #else
+                    .buttonStyle(.plain)
+                    #endif
+                    .frame(width: playButtonWidth)
+                }
             }
         }
         .padding(.horizontal, contentPadding)
@@ -447,9 +543,11 @@ struct MediaDetailScreen: View {
                         .foregroundStyle(CinemaColor.onSurface)
                         .lineLimit(2)
 
+                    episodeMetadataLine(episode)
+
                     if let ov = overview {
                         Text(ov)
-                            .font(CinemaFont.body)
+                            .font(CinemaFont.dynamicBody)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .lineLimit(3)
                             .padding(.top, 2)
@@ -520,11 +618,7 @@ struct MediaDetailScreen: View {
                                 .font(.system(size: episodeTitleFontSize, weight: .semibold))
                                 .foregroundStyle(CinemaColor.onSurface)
                                 .lineLimit(2)
-                            if let runtime = episode.runTimeTicks {
-                                Text(loc.localized("detail.runtime.min", runtime.jellyfinMinutes))
-                                    .font(CinemaFont.label(.medium))
-                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            }
+                            episodeMetadataLine(episode)
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
@@ -551,7 +645,7 @@ struct MediaDetailScreen: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(ov)
-                                .font(CinemaFont.body)
+                                .font(CinemaFont.dynamicBody)
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                                 .lineLimit(4)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -573,6 +667,43 @@ struct MediaDetailScreen: View {
         }
     }
     #endif
+
+    // MARK: - Shared Episode Metadata Line
+
+    /// Small secondary-text line under an episode title combining "X min remaining" (or runtime)
+    /// with the air date. Returns `EmptyView` when nothing meaningful is available.
+    @ViewBuilder
+    private func episodeMetadataLine(_ episode: BaseItemDto) -> some View {
+        let isPlayed = episode.userData?.isPlayed ?? false
+        let runtimeText: String? = {
+            // Prefer "X remaining" while in-progress, otherwise show total runtime.
+            if !isPlayed,
+               let position = episode.userData?.playbackPositionTicks,
+               let total = episode.runTimeTicks,
+               position > 0, total > position {
+                let remainingMinutes = (total - position).jellyfinMinutes
+                if remainingMinutes <= 0 { return nil }
+                return remainingMinutes > 60
+                    ? loc.localized("home.remainingTime.hours", remainingMinutes / 60, remainingMinutes % 60)
+                    : loc.localized("home.remainingTime.minutes", remainingMinutes)
+            }
+            if let runtime = episode.runTimeTicks, runtime > 0 {
+                return loc.localized("detail.runtime.min", runtime.jellyfinMinutes)
+            }
+            return nil
+        }()
+
+        let dateText: String? = episode.premiereDate.map {
+            $0.formatted(.dateTime.month(.abbreviated).day().year())
+        }
+
+        let parts: [String] = [runtimeText, dateText].compactMap { $0 }
+        if !parts.isEmpty {
+            Text(parts.joined(separator: " • "))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+        }
+    }
 
     // MARK: - Similar Items
 

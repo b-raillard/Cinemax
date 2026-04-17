@@ -113,8 +113,10 @@ struct SettingsScreen: View {
     @Environment(AppState.self) var appState
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
+    @Environment(ToastCenter.self) var toasts
     @State var showLogOutAlert = false
     @State var showLicenses = false
+    @State var showUserSwitch = false
     @State var selectedCategory: SettingsCategory? = nil
 
     // Shared stored properties
@@ -123,6 +125,14 @@ struct SettingsScreen: View {
     @AppStorage("render4K") var render4K: Bool = true
     @AppStorage("autoPlayNextEpisode") var autoPlayNextEpisode: Bool = true
     @AppStorage("darkMode") var darkModeStorage: Bool = true
+    @AppStorage("home.showContinueWatching") var showContinueWatching: Bool = true
+    @AppStorage("home.showRecentlyAdded") var showRecentlyAdded: Bool = true
+    @AppStorage("home.showGenreRows") var showGenreRows: Bool = true
+    @AppStorage("home.showWatchingNow") var showWatchingNow: Bool = true
+    @AppStorage("detail.showQualityBadges") var showQualityBadges: Bool = true
+    @AppStorage("sleepTimerDefaultMinutes") var sleepTimerMinutes: Int = 0
+    @AppStorage("debug.fastSleepTimer") var debugFastSleepTimer: Bool = false
+    @AppStorage("debug.showSkipToEnd") var debugShowSkipToEnd: Bool = false
     @State var fontScale: Double = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
     @State var showFontSizePicker = false
     let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]
@@ -132,6 +142,7 @@ struct SettingsScreen: View {
     @FocusState var focusedItem: SettingsFocus?
     @State var serverUsers: [UserDto] = []
     @State var showSwitchAccountAlert = false
+    @State var showSleepTimerPicker = false
     #endif
 
     // MARK: Shared Computed Properties
@@ -173,6 +184,14 @@ struct SettingsScreen: View {
 
     // MARK: Body
 
+    /// Clears the API client cache and broadcasts `cinemaxShouldRefreshCatalogue` so Home
+    /// and Library reload from the server on their next render. Shown as a toast for feedback.
+    func refreshCatalogue() {
+        appState.apiClient.clearCache()
+        NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+        toasts.success(loc.localized("toast.catalogueRefreshed"))
+    }
+
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
@@ -189,6 +208,12 @@ struct SettingsScreen: View {
         #endif
         .sheet(isPresented: $showLicenses) {
             LicensesView()
+        }
+        .sheet(isPresented: $showUserSwitch) {
+            UserSwitchSheet()
+                .environment(appState)
+                .environment(themeManager)
+                .environment(loc)
         }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {

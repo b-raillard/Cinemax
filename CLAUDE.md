@@ -10,6 +10,26 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. Uses a "Cinema 
 - **Swift 6** strict concurrency
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable conformance
 
+### Modern API requirements (iOS 18 / tvOS 26)
+
+The project's deployment targets are iOS 18 and tvOS 26. Avoid pre-iOS-15 APIs that the compiler has now deprecated.
+
+- **`UIButton`**: never use `UIButton(type:)` + `setTitle` / `setTitleColor` / `titleLabel?.font` / `backgroundColor` / `contentEdgeInsets`. Build buttons with `UIButton.Configuration`:
+  ```swift
+  var config = UIButton.Configuration.plain()
+  var attrTitle = AttributedString("Hello")
+  attrTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+  attrTitle.foregroundColor = UIColor.white
+  config.attributedTitle = attrTitle
+  config.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 24, bottom: 14, trailing: 24)
+  config.background.backgroundColor = .systemBlue
+  config.background.cornerRadius = 12
+  // Frosted background is supported via `config.background.customView = UIVisualEffectView(...)`
+  let button = UIButton(configuration: config, primaryAction: UIAction { _ in ... })
+  ```
+- **Free SwiftUI helpers**: free functions returning `some View` that touch SwiftUI types (`PrimitiveButtonStyle.plain`, `Font`, etc.) must be `@MainActor`. Under Swift 6 strict concurrency, those types are main-actor-isolated and the compiler raises "Main actor-isolated static property X can not be referenced from a nonisolated context" otherwise. The shared `iOSToggleRow` / `iOSSettingsRow` helpers in `SettingsRowHelpers.swift` follow this pattern.
+- **iPad multitasking**: `UIRequiresFullScreen: true` is set in `project.yml` for the iOS target. Cinemax is a video player — split view would interrupt playback and break hero/backdrop layouts, and the flag also satisfies Xcode's "all interface orientations must be supported unless the app requires full screen" warning. Don't change this without a strong reason; if the app ever needs split view, the iPhone orientation list must be expanded to include `UIInterfaceOrientationPortraitUpsideDown` (currently omitted on iPhone).
+
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
 **Playback reporting**: `APIClientProtocol` defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. `NativeVideoPresenter` (both platforms) calls these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale.
@@ -22,7 +42,7 @@ Shared/
     Components/     CinemaLazyImage, ProgressBarView, RatingBadge, LoadingStateView, ErrorStateView, PosterCard, WideCard, ContentRow, CinemaButton, FlowLayout
   Navigation/       AppNavigation (auth routing), MainTabView (tab bar/sidebar)
   Screens/          HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen,
-                    MovieLibraryScreen, LibrarySortFilterSheet, TVSeriesScreen,
+                    MovieLibraryScreen, LibrarySortFilterSheet, TVSeriesScreen, MediaQualityBadges,
                     VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet,
                     SettingsScreen (+iOS, +tvOS platform variants), SettingsRowHelpers
   ViewModels/       HomeViewModel, LoginViewModel, SearchViewModel, ServerSetupViewModel,
@@ -64,13 +84,21 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 
 **Sort & Filter state** (`LibrarySortFilterState`):
 - Default: `dateCreated` descending. `isNonDefault` is true when sort or filter differs from default
-- `isFiltered` is true only when genre chips are selected
-- **Browse vs filtered**: show browse view (genre rows) whenever `isFiltered == false`, regardless of sort. Only a genre chip selection switches to the flat filtered grid
-- **Title count**: uses `isFiltered` (not `isNonDefault`) — sort-only changes don't affect total count, only genre filtering does. Shows `filteredTotalCount` when filtered, `totalCount` otherwise
-- Sort change triggers `reloadGenreItems` (genre rows respect current sort); genre selection triggers `applyFilter` (flat paginated list)
-- `loadInitial` guarded by `hasLoaded` — prevents re-randomization on tab switch
+- `isFiltered` is true when genre chips are selected OR `showUnwatchedOnly == true` OR `selectedDecades` non-empty
+- **Browse vs filtered**: show browse view (genre rows) whenever `isFiltered == false`, regardless of sort. Genre chip / unwatched toggle / decade chip switches to the flat filtered grid
+- **Title count**: uses `isFiltered` (not `isNonDefault`) — sort-only changes don't affect total count. Shows `filteredTotalCount` when filtered, `totalCount` otherwise
+- Sort change triggers `reloadGenreItems` (genre rows respect current sort); filter change triggers `applyFilter` (flat paginated list)
+- `loadInitial` guarded by `hasLoaded` — prevents re-randomization on tab switch. `reload(using:)` bypasses the guard and re-runs the full load. Triggered by pull-to-refresh on iOS and by `.cinemaxShouldRefreshCatalogue` notification from Settings → Server → Refresh Catalogue on both platforms
 
-**tvOS filter bar**: inline (not modal) — sort pills (horizontal scroll) + genre chips (`FlowLayout`, multi-line) + reset button. `TVFilterChipButtonStyle` for chip focus.
+**Filters**:
+- Unwatched: iOS sort sheet `unwatchedSection` + tvOS inline Watch Status chip → `LibrarySortFilterState.showUnwatchedOnly` → `filters: [.isUnplayed]` on `getItems`
+- Decade: `LibrarySortFilterState.selectedDecades: Set<Int>` (stored as the starting year, e.g. `1980`). `expandedYears` explodes the set into every concrete year and passes to `getItems(years:)`. UI: chips for 1950s–2020s in both iOS sort sheet and tvOS inline bar
+
+**Refresh**: `.refreshable { reload() }` on iOS. On both platforms, observes `.cinemaxShouldRefreshCatalogue` (posted by Settings → Server → Refresh Catalogue, which also calls `apiClient.clearCache()`). No in-page refresh button — the global Settings action is the single source of truth.
+
+**tvOS filter bar**: inline (not modal) — sort pills (horizontal scroll) + watch-status chip + decade chips + genre chips (`FlowLayout`, multi-line) + Reset button only. `TVFilterChipButtonStyle` for chip focus.
+
+**iOS alphabetical jump bar**: `AlphabeticalJumpBar` (Contacts-style capsule, ultraThinMaterial background, right edge of filtered view). Tap or drag to scroll the grid. Uses `ScrollViewReader` + `proxy.scrollTo(firstItemID(for: letter))` and `UISelectionFeedbackGenerator` for per-letter haptics. Only rendered when `sortBy == .sortName && sortAscending && items.count > 20` — other sorts aren't alphabetically meaningful.
 
 ## Video Playback
 
@@ -99,10 +127,27 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 
 **Episode navigation**: `MPRemoteCommandCenter` prev/next track commands on both platforms. `EpisodeRef` + `EpisodeNavigator` + `buildEpisodeNavigation` (shared free function in `PlayLink.swift`). `PlayLink` carries `previousEpisode`, `nextEpisode`, `episodeNavigator`; passes through `VideoPlayerCoordinator` (tvOS) or `VideoPlayerView` (iOS) → `NativeVideoPresenter`
 
-**Playback reporting**: `reportPlaybackStart`, `reportPlaybackProgress` (10 s loop), `reportPlaybackStopped` — called on start, periodically, and on dismiss/episode-nav
+**Playback reporting**: `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped` — called on start, periodically (via shared 1 s time observer, reports every ~10 s), and on dismiss/episode-nav
 
 **Auto-play next episode**: `AVPlayerItem.didPlayToEndTime` observer → `navigateToEpisode(next)` when `autoPlayNextEpisode` setting is on
 
+**Skip Intro / Credits**: Requires the **Intro Skipper** plugin (or similar) on the Jellyfin server. On playback start (and episode navigation), `NativeVideoPresenter` fetches media segments via `getMediaSegments(itemId:includeSegmentTypes: [.intro, .outro])`. A single `addPeriodicTimeObserver` (1 s interval) handles both segment detection and progress reporting. Visibility is **pure time-based**: `checkSegments` shows/hides based on whether `currentTime ∈ [segment.start, segment.end)`. Re-entry works naturally — rewinding back into a segment re-shows the button. Click action seeks to `segment.end`; no manual hide call, the next observer tick detects we're outside the segment and clears the button. Localization keys: `player.skipIntro`, `player.skipCredits`.
+
+Rendering is platform-split:
+- **iOS**: a floating `UIButton` (with `UIBlurEffect` background, bottom-right corner of the player) added directly to `AVPlayerViewController.view`. Direct touch.
+- **tvOS**: native `AVPlayerViewController.contextualActions = [UIAction(…)]`. This is the only mechanism that produces a focusable action button coexisting with `AVPlayerViewController`'s transport-bar focus context. **Custom subviews / overlay modals / subclass `preferredFocusEnvironments` overrides cannot be focused on tvOS while AVPlayerViewController is on screen** — the player owns and locks its focus environment. Do not attempt to reintroduce a floating pill on tvOS; it will appear but be unreachable by the Siri Remote. Same rule applies to any future "in-player" affordance (next-episode card, chapter menu, etc.) — use `contextualActions` or other native player APIs rather than arbitrary subviews.
+
+**Chapters** (tvOS only): built from `BaseItemDto.chapters` and applied via `AVPlayerItem.navigationMarkerGroups = [AVNavigationMarkersGroup(title:timedNavigationMarkers:)]`. Each marker carries `commonIdentifierTitle` + optional `commonIdentifierArtwork` (JPEG thumbnail fetched from `ImageURLBuilder.chapterImageURL(itemId:imageIndex:)` with the Jellyfin auth token). `AVNavigationMarkersGroup` lives in AVKit on tvOS only; iOS `AVPlayerViewController` has no native chapter scrubber so the iOS path is a scoped `#if os(tvOS)` no-op.
+
+**Sleep timer**: `SleepTimerOption` enum (`Off` / 15 / 30 / 45 / 60 / 90 minutes) backed by `@AppStorage("sleepTimerDefaultMinutes")`. `SleepTimerOption.currentDefaultSeconds` returns 15 s when `debug.fastSleepTimer` is on (Settings → Interface → Debug), otherwise the stored option in seconds. `NativeVideoPresenter.startSleepTimerIfNeeded` runs on playback start and episode navigation — displays a moon-icon blur pill countdown indicator (`mm:ss`) bottom-left of the player, pauses + shows a "Still watching?" prompt when the timer fires. The prompt uses `UIAlertController` on tvOS (focus-friendly) and a custom blur card on iOS; "Keep watching" restarts the timer, "Stop playback" dismisses the player.
+
+**End-of-series completion**: When `AVPlayerItemDidPlayToEndTime` fires with autoplay on, no next episode, and `episodeNavigator != nil`, shows a centered "You finished {Series Name}" overlay. `currentSeriesName` is captured opportunistically from the same `getItem` call that fetches chapters. tvOS uses `UIAlertController`, iOS uses a custom blur card — same focus-context reason as the sleep prompt.
+
+**Playback error recovery**: `showPlaybackErrorAlert(error:)` presents a native `UIAlertController` with error-code-specific messages. `-12881 / -12886 / -16170` → transcode guidance, `-12938 / -1001 / -1004 / -1005 / -1009` → network guidance, fallback → generic. On iOS the alert only fires after the `retryWithDirectURL` fallback itself fails (so we don't interrupt the silent first-try recovery). `isShowingErrorAlert` flag prevents stacking.
+
+**Debug tooling** (Settings → Interface → Debug, always visible not gated by `#if DEBUG`):
+- `debug.fastSleepTimer` — overrides sleep duration to 15 s
+- `debug.showSkipToEnd` — on iOS paints a purple "End" pill top-right of the player that seeks to `(duration − 15 s)`; on tvOS injects the action into `transportBarCustomMenuItems`. Useful for previewing the end-of-series overlay without sitting through an episode.
 
 ## Settings Screen
 
@@ -140,9 +185,26 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 | `forceSubtitles` | `false` | Auto-selects first `.legible` track; disables `appliesMediaSelectionCriteriaAutomatically` |
 | `render4K` | `true` | `maxBitrate` 120 Mbps (on) / 20 Mbps (off) |
 | `autoPlayNextEpisode` | `true` | Auto-navigates to next episode via `AVPlayerItem.didPlayToEndTime` in `NativeVideoPresenter` (both platforms) |
+| `sleepTimerDefaultMinutes` | `0` (Off) | Duration for the sleep timer that starts on playback. Options: 0 / 15 / 30 / 45 / 60 / 90 min via `SleepTimerOption` |
 | `uiScale` | `1.0` | Font scale 80–130%. Bumps `ThemeManager._accentRevision` to force re-render |
 | `darkMode` | `true` | **Must be toggled via `themeManager.darkModeEnabled`**, not directly — direct writes don't bump `_accentRevision` |
 | `accentColor` | `"blue"` | Set via `themeManager.accentColorKey` for same reason |
+| `home.showContinueWatching` | `true` | Toggles the Continue Watching row on Home |
+| `home.showRecentlyAdded` | `true` | Toggles the Recently Added row on Home |
+| `home.showGenreRows` | `true` | Toggles the 4 dynamic genre rows on Home |
+| `home.showWatchingNow` | `true` | Toggles the Watching Now row on Home |
+| `detail.showQualityBadges` | `true` | Toggles the resolution/HDR/codec/audio pill row on `MediaDetailScreen` |
+| `debug.fastSleepTimer` | `false` | Overrides sleep duration to 15 s — for testing the "Still watching?" prompt |
+| `debug.showSkipToEnd` | `false` | Shows an "End" button in the player that seeks to `(duration − 15 s)` — for testing end-of-series overlay |
+
+### Quick user switch
+`UserSwitchSheet` (launched from Settings → Account) — two-step flow: grid of server users with their primary images → password prompt → re-auth. Updates `AppState.accessToken` / `currentUserId` and calls `apiClient.reconnect(url:accessToken:)` without clearing the server URL, then emits a success toast and dismisses. Errors stay inline so the user can retry.
+
+### Refresh Catalogue
+Settings → Server has a "Refresh Catalogue" row that calls `apiClient.clearCache()` and posts `.cinemaxShouldRefreshCatalogue`. `HomeScreen` and `MediaLibraryScreen` observe this notification and reload. Fires a success toast. Single source of truth for forcing a re-fetch — no per-page refresh buttons.
+
+### Debug section
+Settings → Interface → Debug holds testing toggles. Always visible (not gated by `#if DEBUG`) so QA / power users don't need a custom build. Icons are orange to signal developer territory.
 
 ## MediaDetailScreen
 
@@ -155,12 +217,32 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
 **Resume / next-up logic in `actionButtons`**:
 - Movie with `playbackPositionTicks > 0` and not `isPlayed`: shows progress bar (accent fill, `playButtonWidth` wide) + remaining time text (`home.remainingTime.*` keys) + "Lecture" button that resumes at saved position via `PlayLink(startTime:)`
 - Series: uses `viewModel.nextUpEpisode` (from `getNextUp`). In-progress episode → progress bar + remaining time + resume button. Finished/next episode → episode label + regular play button. Falls back to series-level play if no next-up
+- **Play from beginning**: when `showResume` is true, a secondary ghost-styled `PlayLink` button (`detail.playFromBeginning`, SF Symbol `backward.end.fill`) is rendered under the resume button with `startTime: nil`. Only shown when a resume position exists — otherwise the single primary button already starts from 0
 - `userData.playbackPositionTicks` and `runTimeTicks` are both `Int?` (not `Int64`); `isPlayed` is `userData.isPlayed: Bool?`
 - Episode rows show a thin accent progress bar overlay at the bottom of the thumbnail for partially-watched episodes
+
+**Quality badges** (`MediaQualityBadges.swift`):
+- Horizontal pill row between `actionButtons` and overview text. Gated on `@AppStorage("detail.showQualityBadges")` (default `true`, toggleable in Settings > Interface > Detail Page)
+- Derived from `item.mediaSources?.first` — first `.video` stream for resolution/HDR/video codec, default audio stream (`defaultAudioStreamIndex`) for audio format/channels
+- Resolution: height thresholds → "4K" / "1080p" / "720p" / "SD"
+- HDR: `VideoRangeType` maps to "Dolby Vision" (any `dovi*` case), "HDR10+", "HDR10", "HDR" (for `hlg`); `VideoRange.hdr` as fallback. No badge for SDR
+- Video codec: "HEVC" (hevc/h265), "H.264", "AV1", "VP9", else uppercased raw codec
+- Audio format: first-hit priority — Atmos (from `profile`/`displayTitle`), TrueHD, "Dolby Digital+" (EAC3), "Dolby Digital" (AC3), DTS, AAC, FLAC, Opus, MP3, else uppercased raw codec
+- Channels: `channelLayout` uppercased (Stereo/Mono title-cased); fallback from `channels` count (8→"7.1", 6→"5.1", 2→"Stereo", 1→"Mono")
+- View returns `EmptyView()` when no streams produce any badges
 
 **Episode navigation wiring**:
 - `episodeNavigation(for:)` — O(1) lookup from precomputed `viewModel.episodeNavigationMap` (current season) or `viewModel.nextUpNavigationMap` (cross-season next-up). Maps are rebuilt in `MediaDetailViewModel` whenever episodes change
 - Both `actionButtons` (next-up episode) and each `episodeRow` pass `previousEpisode`, `nextEpisode`, `episodeNavigator` to `PlayLink`
+
+**Ratings row** (`ratingsRow`): backdrop-adjacent. Shows `communityRating` (yellow star + `%.1f`) and `criticRating` (Rotten-Tomatoes-style icon — green if ≥ 60, red otherwise — + `%d%%`). Either or both may be absent.
+
+**Studio / Network label** (`studioLine`): below the overview. Up to 2 names from `item.studios`. Label reads "STUDIO" for movies, "NETWORK" for series. Returns `EmptyView` when the array is empty.
+
+**Episode metadata line** (`episodeMetadataLine`): shared helper used by both the tvOS `episodeRow` and iOS `iOSEpisodeCard`. Combines with ` • ` separator:
+- If in-progress (not `isPlayed`, `playbackPositionTicks > 0`, remaining > 0): "Xm remaining" via `home.remainingTime.*` keys
+- Else if `runTimeTicks > 0`: total runtime via `detail.runtime.min`
+- Plus `premiereDate` formatted as `.dateTime.month(.abbreviated).day().year()` when present
 
 ## HomeScreen
 
@@ -171,12 +253,60 @@ Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal 
   - `startTime` — from `playbackPositionTicks / 10_000_000` (nil for items with no progress)
   - `previousEpisode`, `nextEpisode`, `episodeNavigator` — looked up from `resumeNavigation[id]` (nil for movies)
 
+**Genre rows**: `HomeViewModel.genreRows: [(genre, items)]` — after loading resume/latest, fetches all genres via `getGenres(userId:includeItemTypes: [.movie, .series])`, shuffles and picks 4. Each genre's items are fetched in parallel via `TaskGroup` using `getItems(sortBy: [.random], genres: [genre], limit: 10, includeItemTypes: [.movie, .series])`. Empty genres are skipped; the 4 picks' order is preserved. Rendered as `ContentRow`s using `PosterCard` inside `NavigationLink` to `MediaDetailScreen`.
+
+**Watching Now row**: `HomeViewModel.activeSessions` — fetched via `getActiveSessions(activeWithinSeconds: 60)`, filtered to drop the current user and sessions with no `nowPlayingItem`. Rendered with `WideCard` + a red "LIVE" pill overlay, navigates to the item's `MediaDetailScreen` on tap.
+
+**Configurable layout** (`@AppStorage`, declared in `SettingsScreen.swift`, UI in Settings > Interface > Home Page):
+| Key | Default | Row |
+|-----|---------|-----|
+| `home.showContinueWatching` | `true` | Continue Watching |
+| `home.showRecentlyAdded` | `true` | Recently Added |
+| `home.showGenreRows` | `true` | All 4 genre rows (block-level toggle) |
+| `home.showWatchingNow` | `true` | Watching Now (other users) |
+
+Hero is never gated — always renders when `heroItem` is non-nil.
+
+**Refresh**: `.refreshable { await viewModel.reload(using: appState) }` on iOS. Both platforms observe `.cinemaxShouldRefreshCatalogue` (posted by Settings → Server → Refresh Catalogue) and call `viewModel.reload`. No in-page refresh pill — Settings is the single trigger. `HomeViewModel.reload(using:)` repopulates everything including genre rows, active sessions, and `resumeNavigation` (cleared before rebuild to avoid stale prev/next refs).
+
+**Empty state**: when `heroItem`, `resumeItems`, `latestItems` and `genreRows` are all empty, renders `EmptyStateView` with a "Your library is empty" message and a Refresh action wrapped in a `ScrollView` so pull-to-refresh still works.
+
+**Scroll-to-top on reappearance (tvOS)**: content is wrapped in `ScrollViewReader` with a zero-height `.id("home.top")` sentinel at the top. `.onAppear` fires `proxy.scrollTo("home.top", anchor: .top)` whenever the screen re-appears (after a deep nav pop or tab switch). This surfaces the system top tab bar which can otherwise stay hidden behind scrolled content. Same pattern applies in `MovieLibraryScreen`, `SearchScreen`, and Settings tvOS landing.
+
+## SearchScreen
+
+- `SearchViewModel.search(using:)` debounces by 400 ms then calls `searchItems(userId:searchTerm:limit:30)`
+- iOS: microphone button launches `SpeechRecognitionHelper` (SFSpeechRecognizer + AVAudioEngine wrapper) for voice search
+- **Surprise Me**: two pills ("Surprise movie" / "Surprise series") in the search empty state. Backed by `fetchRandomMovie(using:)` / `fetchRandomSeries(using:)` which call `getItems(includeItemTypes: [.movie or .series], sortBy: [.random], limit: 1)`. Two separate methods (not one parameterized) because Swift 6 strict concurrency flags a `[BaseItemKind]` array built from a function parameter as non-Sendable when crossing to the API actor — literal `[.movie]` / `[.series]` arrays work fine. On success pushes `MediaDetailScreen` via `navigationDestination(item:)`; on empty library emits an error toast
+- **tvOS scroll-to-top**: wrapped in `ScrollViewReader` with a sentinel, `.onAppear` scrolls to top so the system tab bar resurfaces after a deep-nav pop
+
 ## Localization
 
 - `LocalizationManager` (`@Observable`, injected from `AppNavigation`). Default: French (`fr`), also English (`en`)
 - All strings via `loc.localized("key")` or `loc.localized("key", args...)` — never hardcoded
 - Strings at `Resources/{lang}.lproj/Localizable.strings`
 - Reactivity: `@ObservationIgnored` + `@AppStorage` + `_revision` counter pattern (same as `ThemeManager`)
+
+## Toasts
+
+- `ToastCenter` (`@Observable`, injected at `AppNavigation` root) — single-toast queue with auto-dismiss
+- `ToastOverlay` renders a top-anchored glass pill (level-tinted SF Symbol + title + optional message) that slides in from the top safe area
+- API: `.success(_:)`, `.error(_:)`, `.info(_:)`, all with optional `message:` and `duration:` parameters
+- Use for: action feedback (Refresh Catalogue, user switch success), recoverable error surfaces. Do NOT use for critical errors that need user decision — use `UIAlertController` instead
+
+## Empty states
+
+- `EmptyStateView` (icon + title + optional subtitle + optional action button)
+- Used by:
+  - Home when `heroItem` / resume / latest / genre rows are all empty
+  - Filtered library grid when sort + filter yields no results (offers "Clear filters" action that resets `LibrarySortFilterState()`)
+  - `UserSwitchSheet` when user list is empty
+
+## Dynamic Type (iOS)
+
+- `.dynamicTypeSize(.xSmall ... .accessibility2)` applied at `AppNavigation` root — honors the user's OS-level text-size preference while capping below accessibility sizes that would break hero/tab-bar layouts
+- `CinemaFont.dynamicBody / dynamicBodyLarge / dynamicLabel(_:)` variants use `UIFontMetrics(forTextStyle:).scaledValue(for:)` so the final size is `baseSize × CinemaScale.factor (app uiScale) × dynamicTypeMultiplier (OS)`
+- Apply dynamic variants only to reading-heavy surfaces (overviews, settings rows, list cells). Hero / display / headline titles keep the fixed `CinemaFont.body` / `.headline()` variants to protect layout
 
 ## Image Patterns
 

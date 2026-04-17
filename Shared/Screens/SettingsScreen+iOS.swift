@@ -192,6 +192,12 @@ extension SettingsScreen {
 
                     iOSSettingsDivider
 
+                    navigationRow(icon: "person.2.circle", label: loc.localized("settings.switchAccount")) {
+                        showUserSwitch = true
+                    }
+
+                    iOSSettingsDivider
+
                     iOSSettingsRow {
                         Button {
                             showLogOutAlert = true
@@ -258,6 +264,29 @@ extension SettingsScreen {
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
 
+            // Refresh Catalogue
+            VStack(spacing: 0) {
+                iOSSettingsRow {
+                    Button { refreshCatalogue() } label: {
+                        HStack(alignment: .center, spacing: CinemaSpacing.spacing3) {
+                            iOSRowIcon(systemName: "arrow.triangle.2.circlepath", color: themeManager.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(loc.localized("settings.refreshCatalogue"))
+                                    .font(CinemaFont.label(.large))
+                                    .foregroundStyle(CinemaColor.onSurface)
+                                Text(loc.localized("settings.refreshCatalogue.subtitle"))
+                                    .font(CinemaFont.label(.medium))
+                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+
             // Licenses
             VStack(spacing: 0) {
                 iOSSettingsRow {
@@ -283,51 +312,101 @@ extension SettingsScreen {
     // MARK: Interface Detail (iOS)
 
     var iOSInterfaceDetail: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            iOSSettingsSectionHeader(loc.localized("settings.interface"))
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                iOSSettingsSectionHeader(loc.localized("settings.interface"))
 
-            VStack(spacing: 0) {
-                iOSToggleRow(icon: "sparkles", label: loc.localized("settings.motionEffects"),
-                             value: $motionEffects, accent: themeManager.accent, animated: motionEffects)
-                iOSSettingsDivider
-                iOSToggleRow(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"),
-                             value: $forceSubtitles, accent: themeManager.accent, animated: motionEffects)
-                iOSSettingsDivider
-                iOSToggleRow(icon: "4k.tv", label: loc.localized("settings.4kRendering"),
-                             value: $render4K, accent: themeManager.accent, animated: motionEffects)
-                iOSSettingsDivider
-                iOSToggleRow(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"),
-                             value: $autoPlayNextEpisode, accent: themeManager.accent, animated: motionEffects)
-                iOSSettingsDivider
+                VStack(spacing: 0) {
+                    iOSToggleRow(icon: "sparkles", label: loc.localized("settings.motionEffects"),
+                                 value: $motionEffects, accent: themeManager.accent, animated: motionEffects)
+                    iOSSettingsDivider
+                    iOSToggleRow(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"),
+                                 value: $forceSubtitles, accent: themeManager.accent, animated: motionEffects)
+                    iOSSettingsDivider
+                    iOSToggleRow(icon: "4k.tv", label: loc.localized("settings.4kRendering"),
+                                 value: $render4K, accent: themeManager.accent, animated: motionEffects)
+                    iOSSettingsDivider
+                    iOSToggleRow(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"),
+                                 value: $autoPlayNextEpisode, accent: themeManager.accent, animated: motionEffects)
+                    iOSSettingsDivider
 
-                iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
-                        Text(loc.localized("settings.fontSize"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
-                        Stepper(
-                            "\(Int(fontScale * 100))%",
-                            onIncrement: {
-                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx < fontScaleOptions.count - 1 {
-                                    fontScale = fontScaleOptions[idx + 1]
-                                    themeManager.uiScale = fontScale
+                    iOSSleepTimerRow
+                    iOSSettingsDivider
+
+                    iOSSettingsRow {
+                        HStack {
+                            iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
+                            Text(loc.localized("settings.fontSize"))
+                                .font(CinemaFont.label(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                            Spacer()
+                            Stepper(
+                                "\(Int(fontScale * 100))%",
+                                onIncrement: {
+                                    if let idx = fontScaleOptions.firstIndex(of: fontScale), idx < fontScaleOptions.count - 1 {
+                                        fontScale = fontScaleOptions[idx + 1]
+                                        themeManager.uiScale = fontScale
+                                    }
+                                },
+                                onDecrement: {
+                                    if let idx = fontScaleOptions.firstIndex(of: fontScale), idx > 0 {
+                                        fontScale = fontScaleOptions[idx - 1]
+                                        themeManager.uiScale = fontScale
+                                    }
                                 }
-                            },
-                            onDecrement: {
-                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx > 0 {
-                                    fontScale = fontScaleOptions[idx - 1]
-                                    themeManager.uiScale = fontScale
-                                }
-                            }
-                        )
-                        .fixedSize()
-                        .tint(themeManager.accent)
+                            )
+                            .fixedSize()
+                            .tint(themeManager.accent)
+                        }
                     }
                 }
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
-            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+
+            // Home Page section
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                iOSSettingsSectionHeader(loc.localized("settings.homePage"))
+
+                VStack(spacing: 0) {
+                    iOSToggleRow(icon: "play.circle", label: loc.localized("settings.homePage.continueWatching"),
+                                 value: $showContinueWatching, accent: themeManager.accent, animated: motionEffects)
+                    iOSSettingsDivider
+                    iOSToggleRow(icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"),
+                                 value: $showRecentlyAdded, accent: themeManager.accent, animated: motionEffects)
+                    iOSSettingsDivider
+                    iOSToggleRow(icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"),
+                                 value: $showGenreRows, accent: themeManager.accent, animated: motionEffects)
+                    iOSSettingsDivider
+                    iOSToggleRow(icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"),
+                                 value: $showWatchingNow, accent: themeManager.accent, animated: motionEffects)
+                }
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
+
+            // Detail Page section
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                iOSSettingsSectionHeader(loc.localized("settings.detailPage"))
+
+                VStack(spacing: 0) {
+                    iOSToggleRow(icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"),
+                                 value: $showQualityBadges, accent: themeManager.accent, animated: motionEffects)
+                }
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
+
+            // Debug section
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                iOSSettingsSectionHeader(loc.localized("settings.debug"))
+
+                VStack(spacing: 0) {
+                    iOSToggleRow(icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"),
+                                 value: $debugFastSleepTimer, accent: .orange, animated: motionEffects)
+                    iOSSettingsDivider
+                    iOSToggleRow(icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"),
+                                 value: $debugShowSkipToEnd, accent: .orange, animated: motionEffects)
+                }
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
         }
     }
 
@@ -404,140 +483,46 @@ extension SettingsScreen {
             .buttonStyle(.plain)
         }
     }
-}
+    // MARK: - Sleep Timer Row (iOS)
 
-// MARK: - Appearance Detail View (iOS)
-// Standalone View struct so NavigationStack destination has its own
-// @Observable observation tracking for ThemeManager and LocalizationManager.
-
-private struct IOSAppearanceDetailView: View {
-    @Environment(ThemeManager.self) var themeManager
-    @Environment(LocalizationManager.self) var loc
-    @Environment(\.motionEffectsEnabled) private var motionEffects
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            iOSSettingsSectionHeader(loc.localized("settings.personalization"))
-
-            VStack(spacing: 0) {
-                iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
-
-                        Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Spacer()
-
-                        Button { themeManager.darkModeEnabled.toggle() } label: {
-                            CinemaToggleIndicator(isOn: themeManager.darkModeEnabled, accent: themeManager.accent, animated: motionEffects)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                iOSSettingsDivider
-
-                iOSSettingsRow {
-                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                        HStack {
-                            iOSRowIcon(systemName: "paintpalette.fill", color: selectedAccent.color)
-
-                            Text(loc.localized("settings.accentColor"))
-                                .font(CinemaFont.label(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-
-                            Spacer()
-                        }
-
-                        HStack(spacing: CinemaSpacing.spacing2) {
-                            ForEach(AccentOption.allCases) { option in
-                                accentDot(option)
+    /// Menu-based picker for the default sleep timer duration. Label matches the selected
+    /// option's localized name ("Off", "30 minutes", etc.).
+    @ViewBuilder
+    var iOSSleepTimerRow: some View {
+        iOSSettingsRow {
+            HStack {
+                iOSRowIcon(systemName: "moon.zzz", color: themeManager.accent)
+                Text(loc.localized("settings.sleepTimer"))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                Menu {
+                    ForEach(SleepTimerOption.allCases) { option in
+                        Button {
+                            sleepTimerMinutes = option.rawValue
+                        } label: {
+                            if sleepTimerMinutes == option.rawValue {
+                                Label(loc.localized(option.localizationKey), systemImage: "checkmark")
+                            } else {
+                                Text(loc.localized(option.localizationKey))
                             }
                         }
                     }
-                    .hoverEffectDisabled()
-                }
-
-                iOSSettingsDivider
-
-                iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: "globe", color: themeManager.accent)
-
-                        Text(loc.localized("settings.language"))
+                } label: {
+                    let selected = SleepTimerOption(rawValue: sleepTimerMinutes) ?? .disabled
+                    HStack(spacing: 4) {
+                        Text(loc.localized(selected.localizationKey))
                             .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Spacer()
-
-                        languagePicker
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
+                            .foregroundStyle(CinemaColor.outlineVariant)
                     }
                 }
-            }
-            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-        }
-    }
-
-    // MARK: - Appearance-specific helpers
-
-    var selectedAccent: AccentOption {
-        AccentOption(rawValue: themeManager.accentColorKey) ?? .blue
-    }
-
-    var languagePicker: some View {
-        HStack(spacing: CinemaSpacing.spacing2) {
-            languageButton("fr", label: "FR")
-            languageButton("en", label: "EN")
-        }
-    }
-
-    func languageButton(_ code: String, label: String) -> some View {
-        let isSelected = loc.languageCode == code
-        return Button {
-            loc.languageCode = code
-        } label: {
-            Text(label)
-                .font(.system(size: CinemaScale.pt(17), weight: .bold))
-                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
-                .frame(width: 40, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                        .fill(isSelected ? themeManager.accent : CinemaColor.surfaceContainerHigh)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    func accentDot(_ option: AccentOption) -> some View {
-        let isSelected = option.rawValue == themeManager.accentColorKey
-
-        Button {
-            themeManager.accentColorKey = option.rawValue
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(option.color)
-                    .frame(width: 28, height: 28)
-
-                if isSelected {
-                    Circle()
-                        .strokeBorder(.white.opacity(0.9), lineWidth: 2)
-                        .frame(width: 28, height: 28)
-
-                    Image(systemName: "checkmark")
-                        .font(.system(size: CinemaScale.pt(13), weight: .bold))
-                        .foregroundStyle(.white)
-                }
+                .tint(themeManager.accent)
             }
         }
-        .buttonStyle(.plain)
-        .hoverEffectDisabled()
-        .scaleEffect(isSelected ? 1.1 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
     }
-
 }
+
 #endif

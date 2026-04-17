@@ -49,6 +49,12 @@ func iOSSettingsSectionHeader(_ title: String) -> some View {
 
 /// Toggle row matching the iOS settings pattern: icon + label + CinemaToggleIndicator.
 /// Equivalent to tvOS's `tvGlassToggle` — one call per boolean setting.
+///
+/// `@MainActor` is required because the helper touches `PrimitiveButtonStyle.plain`,
+/// which is main-actor isolated under Swift 6 strict concurrency. Without it the
+/// compiler raises "Main actor-isolated static property 'plain' can not be referenced
+/// from a nonisolated context".
+@MainActor
 @ViewBuilder
 func iOSToggleRow(
     icon: String,
@@ -61,7 +67,7 @@ func iOSToggleRow(
         HStack {
             iOSRowIcon(systemName: icon, color: accent)
             Text(label)
-                .font(CinemaFont.label(.large))
+                .font(CinemaFont.dynamicLabel(.large))
                 .foregroundStyle(CinemaColor.onSurface)
             Spacer()
             Button { value.wrappedValue.toggle() } label: {

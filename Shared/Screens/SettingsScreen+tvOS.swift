@@ -8,15 +8,38 @@ import CinemaxKit
 extension SettingsScreen {
 
     var tvOSLayout: some View {
-        Group {
-            if let category = selectedCategory {
-                tvDetailView(for: category)
-                    .onExitCommand { selectedCategory = nil }
-            } else {
-                tvLandingPage
+        // Wrap in a ScrollView + ScrollViewReader so we can force the page to
+        // scroll back to its top whenever the user pops back from a category
+        // detail. Without this, tvOS keeps the page scrolled (or focus stranded)
+        // and the system top tab bar can stay hidden behind page content.
+        ScrollViewReader { proxy in
+            ScrollView {
+                Color.clear.frame(height: 0).id("settings.top")
+
+                Group {
+                    if let category = selectedCategory {
+                        tvDetailView(for: category)
+                            .onExitCommand { selectedCategory = nil }
+                    } else {
+                        tvLandingPage
+                    }
+                }
+                // Hold full height so the visual layout is unchanged from the
+                // pre-ScrollView version (brand panel + categories centered).
+                .frame(maxWidth: .infinity, minHeight: tvLandingMinHeight, maxHeight: .infinity)
+            }
+            .scrollClipDisabled()
+            .onChange(of: selectedCategory) { _, newValue in
+                // When a category is closed (newValue == nil), bring the page
+                // back to the top so the tab bar resurfaces naturally.
+                if newValue == nil {
+                    proxy.scrollTo("settings.top", anchor: .top)
+                }
+            }
+            .onAppear {
+                proxy.scrollTo("settings.top", anchor: .top)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             // Centered accent bloom — persists across all settings pages
             Circle()
@@ -26,8 +49,8 @@ extension SettingsScreen {
         }
         .task { await loadServerUsers() }
         .alert(loc.localized("settings.switchAccount"), isPresented: $showSwitchAccountAlert) {
-            Button(loc.localized("settings.switchAccount"), role: .destructive) {
-                appState.logout()
+            Button(loc.localized("settings.switchAccount")) {
+                showUserSwitch = true
             }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
@@ -293,6 +316,7 @@ extension SettingsScreen {
                 }
 
                 tvRefreshConnectionButton
+                tvRefreshCatalogueButton
             }
             .padding(CinemaSpacing.spacing4)
             .background(
@@ -306,6 +330,40 @@ extension SettingsScreen {
 
             tvLicensesButton
         }
+    }
+
+    // MARK: - Refresh Catalogue (tvOS)
+
+    var tvRefreshCatalogueButton: some View {
+        let isFocused = focusedItem == .toggle("refreshCatalogue")
+        return Button {
+            refreshCatalogue()
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(loc.localized("settings.refreshCatalogue"))
+                        .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                        .foregroundStyle(CinemaColor.onSurface)
+                    Text(loc.localized("settings.refreshCatalogue.subtitle"))
+                        .font(.system(size: CinemaScale.pt(16), weight: .regular))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle("refreshCatalogue"))
     }
 
     var tvLicensesButton: some View {
@@ -343,13 +401,41 @@ extension SettingsScreen {
     // MARK: Interface Detail (tvOS)
 
     var tvInterfaceDetail: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            tvGlassToggle(icon: "sparkles", label: loc.localized("settings.motionEffects"), key: "motion", value: $motionEffects)
-            tvGlassToggle(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), key: "subtitles", value: $forceSubtitles)
-            tvGlassToggle(icon: "4k.tv", label: loc.localized("settings.4kRendering"), key: "4k", value: $render4K)
-            tvGlassToggle(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), key: "autoPlayNext", value: $autoPlayNextEpisode)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+                tvGlassToggle(icon: "sparkles", label: loc.localized("settings.motionEffects"), key: "motion", value: $motionEffects)
+                tvGlassToggle(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), key: "subtitles", value: $forceSubtitles)
+                tvGlassToggle(icon: "4k.tv", label: loc.localized("settings.4kRendering"), key: "4k", value: $render4K)
+                tvGlassToggle(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), key: "autoPlayNext", value: $autoPlayNextEpisode)
 
-            tvFontSizeRow
+                tvSleepTimerRow
+                tvFontSizeRow
+            }
+
+            // Home Page section
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+                tvSectionLabel(loc.localized("settings.homePage"))
+
+                tvGlassToggle(icon: "play.circle", label: loc.localized("settings.homePage.continueWatching"), key: "homeContinueWatching", value: $showContinueWatching)
+                tvGlassToggle(icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"), key: "homeRecentlyAdded", value: $showRecentlyAdded)
+                tvGlassToggle(icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), key: "homeGenreRows", value: $showGenreRows)
+                tvGlassToggle(icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"), key: "homeWatchingNow", value: $showWatchingNow)
+            }
+
+            // Detail Page section
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+                tvSectionLabel(loc.localized("settings.detailPage"))
+
+                tvGlassToggle(icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"), key: "detailQualityBadges", value: $showQualityBadges)
+            }
+
+            // Debug section
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+                tvSectionLabel(loc.localized("settings.debug"))
+
+                tvGlassToggle(icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"), key: "debugFastSleep", value: $debugFastSleepTimer)
+                tvGlassToggle(icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"), key: "debugSkipToEnd", value: $debugShowSkipToEnd)
+            }
         }
     }
 
@@ -704,6 +790,52 @@ extension SettingsScreen {
                 Button("\(Int(option * 100))%") {
                     fontScale = option
                     themeManager.uiScale = option
+                }
+            }
+        }
+    }
+
+    /// Minimum height for the Settings landing page so the brand+categories layout
+    /// keeps its visual proportions inside the new ScrollView wrapper. tvOS screens
+    /// are ≥ 720pt tall, so this safely fills the viewport without forcing scroll.
+    var tvLandingMinHeight: CGFloat { 720 }
+
+    // MARK: - Sleep Timer Row (tvOS)
+
+    var tvSleepTimerRow: some View {
+        let isFocused = focusedItem == .toggle("sleepTimer")
+        let selected = SleepTimerOption(rawValue: sleepTimerMinutes) ?? .disabled
+        return Button {
+            showSleepTimerPicker = true
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: "moon.zzz")
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+                Text(loc.localized("settings.sleepTimer"))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                Text(loc.localized(selected.localizationKey))
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle("sleepTimer"))
+        .confirmationDialog(loc.localized("settings.sleepTimer"), isPresented: $showSleepTimerPicker) {
+            ForEach(SleepTimerOption.allCases) { option in
+                Button(loc.localized(option.localizationKey)) {
+                    sleepTimerMinutes = option.rawValue
                 }
             }
         }

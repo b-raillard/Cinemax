@@ -15,6 +15,12 @@ public protocol APIClientProtocol: Sendable {
     func authenticate(username: String, password: String) async throws -> UserSession
     func getPublicUsers() async throws -> [UserDto]
     func getUsers() async throws -> [UserDto]
+    func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto]
+
+    // MARK: - Cache
+
+    /// Drops every cached response (used by Settings → Server → Refresh Catalogue).
+    func clearCache()
 
     // MARK: - Media Queries
 
@@ -29,6 +35,7 @@ public protocol APIClientProtocol: Sendable {
         genres: [String]?,
         years: [Int]?,
         isFavorite: Bool?,
+        filters: [ItemFilter]?,
         limit: Int?,
         startIndex: Int?
     ) async throws -> (items: [BaseItemDto], totalCount: Int)
@@ -43,6 +50,10 @@ public protocol APIClientProtocol: Sendable {
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto?
+
+    // MARK: - Media Segments
+
+    func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto]
 
     // MARK: - Playback
 
@@ -82,13 +93,14 @@ public extension APIClientProtocol {
         genres: [String]? = nil,
         years: [Int]? = nil,
         isFavorite: Bool? = nil,
+        filters: [ItemFilter]? = nil,
         limit: Int? = nil,
         startIndex: Int? = nil
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         try await getItems(
             userId: userId, parentId: parentId, includeItemTypes: includeItemTypes,
             sortBy: sortBy, sortOrder: sortOrder, genres: genres, years: years,
-            isFavorite: isFavorite, limit: limit, startIndex: startIndex
+            isFavorite: isFavorite, filters: filters, limit: limit, startIndex: startIndex
         )
     }
     func getGenres(userId: String, includeItemTypes: [BaseItemKind]? = nil) async throws -> [String] {
@@ -97,8 +109,14 @@ public extension APIClientProtocol {
     func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
         try await getSimilarItems(itemId: itemId, userId: userId, limit: limit)
     }
+    func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
+        try await getActiveSessions(activeWithinSeconds: activeWithinSeconds)
+    }
     func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
         try await searchItems(userId: userId, searchTerm: searchTerm, limit: limit)
+    }
+    func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {
+        try await getMediaSegments(itemId: itemId, includeSegmentTypes: includeSegmentTypes)
     }
     func getPlaybackInfo(
         itemId: String,

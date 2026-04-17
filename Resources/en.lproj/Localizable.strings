@@ -22,10 +22,15 @@
 "action.clear" = "Clear";
 "action.logOut" = "Log Out";
 "action.viewAll" = "View All";
+"action.refresh" = "Refresh";
+"action.surpriseMe" = "Surprise Me";
 
 // MARK: - Home Screen
 
 "home.continueWatching" = "Continue Watching";
+"home.watchingNow" = "Watching Now";
+"home.watchingNow.playing" = "%@ is watching";
+"settings.homePage.watchingNow" = "Watching Now";
 "home.recentlyAdded" = "Recently Added";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
@@ -46,6 +51,10 @@
 "sort.rating" = "Rating";
 "sort.runtime" = "Runtime";
 "filter.byGenre" = "Genre";
+"filter.watchStatus" = "Watch status";
+"filter.unwatchedOnly" = "Unwatched only";
+"filter.byDecade" = "Decade";
+"filter.decade" = "%ds";
 
 // MARK: - TV Series
 
@@ -63,10 +72,57 @@
 "search.placeholder" = "Search movies, shows...";
 "search.listening" = "Listening...";
 "search.noResults" = "No results found";
+"empty.library.filtered.title" = "No matches";
+"empty.library.filtered.subtitle" = "Try adjusting your filters or clearing them.";
+"empty.library.filtered.action" = "Clear filters";
+"empty.library.title" = "No titles here yet";
+"empty.library.subtitle" = "Add content to your Jellyfin server to get started.";
+"empty.home.title" = "Your library is empty";
+"empty.home.subtitle" = "Add movies or TV shows to your Jellyfin server and pull down to refresh.";
+"empty.series.title" = "No episodes yet";
+
+// MARK: - Sleep Timer
+
+"settings.sleepTimer" = "Sleep Timer";
+"sleep.disabled" = "Off";
+"sleep.15" = "15 minutes";
+"sleep.30" = "30 minutes";
+"sleep.45" = "45 minutes";
+"sleep.60" = "1 hour";
+"sleep.90" = "1 hour 30 minutes";
+"sleep.indicator" = "Sleep in %@";
+"sleep.prompt.title" = "Still watching?";
+"sleep.prompt.subtitle" = "Your sleep timer ended.";
+"sleep.prompt.keepWatching" = "Keep watching";
+"sleep.prompt.stop" = "Stop playback";
+
+// MARK: - Playback Errors
+
+"playback.error.title" = "Couldn't play this video";
+"playback.error.generic" = "Something went wrong while loading the stream. Try again or check your Jellyfin server.";
+"playback.error.network" = "The connection to your server was lost. Check your network and retry.";
+"playback.error.transcode" = "The server couldn't transcode this file. Check your server's transcoding settings.";
+"playback.error.retry" = "Retry";
+"playback.error.close" = "Close";
+
+// MARK: - End of Series
+
+"player.finishedSeries.title" = "You finished %@";
+"player.finishedSeries.subtitle" = "No more episodes to play.";
+"player.finishedSeries.done" = "Done";
+
+// MARK: - Toasts
+
+"toast.surprise.failed" = "Couldn't pick something";
+"toast.surprise.emptyLibrary" = "Your library is empty.";
+"toast.loadFailed" = "Couldn't load content";
 "search.searchLibrary" = "Search your library";
 "search.topMatches" = "Top Matches";
 "search.permissionRequired" = "Permission Required";
 "search.openSettings" = "Open Settings";
+"search.surpriseMePrompt" = "Not sure what to watch?";
+"search.surprise.movie" = "Surprise movie";
+"search.surprise.series" = "Surprise series";
 
 // MARK: - Settings
 
@@ -95,9 +151,25 @@
 "settings.user" = "User";
 "settings.switchAccount" = "Switch Account";
 "settings.switchAccountConfirm" = "You will be logged out and returned to the login screen.";
+"switchAccount.pickUser" = "Pick a user";
+"switchAccount.enterPasswordFor" = "Enter password for %@";
+"switchAccount.signIn" = "Sign In";
+"switchAccount.authFailed" = "Sign-in failed";
+"switchAccount.success" = "Signed in as %@";
 "settings.server" = "Server";
 "settings.connected" = "Connected";
 "settings.refreshConnection" = "Refresh Connection";
+"settings.refreshCatalogue" = "Refresh Catalogue";
+"settings.refreshCatalogue.subtitle" = "Clear cache and reload Home and Library.";
+"toast.catalogueRefreshed" = "Catalogue refreshed";
+
+// MARK: - Debug
+
+"settings.debug" = "Debug";
+"settings.debug.fastSleepTimer" = "Fast sleep timer (15 s)";
+"settings.debug.fastSleepTimer.subtitle" = "Override the sleep duration to 15 seconds for testing the prompt.";
+"settings.debug.skipToEnd" = "Skip-to-end button";
+"settings.debug.skipToEnd.subtitle" = "Show a button in the player that jumps to the last 15 s of the current item.";
 "settings.interface" = "Interface";
 "settings.motionEffects" = "Motion Effects";
 "settings.fontSize" = "Text Size";
@@ -110,10 +182,17 @@
 "settings.deviceName" = "Device Name";
 "settings.network" = "Network";
 "settings.authenticatedDevice" = "Authenticated Device";
+"settings.homePage" = "Home Page";
+"settings.homePage.continueWatching" = "Continue Watching";
+"settings.homePage.recentlyAdded" = "Recently Added";
+"settings.homePage.genreRows" = "Genre Rows";
+"settings.detailPage" = "Detail Page";
+"settings.detailPage.qualityBadges" = "Quality badges";
 
 // MARK: - Media Detail
 
 "detail.play" = "Play";
+"detail.playFromBeginning" = "Play from beginning";
 "detail.castCrew" = "Cast & Crew";
 "detail.moreLikeThis" = "More Like This";
 "detail.episode" = "Episode %d";
@@ -123,6 +202,10 @@
 "detail.seasons" = "%d Seasons";
 "detail.season" = "Season";
 "detail.seeMore" = "See more";
+"detail.studio" = "Studio";
+"detail.network" = "Network";
+"detail.criticRating" = "Critics";
+"detail.audienceRating" = "Audience";
 
 // MARK: - Login
 
@@ -170,6 +253,8 @@
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
 "player.trackPicker.title" = "Playback Tracks";
+"player.skipIntro" = "Skip Intro";
+"player.skipCredits" = "Skip Credits";
 
 // MARK: - Licenses
 
