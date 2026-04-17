@@ -28,6 +28,8 @@ struct LibrarySortFilterSheet: View {
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
                         sortSection
                         sortOrderSection
+                        unwatchedSection
+                        decadeSection
                         if !availableGenres.isEmpty {
                             genreSection
                         }
@@ -149,6 +151,90 @@ struct LibrarySortFilterSheet: View {
                     : CinemaColor.surfaceContainerHigh
             )
             .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Watch Status
+
+    private var unwatchedSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            sectionHeader(loc.localized("filter.watchStatus"))
+
+            Button {
+                sortFilter.showUnwatchedOnly.toggle()
+            } label: {
+                HStack {
+                    Text(loc.localized("filter.unwatchedOnly"))
+                        .font(CinemaFont.body)
+                        .foregroundStyle(CinemaColor.onSurface)
+                    Spacer()
+                    CinemaToggleIndicator(
+                        isOn: sortFilter.showUnwatchedOnly,
+                        accent: themeManager.accent
+                    )
+                }
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.vertical, CinemaSpacing.spacing3)
+                .background(CinemaColor.surfaceContainerHigh)
+                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: Decade Filter
+
+    /// Decades offered in the UI. Starting years, most-recent-first.
+    private static let decadeOptions: [Int] = [2020, 2010, 2000, 1990, 1980, 1970, 1960, 1950]
+
+    private var decadeSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            HStack {
+                sectionHeader(loc.localized("filter.byDecade"))
+                Spacer()
+                if !sortFilter.selectedDecades.isEmpty {
+                    Button {
+                        sortFilter.selectedDecades = []
+                    } label: {
+                        Text(loc.localized("action.clear"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(themeManager.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            FlowLayout(spacing: CinemaSpacing.spacing2) {
+                ForEach(Self.decadeOptions, id: \.self) { decade in
+                    decadeChip(decade)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func decadeChip(_ decade: Int) -> some View {
+        let isSelected = sortFilter.selectedDecades.contains(decade)
+
+        Button {
+            if isSelected {
+                sortFilter.selectedDecades.remove(decade)
+            } else {
+                sortFilter.selectedDecades.insert(decade)
+            }
+        } label: {
+            Text(loc.localized("filter.decade", decade))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                .padding(.vertical, CinemaSpacing.spacing2)
+                .background(
+                    isSelected
+                        ? themeManager.accentContainer
+                        : CinemaColor.surfaceContainerHigh
+                )
+                .clipShape(Capsule())
         }
         .buttonStyle(.plain)
     }

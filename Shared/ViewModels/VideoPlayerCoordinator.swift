@@ -60,6 +60,7 @@ final class VideoPlayerCoordinator {
                     apiClient: apiClient, userId: userId,
                     maxBitrate: bitrate, loc: loc,
                     autoPlayNextEpisode: autoPlayNextEpisode,
+                    imageBuilder: appState.imageBuilder,
                     onDismiss: { [weak self] in
                         self?.presenter = nil
                         self?.lastDismissedAt = Date()

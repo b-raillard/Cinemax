@@ -8,10 +8,20 @@ final class HomeViewModel {
     var heroItem: BaseItemDto?
     var resumeItems: [BaseItemDto] = []
     var latestItems: [BaseItemDto] = []
+    /// Ordered list of genre rows (mixed movies + series). Empty genres are skipped.
+    var genreRows: [(genre: String, items: [BaseItemDto])] = []
     /// Episode navigation keyed by episode item ID. Populated after resumeItems loads.
     var resumeNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
+    /// Other users currently watching something on this server. Excludes the logged-in user.
+    var activeSessions: [SessionInfoDto] = []
     var isLoading = true
     var errorMessage: String?
+
+    /// Re-runs the full home load (equivalent to calling `load` again). Exposed for pull-to-refresh.
+    func reload(using appState: AppState) async {
+        activeSessions = []
+        await load(using: appState)
+    }
 
     func load(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
@@ -64,6 +74,7 @@ final class HomeViewModel {
                 }
             }
 
+            resumeNavigation.removeAll()
             for item in episodeItems {
                 guard let id = item.id, let seasonId = item.seasonID else { continue }
                 guard let eps = seasonEpisodes[seasonId] else { continue }
@@ -73,8 +84,87 @@ final class HomeViewModel {
                 )
                 resumeNavigation[id] = nav
             }
+        } else {
+            resumeNavigation.removeAll()
         }
 
+        // Genre rows: pick up to 4 random genres from the server and fetch 10 random
+        // items per genre in parallel. Genres with no items are skipped.
+        await loadGenreRows(userId: userId, appState: appState)
+
+        // Active sessions ("Watching Now" row). Non-blocking — quietly drops on error.
+        await loadActiveSessions(userId: userId, appState: appState)
+
         isLoading = false
+    }
+
+    /// Fetches active sessions and filters down to ones with a currently-playing item,
+    /// excluding the logged-in user (their own "resume" already covers that).
+    private func loadActiveSessions(userId: String, appState: AppState) async {
+        do {
+            let all = try await appState.apiClient.getActiveSessions(activeWithinSeconds: 60)
+            activeSessions = all.filter { session in
+                session.nowPlayingItem != nil
+                    && (session.userID ?? "") != userId
+            }
+        } catch {
+            activeSessions = []
+        }
+    }
+
+    private func loadGenreRows(userId: String, appState: AppState) async {
+        let allGenres: [String]
+        do {
+            allGenres = try await appState.apiClient.getGenres(
+                userId: userId, includeItemTypes: [.movie, .series]
+            )
+        } catch {
+            genreRows = []
+            return
+        }
+
+        guard !allGenres.isEmpty else {
+            genreRows = []
+            return
+        }
+
+        let picked = Array(allGenres.shuffled().prefix(4))
+
+        // Fetch items for each picked genre in parallel. Preserve the order of `picked`.
+        var results: [String: [BaseItemDto]] = [:]
+        await withTaskGroup(of: (String, [BaseItemDto])?.self) { group in
+            for genre in picked {
+                group.addTask {
+                    do {
+                        let response = try await appState.apiClient.getItems(
+                            userId: userId,
+                            parentId: nil,
+                            includeItemTypes: [.movie, .series],
+                            sortBy: [.random],
+                            sortOrder: nil,
+                            genres: [genre],
+                            years: nil,
+                            isFavorite: nil,
+                            filters: nil,
+                            limit: 10,
+                            startIndex: nil
+                        )
+                        return (genre, response.items)
+                    } catch {
+                        return nil
+                    }
+                }
+            }
+            for await result in group {
+                if let (genre, items) = result {
+                    results[genre] = items
+                }
+            }
+        }
+
+        genreRows = picked.compactMap { genre in
+            guard let items = results[genre], !items.isEmpty else { return nil }
+            return (genre: genre, items: items)
+        }
     }
 }

@@ -68,6 +68,7 @@ struct AppNavigation: View {
     @State private var appState = AppState()
     @State private var themeManager = ThemeManager()
     @State private var loc = LocalizationManager()
+    @State private var toasts = ToastCenter()
     @State private var hasCheckedSession = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -81,21 +82,32 @@ struct AppNavigation: View {
     }
 
     var body: some View {
-        Group {
-            if !hasCheckedSession {
-                launchScreen
-            } else if !appState.hasServer {
-                ServerSetupScreen()
-            } else if !appState.isAuthenticated {
-                LoginScreen()
-            } else {
-                MainTabView()
+        ZStack {
+            Group {
+                if !hasCheckedSession {
+                    launchScreen
+                } else if !appState.hasServer {
+                    ServerSetupScreen()
+                } else if !appState.isAuthenticated {
+                    LoginScreen()
+                } else {
+                    MainTabView()
+                }
             }
+
+            // Toasts overlay the entire app chrome (above tab bar / modals).
+            ToastOverlay()
+                .allowsHitTesting(toasts.current != nil)
         }
         .environment(appState)
         .environment(themeManager)
         .environment(loc)
+        .environment(toasts)
         .environment(\.motionEffectsEnabled, motionEffects)
+        // Respect the user's OS Dynamic Type setting while capping at a size
+        // that won't collapse layouts (hero titles, tab bar). The app also has
+        // its own `uiScale` in Settings > Interface > Font Size for finer control.
+        .dynamicTypeSize(.xSmall ... .accessibility2)
         .preferredColorScheme(themeManager.colorScheme)
         .task {
             await appState.restoreSession()
@@ -112,6 +124,9 @@ struct AppNavigation: View {
 
 extension Notification.Name {
     static let cinemaxDidEnterBackground = Notification.Name("cinemaxDidEnterBackground")
+    /// Posted when the user taps "Refresh Catalogue" in Settings → Server.
+    /// Home and Library observe this and reload their content (cache-busted).
+    static let cinemaxShouldRefreshCatalogue = Notification.Name("cinemaxShouldRefreshCatalogue")
 }
 
 private extension AppNavigation {

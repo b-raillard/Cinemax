@@ -53,6 +53,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     func getPublicUsers() async throws -> [UserDto] { [] }
     func getUsers() async throws -> [UserDto] { [] }
+    func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto] { [] }
+
+    // MARK: - Cache
+
+    func clearCache() {}
 
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
         if shouldThrow { throw stubbedError }
@@ -68,7 +73,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?,
         sortBy: [ItemSortBy]?, sortOrder: [JellyfinAPI.SortOrder]?,
         genres: [String]?, years: [Int]?, isFavorite: Bool?,
-        limit: Int?, startIndex: Int?
+        filters: [ItemFilter]?, limit: Int?, startIndex: Int?
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         if shouldThrow { throw stubbedError }
         return (stubbedItems, stubbedTotalCount)
@@ -97,8 +102,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] { [] }
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
 
-    func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {}
-    func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {}
+    // MARK: - Media Segments
+
+    func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto] { [] }
+
+    // `PlayMethod` is disambiguated with `CinemaxKit.` prefix because JellyfinAPI
+    // exports a type of the same name; Swift can't tell which one the protocol
+    // signature refers to without the explicit module qualifier.
+    func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: CinemaxKit.PlayMethod) async {}
+    func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod) async {}
     func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async {}
 
     func getPlaybackInfo(

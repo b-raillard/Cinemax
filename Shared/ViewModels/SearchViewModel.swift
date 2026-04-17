@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 import CinemaxKit
-import JellyfinAPI
+@preconcurrency import JellyfinAPI
 #if os(iOS)
 import Speech
 import AVFoundation
@@ -149,6 +149,42 @@ final class SearchViewModel {
         }
     }
     #endif
+
+    // MARK: - Surprise Me
+
+    /// Two specialized entry points (vs. one parameterized) so the `[BaseItemKind]`
+    /// literal is captured locally — Swift 6 strict concurrency raises a "sending
+    /// non-Sendable value" diagnostic when the array is built from a function
+    /// parameter and sent across the actor boundary into the API call.
+    func fetchRandomMovie(using appState: AppState) async -> BaseItemDto? {
+        guard let userId = appState.currentUserId else { return nil }
+        do {
+            let response = try await appState.apiClient.getItems(
+                userId: userId,
+                includeItemTypes: [.movie],
+                sortBy: [.random],
+                limit: 1
+            )
+            return response.items.first
+        } catch {
+            return nil
+        }
+    }
+
+    func fetchRandomSeries(using appState: AppState) async -> BaseItemDto? {
+        guard let userId = appState.currentUserId else { return nil }
+        do {
+            let response = try await appState.apiClient.getItems(
+                userId: userId,
+                includeItemTypes: [.series],
+                sortBy: [.random],
+                limit: 1
+            )
+            return response.items.first
+        } catch {
+            return nil
+        }
+    }
 
     // MARK: Text search
 

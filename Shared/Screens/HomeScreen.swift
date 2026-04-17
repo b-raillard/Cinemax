@@ -8,12 +8,19 @@ struct HomeScreen: View {
     @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = HomeViewModel()
 
+    @AppStorage("home.showContinueWatching") private var showContinueWatching: Bool = true
+    @AppStorage("home.showRecentlyAdded") private var showRecentlyAdded: Bool = true
+    @AppStorage("home.showGenreRows") private var showGenreRows: Bool = true
+    @AppStorage("home.showWatchingNow") private var showWatchingNow: Bool = true
+
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
             if viewModel.isLoading {
                 LoadingStateView()
+            } else if isHomeEmpty {
+                homeEmptyState
             } else {
                 content
             }
@@ -25,32 +32,102 @@ struct HomeScreen: View {
         .task {
             await viewModel.load(using: appState)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
+            Task { await viewModel.reload(using: appState) }
+        }
+    }
+
+    /// True when there's no hero, no resume items, no recently added items, and no genre rows.
+    /// Happens on a fresh Jellyfin install or a server with no media.
+    private var isHomeEmpty: Bool {
+        viewModel.heroItem == nil
+            && viewModel.resumeItems.isEmpty
+            && viewModel.latestItems.isEmpty
+            && viewModel.genreRows.isEmpty
+    }
+
+    private var homeEmptyState: some View {
+        ScrollView {
+            EmptyStateView(
+                systemImage: "tv.slash",
+                title: loc.localized("empty.home.title"),
+                subtitle: loc.localized("empty.home.subtitle"),
+                actionTitle: loc.localized("action.refresh")
+            ) {
+                Task { await viewModel.reload(using: appState) }
+            }
+            .padding(.top, CinemaSpacing.spacing20)
+        }
+        .refreshable { await viewModel.reload(using: appState) }
     }
 
     private var content: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                // Hero
-                if let hero = viewModel.heroItem {
-                    heroSection(hero)
-                }
+        // Wrap in `ScrollViewReader` so that on tvOS we can scroll back to the
+        // top sentinel whenever the screen reappears (after a deep-nav pop or
+        // tab switch). Without this the tvOS top tab bar can be hidden behind
+        // scrolled content and the user can't reach it with the remote.
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                    // Sentinel for `proxy.scrollTo(_:anchor:)`
+                    Color.clear.frame(height: 0).id(scrollTopID)
 
-                // Continue Watching
-                if !viewModel.resumeItems.isEmpty {
-                    continueWatchingRow
-                }
+                    // Hero
+                    if let hero = viewModel.heroItem {
+                        heroSection(hero)
+                    }
 
-                // Recently Added
-                if !viewModel.latestItems.isEmpty {
-                    recentlyAddedRow
-                }
+                    // Watching Now (other users on the server)
+                    if showWatchingNow, !viewModel.activeSessions.isEmpty {
+                        watchingNowRow
+                    }
 
-                Spacer(minLength: 80)
+                    // Continue Watching
+                    if showContinueWatching, !viewModel.resumeItems.isEmpty {
+                        continueWatchingRow
+                    }
+
+                    // Recently Added
+                    if showRecentlyAdded, !viewModel.latestItems.isEmpty {
+                        recentlyAddedRow
+                    }
+
+                    // Genre rows
+                    if showGenreRows {
+                        ForEach(viewModel.genreRows, id: \.genre) { row in
+                            genreRow(genre: row.genre, items: row.items)
+                        }
+                    }
+
+                    Spacer(minLength: 80)
+                }
+            }
+            .refreshable {
+                await viewModel.reload(using: appState)
+            }
+            #if os(tvOS)
+            .scrollClipDisabled()
+            .onAppear {
+                // Returning from a deep navigation (e.g., MediaDetail → Menu) —
+                // reveal the top tab bar by scrolling to the sentinel.
+                proxy.scrollTo(scrollTopID, anchor: .top)
+            }
+            #endif
+        }
+    }
+
+    private var scrollTopID: String { "home.top" }
+
+    // MARK: - Genre Rows
+
+    @ViewBuilder
+    private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
+        ContentRow(title: genre) {
+            ForEach(items, id: \.id) { item in
+                recentlyAddedCard(item)
+                    .frame(width: posterCardWidth)
             }
         }
-        #if os(tvOS)
-        .scrollClipDisabled()
-        #endif
     }
 
     // MARK: - Hero
@@ -176,6 +253,68 @@ struct HomeScreen: View {
     }
 
     // MARK: - Continue Watching
+
+    // MARK: - Watching Now (other users)
+
+    /// Small row showing other server users' active playback sessions. Each card shows
+    /// the item artwork + "Name is watching" label, and navigates to the item's detail
+    /// screen on tap. Hidden entirely when the server has no other active sessions.
+    private var watchingNowRow: some View {
+        ContentRow(title: loc.localized("home.watchingNow")) {
+            ForEach(viewModel.activeSessions.indices, id: \.self) { idx in
+                watchingNowCard(viewModel.activeSessions[idx])
+                    .frame(width: wideCardWidth)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func watchingNowCard(_ session: SessionInfoDto) -> some View {
+        if let item = session.nowPlayingItem, let id = item.id {
+            // Episodes → use parent series for backdrop; fall back to the episode itself.
+            let backdropId = item.parentBackdropItemID ?? item.seriesID ?? id
+            let title = (item.seriesName ?? item.name) ?? ""
+            let subtitle = String(format: loc.localized("home.watchingNow.playing"), session.userName ?? "")
+
+            NavigationLink {
+                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+            } label: {
+                WideCard(
+                    title: title,
+                    imageURL: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 600),
+                    progress: sessionProgress(session),
+                    subtitle: subtitle
+                )
+                .overlay(alignment: .topLeading) {
+                    // Small red "LIVE" pill to signal this is a session, not a recommendation.
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.red).frame(width: 6, height: 6)
+                        Text("LIVE")
+                            .font(.system(size: 10, weight: .bold))
+                            .tracking(0.5)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(8)
+                }
+            }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityLabel("\(title), \(subtitle)")
+        }
+    }
+
+    private func sessionProgress(_ session: SessionInfoDto) -> Double {
+        guard let position = session.playState?.positionTicks,
+              let total = session.nowPlayingItem?.runTimeTicks,
+              total > 0 else { return 0 }
+        return min(1.0, Double(position) / Double(total))
+    }
 
     private var continueWatchingRow: some View {
         ContentRow(title: loc.localized("home.continueWatching")) {

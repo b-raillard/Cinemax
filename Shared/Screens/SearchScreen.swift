@@ -8,10 +8,21 @@ struct SearchScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(ToastCenter.self) private var toasts
     @State private var viewModel = SearchViewModel()
 
     // Pulsing animation state for the listening indicator
     @State private var isPulsing = false
+
+    // Surprise Me state — two buttons (movie + series) in the empty state.
+    @State private var surpriseDestination: SurpriseDestination?
+    @State private var isPickingSurpriseMovie = false
+    @State private var isPickingSurpriseSeries = false
+
+    private struct SurpriseDestination: Identifiable, Hashable {
+        let id: String
+        let itemType: BaseItemKind
+    }
 
     private let columns: [GridItem] = {
         #if os(tvOS)
@@ -25,13 +36,35 @@ struct SearchScreen: View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
+            #if os(tvOS)
+            // tvOS path is wrapped in a ScrollView + ScrollViewReader so we can
+            // force the page back to the top whenever it reappears (e.g., user
+            // pops back from a result detail). This is what surfaces the tvOS
+            // top tab bar — it stays hidden when content overlaps its area.
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Color.clear.frame(height: 0).id("search.top")
+                    VStack(spacing: 0) {
+                        searchField
+                        resultContent
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 720, maxHeight: .infinity)
+                }
+                .scrollClipDisabled()
+                .onAppear {
+                    proxy.scrollTo("search.top", anchor: .top)
+                }
+            }
+            #else
             VStack(spacing: 0) {
                 searchField
-                #if os(iOS)
                 listeningLabel
-                #endif
                 resultContent
             }
+            #endif
+        }
+        .navigationDestination(item: $surpriseDestination) { dest in
+            MediaDetailScreen(itemId: dest.id, itemType: dest.itemType)
         }
         #if os(iOS)
         .navigationTitle(loc.localized("search.title"))
@@ -177,7 +210,7 @@ struct SearchScreen: View {
             Spacer()
         } else if viewModel.results.isEmpty {
             Spacer()
-            VStack(spacing: CinemaSpacing.spacing3) {
+            VStack(spacing: CinemaSpacing.spacing4) {
                 Image(systemName: "sparkle.magnifyingglass")
                     .font(.system(size: 48))
                     .foregroundStyle(CinemaColor.outlineVariant)
@@ -185,11 +218,114 @@ struct SearchScreen: View {
                 Text(loc.localized("search.searchLibrary"))
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
+
+                // "Not sure what to watch?" → two pills for a random movie or series.
+                surpriseMePills
             }
             Spacer()
         } else {
             resultsGrid
         }
+    }
+
+    // MARK: - Surprise Me
+
+    private var surpriseMePills: some View {
+        VStack(spacing: CinemaSpacing.spacing2) {
+            Text(loc.localized("search.surpriseMePrompt"))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+
+            HStack(spacing: CinemaSpacing.spacing3) {
+                surprisePill(
+                    label: loc.localized("search.surprise.movie"),
+                    icon: "film.fill",
+                    isLoading: isPickingSurpriseMovie
+                ) {
+                    await performSurprise(type: .movie)
+                }
+                surprisePill(
+                    label: loc.localized("search.surprise.series"),
+                    icon: "tv.fill",
+                    isLoading: isPickingSurpriseSeries
+                ) {
+                    await performSurprise(type: .series)
+                }
+            }
+        }
+        .padding(.top, CinemaSpacing.spacing4)
+    }
+
+    @ViewBuilder
+    private func surprisePill(label: String, icon: String, isLoading: Bool, action: @escaping () async -> Void) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: surpriseIconSize, weight: .semibold))
+                }
+                Text(label)
+                    .font(.system(size: surpriseLabelSize, weight: .semibold))
+            }
+            .foregroundStyle(themeManager.onAccent)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .background(themeManager.accentContainer)
+            .clipShape(Capsule())
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .disabled(isLoading)
+        .accessibilityLabel(label)
+    }
+
+    private func performSurprise(type: BaseItemKind) async {
+        if type == .movie { isPickingSurpriseMovie = true }
+        else { isPickingSurpriseSeries = true }
+        defer {
+            if type == .movie { isPickingSurpriseMovie = false }
+            else { isPickingSurpriseSeries = false }
+        }
+
+        let item: BaseItemDto?
+        switch type {
+        case .movie:  item = await viewModel.fetchRandomMovie(using: appState)
+        case .series: item = await viewModel.fetchRandomSeries(using: appState)
+        default:      item = nil
+        }
+
+        guard let item, let id = item.id else {
+            toasts.error(
+                loc.localized("toast.surprise.failed"),
+                message: loc.localized("toast.surprise.emptyLibrary")
+            )
+            return
+        }
+        surpriseDestination = SurpriseDestination(id: id, itemType: item.type ?? type)
+    }
+
+    private var surpriseIconSize: CGFloat {
+        #if os(tvOS)
+        24
+        #else
+        16
+        #endif
+    }
+
+    private var surpriseLabelSize: CGFloat {
+        #if os(tvOS)
+        22
+        #else
+        15
+        #endif
     }
 
     private var resultsGrid: some View {

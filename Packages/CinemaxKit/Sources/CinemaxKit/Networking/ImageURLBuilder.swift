@@ -43,6 +43,25 @@ public struct ImageURLBuilder: Sendable {
         #endif
     }
 
+    /// Builds the URL for a chapter thumbnail. Jellyfin exposes chapter images at
+    /// `/Items/{id}/Images/Chapter/{index}` (0-based index into the chapter list).
+    public func chapterImageURL(itemId: String, imageIndex: Int, tag: String? = nil, maxWidth: Int? = nil) -> URL {
+        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
+        components.path = "/Items/\(itemId)/Images/Chapter/\(imageIndex)"
+
+        var queryItems: [URLQueryItem] = []
+        if let maxWidth {
+            queryItems.append(URLQueryItem(name: "maxWidth", value: String(maxWidth)))
+        }
+        if let tag {
+            queryItems.append(URLQueryItem(name: "tag", value: tag))
+        }
+        queryItems.append(URLQueryItem(name: "quality", value: "85"))
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+
+        return components.url!
+    }
+
     public func userImageURL(userId: String, tag: String? = nil, maxWidth: Int? = nil) -> URL {
         var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
         components.path = "/Users/\(userId)/Images/Primary"

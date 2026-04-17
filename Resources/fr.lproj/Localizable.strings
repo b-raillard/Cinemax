@@ -22,10 +22,15 @@
 "action.clear" = "Effacer";
 "action.logOut" = "Déconnexion";
 "action.viewAll" = "Tout voir";
+"action.refresh" = "Actualiser";
+"action.surpriseMe" = "Au hasard";
 
 // MARK: - Home Screen
 
 "home.continueWatching" = "Reprendre";
+"home.watchingNow" = "En direct";
+"home.watchingNow.playing" = "%@ regarde";
+"settings.homePage.watchingNow" = "En direct";
 "home.recentlyAdded" = "Ajouts récents";
 "home.remainingTime.hours" = "%dh %dm restantes";
 "home.remainingTime.minutes" = "%dm restantes";
@@ -46,6 +51,10 @@
 "sort.rating" = "Note";
 "sort.runtime" = "Durée";
 "filter.byGenre" = "Genre";
+"filter.watchStatus" = "Statut de visionnage";
+"filter.unwatchedOnly" = "Non vus uniquement";
+"filter.byDecade" = "Décennie";
+"filter.decade" = "Années %d";
 
 // MARK: - TV Series
 
@@ -63,10 +72,57 @@
 "search.placeholder" = "Rechercher des films, séries...";
 "search.listening" = "Écoute en cours...";
 "search.noResults" = "Aucun résultat";
+"empty.library.filtered.title" = "Aucun résultat";
+"empty.library.filtered.subtitle" = "Essayez d'ajuster vos filtres ou de les effacer.";
+"empty.library.filtered.action" = "Effacer les filtres";
+"empty.library.title" = "Aucun titre pour le moment";
+"empty.library.subtitle" = "Ajoutez du contenu à votre serveur Jellyfin pour commencer.";
+"empty.home.title" = "Votre bibliothèque est vide";
+"empty.home.subtitle" = "Ajoutez des films ou séries à votre serveur Jellyfin puis tirez pour actualiser.";
+"empty.series.title" = "Aucun épisode pour le moment";
+
+// MARK: - Sleep Timer
+
+"settings.sleepTimer" = "Minuteur de veille";
+"sleep.disabled" = "Désactivé";
+"sleep.15" = "15 minutes";
+"sleep.30" = "30 minutes";
+"sleep.45" = "45 minutes";
+"sleep.60" = "1 heure";
+"sleep.90" = "1 heure 30 minutes";
+"sleep.indicator" = "Veille dans %@";
+"sleep.prompt.title" = "Toujours là ?";
+"sleep.prompt.subtitle" = "Votre minuteur de veille s'est écoulé.";
+"sleep.prompt.keepWatching" = "Continuer";
+"sleep.prompt.stop" = "Arrêter la lecture";
+
+// MARK: - Playback Errors
+
+"playback.error.title" = "Lecture impossible";
+"playback.error.generic" = "Une erreur est survenue pendant le chargement du flux. Réessayez ou vérifiez votre serveur Jellyfin.";
+"playback.error.network" = "La connexion au serveur a été perdue. Vérifiez votre réseau et réessayez.";
+"playback.error.transcode" = "Le serveur n'a pas pu transcoder ce fichier. Vérifiez les réglages de transcodage.";
+"playback.error.retry" = "Réessayer";
+"playback.error.close" = "Fermer";
+
+// MARK: - End of Series
+
+"player.finishedSeries.title" = "Vous avez terminé %@";
+"player.finishedSeries.subtitle" = "Plus d'épisodes à lire.";
+"player.finishedSeries.done" = "Terminé";
+
+// MARK: - Toasts
+
+"toast.surprise.failed" = "Impossible de choisir un titre";
+"toast.surprise.emptyLibrary" = "Votre bibliothèque est vide.";
+"toast.loadFailed" = "Échec du chargement";
 "search.searchLibrary" = "Rechercher dans votre bibliothèque";
 "search.topMatches" = "Meilleurs résultats";
 "search.permissionRequired" = "Autorisation requise";
 "search.openSettings" = "Ouvrir les réglages";
+"search.surpriseMePrompt" = "Pas d'idée de ce que regarder ?";
+"search.surprise.movie" = "Film surprise";
+"search.surprise.series" = "Série surprise";
 
 // MARK: - Settings
 
@@ -95,9 +151,25 @@
 "settings.user" = "Utilisateur";
 "settings.switchAccount" = "Changer de compte";
 "settings.switchAccountConfirm" = "Vous serez déconnecté et redirigé vers l'écran de connexion.";
+"switchAccount.pickUser" = "Choisir un utilisateur";
+"switchAccount.enterPasswordFor" = "Mot de passe de %@";
+"switchAccount.signIn" = "Connexion";
+"switchAccount.authFailed" = "Échec de la connexion";
+"switchAccount.success" = "Connecté en tant que %@";
 "settings.server" = "Serveur";
 "settings.connected" = "Connecté";
 "settings.refreshConnection" = "Actualiser la connexion";
+"settings.refreshCatalogue" = "Actualiser le catalogue";
+"settings.refreshCatalogue.subtitle" = "Vider le cache et recharger Accueil et Bibliothèque.";
+"toast.catalogueRefreshed" = "Catalogue actualisé";
+
+// MARK: - Debug
+
+"settings.debug" = "Débogage";
+"settings.debug.fastSleepTimer" = "Veille rapide (15 s)";
+"settings.debug.fastSleepTimer.subtitle" = "Forcer la durée de veille à 15 secondes pour tester le prompt.";
+"settings.debug.skipToEnd" = "Bouton aller à la fin";
+"settings.debug.skipToEnd.subtitle" = "Afficher un bouton dans le lecteur qui saute aux 15 dernières secondes.";
 "settings.interface" = "Interface";
 "settings.motionEffects" = "Effets de mouvement";
 "settings.fontSize" = "Taille du texte";
@@ -110,10 +182,17 @@
 "settings.deviceName" = "Nom de l'appareil";
 "settings.network" = "Réseau";
 "settings.authenticatedDevice" = "Appareil authentifié";
+"settings.homePage" = "Page d'accueil";
+"settings.homePage.continueWatching" = "Reprendre";
+"settings.homePage.recentlyAdded" = "Ajouts récents";
+"settings.homePage.genreRows" = "Rangées par genre";
+"settings.detailPage" = "Page de détail";
+"settings.detailPage.qualityBadges" = "Badges de qualité";
 
 // MARK: - Media Detail
 
 "detail.play" = "Lecture";
+"detail.playFromBeginning" = "Lire depuis le début";
 "detail.castCrew" = "Casting";
 "detail.moreLikeThis" = "Titres similaires";
 "detail.episode" = "Épisode %d";
@@ -123,6 +202,10 @@
 "detail.seasons" = "%d saisons";
 "detail.season" = "Saison";
 "detail.seeMore" = "Voir plus";
+"detail.studio" = "Studio";
+"detail.network" = "Chaîne";
+"detail.criticRating" = "Critiques";
+"detail.audienceRating" = "Public";
 
 // MARK: - Login
 
@@ -170,6 +253,8 @@
 "player.subtitles" = "Sous-titres";
 "player.subtitles.off" = "Désactivé";
 "player.trackPicker.title" = "Pistes de lecture";
+"player.skipIntro" = "Passer l'intro";
+"player.skipCredits" = "Passer le générique";
 
 // MARK: - Licenses
 

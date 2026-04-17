@@ -13,14 +13,6 @@ func debugLog(_ message: String) {
 }
 #endif
 
-/// A single audio or subtitle track from a Jellyfin media source.
-public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
-    public let id: Int        // stream index (AudioStreamIndex / SubtitleStreamIndex)
-    public let label: String  // Jellyfin DisplayTitle, e.g. "English - AAC - Stereo"
-    public let isDefault: Bool
-    public let isForced: Bool
-}
-
 public final class JellyfinAPIClient: Sendable {
     // JellyfinClient is not Sendable, so we protect it with a lock
     private let lock = NSLock()
@@ -148,6 +140,15 @@ public final class JellyfinAPIClient: Sendable {
         return response.value
     }
 
+    /// Returns all active sessions on the server. Used by the "Currently watching" indicator
+    /// on Home to show what other users are streaming right now.
+    public func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.GetSessionsParameters(activeWithinSeconds: activeWithinSeconds)
+        let response = try await client.send(Paths.getSessions(parameters: params))
+        return response.value
+    }
+
     // MARK: - Media Queries
 
     public func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
@@ -195,6 +196,7 @@ public final class JellyfinAPIClient: Sendable {
         genres: [String]? = nil,
         years: [Int]? = nil,
         isFavorite: Bool? = nil,
+        filters: [ItemFilter]? = nil,
         limit: Int? = nil,
         startIndex: Int? = nil
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
@@ -207,6 +209,7 @@ public final class JellyfinAPIClient: Sendable {
             sortOrder: sortOrder,
             parentID: parentId,
             includeItemTypes: includeItemTypes,
+            filters: filters,
             sortBy: sortBy,
             genres: genres,
             years: years
@@ -294,6 +297,14 @@ public final class JellyfinAPIClient: Sendable {
         )
         let response = try await client.send(Paths.getNextUp(parameters: params))
         return response.value.items?.first
+    }
+
+    // MARK: - Media Segments
+
+    public func getMediaSegments(itemId: String, includeSegmentTypes: [JellyfinAPI.MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getItemSegments(itemID: itemId, includeSegmentTypes: includeSegmentTypes))
+        return response.value.items ?? []
     }
 
     // MARK: - Playback
@@ -716,6 +727,13 @@ public final class JellyfinAPIClient: Sendable {
         )
     }
 
+    /// Invalidates every cached response (resume items, latest media, genres, etc.).
+    /// Called by Settings → Server → Refresh Catalogue so that the next fetch hits
+    /// the server rather than returning stale cached data.
+    public func clearCache() {
+        cache.clear()
+    }
+
     public func reconnect(url: URL, accessToken: String) {
         cache.clear()
         let client = JellyfinClient(
@@ -750,18 +768,3 @@ public final class JellyfinAPIClient: Sendable {
     }
 }
 
-public enum JellyfinError: LocalizedError, Sendable {
-    case notConnected
-    case authenticationFailed
-    case invalidURL
-    case playbackFailed(String)
-
-    public var errorDescription: String? {
-        switch self {
-        case .notConnected: "Not connected to a server"
-        case .authenticationFailed: "Authentication failed"
-        case .invalidURL: "Invalid server URL"
-        case .playbackFailed(let reason): "Playback failed: \(reason)"
-        }
-    }
-}

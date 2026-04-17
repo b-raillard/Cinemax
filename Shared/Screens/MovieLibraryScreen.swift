@@ -49,6 +49,9 @@ struct MediaLibraryScreen: View {
         .task {
             await viewModel.loadInitial(using: appState)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
+            Task { await viewModel.reload(using: appState) }
+        }
     }
 
     // MARK: Main Content Switch
@@ -70,55 +73,69 @@ struct MediaLibraryScreen: View {
 
     #if os(tvOS)
     private var tvMainContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                tvFilterBar
-                    .padding(.bottom, CinemaSpacing.spacing6)
+        // ScrollViewReader so we can pop back to the top of the page (and reveal
+        // the tvOS top tab bar) whenever the screen reappears after a deep nav.
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    Color.clear.frame(height: 0).id("library.top")
 
-                if viewModel.sortFilter.isFiltered {
-                    // Filtered grid (genre selected)
-                    if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
-                        ProgressView()
-                            .tint(CinemaColor.onSurfaceVariant)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, CinemaSpacing.spacing10)
-                    } else {
-                        LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
-                            ForEach(viewModel.filteredLoader.items, id: \.id) { item in
-                                posterCard(item)
-                                    .onAppear {
-                                        if item.id == viewModel.filteredLoader.items.last?.id {
-                                            Task { await viewModel.loadMoreFiltered(using: appState) }
+                    tvFilterBar
+                        .padding(.bottom, CinemaSpacing.spacing6)
+
+                    if viewModel.sortFilter.isFiltered {
+                        // Filtered grid (genre selected)
+                        if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
+                            ProgressView()
+                                .tint(CinemaColor.onSurfaceVariant)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, CinemaSpacing.spacing10)
+                        } else if viewModel.filteredLoader.items.isEmpty {
+                            filteredEmptyState
+                        } else {
+                            LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
+                                ForEach(viewModel.filteredLoader.items, id: \.id) { item in
+                                    posterCard(item)
+                                        .onAppear {
+                                            if item.id == viewModel.filteredLoader.items.last?.id {
+                                                Task { await viewModel.loadMoreFiltered(using: appState) }
+                                            }
                                         }
-                                    }
+                                }
+                            }
+                            .padding(.horizontal, CinemaSpacing.spacing20)
+                        }
+                    } else {
+                        // Browse genre rows
+                        ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
+                            if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
+                                genreRow(genre: genre, items: items)
+                                    .padding(.bottom, CinemaSpacing.spacing6)
                             }
                         }
-                        .padding(.horizontal, CinemaSpacing.spacing20)
-                    }
-                } else {
-                    // Browse genre rows
-                    ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
-                        if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
-                            genreRow(genre: genre, items: items)
+
+                        if !viewModel.genres.isEmpty {
+                            browseGenresSection
                                 .padding(.bottom, CinemaSpacing.spacing6)
                         }
                     }
 
-                    if !viewModel.genres.isEmpty {
-                        browseGenresSection
-                            .padding(.bottom, CinemaSpacing.spacing6)
-                    }
+                    Spacer(minLength: 80)
                 }
-
-                Spacer(minLength: 80)
             }
-        }
-        .scrollClipDisabled()
-        .task(id: viewModel.sortFilter) {
-            if viewModel.sortFilter.isFiltered {
-                await viewModel.applyFilter(using: appState)
-            } else if !viewModel.genres.isEmpty {
-                await viewModel.reloadGenreItems(using: appState)
+            .scrollClipDisabled()
+            .refreshable {
+                await viewModel.reload(using: appState)
+            }
+            .task(id: viewModel.sortFilter) {
+                if viewModel.sortFilter.isFiltered {
+                    await viewModel.applyFilter(using: appState)
+                } else if !viewModel.genres.isEmpty {
+                    await viewModel.reloadGenreItems(using: appState)
+                }
+            }
+            .onAppear {
+                proxy.scrollTo("library.top", anchor: .top)
             }
         }
     }
@@ -149,6 +166,9 @@ struct MediaLibraryScreen: View {
                 Spacer(minLength: 80)
             }
         }
+        .refreshable {
+            await viewModel.reload(using: appState)
+        }
     }
 
     // MARK: Filtered View (iOS)
@@ -162,38 +182,61 @@ struct MediaLibraryScreen: View {
     }
 
     private var filteredView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredLoader.totalCount))
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .padding(.horizontal, gridPadding)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+                    Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredLoader.totalCount))
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .padding(.horizontal, gridPadding)
 
-                if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
-                    ProgressView()
-                        .tint(CinemaColor.onSurfaceVariant)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, CinemaSpacing.spacing10)
-                } else {
-                    LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
-                        ForEach(viewModel.filteredLoader.items, id: \.id) { item in
-                            posterCard(item)
-                                .onAppear {
-                                    if item.id == viewModel.filteredLoader.items.last?.id {
-                                        Task { await viewModel.loadMoreFiltered(using: appState) }
+                    if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
+                        ProgressView()
+                            .tint(CinemaColor.onSurfaceVariant)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, CinemaSpacing.spacing10)
+                    } else if viewModel.filteredLoader.items.isEmpty {
+                        filteredEmptyState
+                    } else {
+                        LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
+                            ForEach(viewModel.filteredLoader.items, id: \.id) { item in
+                                posterCard(item)
+                                    .id(item.id)
+                                    .onAppear {
+                                        if item.id == viewModel.filteredLoader.items.last?.id {
+                                            Task { await viewModel.loadMoreFiltered(using: appState) }
+                                        }
                                     }
-                                }
+                            }
                         }
+                        .padding(.horizontal, gridPadding)
                     }
-                    .padding(.horizontal, gridPadding)
-                }
 
-                Spacer(minLength: 80)
+                    Spacer(minLength: 80)
+                }
+                .padding(.top, CinemaSpacing.spacing3)
             }
-            .padding(.top, CinemaSpacing.spacing3)
-        }
-        .task(id: viewModel.sortFilter) {
-            await viewModel.applyFilter(using: appState)
+            .refreshable {
+                await viewModel.reload(using: appState)
+            }
+            .task(id: viewModel.sortFilter) {
+                await viewModel.applyFilter(using: appState)
+            }
+            #if os(iOS)
+            .overlay(alignment: .trailing) {
+                if shouldShowJumpBar {
+                    AlphabeticalJumpBar(
+                        accent: themeManager.accent,
+                        onSelect: { letter in
+                            if let target = firstItemID(for: letter) {
+                                withAnimation { proxy.scrollTo(target, anchor: .top) }
+                            }
+                        }
+                    )
+                    .padding(.trailing, CinemaSpacing.spacing2)
+                }
+            }
+            #endif
         }
     }
 
@@ -378,6 +421,70 @@ struct MediaLibraryScreen: View {
             }
             .scrollClipDisabled()
 
+            // Watch Status section
+            Text(loc.localized("filter.watchStatus"))
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .textCase(.uppercase)
+                .tracking(0.8)
+
+            HStack(spacing: 10) {
+                let isSelected = viewModel.sortFilter.showUnwatchedOnly
+                Button {
+                    viewModel.sortFilter.showUnwatchedOnly.toggle()
+                } label: {
+                    Text(loc.localized("filter.unwatchedOnly"))
+                        .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
+                        .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(
+                            isSelected
+                                ? themeManager.accentContainer
+                                : CinemaColor.surfaceContainerHigh
+                        )
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                .focusEffectDisabled()
+                .hoverEffectDisabled()
+            }
+
+            // Decade section
+            Text(loc.localized("filter.byDecade"))
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .textCase(.uppercase)
+                .tracking(0.8)
+
+            FlowLayout(spacing: 10) {
+                ForEach(tvDecadeOptions, id: \.self) { decade in
+                    let isSelected = viewModel.sortFilter.selectedDecades.contains(decade)
+                    Button {
+                        if isSelected {
+                            viewModel.sortFilter.selectedDecades.remove(decade)
+                        } else {
+                            viewModel.sortFilter.selectedDecades.insert(decade)
+                        }
+                    } label: {
+                        Text(loc.localized("filter.decade", decade))
+                            .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
+                            .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(
+                                isSelected
+                                    ? themeManager.accentContainer
+                                    : CinemaColor.surfaceContainerHigh
+                            )
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                    .focusEffectDisabled()
+                    .hoverEffectDisabled()
+                }
+            }
+
             // Genre section
             if !viewModel.genres.isEmpty {
                 Text(loc.localized("filter.byGenre"))
@@ -436,26 +543,28 @@ struct MediaLibraryScreen: View {
                 }
             }
 
-            // Reset button — separate line, only when filters are active
+            // Reset button (refresh moved to Settings > Server > Refresh Catalogue)
             if viewModel.sortFilter.isNonDefault {
-                Button {
-                    viewModel.sortFilter = LibrarySortFilterState()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: CinemaScale.pt(18), weight: .medium))
-                        Text(loc.localized("action.reset"))
-                            .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                HStack(spacing: 10) {
+                    Button {
+                        viewModel.sortFilter = LibrarySortFilterState()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: CinemaScale.pt(18), weight: .medium))
+                            Text(loc.localized("action.reset"))
+                                .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                        }
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(CinemaColor.surfaceContainerHigh)
+                        .clipShape(Capsule())
                     }
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(CinemaColor.surfaceContainerHigh)
-                    .clipShape(Capsule())
+                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                    .focusEffectDisabled()
+                    .hoverEffectDisabled()
                 }
-                .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                .focusEffectDisabled()
-                .hoverEffectDisabled()
             }
         }
         .padding(.horizontal, CinemaSpacing.spacing20)
@@ -469,6 +578,9 @@ struct MediaLibraryScreen: View {
             (loc.localized("sort.rating"), .communityRating)
         ]
     }
+
+    /// Decades offered as chips on tvOS, most-recent-first.
+    private var tvDecadeOptions: [Int] { [2020, 2010, 2000, 1990, 1980, 1970, 1960, 1950] }
     #endif
 
     // MARK: - Genre Row
@@ -578,10 +690,14 @@ struct MediaLibraryScreen: View {
                 Text(loc.localized("movies.sortFilter"))
                     .font(.system(size: filterLabelSize, weight: .semibold))
                 if viewModel.sortFilter.isFiltered {
+                    let filterCount =
+                        viewModel.sortFilter.selectedGenres.count
+                        + viewModel.sortFilter.selectedDecades.count
+                        + (viewModel.sortFilter.showUnwatchedOnly ? 1 : 0)
                     ZStack {
                         Circle()
                             .fill(CinemaColor.onSurface.opacity(0.25))
-                        Text("\(viewModel.sortFilter.selectedGenres.count)")
+                        Text("\(filterCount)")
                             .font(.system(size: 11, weight: .bold))
                     }
                     .frame(width: 20, height: 20)
@@ -611,6 +727,50 @@ struct MediaLibraryScreen: View {
     private func errorView(_ message: String) -> some View {
         ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
             Task { await viewModel.loadInitial(using: appState) }
+        }
+    }
+
+    // MARK: - Empty States
+
+    // MARK: - Alphabetical Jump Bar (iOS)
+
+    #if os(iOS)
+    /// Only shown when the filtered view is actually alphabetically meaningful:
+    /// the user has sorted by name ascending. Other sorts (date added, year, rating)
+    /// wouldn't produce a coherent A→Z scroll.
+    private var shouldShowJumpBar: Bool {
+        viewModel.sortFilter.sortBy == .sortName
+            && viewModel.sortFilter.sortAscending
+            && viewModel.filteredLoader.items.count > 20
+    }
+
+    /// Returns the id of the first loaded item whose name begins with the given letter.
+    /// "#" targets the first item starting with a digit or non-letter character.
+    private func firstItemID(for letter: String) -> String? {
+        let target = letter.uppercased()
+        for item in viewModel.filteredLoader.items {
+            guard let name = item.name else { continue }
+            let first = String(name.prefix(1)).uppercased()
+            if target == "#" {
+                if first.first.map({ !$0.isLetter }) ?? false { return item.id }
+            } else if first == target {
+                return item.id
+            }
+        }
+        return nil
+    }
+    #endif
+
+    /// Shown in the filtered grid (iOS or tvOS) when the current sort/filter combination
+    /// yields no results. Offers a "Clear filters" action that resets sort + filter state.
+    private var filteredEmptyState: some View {
+        EmptyStateView(
+            systemImage: "line.3.horizontal.decrease.circle",
+            title: loc.localized("empty.library.filtered.title"),
+            subtitle: loc.localized("empty.library.filtered.subtitle"),
+            actionTitle: loc.localized("empty.library.filtered.action")
+        ) {
+            viewModel.sortFilter = LibrarySortFilterState()
         }
     }
 

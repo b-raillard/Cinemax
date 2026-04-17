@@ -183,7 +183,8 @@ tvShows.title
 | 7 | Fix season selection race condition | Performance | 30 min | **DONE** (audit 1.1) |
 | 8 | Cancel previous task in `VideoPlayerCoordinator.play()` | Performance | 15 min | **DONE** (audit 1.1.1) |
 | 9 | Remove 33 unused localization keys | Dead code | 15 min | **DONE** (audit 1.1) |
-| 10 | Extract large files into focused components | Refactoring | 4-6 hr | Open |
+| 10 | Extract large files into focused components | Refactoring | 4-6 hr | **PARTIAL** (2026-04-17) — conservative first pass: `JellyfinError` + `MediaTrackInfo` lifted to their own files; `IOSAppearanceDetailView` moved from `SettingsScreen+iOS.swift` (now 489 lines) into `SettingsAppearanceView+iOS.swift`. `NativeVideoPresenter` (~1,300 lines) and `MovieLibraryScreen` (~1,000 lines) not yet split — deferred since a robust extraction needs promoting many `private` members to `internal` and introducing delegate protocols; higher regression risk than this first-pass warranted |
+| 11 | Skip Intro / Credits overlay (Intro Skipper plugin) | Feature | 2 hr | **DONE** — needs testing with Intro Skipper plugin |
 
 ---
 
@@ -208,10 +209,94 @@ tvShows.title
 
 | # | Action | Priority |
 |---|--------|----------|
-| 1 | Respect iOS Dynamic Type settings | Medium |
+| 1 | Respect iOS Dynamic Type settings | Medium — **DONE** (2026-04-17) — `.dynamicTypeSize(.xSmall...accessibility2)` cap at `AppNavigation` root; new `CinemaFont.dynamicBody / dynamicBodyLarge / dynamicLabel(_:)` variants use `UIFontMetrics` so final size = `baseSize × appScale × dynamicTypeMultiplier`; applied to reading-heavy surfaces (MediaDetail overview, episode-card overviews, iOS toggle row labels). Hero/display fonts stay fixed to protect layouts |
 | 2 | Configure App Store distribution signing | Required |
 | 3 | Prepare demo Jellyfin server for App Review | Required |
 | 4 | App Store metadata + screenshots | Required |
 | 5 | Replace force unwraps with safe unwrapping in URL construction | Low |
 
 See `APP_STORE_AUDIT.md` for full audit and future roadmap.
+
+---
+
+## 7. Feature & UX Improvements (2026-04-16)
+
+### UX Friction & Polish
+
+| # | Feature | Description | Effort | Status |
+|---|---------|-------------|--------|--------|
+| 1 | Empty states everywhere | Library with no results, Home with no resume items, series with 0 episodes — show illustration + message instead of silent empty sections | 2 hr | **DONE** (2026-04-17) — `EmptyStateView` component (icon + title + subtitle + optional action); filtered library shows "No matches" with Clear filters action; Home shows "Library is empty" with Refresh |
+| 2 | Toast / snackbar feedback | Visual confirmation on actions (playback started, error, episode navigated). Silent failures confuse users | 3 hr | **DONE** (2026-04-17) — `ToastCenter` + `ToastOverlay` with success/error/info levels; wired to "Surprise Me" failure; injected at `AppNavigation` root |
+| 3 | Pull-to-refresh (iOS) / refresh button (tvOS) | No way to refresh content without killing the app. New items added to Jellyfin don't appear until relaunch | 1 hr | **DONE** (2026-04-16) |
+| 4 | "You finished the series" end screen | When last episode ends and auto-play has nowhere to go, show a completion screen instead of just stopping | 1 hr | **DONE** (2026-04-17) — `showFinishedSeriesOverlay` blur card with green checkmark + series name; `currentSeriesName` captured during chapter fetch; triggered by `itemEndObserver` when autoplay is on and no next episode exists |
+| 5 | Remaining time on episode rows | Episode cards show runtime but not "12 min left" for partially-watched episodes — the thin progress bar isn't enough context | 30 min | **DONE** (2026-04-17) |
+
+### Discovery & Browsing
+
+| # | Feature | Description | Effort | Status |
+|---|---------|-------------|--------|--------|
+| 6 | Genre-based Home rows | Home only has 2 rows (resume + recently added). Add dynamic rows like "Action Movies", "Recent Comedies" using `getItems(genreIds:sortBy:limit:)` | 3 hr | **DONE** (2026-04-16) |
+| 7 | "Surprise me" / Random pick | One tap → play something random. Jellyfin supports `sortBy: Random, limit: 1`. Solves decision paralysis on large libraries | 1 hr | **DONE** (2026-04-17) |
+| 8 | Alphabetical jump bar (iOS library) | Scrolling through 500+ movies with no way to jump to a letter is painful. Side index like Contacts.app | 2 hr | **DONE** (2026-04-17) — `AlphabeticalJumpBar` (iOS-only, Contacts-style capsule index with drag-slide + haptics); only rendered when sort = name ascending and >20 items loaded; uses `ScrollViewReader` to jump to first matching id |
+| 9 | Filter by unwatched only | Most common practical filter — "show me what I haven't seen." Simple toggle next to existing sort/genre controls | 1 hr | **DONE** (2026-04-16) |
+| 10 | Year / decade filter in library | Genre is the only filter axis. "Show me 80s movies" is a real use case for movie collectors | 1 hr | **DONE** (2026-04-17) — decade chips (1950s–2020s) in iOS sort/filter sheet and tvOS inline filter bar; `LibrarySortFilterState.selectedDecades` expanded to `years` parameter on `getItems` |
+
+### Playback Quality of Life
+
+| # | Feature | Description | Effort | Status |
+|---|---------|-------------|--------|--------|
+| 11 | "Resume at X:XX" vs "Play from beginning" | Currently only resume is offered. Sometimes users want to restart. Offer both options | 1 hr | **DONE** (2026-04-16) |
+| 12 | Sleep timer | 30/60/90 min timer that pauses playback. Essential for watching in bed | 2 hr | **DONE** (2026-04-17) — `SleepTimerOption` enum (Off/15/30/45/60/90); Settings > Interface row (iOS Menu, tvOS confirmationDialog) backed by `@AppStorage("sleepTimerDefaultMinutes")`; `NativeVideoPresenter` shows a moon-icon blur pill bottom-left counting down `mm:ss`; on fire, pauses + shows centered card "Still watching?" with "Keep watching" (restarts timer) / "Stop playback" (dismisses player); timer restarts on episode navigation |
+| 13 | Chapter support in scrubber | Jellyfin exposes chapter markers with thumbnails. Display them in the player scrubber for context when seeking | 3 hr | **DONE — tvOS only** (2026-04-17) — `ImageURLBuilder.chapterImageURL`, parallel image fetch via `URLSession` with auth header, `AVNavigationMarkersGroup` applied to `AVPlayerItem.navigationMarkerGroups`. iOS `AVPlayerViewController` has no native chapter UI so this is a tvOS feature (iOS would need a custom scrubber) |
+| 14 | Playback error recovery with guidance | Transcoding failures are silent or cryptic. Show actionable messages like "This file couldn't be played — try enabling transcoding in server settings" | 2 hr | **DONE** (2026-04-17) — `showPlaybackErrorAlert` presents a native `UIAlertController` when all retries are exhausted; error codes mapped to targeted messages (`-12881` transcode, `-12938/-1009/etc.` network, fallback generic); Close button dismisses player |
+
+### Information Density
+
+| # | Feature | Description | Effort | Status |
+|---|---------|-------------|--------|--------|
+| 15 | Video/audio codec badges on detail screen | "4K HDR · Dolby Atmos · HEVC" badges from `MediaSources[0].MediaStreams`. Self-hosted users care deeply about media quality | 2 hr | **DONE** (2026-04-16) — `MediaQualityBadges` view |
+| 16 | Studio / Network label | Jellyfin provides studio info — showing "A24" or "HBO" adds browsable context | 1 hr | **DONE** (2026-04-17) — `studioLine` on `MediaDetailScreen` below overview (shows up to 2 studio names; label reads "Network" for series, "Studio" for movies) |
+| 17 | External ratings (audience + critics) | Jellyfin stores `CommunityRating` and `CriticRating`. Showing both helps users decide what to watch | 1 hr | **DONE** (2026-04-17) — `ratingsRow` on backdrop shows yellow-star community rating + Rotten-Tomatoes-style critic rating (green ≥60, red otherwise) |
+| 18 | Episode air dates on episode cards | Helps users know if they've missed episodes of an ongoing series | 30 min | **DONE** (2026-04-17) |
+
+### Multi-User & Social
+
+| # | Feature | Description | Effort | Status |
+|---|---------|-------------|--------|--------|
+| 19 | "Currently watching" indicator | Show when another server user is watching something (Jellyfin Sessions API). Makes the app feel alive | 2 hr | **DONE** (2026-04-17) — new `getActiveSessions` protocol method; `HomeViewModel.activeSessions` filters out the current user + idle sessions; "Watching Now" row on Home with a red LIVE pill overlay on each card; toggleable in Settings > Home Page |
+| 20 | Quick user switch | Families share a TV. Tap avatar → pick user → PIN → done, without full server re-entry | 3 hr | **DONE** (2026-04-17) — new `UserSwitchSheet` (grid of user avatars → password prompt → re-auth keeping serverURL); wired into Settings > Account row on both iOS and tvOS; success emits a toast and closes the sheet; errors keep the sheet open for retry |
+
+### Prioritized Top 10
+
+| # | Feature | Category | Effort | Impact | Status |
+|---|---------|----------|--------|--------|--------|
+| 1 | Genre-based Home rows | Discovery | 3 hr | **High** — transforms Home from bare to rich | **DONE** (2026-04-16) — user-configurable via Settings > Interface > Home Page |
+| 2 | Pull-to-refresh / refresh | UX Polish | 1 hr | **High** — basic hygiene, absence is immediately noticeable | **DONE** (2026-04-16) |
+| 3 | "Resume" vs "Play from beginning" | Playback | 1 hr | **High** — daily friction for every partially-watched item | **DONE** (2026-04-16) |
+| 4 | Filter by unwatched | Discovery | 1 hr | **High** — most useful filter for repeat library visits | **DONE** (2026-04-16) |
+| 5 | Codec / quality badges | Information | 2 hr | **High** — differentiator for self-hosted audience | **DONE** (2026-04-16) — toggleable via Settings > Interface > Detail Page |
+| 6 | Empty states everywhere | UX Polish | 2 hr | **Medium** — builds trust, removes confusion | **DONE** (2026-04-17) |
+| 7 | "Surprise me" random pick | Discovery | 1 hr | **Medium** — fun, solves decision paralysis | **DONE → relocated** (2026-04-17) — initially on Home, then moved to **SearchScreen** empty state. Two distinct pills (`Surprise movie` / `Surprise series`) feel more natural where users go when they don't know what to watch. Pushes `MediaDetailScreen` via `navigationDestination(item:)` |
+| 8 | Remaining time on episode rows | UX Polish | 30 min | **Medium** — quick win, better resume context | **DONE** (2026-04-17) — partial episodes show "Xm remaining" via shared `episodeMetadataLine` helper on both platforms |
+| 9 | Chapter support in scrubber | Playback | 3 hr | **Medium** — valuable for long movies | **DONE — tvOS** (2026-04-17) |
+| 10 | Episode air dates | Information | 30 min | **Medium** — quick win for ongoing series | **DONE** (2026-04-17) — `premiereDate` rendered in the shared `episodeMetadataLine` helper, combined with runtime/remaining on one line |
+
+---
+
+## 8. UX Refinements & Debug Tooling (2026-04-17)
+
+### Refresh & Surprise relocation
+
+| # | Change | Description |
+|---|--------|-------------|
+| 1 | Surprise-me moved from Home → Search | Two pills (Surprise movie / Surprise series) in `SearchScreen`'s "search your library" empty state. Removed iOS toolbar dice + tvOS pill from Home. Search is where users go when they don't know what to watch — better discovery context. |
+| 2 | Refresh buttons removed | Removed the tvOS Refresh pill from Home and from the `MediaLibraryScreen` filter bar. iOS pull-to-refresh remains. |
+| 3 | "Refresh Catalogue" added to Settings → Server | Single user-driven catalogue refresh. Calls `apiClient.clearCache()` and posts `.cinemaxShouldRefreshCatalogue`; Home and Library `.onReceive` reload. Toast confirms. New `clearCache()` on `APIClientProtocol`. |
+
+### Debug tooling
+
+| # | Feature | Description |
+|---|---------|-------------|
+| 1 | Debug section in Settings → Interface | Two `@AppStorage`-backed toggles (`debug.fastSleepTimer`, `debug.showSkipToEnd`); always visible (not gated by `#if DEBUG`) so QA / power users can reach them without a special build. Orange icon to signal "developer territory". |
+| 2 | Fast sleep timer (15 s override) | New `SleepTimerOption.currentDefaultSeconds` returns 15 seconds when `debug.fastSleepTimer` is on; `NativeVideoPresenter.startSleepTimerIfNeeded` uses this helper instead of reading the option directly. Lets you preview the "Still watching?" prompt after only 15 s of playback. |
+| 3 | Skip-to-end button in player HUD | When `debug.showSkipToEnd` is on, `NativeVideoPresenter` paints a small purple `⏭ End` chip top-right of the player. Seeks to `(duration − 15 s)` so you can verify the end-of-series completion overlay without watching a full episode. Hidden by default. |
