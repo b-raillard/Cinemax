@@ -27,7 +27,7 @@ The project's deployment targets are iOS 18 and tvOS 26. Avoid pre-iOS-15 APIs t
   // Frosted background is supported via `config.background.customView = UIVisualEffectView(...)`
   let button = UIButton(configuration: config, primaryAction: UIAction { _ in ... })
   ```
-- **Free SwiftUI helpers**: free functions returning `some View` that touch SwiftUI types (`PrimitiveButtonStyle.plain`, `Font`, etc.) must be `@MainActor`. Under Swift 6 strict concurrency, those types are main-actor-isolated and the compiler raises "Main actor-isolated static property X can not be referenced from a nonisolated context" otherwise. The shared `iOSToggleRow` / `iOSSettingsRow` helpers in `SettingsRowHelpers.swift` follow this pattern.
+- **Free SwiftUI helpers**: free functions returning `some View` that touch SwiftUI types (`PrimitiveButtonStyle.plain`, `Font`, etc.) must be `@MainActor`. Under Swift 6 strict concurrency, those types are main-actor-isolated and the compiler raises "Main actor-isolated static property X can not be referenced from a nonisolated context" otherwise. The shared `iOSToggleRow` / `iOSToggleRowsJoined` / `iOSSettingsRow` helpers in `SettingsRowHelpers.swift` follow this pattern.
 - **iPad multitasking**: `UIRequiresFullScreen: true` is set in `project.yml` for the iOS target. Cinemax is a video player — split view would interrupt playback and break hero/backdrop layouts, and the flag also satisfies Xcode's "all interface orientations must be supported unless the app requires full screen" warning. Don't change this without a strong reason; if the app ever needs split view, the iPhone orientation list must be expanded to include `UIInterfaceOrientationPortraitUpsideDown` (currently omitted on iPhone).
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
@@ -168,12 +168,16 @@ Rendering is platform-split:
 - Category buttons on landing: pill shape, focused state = `accentContainer` fill + scale 1.05 + glow shadow.
 - Back button focus: `.focused($focusedItem, equals: .back)`, highlighted with accent color.
 
-### iOS Settings Row Helpers (`SettingsRowHelpers.swift`)
-- `iOSSettingsRow` — padded row container
-- `iOSRowIcon` — colored icon badge (leading element)
-- `iOSSettingsDivider` — inset divider aligned past icon
-- `iOSSettingsSectionHeader` — uppercase section label
-- `iOSToggleRow` — complete toggle row (icon + label + `CinemaToggleIndicator`), equivalent to tvOS's `tvGlassToggle`
+### Settings row SSOT (`SettingsRowHelpers.swift` + platform extensions)
+
+Every boolean toggle in Settings is declared once as a `SettingsToggleRow` and rendered on both platforms from the same list. Four catalogue properties on `SettingsScreen` — `interfaceToggleRows`, `homePageToggleRows`, `detailPageToggleRows`, `debugToggleRows` — are the authoritative list of toggles. Adding or renaming a toggle is a one-line `.init(id:icon:label:value:)` edit; the two renderers can only differ in presentation, never in which rows exist.
+
+- `SettingsToggleRow` (platform-agnostic) — `id`, `icon`, `label`, `value: Binding<Bool>`, optional `tint`.
+- `iOSToggleRowsJoined(_ rows:accent:animated:)` — iOS `@MainActor @ViewBuilder` expander (rows + dividers between them).
+- `tvToggleList(_ rows:)` — tvOS `@ViewBuilder` expander. Ignores `row.tint`; tvOS icons use `themeManager.accent` uniformly. iOS-only debug-orange tint lives in the `tint:` field and is consumed by `iOSToggleRowsJoined` only.
+- `tvActionRow(id:icon:label:subtitle:showsChevron:action:)` — tvOS helper for "tappable row with icon + title + optional subtitle + optional chevron". Two overloads: one for generic `.toggle(id)` focus, one for any `SettingsFocus` case (e.g. `.refreshConnection`). Consolidates Refresh Catalogue, Refresh Connection, Licenses.
+- iOS row atoms (reused by `navigationRow` + `iOSToggleRow` + bespoke rows): `iOSSettingsRow` (padded container), `iOSRowIcon` (colored icon badge), `iOSSettingsDivider` (inset divider), `iOSSettingsSectionHeader` (uppercase section label), `iOSToggleRow` (icon + label + `CinemaToggleIndicator`), `navigationRow(icon:label:action:)` (icon + label + chevron + tap action — used for Profile Settings, Privacy/Security, Switch Account, Licenses).
+- tvOS row atom: `tvGlassToggle(icon:label:key:value:)` — the single-row counterpart invoked by `tvToggleList`.
 
 ### Assets
 - `AppLogo.imageset`: iOS uses `app_logo.png` (full icon with background); tvOS uses `app_logo_tv.png` (front parallax layer — transparent background, jellyfish only). No `clipShape` on tvOS logo — organic shape renders freely.
