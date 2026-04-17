@@ -1,5 +1,33 @@
 import SwiftUI
 
+// MARK: - Shared Settings Row Data
+
+/// Descriptor for a boolean-toggle settings row shared across iOS and tvOS.
+/// Lets us declare the icon / label / binding triple for each user-facing
+/// preference in one place (computed on `SettingsScreen`) and render it through
+/// the two platform-specific helpers below without duplicating the list.
+///
+/// `id` doubles as the tvOS `SettingsFocus.toggle` key — it must be stable
+/// across renders so `@FocusState` keeps the right row focused when the
+/// binding changes. `tint` is honored by the iOS renderer (icon color) and
+/// ignored by the tvOS renderer, which always uses `themeManager.accent` —
+/// preserving the current Debug-section asymmetry (orange on iOS, accent on tvOS).
+struct SettingsToggleRow: Identifiable {
+    let id: String
+    let icon: String
+    let label: String
+    let value: Binding<Bool>
+    let tint: Color?
+
+    init(id: String, icon: String, label: String, value: Binding<Bool>, tint: Color? = nil) {
+        self.id = id
+        self.icon = icon
+        self.label = label
+        self.value = value
+        self.tint = tint
+    }
+}
+
 // MARK: - iOS Settings Row Helpers
 //
 // Shared layout helpers used by SettingsScreen and IOSAppearanceDetailView on iOS.
@@ -74,6 +102,27 @@ func iOSToggleRow(
                 CinemaToggleIndicator(isOn: value.wrappedValue, accent: accent, animated: animated)
             }
             .buttonStyle(.plain)
+        }
+    }
+}
+
+/// Renders a list of `SettingsToggleRow` as iOS toggle rows separated by
+/// `iOSSettingsDivider`. Caller is responsible for wrapping in a `glassPanel`
+/// and for appending any non-toggle rows (sleep timer, font size, etc.) —
+/// this keeps the helper compatible with mixed-row sections.
+@MainActor
+@ViewBuilder
+func iOSToggleRowsJoined(_ rows: [SettingsToggleRow], accent: Color, animated: Bool) -> some View {
+    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+        iOSToggleRow(
+            icon: row.icon,
+            label: row.label,
+            value: row.value,
+            accent: row.tint ?? accent,
+            animated: animated
+        )
+        if index < rows.count - 1 {
+            iOSSettingsDivider
         }
     }
 }

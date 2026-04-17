@@ -289,20 +289,8 @@ extension SettingsScreen {
 
             // Licenses
             VStack(spacing: 0) {
-                iOSSettingsRow {
-                    Button { showLicenses = true } label: {
-                        HStack {
-                            iOSRowIcon(systemName: "doc.text", color: CinemaColor.onSurfaceVariant)
-                            Text(loc.localized("settings.licenses"))
-                                .font(CinemaFont.label(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: CinemaScale.pt(15), weight: .semibold))
-                                .foregroundStyle(CinemaColor.outlineVariant)
-                        }
-                    }
-                    .buttonStyle(.plain)
+                navigationRow(icon: "doc.text", label: loc.localized("settings.licenses")) {
+                    showLicenses = true
                 }
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
@@ -317,17 +305,7 @@ extension SettingsScreen {
                 iOSSettingsSectionHeader(loc.localized("settings.interface"))
 
                 VStack(spacing: 0) {
-                    iOSToggleRow(icon: "sparkles", label: loc.localized("settings.motionEffects"),
-                                 value: $motionEffects, accent: themeManager.accent, animated: motionEffects)
-                    iOSSettingsDivider
-                    iOSToggleRow(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"),
-                                 value: $forceSubtitles, accent: themeManager.accent, animated: motionEffects)
-                    iOSSettingsDivider
-                    iOSToggleRow(icon: "4k.tv", label: loc.localized("settings.4kRendering"),
-                                 value: $render4K, accent: themeManager.accent, animated: motionEffects)
-                    iOSSettingsDivider
-                    iOSToggleRow(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"),
-                                 value: $autoPlayNextEpisode, accent: themeManager.accent, animated: motionEffects)
+                    iOSToggleRowsJoined(interfaceToggleRows, accent: themeManager.accent, animated: motionEffects)
                     iOSSettingsDivider
 
                     iOSSleepTimerRow
@@ -368,17 +346,7 @@ extension SettingsScreen {
                 iOSSettingsSectionHeader(loc.localized("settings.homePage"))
 
                 VStack(spacing: 0) {
-                    iOSToggleRow(icon: "play.circle", label: loc.localized("settings.homePage.continueWatching"),
-                                 value: $showContinueWatching, accent: themeManager.accent, animated: motionEffects)
-                    iOSSettingsDivider
-                    iOSToggleRow(icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"),
-                                 value: $showRecentlyAdded, accent: themeManager.accent, animated: motionEffects)
-                    iOSSettingsDivider
-                    iOSToggleRow(icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"),
-                                 value: $showGenreRows, accent: themeManager.accent, animated: motionEffects)
-                    iOSSettingsDivider
-                    iOSToggleRow(icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"),
-                                 value: $showWatchingNow, accent: themeManager.accent, animated: motionEffects)
+                    iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects)
                 }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
@@ -388,8 +356,7 @@ extension SettingsScreen {
                 iOSSettingsSectionHeader(loc.localized("settings.detailPage"))
 
                 VStack(spacing: 0) {
-                    iOSToggleRow(icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"),
-                                 value: $showQualityBadges, accent: themeManager.accent, animated: motionEffects)
+                    iOSToggleRowsJoined(detailPageToggleRows, accent: themeManager.accent, animated: motionEffects)
                 }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
@@ -399,11 +366,7 @@ extension SettingsScreen {
                 iOSSettingsSectionHeader(loc.localized("settings.debug"))
 
                 VStack(spacing: 0) {
-                    iOSToggleRow(icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"),
-                                 value: $debugFastSleepTimer, accent: .orange, animated: motionEffects)
-                    iOSSettingsDivider
-                    iOSToggleRow(icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"),
-                                 value: $debugShowSkipToEnd, accent: .orange, animated: motionEffects)
+                    iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects)
                 }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }

@@ -332,70 +332,26 @@ extension SettingsScreen {
         }
     }
 
-    // MARK: - Refresh Catalogue (tvOS)
+    // MARK: - Action Rows (tvOS)
 
     var tvRefreshCatalogueButton: some View {
-        let isFocused = focusedItem == .toggle("refreshCatalogue")
-        return Button {
-            refreshCatalogue()
-        } label: {
-            HStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(themeManager.accent)
-                    .frame(width: 24)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(loc.localized("settings.refreshCatalogue"))
-                        .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                        .foregroundStyle(CinemaColor.onSurface)
-                    Text(loc.localized("settings.refreshCatalogue.subtitle"))
-                        .font(.system(size: CinemaScale.pt(16), weight: .regular))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                }
-
-                Spacer()
-            }
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
-        }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .hoverEffectDisabled()
-        .focused($focusedItem, equals: .toggle("refreshCatalogue"))
+        tvActionRow(
+            id: "refreshCatalogue",
+            icon: "arrow.triangle.2.circlepath",
+            label: loc.localized("settings.refreshCatalogue"),
+            subtitle: loc.localized("settings.refreshCatalogue.subtitle"),
+            action: refreshCatalogue
+        )
     }
 
     var tvLicensesButton: some View {
-        let isFocused = focusedItem == .toggle("licenses")
-
-        return Button {
-            showLicenses = true
-        } label: {
-            HStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(themeManager.accent)
-                    .frame(width: 24)
-
-                Text(loc.localized("settings.licenses"))
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(CinemaColor.onSurface)
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-            }
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
-        }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .hoverEffectDisabled()
-        .focused($focusedItem, equals: .toggle("licenses"))
+        tvActionRow(
+            id: "licenses",
+            icon: "doc.text",
+            label: loc.localized("settings.licenses"),
+            showsChevron: true,
+            action: { showLicenses = true }
+        )
     }
 
     // MARK: Interface Detail (tvOS)
@@ -403,10 +359,7 @@ extension SettingsScreen {
     var tvInterfaceDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                tvGlassToggle(icon: "sparkles", label: loc.localized("settings.motionEffects"), key: "motion", value: $motionEffects)
-                tvGlassToggle(icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), key: "subtitles", value: $forceSubtitles)
-                tvGlassToggle(icon: "4k.tv", label: loc.localized("settings.4kRendering"), key: "4k", value: $render4K)
-                tvGlassToggle(icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), key: "autoPlayNext", value: $autoPlayNextEpisode)
+                tvToggleList(interfaceToggleRows)
 
                 tvSleepTimerRow
                 tvFontSizeRow
@@ -415,27 +368,31 @@ extension SettingsScreen {
             // Home Page section
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                 tvSectionLabel(loc.localized("settings.homePage"))
-
-                tvGlassToggle(icon: "play.circle", label: loc.localized("settings.homePage.continueWatching"), key: "homeContinueWatching", value: $showContinueWatching)
-                tvGlassToggle(icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"), key: "homeRecentlyAdded", value: $showRecentlyAdded)
-                tvGlassToggle(icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), key: "homeGenreRows", value: $showGenreRows)
-                tvGlassToggle(icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"), key: "homeWatchingNow", value: $showWatchingNow)
+                tvToggleList(homePageToggleRows)
             }
 
             // Detail Page section
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                 tvSectionLabel(loc.localized("settings.detailPage"))
-
-                tvGlassToggle(icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"), key: "detailQualityBadges", value: $showQualityBadges)
+                tvToggleList(detailPageToggleRows)
             }
 
             // Debug section
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                 tvSectionLabel(loc.localized("settings.debug"))
-
-                tvGlassToggle(icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"), key: "debugFastSleep", value: $debugFastSleepTimer)
-                tvGlassToggle(icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"), key: "debugSkipToEnd", value: $debugShowSkipToEnd)
+                tvToggleList(debugToggleRows)
             }
+        }
+    }
+
+    /// Renders a `SettingsToggleRow` list as tvOS focused rows. tvOS currently
+    /// uses `themeManager.accent` for every icon; `row.tint` is preserved on the
+    /// data model but intentionally ignored here to match the pre-refactor
+    /// visual (see CLAUDE.md — iOS orange debug icons, tvOS accent icons).
+    @ViewBuilder
+    func tvToggleList(_ rows: [SettingsToggleRow]) -> some View {
+        ForEach(rows) { row in
+            tvGlassToggle(icon: row.icon, label: row.label, key: row.id, value: row.value)
         }
     }
 
@@ -726,31 +683,12 @@ extension SettingsScreen {
     // MARK: - Server Connection
 
     var tvRefreshConnectionButton: some View {
-        let isFocused = focusedItem == .refreshConnection
-
-        return Button {
-            Task { await appState.restoreSession() }
-        } label: {
-            HStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(themeManager.accent)
-                    .frame(width: 24)
-
-                Text(loc.localized("settings.refreshConnection"))
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(CinemaColor.onSurface)
-
-                Spacer()
-            }
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
-        }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .hoverEffectDisabled()
-        .focused($focusedItem, equals: .refreshConnection)
+        tvActionRow(
+            focus: .refreshConnection,
+            icon: "arrow.clockwise",
+            label: loc.localized("settings.refreshConnection"),
+            action: { Task { await appState.restoreSession() } }
+        )
     }
 
     // MARK: - Interface Options
@@ -869,6 +807,85 @@ extension SettingsScreen {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .toggle(key))
+    }
+
+    // MARK: - Action Row (shared tvOS helper)
+    //
+    // Single source of truth for "tappable row with icon + title + optional
+    // subtitle + optional chevron" on tvOS. Replaces three near-duplicate
+    // bespoke buttons (Refresh Catalogue / Refresh Connection / Licenses).
+    //
+    // Two overloads let callers either reuse the generic `.toggle(id)` focus
+    // lane (used for most settings rows) or supply a dedicated `SettingsFocus`
+    // case where one already exists (e.g. `.refreshConnection`).
+
+    @ViewBuilder
+    func tvActionRow(
+        id: String,
+        icon: String,
+        label: String,
+        subtitle: String? = nil,
+        showsChevron: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        tvActionRow(
+            focus: .toggle(id),
+            icon: icon,
+            label: label,
+            subtitle: subtitle,
+            showsChevron: showsChevron,
+            action: action
+        )
+    }
+
+    @ViewBuilder
+    func tvActionRow(
+        focus: SettingsFocus,
+        icon: String,
+        label: String,
+        subtitle: String? = nil,
+        showsChevron: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isFocused = focusedItem == focus
+        Button(action: action) {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: icon)
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+
+                if let subtitle {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(label)
+                            .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Text(subtitle)
+                            .font(.system(size: CinemaScale.pt(16), weight: .regular))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    }
+                } else {
+                    Text(label)
+                        .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                        .foregroundStyle(CinemaColor.onSurface)
+                }
+
+                Spacer()
+
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                }
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: focus)
     }
 
     // MARK: - tvOS Helpers

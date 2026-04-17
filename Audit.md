@@ -507,7 +507,7 @@ Cinemax is in **strong shape for App Store submission**. No critical blockers. S
 
 | # | Action | Category | Effort | Impact |
 |---|--------|----------|--------|--------|
-| 1 | Extract shared `SettingsRowModel` + platform wrappers | Code Quality | 4-6 hr | High — ~350 LOC removed, future rows are one edit |
+| 1 | ~~Extract shared `SettingsToggleRow` + platform wrappers~~ | Code Quality | 4-6 hr | **DONE** (audit 2.3, 2026-04-17) — single source of truth for toggle rows |
 | 2 | ~~Pagination spinner → footer row (centered only for initial)~~ | UX | 30-60 min | **DONE** (audit 2.1, 2026-04-17) |
 | 3 | ~~Unit tests: `MediaDetailViewModel.selectSeason` race, `SearchViewModel` cancel, cache TTL~~ | Testing | 2-3 hr | **DONE** (audit 2.1, 2026-04-17) |
 | 4 | ~~Extract `LibraryHeroSection` + `LibraryGenreRow` from `MovieLibraryScreen`~~ | Code Quality | 2-3 hr | **DONE** (audit 2.2, 2026-04-17) |
@@ -567,3 +567,48 @@ Cinemax is in **strong shape for App Store submission**. No critical blockers. S
 **App Store submission (user-task)**
 - Distribution signing, demo Jellyfin server, metadata + screenshots
 
+---
+
+## 16. Audit 2.3 — Settings single source of truth (2026-04-17)
+
+### Completed this batch
+
+| # | Action | Category | Effort | Notes |
+|---|--------|----------|--------|-------|
+| 1 | `SettingsToggleRow` shared data model | Code Quality (#1) | 30 min | New `Identifiable` struct in `SettingsRowHelpers.swift` carrying `id`, `icon`, `label`, `value: Binding<Bool>`, optional `tint`. Platform-agnostic — lives outside `#if os(iOS)` so both renderers consume it. |
+| 2 | `iOSToggleRowsJoined` renderer | Code Quality (#1) | 20 min | `@MainActor @ViewBuilder` helper that expands a `[SettingsToggleRow]` into `iOSToggleRow` + `iOSSettingsDivider` pairs. One call per section in `SettingsScreen+iOS.swift` replaces 10 toggle rows + 7 dividers. |
+| 3 | `tvToggleList` renderer | Code Quality (#1) | 15 min | `@ViewBuilder` method on the tvOS extension that expands a `[SettingsToggleRow]` into `tvGlassToggle` rows. Four calls in `SettingsScreen+tvOS.swift` replace 10 inline toggles. Intentionally ignores `row.tint` — tvOS uses `themeManager.accent` uniformly (preserves pre-refactor visual; documented on the method). |
+| 4 | Toggle row catalogues on `SettingsScreen` | Code Quality (#1) | 20 min | Four computed properties — `interfaceToggleRows`, `homePageToggleRows`, `detailPageToggleRows`, `debugToggleRows` — define every boolean toggle in the app in one place. Adding a new toggle is now a one-line `.init(...)` addition visible to both platforms. |
+| 5 | `tvActionRow` consolidates 3 bespoke buttons | Code Quality (#1) | 25 min | New helper in `SettingsScreen+tvOS.swift` (two overloads: one for `.toggle(id)` focus, one for any `SettingsFocus` case). Replaces `tvRefreshCatalogueButton`, `tvRefreshConnectionButton`, `tvLicensesButton` — three near-duplicate Button blocks (~30 lines each) collapse to ~5-line call sites. Future action rows are one-liners. |
+| 6 | iOS Licenses reuses `navigationRow` | Code Quality (#1) | 5 min | Replaced bespoke 17-line inline button with `navigationRow(icon:label:action:)` call. Identical layout (neutral icon + label + chevron), identical visual, ~13 fewer lines. |
+
+### What "single source of truth" means here
+
+The measurable outcome isn't line count — it's **where the facts about a settings row live**.
+
+Before this batch, the definition of a toggle row (its id, icon, localization key, storage binding) was scattered:
+- The `@AppStorage` key and its default in `SettingsScreen.swift`
+- The row's icon + label + binding repeated verbatim in `SettingsScreen+iOS.swift`
+- The same icon + label + binding (with a different focus id) repeated in `SettingsScreen+tvOS.swift`
+
+Adding a toggle meant touching three files and keeping three string literals in sync. Renaming required a careful cross-file search. Accidental drift (wrong icon on one platform, slightly different label text, mis-matched focus id) was a real failure mode.
+
+After: every toggle is declared once as a `SettingsToggleRow` entry on `SettingsScreen`. Both platform renderers consume the same list. The `@AppStorage` binding is threaded through `value:`. Adding or renaming a toggle is a single-file, single-line operation. The two renderers can only differ in *presentation*, never in *what rows exist*.
+
+Same principle applies to `tvActionRow` — three action buttons (Refresh Catalogue, Refresh Connection, Licenses) that shared a visual pattern are now rendered by one helper. The pattern itself — icon + label + optional subtitle + optional chevron + `tvSettingsFocusable` framing — lives in one place.
+
+### Build & test verification
+
+- iOS build → `** BUILD SUCCEEDED **`
+- tvOS build → `** BUILD SUCCEEDED **`
+- `xcodebuild test -scheme Cinemax -only-testing:CinemaxTests` → `** TEST SUCCEEDED **` (36 tests across 8 suites)
+- Refactor is behavior-preserving. No visual, behavioral, focus, or localization changes.
+
+### Remaining after this batch
+
+**Refactoring** (from §13 suggested batch)
+- `NativeVideoPresenter` sub-controller extraction (sleep / skip / reporting)
+- `APIClientProtocol` domain split
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
