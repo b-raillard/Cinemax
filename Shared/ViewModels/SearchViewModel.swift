@@ -134,8 +134,16 @@ final class SearchViewModel {
 
     #if os(iOS)
     private let speechHelper = SpeechRecognitionHelper()
+    private var hasBoundSpeechCallbacks = false
 
+    /// Binds the speech helper's callbacks once per view-model lifetime. Re-binding on
+    /// every toggle is wasteful — old closures are replaced but their captured
+    /// `appState` / `self` stack up briefly during tear-down, which the audit flagged
+    /// as a latent leak. Guarding on `hasBoundSpeechCallbacks` keeps a single stable
+    /// set of closures; `stop()` clears them on the helper side.
     func setupSpeechCallbacks(using appState: AppState) {
+        guard !hasBoundSpeechCallbacks else { return }
+        hasBoundSpeechCallbacks = true
         speechHelper.onTranscript = { [weak self] transcript in
             self?.searchText = transcript
             self?.search(using: appState)
@@ -198,24 +206,27 @@ final class SearchViewModel {
             return
         }
 
-        searchTask = Task {
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
 
             guard let userId = appState.currentUserId else { return }
-            isSearching = true
+            self?.isSearching = true
+            // `defer` guarantees `isSearching` flips back to false even when an
+            // early `return` fires after cancellation mid-await — otherwise the
+            // UI can remain stuck on the spinner after a quick text change.
+            defer { self?.isSearching = false }
 
             do {
                 let items = try await appState.apiClient.searchItems(userId: userId, searchTerm: query, limit: 30)
                 guard !Task.isCancelled else { return }
-                results = items
+                self?.results = items
             } catch {
                 guard !Task.isCancelled else { return }
-                results = []
+                self?.results = []
             }
 
-            isSearching = false
-            hasSearched = true
+            self?.hasSearched = true
         }
     }
 

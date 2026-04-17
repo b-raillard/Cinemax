@@ -96,11 +96,7 @@ struct MediaLibraryScreen: View {
                             LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
                                 ForEach(viewModel.filteredLoader.items, id: \.id) { item in
                                     posterCard(item)
-                                        .onAppear {
-                                            if item.id == viewModel.filteredLoader.items.last?.id {
-                                                Task { await viewModel.loadMoreFiltered(using: appState) }
-                                            }
-                                        }
+                                        .onAppear { maybeLoadMore(triggerId: item.id) }
                                 }
                             }
                             .padding(.horizontal, CinemaSpacing.spacing20)
@@ -202,11 +198,7 @@ struct MediaLibraryScreen: View {
                             ForEach(viewModel.filteredLoader.items, id: \.id) { item in
                                 posterCard(item)
                                     .id(item.id)
-                                    .onAppear {
-                                        if item.id == viewModel.filteredLoader.items.last?.id {
-                                            Task { await viewModel.loadMoreFiltered(using: appState) }
-                                        }
-                                    }
+                                    .onAppear { maybeLoadMore(triggerId: item.id) }
                             }
                         }
                         .padding(.horizontal, gridPadding)
@@ -587,13 +579,15 @@ struct MediaLibraryScreen: View {
 
     @ViewBuilder
     private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
-        ContentRow(title: genre, showViewAll: true, onViewAll: {
-            viewModel.sortFilter.selectedGenres = [genre]
-        }) {
-            ForEach(items, id: \.id) { item in
-                posterCard(item)
-                    .frame(width: posterCardWidth)
-            }
+        ContentRow(
+            title: genre,
+            showViewAll: true,
+            onViewAll: { viewModel.sortFilter.selectedGenres = [genre] },
+            data: items,
+            id: \.id
+        ) { item in
+            posterCard(item)
+                .frame(width: posterCardWidth)
         }
     }
 
@@ -638,6 +632,22 @@ struct MediaLibraryScreen: View {
         #else
         .buttonStyle(.plain)
         #endif
+    }
+
+    // MARK: - Pagination Trigger
+
+    /// Guards pagination against SwiftUI calling `.onAppear` multiple times for the
+    /// same card (view recycling, off-screen-and-back, parent re-renders). Previously
+    /// each call spawned a Task that queued behind `PaginatedLoader`'s actor guard —
+    /// correct but wasteful. Now we check `isLoadingMore` / `hasLoadedAll`
+    /// synchronously before spawning, so redundant onAppears are free.
+    private func maybeLoadMore(triggerId: String?) {
+        let loader = viewModel.filteredLoader
+        guard !loader.isLoadingMore,
+              !loader.hasLoadedAll,
+              let triggerId,
+              triggerId == loader.items.last?.id else { return }
+        Task { await viewModel.loadMoreFiltered(using: appState) }
     }
 
     // MARK: - Poster Card

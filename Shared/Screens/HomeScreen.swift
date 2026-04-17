@@ -122,11 +122,9 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
-        ContentRow(title: genre) {
-            ForEach(items, id: \.id) { item in
-                recentlyAddedCard(item)
-                    .frame(width: posterCardWidth)
-            }
+        ContentRow(title: genre, data: items, id: \.id) { item in
+            recentlyAddedCard(item)
+                .frame(width: posterCardWidth)
         }
     }
 
@@ -260,11 +258,13 @@ struct HomeScreen: View {
     /// the item artwork + "Name is watching" label, and navigates to the item's detail
     /// screen on tap. Hidden entirely when the server has no other active sessions.
     private var watchingNowRow: some View {
-        ContentRow(title: loc.localized("home.watchingNow")) {
-            ForEach(viewModel.activeSessions.indices, id: \.self) { idx in
-                watchingNowCard(viewModel.activeSessions[idx])
-                    .frame(width: wideCardWidth)
-            }
+        ContentRow(
+            title: loc.localized("home.watchingNow"),
+            data: Array(viewModel.activeSessions.indices),
+            id: \.self
+        ) { idx in
+            watchingNowCard(viewModel.activeSessions[idx])
+                .frame(width: wideCardWidth)
         }
     }
 
@@ -317,31 +317,38 @@ struct HomeScreen: View {
     }
 
     private var continueWatchingRow: some View {
-        ContentRow(title: loc.localized("home.continueWatching")) {
-            ForEach(viewModel.resumeItems, id: \.id) { item in
-                if let id = item.id {
-                    let nav = viewModel.resumeNavigation[id]
-                    let startSeconds: Double? = {
-                        guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
-                        return Double(ticks) / 10_000_000
-                    }()
-                    PlayLink(
-                        itemId: id, title: item.name ?? "",
-                        startTime: startSeconds,
-                        previousEpisode: nav?.previous, nextEpisode: nav?.next,
-                        episodeNavigator: nav?.navigator
-                    ) {
-                        continueWatchingCard(item)
-                            .frame(width: wideCardWidth)
-                    }
-                    #if os(tvOS)
-                    .buttonStyle(CinemaTVCardButtonStyle())
-                    #else
-                    .buttonStyle(.plain)
-                    #endif
-                    .accessibilityLabel(item.name ?? "")
-                }
+        ContentRow(
+            title: loc.localized("home.continueWatching"),
+            data: viewModel.resumeItems,
+            id: \.id
+        ) { item in
+            continueWatchingPlayLink(item)
+        }
+    }
+
+    @ViewBuilder
+    private func continueWatchingPlayLink(_ item: BaseItemDto) -> some View {
+        if let id = item.id {
+            let nav = viewModel.resumeNavigation[id]
+            let startSeconds: Double? = {
+                guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
+                return Double(ticks) / 10_000_000
+            }()
+            PlayLink(
+                itemId: id, title: item.name ?? "",
+                startTime: startSeconds,
+                previousEpisode: nav?.previous, nextEpisode: nav?.next,
+                episodeNavigator: nav?.navigator
+            ) {
+                continueWatchingCard(item)
+                    .frame(width: wideCardWidth)
             }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityLabel(item.name ?? "")
         }
     }
 
@@ -393,11 +400,13 @@ struct HomeScreen: View {
     // MARK: - Recently Added
 
     private var recentlyAddedRow: some View {
-        ContentRow(title: loc.localized("home.recentlyAdded")) {
-            ForEach(viewModel.latestItems, id: \.id) { item in
-                recentlyAddedCard(item)
-                    .frame(width: posterCardWidth)
-            }
+        ContentRow(
+            title: loc.localized("home.recentlyAdded"),
+            data: viewModel.latestItems,
+            id: \.id
+        ) { item in
+            recentlyAddedCard(item)
+                .frame(width: posterCardWidth)
         }
     }
 

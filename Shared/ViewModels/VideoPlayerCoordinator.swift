@@ -27,6 +27,11 @@ final class VideoPlayerCoordinator {
     /// Retained so the presenter isn't deallocated during playback.
     private var presenter: NativeVideoPresenter?
     private var playTask: Task<Void, Never>?
+    /// Monotonic counter used to identify the current play session. Incremented each
+    /// time `play()` starts a new session, so a stale `onDismiss` firing after a
+    /// second `play()` (e.g. dismiss delegate arriving late) can't nil out the
+    /// replacement presenter.
+    private var currentGeneration: UInt = 0
 
     var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
 
@@ -43,6 +48,12 @@ final class VideoPlayerCoordinator {
         let bitrate = maxBitrate
         let apiClient = appState.apiClient
         playTask?.cancel()
+        // Drop any previous presenter reference before starting a new session, so a
+        // stuck presenter (onDismiss never fired — crash, hardware back, edge cases)
+        // doesn't linger on the coordinator indefinitely.
+        presenter = nil
+        currentGeneration &+= 1
+        let generation = currentGeneration
         playTask = Task {
             guard let userId = appState.currentUserId else {
                 logger.error("VideoPlayerCoordinator: not authenticated")
@@ -62,10 +73,12 @@ final class VideoPlayerCoordinator {
                     autoPlayNextEpisode: autoPlayNextEpisode,
                     imageBuilder: appState.imageBuilder,
                     onDismiss: { [weak self] in
-                        self?.presenter = nil
-                        self?.lastDismissedAt = Date()
+                        guard let self, self.currentGeneration == generation else { return }
+                        self.presenter = nil
+                        self.lastDismissedAt = Date()
                     }
                 )
+                guard self.currentGeneration == generation else { return }
                 self.presenter = p
                 p.present(info: info)
             } catch {

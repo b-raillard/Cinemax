@@ -245,6 +245,8 @@
 "server.networkSettings" = "Network Settings";
 "server.connecting" = "Connecting...";
 "server.offline" = "Offline";
+"server.httpWarning.title" = "Unencrypted connection";
+"server.httpWarning.message" = "This address uses HTTP. Your credentials and playback tokens will travel in plain text over the network. Use HTTPS whenever possible — keep HTTP only for a server on a trusted local network.";
 
 // MARK: - Video Player
 

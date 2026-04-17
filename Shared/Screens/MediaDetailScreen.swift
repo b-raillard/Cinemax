@@ -379,16 +379,18 @@ struct MediaDetailScreen: View {
     // MARK: - Cast
 
     private func castSection(_ people: [BaseItemPerson]) -> some View {
-        return ContentRow(title: loc.localized("detail.castCrew")) {
-            ForEach(people.prefix(20), id: \.id) { person in
-                CastCircle(
-                    name: person.name ?? "",
-                    role: person.role,
-                    imageURL: person.id.map {
-                        appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200)
-                    }
-                )
-            }
+        return ContentRow(
+            title: loc.localized("detail.castCrew"),
+            data: Array(people.prefix(20)),
+            id: \.id
+        ) { person in
+            CastCircle(
+                name: person.name ?? "",
+                role: person.role,
+                imageURL: person.id.map {
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200)
+                }
+            )
         }
     }
 
@@ -708,30 +710,32 @@ struct MediaDetailScreen: View {
     // MARK: - Similar Items
 
     private var similarSection: some View {
-        return ContentRow(title: loc.localized("detail.moreLikeThis")) {
-            ForEach(viewModel.similarItems, id: \.id) { item in
-                NavigationLink {
-                    if let id = item.id {
-                        MediaDetailScreen(
-                            itemId: id,
-                            itemType: item.type ?? .movie
-                        )
-                    }
-                } label: {
-                    PosterCard(
-                        title: item.name ?? "",
-                        imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
-                        subtitle: item.productionYear.map(String.init)
+        return ContentRow(
+            title: loc.localized("detail.moreLikeThis"),
+            data: viewModel.similarItems,
+            id: \.id
+        ) { item in
+            NavigationLink {
+                if let id = item.id {
+                    MediaDetailScreen(
+                        itemId: id,
+                        itemType: item.type ?? .movie
                     )
-                    .frame(width: similarCardWidth)
                 }
-                #if os(tvOS)
-                .buttonStyle(CinemaTVCardButtonStyle())
-                #else
-                .buttonStyle(.plain)
-                #endif
-                .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
+            } label: {
+                PosterCard(
+                    title: item.name ?? "",
+                    imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
+                    subtitle: item.productionYear.map(String.init)
+                )
+                .frame(width: similarCardWidth)
             }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
         }
     }
 

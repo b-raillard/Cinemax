@@ -49,41 +49,16 @@ final class MediaDetailViewModel {
                 item = seriesItem
                 resolvedType = .series
 
-                async let similar = appState.apiClient.getSimilarItems(itemId: seriesId, userId: userId, limit: 12)
-                similarItems = try await similar
-
-                seasons = try await appState.apiClient.getSeasons(seriesId: seriesId, userId: userId)
-                if let firstSeason = seasons.first, let seasonId = firstSeason.id {
-                    selectedSeasonId = seasonId
-                    episodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
-                }
-                nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: seriesId, userId: userId)
-                if let nextUp = nextUpEpisode,
-                   let nextUpSeasonId = nextUp.seasonID,
-                   nextUpSeasonId != selectedSeasonId {
-                    nextUpEpisodes = (try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: nextUpSeasonId, userId: userId)) ?? []
-                }
-                rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
+                try await loadSeriesDetail(seriesId: seriesId, apiClient: appState.apiClient, userId: userId)
             } else {
                 item = loadedItem
                 resolvedType = effectiveType
 
-                async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
-                similarItems = try await similar
-
                 if effectiveType == .series {
-                    seasons = try await appState.apiClient.getSeasons(seriesId: itemId, userId: userId)
-                    if let firstSeason = seasons.first, let seasonId = firstSeason.id {
-                        selectedSeasonId = seasonId
-                        episodes = try await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
-                    }
-                    nextUpEpisode = try? await appState.apiClient.getNextUp(seriesId: itemId, userId: userId)
-                    if let nextUp = nextUpEpisode,
-                       let nextUpSeasonId = nextUp.seasonID,
-                       nextUpSeasonId != selectedSeasonId {
-                        nextUpEpisodes = (try? await appState.apiClient.getEpisodes(seriesId: itemId, seasonId: nextUpSeasonId, userId: userId)) ?? []
-                    }
-                    rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
+                    try await loadSeriesDetail(seriesId: itemId, apiClient: appState.apiClient, userId: userId)
+                } else {
+                    async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
+                    similarItems = try await similar
                 }
             }
         } catch {
@@ -91,6 +66,42 @@ final class MediaDetailViewModel {
         }
 
         isLoading = false
+    }
+
+    /// Fans out the series-level fetches in parallel — similar, seasons, and next-up
+    /// have no dependencies on each other. Episode lists depend on the resolved
+    /// season IDs, so a second (parallel) stage fetches the current season's and
+    /// the next-up season's episodes together when they differ.
+    private func loadSeriesDetail(
+        seriesId: String,
+        apiClient: any APIClientProtocol,
+        userId: String
+    ) async throws {
+        async let similarTask = apiClient.getSimilarItems(itemId: seriesId, userId: userId, limit: 12)
+        async let seasonsTask = apiClient.getSeasons(seriesId: seriesId, userId: userId)
+        async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
+
+        similarItems = try await similarTask
+        seasons = try await seasonsTask
+        nextUpEpisode = try? await nextUpTask
+
+        guard let seasonId = seasons.first?.id else {
+            rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+            return
+        }
+        selectedSeasonId = seasonId
+
+        let nextUpSeasonId = nextUpEpisode?.seasonID
+        if let nextUpSeasonId, nextUpSeasonId != seasonId {
+            async let currentEpisodesTask = apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
+            async let nextUpEpisodesTask = apiClient.getEpisodes(seriesId: seriesId, seasonId: nextUpSeasonId, userId: userId)
+            episodes = try await currentEpisodesTask
+            nextUpEpisodes = (try? await nextUpEpisodesTask) ?? []
+        } else {
+            episodes = try await apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
+        }
+
+        rebuildNavigationMaps(apiClient: apiClient, userId: userId)
     }
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {

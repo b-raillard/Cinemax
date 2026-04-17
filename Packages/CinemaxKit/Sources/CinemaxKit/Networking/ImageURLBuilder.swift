@@ -19,7 +19,9 @@ public struct ImageURLBuilder: Sendable {
     }
 
     public func imageURL(itemId: String, imageType: ImageType, maxWidth: Int? = nil) -> URL {
-        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            return serverURL
+        }
         components.path = "/Items/\(itemId)/Images/\(imageType.rawValue)"
 
         var queryItems: [URLQueryItem] = []
@@ -29,7 +31,7 @@ public struct ImageURLBuilder: Sendable {
         queryItems.append(URLQueryItem(name: "quality", value: "90"))
         components.queryItems = queryItems.isEmpty ? nil : queryItems
 
-        return components.url!
+        return components.url ?? serverURL
     }
 
     /// Returns `maxWidth` based on the device's native screen width in pixels.
@@ -46,7 +48,9 @@ public struct ImageURLBuilder: Sendable {
     /// Builds the URL for a chapter thumbnail. Jellyfin exposes chapter images at
     /// `/Items/{id}/Images/Chapter/{index}` (0-based index into the chapter list).
     public func chapterImageURL(itemId: String, imageIndex: Int, tag: String? = nil, maxWidth: Int? = nil) -> URL {
-        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            return serverURL
+        }
         components.path = "/Items/\(itemId)/Images/Chapter/\(imageIndex)"
 
         var queryItems: [URLQueryItem] = []
@@ -59,11 +63,13 @@ public struct ImageURLBuilder: Sendable {
         queryItems.append(URLQueryItem(name: "quality", value: "85"))
         components.queryItems = queryItems.isEmpty ? nil : queryItems
 
-        return components.url!
+        return components.url ?? serverURL
     }
 
     public func userImageURL(userId: String, tag: String? = nil, maxWidth: Int? = nil) -> URL {
-        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            return serverURL
+        }
         components.path = "/Users/\(userId)/Images/Primary"
 
         var queryItems: [URLQueryItem] = []
@@ -76,6 +82,6 @@ public struct ImageURLBuilder: Sendable {
         queryItems.append(URLQueryItem(name: "quality", value: "90"))
         components.queryItems = queryItems.isEmpty ? nil : queryItems
 
-        return components.url!
+        return components.url ?? serverURL
     }
 }

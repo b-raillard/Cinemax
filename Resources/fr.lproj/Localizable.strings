@@ -245,6 +245,8 @@
 "server.networkSettings" = "Paramètres réseau";
 "server.connecting" = "Connexion en cours...";
 "server.offline" = "Hors ligne";
+"server.httpWarning.title" = "Connexion non chiffrée";
+"server.httpWarning.message" = "Cette adresse utilise HTTP. Vos identifiants et jetons de lecture circuleront en clair sur le réseau. Utilisez HTTPS lorsque c'est possible — conservez HTTP uniquement pour un serveur sur votre réseau local de confiance.";
 
 // MARK: - Video Player
 

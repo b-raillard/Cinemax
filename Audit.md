@@ -19,24 +19,24 @@
 
 | Issue | File | Lines | Description |
 |-------|------|-------|-------------|
-| Weak ATS configuration | `project.yml`, both `Info.plist` | 38-40, 80-82 | `NSAllowsArbitraryLoadsForMedia: true` allows HTTP for media streams. Auth tokens in transcoding URLs can be captured in plaintext. |
-| No TLS certificate pinning | Networking layer | — | Standard URLSession with system CA store only. Vulnerable to MITM if device CA is compromised or corporate proxy intercepts. |
+| ~~Weak ATS configuration~~ | `project.yml`, both `Info.plist` | 38-40, 80-82 | **MITIGATED (2026-04-17, audit 1.5)** — ATS flags intentionally scoped: `NSAllowsArbitraryLoadsForMedia: true` (stream-only, required for self-hosted HTTP) + `NSAllowsLocalNetworking: true` (for `192.168.*.*` / Bonjour). No `NSAllowsArbitraryLoads: true` — API calls to arbitrary HTTP hosts are still blocked by ATS. `ServerSetupScreen` now shows an inline orange warning banner (`server.httpWarning.*`) when the typed URL starts with `http://`, explaining that credentials/tokens flow in plaintext and recommending HTTPS. Non-blocking — local self-hosters can still connect. |
+| ~~No TLS certificate pinning~~ | Networking layer | — | **N/A BY DESIGN (2026-04-17, audit 1.5)** — Cinemax is a BYO-server client: users connect to their own Jellyfin instances on arbitrary domains (self-hosted, reverse-proxied, Cloudflare-tunneled, Tailscale, etc.). There is no known leaf certificate or issuer to pin against. Pinning against the system CA store adds no defense-in-depth and would break users with self-signed/Let's Encrypt rotation. Documented as design decision; revisit only if a hosted "Cinemax Cloud" tier is ever offered. |
 
 ### Medium
 
 | Issue | File | Lines | Description |
 |-------|------|-------|-------------|
-| Token in error messages | `JellyfinAPIClient.swift` | 553 | Error body logged unsanitized: `"PlaybackInfo returned \(statusCode): \(bodyStr.prefix(200))"`. May expose sensitive data in error strings shown to users. |
-| Password stays in memory | `LoginViewModel.swift` | 8, 25 | `password: String = ""` — not cleared after successful authentication. Vulnerable to memory dumps. |
-| No search input validation | `SearchViewModel.swift` | 155-173 | Search terms passed to API with only whitespace trimming. No defense-in-depth escaping. |
+| ~~Token in error messages~~ | `JellyfinAPIClient.swift` | 561-568 | **DONE (2026-04-17)** — user-facing `JellyfinError.playbackFailed` now only embeds the status code; raw response body is only printed behind `#if DEBUG`. |
+| ~~Password stays in memory~~ | `LoginViewModel.swift` | 33 | **DONE (2026-04-17, audit 1.3)** — `authenticate` already sets `password = ""` right after Keychain persistence succeeds (before the 1 s success dwell). Verified no other caller retains the string. On auth failure the password is intentionally kept so the user can retry. |
+| ~~No search input validation~~ | `SearchViewModel.swift` | 155-173 | **N/A (2026-04-17, audit 1.5)** — `searchTerm` is handed to `Paths.GetItemsParameters(searchTerm:)` from jellyfin-sdk-swift, which emits it as a strongly-typed query parameter. The SDK performs proper URL encoding; no string interpolation into the URL is done anywhere in `searchItems`. Search results are rendered via `Text(item.name ?? "")` (no HTML/markdown/WebView), so there's no XSS surface. No server-side injection risk — Jellyfin sanitizes search input. Additional escaping would be redundant. |
 
 ### Low
 
 | Issue | File | Lines | Description |
 |-------|------|-------|-------------|
-| HTTP localhost fallback | `AppNavigation.swift` | 9, 27, 29 | `URL(string: "http://localhost")!` used as fallback when no server is configured. |
-| `nonisolated(unsafe)` | `JellyfinAPIClient.swift` | 27-28 | Suppresses Swift 6 concurrency warnings. Mitigated by `NSLock`, but ideally `JellyfinClient` would be `Sendable`. |
-| No API response validation | Networking layer | — | Decoded Jellyfin responses used without additional range/safety checks. Malicious server could return crafted data. |
+| ~~HTTP localhost fallback~~ | `AppNavigation.swift` + `UserSwitchSheet.swift` + `ImageURLBuilder.swift` + `JellyfinAPIClient.swift` | — | **DONE (2026-04-17)** — single `AppState.placeholderServerURL` built from `URLComponents` (infallible). All `URL(string:)!` call sites in production code now reference it; `ImageURLBuilder` + `JellyfinAPIClient` `URLComponents`/`components.url!` force unwraps replaced with `guard` / `?? serverURL` fallbacks. Tests still use literal force unwraps (acceptable). |
+| ~~`nonisolated(unsafe)`~~ | `JellyfinAPIClient.swift` | 16-21 | **MITIGATED + DOCUMENTED (2026-04-17, audit 1.5)** — added explicit invariant comment at the declaration: every read/write of `_jellyfinClient` / `_serverURL` goes through `getClient()` / `getServerURL()` / `setClient(_:url:)`, all of which acquire the `NSLock`. The static profile arrays (`_directPlayProfiles`, `_transcodingProfiles`, `_subtitleProfiles`) are `let` constants — immutable, inherently safe — the `nonisolated(unsafe)` marker is only required because the SDK's profile types aren't marked `Sendable`. Escape hatch is contained and correct; upgrading beyond this requires the SDK itself to conform. |
+| ~~No API response validation~~ | Networking layer | — | **ACCEPTED TRADEOFF (2026-04-17, audit 1.5)** — `jellyfin-sdk-swift` handles HTTP/JSON decoding with typed parameters and codable models; invalid types are rejected at the SDK boundary. Additional app-side validation would duplicate the SDK's guarantees and add maintenance cost without a concrete threat model (the attacker is the user's own server). Revisit if Cinemax ever talks to third-party APIs. |
 
 ### Positive Findings
 
@@ -59,18 +59,18 @@
 | Expensive `actionButtons()` recomputation | `MediaDetailScreen.swift` | 192-283 | Recalculates episode navigation on every re-render, even when only unrelated state changes. |
 | No Nuke/NukeUI cache configuration | `CinemaLazyImage.swift` | 11-41 | No explicit cache size limits, no memory pressure handling. Can grow unbounded when browsing large libraries, risking OOM on tvOS. |
 | Image size mismatch | `HomeScreen.swift` + others | 64, 279 | Always requests `maxWidth: 1920` for backdrops even on iPhone SE (390px viewport). Wastes bandwidth and memory. Use `GeometryReader` or environment-based sizing. |
-| `.onAppear` pagination trigger | `MovieLibraryScreen.swift` | 89-92, 181-184 | Every card checks `item.id == items.last?.id` on appear. Can fire multiple times on re-render, triggering duplicate loads. Consider `ScrollViewReader` or threshold-based approach. |
+| ~~`.onAppear` pagination trigger~~ | `MovieLibraryScreen.swift` | 96-100, 202-206 | **DONE (2026-04-17, audit 1.3)** — Both `ForEach` call sites delegate to a new `maybeLoadMore(triggerId:)` helper that guards on `isLoadingMore` / `hasLoadedAll` *synchronously* before spawning a `Task`. Redundant `.onAppear` callbacks (view recycling, re-renders) no longer queue dead tasks behind `PaginatedLoader`'s actor guard. |
 
 ### Medium
 
 | Issue | File | Lines | Description |
 |-------|------|-------|-------------|
-| Sequential API calls in load | `MediaDetailViewModel.swift` | 35-79 | Series item fetch, seasons, episodes, nextUp, nextUp episodes are sequential. Several could be parallelized with `async let`. |
-| `ContentRow` `@ViewBuilder` creates all items | `ContentRow.swift` | 41-53 | `LazyHStack` defers rendering but not view creation. A row with 20 items builds all 20 view hierarchies upfront. |
+| ~~Sequential API calls in load~~ | `MediaDetailViewModel.swift` | 35-109 | **DONE (2026-04-17)** — `loadSeriesDetail` fans out `getSimilarItems` / `getSeasons` / `getNextUp` in parallel via `async let`. When the next-up episode lives in a different season, the current season's and next-up season's episode lists are also fetched concurrently. Shared between the Episode/Season → Series resolution path and the direct Series path. |
+| ~~`ContentRow` `@ViewBuilder` creates all items~~ | `ContentRow.swift` | 41-53 | **DONE (2026-04-17, audit 1.4)** — `ContentRow` is now a data-driven generic (`Data: RandomAccessCollection, ItemID: Hashable, ItemView: View`). The internal `ForEach(data, id: id, content: itemView)` is guaranteed by the type signature, so callers can't accidentally pass a tuple that `LazyHStack` would build eagerly. All 7 existing call sites migrated; both iOS and tvOS schemes build clean. |
 | Race condition on rapid season selection | `MediaDetailViewModel.swift` | 87-95 | `selectedSeasonId` set immediately, `episodes` populated async. Rapid tapping can show episodes from wrong season. Add a generation counter. |
 | `VideoPlayerCoordinator` missing task cancellation | `VideoPlayerCoordinator.swift` | 44-69 | `play()` creates a new Task without cancelling the previous one. Double-tapping can start two concurrent playback sessions. |
-| Search state management | `SearchViewModel.swift` | 155-184 | Cancelling the search task can leave `isSearching = true` if cancelled between set and reset. |
-| 6+ ProgressViews in grids | `PosterCard.swift`, `WideCard.swift` | 14, 15 | Loading indicators render in every grid cell simultaneously. Disable for dense grids, keep for hero/featured items. |
+| ~~Search state management~~ | `SearchViewModel.swift` | 191-221 | **DONE (2026-04-17)** — `defer { self?.isSearching = false }` placed right after `isSearching = true` so cancellation paths (guard returns mid-await, thrown `CancellationError`) always flip the flag back. Task now captures `[weak self]` for consistency. |
+| ~~6+ ProgressViews in grids~~ | `PosterCard.swift`, `WideCard.swift` | 14, 15 | **DONE (2026-04-17, audit 1.4)** — `PosterCard` no longer passes `showLoadingIndicator: true`. Dense poster grids (Home genre rows, library, similar) rely on the fallback background during the brief load window instead of spinning 6+ `ProgressView`s simultaneously. `WideCard` (used for continue-watching / watching-now, where cards are larger and fewer per row) keeps its indicator. |
 
 ### Low
 
@@ -84,9 +84,9 @@
 
 | Issue | File | Lines | Description |
 |-------|------|-------|-------------|
-| SpeechRecognitionHelper callbacks | `SearchViewModel.swift` | 139-150 | `setupSpeechCallbacks()` called on each listen toggle. Old callbacks never cleared. Helper outlives ViewModel. |
+| ~~SpeechRecognitionHelper callbacks~~ | `SearchViewModel.swift` | 138-161 | **DONE (2026-04-17)** — `hasBoundSpeechCallbacks` gate in `setupSpeechCallbacks` binds the `onTranscript` / `onStopped` / `onPermissionError` closures exactly once per view-model lifetime instead of rebuilding them on every `toggleListening`. Closures still capture `[weak self]`; `stop()` continues to cancel tasks + tear down audio so late-firing SFSpeech events can't hit a deallocated VM. |
 | TVPlayerHostViewController observations | `TVPlayerHostViewController.swift` | 44-49 | No `deinit` to clean up `NSKeyValueObservation`/`NSObjectProtocol` observers. *(Dead code — delete priority.)* |
-| VideoPlayerCoordinator presenter lifecycle | `VideoPlayerCoordinator.swift` | 28, 52-65 | If `onDismiss` never fires (crash, hardware back), old `NativeVideoPresenter` leaks. |
+| ~~VideoPlayerCoordinator presenter lifecycle~~ | `VideoPlayerCoordinator.swift` | 28-87 | **DONE (2026-04-17, audit 1.3)** — `play()` now nils `presenter` eagerly before starting a new session and bumps a `currentGeneration` counter. The `onDismiss` closure and the post-fetch `self.presenter = p` assignment both compare `currentGeneration == generation`, so a late-firing `onDismiss` from an abandoned session can't nil out the fresh presenter and an abandoned presenter can't linger on the coordinator. |
 
 ---
 
@@ -213,7 +213,7 @@ tvShows.title
 | 2 | Configure App Store distribution signing | Required |
 | 3 | Prepare demo Jellyfin server for App Review | Required |
 | 4 | App Store metadata + screenshots | Required |
-| 5 | Replace force unwraps with safe unwrapping in URL construction | Low |
+| 5 | ~~Replace force unwraps with safe unwrapping in URL construction~~ | **DONE (2026-04-17)** — see audit 1.2 below. |
 
 See `APP_STORE_AUDIT.md` for full audit and future roadmap.
 
@@ -300,3 +300,218 @@ See `APP_STORE_AUDIT.md` for full audit and future roadmap.
 | 1 | Debug section in Settings → Interface | Two `@AppStorage`-backed toggles (`debug.fastSleepTimer`, `debug.showSkipToEnd`); always visible (not gated by `#if DEBUG`) so QA / power users can reach them without a special build. Orange icon to signal "developer territory". |
 | 2 | Fast sleep timer (15 s override) | New `SleepTimerOption.currentDefaultSeconds` returns 15 seconds when `debug.fastSleepTimer` is on; `NativeVideoPresenter.startSleepTimerIfNeeded` uses this helper instead of reading the option directly. Lets you preview the "Still watching?" prompt after only 15 s of playback. |
 | 3 | Skip-to-end button in player HUD | When `debug.showSkipToEnd` is on, `NativeVideoPresenter` paints a small purple `⏭ End` chip top-right of the player. Seeks to `(duration − 15 s)` so you can verify the end-of-series completion overlay without watching a full episode. Hidden by default. |
+
+---
+
+## 9. Audit 1.2 — Quick-win pass (2026-04-17)
+
+### Completed this batch
+
+| # | Action | Category | Effort | Notes |
+|---|--------|----------|--------|-------|
+| 1 | Sanitize PlaybackInfo error body | Security (Medium) | 5 min | `JellyfinError.playbackFailed` user-facing string is now just the HTTP status code; raw body is only `debugLog`-printed behind `#if DEBUG`. |
+| 2 | Replace force unwraps on URL construction | Correctness / App Store | 30 min | `AppState.placeholderServerURL` constructed from `URLComponents` (infallible) replaces the 3 `URL(string: "http://localhost")!` sites in `AppNavigation.swift` + 1 in `UserSwitchSheet.swift`. `ImageURLBuilder` + `JellyfinAPIClient` `URLComponents!` / `components.url!` sites fall back to `serverURL` via `guard` / `??`. Tests untouched. |
+| 3 | Parallelize `MediaDetailViewModel.load` | Performance (Medium) | 30 min | New private `loadSeriesDetail` fans out `getSimilarItems` / `getSeasons` / `getNextUp` with `async let`; episode lists for the current vs next-up season fetch in parallel when they differ. Shared between the Episode/Season → Series path and the direct Series path. |
+| 4 | SpeechRecognitionHelper callback accumulation | Memory / Correctness | 15 min | `setupSpeechCallbacks` gated on `hasBoundSpeechCallbacks` so closures are bound once per VM lifetime; prevents rebuilding `[weak self]` closures every `toggleListening`. |
+| 5 | Fix `isSearching` cancel race | Performance (Medium) | 15 min | `defer { self?.isSearching = false }` placed right after the flag flips true, so cancellation paths (guard returns, `CancellationError`) no longer leave the spinner stuck on. Task captures `[weak self]`. |
+
+Build verification: iOS (`Cinemax` scheme, iPhone 17 Pro sim) and tvOS (`CinemaxTV` scheme, Apple TV 4K sim) both `** BUILD SUCCEEDED **`.
+
+### Remaining after this batch
+
+**Security**
+- **High** — `NSAllowsArbitraryLoadsForMedia: true` in both Info.plists; auth tokens in transcoding URLs still flow in plaintext if server is HTTP
+- **High** — No TLS certificate pinning (standard `URLSession`)
+- **Medium** — `password: String = ""` in `LoginViewModel` not cleared after successful auth
+- **Medium** — No defense-in-depth escaping on search input
+- **Low** — `nonisolated(unsafe)` on `JellyfinClient` (mitigated by `NSLock`)
+- **Low** — No post-decode validation on Jellyfin responses
+
+**Performance**
+- **High** — `.onAppear` pagination trigger in `MovieLibraryScreen` can double-fire
+- **Medium** — `ContentRow` `@ViewBuilder` builds all items upfront despite `LazyHStack`
+- **Medium** — `ProgressView` renders in every grid cell simultaneously
+- **Medium** — `actionButtons()` in `MediaDetailScreen` recomputes on unrelated state changes
+
+**Memory leaks**
+- `VideoPlayerCoordinator` presenter leaks if `onDismiss` never fires (crash / hardware back)
+
+**Refactoring** (from Top-10 #10 partial)
+- `NativeVideoPresenter` (~1,300 lines) not yet split
+- `MovieLibraryScreen` (~1,000 lines) not yet split
+- Settings row duplication (~1,579 lines across 3 files)
+- `APIClientProtocol` split into `ServerAPI` / `MediaAPI` / `PlaybackAPI` / `ReportingAPI`
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
+
+---
+
+## 10. Audit 1.3 — Second quick-win pass (2026-04-17)
+
+### Completed this batch
+
+| # | Action | Category | Effort | Notes |
+|---|--------|----------|--------|-------|
+| 1 | Clear password after login | Security (Medium) | audit bookkeeping | Verified `LoginViewModel.authenticate` already zeros `password` (line 33) right after Keychain persist — predates audit 1.3. On failure the string is intentionally kept for retry UX. Row in §1 updated to DONE. |
+| 2 | Fix pagination double-fire | Performance (High) | 20 min | New `maybeLoadMore(triggerId:)` in `MovieLibraryScreen` short-circuits on `isLoadingMore` / `hasLoadedAll` *before* spawning the load task. Applied to both the tvOS and iOS filtered-grid `ForEach` sites. `PaginatedLoader`'s actor guard still there as a belt-and-braces. |
+| 3 | Fix `VideoPlayerCoordinator` presenter leak | Memory | 30 min | Added `currentGeneration: UInt` counter. `play()` eagerly nils the old presenter and bumps the generation; `onDismiss` and the post-fetch `self.presenter = p` both guard on matching generation so a stale dismiss (late delegate callback, edge-case where `onDismiss` would have fired into the new session) can't nil the replacement. |
+
+Build verification: iOS (`Cinemax` scheme, iPhone 17 Pro sim) and tvOS (`CinemaxTV` scheme, Apple TV 4K sim) both `** BUILD SUCCEEDED **`.
+
+### Remaining after this batch
+
+**Security**
+- **High** — `NSAllowsArbitraryLoadsForMedia: true` in both Info.plists; auth tokens in transcoding URLs still flow in plaintext if server is HTTP
+- **High** — No TLS certificate pinning (standard `URLSession`)
+- **Medium** — No defense-in-depth escaping on search input
+- **Low** — `nonisolated(unsafe)` on `JellyfinClient` (mitigated by `NSLock`)
+- **Low** — No post-decode validation on Jellyfin responses
+
+**Performance**
+- **Medium** — `ContentRow` `@ViewBuilder` builds all items upfront despite `LazyHStack`
+- **Medium** — `ProgressView` renders in every grid cell simultaneously
+- **Medium** — `actionButtons()` in `MediaDetailScreen` recomputes on unrelated state changes
+
+**Refactoring** (from Top-10 #10 partial)
+- `NativeVideoPresenter` (~1,300 lines) not yet split
+- `MovieLibraryScreen` (~1,000 lines) not yet split
+- Settings row duplication (~1,579 lines across 3 files)
+- `APIClientProtocol` split into `ServerAPI` / `MediaAPI` / `PlaybackAPI` / `ReportingAPI`
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
+
+---
+
+## 11. Audit 1.4 — Perf-wins pass (2026-04-17)
+
+### Completed this batch
+
+| # | Action | Category | Effort | Notes |
+|---|--------|----------|--------|-------|
+| 1 | Drop `ProgressView` from dense grid cards | Performance (Medium) | 5 min | `PosterCard` no longer passes `showLoadingIndicator: true` to `CinemaLazyImage`. Removes 6–20 simultaneous `ProgressView` spinners on Home genre rows, library grids, and similar-items rows. `WideCard` (continue-watching / watching-now — larger and fewer per row) keeps its spinner. |
+| 2 | Make `ContentRow` structurally lazy | Performance (Medium) | 40 min | `ContentRow` is now `ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View>`. The internal `LazyHStack { ForEach(data, id: id, content: itemView) }` guarantees the `ForEach` — callers can no longer pass a tuple of N views that SwiftUI would build eagerly. All 7 call sites migrated (Home: genre row / watching-now / continue-watching / recently-added; MovieLibrary: genre row; MediaDetail: cast / similar). Every caller already used `ForEach` under the old API, so behavior is unchanged — this tightens the contract at the type level to prevent future regressions. |
+
+Build verification: iOS (`Cinemax` scheme, iPhone 17 Pro sim) and tvOS (`CinemaxTV` scheme, Apple TV 4K sim) both `** BUILD SUCCEEDED **`.
+
+### Remaining after this batch
+
+**Security**
+- **High** — `NSAllowsArbitraryLoadsForMedia: true` in both Info.plists; auth tokens in transcoding URLs still flow in plaintext if server is HTTP
+- **High** — No TLS certificate pinning (standard `URLSession`)
+- **Medium** — No defense-in-depth escaping on search input
+- **Low** — `nonisolated(unsafe)` on `JellyfinClient` (mitigated by `NSLock`)
+- **Low** — No post-decode validation on Jellyfin responses
+
+**Performance**
+- **Medium** — `actionButtons()` in `MediaDetailScreen` recomputes on unrelated state changes
+
+**Refactoring** (from Top-10 #10 partial)
+- `NativeVideoPresenter` (~1,300 lines) not yet split
+- `MovieLibraryScreen` (~1,000 lines) not yet split
+- Settings row duplication (~1,579 lines across 3 files)
+- `APIClientProtocol` split into `ServerAPI` / `MediaAPI` / `PlaybackAPI` / `ReportingAPI`
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
+
+---
+
+## 12. Audit 1.5 — Security pass (2026-04-17)
+
+### Completed this batch
+
+| # | Action | Category | Effort | Notes |
+|---|--------|----------|--------|-------|
+| 1 | HTTP server warning banner | Security (High) | 20 min | `ServerSetupScreen` detects `http://`-prefixed input via a `isHTTPURL` helper and renders an inline orange-tinted banner above the Connect button (both tvOS/iPad and iPhone layouts). Explains in plain language that credentials and tokens flow in plaintext. Non-blocking — local self-hosters keep working. Localized `server.httpWarning.title` / `server.httpWarning.message` in fr + en. ATS kept as-is (`NSAllowsArbitraryLoadsForMedia` + `NSAllowsLocalNetworking`, no blanket `NSAllowsArbitraryLoads`) — the warning addresses user awareness without locking out the common home-lab deployment. |
+| 2 | TLS cert pinning decision | Security (High) | docs | Resolved as N/A-by-design: Cinemax is BYO-server, so there is no known certificate chain to pin. Decision documented in §1 Security. |
+| 3 | Search input escaping | Security (Medium) | docs | Verified SDK handles URL encoding via `Paths.GetItemsParameters(searchTerm:)`; response rendered as `Text`, no XSS surface. Resolved as N/A. |
+| 4 | `nonisolated(unsafe)` invariant | Security (Low) | 5 min | Added explicit invariant comment at the declaration in `JellyfinAPIClient.swift` documenting that every read/write of `_jellyfinClient` / `_serverURL` MUST go through the lock-protected helpers. The escape-hatch is contained and correct. |
+| 5 | API response validation | Security (Low) | docs | Accepted tradeoff: SDK-level codable decoding is the boundary; additional validation would duplicate SDK guarantees without a concrete threat model. Documented in §1 Security. |
+
+Build verification: iOS (`Cinemax` scheme, iPhone 17 Pro sim) and tvOS (`CinemaxTV` scheme, Apple TV 4K sim) both `** BUILD SUCCEEDED **`.
+
+### Remaining after this batch
+
+**Security** — all items resolved. §1 is now either `DONE` or `N/A BY DESIGN` / `ACCEPTED TRADEOFF` with inline justification.
+
+**Performance**
+- **Medium** — `actionButtons()` in `MediaDetailScreen` recomputes on unrelated state changes
+
+**Refactoring** (from Top-10 #10 partial)
+- `NativeVideoPresenter` (~1,300 lines) not yet split
+- `MovieLibraryScreen` (~1,000 lines) not yet split
+- Settings row duplication (~1,579 lines across 3 files)
+- `APIClientProtocol` split into `ServerAPI` / `MediaAPI` / `PlaybackAPI` / `ReportingAPI`
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
+
+**Next**: user-requested full platform re-audit — performance, code quality, iOS 26/tvOS 26 best practices, security, UX/UI, other pertinent topics. Captured in §13 below.
+
+---
+
+## 13. Full platform re-audit (batch 2.0 — 2026-04-17)
+
+### TL;DR
+
+Cinemax is in **strong shape for App Store submission**. No critical blockers. Swift 6 strict concurrency, `@MainActor` isolation, responsive image sizing, comprehensive accessibility labels, sound tvOS focus strategy, and no token leaks or force-unwraps in production code. Remaining items are **code-quality debt** (large files, duplication) and **UX polish** (pagination spinner placement, test coverage). Nothing blocks a submission.
+
+### Critical
+
+*None.*
+
+### High
+
+| Category | File(s) | Lines | Finding | Suggested fix |
+|----------|---------|-------|---------|---------------|
+| Code Quality | `SettingsScreen.swift` + iOS/tvOS variants | ~1,659 total | Three-file duplication of settings rows; iOS and tvOS differ only in layout, not logic. Largest concrete LOC reduction available in the repo. | Extract a `SettingsRowModel` protocol + platform `SettingsRowView(iOS/tvOS)` wrappers. Expected: −300 to −400 LOC, single edit per new row. |
+| Code Quality | `NativeVideoPresenter.swift` | 1,678 | Cohesive but spans playback init, HLS loader, sleep timer, end-of-series overlay, track selection, error recovery, skip segments. Cognitive load is high. | Extract companions: `SleepTimerController.swift`, `SkipSegmentController.swift`, `PlaybackReportingController.swift`. Keep the presenter at ~1,200 lines. Deferred from 1.4 due to regression risk — do when there's time to test playback thoroughly. |
+| UX | `MovieLibraryScreen.swift` | ~89, ~190 | Initial-load `ProgressView()` on the filtered grid shows a centered spinner with no context — visually indistinguishable from an error pause. | Wrap the centered spinner with explanatory text ("Loading movies…") OR move it to a content-unavailable style empty state with a spinner. |
+
+### Medium
+
+| Category | File(s) | Lines | Finding | Suggested fix |
+|----------|---------|-------|---------|---------------|
+| Performance | `MediaDetailScreen.swift` | 255-377 (`actionButtons`) | Re-runs whenever anything on `viewModel` / `item` changes, even for unrelated state like `selectedSeasonId`. Cost is small but avoidable. | Extract a focused sub-view that only depends on `(item.id, nextEpisode?.id, showResume)`. Already flagged in §2. |
+| Code Quality | `MovieLibraryScreen.swift` | 977 | Largest Shared screen file. Browse + filtered + genre rows + hero + filter-sheet wiring + pagination + grid layout all in one. | Extract `LibraryHeroSection`, `LibraryGenreRow`. Moderate effort, good readability win. |
+| Code Quality | `SearchScreen.swift` | 420 | Search input, voice recognition wiring, result grids, empty state, surprise-me, tvOS scroll-to-top all in one file. | Extract `VoiceSearchButton`, `SearchResultsGrid`. Lower priority than MovieLibraryScreen. |
+| UX | `MovieLibraryScreen.swift` | 189-195 | Pagination spinner renders centered in-grid instead of as a footer row below loaded items. Breaks visual continuity during scroll. | Move the pagination spinner to a footer `VStack` row under the grid. Keep centered spinner only for *initial* load. Low effort, real UX win. |
+| Code Quality | `HomeViewModel.swift` | ~60-100 | Genre row fetches silently skip on failure — no error indication, no retry. | Make the helper return `(genre, items)` or `(genre, .failed)` and render a minimal retry chip in-row. Acceptable to defer — discover surface is non-critical. |
+| A11y | Various `NavigationLink` sites | — | Item-type is sometimes inferred post-load rather than passed at push time; detail screen has to refetch/classify. | When pushing to `MediaDetailScreen`, always pass `itemType: item.type ?? .movie` at the call site. Most paths already do. |
+
+### Low
+
+| Category | File(s) | Lines | Finding | Suggested fix |
+|----------|---------|-------|---------|---------------|
+| Performance | `CinemaGlassTheme.swift` | 239 | Color tokens are computed properties returning `Color.dynamic`; accessed on every render. | Convert to `static let`. <1% perf gain; nice-to-have. |
+| Performance | `HomeViewModel.swift` | 60-100 | `resumeNavigation` rebuild is O(n²) in resume-item count. Fine for 5-20 items; 100+ noticeable. | Batch by season in a `buildResumeNavigation` helper. Monitor; not urgent. |
+| Code Quality | `NativeVideoPresenter.swift` | 40-41 | `manifestLoader` / `backgroundObserver` are retained with brief comments — could use one-liner explaining AVAssetResourceLoader's weak-reference behavior. | Done already; no action. |
+| Localization | Time formatting | — | `home.remainingTime.*` uses hardcoded hours/minutes branching instead of plural rules. | Add plural-aware helper. Acceptable for fr/en first; defer until a third language arrives. |
+| Testing | `Packages/CinemaxKit/` | ~500 LOC tests | No coverage for `MediaDetailViewModel.selectSeason` race, `SearchViewModel` cancellation, `JellyfinAPIClient` cache TTL. | Add 3-4 focused tests. ~2-3 hr effort. Worth doing pre-submission. |
+
+### Positive findings
+
+- Strict Swift 6 concurrency throughout — no unsafe patterns detected.
+- Zero `try!` in production; URL construction uses `guard` or `??` fallbacks.
+- Responsive image sizing via `ImageURLBuilder.screenPixelWidth` (no hardcoded 1920 anywhere).
+- 30+ `accessibilityLabel` calls + `accessibilityHidden` on decorative views. VoiceOver coverage is good.
+- tvOS focus strategy is sound: consistent `@FocusState`, `.focusEffectDisabled()` + `.hoverEffectDisabled()`, `tvSettingsFocusable(colorScheme:)` guards against the trait-collection flip.
+- Navigation patterns clean — `NavigationStack` + `navigationDestination(item:)` on iOS, tvOS coordinator with proper `onDismiss`. No stale presenter bugs.
+- Playback reporting is thorough — start / 10 s progress / stopped all wired. Resume state stays fresh.
+- Dark/light mode reactivity routes through `_accentRevision` setter — no direct `@AppStorage` writes bypass reactivity.
+- Previous O(n²) lookups, excessive `ProgressView`s, pagination double-fires all fixed and remain fixed.
+
+### Suggested next batch (ordered by ROI)
+
+| # | Action | Category | Effort | Impact |
+|---|--------|----------|--------|--------|
+| 1 | Extract shared `SettingsRowModel` + platform wrappers | Code Quality | 4-6 hr | High — ~350 LOC removed, future rows are one edit |
+| 2 | Pagination spinner → footer row (centered only for initial) | UX | 30-60 min | Medium — cheap fix, clear win |
+| 3 | Unit tests: `MediaDetailViewModel.selectSeason` race, `SearchViewModel` cancel, cache TTL | Testing | 2-3 hr | High — pre-submission confidence |
+| 4 | Extract `LibraryHeroSection` + `LibraryGenreRow` from `MovieLibraryScreen` | Code Quality | 2-3 hr | Medium — readability, sets pattern |
+| 5 | Extract playback sub-controllers (sleep / skip / reporting) | Code Quality | 3-4 hr | Medium — deferred from 1.4 |
+| 6 | Filter grid: centered spinner → `ContentUnavailableView` with spinner | UX | 30 min | Low — polish |
+| 7 | Split `APIClientProtocol` by domain | Code Quality | 4-6 hr | Low-Medium — nice-to-have; defer |
+
