@@ -70,6 +70,14 @@ final class NativeVideoPresenter {
     /// Retained delegate — AVPlayerViewControllerDelegate is used on tvOS to detect
     /// modal dismissal (Menu button). On iOS we use the PlayerHostingVC wrapper instead.
     private var dismissDelegate: TVDismissDelegate?
+    #else
+    /// Retained delegate — used on iOS for Picture-in-Picture lifecycle
+    /// (modal dismiss is still detected via PlayerHostingVC).
+    private var iosPlayerDelegate: IOSPlayerDelegate?
+    fileprivate var isInPictureInPicture = false
+    /// Set by the restore handler so `didStopPictureInPicture` can distinguish
+    /// "user tapped restore → re-present" from "user closed PiP → cleanup".
+    fileprivate var didRestoreFromPiP = false
     #endif
 
     init(
@@ -152,6 +160,11 @@ final class NativeVideoPresenter {
         #if os(iOS)
         // Suppress native text recognition ("Show Text") — iOS only API.
         vc.allowsVideoFrameAnalysis = false
+        // PiP — defaults to true since iOS 14 but set explicitly to make the
+        // intent obvious. `canStartPictureInPictureAutomaticallyFromInline`
+        // triggers PiP when the user backgrounds the app mid-playback.
+        vc.allowsPictureInPicturePlayback = true
+        vc.canStartPictureInPictureAutomaticallyFromInline = true
         #endif
         self.playerVC = vc
         setupRemoteCommands()
@@ -174,14 +187,14 @@ final class NativeVideoPresenter {
         topVC.present(vc, animated: true)
         #else
         // iOS: wrap in PlayerHostingVC for dismiss detection via viewWillDisappear.
-        let hostingVC = PlayerHostingVC(playerVC: vc)
-        hostingVC.modalPresentationStyle = .fullScreen
-        hostingVC.onDismissed = { [weak self] in
-            self?.playbackReporter.reportStop()
-            self?.cleanup()
-            self?.onDismiss()
-        }
-        topVC.present(hostingVC, animated: true)
+        // The same wrapper is also reused by `restoreFromPiP` when the user taps
+        // the PiP overlay's restore button.
+        let pipDelegate = IOSPlayerDelegate()
+        pipDelegate.presenter = self
+        self.iosPlayerDelegate = pipDelegate
+        vc.delegate = pipDelegate
+
+        topVC.present(makeIOSHostingVC(for: vc), animated: true)
         #endif
 
         // Create the player item and hand it to the player.
@@ -1085,6 +1098,10 @@ final class NativeVideoPresenter {
         if let vc = playerVC { applyTransportBarItems([], to: vc) }
         #if os(tvOS)
         dismissDelegate = nil
+        #else
+        iosPlayerDelegate = nil
+        isInPictureInPicture = false
+        didRestoreFromPiP = false
         #endif
         cleanupPlayer()
         playerVC = nil
@@ -1106,10 +1123,101 @@ final class NativeVideoPresenter {
     }
 
     #else
+    // MARK: - Picture-in-Picture (iOS)
+
+    /// Builds the modal host that wraps `AVPlayerViewController`. Used both for
+    /// initial presentation and for restoring after Picture-in-Picture.
+    private func makeIOSHostingVC(for vc: AVPlayerViewController) -> PlayerHostingVC {
+        let hostingVC = PlayerHostingVC(playerVC: vc)
+        hostingVC.modalPresentationStyle = .fullScreen
+        hostingVC.onDismissed = { [weak self] in
+            self?.playbackReporter.reportStop()
+            self?.cleanup()
+            self?.onDismiss()
+        }
+        // PiP auto-dismisses the modal; suppress the cleanup path while it does.
+        hostingVC.shouldFireOnDismiss = { [weak self] in
+            !(self?.isInPictureInPicture ?? false)
+        }
+        return hostingVC
+    }
+
+    /// Re-present the player when the user taps the PiP overlay's restore button.
+    /// AVKit removed `playerVC` from its previous host on PiP start; addChild in
+    /// the new host adopts it.
+    fileprivate func restoreFromPiP(completion: @escaping (Bool) -> Void) {
+        guard let vc = playerVC,
+              let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first,
+              let rootVC = windowScene.windows.first?.rootViewController else {
+            completion(false); return
+        }
+        // If the modal somehow stayed up (shouldn't happen with default
+        // auto-dismiss), there's nothing to re-present.
+        guard vc.presentingViewController == nil else {
+            completion(true); return
+        }
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController { topVC = presented }
+        topVC.present(makeIOSHostingVC(for: vc), animated: true) {
+            completion(true)
+        }
+    }
+
+    /// Handles the AVPlayerViewController PiP lifecycle. Modal dismiss detection
+    /// stays with `PlayerHostingVC` — this delegate only flips `isInPictureInPicture`
+    /// and runs cleanup when the user closes PiP without restoring.
+    /// AVKit invokes these delegate methods on the main thread, so
+    /// `MainActor.assumeIsolated` is safe and avoids hopping a non-Sendable
+    /// `completionHandler` through a Task. The handler is wrapped in an
+    /// `@unchecked Sendable` box so Swift 6's region analysis allows the
+    /// capture (the call site is still synchronous on the main thread).
+    private struct PiPRestoreHandlerBox: @unchecked Sendable {
+        let call: (Bool) -> Void
+    }
+
+    private final class IOSPlayerDelegate: NSObject, AVPlayerViewControllerDelegate, @unchecked Sendable {
+        weak var presenter: NativeVideoPresenter?
+
+        func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+            MainActor.assumeIsolated {
+                presenter?.isInPictureInPicture = true
+                presenter?.didRestoreFromPiP = false
+            }
+        }
+
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+        ) {
+            let handler = PiPRestoreHandlerBox(call: completionHandler)
+            MainActor.assumeIsolated {
+                guard let presenter else { handler.call(false); return }
+                presenter.didRestoreFromPiP = true
+                presenter.restoreFromPiP(completion: handler.call)
+            }
+        }
+
+        func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
+            MainActor.assumeIsolated {
+                guard let presenter else { return }
+                presenter.isInPictureInPicture = false
+                if !presenter.didRestoreFromPiP {
+                    presenter.playbackReporter.reportStop()
+                    presenter.cleanup()
+                    presenter.onDismiss()
+                }
+            }
+        }
+    }
+
     /// Wraps AVPlayerViewController on iOS so we can detect modal dismissal
     /// via viewWillDisappear(isBeingDismissed:), which fires when the user taps Done/X.
     private class PlayerHostingVC: UIViewController, @unchecked Sendable {
         var onDismissed: (@MainActor () -> Void)?
+        /// Returns false to suppress `onDismissed` for this dismiss event — used
+        /// when PiP triggered the modal dismissal so the player keeps playing.
+        var shouldFireOnDismiss: (@MainActor () -> Bool)?
         private let playerVC: AVPlayerViewController
 
         init(playerVC: AVPlayerViewController) {
@@ -1120,6 +1228,13 @@ final class NativeVideoPresenter {
 
         override func viewDidLoad() {
             super.viewDidLoad()
+            // On a PiP restore the playerVC may still reference its old (deallocated)
+            // parent slot — detach defensively before addChild.
+            if playerVC.parent != nil {
+                playerVC.willMove(toParent: nil)
+                playerVC.view.removeFromSuperview()
+                playerVC.removeFromParent()
+            }
             addChild(playerVC)
             playerVC.view.frame = view.bounds
             playerVC.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -1129,9 +1244,11 @@ final class NativeVideoPresenter {
 
         override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
-            if isBeingDismissed {
-                let cb = onDismissed
-                Task { @MainActor in cb?() }
+            guard isBeingDismissed else { return }
+            let shouldFire = shouldFireOnDismiss
+            let cb = onDismissed
+            Task { @MainActor in
+                if shouldFire?() ?? true { cb?() }
             }
         }
     }
