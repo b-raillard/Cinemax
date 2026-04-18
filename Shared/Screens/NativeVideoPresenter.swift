@@ -22,9 +22,12 @@ final class NativeVideoPresenter {
     private var hasRetriedDirectURL = false
     private var playbackInfo: PlaybackInfo?
 
-    private let itemId: String
+    // `itemId` / `startTime` are mutable so episode navigation can rebind them;
+    // PlaybackReporter.Context reads `self.itemId` each tick, and reportStart
+    // uses `self.startTime` to position the new episode.
+    private var itemId: String
     private let title: String
-    private let startTime: Double?
+    private var startTime: Double?
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
@@ -448,6 +451,12 @@ final class NativeVideoPresenter {
             cleanupPlayer()
             self.hasRetriedDirectURL = false
             self.playbackInfo = info
+            // Rebind identity so PlaybackReporter (via its context closure) and
+            // reportStart below operate on the new episode, not the initial one.
+            // New episodes always start at 0 — the resume `startTime` only applies
+            // to the first item presented.
+            self.itemId = ep.id
+            self.startTime = nil
             self.previousEpisode = prev
             self.nextEpisode = next
             self.audioTracks = info.audioTracks
