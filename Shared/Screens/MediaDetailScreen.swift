@@ -252,128 +252,66 @@ struct MediaDetailScreen: View {
 
     // MARK: - Action Buttons
 
+    /// Resolves the data `PlayActionButtonsSection` needs. Kept out of the
+    /// sub-view so the sub-view's dependencies stay narrow (and its
+    /// `Equatable` short-circuit can skip unrelated view-model updates).
     private func actionButtons(_ item: BaseItemDto) -> some View {
         let isSeries = viewModel.resolvedType == .series
         let nextEp: BaseItemDto? = isSeries ? viewModel.nextUpEpisode : nil
 
-        // Determine resume position ticks and total ticks
-        let posTicks: Int = {
-            if !isSeries { return item.userData?.playbackPositionTicks ?? 0 }
-            return nextEp?.userData?.playbackPositionTicks ?? 0
-        }()
-        let totalTicks: Int = {
-            if !isSeries { return item.runTimeTicks ?? 0 }
-            return nextEp?.runTimeTicks ?? 0
-        }()
+        let posTicks: Int = isSeries
+            ? (nextEp?.userData?.playbackPositionTicks ?? 0)
+            : (item.userData?.playbackPositionTicks ?? 0)
+        let totalTicks: Int = isSeries
+            ? (nextEp?.runTimeTicks ?? 0)
+            : (item.runTimeTicks ?? 0)
         let isPlayed: Bool = isSeries
             ? (nextEp?.userData?.isPlayed ?? false)
             : (item.userData?.isPlayed ?? false)
 
         let showResume = posTicks > 0 && !isPlayed && totalTicks > 0
         let progress: Double = showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0
-        let remainingTicks = max(0, totalTicks - posTicks)
-        let remainingMinutes = remainingTicks.jellyfinMinutes
+        let remainingMinutes = max(0, totalTicks - posTicks).jellyfinMinutes
         let startSeconds: Double? = showResume ? posTicks.jellyfinSeconds : nil
 
         let playItemId: String = nextEp?.id ?? item.id ?? ""
         let playTitle: String = nextEp?.name ?? item.name ?? ""
 
-        return VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-            // Episode label for series next-up
-            if let ep = nextEp {
-                let parts: [String] = [
-                    ep.indexNumber.map { loc.localized("detail.episode", $0) },
-                    ep.name
-                ].compactMap { $0 }
-                if !parts.isEmpty {
-                    Text(parts.joined(separator: " · "))
-                        .font(CinemaFont.label(.medium))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .lineLimit(1)
-                }
-            }
+        let nextEpisodeLabel: String? = {
+            guard let ep = nextEp else { return nil }
+            let parts: [String] = [
+                ep.indexNumber.map { loc.localized("detail.episode", $0) },
+                ep.name
+            ].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }()
 
-            // Progress bar + remaining time when resuming
-            if showResume {
-                ProgressBarView(progress: progress)
-                    .frame(width: playButtonWidth)
+        let remainingText: String? = showResume ? loc.remainingTime(minutes: remainingMinutes) : nil
 
-                Text(remainingMinutes >= 60
-                    ? loc.localized("home.remainingTime.hours", remainingMinutes / 60, remainingMinutes % 60)
-                    : loc.localized("home.remainingTime.minutes", remainingMinutes))
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-            }
-
-            // Play button — include episode navigation when playing a series episode
-            let epNav = nextEp.flatMap { ep -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)? in
-                guard let id = ep.id else { return nil }
-                return episodeNavigation(for: id)
-            }
-            if !playItemId.isEmpty {
-                PlayLink(
-                    itemId: playItemId, title: playTitle, startTime: startSeconds,
-                    previousEpisode: epNav?.previous, nextEpisode: epNav?.next,
-                    episodeNavigator: epNav?.navigator
-                ) {
-                    HStack(spacing: CinemaSpacing.spacing2) {
-                        Text(loc.localized("detail.play"))
-                            .font(.system(size: buttonFontSize, weight: .bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                        Image(systemName: "play.fill")
-                            .font(.system(size: buttonFontSize - 2, weight: .bold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, buttonVerticalPadding)
-                    .padding(.horizontal, CinemaSpacing.spacing4)
-                    #if os(iOS)
-                    .background(themeManager.accentContainer)
-                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                    #endif
-                }
-                #if os(tvOS)
-                .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
-                #else
-                .buttonStyle(.plain)
-                #endif
-                .frame(width: playButtonWidth)
-
-                // Secondary — Play from beginning (only when resuming)
-                if showResume {
-                    PlayLink(
-                        itemId: playItemId, title: playTitle, startTime: nil,
-                        previousEpisode: epNav?.previous, nextEpisode: epNav?.next,
-                        episodeNavigator: epNav?.navigator
-                    ) {
-                        HStack(spacing: CinemaSpacing.spacing2) {
-                            Image(systemName: "backward.end.fill")
-                                .font(.system(size: buttonFontSize - 2, weight: .bold))
-                            Text(loc.localized("detail.playFromBeginning"))
-                                .font(.system(size: buttonFontSize, weight: .bold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        .foregroundStyle(CinemaColor.onSurface)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, buttonVerticalPadding)
-                        .padding(.horizontal, CinemaSpacing.spacing4)
-                        #if os(iOS)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                        #endif
-                    }
-                    #if os(tvOS)
-                    .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-                    #else
-                    .buttonStyle(.plain)
-                    #endif
-                    .frame(width: playButtonWidth)
-                }
-            }
+        let epNav = nextEp.flatMap { ep -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)? in
+            guard let id = ep.id else { return nil }
+            return episodeNavigation(for: id)
         }
-        .padding(.horizontal, contentPadding)
+
+        return PlayActionButtonsSection(
+            playItemId: playItemId,
+            playTitle: playTitle,
+            nextEpisodeLabel: nextEpisodeLabel,
+            startSeconds: startSeconds,
+            showResume: showResume,
+            progress: progress,
+            remainingText: remainingText,
+            epPrev: epNav?.previous,
+            epNext: epNav?.next,
+            epNavigator: epNav?.navigator,
+            playLabel: loc.localized("detail.play"),
+            playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
+            buttonFontSize: buttonFontSize,
+            buttonVerticalPadding: buttonVerticalPadding,
+            playButtonWidth: playButtonWidth,
+            contentPadding: contentPadding
+        )
+        .equatable()
     }
 
     // MARK: - Cast
@@ -685,9 +623,7 @@ struct MediaDetailScreen: View {
                position > 0, total > position {
                 let remainingMinutes = (total - position).jellyfinMinutes
                 if remainingMinutes <= 0 { return nil }
-                return remainingMinutes > 60
-                    ? loc.localized("home.remainingTime.hours", remainingMinutes / 60, remainingMinutes % 60)
-                    : loc.localized("home.remainingTime.minutes", remainingMinutes)
+                return loc.remainingTime(minutes: remainingMinutes)
             }
             if let runtime = episode.runTimeTicks, runtime > 0 {
                 return loc.localized("detail.runtime.min", runtime.jellyfinMinutes)
@@ -921,6 +857,142 @@ private struct EpisodeOverviewSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         #endif
+    }
+}
+
+// MARK: - Play Action Buttons
+
+/// Progress bar + "Play" / "Play from beginning" buttons for the detail screen.
+/// Extracted as an Equatable sub-view so `SeasonId`/`episodes` changes on the
+/// parent view model don't re-evaluate the play-button tree (the only inputs
+/// that actually change what this renders are the resume state and the next
+/// episode identity).
+private struct PlayActionButtonsSection: View, Equatable {
+    let playItemId: String
+    let playTitle: String
+    let nextEpisodeLabel: String?
+    let startSeconds: Double?
+    let showResume: Bool
+    let progress: Double
+    let remainingText: String?
+    let epPrev: EpisodeRef?
+    let epNext: EpisodeRef?
+    let epNavigator: EpisodeNavigator?
+
+    let playLabel: String
+    let playFromBeginningLabel: String
+
+    let buttonFontSize: CGFloat
+    let buttonVerticalPadding: CGFloat
+    let playButtonWidth: CGFloat
+    let contentPadding: CGFloat
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    // Equatable ignores the navigator closure — fresh closures that carry the
+    // same prev/next identity are treated as equal so the sub-view doesn't
+    // thrash when the parent rebuilds a functionally-identical navigator.
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.playItemId == rhs.playItemId
+            && lhs.playTitle == rhs.playTitle
+            && lhs.nextEpisodeLabel == rhs.nextEpisodeLabel
+            && lhs.startSeconds == rhs.startSeconds
+            && lhs.showResume == rhs.showResume
+            && lhs.progress == rhs.progress
+            && lhs.remainingText == rhs.remainingText
+            && lhs.epPrev?.id == rhs.epPrev?.id
+            && lhs.epNext?.id == rhs.epNext?.id
+            && lhs.playLabel == rhs.playLabel
+            && lhs.playFromBeginningLabel == rhs.playFromBeginningLabel
+            && lhs.buttonFontSize == rhs.buttonFontSize
+            && lhs.buttonVerticalPadding == rhs.buttonVerticalPadding
+            && lhs.playButtonWidth == rhs.playButtonWidth
+            && lhs.contentPadding == rhs.contentPadding
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            if let label = nextEpisodeLabel {
+                Text(label)
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .lineLimit(1)
+            }
+
+            if showResume {
+                ProgressBarView(progress: progress)
+                    .frame(width: playButtonWidth)
+
+                if let remainingText {
+                    Text(remainingText)
+                        .font(CinemaFont.label(.medium))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                }
+            }
+
+            if !playItemId.isEmpty {
+                PlayLink(
+                    itemId: playItemId, title: playTitle, startTime: startSeconds,
+                    previousEpisode: epPrev, nextEpisode: epNext,
+                    episodeNavigator: epNavigator
+                ) {
+                    HStack(spacing: CinemaSpacing.spacing2) {
+                        Text(playLabel)
+                            .font(.system(size: buttonFontSize, weight: .bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: buttonFontSize - 2, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, buttonVerticalPadding)
+                    .padding(.horizontal, CinemaSpacing.spacing4)
+                    #if os(iOS)
+                    .background(themeManager.accentContainer)
+                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                    #endif
+                }
+                #if os(tvOS)
+                .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
+                #else
+                .buttonStyle(.plain)
+                #endif
+                .frame(width: playButtonWidth)
+
+                if showResume {
+                    PlayLink(
+                        itemId: playItemId, title: playTitle, startTime: nil,
+                        previousEpisode: epPrev, nextEpisode: epNext,
+                        episodeNavigator: epNavigator
+                    ) {
+                        HStack(spacing: CinemaSpacing.spacing2) {
+                            Image(systemName: "backward.end.fill")
+                                .font(.system(size: buttonFontSize - 2, weight: .bold))
+                            Text(playFromBeginningLabel)
+                                .font(.system(size: buttonFontSize, weight: .bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .foregroundStyle(CinemaColor.onSurface)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, buttonVerticalPadding)
+                        .padding(.horizontal, CinemaSpacing.spacing4)
+                        #if os(iOS)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                        #endif
+                    }
+                    #if os(tvOS)
+                    .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+                    #else
+                    .buttonStyle(.plain)
+                    #endif
+                    .frame(width: playButtonWidth)
+                }
+            }
+        }
+        .padding(.horizontal, contentPadding)
     }
 }
 

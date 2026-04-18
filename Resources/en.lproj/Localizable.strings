@@ -34,6 +34,7 @@
 "home.recentlyAdded" = "Recently Added";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
+"home.genreRow.failed" = "Couldn't load";
 
 // MARK: - Movie Library
 

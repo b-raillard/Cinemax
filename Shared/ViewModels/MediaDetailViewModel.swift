@@ -120,16 +120,33 @@ final class MediaDetailViewModel {
     }
 
     /// Rebuilds the precomputed episode navigation maps from current episode lists.
+    /// Precomputes the refs + id→index pair once per list so per-episode
+    /// population is O(1) instead of re-running compactMap+firstIndex inside
+    /// `buildEpisodeNavigation` on every call.
     private func rebuildNavigationMaps(apiClient: any APIClientProtocol, userId: String) {
-        episodeNavigationMap = [:]
-        for episode in episodes {
-            guard let id = episode.id else { continue }
-            episodeNavigationMap[id] = buildEpisodeNavigation(for: id, in: episodes, apiClient: apiClient, userId: userId)
+        episodeNavigationMap = Self.makeNavigationMap(
+            from: episodes, apiClient: apiClient, userId: userId
+        )
+        nextUpNavigationMap = Self.makeNavigationMap(
+            from: nextUpEpisodes, apiClient: apiClient, userId: userId
+        )
+    }
+
+    private static func makeNavigationMap(
+        from episodes: [BaseItemDto],
+        apiClient: any APIClientProtocol,
+        userId: String
+    ) -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
+        guard !episodes.isEmpty else { return [:] }
+        let (refs, indexByID) = precomputeEpisodeRefs(episodes)
+        var map: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
+        map.reserveCapacity(refs.count)
+        for ref in refs {
+            map[ref.id] = buildEpisodeNavigation(
+                for: ref.id, refs: refs, indexByID: indexByID,
+                apiClient: apiClient, userId: userId
+            )
         }
-        nextUpNavigationMap = [:]
-        for episode in nextUpEpisodes {
-            guard let id = episode.id else { continue }
-            nextUpNavigationMap[id] = buildEpisodeNavigation(for: id, in: nextUpEpisodes, apiClient: apiClient, userId: userId)
-        }
+        return map
     }
 }

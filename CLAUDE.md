@@ -32,9 +32,9 @@ The project's deployment targets are iOS 18 and tvOS 26. Avoid pre-iOS-15 APIs t
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
-**Playback reporting**: `PlaybackAPI` (a domain sub-protocol of `APIClientProtocol`) defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. `NativeVideoPresenter` (both platforms) calls these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale. On episode navigation the presenter rebinds `itemId` / `startTime` (both `var`, startTime → `nil`) so the new episode reports under its own identity — `PlaybackReporter.Context` reads `self.itemId` per call through its `[weak self]` closure, so reporter internals stay stable.
-
 **API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): the umbrella `APIClientProtocol` is a typealias for `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI`. View models that touch multiple domains depend on `APIClientProtocol`; leaf controllers narrow to the slice they need (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`). `JellyfinAPIClient` conforms to all four sub-protocols; `MockAPIClient` declares conformance to `APIClientProtocol` and inherits all methods transparently.
+
+**Swift 6 `nonisolated` escape hatches**: two patterns recur when the compiler flags non-Sendable data crossing a `@MainActor` boundary. (1) A `View, Equatable` sub-type defined inside an `@MainActor` screen needs `nonisolated static func ==` because `Equatable` is not main-actor-isolated — see `PlayActionButtonsSection` in `MediaDetailScreen.swift`. (2) A `@MainActor` class's `static func` that returns non-Sendable types (e.g. `[BaseItemDto]`) into a `TaskGroup.addTask @Sendable` closure needs `nonisolated private static func …` — see `HomeViewModel.fetchGenreItems`. Both are safe when the body only reads its parameters.
 
 ## Project Structure
 
@@ -226,8 +226,8 @@ Settings → Interface → Debug holds testing toggles. Always visible (not gate
 - tvOS: overview text uses `.focusable()` for focus-driven scrolling past non-interactive content
 - **tvOS detail refresh**: `VideoPlayerCoordinator` has `lastDismissedAt: Date?`; updated via `onDismiss` callback in `NativeVideoPresenter` (triggered by `TVDismissDelegate`); `MediaDetailScreen` observes `.onChange(of: coordinator.lastDismissedAt)` to reload after the player is dismissed (iOS reloads automatically via `.task` on NavigationLink pop)
 
-**Resume / next-up logic in `actionButtons`**:
-- Movie with `playbackPositionTicks > 0` and not `isPlayed`: shows progress bar (accent fill, `playButtonWidth` wide) + remaining time text (`home.remainingTime.*` keys) + "Lecture" button that resumes at saved position via `PlayLink(startTime:)`
+**Resume / next-up logic in `actionButtons`**: the parent `actionButtons(_:)` method resolves data and delegates rendering to `PlayActionButtonsSection: View, Equatable` (defined at the bottom of `MediaDetailScreen.swift`). Custom `nonisolated static func ==` compares resume state + prev/next episode identity and explicitly ignores the `epNavigator` closure — so `.equatable()` short-circuits re-renders when unrelated view-model state (e.g. `selectedSeasonId`) changes but the play buttons' inputs haven't.
+- Movie with `playbackPositionTicks > 0` and not `isPlayed`: shows progress bar (accent fill, `playButtonWidth` wide) + `loc.remainingTime(minutes:)` text + "Lecture" button that resumes at saved position via `PlayLink(startTime:)`
 - Series: uses `viewModel.nextUpEpisode` (from `getNextUp`). In-progress episode → progress bar + remaining time + resume button. Finished/next episode → episode label + regular play button. Falls back to series-level play if no next-up
 - **Play from beginning**: when `showResume` is true, a secondary ghost-styled `PlayLink` button (`detail.playFromBeginning`, SF Symbol `backward.end.fill`) is rendered under the resume button with `startTime: nil`. Only shown when a resume position exists — otherwise the single primary button already starts from 0
 - `userData.playbackPositionTicks` and `runTimeTicks` are both `Int?` (not `Int64`); `isPlayed` is `userData.isPlayed: Bool?`
@@ -252,7 +252,7 @@ Settings → Interface → Debug holds testing toggles. Always visible (not gate
 **Studio / Network label** (`studioLine`): below the overview. Up to 2 names from `item.studios`. Label reads "STUDIO" for movies, "NETWORK" for series. Returns `EmptyView` when the array is empty.
 
 **Episode metadata line** (`episodeMetadataLine`): shared helper used by both the tvOS `episodeRow` and iOS `iOSEpisodeCard`. Combines with ` • ` separator:
-- If in-progress (not `isPlayed`, `playbackPositionTicks > 0`, remaining > 0): "Xm remaining" via `home.remainingTime.*` keys
+- If in-progress (not `isPlayed`, `playbackPositionTicks > 0`, remaining > 0): "Xm remaining" via `loc.remainingTime(minutes:)`
 - Else if `runTimeTicks > 0`: total runtime via `detail.runtime.min`
 - Plus `premiereDate` formatted as `.dateTime.month(.abbreviated).day().year()` when present
 
@@ -260,12 +260,12 @@ Settings → Interface → Debug holds testing toggles. Always visible (not gate
 
 - `HomeViewModel` loads `resumeItems` (in-progress items) and `latestItems` in parallel via `TaskGroup`
 - `heroItem = resumeItems.first ?? latestItems.first`
-- **Resume navigation**: after the initial load, for each episode in `resumeItems`, the season's episode list is fetched (grouped by `seasonID` to avoid duplicate requests). Results are stored in `resumeNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)]` via `buildEpisodeNavigation`
+- **Resume navigation**: after the initial load, for each episode in `resumeItems`, the season's episode list is fetched (grouped by `seasonID` to avoid duplicate requests). Per season, `precomputeEpisodeRefs(_:)` (in `PlayLink.swift`) builds the `(refs, indexByID)` pair *once*, then each episode calls the O(1) `buildEpisodeNavigation(for:refs:indexByID:apiClient:userId:)` overload. Results land in `resumeNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)]`. `MediaDetailViewModel.makeNavigationMap(from:)` uses the same helper.
 - Both the hero `PlayLink` and each "Reprendre" card `PlayLink` pass:
   - `startTime` — from `playbackPositionTicks / 10_000_000` (nil for items with no progress)
   - `previousEpisode`, `nextEpisode`, `episodeNavigator` — looked up from `resumeNavigation[id]` (nil for movies)
 
-**Genre rows**: `HomeViewModel.genreRows: [(genre, items)]` — after loading resume/latest, fetches all genres via `getGenres(userId:includeItemTypes: [.movie, .series])`, shuffles and picks 4. Each genre's items are fetched in parallel via `TaskGroup` using `getItems(sortBy: [.random], genres: [genre], limit: 10, includeItemTypes: [.movie, .series])`. Empty genres are skipped; the 4 picks' order is preserved. Rendered as `ContentRow`s using `PosterCard` inside `NavigationLink` to `MediaDetailScreen`.
+**Genre rows**: `HomeViewModel.genreRows: [GenreRow]` where `GenreRow.state` is `.items([BaseItemDto])` or `.failed`. After loading resume/latest, fetches all genres via `getGenres(userId:includeItemTypes: [.movie, .series])`, shuffles and picks 4. Each genre's items are fetched in parallel via `TaskGroup` using `getItems(sortBy: [.random], genres: [genre], limit: 10, includeItemTypes: [.movie, .series])`. Empty-success rows are dropped; *failures* become `.failed` so the UI can render a retry capsule (wired to `HomeViewModel.retryGenre(_:using:)`, updates the row in place) — transient server errors don't just make content disappear. Non-failed rows render as `ContentRow` with `PosterCard` inside `NavigationLink` to `MediaDetailScreen`.
 
 **Watching Now row**: `HomeViewModel.activeSessions` — fetched via `getActiveSessions(activeWithinSeconds: 60)`, filtered to drop the current user and sessions with no `nowPlayingItem`. Rendered with `WideCard` + a red "LIVE" pill overlay, navigates to the item's `MediaDetailScreen` on tap.
 
@@ -288,7 +288,8 @@ Hero is never gated — always renders when `heroItem` is non-nil.
 ## SearchScreen
 
 - `SearchViewModel.search(using:)` debounces by 400 ms then calls `searchItems(userId:searchTerm:limit:30)`
-- iOS: microphone button launches `SpeechRecognitionHelper` (SFSpeechRecognizer + AVAudioEngine wrapper) for voice search
+- **Decomposition**: `SearchScreen.swift` owns the screen shell; two file-private structs live at the bottom — `VoiceSearchButton` (iOS-only, owns its own `isPulsing` state) and `SearchResultsGrid` + `SearchResultCard` (grid + poster card). Keeps the screen struct readable and lets SwiftUI skip the grid diff when parent state changes.
+- iOS: microphone (`VoiceSearchButton`) launches `SpeechRecognitionHelper` (SFSpeechRecognizer + AVAudioEngine wrapper) for voice search
 - **Surprise Me**: two pills ("Surprise movie" / "Surprise series") in the search empty state. Backed by `fetchRandomMovie(using:)` / `fetchRandomSeries(using:)` which call `getItems(includeItemTypes: [.movie or .series], sortBy: [.random], limit: 1)`. Two separate methods (not one parameterized) because Swift 6 strict concurrency flags a `[BaseItemKind]` array built from a function parameter as non-Sendable when crossing to the API actor — literal `[.movie]` / `[.series]` arrays work fine. On success pushes `MediaDetailScreen` via `navigationDestination(item:)`; on empty library emits an error toast
 - **tvOS scroll-to-top**: wrapped in `ScrollViewReader` with a sentinel, `.onAppear` scrolls to top so the system tab bar resurfaces after a deep-nav pop
 
@@ -298,6 +299,7 @@ Hero is never gated — always renders when `heroItem` is non-nil.
 - All strings via `loc.localized("key")` or `loc.localized("key", args...)` — never hardcoded
 - Strings at `Resources/{lang}.lproj/Localizable.strings`
 - Reactivity: `@ObservationIgnored` + `@AppStorage` + `_revision` counter pattern (same as `ThemeManager`)
+- Plural-aware helpers live on `LocalizationManager` itself (e.g. `remainingTime(minutes:)` picks `home.remainingTime.hours` vs `.minutes`). Use the helper at every call site rather than branching inline.
 
 ## Toasts
 
