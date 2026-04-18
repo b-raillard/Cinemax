@@ -612,3 +612,60 @@ Same principle applies to `tvActionRow` — three action buttons (Refresh Catalo
 
 **App Store submission (user-task)**
 - Distribution signing, demo Jellyfin server, metadata + screenshots
+
+---
+
+## 17. Audit §13 #5 — NativeVideoPresenter sub-controllers (2026-04-18)
+
+### Goal
+
+Break up the 1,678-line `NativeVideoPresenter.swift` — a single `@MainActor` class that mixed playback-reporting, skip-intro/credits UI, sleep timer, chapters, end-of-series overlay, error alerts, track menus, and episode navigation. Extract the three seams flagged in §13 (reporting / skip / sleep) while preserving behavior.
+
+### Changes
+
+New `Shared/Screens/VideoPlayer/` folder with three `@MainActor` sub-controllers:
+
+| File | Lines | Owns |
+|------|-------|------|
+| `PlaybackReporter.swift` | 118 | `reportStart` / `reportStop` / `reportBackgroundProgress`, the 10-tick throttle for periodic progress reports, and the `onTick()` fan-out from the shared time observer |
+| `SkipSegmentController.swift` | 205 | `load(for:)` fetch (with cancellation), time-based `onTick(currentTime:)` driving the skip button, and the platform-split UI (iOS floating `UIButton` / tvOS `contextualActions`) |
+| `SleepTimerController.swift` | 440 | `startIfNeeded`, the 1 s countdown `Task`, the moon-pill indicator, the "Still watching?" prompt (tvOS `UIAlertController` / iOS custom blur card), and "Keep watching" vs "Stop playback" handling |
+
+The presenter drops from **1,678 → 1,099 lines** (−579, ≈35%). Net file count +3; net LOC +184 (most of which is reintroduced `// MARK:` headers, controller docblocks, and sizing properties duplicated for `finishedSeriesOverlay`). LOC is not the win — responsibility separation is. The presenter's remaining job is narrow: AVPlayerViewController lifecycle, track menus, episode navigation, chapters, error alerts, end-of-series overlay, dismiss delegates.
+
+### Seam design
+
+- **Time observer stays on the presenter.** A single `addPeriodicTimeObserver` at 1 s fans out to `skipSegments.onTick(currentTime:)` and `playbackReporter.onTick()`. Keeping the observer where the player lifecycle is owned preserves the CLAUDE.md invariant ("A single periodic observer handles both segment detection and progress reporting") and avoids fragile `removeTimeObserver` ordering across sub-controllers.
+- **`playerVCProvider: @MainActor () -> AVPlayerViewController?` closure.** Captures `[weak self] in self?.playerVC` at the presenter. The `playerVC` is replaced on episode navigation; a closure always returns the current one, whereas a stored reference would go stale. Same pattern for `PlaybackReporter.Context`, where `player: AVPlayer?` is looked up fresh per call.
+- **`onStopPlayback` callback for `SleepTimerController`.** The "Stop playback" action in the Still Watching prompt dismisses the player. That's the presenter's concern; the controller calls back via `onStopPlayback: @MainActor () -> Void`.
+- **Fetch cancellation added in `SkipSegmentController`.** The original `fetchSegments` was fire-and-forget. The controller now stores `fetchTask: Task<Void, Never>?` and cancels it in `teardown()`, so episode navigation can't race a stale segment list into the new episode.
+
+### What stayed on the presenter
+
+- **End-of-series overlay** — shares the overlay sizing properties (`overlayTitleSize`, etc.) with the sleep prompt. Those props were duplicated into `SleepTimerController` and restored on the presenter rather than extracting a fourth controller for a tiny pair of overlays.
+- **Debug `showSkipToEnd` button** — iOS floating pill / tvOS contextual action for QA; lives with other debug tooling.
+- **Shared button sizing** (`buttonFontSize`, `buttonCornerRadius`, `buttonPaddingH`) — used by the debug pill and could be reused by future affordances; kept on the presenter.
+- **`PlayerHostingVC` (iOS)** and **`TVDismissDelegate` (tvOS)** — tightly coupled to how the presenter models dismissal.
+
+### Preserved behavior
+
+- **Reporting identity on episode nav**: the extraction preserves the presenter's existing behavior where `self.itemId` and `self.startTime` are `let` (never reassigned during episode nav). `playbackReporter.reportStart(startTime: self.startTime)` and `playbackReporter.reportStop()` pull `itemId` via the context closure, which reads `self.itemId` at call time. This is intentionally bug-for-bug with the original: on episode-to-episode autoplay, a pre-existing behavior causes the new episode to be reported under the initial episode's id + startTime. Flagged here as a follow-up rather than folded into the refactor to keep the commit review-able.
+- No visual, focus-context, localization, or timing changes. The same HLSManifestLoader path, same tvOS `contextualActions` semantics, same tvOS `UIAlertController` vs iOS blur-card focus reasoning.
+
+### Build & test
+
+- `xcodebuild build` — iOS Simulator (iPhone 17 Pro): `** BUILD SUCCEEDED **`
+- `xcodebuild build` — tvOS Simulator (Apple TV 4K 3rd gen): `** BUILD SUCCEEDED **`
+- `xcodebuild test -only-testing:CinemaxTests`: 36 / 36 tests pass
+- Manual smoke (to do on first real device session): (1) play movie, verify Jellyfin progress updates every 10 s, resume position survives dismiss; (2) play episode with intro segments, confirm button appears/disappears on segment entry/exit and re-appears on rewind; (3) enable `debug.fastSleepTimer`, confirm moon pill countdown, "Still watching?" prompt, Keep watching restarts, Stop playback dismisses the player.
+
+### Remaining after this batch
+
+**Refactoring** (from §13 suggested batch)
+- `APIClientProtocol` domain split (deferred — mostly organizational)
+
+**Known follow-ups surfaced during this refactor**
+- Episode-nav `reportPlaybackStart` uses `self.itemId` / `self.startTime` (both `let`), so the new episode is reported under the old identity. Small, isolated fix: update `itemId` / `startTime` on episode navigation (or have the reporter take them per-call from the playbackInfo).
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots

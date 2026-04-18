@@ -45,6 +45,7 @@ Shared/
                     MovieLibraryScreen, LibrarySortFilterSheet, TVSeriesScreen, MediaQualityBadges,
                     VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet,
                     SettingsScreen (+iOS, +tvOS platform variants), SettingsRowHelpers
+    VideoPlayer/    PlaybackReporter, SkipSegmentController, SleepTimerController (sub-controllers consumed by NativeVideoPresenter)
   ViewModels/       HomeViewModel, LoginViewModel, SearchViewModel, ServerSetupViewModel,
                     MediaDetailViewModel, MediaLibraryViewModel, VideoPlayerCoordinator
 iOS/                app entry point
@@ -112,7 +113,12 @@ Unified screen parameterized by `BaseItemKind` (movies or series).
 **DeviceProfile**: DirectPlay for mp4/m4v/mov + h264/hevc; transcode to HLS mp4 with `hevc,h264` only. **Never include `mpeg4`** in video codec lists — MPEG-4 ASP is not a valid HLS transcode target on Apple platforms and causes Jellyfin to inject `mpeg4-*` URL parameters that AVFoundation doesn't recognise. `maxBitrate`: 120 Mbps (4K) or 20 Mbps (1080p) via `@AppStorage("render4K")`.
 
 ### Native Player — Both Platforms (`NativeVideoPresenter.swift`)
-Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal (`UIViewController.present()`). The shared `NativeVideoPresenter` class handles playback, track menus, episode navigation, and playback reporting on both platforms.
+Both iOS and tvOS use native `AVPlayerViewController` presented via UIKit modal (`UIViewController.present()`). The shared `NativeVideoPresenter` class handles playback, track menus, episode navigation, chapters, end-of-series overlay, and error alerts. Three `@MainActor` sub-controllers in `Shared/Screens/VideoPlayer/` own cohesive slices:
+- `PlaybackReporter` — reportStart/Stop/Background + periodic progress (10-tick throttle driven by the presenter's shared time observer via `onTick()`).
+- `SkipSegmentController` — intro/outro skip affordance (iOS floating UIButton / tvOS `contextualActions`). Loads segments per item, cancels in-flight fetches on teardown, shows/hides purely from `onTick(currentTime:)`.
+- `SleepTimerController` — countdown indicator + "Still watching?" prompt. Presenter owns the `playerVC` lifecycle, passes a `playerVCProvider` closure + an `onStopPlayback` callback (Stop → presenter dismisses player).
+
+Presenter keeps the single `addPeriodicTimeObserver` (1 s) and fans out ticks to `skipSegments.onTick` + `playbackReporter.onTick`. Sub-controllers never add their own time observers — this preserves the CLAUDE.md invariant that one observer drives both segment detection and progress reporting.
 
 - **MUST present via UIKit modal**, NOT SwiftUI — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss
 - **iOS dismiss detection**: `PlayerHostingVC` wrapper (child VC) with `viewWillDisappear(isBeingDismissed:)`
