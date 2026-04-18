@@ -21,7 +21,7 @@ private let logger = Logger(subsystem: "com.cinemax", category: "Playback.Skip")
 ///   the transport-bar focus context.
 @MainActor
 final class SkipSegmentController {
-    private let apiClient: any APIClientProtocol
+    private let apiClient: any PlaybackAPI
     private let loc: LocalizationManager
     private let playerVCProvider: @MainActor () -> AVPlayerViewController?
 
@@ -34,7 +34,7 @@ final class SkipSegmentController {
     #endif
 
     init(
-        apiClient: any APIClientProtocol,
+        apiClient: any PlaybackAPI,
         loc: LocalizationManager,
         playerVCProvider: @MainActor @escaping () -> AVPlayerViewController?
     ) {

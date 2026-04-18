@@ -20,13 +20,13 @@ final class PlaybackReporter {
 
     typealias ContextProvider = @MainActor () -> Context?
 
-    private let apiClient: any APIClientProtocol
+    private let apiClient: any PlaybackAPI
     private let userId: String
     private let context: ContextProvider
     private var tickCounter = 0
 
     init(
-        apiClient: any APIClientProtocol,
+        apiClient: any PlaybackAPI,
         userId: String,
         context: @escaping ContextProvider
     ) {
