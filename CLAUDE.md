@@ -151,6 +151,8 @@ Rendering is platform-split:
 
 **End-of-series completion**: When `AVPlayerItemDidPlayToEndTime` fires with autoplay on, no next episode, and `episodeNavigator != nil`, shows a centered "You finished {Series Name}" overlay. `currentSeriesName` is captured opportunistically from the same `getItem` call that fetches chapters. tvOS uses `UIAlertController`, iOS uses a custom blur card — same focus-context reason as the sleep prompt.
 
+**AirPlay / external playback** (iOS): iOS `Info.plist` declares `UIBackgroundModes = [audio, airplay]` (set in `project.yml` — required so playback continues when the iPhone locks during a cast). `NativeVideoPresenter.present` calls `activatePlaybackAudioSession()` before handing the item to the player (`.playback` + `.moviePlayback`), sets `avPlayer.allowsExternalPlayback = true` and `usesExternalPlaybackWhileExternalScreenIsActive = true`, and deactivates the session in `cleanup()` with `.notifyOthersOnDeactivation`. The AirPlay picker is drawn natively by `AVPlayerViewController`'s transport bar — no custom button. `SearchViewModel`'s voice-search briefly flips the category to `.record`; do not start voice search during an active playback session.
+
 **Playback error recovery**: `showPlaybackErrorAlert(error:)` presents a native `UIAlertController` with error-code-specific messages. `-12881 / -12886 / -16170` → transcode guidance, `-12938 / -1001 / -1004 / -1005 / -1009` → network guidance, fallback → generic. On iOS the alert only fires after the `retryWithDirectURL` fallback itself fails (so we don't interrupt the silent first-try recovery). `isShowingErrorAlert` flag prevents stacking.
 
 **Debug tooling** (Settings → Interface → Debug, always visible not gated by `#if DEBUG`):

@@ -134,10 +134,17 @@ final class NativeVideoPresenter {
         self.currentSubtitleIndex = info.selectedSubtitleIndex
         self.currentPlayMethod = info.playMethod
 
+        // AVAudioSession must be `.playback` before we hand a player item to AVKit,
+        // otherwise AirPlay routing drops audio when the iPhone silent switch is on
+        // or the screen locks during a cast.
+        activatePlaybackAudioSession()
+
         // Start with nil item — native player chrome appears immediately while
         // we fetch and filter the HLS manifest in the background.
         let avPlayer = AVPlayer(playerItem: nil)
         avPlayer.automaticallyWaitsToMinimizeStalling = true
+        avPlayer.allowsExternalPlayback = true
+        avPlayer.usesExternalPlaybackWhileExternalScreenIsActive = true
 
         let vc = AVPlayerViewController()
         vc.player = avPlayer
@@ -1020,6 +1027,29 @@ final class NativeVideoPresenter {
         return item
     }
 
+    // MARK: - Audio Session (AirPlay + screen-lock continuity)
+
+    /// `.playback` + `.moviePlayback` is the Apple-recommended category for a video
+    /// player: it keeps audio flowing over AirPlay when the ringer is silent or the
+    /// device locks, and cooperates with other media apps' interruption handling.
+    private func activatePlaybackAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .moviePlayback, options: [])
+            try session.setActive(true, options: [])
+        } catch {
+            logger.error("Failed to activate playback audio session: \(error.localizedDescription)")
+        }
+    }
+
+    private func deactivatePlaybackAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            logger.error("Failed to deactivate playback audio session: \(error.localizedDescription)")
+        }
+    }
+
     private func setupBackgroundObserver() {
         backgroundObserver = NotificationCenter.default.addObserver(
             forName: .cinemaxDidEnterBackground, object: nil, queue: .main
@@ -1058,6 +1088,7 @@ final class NativeVideoPresenter {
         #endif
         cleanupPlayer()
         playerVC = nil
+        deactivatePlaybackAudioSession()
     }
 
     // MARK: - Platform-specific dismiss detection
