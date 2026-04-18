@@ -34,6 +34,7 @@
 "home.recentlyAdded" = "Recently Added";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
+"home.genreRow.failed" = "Couldn't load";
 
 // MARK: - Movie Library
 
@@ -75,6 +76,8 @@
 "empty.library.filtered.title" = "No matches";
 "empty.library.filtered.subtitle" = "Try adjusting your filters or clearing them.";
 "empty.library.filtered.action" = "Clear filters";
+"library.loading.movies" = "Loading movies…";
+"library.loading.series" = "Loading series…";
 "empty.library.title" = "No titles here yet";
 "empty.library.subtitle" = "Add content to your Jellyfin server to get started.";
 "empty.home.title" = "Your library is empty";
@@ -245,6 +248,8 @@
 "server.networkSettings" = "Network Settings";
 "server.connecting" = "Connecting...";
 "server.offline" = "Offline";
+"server.httpWarning.title" = "Unencrypted connection";
+"server.httpWarning.message" = "This address uses HTTP. Your credentials and playback tokens will travel in plain text over the network. Use HTTPS whenever possible — keep HTTP only for a server on a trusted local network.";
 
 // MARK: - Video Player
 

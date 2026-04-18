@@ -94,8 +94,13 @@ struct HomeScreen: View {
 
                     // Genre rows
                     if showGenreRows {
-                        ForEach(viewModel.genreRows, id: \.genre) { row in
-                            genreRow(genre: row.genre, items: row.items)
+                        ForEach(viewModel.genreRows) { row in
+                            switch row.state {
+                            case .items(let items):
+                                genreRow(genre: row.genre, items: items)
+                            case .failed:
+                                genreRowFailed(genre: row.genre)
+                            }
                         }
                     }
 
@@ -122,11 +127,49 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
-        ContentRow(title: genre) {
-            ForEach(items, id: \.id) { item in
-                recentlyAddedCard(item)
-                    .frame(width: posterCardWidth)
+        ContentRow(title: genre, data: items, id: \.id) { item in
+            recentlyAddedCard(item)
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    /// Failure-state pill shown in place of an unloadable genre row. Tap to
+    /// re-fetch only that row. Keeps the row's title so the user knows which
+    /// genre is retrying.
+    @ViewBuilder
+    private func genreRowFailed(genre: String) -> some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            Text(genre)
+                .font(CinemaFont.headline(.small))
+                .foregroundStyle(CinemaColor.onSurface)
+                .padding(.horizontal, CinemaSpacing.spacing6)
+
+            Button {
+                Task { await viewModel.retryGenre(genre, using: appState) }
+            } label: {
+                HStack(spacing: CinemaSpacing.spacing2) {
+                    Image(systemName: "exclamationmark.arrow.circlepath")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(loc.localized("home.genreRow.failed"))
+                        .font(CinemaFont.label(.medium))
+                    Text("·")
+                        .foregroundStyle(CinemaColor.outlineVariant)
+                    Text(loc.localized("action.retry"))
+                        .font(CinemaFont.label(.medium))
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                .padding(.vertical, CinemaSpacing.spacing2)
+                .background(CinemaColor.surfaceContainer)
+                .clipShape(Capsule())
             }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .padding(.horizontal, CinemaSpacing.spacing6)
         }
     }
 
@@ -260,11 +303,13 @@ struct HomeScreen: View {
     /// the item artwork + "Name is watching" label, and navigates to the item's detail
     /// screen on tap. Hidden entirely when the server has no other active sessions.
     private var watchingNowRow: some View {
-        ContentRow(title: loc.localized("home.watchingNow")) {
-            ForEach(viewModel.activeSessions.indices, id: \.self) { idx in
-                watchingNowCard(viewModel.activeSessions[idx])
-                    .frame(width: wideCardWidth)
-            }
+        ContentRow(
+            title: loc.localized("home.watchingNow"),
+            data: Array(viewModel.activeSessions.indices),
+            id: \.self
+        ) { idx in
+            watchingNowCard(viewModel.activeSessions[idx])
+                .frame(width: wideCardWidth)
         }
     }
 
@@ -317,31 +362,38 @@ struct HomeScreen: View {
     }
 
     private var continueWatchingRow: some View {
-        ContentRow(title: loc.localized("home.continueWatching")) {
-            ForEach(viewModel.resumeItems, id: \.id) { item in
-                if let id = item.id {
-                    let nav = viewModel.resumeNavigation[id]
-                    let startSeconds: Double? = {
-                        guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
-                        return Double(ticks) / 10_000_000
-                    }()
-                    PlayLink(
-                        itemId: id, title: item.name ?? "",
-                        startTime: startSeconds,
-                        previousEpisode: nav?.previous, nextEpisode: nav?.next,
-                        episodeNavigator: nav?.navigator
-                    ) {
-                        continueWatchingCard(item)
-                            .frame(width: wideCardWidth)
-                    }
-                    #if os(tvOS)
-                    .buttonStyle(CinemaTVCardButtonStyle())
-                    #else
-                    .buttonStyle(.plain)
-                    #endif
-                    .accessibilityLabel(item.name ?? "")
-                }
+        ContentRow(
+            title: loc.localized("home.continueWatching"),
+            data: viewModel.resumeItems,
+            id: \.id
+        ) { item in
+            continueWatchingPlayLink(item)
+        }
+    }
+
+    @ViewBuilder
+    private func continueWatchingPlayLink(_ item: BaseItemDto) -> some View {
+        if let id = item.id {
+            let nav = viewModel.resumeNavigation[id]
+            let startSeconds: Double? = {
+                guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
+                return Double(ticks) / 10_000_000
+            }()
+            PlayLink(
+                itemId: id, title: item.name ?? "",
+                startTime: startSeconds,
+                previousEpisode: nav?.previous, nextEpisode: nav?.next,
+                episodeNavigator: nav?.navigator
+            ) {
+                continueWatchingCard(item)
+                    .frame(width: wideCardWidth)
             }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityLabel(item.name ?? "")
         }
     }
 
@@ -374,11 +426,7 @@ struct HomeScreen: View {
                 guard let position = item.userData?.playbackPositionTicks,
                       let total = item.runTimeTicks else { return nil }
                 let remainingTicks = total - position
-                let minutes = remainingTicks.jellyfinMinutes
-                if minutes > 60 {
-                    return loc.localized("home.remainingTime.hours", minutes / 60, minutes % 60)
-                }
-                return loc.localized("home.remainingTime.minutes", minutes)
+                return loc.remainingTime(minutes: remainingTicks.jellyfinMinutes)
             }
         }()
 
@@ -393,11 +441,13 @@ struct HomeScreen: View {
     // MARK: - Recently Added
 
     private var recentlyAddedRow: some View {
-        ContentRow(title: loc.localized("home.recentlyAdded")) {
-            ForEach(viewModel.latestItems, id: \.id) { item in
-                recentlyAddedCard(item)
-                    .frame(width: posterCardWidth)
-            }
+        ContentRow(
+            title: loc.localized("home.recentlyAdded"),
+            data: viewModel.latestItems,
+            id: \.id
+        ) { item in
+            recentlyAddedCard(item)
+                .frame(width: posterCardWidth)
         }
     }
 

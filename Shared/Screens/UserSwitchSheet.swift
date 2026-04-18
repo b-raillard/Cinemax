@@ -216,7 +216,7 @@ struct UserSwitchSheet: View {
             appState.accessToken = session.accessToken
             appState.currentUserId = session.userID
             appState.apiClient.reconnect(
-                url: appState.serverURL ?? URL(string: "http://localhost")!,
+                url: appState.serverURL ?? AppState.placeholderServerURL,
                 accessToken: session.accessToken
             )
             appState.isAuthenticated = true

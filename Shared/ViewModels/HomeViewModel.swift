@@ -3,13 +3,28 @@ import Observation
 import CinemaxKit
 @preconcurrency import JellyfinAPI
 
+/// Presentation state for a single genre row on Home. `.failed` surfaces a
+/// retry chip instead of silently skipping the row, so transient server
+/// errors don't just make content disappear.
+enum GenreRowState: Equatable {
+    case items([BaseItemDto])
+    case failed
+}
+
+struct GenreRow: Identifiable, Equatable {
+    let genre: String
+    var state: GenreRowState
+    var id: String { genre }
+}
+
 @MainActor @Observable
 final class HomeViewModel {
     var heroItem: BaseItemDto?
     var resumeItems: [BaseItemDto] = []
     var latestItems: [BaseItemDto] = []
-    /// Ordered list of genre rows (mixed movies + series). Empty genres are skipped.
-    var genreRows: [(genre: String, items: [BaseItemDto])] = []
+    /// Ordered genre rows. `.failed` rows render a retry chip; rows that
+    /// succeed but return zero items are dropped.
+    var genreRows: [GenreRow] = []
     /// Episode navigation keyed by episode item ID. Populated after resumeItems loads.
     var resumeNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Other users currently watching something on this server. Excludes the logged-in user.
@@ -74,15 +89,23 @@ final class HomeViewModel {
                 }
             }
 
+            // Precompute refs + id→index per season once so each episode's
+            // prev/next lookup is O(1) rather than O(n) inside the helper.
+            var precomputed: [String: (refs: [EpisodeRef], indexByID: [String: Int])] = [:]
+            precomputed.reserveCapacity(seasonEpisodes.count)
+            for (seasonId, eps) in seasonEpisodes {
+                precomputed[seasonId] = precomputeEpisodeRefs(eps)
+            }
+
             resumeNavigation.removeAll()
             for item in episodeItems {
-                guard let id = item.id, let seasonId = item.seasonID else { continue }
-                guard let eps = seasonEpisodes[seasonId] else { continue }
-                let nav = buildEpisodeNavigation(
-                    for: id, in: eps,
+                guard let id = item.id,
+                      let seasonId = item.seasonID,
+                      let pre = precomputed[seasonId] else { continue }
+                resumeNavigation[id] = buildEpisodeNavigation(
+                    for: id, refs: pre.refs, indexByID: pre.indexByID,
                     apiClient: appState.apiClient, userId: userId
                 )
-                resumeNavigation[id] = nav
             }
         } else {
             resumeNavigation.removeAll()
@@ -131,40 +154,72 @@ final class HomeViewModel {
         let picked = Array(allGenres.shuffled().prefix(4))
 
         // Fetch items for each picked genre in parallel. Preserve the order of `picked`.
-        var results: [String: [BaseItemDto]] = [:]
-        await withTaskGroup(of: (String, [BaseItemDto])?.self) { group in
+        // Distinguish failure (→ retry chip) from empty success (→ drop the row).
+        enum FetchResult { case success([BaseItemDto]); case failure }
+        var results: [String: FetchResult] = [:]
+        await withTaskGroup(of: (String, FetchResult).self) { group in
             for genre in picked {
                 group.addTask {
                     do {
-                        let response = try await appState.apiClient.getItems(
-                            userId: userId,
-                            parentId: nil,
-                            includeItemTypes: [.movie, .series],
-                            sortBy: [.random],
-                            sortOrder: nil,
-                            genres: [genre],
-                            years: nil,
-                            isFavorite: nil,
-                            filters: nil,
-                            limit: 10,
-                            startIndex: nil
+                        let items = try await Self.fetchGenreItems(
+                            genre: genre, userId: userId, appState: appState
                         )
-                        return (genre, response.items)
+                        return (genre, .success(items))
                     } catch {
-                        return nil
+                        return (genre, .failure)
                     }
                 }
             }
-            for await result in group {
-                if let (genre, items) = result {
-                    results[genre] = items
-                }
+            for await (genre, result) in group {
+                results[genre] = result
             }
         }
 
         genreRows = picked.compactMap { genre in
-            guard let items = results[genre], !items.isEmpty else { return nil }
-            return (genre: genre, items: items)
+            switch results[genre] {
+            case .success(let items) where !items.isEmpty:
+                return GenreRow(genre: genre, state: .items(items))
+            case .failure:
+                return GenreRow(genre: genre, state: .failed)
+            default:
+                return nil
+            }
         }
+    }
+
+    /// Re-fetches a single genre after the user taps its retry chip.
+    /// Updates `genreRows` in place so only the affected row re-renders.
+    func retryGenre(_ genre: String, using appState: AppState) async {
+        guard let userId = appState.currentUserId,
+              let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
+        do {
+            let items = try await Self.fetchGenreItems(genre: genre, userId: userId, appState: appState)
+            if items.isEmpty {
+                genreRows.remove(at: index)
+            } else {
+                genreRows[index].state = .items(items)
+            }
+        } catch {
+            genreRows[index].state = .failed
+        }
+    }
+
+    nonisolated private static func fetchGenreItems(
+        genre: String, userId: String, appState: AppState
+    ) async throws -> [BaseItemDto] {
+        let response = try await appState.apiClient.getItems(
+            userId: userId,
+            parentId: nil,
+            includeItemTypes: [.movie, .series],
+            sortBy: [.random],
+            sortOrder: nil,
+            genres: [genre],
+            years: nil,
+            isFavorite: nil,
+            filters: nil,
+            limit: 10,
+            startIndex: nil
+        )
+        return response.items
     }
 }

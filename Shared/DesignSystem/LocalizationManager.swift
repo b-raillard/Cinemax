@@ -43,6 +43,18 @@ final class LocalizationManager {
         let format = localized(key)
         return String(format: format, arguments: args)
     }
+
+    /// Formats a remaining duration using the `home.remainingTime.*` keys.
+    /// Centralises the `>= 60` branching so call sites don't reimplement it.
+    /// The underlying `.strings` keep their current masculine-plural form on
+    /// `fr`; when a third language is added, swap in a `.stringsdict` behind
+    /// this helper without touching call sites.
+    func remainingTime(minutes: Int) -> String {
+        if minutes >= 60 {
+            return localized("home.remainingTime.hours", minutes / 60, minutes % 60)
+        }
+        return localized("home.remainingTime.minutes", minutes)
+    }
 }
 
 // MARK: - Bundle Extension

@@ -1,29 +1,32 @@
 import Foundation
 import JellyfinAPI
 
-/// Abstraction over JellyfinAPIClient enabling mock injection for testing.
-public protocol APIClientProtocol: Sendable {
+// MARK: - Domain sub-protocols
+//
+// The API surface is split into four cohesive domains so that narrow consumers
+// (e.g. `PlaybackReporter`, `SkipSegmentController`) can depend on just the slice
+// they need instead of the full `APIClientProtocol`. Every existing call site
+// that takes `APIClientProtocol` keeps working — it still composes all four.
 
-    // MARK: - Server
-
+/// Server connection, identity, and cache management.
+public protocol ServerAPI: Sendable {
     func connectToServer(url: URL) async throws -> ServerInfo
     func fetchServerInfo() async throws -> ServerInfo
     func reconnect(url: URL, accessToken: String)
+    /// Drops every cached response (used by Settings → Server → Refresh Catalogue).
+    func clearCache()
+}
 
-    // MARK: - Auth
-
+/// Authentication, user listing, and active-session queries.
+public protocol AuthAPI: Sendable {
     func authenticate(username: String, password: String) async throws -> UserSession
     func getPublicUsers() async throws -> [UserDto]
     func getUsers() async throws -> [UserDto]
     func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto]
+}
 
-    // MARK: - Cache
-
-    /// Drops every cached response (used by Settings → Server → Refresh Catalogue).
-    func clearCache()
-
-    // MARK: - Media Queries
-
+/// Library queries: items, genres, search, series/seasons/episodes.
+public protocol LibraryAPI: Sendable {
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto]
     func getLatestMedia(userId: String, parentId: String?, limit: Int) async throws -> [BaseItemDto]
     func getItems(
@@ -45,18 +48,13 @@ public protocol APIClientProtocol: Sendable {
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
     func searchItems(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto]
 
-    // MARK: - Series / Episodes
-
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto?
+}
 
-    // MARK: - Media Segments
-
-    func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto]
-
-    // MARK: - Playback
-
+/// Playback: stream resolution, intro/outro segments, and Jellyfin progress reporting.
+public protocol PlaybackAPI: Sendable {
     func getPlaybackInfo(
         itemId: String,
         userId: String,
@@ -65,7 +63,7 @@ public protocol APIClientProtocol: Sendable {
         subtitleStreamIndex: Int?
     ) async throws -> PlaybackInfo
 
-    // MARK: - Playback Reporting
+    func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto]
 
     /// Reports that playback has started. Fire-and-forget; errors are silently ignored.
     func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async
@@ -75,9 +73,17 @@ public protocol APIClientProtocol: Sendable {
     func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async
 }
 
+// MARK: - Aggregate
+
+/// Umbrella protocol kept as the default dependency type — view models and
+/// screens that touch multiple domains (e.g. `HomeViewModel`,
+/// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
+/// narrower sub-protocol they actually need.
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI
+
 // MARK: - Default arguments
 
-public extension APIClientProtocol {
+public extension LibraryAPI {
     func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
         try await getResumeItems(userId: userId, limit: limit)
     }
@@ -109,12 +115,18 @@ public extension APIClientProtocol {
     func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
         try await getSimilarItems(itemId: itemId, userId: userId, limit: limit)
     }
-    func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
-        try await getActiveSessions(activeWithinSeconds: activeWithinSeconds)
-    }
     func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
         try await searchItems(userId: userId, searchTerm: searchTerm, limit: limit)
     }
+}
+
+public extension AuthAPI {
+    func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
+        try await getActiveSessions(activeWithinSeconds: activeWithinSeconds)
+    }
+}
+
+public extension PlaybackAPI {
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {
         try await getMediaSegments(itemId: itemId, includeSegmentTypes: includeSegmentTypes)
     }
@@ -134,4 +146,4 @@ public extension APIClientProtocol {
 
 // MARK: - Conformance
 
-extension JellyfinAPIClient: APIClientProtocol {}
+extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI {}

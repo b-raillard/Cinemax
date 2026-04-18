@@ -23,6 +23,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedTotalCount = 0
     var stubbedGenres: [String] = []
 
+    /// Called by `getEpisodes(seriesId:seasonId:userId:)` when set, so tests can
+    /// inject per-season delays or cancellation-sensitive behavior. Falls back to
+    /// an empty array when nil.
+    var getEpisodesHandler: (@Sendable (String) async throws -> [BaseItemDto])?
+
+    /// Called by `searchItems(userId:searchTerm:limit:)` when set, so tests can
+    /// inject cancellation-sensitive delays. Falls back to `stubbedSearchResults`.
+    var searchItemsHandler: (@Sendable (String) async throws -> [BaseItemDto])?
+
     // MARK: - Error control
 
     var shouldThrow = false
@@ -94,12 +103,20 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
 
     func searchItems(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto] {
+        if let handler = searchItemsHandler {
+            return try await handler(searchTerm)
+        }
         if shouldThrow { throw stubbedError }
         return stubbedSearchResults
     }
 
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto] { [] }
-    func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] { [] }
+    func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] {
+        if let handler = getEpisodesHandler {
+            return try await handler(seasonId)
+        }
+        return []
+    }
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
 
     // MARK: - Media Segments

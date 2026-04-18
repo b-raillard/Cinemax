@@ -11,9 +11,6 @@ struct SearchScreen: View {
     @Environment(ToastCenter.self) private var toasts
     @State private var viewModel = SearchViewModel()
 
-    // Pulsing animation state for the listening indicator
-    @State private var isPulsing = false
-
     // Surprise Me state — two buttons (movie + series) in the empty state.
     @State private var surpriseDestination: SurpriseDestination?
     @State private var isPickingSurpriseMovie = false
@@ -112,7 +109,11 @@ struct SearchScreen: View {
 
             // Microphone button — iOS only
             #if os(iOS)
-            microphoneButton
+            VoiceSearchButton(
+                isListening: viewModel.isListening,
+                iconSize: searchIconSize,
+                onTap: { viewModel.toggleListening(using: appState) }
+            )
             #endif
 
             if !viewModel.searchText.isEmpty {
@@ -141,41 +142,9 @@ struct SearchScreen: View {
         .padding(.vertical, CinemaSpacing.spacing3)
     }
 
-    // MARK: - Microphone Button (iOS only)
-
-    #if os(iOS)
-    private var microphoneButton: some View {
-        Button {
-            viewModel.toggleListening(using: appState)
-        } label: {
-            ZStack {
-                // Pulsing ring shown while listening
-                if viewModel.isListening {
-                    Circle()
-                        .fill(themeManager.accent.opacity(0.25))
-                        .frame(width: isPulsing ? 36 : 28, height: isPulsing ? 36 : 28)
-                        .animation(
-                            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                            value: isPulsing
-                        )
-                }
-
-                Image(systemName: "mic.fill")
-                    .font(.system(size: searchIconSize))
-                    .foregroundStyle(viewModel.isListening ? themeManager.accent : CinemaColor.onSurfaceVariant)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(viewModel.isListening
-            ? loc.localized("accessibility.stopVoiceSearch")
-            : loc.localized("accessibility.voiceSearch"))
-        .onChange(of: viewModel.isListening) { _, newValue in
-            isPulsing = newValue
-        }
-    }
-
     // MARK: - Listening Label (iOS only)
 
+    #if os(iOS)
     @ViewBuilder
     private var listeningLabel: some View {
         if viewModel.isListening {
@@ -224,7 +193,14 @@ struct SearchScreen: View {
             }
             Spacer()
         } else {
-            resultsGrid
+            SearchResultsGrid(
+                results: viewModel.results,
+                imageBuilder: appState.imageBuilder,
+                columns: columns,
+                gridPadding: gridPadding,
+                gridSpacing: gridSpacing,
+                headerTitle: loc.localized("search.topMatches")
+            )
         }
     }
 
@@ -328,62 +304,6 @@ struct SearchScreen: View {
         #endif
     }
 
-    private var resultsGrid: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                Text(loc.localized("search.topMatches"))
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .padding(.horizontal, gridPadding)
-                    .accessibilityAddTraits(.isHeader)
-
-                LazyVGrid(columns: columns, spacing: gridSpacing) {
-                    ForEach(viewModel.results, id: \.id) { item in
-                        resultCard(item)
-                    }
-                }
-                .padding(.horizontal, gridPadding)
-
-                Spacer(minLength: 80)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func resultCard(_ item: BaseItemDto) -> some View {
-        let subtitle: String = {
-            var parts: [String] = []
-            if let year = item.productionYear { parts.append(String(year)) }
-            if item.type == .episode, let seriesName = item.seriesName {
-                parts.append(seriesName)
-            } else if let type = item.type {
-                parts.append(type.rawValue)
-            }
-            return parts.joined(separator: " · ")
-        }()
-
-        NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(
-                    itemId: id,
-                    itemType: item.type ?? .movie
-                )
-            }
-        } label: {
-            PosterCard(
-                title: item.name ?? "",
-                imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
-                subtitle: subtitle
-            )
-        }
-        #if os(tvOS)
-        .buttonStyle(CinemaTVCardButtonStyle())
-        #else
-        .buttonStyle(.plain)
-        #endif
-        .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
-    }
-
     // MARK: - Sizing
 
     private var gridPadding: CGFloat {
@@ -416,5 +336,127 @@ struct SearchScreen: View {
         #else
         CinemaScale.pt(17)
         #endif
+    }
+}
+
+// MARK: - Voice Search Button (iOS only)
+
+#if os(iOS)
+/// Microphone pill with a pulsing accent ring while listening. Owns its own
+/// pulsing state so the parent doesn't need to track animation flags.
+private struct VoiceSearchButton: View {
+    let isListening: Bool
+    let iconSize: CGFloat
+    let onTap: () -> Void
+
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+    @State private var isPulsing = false
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack {
+                if isListening {
+                    Circle()
+                        .fill(themeManager.accent.opacity(0.25))
+                        .frame(width: isPulsing ? 36 : 28, height: isPulsing ? 36 : 28)
+                        .animation(
+                            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                            value: isPulsing
+                        )
+                }
+
+                Image(systemName: "mic.fill")
+                    .font(.system(size: iconSize))
+                    .foregroundStyle(isListening ? themeManager.accent : CinemaColor.onSurfaceVariant)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isListening
+            ? loc.localized("accessibility.stopVoiceSearch")
+            : loc.localized("accessibility.voiceSearch"))
+        .onChange(of: isListening) { _, newValue in
+            isPulsing = newValue
+        }
+    }
+}
+#endif
+
+// MARK: - Results Grid
+
+/// LazyVGrid of search results. Kept as a standalone `View` so SwiftUI's
+/// diff can skip re-rendering the grid when parent state (surprise-me flags,
+/// pulsing, etc.) changes but the results array itself hasn't.
+private struct SearchResultsGrid: View {
+    let results: [BaseItemDto]
+    let imageBuilder: ImageURLBuilder
+    let columns: [GridItem]
+    let gridPadding: CGFloat
+    let gridSpacing: CGFloat
+    let headerTitle: String
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+                Text(headerTitle)
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .padding(.horizontal, gridPadding)
+                    .accessibilityAddTraits(.isHeader)
+
+                LazyVGrid(columns: columns, spacing: gridSpacing) {
+                    ForEach(results, id: \.id) { item in
+                        SearchResultCard(item: item, imageBuilder: imageBuilder)
+                    }
+                }
+                .padding(.horizontal, gridPadding)
+
+                Spacer(minLength: 80)
+            }
+        }
+    }
+}
+
+private struct SearchResultCard: View {
+    let item: BaseItemDto
+    let imageBuilder: ImageURLBuilder
+
+    var body: some View {
+        let subtitle = Self.subtitle(for: item)
+
+        NavigationLink {
+            if let id = item.id {
+                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+            }
+        } label: {
+            PosterCard(
+                title: item.name ?? "",
+                imageURL: item.id.map {
+                    imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300)
+                },
+                subtitle: subtitle
+            )
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityLabel(
+            [item.name, subtitle.isEmpty ? nil : subtitle]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+        )
+    }
+
+    private static func subtitle(for item: BaseItemDto) -> String {
+        var parts: [String] = []
+        if let year = item.productionYear { parts.append(String(year)) }
+        if item.type == .episode, let seriesName = item.seriesName {
+            parts.append(seriesName)
+        } else if let type = item.type {
+            parts.append(type.rawValue)
+        }
+        return parts.joined(separator: " · ")
     }
 }

@@ -86,31 +86,30 @@ struct MediaLibraryScreen: View {
                     if viewModel.sortFilter.isFiltered {
                         // Filtered grid (genre selected)
                         if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
-                            ProgressView()
-                                .tint(CinemaColor.onSurfaceVariant)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, CinemaSpacing.spacing10)
+                            filteredLoadingState
                         } else if viewModel.filteredLoader.items.isEmpty {
                             filteredEmptyState
                         } else {
                             LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
                                 ForEach(viewModel.filteredLoader.items, id: \.id) { item in
-                                    posterCard(item)
-                                        .onAppear {
-                                            if item.id == viewModel.filteredLoader.items.last?.id {
-                                                Task { await viewModel.loadMoreFiltered(using: appState) }
-                                            }
-                                        }
+                                    LibraryPosterCard(item: item, itemType: itemType)
+                                        .onAppear { maybeLoadMore(triggerId: item.id) }
                                 }
                             }
                             .padding(.horizontal, CinemaSpacing.spacing20)
+
+                            if viewModel.filteredLoader.isLoadingMore {
+                                filteredPaginationFooter
+                            }
                         }
                     } else {
                         // Browse genre rows
                         ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
                             if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
-                                genreRow(genre: genre, items: items)
-                                    .padding(.bottom, CinemaSpacing.spacing6)
+                                LibraryGenreRow(genre: genre, items: items, itemType: itemType) {
+                                    viewModel.sortFilter.selectedGenres = [genre]
+                                }
+                                .padding(.bottom, CinemaSpacing.spacing6)
                             }
                         }
 
@@ -147,14 +146,16 @@ struct MediaLibraryScreen: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if let hero = viewModel.heroItem {
-                    heroSection(hero)
+                    LibraryHeroSection(item: hero, itemType: itemType)
                         .padding(.bottom, CinemaSpacing.spacing6)
                 }
 
                 ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
                     if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
-                        genreRow(genre: genre, items: items)
-                            .padding(.bottom, CinemaSpacing.spacing6)
+                        LibraryGenreRow(genre: genre, items: items, itemType: itemType) {
+                            viewModel.sortFilter.selectedGenres = [genre]
+                        }
+                        .padding(.bottom, CinemaSpacing.spacing6)
                     }
                 }
 
@@ -191,25 +192,22 @@ struct MediaLibraryScreen: View {
                         .padding(.horizontal, gridPadding)
 
                     if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
-                        ProgressView()
-                            .tint(CinemaColor.onSurfaceVariant)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, CinemaSpacing.spacing10)
+                        filteredLoadingState
                     } else if viewModel.filteredLoader.items.isEmpty {
                         filteredEmptyState
                     } else {
                         LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
                             ForEach(viewModel.filteredLoader.items, id: \.id) { item in
-                                posterCard(item)
+                                LibraryPosterCard(item: item, itemType: itemType)
                                     .id(item.id)
-                                    .onAppear {
-                                        if item.id == viewModel.filteredLoader.items.last?.id {
-                                            Task { await viewModel.loadMoreFiltered(using: appState) }
-                                        }
-                                    }
+                                    .onAppear { maybeLoadMore(triggerId: item.id) }
                             }
                         }
                         .padding(.horizontal, gridPadding)
+
+                        if viewModel.filteredLoader.isLoadingMore {
+                            filteredPaginationFooter
+                        }
                     }
 
                     Spacer(minLength: 80)
@@ -236,123 +234,6 @@ struct MediaLibraryScreen: View {
                     .padding(.trailing, CinemaSpacing.spacing2)
                 }
             }
-            #endif
-        }
-    }
-
-    // MARK: - Hero Section
-
-    @ViewBuilder
-    private func heroSection(_ item: BaseItemDto) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            if let id = item.id {
-                CinemaLazyImage(
-                    url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
-                    fallbackIcon: nil,
-                    fallbackBackground: CinemaColor.surfaceContainerLow
-                )
-                .accessibilityHidden(true)
-            }
-
-            CinemaGradient.heroOverlay
-
-            VStack(alignment: .leading, spacing: heroContentSpacing) {
-                // Metadata badges
-                HStack(spacing: 8) {
-                    if let rating = item.officialRating {
-                        RatingBadge(rating: rating)
-                    }
-                    heroMetadataText(for: item)
-                }
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-
-                // Title
-                Text(item.name ?? "")
-                    .font(.system(size: heroTitleSize, weight: .black))
-                    .tracking(-1.5)
-                    .foregroundStyle(.white)
-                    .textCase(.uppercase)
-                    .lineLimit(2)
-
-                // Overview — hidden on iOS to keep hero compact
-                #if os(tvOS)
-                if let overview = item.overview {
-                    Text(overview)
-                        .font(.system(size: overviewFontSize))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .lineLimit(3)
-                        .frame(maxWidth: maxOverviewWidth, alignment: .leading)
-                }
-                #endif
-
-                // Action buttons
-                if let id = item.id {
-                    heroActionButtons(id: id, item: item)
-                }
-            }
-            .padding(.horizontal, heroPadding)
-            .padding(.top, heroPadding)
-            .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: heroHeight)
-        .clipped()
-    }
-
-    @ViewBuilder
-    private func heroActionButtons(id: String, item: BaseItemDto) -> some View {
-        HStack(spacing: heroButtonSpacing) {
-            PlayLink(itemId: id, title: item.name ?? "") {
-                HStack(spacing: CinemaSpacing.spacing2) {
-                    Text(loc.localized("action.play"))
-                        .font(.system(size: heroButtonFontSize, weight: .bold))
-                    Image(systemName: "play.fill")
-                        .font(.system(size: heroButtonFontSize - 2, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, heroButtonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
-                #if os(iOS)
-                .background(themeManager.accentContainer)
-                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                #endif
-            }
-            #if os(tvOS)
-            .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
-            #else
-            .buttonStyle(.plain)
-            #endif
-            .frame(width: heroButtonWidth)
-
-            NavigationLink {
-                MediaDetailScreen(itemId: id, itemType: itemType)
-            } label: {
-                HStack(spacing: CinemaSpacing.spacing2) {
-                    Text(loc.localized("action.moreInfo"))
-                        .font(.system(size: heroButtonFontSize, weight: .bold))
-                        .lineLimit(1)
-                    Image(systemName: "info.circle")
-                        .font(.system(size: heroButtonFontSize - 2, weight: .bold))
-                }
-                .foregroundStyle(CinemaColor.onSurface)
-                #if os(tvOS)
-                .frame(maxWidth: .infinity)
-                #endif
-                .padding(.vertical, heroButtonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
-                #if os(iOS)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                #endif
-            }
-            #if os(tvOS)
-            .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-            .frame(width: heroButtonWidth)
-            #else
-            .buttonStyle(.plain)
-            .fixedSize()
             #endif
         }
     }
@@ -583,20 +464,6 @@ struct MediaLibraryScreen: View {
     private var tvDecadeOptions: [Int] { [2020, 2010, 2000, 1990, 1980, 1970, 1960, 1950] }
     #endif
 
-    // MARK: - Genre Row
-
-    @ViewBuilder
-    private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
-        ContentRow(title: genre, showViewAll: true, onViewAll: {
-            viewModel.sortFilter.selectedGenres = [genre]
-        }) {
-            ForEach(items, id: \.id) { item in
-                posterCard(item)
-                    .frame(width: posterCardWidth)
-            }
-        }
-    }
-
     // MARK: - Browse Genres Section
 
     private var browseGenresSection: some View {
@@ -640,42 +507,20 @@ struct MediaLibraryScreen: View {
         #endif
     }
 
-    // MARK: - Poster Card
+    // MARK: - Pagination Trigger
 
-    @ViewBuilder
-    private func posterCard(_ item: BaseItemDto) -> some View {
-        let subtitle: String = {
-            var parts: [String] = []
-            if let year = item.productionYear { parts.append(String(year)) }
-            if itemType == .series {
-                if let count = item.childCount {
-                    parts.append(loc.localized(count == 1 ? "tvShows.season" : "tvShows.seasonsPlural", count))
-                }
-            } else {
-                if let rating = item.communityRating {
-                    parts.append(String(format: "%.1f", rating))
-                }
-            }
-            return parts.joined(separator: " · ")
-        }()
-
-        NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(itemId: id, itemType: itemType)
-            }
-        } label: {
-            PosterCard(
-                title: item.name ?? "",
-                imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
-                subtitle: subtitle
-            )
-        }
-        #if os(tvOS)
-        .buttonStyle(CinemaTVCardButtonStyle())
-        #else
-        .buttonStyle(.plain)
-        #endif
-        .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+    /// Guards pagination against SwiftUI calling `.onAppear` multiple times for the
+    /// same card (view recycling, off-screen-and-back, parent re-renders). Previously
+    /// each call spawned a Task that queued behind `PaginatedLoader`'s actor guard —
+    /// correct but wasteful. Now we check `isLoadingMore` / `hasLoadedAll`
+    /// synchronously before spawning, so redundant onAppears are free.
+    private func maybeLoadMore(triggerId: String?) {
+        let loader = viewModel.filteredLoader
+        guard !loader.isLoadingMore,
+              !loader.hasLoadedAll,
+              let triggerId,
+              triggerId == loader.items.last?.id else { return }
+        Task { await viewModel.loadMoreFiltered(using: appState) }
     }
 
     // MARK: - Filter Button
@@ -774,19 +619,29 @@ struct MediaLibraryScreen: View {
         }
     }
 
-    // MARK: - Hero Helpers
+    /// Shown in place of the filtered grid on the *initial* load (items still empty,
+    /// `isLoadingMore` is true). Pairs the spinner with an explanatory label so the
+    /// UI doesn't look like a hung fetch.
+    private var filteredLoadingState: some View {
+        VStack(spacing: CinemaSpacing.spacing4) {
+            ProgressView()
+                .tint(CinemaColor.onSurfaceVariant)
+                .scaleEffect(1.3)
+            Text(loc.localized(itemType == .series ? "library.loading.series" : "library.loading.movies"))
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, CinemaSpacing.spacing10)
+    }
 
-    private func heroMetadataText(for item: BaseItemDto) -> some View {
-        let parts: [String] = [
-            item.productionYear.map(String.init),
-            itemType == .series
-                ? item.childCount.map { loc.localized($0 == 1 ? "tvShows.season" : "tvShows.seasonsPlural", $0) }
-                : item.formattedRuntime,
-            item.genres?.first
-        ].compactMap { $0 }
-
-        return Text(parts.joined(separator: " · "))
-            .font(.system(size: metadataFontSize, weight: .medium))
+    /// Footer row under the filtered grid when paginating additional pages. Keeps the
+    /// visual continuity of the grid instead of centering a mid-screen spinner.
+    private var filteredPaginationFooter: some View {
+        ProgressView()
+            .tint(CinemaColor.onSurfaceVariant)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, CinemaSpacing.spacing6)
     }
 
     // MARK: - Sort & Filter Sheet
@@ -803,102 +658,6 @@ struct MediaLibraryScreen: View {
     }
 
     // MARK: - Adaptive Sizing
-
-    private var heroHeight: CGFloat {
-        #if os(tvOS)
-        820
-        #else
-        360
-        #endif
-    }
-
-    private var heroTitleSize: CGFloat {
-        #if os(tvOS)
-        CinemaScale.pt(72)
-        #else
-        20
-        #endif
-    }
-
-    private var overviewFontSize: CGFloat {
-        #if os(tvOS)
-        CinemaScale.pt(18)
-        #else
-        14
-        #endif
-    }
-
-    private var heroPadding: CGFloat {
-        #if os(tvOS)
-        CinemaSpacing.spacing20
-        #else
-        CinemaSpacing.spacing4
-        #endif
-    }
-
-    private var heroContentSpacing: CGFloat {
-        #if os(tvOS)
-        16
-        #else
-        10
-        #endif
-    }
-
-    private var maxOverviewWidth: CGFloat {
-        #if os(tvOS)
-        600
-        #else
-        300
-        #endif
-    }
-
-    private var heroButtonWidth: CGFloat {
-        #if os(tvOS)
-        240
-        #else
-        160
-        #endif
-    }
-
-    private var heroButtonFontSize: CGFloat {
-        #if os(tvOS)
-        28
-        #else
-        16
-        #endif
-    }
-
-    private var heroButtonVerticalPadding: CGFloat {
-        #if os(tvOS)
-        CinemaSpacing.spacing4
-        #else
-        CinemaSpacing.spacing2
-        #endif
-    }
-
-    private var heroButtonSpacing: CGFloat {
-        #if os(tvOS)
-        CinemaSpacing.spacing5
-        #else
-        12
-        #endif
-    }
-
-    private var posterCardWidth: CGFloat {
-        #if os(tvOS)
-        200
-        #else
-        140
-        #endif
-    }
-
-    private var metadataFontSize: CGFloat {
-        #if os(tvOS)
-        CinemaScale.pt(16)
-        #else
-        CinemaScale.pt(13)
-        #endif
-    }
 
     private var gridPadding: CGFloat {
         #if os(tvOS)

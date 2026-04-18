@@ -11,7 +11,10 @@ struct PosterCard: View {
                 .aspectRatio(2/3, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .overlay {
-                    CinemaLazyImage(url: imageURL, fallbackIcon: "film", showLoadingIndicator: true)
+                    // No loading indicator — rendering 6+ simultaneous ProgressViews
+                    // in a dense grid is visual noise and costs layout. The fallback
+                    // background shows during the brief load window.
+                    CinemaLazyImage(url: imageURL, fallbackIcon: "film")
                 }
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
