@@ -32,7 +32,9 @@ The project's deployment targets are iOS 18 and tvOS 26. Avoid pre-iOS-15 APIs t
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
-**Playback reporting**: `APIClientProtocol` defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. `NativeVideoPresenter` (both platforms) calls these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale.
+**Playback reporting**: `PlaybackAPI` (a domain sub-protocol of `APIClientProtocol`) defines `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped`. `NativeVideoPresenter` (both platforms) calls these on start, every 10 s, and on dismiss/disappear. Without these calls Jellyfin never updates `playbackPositionTicks` / `isPlayed`, so `getNextUp` and resume data stay stale. On episode navigation the presenter rebinds `itemId` / `startTime` (both `var`, startTime → `nil`) so the new episode reports under its own identity — `PlaybackReporter.Context` reads `self.itemId` per call through its `[weak self]` closure, so reporter internals stay stable.
+
+**API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): the umbrella `APIClientProtocol` is a typealias for `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI`. View models that touch multiple domains depend on `APIClientProtocol`; leaf controllers narrow to the slice they need (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`). `JellyfinAPIClient` conforms to all four sub-protocols; `MockAPIClient` declares conformance to `APIClientProtocol` and inherits all methods transparently.
 
 ## Project Structure
 
@@ -133,7 +135,7 @@ Presenter keeps the single `addPeriodicTimeObserver` (1 s) and fans out ticks to
 
 **Episode navigation**: `MPRemoteCommandCenter` prev/next track commands on both platforms. `EpisodeRef` + `EpisodeNavigator` + `buildEpisodeNavigation` (shared free function in `PlayLink.swift`). `PlayLink` carries `previousEpisode`, `nextEpisode`, `episodeNavigator`; passes through `VideoPlayerCoordinator` (tvOS) or `VideoPlayerView` (iOS) → `NativeVideoPresenter`
 
-**Playback reporting**: `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped` — called on start, periodically (via shared 1 s time observer, reports every ~10 s), and on dismiss/episode-nav
+**Playback reporting**: `reportPlaybackStart`, `reportPlaybackProgress`, `reportPlaybackStopped` — called on start, periodically (via shared 1 s time observer, reports every ~10 s), and on dismiss/episode-nav. `itemId` / `startTime` on the presenter are `var` and are rebound in `navigateToEpisode(_:)` (startTime → `nil`) so the new episode reports under its own identity rather than the initial episode's.
 
 **Auto-play next episode**: `AVPlayerItem.didPlayToEndTime` observer → `navigateToEpisode(next)` when `autoPlayNextEpisode` setting is on
 

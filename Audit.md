@@ -662,10 +662,86 @@ The presenter drops from **1,678 → 1,099 lines** (−579, ≈35%). Net file co
 ### Remaining after this batch
 
 **Refactoring** (from §13 suggested batch)
-- `APIClientProtocol` domain split (deferred — mostly organizational)
+- ~~`APIClientProtocol` domain split~~ → **done in §19.**
 
 **Known follow-ups surfaced during this refactor**
-- Episode-nav `reportPlaybackStart` uses `self.itemId` / `self.startTime` (both `let`), so the new episode is reported under the old identity. Small, isolated fix: update `itemId` / `startTime` on episode navigation (or have the reporter take them per-call from the playbackInfo).
+- ~~Episode-nav `reportPlaybackStart` uses `self.itemId` / `self.startTime` (both `let`), so the new episode is reported under the old identity.~~ → **fixed in §18.**
+
+**App Store submission (user-task)**
+- Distribution signing, demo Jellyfin server, metadata + screenshots
+
+---
+
+## 18. Bug fix — episode-nav playback reporting identity (2026-04-18)
+
+### Problem
+
+The §17 sub-controller extraction preserved a pre-existing bug bug-for-bug: `NativeVideoPresenter.itemId` and `startTime` were declared `let`, so on episode-to-episode navigation (auto-play or manual next/prev) `PlaybackReporter`'s context closure kept reading the **original** episode's id, and `reportStart(startTime: self.startTime)` kept sending the **original** resume position.
+
+Server-visible symptoms:
+- "Now Playing" in Jellyfin's dashboard stays on the first episode even after navigating to the next.
+- `playbackPositionTicks` never advances on episodes N+1, N+2, …, so `getNextUp` + Continue Watching stay stuck pointing at episode N.
+- The first episode's "in progress" state never clears when you finish binging, because its `reportPlaybackStopped` fires with the ticks of the *last* episode you were watching.
+
+### Fix
+
+One-file change in `Shared/Screens/NativeVideoPresenter.swift`:
+
+- Promote `itemId` and `startTime` from `let` → `var`.
+- In `navigateToEpisode(_:)`, after `navigator(ep.id)` resolves, rebind `self.itemId = ep.id` and `self.startTime = nil` (new episodes always start at 0 — the `startTime` resume position only applies to the first item presented).
+
+`PlaybackReporter.Context` reads `self.itemId` per call via its `[weak self]` closure, so no reporter changes are required.
+
+### Verification
+
+- iOS + tvOS builds green.
+- Manual QA path documented on the PR: enable Settings → Interface → Debug → *Skip to End*, play episode N, hit the purple "End" pill → auto-play rolls to N+1 → confirm Jellyfin dashboard's "Now Playing" shows **N+1**, not N. Continue Watching on Home should also update to N+1 after dismiss.
+
+---
+
+## 19. Audit §13 #7 — APIClientProtocol domain split (2026-04-18)
+
+### Goal
+
+`APIClientProtocol` had grown to a single protocol with ~20 methods spanning server connection, auth/users, library queries, series/episodes, media segments, playback info, and playback reporting. Every leaf consumer (e.g. `PlaybackReporter`, `SkipSegmentController`) had to depend on the full surface even when they only needed 1–3 methods. This batch splits the protocol along domain lines without changing any call site or mock.
+
+### Changes
+
+`Packages/CinemaxKit/Sources/CinemaxKit/Networking/APIClientProtocol.swift` is now four sub-protocols + a composition typealias:
+
+| Sub-protocol | Responsibilities |
+|--------------|------------------|
+| `ServerAPI`   | `connectToServer`, `fetchServerInfo`, `reconnect`, `clearCache` |
+| `AuthAPI`     | `authenticate`, `getPublicUsers`, `getUsers`, `getActiveSessions` |
+| `LibraryAPI`  | `getResumeItems`, `getLatestMedia`, `getItems`, `getGenres`, `getUserViews`, `getItem`, `getSimilarItems`, `searchItems`, `getSeasons`, `getEpisodes`, `getNextUp` |
+| `PlaybackAPI` | `getPlaybackInfo`, `getMediaSegments`, `reportPlaybackStart/Progress/Stopped` |
+
+```swift
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI
+extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI {}
+```
+
+Default-argument extensions moved onto the appropriate sub-protocol (`LibraryAPI`, `AuthAPI`, `PlaybackAPI`).
+
+### Narrowed consumers
+
+- `PlaybackReporter`       → `any PlaybackAPI`
+- `SkipSegmentController`  → `any PlaybackAPI`
+
+Everything else (view models, screens, navigation, `MockAPIClient`) continues to use `any APIClientProtocol`. Because `APIClientProtocol` is now a typealias for the composition, no call site or mock needed a rename.
+
+### Why not split the call sites too
+
+The view models (`HomeViewModel`, `MediaDetailViewModel`, `SearchViewModel`, `MediaLibraryViewModel`, `LoginViewModel`, `ServerSetupViewModel`) legitimately touch 2–3 domains each. Narrowing them would require passing multiple protocol existentials through `AppState` / environment plumbing for little real benefit. The leaf controllers (pure playback) are where narrowing pays off: their dependency graph now *documents* that they can't accidentally reach into auth, library, or server surfaces.
+
+### Build & test
+
+- iOS + tvOS builds green.
+- `xcodebuild test -only-testing:CinemaxTests`: all green (exit 0).
+
+### Remaining after this batch
+
+**Refactoring**: nothing scheduled from §13.
 
 **App Store submission (user-task)**
 - Distribution signing, demo Jellyfin server, metadata + screenshots
