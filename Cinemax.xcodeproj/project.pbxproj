@@ -28,6 +28,7 @@
 		2795FD90A8FA67405535C2B7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 653AA083295D61DCACCEC0A1 /* PrivacyInfo.xcprivacy */; };
 		28247D55CC29D95670733239 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81F4A35762E8619A3D24747 /* EmptyStateView.swift */; };
 		2853B78C03BA5522E348B212 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 280786386ED204F8AAAF36B6 /* Assets.xcassets */; };
+		28607C1A48373994CB677989 /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */; };
 		28909321B0A490C0E70342E4 /* GlassTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CE3A78C397CC15A81F1635 /* GlassTextField.swift */; };
 		289B6BE095E7F76554DAE841 /* TrackPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5D31C0A9CB664FEB840DA3 /* TrackPickerSheet.swift */; };
 		28A82A58BDED7ACD5B9221F8 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */; };
@@ -110,6 +111,7 @@
 		A3B5BCE46E4207582861DBBE /* TVSeriesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0A181A9E709E7700EC2E95 /* TVSeriesScreen.swift */; };
 		A457ECA5B1E6FC13546B3306 /* ErrorStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929537FA4254CCBD87E276B3 /* ErrorStateView.swift */; };
 		A5BDB9B097C212892B4AEB36 /* BaseItemDto+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */; };
+		A8C1C7C4A4E243D4F959D865 /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */; };
 		AE92C836D641772893016E26 /* SettingsRowHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4049AE456C81ACB9DD77BA6B /* SettingsRowHelpers.swift */; };
 		B17B6055000707C83658C8DF /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */; };
 		B69DEDB39F1ACCA6FBE1EFAC /* SettingsAppearanceView+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44CF59AA409F235181A7D841 /* SettingsAppearanceView+iOS.swift */; };
@@ -189,14 +191,14 @@
 		59CE3A78C397CC15A81F1635 /* GlassTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTextField.swift; sourceTree = "<group>"; };
 		5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaGlassTheme.swift; sourceTree = "<group>"; };
 		611E44F72064D91AE6DBCC6C /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
-		653AA083295D61DCACCEC0A1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		653AA083295D61DCACCEC0A1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModelTests.swift; sourceTree = "<group>"; };
 		6EAA0B8314F73A80686E650D /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		71EDA47106672004DE07BDCF /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		74EFA596296688A96C374135 /* SleepTimerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepTimerController.swift; sourceTree = "<group>"; };
 		75FE585AF0EC0507240E8772 /* APICacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APICacheTests.swift; sourceTree = "<group>"; };
 		78377E8E832D65F7226A2A06 /* AppNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigation.swift; sourceTree = "<group>"; };
-		7D88DF3FEF51CF7E5E1C948A /* Cinemax.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Cinemax.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7D88DF3FEF51CF7E5E1C948A /* Cinemax.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cinemax.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7EB193219DC7306139A95B60 /* LibraryPosterCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPosterCard.swift; sourceTree = "<group>"; };
 		7F79C18163C57966CF114BD2 /* SearchViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModelTests.swift; sourceTree = "<group>"; };
 		8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailScreen.swift; sourceTree = "<group>"; };
@@ -210,6 +212,7 @@
 		A6A30840A8AEBE5AA59B722F /* MovieLibraryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieLibraryScreen.swift; sourceTree = "<group>"; };
 		A7C6E1A74D6EE64FD563385D /* CinemaxTVApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxTVApp.swift; sourceTree = "<group>"; };
 		A863021FF6B842EE2A0E27CA /* LoadingStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingStateView.swift; sourceTree = "<group>"; };
+		A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		AA0A181A9E709E7700EC2E95 /* TVSeriesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSeriesScreen.swift; sourceTree = "<group>"; };
 		AEA4717DCFEE46C5BE3F4787 /* PlayLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayLink.swift; sourceTree = "<group>"; };
 		B01CD5F39E429B665FA12B0C /* ServerSetupViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSetupViewModelTests.swift; sourceTree = "<group>"; };
@@ -217,7 +220,7 @@
 		B171C71911F6E759AB1A0EDB /* MediaDetailViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailViewModelTests.swift; sourceTree = "<group>"; };
 		B4426FD8BE586CC3296B2698 /* MediaQualityBadges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaQualityBadges.swift; sourceTree = "<group>"; };
 		BA0B2775D4776FF99A90FB12 /* WideCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WideCard.swift; sourceTree = "<group>"; };
-		BCC43AE61EC4C83ED88C63C1 /* CinemaxTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CinemaxTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BCC43AE61EC4C83ED88C63C1 /* CinemaxTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CinemaxTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E9157A106817FC0C04B450 /* SettingsScreen+tvOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsScreen+tvOS.swift"; sourceTree = "<group>"; };
 		C144D0A57021E0A0A783977B /* SearchScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchScreen.swift; sourceTree = "<group>"; };
 		C346F0B7AFF504DA6593370E /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
@@ -416,6 +419,7 @@
 			isa = PBXGroup;
 			children = (
 				F701053A07C8B6B1D912E9E6 /* Components */,
+				A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */,
 				5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */,
 				D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */,
 				E9A353B49C5117D5F686F07B /* GlassModifiers.swift */,
@@ -537,8 +541,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2620;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = 4A265CE224197B289D7A7B4E /* Build configuration list for PBXProject "Cinemax" */;
 			developmentRegion = fr;
@@ -609,6 +611,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				28607C1A48373994CB677989 /* AdaptiveLayout.swift in Sources */,
 				173F19747EE155F10F3B6115 /* AlphabeticalJumpBar.swift in Sources */,
 				2BC23AB09D961A04A91415F7 /* AppNavigation.swift in Sources */,
 				A5BDB9B097C212892B4AEB36 /* BaseItemDto+Metadata.swift in Sources */,
@@ -677,6 +680,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A8C1C7C4A4E243D4F959D865 /* AdaptiveLayout.swift in Sources */,
 				0A06186102AA10D92923583B /* AlphabeticalJumpBar.swift in Sources */,
 				8CE621C8D3CAD1DE98B6CA11 /* AppNavigation.swift in Sources */,
 				E71BC25CBB98F5DF97065B98 /* BaseItemDto+Metadata.swift in Sources */,
@@ -834,6 +838,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = iOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -889,6 +894,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = tvOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -908,6 +914,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = iOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -987,6 +994,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = tvOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

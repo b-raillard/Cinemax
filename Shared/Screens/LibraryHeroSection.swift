@@ -9,61 +9,71 @@ struct LibraryHeroSection: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    #if !os(tvOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
 
     let item: BaseItemDto
     let itemType: BaseItemKind
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let id = item.id {
-                CinemaLazyImage(
-                    url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
-                    fallbackIcon: nil,
-                    fallbackBackground: CinemaColor.surfaceContainerLow
-                )
-                .accessibilityHidden(true)
-            }
-
-            CinemaGradient.heroOverlay
-
-            VStack(alignment: .leading, spacing: heroContentSpacing) {
-                HStack(spacing: 8) {
-                    if let rating = item.officialRating {
-                        RatingBadge(rating: rating)
-                    }
-                    heroMetadataText
-                }
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-
-                Text(item.name ?? "")
-                    .font(.system(size: heroTitleSize, weight: .black))
-                    .tracking(-1.5)
-                    .foregroundStyle(.white)
-                    .textCase(.uppercase)
-                    .lineLimit(2)
-
-                #if os(tvOS)
-                if let overview = item.overview {
-                    Text(overview)
-                        .font(.system(size: overviewFontSize))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .lineLimit(3)
-                        .frame(maxWidth: maxOverviewWidth, alignment: .leading)
-                }
-                #endif
-
+        // A `Color.clear` sizing driver pinned to `heroHeight`, with backdrop, gradient,
+        // and content all layered as overlays. Overlays CANNOT grow the parent, so the
+        // hero is guaranteed to be exactly `heroHeight` tall regardless of what the
+        // backdrop image or the content VStack try to do. `.clipped()` then bounds the
+        // overlays visually. Earlier ZStack-based attempts let the CinemaLazyImage's
+        // natural size leak through in iPad landscape, pushing the action buttons
+        // outside the visible hero bounds.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: heroHeight)
+            .overlay {
                 if let id = item.id {
-                    heroActionButtons(id: id)
+                    CinemaLazyImage(
+                        url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
+                        fallbackIcon: nil,
+                        fallbackBackground: CinemaColor.surfaceContainerLow
+                    )
+                    .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, heroPadding)
-            .padding(.top, heroPadding)
-            .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: heroHeight)
-        .clipped()
+            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: heroContentSpacing) {
+                    HStack(spacing: 8) {
+                        if let rating = item.officialRating {
+                            RatingBadge(rating: rating)
+                        }
+                        heroMetadataText
+                    }
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+
+                    Text(item.name ?? "")
+                        .font(.system(size: heroTitleSize, weight: .black))
+                        .tracking(-1.5)
+                        .foregroundStyle(.white)
+                        .textCase(.uppercase)
+                        .lineLimit(2)
+
+                    #if os(tvOS)
+                    if let overview = item.overview {
+                        Text(overview)
+                            .font(.system(size: overviewFontSize))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .lineLimit(3)
+                            .frame(maxWidth: maxOverviewWidth, alignment: .leading)
+                    }
+                    #endif
+
+                    if let id = item.id {
+                        heroActionButtons(id: id)
+                    }
+                }
+                .padding(.horizontal, heroPadding)
+                .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .clipped()
     }
 
     @ViewBuilder
@@ -142,7 +152,7 @@ struct LibraryHeroSection: View {
         #if os(tvOS)
         820
         #else
-        360
+        AdaptiveLayout.heroHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 

@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @State private var selectedTab: AppTab = .home
@@ -16,11 +15,7 @@ struct MainTabView: View {
             .environment(playerCoordinator)
             .task { playerCoordinator.localizationManager = loc }
         #else
-        if sizeClass == .regular {
-            sidebarLayout
-        } else {
-            tabBarLayout
-        }
+        iOSTabLayout
         #endif
     }
 
@@ -40,73 +35,49 @@ struct MainTabView: View {
     }
     #endif
 
-    // MARK: - Sidebar (iPad Landscape)
+    // MARK: - iOS / iPadOS — adaptive tab bar ↔ sidebar
 
-    private var sidebarLayout: some View {
-        NavigationSplitView {
-            sidebarContent
-        } detail: {
-            selectedTabView
-        }
-    }
-
-    private var sidebarContent: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(loc.localized("app.name"))
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(CinemaColor.onSurface)
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 12)
-
-            ForEach(AppTab.allCases) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    Label(loc.localized(tab.titleKey), systemImage: tab.icon)
-                        .font(.system(size: 17, weight: selectedTab == tab ? .semibold : .regular))
-                        .foregroundStyle(selectedTab == tab ? .white : CinemaColor.onSurfaceVariant)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 20)
-                        .background(
-                            selectedTab == tab
-                                ? Capsule().fill(themeManager.accentContainer)
-                                : nil
-                        )
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
-            }
-
-            Spacer()
-        }
-        .frame(maxHeight: .infinity)
-        .background(CinemaColor.surfaceContainerLow.opacity(0.7))
-    }
-
-    // MARK: - Tab Bar (iPhone + iPad Portrait)
-
-    private var tabBarLayout: some View {
+    #if !os(tvOS)
+    /// Uses the iOS 18 `Tab` API with `.tabViewStyle(.sidebarAdaptable)` so iPhone gets
+    /// a bottom tab bar while iPad regular width gets a native sidebar. Replaces the
+    /// previous hand-built `NavigationSplitView` sidebar (which needed manual selection
+    /// highlight, capsule styling, and detail wiring).
+    private var iOSTabLayout: some View {
         TabView(selection: $selectedTab) {
-            ForEach(AppTab.allCases) { tab in
-                selectedView(for: tab)
-                    .tabItem {
-                        Label(loc.localized(tab.titleKey), systemImage: tab.icon)
-                    }
-                    .tag(tab)
+            Tab(value: AppTab.home) {
+                NavigationStack { HomeScreen() }
+            } label: {
+                Label(loc.localized("tab.home"), systemImage: "house.fill")
+            }
+            Tab(value: AppTab.movies) {
+                NavigationStack { MovieLibraryScreen() }
+            } label: {
+                Label(loc.localized("tab.movies"), systemImage: "film")
+            }
+            Tab(value: AppTab.tvShows) {
+                NavigationStack { TVSeriesScreen() }
+            } label: {
+                Label(loc.localized("tab.tvShows"), systemImage: "tv.fill")
+            }
+            Tab(value: AppTab.search, role: .search) {
+                NavigationStack { SearchScreen() }
+            } label: {
+                Label(loc.localized("tab.search"), systemImage: "magnifyingglass")
+            }
+            Tab(value: AppTab.settings) {
+                NavigationStack { SettingsScreen() }
+            } label: {
+                Label(loc.localized("tab.settings"), systemImage: "gearshape")
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
         .tint(themeManager.accentContainer)
     }
+    #endif
 
-    // MARK: - Tab Content
+    // MARK: - Tab Content (tvOS only; iOS uses Tab blocks above)
 
-    @ViewBuilder
-    private var selectedTabView: some View {
-        selectedView(for: selectedTab)
-    }
-
+    #if os(tvOS)
     @ViewBuilder
     private func selectedView(for tab: AppTab) -> some View {
         switch tab {
@@ -122,6 +93,7 @@ struct MainTabView: View {
             NavigationStack { SettingsScreen() }
         }
     }
+    #endif
 }
 
 // MARK: - Tab Definition

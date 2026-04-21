@@ -17,6 +17,9 @@ struct UserSwitchSheet: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss
+    #if !os(tvOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
 
     @State private var users: [UserDto] = []
     @State private var isLoading = true
@@ -235,7 +238,7 @@ struct UserSwitchSheet: View {
         #if os(tvOS)
         Array(repeating: GridItem(.flexible(), spacing: CinemaSpacing.spacing4), count: 4)
         #else
-        Array(repeating: GridItem(.flexible(), spacing: CinemaSpacing.spacing3), count: 3)
+        AdaptiveLayout.userGridColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 

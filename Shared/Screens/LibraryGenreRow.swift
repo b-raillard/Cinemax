@@ -12,6 +12,10 @@ struct LibraryGenreRow: View {
     let itemType: BaseItemKind
     let onViewAll: () -> Void
 
+    #if !os(tvOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
     var body: some View {
         ContentRow(
             title: genre,
@@ -29,7 +33,7 @@ struct LibraryGenreRow: View {
         #if os(tvOS)
         200
         #else
-        140
+        AdaptiveLayout.posterCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 }

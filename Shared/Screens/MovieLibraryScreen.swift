@@ -8,6 +8,9 @@ struct MediaLibraryScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    #if !os(tvOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
     @State private var viewModel: MediaLibraryViewModel
     @State private var showSortFilter = false
 
@@ -178,7 +181,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
         #else
-        Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
+        AdaptiveLayout.posterGridColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -663,7 +666,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         CinemaSpacing.spacing20
         #else
-        CinemaSpacing.spacing3
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -703,7 +706,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         CinemaSpacing.spacing20
         #else
-        CinemaSpacing.spacing6
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -711,7 +714,7 @@ struct MediaLibraryScreen: View {
         #if os(tvOS)
         Array(repeating: GridItem(.flexible(), spacing: CinemaSpacing.spacing3), count: 4)
         #else
-        Array(repeating: GridItem(.flexible(), spacing: CinemaSpacing.spacing3), count: 2)
+        AdaptiveLayout.browseGenreColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 }
