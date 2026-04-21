@@ -41,6 +41,11 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIApplicationSupportsIndirectInputEvents: true
+        # AirPlay to Apple TV / external speakers needs both `audio` (keeps
+        # playback alive when the iPhone is locked mid-cast) and `airplay`.
+        UIBackgroundModes:
+          - audio
+          - airplay
         # Full-screen-only — Cinemax is a video player, iPad split view would
         # interrupt playback and shrink hero/backdrop layouts. Setting this
         # also silences Xcode's "all interface orientations must be supported

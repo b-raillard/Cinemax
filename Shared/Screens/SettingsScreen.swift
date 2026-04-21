@@ -182,6 +182,47 @@ struct SettingsScreen: View {
         serverAddress
     }
 
+    // MARK: - Shared Toggle Row Lists
+    //
+    // Single source of truth for every boolean settings row. Both platform
+    // renderers (iOS glass-panel + divider stack, tvOS focused accent row)
+    // consume these arrays via `iOSToggleRowsJoined` / inline `ForEach`.
+    // Adding or renaming a toggle is now a single-file change.
+
+    var interfaceToggleRows: [SettingsToggleRow] {
+        [
+            .init(id: "motion", icon: "sparkles", label: loc.localized("settings.motionEffects"), value: $motionEffects),
+            .init(id: "subtitles", icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), value: $forceSubtitles),
+            .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
+            .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode)
+        ]
+    }
+
+    var homePageToggleRows: [SettingsToggleRow] {
+        [
+            .init(id: "homeContinueWatching", icon: "play.circle", label: loc.localized("settings.homePage.continueWatching"), value: $showContinueWatching),
+            .init(id: "homeRecentlyAdded", icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"), value: $showRecentlyAdded),
+            .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows),
+            .init(id: "homeWatchingNow", icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"), value: $showWatchingNow)
+        ]
+    }
+
+    var detailPageToggleRows: [SettingsToggleRow] {
+        [
+            .init(id: "detailQualityBadges", icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"), value: $showQualityBadges)
+        ]
+    }
+
+    /// iOS marks debug icons orange to signal developer territory. tvOS
+    /// currently ignores `tint` and uses `themeManager.accent` — preserving
+    /// the existing platform difference.
+    var debugToggleRows: [SettingsToggleRow] {
+        [
+            .init(id: "debugFastSleep", icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"), value: $debugFastSleepTimer, tint: .orange),
+            .init(id: "debugSkipToEnd", icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"), value: $debugShowSkipToEnd, tint: .orange)
+        ]
+    }
+
     // MARK: Body
 
     /// Clears the API client cache and broadcasts `cinemaxShouldRefreshCatalogue` so Home

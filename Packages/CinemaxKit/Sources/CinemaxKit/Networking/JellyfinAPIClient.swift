@@ -14,7 +14,10 @@ func debugLog(_ message: String) {
 #endif
 
 public final class JellyfinAPIClient: Sendable {
-    // JellyfinClient is not Sendable, so we protect it with a lock
+    // `JellyfinClient` (from jellyfin-sdk-swift) is not marked `Sendable`, but we need
+    // cross-actor access. Invariant: every access to `_jellyfinClient` / `_serverURL`
+    // goes through `getClient()` / `getServerURL()` / `setClient(_:url:)` which all
+    // acquire `lock`. Do not read or write these fields directly outside those helpers.
     private let lock = NSLock()
     nonisolated(unsafe) private var _jellyfinClient: JellyfinClient?
     nonisolated(unsafe) private var _serverURL: URL?
@@ -478,7 +481,11 @@ public final class JellyfinAPIClient: Sendable {
             )
         }
 
-        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            return buildDirectStreamURL(
+                itemId: effectiveItemId, serverURL: serverURL, token: token, etag: item.etag
+            )
+        }
         components.path = "/Videos/\(effectiveItemId)/stream"
         var queryItems = [
             URLQueryItem(name: "static", value: "true"),
@@ -560,8 +567,12 @@ public final class JellyfinAPIClient: Sendable {
 
         guard let statusCode = httpResponse?.statusCode, (200..<300).contains(statusCode) else {
             let statusCode = httpResponse?.statusCode ?? -1
-            let bodyStr = String(data: data, encoding: .utf8) ?? "no body"
-            throw JellyfinError.playbackFailed("PlaybackInfo returned \(statusCode): \(bodyStr.prefix(200))")
+            #if DEBUG
+            if let bodyStr = String(data: data, encoding: .utf8) {
+                debugLog("PlaybackInfo \(statusCode) body: \(bodyStr.prefix(500))")
+            }
+            #endif
+            throw JellyfinError.playbackFailed("PlaybackInfo returned \(statusCode)")
         }
 
         let decoder = JSONDecoder()
@@ -579,7 +590,7 @@ public final class JellyfinAPIClient: Sendable {
     private func buildDirectStreamURL(
         itemId: String, serverURL: URL, token: String?, etag: String?
     ) -> PlaybackInfo {
-        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) ?? URLComponents()
         components.path = "/Videos/\(itemId)/stream"
         var queryItems = [
             URLQueryItem(name: "static", value: "true"),

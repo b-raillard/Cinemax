@@ -70,6 +70,10 @@ struct ServerSetupScreen: View {
                         errorBanner(error)
                     }
 
+                    if isHTTPURL(viewModel.serverURL) {
+                        httpWarningBanner
+                    }
+
                     CinemaButton(
                         title: loc.localized("server.connect"),
                         style: .accent,
@@ -161,6 +165,10 @@ struct ServerSetupScreen: View {
                     if let error = viewModel.errorMessage {
                         errorBanner(error)
                     }
+
+                    if isHTTPURL(viewModel.serverURL) {
+                        httpWarningBanner
+                    }
                 }
                 .padding(CinemaSpacing.spacing4)
                 .glassPanel(cornerRadius: CinemaRadius.large)
@@ -211,6 +219,40 @@ struct ServerSetupScreen: View {
                 .blur(radius: 100)
                 .offset(x: -150, y: 200)
         }
+    }
+
+    /// True when the user has explicitly typed `http://` (not `https://`). We do NOT warn on
+    /// scheme-less input because `ServerSetupViewModel.connect` defaults missing-scheme input
+    /// to HTTPS. Trimming matches the VM's behavior so the warning tracks what will actually
+    /// be dialed.
+    private func isHTTPURL(_ raw: String) -> Bool {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .hasPrefix("http://")
+    }
+
+    private var httpWarningBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .foregroundStyle(Color.orange)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(loc.localized("server.httpWarning.title"))
+                    .font(CinemaFont.label(.medium).weight(.semibold))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Text(loc.localized("server.httpWarning.message"))
+                    .font(CinemaFont.label(.small))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                .fill(Color.orange.opacity(0.15))
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private func errorBanner(_ message: String) -> some View {

@@ -4,10 +4,20 @@ import Nuke
 
 @MainActor @Observable
 final class AppState {
+    /// Placeholder used before a real server is configured. `URL(string:)` is Optional
+    /// so a force unwrap here would crash on a malformed literal — a static URL built
+    /// from components is infallible and keeps the rest of the code crash-free.
+    static let placeholderServerURL: URL = {
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = "localhost"
+        return components.url ?? URL(fileURLWithPath: "/")
+    }()
+
     var isAuthenticated = false
     var hasServer = false
     var serverURL: URL? {
-        didSet { imageBuilder = ImageURLBuilder(serverURL: serverURL ?? URL(string: "http://localhost")!) }
+        didSet { imageBuilder = ImageURLBuilder(serverURL: serverURL ?? Self.placeholderServerURL) }
     }
     var serverInfo: ServerInfo?
     var currentUserId: String?
@@ -25,9 +35,9 @@ final class AppState {
     }
 
     // Stored so it is only rebuilt when serverURL changes, not on every access.
-    var imageBuilder = ImageURLBuilder(serverURL: URL(string: "http://localhost")!)
+    var imageBuilder = ImageURLBuilder(serverURL: AppState.placeholderServerURL)
 
-    var imageServerURL: URL { serverURL ?? URL(string: "http://localhost")! }
+    var imageServerURL: URL { serverURL ?? Self.placeholderServerURL }
 
     func restoreSession() async {
         guard let serverURL = keychain.getServerURL(),
