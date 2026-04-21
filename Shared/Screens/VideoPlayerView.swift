@@ -10,8 +10,8 @@ struct VideoPlayerView: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("autoPlayNextEpisode") private var autoPlayNextEpisode: Bool = true
-    @AppStorage("render4K") private var render4K: Bool = true
+    @AppStorage(SettingsKey.autoPlayNextEpisode) private var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
+    @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
 
     let itemId: String
     let title: String

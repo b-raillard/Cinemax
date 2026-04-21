@@ -82,7 +82,7 @@ struct AppNavigation: View {
     @State private var hasCheckedSession = false
     @Environment(\.scenePhase) private var scenePhase
 
-    @AppStorage("motionEffects") private var motionEffects: Bool = true
+    @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
 
     init() {
         ImagePipeline.shared = ImagePipeline(configuration: .withDataCache(

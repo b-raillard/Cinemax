@@ -13,7 +13,7 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
-    @AppStorage("detail.showQualityBadges") private var showQualityBadges: Bool = true
+    @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
@@ -113,7 +113,7 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private func backdropSection(_ item: BaseItemDto) -> some View {
         ZStack(alignment: .bottomLeading) {
-            if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
+            if let backdropId = item.backdropItemID {
                 CinemaLazyImage(
                     url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
                     fallbackIcon: nil,

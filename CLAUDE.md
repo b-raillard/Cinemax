@@ -170,7 +170,7 @@ Every boolean toggle is declared once as `SettingsToggleRow` and rendered on bot
 ### Assets
 - `AppLogo.imageset`: iOS `app_logo.png` (full icon); tvOS `app_logo_tv.png` (front parallax layer — transparent bg, jellyfish only). No `clipShape` on tvOS logo.
 
-### `@AppStorage` keys (shared iOS/tvOS, declared in `SettingsScreen`)
+### `@AppStorage` keys (key names + defaults in `SettingsKey` / `SettingsKey.Default` — `Shared/DesignSystem/SettingsKeys.swift`)
 | Key | Default | Effect |
 |-----|---------|--------|
 | `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |
@@ -286,7 +286,7 @@ Always visible (not `#if DEBUG`-gated) so QA / power users don't need a custom b
 - `ImageURLBuilder` → `/Items/{id}/Images/{type}`.
 - **Backdrop sizing**: use `ImageURLBuilder.screenPixelWidth` — never hardcode `1920`.
 - **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with a 500 MB disk cache (`com.cinemax.images`).
-- **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`.
+- **Backdrop fallback**: use `item.backdropItemID` (→ `parentBackdropItemID ?? seriesID ?? id`) from `BaseItemDto+Metadata`.
 - **All image loading via `CinemaLazyImage`** — never `LazyImage` directly. Params: `url`, `fallbackIcon: String?`, `fallbackBackground: Color`, `showLoadingIndicator: Bool`.
 - **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`.
 - **Backdrop (full-bleed ZStack)**: `CinemaLazyImage` inside a `ZStack` must have `.frame(maxWidth: .infinity, maxHeight: .infinity)` — otherwise ZStack sizes from the image's natural dimensions (e.g. 1920px), pushing the title VStack off-screen. Outer container must be `LazyVStack(alignment: .leading)`.

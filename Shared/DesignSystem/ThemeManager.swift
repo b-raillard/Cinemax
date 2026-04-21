@@ -13,7 +13,7 @@ final class ThemeManager {
     // MARK: - Persisted Properties
 
     @ObservationIgnored
-    @AppStorage("accentColor") private var _accentColorKey: String = "blue"
+    @AppStorage(SettingsKey.accentColor) private var _accentColorKey: String = SettingsKey.Default.accentColor
 
     var accentColorKey: String {
         get {
@@ -27,7 +27,7 @@ final class ThemeManager {
     }
 
     @ObservationIgnored
-    @AppStorage("darkMode") private var _darkModeEnabled: Bool = true
+    @AppStorage(SettingsKey.darkMode) private var _darkModeEnabled: Bool = SettingsKey.Default.darkMode
 
     var darkModeEnabled: Bool {
         get { _darkModeEnabled }
@@ -38,7 +38,7 @@ final class ThemeManager {
     }
 
     @ObservationIgnored
-    @AppStorage("uiScale") private var _uiScale: Double = 1.0
+    @AppStorage(SettingsKey.uiScale) private var _uiScale: Double = SettingsKey.Default.uiScale
 
     /// Global UI text scale factor (0.8 – 1.4). Changing this re-renders all views.
     var uiScale: Double {

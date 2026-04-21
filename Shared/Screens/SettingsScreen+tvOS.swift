@@ -302,17 +302,7 @@ extension SettingsScreen {
 
                     Spacer()
 
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(CinemaColor.success)
-                            .frame(width: 6, height: 6)
-                        Text(loc.localized("settings.connected"))
-                            .font(.system(size: CinemaScale.pt(14), weight: .bold))
-                            .foregroundStyle(CinemaColor.success)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(CinemaColor.success.opacity(0.1)))
+                    serverStatusBadge(label: loc.localized("settings.connected"), fontSize: 14)
                 }
 
                 tvRefreshConnectionButton

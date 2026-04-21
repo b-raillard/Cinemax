@@ -410,19 +410,7 @@ extension SettingsScreen {
     }
 
     var liveBadge: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(CinemaColor.success)
-                .frame(width: 6, height: 6)
-
-            Text(loc.localized("settings.live"))
-                .font(.system(size: CinemaScale.pt(13), weight: .bold))
-                .tracking(0.5)
-                .foregroundStyle(CinemaColor.success)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(CinemaColor.success.opacity(0.12)))
+        serverStatusBadge(label: loc.localized("settings.live"), fontSize: 13)
     }
 
     @ViewBuilder

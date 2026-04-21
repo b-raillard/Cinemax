@@ -4,7 +4,7 @@ import SwiftUI
 final class LocalizationManager {
 
     @ObservationIgnored
-    @AppStorage("appLanguage") private var _languageCode: String = "fr"
+    @AppStorage(SettingsKey.appLanguage) private var _languageCode: String = SettingsKey.Default.appLanguage
 
     private var _revision: Int = 0
 

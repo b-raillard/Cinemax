@@ -102,8 +102,9 @@ enum AccentOption: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Preview swatch — matches the dark-mode `accent` hue so the dot reads like the active accent.
-    var color: Color { Color(hex: palette.accentDark) }
+    /// Preview swatch — resolves against the active trait collection so the dot
+    /// matches the live accent in both light and dark mode.
+    var color: Color { Color.dynamic(light: palette.accentLight, dark: palette.accentDark) }
 }
 
 // MARK: - Settings Category
@@ -171,21 +172,21 @@ struct SettingsScreen: View {
     @State var showUserSwitch = false
     @State var selectedCategory: SettingsCategory? = nil
 
-    // Shared stored properties
-    @AppStorage("motionEffects") var motionEffects: Bool = true
-    @AppStorage("forceSubtitles") var forceSubtitles: Bool = false
-    @AppStorage("render4K") var render4K: Bool = true
-    @AppStorage("autoPlayNextEpisode") var autoPlayNextEpisode: Bool = true
-    @AppStorage("darkMode") var darkModeStorage: Bool = true
-    @AppStorage("home.showContinueWatching") var showContinueWatching: Bool = true
-    @AppStorage("home.showRecentlyAdded") var showRecentlyAdded: Bool = true
-    @AppStorage("home.showGenreRows") var showGenreRows: Bool = true
-    @AppStorage("home.showWatchingNow") var showWatchingNow: Bool = true
-    @AppStorage("detail.showQualityBadges") var showQualityBadges: Bool = true
-    @AppStorage("sleepTimerDefaultMinutes") var sleepTimerMinutes: Int = 0
-    @AppStorage("debug.fastSleepTimer") var debugFastSleepTimer: Bool = false
-    @AppStorage("debug.showSkipToEnd") var debugShowSkipToEnd: Bool = false
-    @State var fontScale: Double = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
+    // Shared stored properties — keys + defaults live in SettingsKey
+    @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects
+    @AppStorage(SettingsKey.forceSubtitles) var forceSubtitles: Bool = SettingsKey.Default.forceSubtitles
+    @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
+    @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
+    @AppStorage(SettingsKey.darkMode) var darkModeStorage: Bool = SettingsKey.Default.darkMode
+    @AppStorage(SettingsKey.homeShowContinueWatching) var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
+    @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
+    @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
+    @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
+    @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
+    @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
+    @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
+    @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
+    @State var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
     @State var showFontSizePicker = false
     let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]
 

@@ -189,17 +189,37 @@ final class SleepTimerController {
 
     // MARK: - Overlay prompt
 
+    /// Localized strings rendered by both platform presentations (tvOS alert,
+    /// iOS blur card). Kept as a struct so future copy tweaks happen in one place.
+    /// `@MainActor` required — `LocalizationManager.localized` is main-actor isolated.
+    @MainActor
+    private struct PromptContent {
+        let title: String
+        let subtitle: String
+        let keepWatching: String
+        let stop: String
+
+        init(loc: LocalizationManager) {
+            title = loc.localized("sleep.prompt.title")
+            subtitle = loc.localized("sleep.prompt.subtitle")
+            keepWatching = loc.localized("sleep.prompt.keepWatching")
+            stop = loc.localized("sleep.prompt.stop")
+        }
+    }
+
     private func showOverlay() {
+        let content = PromptContent(loc: loc)
+
         #if os(tvOS)
         guard overlayContainer == nil, let vc = playerVCProvider() else { return }
 
         let alert = UIAlertController(
-            title: loc.localized("sleep.prompt.title"),
-            message: loc.localized("sleep.prompt.subtitle"),
+            title: content.title,
+            message: content.subtitle,
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(
-            title: loc.localized("sleep.prompt.keepWatching"),
+            title: content.keepWatching,
             style: .default,
             handler: { [weak self] _ in
                 self?.overlayContainer = nil
@@ -207,7 +227,7 @@ final class SleepTimerController {
             }
         ))
         alert.addAction(UIAlertAction(
-            title: loc.localized("sleep.prompt.stop"),
+            title: content.stop,
             style: .destructive,
             handler: { [weak self] _ in
                 self?.overlayContainer = nil
@@ -247,7 +267,7 @@ final class SleepTimerController {
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 0
-        titleLabel.text = loc.localized("sleep.prompt.title")
+        titleLabel.text = content.title
 
         let subtitleLabel = UILabel()
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -255,10 +275,10 @@ final class SleepTimerController {
         subtitleLabel.textColor = .white.withAlphaComponent(0.8)
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
-        subtitleLabel.text = loc.localized("sleep.prompt.subtitle")
+        subtitleLabel.text = content.subtitle
 
         var keepConfig = UIButton.Configuration.plain()
-        var keepTitle = AttributedString(loc.localized("sleep.prompt.keepWatching"))
+        var keepTitle = AttributedString(content.keepWatching)
         keepTitle.font = .systemFont(ofSize: overlayButtonSize, weight: .semibold)
         keepTitle.foregroundColor = UIColor.black
         keepConfig.attributedTitle = keepTitle
@@ -273,7 +293,7 @@ final class SleepTimerController {
         keepWatchingButton.translatesAutoresizingMaskIntoConstraints = false
 
         var stopConfig = UIButton.Configuration.plain()
-        var stopTitle = AttributedString(loc.localized("sleep.prompt.stop"))
+        var stopTitle = AttributedString(content.stop)
         stopTitle.font = .systemFont(ofSize: overlayButtonSize, weight: .semibold)
         stopTitle.foregroundColor = UIColor.white
         stopConfig.attributedTitle = stopTitle
