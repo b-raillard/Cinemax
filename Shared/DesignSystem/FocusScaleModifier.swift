@@ -36,6 +36,11 @@ struct CinemaFocusModifier: ViewModifier {
                 x: 0, y: 12
             )
             .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+            #else
+            // iPad pointer hover. No-op on iPhone (no hover). `.lift` gives a gentle
+            // scale + shadow when motion is on; `.highlight` keeps the dim-only fallback
+            // when the user disables motion effects.
+            .hoverEffect(motionEnabled ? .lift : .highlight)
             #endif
     }
 }

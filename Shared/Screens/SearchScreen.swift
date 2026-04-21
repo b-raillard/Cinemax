@@ -9,6 +9,10 @@ struct SearchScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    #if !os(tvOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @FocusState private var searchFieldFocused: Bool
+    #endif
     @State private var viewModel = SearchViewModel()
 
     // Surprise Me state — two buttons (movie + series) in the empty state.
@@ -21,13 +25,13 @@ struct SearchScreen: View {
         let itemType: BaseItemKind
     }
 
-    private let columns: [GridItem] = {
+    private var columns: [GridItem] {
         #if os(tvOS)
         Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
         #else
-        Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
+        AdaptiveLayout.posterGridColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
-    }()
+    }
 
     var body: some View {
         ZStack {
@@ -64,6 +68,15 @@ struct SearchScreen: View {
             MediaDetailScreen(itemId: dest.id, itemType: dest.itemType)
         }
         #if os(iOS)
+        .background {
+            // ⌘F focuses the search field. Hidden button → keyboard-only affordance
+            // (the shortcut fires even though the button is off-screen).
+            Button("") { searchFieldFocused = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
         .navigationTitle(loc.localized("search.title"))
         .alert(loc.localized("search.permissionRequired"), isPresented: Bindable(viewModel).showPermissionAlert) {
             Button(loc.localized("search.openSettings")) {
@@ -96,6 +109,7 @@ struct SearchScreen: View {
             TextField(loc.localized("search.placeholder"), text: Bindable(viewModel).searchText)
                 #if os(iOS)
                 .textFieldStyle(.plain)
+                .focused($searchFieldFocused)
                 #endif
                 .font(.system(size: searchFontSize))
                 .foregroundStyle(CinemaColor.onSurface)
@@ -310,7 +324,7 @@ struct SearchScreen: View {
         #if os(tvOS)
         CinemaSpacing.spacing20
         #else
-        CinemaSpacing.spacing3
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 

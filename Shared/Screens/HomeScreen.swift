@@ -6,6 +6,9 @@ struct HomeScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    #if !os(tvOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
     @State private var viewModel = HomeViewModel()
 
     @AppStorage("home.showContinueWatching") private var showContinueWatching: Bool = true
@@ -177,122 +180,121 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func heroSection(_ item: BaseItemDto) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            // Backdrop — episodes/seasons don't have their own backdrop; use the parent (series)
-            if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
-                CinemaLazyImage(
-                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
-                    fallbackIcon: nil,
-                    fallbackBackground: CinemaColor.surfaceContainerLow
-                )
-                .accessibilityHidden(true)
-            }
-
-            // Gradient overlays
-            CinemaGradient.heroOverlay
-
-            // Content
-            VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
-                // Badges
-                HStack(spacing: 8) {
-                    if let rating = item.officialRating {
-                        RatingBadge(rating: rating)
-                    }
-
-                    metadataText(for: item)
-                }
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-
-                // Title
-                Text(item.name ?? "")
-                    .font(.system(size: heroTitleSize, weight: .black))
-                    .tracking(-1.5)
-                    .foregroundStyle(.white)
-                    .textCase(.uppercase)
-                    .lineLimit(2)
-
-                // Overview — hidden on iOS to keep hero compact
-                #if os(tvOS)
-                if let overview = item.overview {
-                    Text(overview)
-                        .font(.system(size: overviewFontSize))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .lineLimit(3)
-                        .frame(maxWidth: maxOverviewWidth, alignment: .leading)
-                }
-                #endif
-
-                // Action buttons
-                HStack(spacing: 12) {
-                    if let id = item.id {
-                        let heroNav = viewModel.resumeNavigation[id]
-                        let heroStart: Double? = {
-                            guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
-                            return Double(ticks) / 10_000_000
-                        }()
-                        PlayLink(
-                            itemId: id, title: item.name ?? "",
-                            startTime: heroStart,
-                            previousEpisode: heroNav?.previous, nextEpisode: heroNav?.next,
-                            episodeNavigator: heroNav?.navigator
-                        ) {
-                            HStack(spacing: CinemaSpacing.spacing2) {
-                                Text(loc.localized("action.play"))
-                                    .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
-                            .padding(.horizontal, CinemaSpacing.spacing4)
-                            #if os(iOS)
-                            .background(themeManager.accentContainer)
-                            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                            #endif
-                        }
-                        #if os(tvOS)
-                        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
-                        #else
-                        .buttonStyle(.plain)
-                        #endif
-                        .frame(width: playButtonWidth)
-
-                        NavigationLink {
-                            MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                        } label: {
-                            HStack(spacing: CinemaSpacing.spacing2) {
-                                Text(loc.localized("action.moreInfo"))
-                                    .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
-                                    .lineLimit(1)
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
-                            }
-                            .foregroundStyle(CinemaColor.onSurface)
-                            .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
-                            .padding(.horizontal, CinemaSpacing.spacing4)
-                            #if os(iOS)
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                            #endif
-                        }
-                        #if os(tvOS)
-                        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-                        #else
-                        .buttonStyle(.plain)
-                        #endif
-                        .fixedSize()
-                    }
+        // `Color.clear` sizing driver pinned to `heroHeight`, with backdrop, gradient,
+        // and content layered as overlays. Overlays can't grow the parent frame — so
+        // the hero is guaranteed to be exactly `heroHeight` regardless of what the
+        // backdrop or content try to do. Prevents the iPad-landscape regression where
+        // ZStack sized from the CinemaLazyImage's natural dimensions and pushed the
+        // action buttons off-screen.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: heroHeight)
+            .overlay {
+                if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
+                    CinemaLazyImage(
+                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
+                        fallbackIcon: nil,
+                        fallbackBackground: CinemaColor.surfaceContainerLow
+                    )
+                    .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, heroPadding)
-            .padding(.top, heroPadding)
-            .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: heroHeight)
-        .clipped()
+            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
+                    HStack(spacing: 8) {
+                        if let rating = item.officialRating {
+                            RatingBadge(rating: rating)
+                        }
+
+                        metadataText(for: item)
+                    }
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+
+                    Text(item.name ?? "")
+                        .font(.system(size: heroTitleSize, weight: .black))
+                        .tracking(-1.5)
+                        .foregroundStyle(.white)
+                        .textCase(.uppercase)
+                        .lineLimit(2)
+
+                    #if os(tvOS)
+                    if let overview = item.overview {
+                        Text(overview)
+                            .font(.system(size: overviewFontSize))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .lineLimit(3)
+                            .frame(maxWidth: maxOverviewWidth, alignment: .leading)
+                    }
+                    #endif
+
+                    HStack(spacing: 12) {
+                        if let id = item.id {
+                            let heroNav = viewModel.resumeNavigation[id]
+                            let heroStart: Double? = {
+                                guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
+                                return Double(ticks) / 10_000_000
+                            }()
+                            PlayLink(
+                                itemId: id, title: item.name ?? "",
+                                startTime: heroStart,
+                                previousEpisode: heroNav?.previous, nextEpisode: heroNav?.next,
+                                episodeNavigator: heroNav?.navigator
+                            ) {
+                                HStack(spacing: CinemaSpacing.spacing2) {
+                                    Text(loc.localized("action.play"))
+                                        .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
+                                    Image(systemName: "play.fill")
+                                        .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
+                                .padding(.horizontal, CinemaSpacing.spacing4)
+                                #if os(iOS)
+                                .background(themeManager.accentContainer)
+                                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                                #endif
+                            }
+                            #if os(tvOS)
+                            .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
+                            #else
+                            .buttonStyle(.plain)
+                            #endif
+                            .frame(width: playButtonWidth)
+
+                            NavigationLink {
+                                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                            } label: {
+                                HStack(spacing: CinemaSpacing.spacing2) {
+                                    Text(loc.localized("action.moreInfo"))
+                                        .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
+                                        .lineLimit(1)
+                                    Image(systemName: "info.circle")
+                                        .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
+                                }
+                                .foregroundStyle(CinemaColor.onSurface)
+                                .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
+                                .padding(.horizontal, CinemaSpacing.spacing4)
+                                #if os(iOS)
+                                .background(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                                #endif
+                            }
+                            #if os(tvOS)
+                            .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+                            #else
+                            .buttonStyle(.plain)
+                            #endif
+                            .fixedSize()
+                        }
+                    }
+                }
+                .padding(.horizontal, heroPadding)
+                .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .clipped()
     }
 
     // MARK: - Continue Watching
@@ -498,7 +500,7 @@ struct HomeScreen: View {
         #if os(tvOS)
         820
         #else
-        360
+        AdaptiveLayout.heroHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -522,7 +524,10 @@ struct HomeScreen: View {
         #if os(tvOS)
         CinemaSpacing.spacing20
         #else
-        CinemaSpacing.spacing4
+        // Under 60 intentionally — the hero's "big-button" branch triggers above 60 (tvOS only).
+        AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular
+            ? CinemaSpacing.spacing6
+            : CinemaSpacing.spacing4
         #endif
     }
 
@@ -546,7 +551,7 @@ struct HomeScreen: View {
         #if os(tvOS)
         400
         #else
-        280
+        AdaptiveLayout.wideCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -554,7 +559,7 @@ struct HomeScreen: View {
         #if os(tvOS)
         200
         #else
-        140
+        AdaptiveLayout.posterCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 

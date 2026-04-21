@@ -8,6 +8,8 @@ struct MediaDetailScreen: View {
     @Environment(LocalizationManager.self) private var loc
     #if os(tvOS)
     @Environment(VideoPlayerCoordinator.self) private var coordinator
+    #else
+    @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
@@ -69,6 +71,7 @@ struct MediaDetailScreen: View {
                         Text(overview)
                             .font(CinemaFont.dynamicBody)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .frame(maxWidth: readingMaxWidth, alignment: .leading)
                             .padding(.horizontal, contentPadding)
                             #if os(tvOS)
                             .focusable()
@@ -77,6 +80,7 @@ struct MediaDetailScreen: View {
 
                     // Studio / Network
                     studioLine(item)
+                        .frame(maxWidth: readingMaxWidth, alignment: .leading)
                         .padding(.horizontal, contentPadding)
 
                     // Cast
@@ -689,7 +693,7 @@ struct MediaDetailScreen: View {
         #if os(tvOS)
         760
         #else
-        310
+        AdaptiveLayout.detailBackdropHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -713,7 +717,17 @@ struct MediaDetailScreen: View {
         #if os(tvOS)
         CinemaSpacing.spacing20
         #else
-        CinemaSpacing.spacing4
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
+        #endif
+    }
+
+    /// Max width for prose blocks (overview, studio line) on wide screens so lines stay readable.
+    /// Horizontal carousels (cast, similar, episodes) intentionally ignore this and use full width.
+    private var readingMaxWidth: CGFloat {
+        #if os(tvOS)
+        .infinity
+        #else
+        AdaptiveLayout.readingMaxWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass)) ?? .infinity
         #endif
     }
 
