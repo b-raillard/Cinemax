@@ -57,9 +57,9 @@ final class ThemeManager {
     // The palette for each accent lives on `AccentOption.palette` — single source of truth.
     // These computed properties just pick the right slice + wrap in `Color.dynamic`.
 
-    /// Current palette. Falls back to blue if `accentColorKey` is unrecognised (e.g. stale storage).
+    /// Current palette. Falls back to green if `accentColorKey` is unrecognised (e.g. stale storage).
     private var palette: AccentOption.Palette {
-        (AccentOption(rawValue: accentColorKey) ?? .blue).palette
+        (AccentOption(rawValue: accentColorKey) ?? .green).palette
     }
 
     /// Accent "light" variant — used for text, icons, active indicators.

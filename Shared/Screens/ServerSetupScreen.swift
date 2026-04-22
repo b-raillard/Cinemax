@@ -6,16 +6,39 @@ struct ServerSetupScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @State private var viewModel = ServerSetupViewModel()
+    @State private var showDiscoverySheet = false
+    @State private var showHelpSheet = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        #if os(tvOS)
-        tvOSLayout
-        #else
-        if sizeClass == .regular {
+        Group {
+            #if os(tvOS)
             tvOSLayout
-        } else {
-            mobileLayout
+            #else
+            if sizeClass == .regular {
+                tvOSLayout
+            } else {
+                mobileLayout
+            }
+            #endif
+        }
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $showDiscoverySheet) {
+            ServerDiscoverySheet { address in
+                viewModel.serverURL = address
+            }
+        }
+        .fullScreenCover(isPresented: $showHelpSheet) {
+            ServerHelpSheet()
+        }
+        #else
+        .sheet(isPresented: $showDiscoverySheet) {
+            ServerDiscoverySheet { address in
+                viewModel.serverURL = address
+            }
+        }
+        .sheet(isPresented: $showHelpSheet) {
+            ServerHelpSheet()
         }
         #endif
     }
@@ -92,11 +115,15 @@ struct ServerSetupScreen: View {
 
                 // Helper links
                 HStack(spacing: CinemaSpacing.spacing6) {
-                    helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind"))
+                    helperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
+                        showDiscoverySheet = true
+                    }
                     Divider()
                         .frame(height: 20)
                         .overlay(CinemaColor.outlineVariant.opacity(0.3))
-                    helperLink(icon: "network", title: loc.localized("server.networkSettings"))
+                    helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
+                        showHelpSheet = true
+                    }
                 }
                 .padding(.bottom, CinemaSpacing.spacing6)
 
@@ -188,14 +215,18 @@ struct ServerSetupScreen: View {
                     }
                     .disabled(viewModel.isConnecting)
 
-                    Button {
-                        // Help action
-                    } label: {
-                        Text(loc.localized("server.needHelp"))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    HStack(spacing: CinemaSpacing.spacing4) {
+                        helperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
+                            showDiscoverySheet = true
+                        }
+                        Divider()
+                            .frame(height: 16)
+                            .overlay(CinemaColor.outlineVariant.opacity(0.3))
+                        helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
+                            showHelpSheet = true
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(.top, CinemaSpacing.spacing2)
                 }
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.bottom, CinemaSpacing.spacing6)
@@ -271,10 +302,8 @@ struct ServerSetupScreen: View {
         )
     }
 
-    private func helperLink(icon: String, title: String) -> some View {
-        Button {
-            // Placeholder
-        } label: {
+    private func helperLink(icon: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                 Text(title)

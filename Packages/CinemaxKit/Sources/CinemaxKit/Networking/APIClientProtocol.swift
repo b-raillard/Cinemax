@@ -15,6 +15,13 @@ public protocol ServerAPI: Sendable {
     func reconnect(url: URL, accessToken: String)
     /// Drops every cached response (used by Settings → Server → Refresh Catalogue).
     func clearCache()
+    /// Installs a maximum content age (years) applied to every subsequent item
+    /// query — content rated above that age is hidden. Pass `0` to disable.
+    /// `maxOfficialRating` is used on endpoints that support it (`/Items`);
+    /// the rest are filtered client-side via `ContentRatingClassifier` so the
+    /// limit holds uniformly across Home, Library, Search, Similar, Next Up,
+    /// and Episodes.
+    func applyContentRatingLimit(maxAge: Int)
 }
 
 /// Authentication, user listing, and active-session queries.
@@ -23,6 +30,11 @@ public protocol AuthAPI: Sendable {
     func getPublicUsers() async throws -> [UserDto]
     func getUsers() async throws -> [UserDto]
     func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto]
+    /// Lists devices registered on the server. For non-admin users the server
+    /// returns only the caller's own devices; admins receive every device.
+    func getDevices() async throws -> [DeviceInfoDto]
+    /// Revokes every access token tied to `deviceId`, logging that device out.
+    func deleteDevice(id: String) async throws
 }
 
 /// Library queries: items, genres, search, series/seasons/episodes.
@@ -51,6 +63,11 @@ public protocol LibraryAPI: Sendable {
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto?
+
+    /// Clears the user's played/progress state for the given item. Used by
+    /// Privacy & Security → Clear Continue Watching to drop resume points
+    /// without leaking what was being watched.
+    func markItemUnplayed(itemId: String, userId: String) async throws
 }
 
 /// Playback: stream resolution, intro/outro segments, and Jellyfin progress reporting.

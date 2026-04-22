@@ -418,7 +418,7 @@ struct HomeScreen: View {
             if isEpisode {
                 var label = ""
                 if let season = item.parentIndexNumber, let ep = item.indexNumber {
-                    label = "S\(season):E\(ep)"
+                    label = String(format: "S%02d:E%02d", season, ep)
                 }
                 if let name = item.name, !name.isEmpty {
                     label = label.isEmpty ? name : "\(label) - \(name)"

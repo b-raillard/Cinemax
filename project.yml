@@ -49,6 +49,7 @@ targets:
         UILaunchScreen: {}
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
+        NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi."
         UISupportedInterfaceOrientations~iPad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
@@ -89,6 +90,7 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen: {}
+        NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers on your Wi-Fi."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.tvos

@@ -56,6 +56,14 @@ extension SettingsScreen {
         } message: {
             Text(loc.localized("settings.switchAccountConfirm"))
         }
+        .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
+            Button(loc.localized("action.logOut"), role: .destructive) {
+                appState.logout()
+            }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        } message: {
+            Text(loc.localized("settings.logOutConfirm"))
+        }
     }
 
     // MARK: tvOS Landing Page
@@ -271,6 +279,22 @@ extension SettingsScreen {
     var tvAccountDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             tvProfileSection
+
+            tvActionRow(
+                id: "privacySecurity",
+                icon: "lock.shield",
+                label: loc.localized("settings.privacySecurity"),
+                showsChevron: true,
+                action: { showPrivacySecurity = true }
+            )
+
+            tvActionRow(
+                id: "logout",
+                icon: "rectangle.portrait.and.arrow.right",
+                label: loc.localized("action.logOut"),
+                tint: CinemaColor.error,
+                action: { showLogOutAlert = true }
+            )
         }
     }
 
@@ -816,6 +840,7 @@ extension SettingsScreen {
         label: String,
         subtitle: String? = nil,
         showsChevron: Bool = false,
+        tint: Color? = nil,
         action: @escaping () -> Void
     ) -> some View {
         tvActionRow(
@@ -824,6 +849,7 @@ extension SettingsScreen {
             label: label,
             subtitle: subtitle,
             showsChevron: showsChevron,
+            tint: tint,
             action: action
         )
     }
@@ -835,21 +861,24 @@ extension SettingsScreen {
         label: String,
         subtitle: String? = nil,
         showsChevron: Bool = false,
+        tint: Color? = nil,
         action: @escaping () -> Void
     ) -> some View {
         let isFocused = focusedItem == focus
+        let iconColor = tint ?? themeManager.accent
+        let labelColor = tint ?? CinemaColor.onSurface
         Button(action: action) {
             HStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: icon)
                     .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(themeManager.accent)
+                    .foregroundStyle(iconColor)
                     .frame(width: 24)
 
                 if let subtitle {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(label)
                             .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                            .foregroundStyle(CinemaColor.onSurface)
+                            .foregroundStyle(labelColor)
                         Text(subtitle)
                             .font(.system(size: CinemaScale.pt(16), weight: .regular))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -857,7 +886,7 @@ extension SettingsScreen {
                 } else {
                     Text(label)
                         .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                        .foregroundStyle(CinemaColor.onSurface)
+                        .foregroundStyle(labelColor)
                 }
 
                 Spacer()

@@ -53,6 +53,10 @@ final class AppState {
 
         // Reconnect client with stored token
         apiClient.reconnect(url: serverURL, accessToken: session.accessToken)
+        // Re-apply the user's Privacy & Security content-rating cap, since a
+        // `reconnect` rebuilds the Jellyfin client and resets its in-memory state.
+        let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        apiClient.applyContentRatingLimit(maxAge: storedAge)
 
         // Fetch server info without replacing the authenticated client
         do {
@@ -61,6 +65,16 @@ final class AppState {
         } catch {
             // Server may be temporarily unreachable, keep stored state
         }
+    }
+
+    /// Returns the user from `LoginScreen` to `ServerSetupScreen` so they can pick a different
+    /// server. Only clears server-side state — auth state is already empty at that point in
+    /// the flow, so there's nothing user-related to wipe.
+    func disconnectServer() {
+        keychain.deleteServerURL()
+        hasServer = false
+        serverURL = nil
+        serverInfo = nil
     }
 
     func logout() {

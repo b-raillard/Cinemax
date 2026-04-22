@@ -31,13 +31,19 @@ enum SettingsKey {
     // Detail page
     static let detailShowQualityBadges = "detail.showQualityBadges"
 
+    // Privacy & Security
+    /// Maximum content age (years) for items shown across the app.
+    /// `0` = unrestricted; 10/12/14/16/18 select a ceiling and any item rated
+    /// above it is hidden. Routes through `apiClient.applyContentRatingLimit`.
+    static let privacyMaxContentAge = "privacy.maxContentAge"
+
     // Debug
     static let debugFastSleepTimer = "debug.fastSleepTimer"
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
 
     enum Default {
         static let darkMode = true
-        static let accentColor = "blue"
+        static let accentColor = "green"
         static let uiScale = 1.0
         static let appLanguage = "fr"
 
@@ -53,6 +59,8 @@ enum SettingsKey {
         static let homeShowWatchingNow = true
 
         static let detailShowQualityBadges = true
+
+        static let privacyMaxContentAge = 0
 
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false

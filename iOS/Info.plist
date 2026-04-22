@@ -25,6 +25,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Cinemax uses the microphone for voice search.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

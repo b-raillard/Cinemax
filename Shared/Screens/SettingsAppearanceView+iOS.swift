@@ -82,7 +82,7 @@ struct IOSAppearanceDetailView: View {
     // MARK: - Appearance-specific helpers
 
     var selectedAccent: AccentOption {
-        AccentOption(rawValue: themeManager.accentColorKey) ?? .blue
+        AccentOption(rawValue: themeManager.accentColorKey) ?? .green
     }
 
     var languagePicker: some View {

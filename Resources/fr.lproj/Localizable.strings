@@ -20,6 +20,7 @@
 "action.apply" = "Appliquer";
 "action.reset" = "Réinitialiser";
 "action.clear" = "Effacer";
+"action.done" = "Terminé";
 "action.logOut" = "Déconnexion";
 "action.viewAll" = "Tout voir";
 "action.refresh" = "Actualiser";
@@ -166,6 +167,34 @@
 "settings.refreshCatalogue.subtitle" = "Vider le cache et recharger Accueil et Bibliothèque.";
 "toast.catalogueRefreshed" = "Catalogue actualisé";
 
+// MARK: - Privacy & Security
+
+"privacy.parentalControls" = "Contrôle parental";
+"privacy.parentalControls.footer" = "Masque dans toute l'application le contenu classé au-dessus de l'âge sélectionné. Les titres sans classement restent visibles.";
+"privacy.age.all" = "Sans restriction";
+"privacy.age.over10" = "Jusqu'à 10+";
+"privacy.age.over12" = "Jusqu'à 12+";
+"privacy.age.over14" = "Jusqu'à 14+";
+"privacy.age.over16" = "Jusqu'à 16+";
+"privacy.age.over18" = "Jusqu'à 18+";
+"privacy.activeSessions" = "Appareils connectés";
+"privacy.activeSessions.subtitle" = "Consulter et déconnecter d'autres appareils.";
+"privacy.sessions.current" = "Cet appareil";
+"privacy.sessions.signOut" = "Déconnecter";
+"privacy.sessions.signOutConfirm" = "Cet appareil sera déconnecté du serveur.";
+"privacy.sessions.empty" = "Aucun autre appareil connecté";
+"privacy.maintenance" = "Maintenance";
+"privacy.clearContinueWatching" = "Effacer « Reprendre »";
+"privacy.clearContinueWatching.subtitle" = "Supprimer la progression affichée dans Reprendre.";
+"privacy.clearContinueWatching.confirm" = "Les progressions de lecture seront effacées côté serveur.";
+"privacy.clearImageCache" = "Vider le cache d'images";
+"privacy.clearImageCache.subtitle" = "Libère le cache disque (~500 Mo).";
+"privacy.clearImageCache.confirm" = "Les images seront retéléchargées à la demande.";
+"toast.continueWatchingCleared" = "Reprendre réinitialisé";
+"toast.imageCacheCleared" = "Cache d'images vidé";
+"toast.deviceSignedOut" = "Appareil déconnecté";
+"toast.deviceSignOutFailed" = "Impossible de déconnecter cet appareil";
+
 // MARK: - Debug
 
 "settings.debug" = "Débogage";
@@ -216,6 +245,8 @@
 "login.title" = "CONNEXION";
 "login.subtitle" = "Entrez vos identifiants pour accéder à votre bibliothèque";
 "login.mobileTitle" = "Connexion";
+"login.mobileSubtitle" = "Connectez-vous avec votre compte Jellyfin pour commencer.";
+"login.changeServer" = "Changer de serveur";
 "login.tagline" = "Vos médias, simplifiés";
 "login.username" = "Nom d'utilisateur";
 "login.usernamePlaceholder" = "Votre nom d'utilisateur";
@@ -223,10 +254,6 @@
 "login.passwordPlaceholder" = "\U2022\U2022\U2022\U2022\U2022\U2022\U2022\U2022";
 "login.button" = "CONNEXION";
 "login.buttonMobile" = "Connexion";
-"login.forgotPassword" = "Mot de passe oublié ?";
-"login.createAccount" = "Créer un compte";
-"login.joinCommunity" = "Rejoindre la communauté";
-"login.noServer" = "Pas de serveur ?";
 "login.serverConnected" = "Serveur connecté !";
 "login.authenticated" = "Authentifié !";
 "login.server" = "Serveur : %@";
@@ -243,13 +270,28 @@
 "server.addressLabel" = "Adresse du serveur";
 "server.placeholder" = "http://192.168.1.100:8096";
 "server.connect" = "Connexion";
-"server.needHelp" = "Besoin d'aide ?";
 "server.howToFind" = "Comment trouver mon serveur ?";
-"server.networkSettings" = "Paramètres réseau";
+"server.findOnNetwork" = "Rechercher sur mon réseau";
 "server.connecting" = "Connexion en cours...";
 "server.offline" = "Hors ligne";
 "server.httpWarning.title" = "Connexion non chiffrée";
 "server.httpWarning.message" = "Cette adresse utilise HTTP. Vos identifiants et jetons de lecture circuleront en clair sur le réseau. Utilisez HTTPS lorsque c'est possible — conservez HTTP uniquement pour un serveur sur votre réseau local de confiance.";
+
+"server.discovery.title" = "Serveurs sur ce réseau";
+"server.discovery.scanning" = "Recherche sur votre réseau...";
+"server.discovery.noResults.title" = "Aucun serveur trouvé";
+"server.discovery.noResults.message" = "Vérifiez que votre serveur Jellyfin est en cours d'exécution et connecté au même réseau Wi-Fi que cet appareil. Vous pouvez aussi saisir l'adresse manuellement.";
+"server.discovery.scanAgain" = "Réessayer";
+
+"server.help.title" = "Trouver votre serveur";
+"server.help.intro" = "Jellyfin s'exécute sur un ordinateur, un NAS ou un serveur de votre réseau. Pour vous connecter, vous avez besoin de son adresse web.";
+"server.help.format.title" = "À quoi ressemble l'URL";
+"server.help.format.body" = "Elle commence par http:// ou https://, suivi d'une adresse IP ou d'un nom d'hôte. Jellyfin écoute par défaut sur le port 8096.";
+"server.help.local.title" = "Sur votre réseau local";
+"server.help.local.body" = "Ouvrez le tableau de bord Jellyfin sur l'ordinateur qui héberge le serveur — l'adresse dans la barre d'URL de votre navigateur est exactement celle à saisir ici. Ou appuyez sur « Rechercher sur mon réseau » et nous ferons l'analyse pour vous.";
+"server.help.remote.title" = "Accès à distance";
+"server.help.remote.body" = "Si votre serveur est accessible depuis Internet, votre administrateur dispose d'un nom de domaine public. Demandez-lui l'adresse.";
+"server.help.tip" = "La détection automatique ne fonctionne que si cet appareil est sur le même réseau Wi-Fi que le serveur. Si rien n'apparaît, saisissez l'URL manuellement.";
 
 // MARK: - Video Player
 

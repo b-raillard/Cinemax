@@ -20,6 +20,7 @@
 "action.apply" = "Apply";
 "action.reset" = "Reset";
 "action.clear" = "Clear";
+"action.done" = "Done";
 "action.logOut" = "Log Out";
 "action.viewAll" = "View All";
 "action.refresh" = "Refresh";
@@ -166,6 +167,34 @@
 "settings.refreshCatalogue.subtitle" = "Clear cache and reload Home and Library.";
 "toast.catalogueRefreshed" = "Catalogue refreshed";
 
+// MARK: - Privacy & Security
+
+"privacy.parentalControls" = "Parental Controls";
+"privacy.parentalControls.footer" = "Hides content rated above the selected age across the whole app. Unrated items stay visible.";
+"privacy.age.all" = "Unrestricted";
+"privacy.age.over10" = "Up to 10+";
+"privacy.age.over12" = "Up to 12+";
+"privacy.age.over14" = "Up to 14+";
+"privacy.age.over16" = "Up to 16+";
+"privacy.age.over18" = "Up to 18+";
+"privacy.activeSessions" = "Connected Devices";
+"privacy.activeSessions.subtitle" = "Review and sign out other devices.";
+"privacy.sessions.current" = "This device";
+"privacy.sessions.signOut" = "Sign out";
+"privacy.sessions.signOutConfirm" = "This device will be signed out of the server.";
+"privacy.sessions.empty" = "No other connected devices";
+"privacy.maintenance" = "Maintenance";
+"privacy.clearContinueWatching" = "Clear Continue Watching";
+"privacy.clearContinueWatching.subtitle" = "Remove resume progress shown in Continue Watching.";
+"privacy.clearContinueWatching.confirm" = "Resume progress will be cleared on the server.";
+"privacy.clearImageCache" = "Clear Image Cache";
+"privacy.clearImageCache.subtitle" = "Frees the on-disk cache (~500 MB).";
+"privacy.clearImageCache.confirm" = "Images will be re-downloaded on demand.";
+"toast.continueWatchingCleared" = "Continue Watching cleared";
+"toast.imageCacheCleared" = "Image cache cleared";
+"toast.deviceSignedOut" = "Device signed out";
+"toast.deviceSignOutFailed" = "Couldn't sign out that device";
+
 // MARK: - Debug
 
 "settings.debug" = "Debug";
@@ -213,20 +242,18 @@
 // MARK: - Login
 
 "login.header" = "JELLYFIN";
-"login.title" = "USER LOGIN";
+"login.title" = "SIGN IN";
 "login.subtitle" = "Enter your credentials to access your library";
-"login.mobileTitle" = "Login";
+"login.mobileTitle" = "Sign In";
+"login.mobileSubtitle" = "Sign in with your Jellyfin account to start streaming.";
+"login.changeServer" = "Change server";
 "login.tagline" = "Your Media, Simplified";
 "login.username" = "Username";
 "login.usernamePlaceholder" = "Your Username";
 "login.password" = "Password";
 "login.passwordPlaceholder" = "\U2022\U2022\U2022\U2022\U2022\U2022\U2022\U2022";
-"login.button" = "LOG IN";
-"login.buttonMobile" = "Login";
-"login.forgotPassword" = "Forgot Password?";
-"login.createAccount" = "Create Account";
-"login.joinCommunity" = "Join Community";
-"login.noServer" = "Don't have a server?";
+"login.button" = "SIGN IN";
+"login.buttonMobile" = "Sign In";
 "login.serverConnected" = "Server Connected!";
 "login.authenticated" = "Authenticated!";
 "login.server" = "Server: %@";
@@ -243,13 +270,28 @@
 "server.addressLabel" = "Server Address";
 "server.placeholder" = "http://192.168.1.100:8096";
 "server.connect" = "Connect";
-"server.needHelp" = "Need help?";
 "server.howToFind" = "How do I find my server?";
-"server.networkSettings" = "Network Settings";
+"server.findOnNetwork" = "Find on my network";
 "server.connecting" = "Connecting...";
 "server.offline" = "Offline";
 "server.httpWarning.title" = "Unencrypted connection";
 "server.httpWarning.message" = "This address uses HTTP. Your credentials and playback tokens will travel in plain text over the network. Use HTTPS whenever possible — keep HTTP only for a server on a trusted local network.";
+
+"server.discovery.title" = "Servers on this network";
+"server.discovery.scanning" = "Scanning your network...";
+"server.discovery.noResults.title" = "No servers found";
+"server.discovery.noResults.message" = "Make sure your Jellyfin server is running and connected to the same Wi-Fi network as this device. You can also enter the address manually.";
+"server.discovery.scanAgain" = "Scan again";
+
+"server.help.title" = "Finding your server";
+"server.help.intro" = "Jellyfin runs on a computer, NAS, or server on your network. To connect, you'll need its web address.";
+"server.help.format.title" = "What the URL looks like";
+"server.help.format.body" = "It starts with http:// or https://, followed by an IP address or hostname. Jellyfin listens on port 8096 by default.";
+"server.help.local.title" = "On your home network";
+"server.help.local.body" = "Open the Jellyfin dashboard on the computer running the server — the address in your browser's URL bar is exactly what to enter here. Or tap \"Find on my network\" and we'll scan for you.";
+"server.help.remote.title" = "Accessing from outside";
+"server.help.remote.body" = "If your server is reachable over the internet, your administrator will have a public domain name. Ask them for the address.";
+"server.help.tip" = "Auto-discovery only works when this device is on the same Wi-Fi network as the server. If nothing shows up, enter the URL manually.";
 
 // MARK: - Video Player
 

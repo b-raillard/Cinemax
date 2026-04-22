@@ -61,6 +61,19 @@ Packages/CinemaxKit/        Models, Networking (JellyfinAPIClient, ImageURLBuild
 - No server → `ServerSetupScreen` → `LoginScreen` → `MainTabView` (top tabs on tvOS, sidebar on iPad, bottom tabs on iPhone).
 - All play buttons use `PlayLink<Label>` (Button+coordinator on tvOS, NavigationLink on iOS) — never direct `NavigationLink` to `VideoPlayerView`.
 
+## Server Setup & Login
+
+Two-step pre-auth flow with a shared mobile design language so users perceive Server → Login as one journey. The two screens' `mobileLayout`s share: same icon block (rounded `surfaceContainerHigh` rect + accent-tinted symbol + shadow), same tracked label / big black title / centered subtitle (max 280pt), same glass-panel form, same primary `CinemaButton` + helper-link footer.
+
+**Server discovery** (`JellyfinServerDiscovery` in CinemaxKit + `ServerDiscoverySheet`):
+- UDP `"Who is JellyfinServer?"` broadcast on port 7359, listen for JSON `{Address,Id,Name}` replies.
+- Probes both the limited broadcast (`255.255.255.255`) **and** each interface's directed broadcast (e.g. `192.168.1.255`) via `getifaddrs` — many consumer routers drop the limited form but pass directed.
+- `ServerDiscoverySheet.scan()` clears `servers` at start (visible transition), then auto-retries once after 800ms when the first scan returns empty — covers the iPhone case where the very first probe races the iOS local-network permission prompt and gets silently blocked before the user can approve. Also re-scans on `scenePhase == .active` for the "user toggled Local Network in Settings.app and came back" path. iOS needs `NSLocalNetworkUsageDescription` in `iOS/Info.plist` (already declared).
+
+**`AppState.disconnectServer()`**: clears keychain server URL + flips `hasServer = false` so `AppNavigation` sends the user back to `ServerSetupScreen`. Surfaced as the "Change server" helper link in the bottom action area of `LoginScreen.mobileLayout`. Doesn't touch auth state — the user isn't authenticated at that point.
+
+**LoginScreen mobile layout caveat**: ServerSetupScreen's form uses `.padding(.horizontal, spacing4)` outside the `.glassPanel` to set its visual margin. The same modifier chain in `LoginScreen.mobileLayout` is silently dropped under iOS 26 (root cause untracked — possibly related to the multi-`GlassTextField` + `.ultraThinMaterial` interaction). Workaround: `.frame(maxWidth: formMaxWidth)` (350pt) on both the form panel and the actions VStack, letting the outer VStack center them. Don't "fix" this back to padding without verifying with pixel sampling.
+
 ## Media Library (`MediaLibraryScreen`)
 
 Unified screen parameterized by `BaseItemKind` (movies or series).

@@ -63,10 +63,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getPublicUsers() async throws -> [UserDto] { [] }
     func getUsers() async throws -> [UserDto] { [] }
     func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto] { [] }
+    func getDevices() async throws -> [DeviceInfoDto] { [] }
+    func deleteDevice(id: String) async throws {}
 
     // MARK: - Cache
 
     func clearCache() {}
+    func applyContentRatingLimit(maxAge: Int) {}
 
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
         if shouldThrow { throw stubbedError }
@@ -118,6 +121,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return []
     }
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
+    func markItemUnplayed(itemId: String, userId: String) async throws {}
 
     // MARK: - Media Segments
 

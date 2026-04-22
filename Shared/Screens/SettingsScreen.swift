@@ -170,7 +170,9 @@ struct SettingsScreen: View {
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
+    @State var showPrivacySecurity = false
     @State var selectedCategory: SettingsCategory? = nil
+    @State var currentUser: UserDto? = nil
 
     // Shared stored properties — keys + defaults live in SettingsKey
     @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects
@@ -286,6 +288,16 @@ struct SettingsScreen: View {
         toasts.success(loc.localized("toast.catalogueRefreshed"))
     }
 
+    /// Fetches the signed-in user's `UserDto` so the Account header can render
+    /// the primary image (with `primaryImageTag` for cache-busting) and fall
+    /// back to initials when no image exists.
+    func fetchCurrentUser() async {
+        guard let id = appState.currentUserId else { return }
+        if let users = try? await appState.apiClient.getUsers() {
+            currentUser = users.first { $0.id == id }
+        }
+    }
+
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
@@ -309,13 +321,12 @@ struct SettingsScreen: View {
                 .environment(themeManager)
                 .environment(loc)
         }
-        .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
-            Button(loc.localized("action.logOut"), role: .destructive) {
-                appState.logout()
-            }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        } message: {
-            Text(loc.localized("settings.logOutConfirm"))
+        .sheet(isPresented: $showPrivacySecurity) {
+            PrivacySecurityScreen()
+                .environment(appState)
+                .environment(themeManager)
+                .environment(loc)
+                .environment(toasts)
         }
     }
 }
