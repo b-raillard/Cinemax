@@ -35,11 +35,16 @@ public struct ImageURLBuilder: Sendable {
     }
 
     /// Returns `maxWidth` based on the device's native screen width in pixels.
-    /// Falls back to 1920 when UIKit is unavailable.
+    /// Falls back to 1920 when UIKit is unavailable or no scene is active.
     @MainActor
     public static var screenPixelWidth: Int {
         #if canImport(UIKit)
-        Int(UIScreen.main.bounds.width * UIScreen.main.scale)
+        let windowScenes = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+        let scene = windowScenes.first(where: { $0.activationState == .foregroundActive })
+            ?? windowScenes.first
+        guard let screen = scene?.screen else { return 1920 }
+        return Int(screen.bounds.width * screen.scale)
         #else
         1920
         #endif

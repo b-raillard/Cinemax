@@ -1,6 +1,6 @@
 # Cinemax - Jellyfin Client for Apple Platforms
 
-Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
+Native Jellyfin media streaming client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
 
 ## Architecture
 
@@ -10,11 +10,12 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. "Cinema Glass" 
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable conformance
 - **iOS `NavigationStack` caveat**: destinations pushed via `navigationDestination(item:)` render in a separate context — `@Observable` changes to environment objects won't re-render the destination unless it is a standalone `View` struct with its own `@Environment` properties. Use a proper struct, not an extension method returning `some View`.
 
-### Modern API requirements (iOS 18 / tvOS 26)
+### Modern API requirements (iOS 26 / tvOS 26)
 
 - **`UIButton`**: never use `UIButton(type:)` + `setTitle/setTitleColor/titleLabel?.font/backgroundColor/contentEdgeInsets`. Build with `UIButton.Configuration` (see the skip-intro button and debug "End" pill in `NativeVideoPresenter` for the pattern). Frosted background via `config.background.customView = UIVisualEffectView(...)`.
 - **Free SwiftUI helpers**: free functions returning `some View` that touch SwiftUI types (`PrimitiveButtonStyle.plain`, `Font`, etc.) must be `@MainActor` under Swift 6 — those types are main-actor-isolated. The `iOSToggleRow` / `iOSToggleRowsJoined` / `iOSSettingsRow` helpers in `SettingsRowHelpers.swift` follow this.
-- **iPad multitasking**: `UIRequiresFullScreen: true` in `project.yml`. Split view would interrupt playback and break hero/backdrop layouts; also satisfies the "all orientations unless full screen" warning. If ever changed, the iPhone orientation list must add `UIInterfaceOrientationPortraitUpsideDown`.
+- **iPad multitasking**: `UIRequiresFullScreen` was removed with the iOS 26 bump (Apple deprecated it and will ignore it in a future release). Both iPhone and iPad orientation lists include `UIInterfaceOrientationPortraitUpsideDown` to silence the "all orientations must be supported" warning. iPad split view / Stage Manager is therefore allowed at runtime — hero/backdrop layouts and playback-through-resize have not been hardened for that yet, so expect visual glitches on resized iPad windows until that work is done.
+- **Toolbar buttons + Liquid Glass**: in iOS 26, navigation-bar `ToolbarItem` buttons are automatically rendered with Liquid Glass by the system. **Do not add `.buttonStyle(.glass)` / `.glassProminent` on toolbar items** — it nests a second glass capsule inside the toolbar's own container (see `MovieLibraryScreen.filterButton`). Signal active state with `.tint(themeManager.accent)` + a `.fill` icon variant instead.
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 

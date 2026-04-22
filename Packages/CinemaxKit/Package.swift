@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "CinemaxKit",
     platforms: [
-        .iOS(.v18),
+        .iOS(.v26),
         .tvOS(.v26)
     ],
     products: [

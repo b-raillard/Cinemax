@@ -2,7 +2,7 @@ name: Cinemax
 options:
   bundleIdPrefix: com.cinemax
   deploymentTarget:
-    iOS: "18.0"
+    iOS: "26.0"
     tvOS: "26.0"
   xcodeVersion: "26.2"
   createIntermediateGroups: true
@@ -46,11 +46,6 @@ targets:
         UIBackgroundModes:
           - audio
           - airplay
-        # Full-screen-only — Cinemax is a video player, iPad split view would
-        # interrupt playback and shrink hero/backdrop layouts. Setting this
-        # also silences Xcode's "all interface orientations must be supported
-        # unless the app requires full screen" iPad multitasking warning.
-        UIRequiresFullScreen: true
         UILaunchScreen: {}
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
@@ -61,6 +56,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~iPhone:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
     settings:
