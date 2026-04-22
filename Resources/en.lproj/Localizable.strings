@@ -315,3 +315,8 @@
 "accessibility.stopVoiceSearch" = "Stop voice search";
 "accessibility.previousEpisode" = "Previous episode";
 "accessibility.nextEpisode" = "Next episode";
+
+// MARK: - Easter eggs
+
+"easterEgg.rainbow.title" = "Rainbow unlocked!";
+"easterEgg.rainbow.message" = "A new accent color is waiting for you in settings.";

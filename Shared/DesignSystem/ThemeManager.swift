@@ -23,6 +23,7 @@ final class ThemeManager {
         set {
             _accentColorKey = newValue
             _accentRevision += 1
+            startRainbowIfNeeded()
         }
     }
 
@@ -52,10 +53,46 @@ final class ThemeManager {
     /// Tracked revision counter — triggers SwiftUI updates when AppStorage values change.
     private var _accentRevision: Int = 0
 
+    // MARK: - Rainbow Easter Egg
+    //
+    // When `accentColorKey == "rainbow"`, a Task on the main actor advances
+    // `_rainbowHue` every ~33 ms and bumps `_accentRevision` so every view
+    // observing ThemeManager re-evaluates `accent`/`accentContainer`/`accentDim`
+    // against the new hue. The task self-exits as soon as the user switches to a
+    // static accent, so there's zero cost outside of the easter-egg state.
+
+    @ObservationIgnored private var _rainbowHue: Double = 0
+    @ObservationIgnored private var rainbowTask: Task<Void, Never>?
+
+    var isRainbow: Bool { accentColorKey == "rainbow" }
+
+    init() {
+        startRainbowIfNeeded()
+    }
+
+    deinit {
+        rainbowTask?.cancel()
+    }
+
+    private func startRainbowIfNeeded() {
+        rainbowTask?.cancel()
+        rainbowTask = nil
+        guard isRainbow else { return }
+        rainbowTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 33_000_000)
+                guard let self, self.isRainbow else { return }
+                self._rainbowHue = (self._rainbowHue + 0.006).truncatingRemainder(dividingBy: 1.0)
+                self._accentRevision += 1
+            }
+        }
+    }
+
     // MARK: - Dynamic Accent Colors
     //
     // The palette for each accent lives on `AccentOption.palette` — single source of truth.
     // These computed properties just pick the right slice + wrap in `Color.dynamic`.
+    // Rainbow mode bypasses the palette and returns HSB colors driven by `_rainbowHue`.
 
     /// Current palette. Falls back to green if `accentColorKey` is unrecognised (e.g. stale storage).
     private var palette: AccentOption.Palette {
@@ -66,6 +103,9 @@ final class ThemeManager {
     /// Light-mode values are deeper/more saturated for ≥4.5:1 contrast on the soft-grey background.
     var accent: Color {
         _ = _accentRevision
+        if isRainbow {
+            return Color(hue: _rainbowHue, saturation: 0.85, brightness: 0.95)
+        }
         let p = palette
         return Color.dynamic(light: p.accentLight, dark: p.accentDark)
     }
@@ -74,6 +114,9 @@ final class ThemeManager {
     /// Mid-tone saturated values work on both light and dark backgrounds.
     var accentContainer: Color {
         _ = _accentRevision
+        if isRainbow {
+            return Color(hue: _rainbowHue, saturation: 0.9, brightness: 0.88)
+        }
         let p = palette
         return Color.dynamic(light: p.containerLight, dark: p.containerDark)
     }
@@ -81,6 +124,9 @@ final class ThemeManager {
     /// Dimmed accent — used for hover/pressed states of accent-colored UI.
     var accentDim: Color {
         _ = _accentRevision
+        if isRainbow {
+            return Color(hue: _rainbowHue, saturation: 0.75, brightness: 0.7)
+        }
         let p = palette
         return Color.dynamic(light: p.dimLight, dark: p.dimDark)
     }
@@ -89,6 +135,9 @@ final class ThemeManager {
     /// Always white in light mode (saturated containers host white); near-black in dark mode.
     var onAccent: Color {
         _ = _accentRevision
+        if isRainbow {
+            return .white
+        }
         let p = palette
         return Color.dynamic(light: p.onAccentLight, dark: p.onAccentDark)
     }

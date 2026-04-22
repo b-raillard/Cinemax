@@ -13,6 +13,7 @@ struct IOSAppearanceDetailView: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -51,7 +52,7 @@ struct IOSAppearanceDetailView: View {
                         }
 
                         HStack(spacing: CinemaSpacing.spacing2) {
-                            ForEach(AccentOption.allCases) { option in
+                            ForEach(AccentOption.visibleCases(rainbowUnlocked: rainbowUnlocked)) { option in
                                 accentDot(option)
                             }
                         }
@@ -117,9 +118,13 @@ struct IOSAppearanceDetailView: View {
             themeManager.accentColorKey = option.rawValue
         } label: {
             ZStack {
-                Circle()
-                    .fill(option.color)
-                    .frame(width: 28, height: 28)
+                if option == .rainbow {
+                    RainbowAccentSwatch(diameter: 28)
+                } else {
+                    Circle()
+                        .fill(option.color)
+                        .frame(width: 28, height: 28)
+                }
 
                 if isSelected {
                     Circle()

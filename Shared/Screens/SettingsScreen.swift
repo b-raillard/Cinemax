@@ -47,8 +47,23 @@ enum AccentOption: String, CaseIterable, Identifiable {
     case indigo = "indigo"
     case purple = "purple"
     case pink   = "pink"
+    /// Easter egg accent — hidden from the picker until unlocked via the Server/Login
+    /// logo tap sequence. When active, `ThemeManager` ignores the palette below and
+    /// drives `accent`/`accentContainer`/`accentDim` from an animated HSB hue phase.
+    case rainbow = "rainbow"
 
     var id: String { rawValue }
+
+    /// Cases visible in the accent picker. Rainbow is filtered out unless the user
+    /// has unlocked it via the easter egg.
+    static func visibleCases(rainbowUnlocked: Bool) -> [AccentOption] {
+        rainbowUnlocked ? allCases : allCases.filter { $0 != .rainbow }
+    }
+
+    /// The nine base accents the easter egg cycles through.
+    static var cyclingCases: [AccentOption] {
+        allCases.filter { $0 != .rainbow }
+    }
 
     struct Palette {
         let accentLight: UInt
@@ -99,12 +114,72 @@ enum AccentOption: String, CaseIterable, Identifiable {
                               containerLight: 0xD63384, containerDark: 0xE0458F,
                               dimLight: 0xA0144A, dimDark: 0xCC3578,
                               onAccentLight: 0xFFFFFF, onAccentDark: 0x3D001A)
+        case .rainbow: Palette(accentLight: 0x6B46C1, accentDark: 0xA78BFA,
+                               containerLight: 0x7C3AED, containerDark: 0x8B5CF6,
+                               dimLight: 0x5B21B6, dimDark: 0x7C3AED,
+                               onAccentLight: 0xFFFFFF, onAccentDark: 0x1A0040)
         }
     }
 
     /// Preview swatch — resolves against the active trait collection so the dot
     /// matches the live accent in both light and dark mode.
     var color: Color { Color.dynamic(light: palette.accentLight, dark: palette.accentDark) }
+}
+
+// MARK: - Rainbow Swatch
+
+/// Shared rainbow preview dot used by every accent picker. Kept here so the iOS +
+/// tvOS Settings pickers render identical visuals.
+struct RainbowAccentSwatch: View {
+    var diameter: CGFloat = 28
+
+    var body: some View {
+        Circle()
+            .fill(
+                AngularGradient(
+                    gradient: Gradient(colors: [.red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink, .red]),
+                    center: .center
+                )
+            )
+            .frame(width: diameter, height: diameter)
+    }
+}
+
+// MARK: - Accent Easter Egg
+
+/// Pure resolver that powers the logo-tap easter egg on `ServerSetupScreen` and
+/// `LoginScreen`. Each tap advances the accent through `AccentOption.cyclingCases`;
+/// after a full loop during the session the rainbow accent is unlocked + applied.
+/// Once unlocked it stays available in the settings picker forever.
+///
+/// The resolver is pure (no state mutation) so callers can bind directly to `@State`
+/// and `@AppStorage` without wrestling with inout on property-wrapper-backed values.
+enum AccentEasterEgg {
+    struct TapResult {
+        /// Accent key to apply after this tap.
+        let nextAccentKey: String
+        /// `true` when this tap completed the loop and rainbow should become unlocked.
+        let unlockedRainbow: Bool
+    }
+
+    static func tap(
+        currentAccentKey: String,
+        previousTapCount: Int,
+        rainbowAlreadyUnlocked: Bool
+    ) -> TapResult {
+        let cycle = AccentOption.cyclingCases
+        let nextTapCount = previousTapCount + 1
+
+        if nextTapCount >= cycle.count, !rainbowAlreadyUnlocked {
+            return TapResult(nextAccentKey: AccentOption.rainbow.rawValue, unlockedRainbow: true)
+        }
+
+        if let idx = cycle.firstIndex(where: { $0.rawValue == currentAccentKey }) {
+            return TapResult(nextAccentKey: cycle[(idx + 1) % cycle.count].rawValue, unlockedRainbow: false)
+        }
+        // Currently on rainbow (already unlocked) — jump back to start of cycle.
+        return TapResult(nextAccentKey: cycle.first?.rawValue ?? "green", unlockedRainbow: false)
+    }
 }
 
 // MARK: - Settings Category
@@ -188,6 +263,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
+    @AppStorage(SettingsKey.rainbowUnlocked) var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @State var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
     @State var showFontSizePicker = false
     let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]

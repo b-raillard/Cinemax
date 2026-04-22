@@ -1,11 +1,17 @@
 import SwiftUI
 import CinemaxKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct LoginScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(ToastCenter.self) private var toasts
     @State private var viewModel = LoginViewModel()
+    @State private var easterEggTaps: Int = 0
+    @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
@@ -135,16 +141,21 @@ struct LoginScreen: View {
 
                 // Header
                 VStack(spacing: CinemaSpacing.spacing3) {
-                    // Icon
-                    ZStack {
-                        RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                            .fill(CinemaColor.surfaceContainerHigh)
-                            .frame(width: 80, height: 80)
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 36))
-                            .foregroundStyle(themeManager.accent)
+                    // Icon — secretly doubles as the accent-cycling easter egg.
+                    Button {
+                        triggerEasterEgg()
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                                .fill(CinemaColor.surfaceContainerHigh)
+                                .frame(width: 80, height: 80)
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 36))
+                                .foregroundStyle(themeManager.accent)
+                        }
+                        .shadow(color: .black.opacity(0.3), radius: 20)
                     }
-                    .shadow(color: .black.opacity(0.3), radius: 20)
+                    .buttonStyle(.plain)
                     .accessibilityHidden(true)
 
                     Text(loc.localized("login.header"))
@@ -230,6 +241,30 @@ struct LoginScreen: View {
     /// Mobile form/button max width — matches the visual inset of ServerSetupScreen's
     /// `.padding(.horizontal, spacing4)` (22pt each side) on a standard 390–440pt iPhone.
     private var formMaxWidth: CGFloat { 350 }
+
+    private func triggerEasterEgg() {
+        let result = AccentEasterEgg.tap(
+            currentAccentKey: themeManager.accentColorKey,
+            previousTapCount: easterEggTaps,
+            rainbowAlreadyUnlocked: rainbowUnlocked
+        )
+        easterEggTaps += 1
+        themeManager.accentColorKey = result.nextAccentKey
+        if result.unlockedRainbow {
+            rainbowUnlocked = true
+            #if os(iOS)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            #endif
+            toasts.success(
+                loc.localized("easterEgg.rainbow.title"),
+                message: loc.localized("easterEgg.rainbow.message")
+            )
+        } else {
+            #if os(iOS)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            #endif
+        }
+    }
 
     private func helperLink(icon: String, title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {

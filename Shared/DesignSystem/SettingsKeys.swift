@@ -41,6 +41,9 @@ enum SettingsKey {
     static let debugFastSleepTimer = "debug.fastSleepTimer"
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
 
+    // Easter eggs
+    static let rainbowUnlocked = "easterEgg.rainbowUnlocked"
+
     enum Default {
         static let darkMode = true
         static let accentColor = "green"
@@ -64,5 +67,7 @@ enum SettingsKey {
 
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false
+
+        static let rainbowUnlocked = false
     }
 }

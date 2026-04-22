@@ -74,6 +74,8 @@ Two-step pre-auth flow with a shared mobile design language so users perceive Se
 
 **LoginScreen mobile layout caveat**: ServerSetupScreen's form uses `.padding(.horizontal, spacing4)` outside the `.glassPanel` to set its visual margin. The same modifier chain in `LoginScreen.mobileLayout` is silently dropped under iOS 26 (root cause untracked — possibly related to the multi-`GlassTextField` + `.ultraThinMaterial` interaction). Workaround: `.frame(maxWidth: formMaxWidth)` (350pt) on both the form panel and the actions VStack, letting the outer VStack center them. Don't "fix" this back to padding without verifying with pixel sampling.
 
+**Rainbow accent easter egg**: the rounded-icon block at the top of both mobile layouts is a `Button` that triggers `AccentEasterEgg.tap(…)` (pure resolver in `SettingsScreen.swift`). Each tap advances through `AccentOption.cyclingCases` (the 9 base accents) with a light haptic. When `previousTapCount + 1 >= cycle.count` and rainbow is still locked, the resolver returns `unlockedRainbow: true`; the screen then flips `@AppStorage(SettingsKey.rainbowUnlocked) = true`, applies `AccentOption.rainbow`, plays a success haptic, and emits a `toasts.success(…)` using `easterEgg.rainbow.title` / `.message`. `rainbow` has a placeholder palette because `ThemeManager` checks `isRainbow` first and returns HSB colors driven by `_rainbowHue` — a `Task { @MainActor }` advances the hue every ~33 ms while rainbow is the active accent and bumps `_accentRevision`; the task self-cancels as soon as the user picks a static accent (no cost outside easter-egg state). Pickers use `AccentOption.visibleCases(rainbowUnlocked:)` to hide rainbow until unlocked and `RainbowAccentSwatch` (conic gradient) as its preview dot on both platforms.
+
 ## Media Library (`MediaLibraryScreen`)
 
 Unified screen parameterized by `BaseItemKind` (movies or series).
@@ -202,6 +204,7 @@ Every boolean toggle is declared once as `SettingsToggleRow` and rendered on bot
 | `detail.showQualityBadges` | `true` | Quality pill row on `MediaDetailScreen` |
 | `debug.fastSleepTimer` | `false` | Overrides sleep to 15 s |
 | `debug.showSkipToEnd` | `false` | "End" button seeking to `(duration − 15 s)` |
+| `easterEgg.rainbowUnlocked` | `false` | Unlocks the rainbow accent in the picker — flipped by the logo-tap easter egg on Server/Login mobile screens |
 
 ### Quick user switch
 `UserSwitchSheet` (Settings → Account) — two-step: user grid → password prompt → re-auth. Updates `AppState.accessToken` / `currentUserId`, calls `apiClient.reconnect(url:accessToken:)` without clearing server URL, emits success toast, dismisses. Errors stay inline.

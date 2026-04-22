@@ -479,7 +479,7 @@ extension SettingsScreen {
 
     var tvAccentColorPicker: some View {
         let isFocused = focusedItem == .accentColor("row")
-        let allOptions = AccentOption.allCases
+        let allOptions = AccentOption.visibleCases(rainbowUnlocked: rainbowUnlocked)
 
         return Button {
             // Cycle to next accent color on press
@@ -516,7 +516,7 @@ extension SettingsScreen {
         .focused($focusedItem, equals: .accentColor("row"))
         .onMoveCommand { direction in
             guard isFocused else { return }
-            let allOpts = AccentOption.allCases
+            let allOpts = AccentOption.visibleCases(rainbowUnlocked: rainbowUnlocked)
             if let currentIndex = allOpts.firstIndex(where: { $0.rawValue == themeManager.accentColorKey }) {
                 let idx = allOpts.distance(from: allOpts.startIndex, to: currentIndex)
                 switch direction {
@@ -539,9 +539,13 @@ extension SettingsScreen {
         let isSelected = option.rawValue == themeManager.accentColorKey
 
         return ZStack {
-            Circle()
-                .fill(option.color)
-                .frame(width: 36, height: 36)
+            if option == .rainbow {
+                RainbowAccentSwatch(diameter: 36)
+            } else {
+                Circle()
+                    .fill(option.color)
+                    .frame(width: 36, height: 36)
+            }
 
             if isSelected {
                 Circle()
