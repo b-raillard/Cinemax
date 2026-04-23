@@ -28,10 +28,7 @@ struct AdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.metadata.title"),
                         subtitle: loc.localized("admin.metadata.subtitle"),
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.metadata.title"),
-                            symbol: "square.and.pencil"
-                        )
+                        destination: MetadataBrowserScreen()
                     )
                 }
             }

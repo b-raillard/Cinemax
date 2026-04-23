@@ -189,6 +189,37 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldThrow { throw stubbedError }
     }
 
+    // MARK: - Admin P3b (Metadata)
+
+    var stubbedRemoteResults: [RemoteSearchResult] = []
+
+    func updateItem(id: String, item: BaseItemDto) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func refreshItem(id: String, metadataMode: MetadataRefreshMode, imageMode: MetadataRefreshMode, replaceAllMetadata: Bool, replaceAllImages: Bool) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func deleteItem(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func deleteItemImage(id: String, type: JellyfinAPI.ImageType, index: Int?) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func searchRemoteMovies(query: MovieInfoRemoteSearchQuery) async throws -> [RemoteSearchResult] {
+        if shouldThrow { throw stubbedError }
+        return stubbedRemoteResults
+    }
+    func searchRemoteSeries(query: SeriesInfoRemoteSearchQuery) async throws -> [RemoteSearchResult] {
+        if shouldThrow { throw stubbedError }
+        return stubbedRemoteResults
+    }
+    func applyRemoteSearchResult(itemId: String, result: RemoteSearchResult, replaceAllImages: Bool) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+
     // MARK: - Cache
 
     func clearCache() {}

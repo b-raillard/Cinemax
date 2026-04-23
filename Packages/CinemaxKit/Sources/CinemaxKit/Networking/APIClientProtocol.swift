@@ -207,6 +207,50 @@ public protocol AdminAPI: Sendable {
     /// Revokes a key by its token value. Irreversible on the server side
     /// — clients using the revoked key start getting 401s immediately.
     func revokeApiKey(key: String) async throws
+
+    // MARK: Metadata editor (P3b)
+
+    /// Persists edits to a `BaseItemDto` — name, overview, cast, provider
+    /// ids, etc. The server accepts the full DTO and diffs internally, so
+    /// callers send the edited object without worrying about change-sets.
+    func updateItem(id: String, item: BaseItemDto) async throws
+    /// Kicks off a metadata + image refresh. `fullRefresh` passes
+    /// `.fullRefresh` for both modes; `replaceAll*` wipes local edits and
+    /// re-pulls everything from the active providers.
+    func refreshItem(
+        id: String,
+        metadataMode: MetadataRefreshMode,
+        imageMode: MetadataRefreshMode,
+        replaceAllMetadata: Bool,
+        replaceAllImages: Bool
+    ) async throws
+    /// Deletes an item from the library. Whether the underlying files are
+    /// also removed is controlled by the server's `DeleteContent` policy —
+    /// clients can't opt in/out per-call.
+    func deleteItem(id: String) async throws
+
+    /// Instructs the server to fetch an image from a URL and attach it to
+    /// the item under the given type. Preferred over raw-bytes upload when
+    /// the admin has a URL handy — the server does the download, we don't
+    /// proxy bytes through the phone.
+    ///
+    /// Uses `JellyfinAPI.ImageType` (not the narrower `CinemaxKit.ImageType`
+    /// exposed by `ImageURLBuilder`) because admin workflows need the full
+    /// Jellyfin image-type surface (Disc, Art, BoxRear, Screenshot, …) that
+    /// the UI builder doesn't model.
+    func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws
+    /// Deletes an image from an item. `index` is required for image types
+    /// that can have multiples (Backdrop); pass `nil` for singleton types.
+    func deleteItemImage(id: String, type: JellyfinAPI.ImageType, index: Int?) async throws
+
+    /// Remote-metadata search (TMDB / IMDB / etc.) scoped to movies.
+    func searchRemoteMovies(query: MovieInfoRemoteSearchQuery) async throws -> [RemoteSearchResult]
+    /// Remote-metadata search scoped to series.
+    func searchRemoteSeries(query: SeriesInfoRemoteSearchQuery) async throws -> [RemoteSearchResult]
+    /// Applies a remote search result — server overwrites the item's metadata
+    /// from the chosen provider entry. `replaceAllImages` is destructive to
+    /// any manually-uploaded artwork; surface that in the UI.
+    func applyRemoteSearchResult(itemId: String, result: RemoteSearchResult, replaceAllImages: Bool) async throws
 }
 
 // MARK: - Aggregate

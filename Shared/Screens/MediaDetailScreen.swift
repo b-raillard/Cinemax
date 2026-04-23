@@ -60,6 +60,15 @@ struct MediaDetailScreen: View {
                     // Action buttons
                     actionButtons(item)
 
+                    #if os(iOS)
+                    // Admin-gated "Edit metadata" link — only rendered for admins.
+                    // Pushes the metadata editor for the current item. Server
+                    // enforces authorization on every endpoint; this is UX only.
+                    if appState.isAdministrator {
+                        editMetadataLink(for: item)
+                    }
+                    #endif
+
                     // Quality badges
                     if showQualityBadges {
                         MediaQualityBadges(item: item)
@@ -322,6 +331,40 @@ struct MediaDetailScreen: View {
         )
         .equatable()
     }
+
+    // MARK: - Admin edit metadata link (iOS)
+
+    #if os(iOS)
+    /// Admin-only affordance below the play buttons. Pushes the metadata
+    /// editor for the current item. Styled as a ghost pill with a pencil
+    /// icon so it doesn't compete with the play CTA.
+    @ViewBuilder
+    private func editMetadataLink(for item: BaseItemDto) -> some View {
+        NavigationLink {
+            MetadataEditorScreen(item: item)
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                Text(loc.localized("detail.admin.editMetadata"))
+                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+            }
+            .foregroundStyle(themeManager.accent)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing2)
+            .background(
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .fill(themeManager.accent.opacity(0.1))
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, contentPadding)
+    }
+    #endif
 
     // MARK: - Cast
 

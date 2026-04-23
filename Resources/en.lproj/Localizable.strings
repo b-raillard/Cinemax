@@ -450,6 +450,138 @@
 "admin.logs.empty.subtitle" = "Server log files will appear here.";
 "admin.logs.truncated" = "Showing the last %@ of %@. Full logs are available in the web admin.";
 
+// MARK: - Admin — Metadata (shared)
+
+"admin.metadata.browser.pickLibrary" = "Pick a library";
+"admin.metadata.browser.empty.title" = "No libraries";
+"admin.metadata.browser.empty.subtitle" = "Create a library from the web admin to get started.";
+"admin.metadata.browser.items.empty.title" = "No items";
+"admin.metadata.browser.items.searchPrompt" = "Search a title";
+
+"admin.metadata.tab.general" = "General";
+"admin.metadata.tab.images" = "Images";
+"admin.metadata.tab.cast" = "Cast";
+"admin.metadata.tab.identify" = "Identify";
+"admin.metadata.tab.actions" = "Actions";
+"admin.metadata.save.success" = "Metadata saved";
+
+"admin.metadata.chip.remove" = "Remove";
+"admin.metadata.kv.remove" = "Remove entry";
+
+// MARK: - Admin — Metadata / General
+
+"admin.metadata.general.titles" = "Titles";
+"admin.metadata.general.name" = "Name";
+"admin.metadata.general.originalTitle" = "Original title";
+"admin.metadata.general.sortName" = "Sort name";
+"admin.metadata.general.forcedSortName" = "Forced sort name";
+"admin.metadata.general.overview" = "Overview";
+"admin.metadata.general.taglines" = "Taglines";
+"admin.metadata.general.addTagline" = "Add a tagline";
+"admin.metadata.general.releaseInfo" = "Dates";
+"admin.metadata.general.year" = "Year";
+"admin.metadata.general.premiereDate" = "Premiere";
+"admin.metadata.general.endDate" = "End date";
+"admin.metadata.general.setDate" = "Set";
+"admin.metadata.general.ratings" = "Ratings";
+"admin.metadata.general.officialRating" = "Official";
+"admin.metadata.general.customRating" = "Custom";
+"admin.metadata.general.communityRating" = "Community rating";
+"admin.metadata.general.genresTags" = "Genres & tags";
+"admin.metadata.general.chipHint" = "Tap × to remove an entry, + to add a new one.";
+"admin.metadata.general.genres" = "Genres";
+"admin.metadata.general.addGenre" = "Add a genre";
+"admin.metadata.general.tags" = "Tags";
+"admin.metadata.general.addTag" = "Add a tag";
+"admin.metadata.general.studios" = "Studios";
+"admin.metadata.general.addStudio" = "Add a studio";
+"admin.metadata.general.providerIds" = "Provider IDs";
+"admin.metadata.general.providerIds.footer" = "Common keys: Imdb, Tmdb, Tvdb, MusicBrainzAlbum.";
+
+// MARK: - Admin — Metadata / Images
+
+"admin.metadata.images.primary" = "Primary (poster)";
+"admin.metadata.images.backdrop" = "Backdrops";
+"admin.metadata.images.logo" = "Logo";
+"admin.metadata.images.thumb" = "Thumbnail";
+"admin.metadata.images.banner" = "Banner";
+"admin.metadata.images.disc" = "Disc art";
+"admin.metadata.images.art" = "Art";
+"admin.metadata.images.backdrop.footer" = "Jellyfin supports multiple backdrops. The player picks one to display.";
+"admin.metadata.images.backdrop.empty" = "No backdrops";
+"admin.metadata.images.add" = "Add";
+"admin.metadata.images.replace" = "Replace";
+"admin.metadata.images.delete" = "Delete";
+"admin.metadata.images.delete.title" = "Delete this image?";
+"admin.metadata.images.delete.confirm" = "Delete";
+"admin.metadata.images.delete.success" = "Image deleted";
+"admin.metadata.images.add.title" = "Add image";
+"admin.metadata.images.add.description" = "The server will download the image from this URL and attach it as \"%@\".";
+"admin.metadata.images.add.urlLabel" = "Image URL";
+"admin.metadata.images.add.submit" = "Download image";
+"admin.metadata.images.add.success" = "Image downloaded";
+
+// MARK: - Admin — Metadata / Cast
+
+"admin.metadata.cast.title" = "Cast & crew";
+"admin.metadata.cast.footer" = "Swipe left on a row to remove someone.";
+"admin.metadata.cast.empty" = "No cast recorded.";
+"admin.metadata.cast.addPerson" = "Add person";
+"admin.metadata.cast.editPerson" = "Edit person";
+"admin.metadata.cast.remove" = "Remove";
+"admin.metadata.cast.name" = "Name";
+"admin.metadata.cast.namePlaceholder" = "Full name";
+"admin.metadata.cast.role" = "Role";
+"admin.metadata.cast.rolePlaceholder" = "Character or role";
+"admin.metadata.cast.kind" = "Kind";
+"admin.metadata.cast.kind.actor" = "Actor";
+"admin.metadata.cast.kind.director" = "Director";
+"admin.metadata.cast.kind.writer" = "Writer";
+"admin.metadata.cast.kind.producer" = "Producer";
+"admin.metadata.cast.kind.composer" = "Composer";
+"admin.metadata.cast.kind.guestStar" = "Guest star";
+"admin.metadata.cast.save" = "Save";
+
+// MARK: - Admin — Metadata / Identify
+
+"admin.metadata.identify.searchTitle" = "Search for a match";
+"admin.metadata.identify.name" = "Title to search";
+"admin.metadata.identify.year" = "Year (optional)";
+"admin.metadata.identify.search" = "Search";
+"admin.metadata.identify.unsupported" = "Automatic identify isn't available for this item kind.";
+"admin.metadata.identify.results" = "Results";
+"admin.metadata.identify.applyConfirm.title" = "Apply these metadata?";
+"admin.metadata.identify.applyConfirm.message" = "The current metadata will be replaced with those of \"%@\". This can't be undone.";
+"admin.metadata.identify.replaceImages" = "Also replace images";
+"admin.metadata.identify.replaceImages.hint" = "Turn off to keep your custom artwork. Text metadata is overwritten regardless.";
+"admin.metadata.identify.apply" = "Apply";
+"admin.metadata.identify.apply.success" = "Metadata applied";
+
+// MARK: - Admin — Metadata / Actions
+
+"admin.metadata.actions.refresh.title" = "Refresh from providers";
+"admin.metadata.actions.refresh.footer" = "Runs a metadata + image refresh against the providers configured server-side.";
+"admin.metadata.actions.refresh.metadataMode" = "Metadata mode";
+"admin.metadata.actions.refresh.imageMode" = "Image mode";
+"admin.metadata.actions.refresh.replaceMetadata" = "Replace all metadata";
+"admin.metadata.actions.refresh.replaceImages" = "Replace all images";
+"admin.metadata.actions.refresh.submit" = "Start refresh";
+"admin.metadata.actions.refresh.success" = "Refresh started";
+"admin.metadata.actions.refresh.mode.none" = "None";
+"admin.metadata.actions.refresh.mode.validation" = "Validation only";
+"admin.metadata.actions.refresh.mode.default" = "Default";
+"admin.metadata.actions.refresh.mode.full" = "Full";
+"admin.metadata.actions.delete.title" = "Danger zone";
+"admin.metadata.actions.delete.footer" = "Deleting removes the item from the library. Depending on server policy, the underlying files may also be erased.";
+"admin.metadata.delete.title" = "Delete item";
+"admin.metadata.delete.message" = "\"%@\" will be removed from the library. This can't be undone.";
+"admin.metadata.delete.confirm" = "Delete permanently";
+"admin.metadata.delete.success" = "Item deleted";
+
+// MARK: - MediaDetail — Admin
+
+"detail.admin.editMetadata" = "Edit metadata";
+
 // MARK: - Debug
 
 "settings.debug" = "Debug";

@@ -549,6 +549,76 @@ public final class JellyfinAPIClient: Sendable {
         _ = try await client.send(Paths.revokeKey(key: key))
     }
 
+    // MARK: - Metadata editor
+
+    public func updateItem(id: String, item: BaseItemDto) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.updateItem(itemID: id, item))
+        // Invalidate cached item queries — stale data after a metadata edit
+        // is misleading (renamed titles staying renamed only in memory, etc.).
+        cache.clear()
+    }
+
+    public func refreshItem(
+        id: String,
+        metadataMode: MetadataRefreshMode,
+        imageMode: MetadataRefreshMode,
+        replaceAllMetadata: Bool,
+        replaceAllImages: Bool
+    ) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.RefreshItemParameters(
+            metadataRefreshMode: metadataMode,
+            imageRefreshMode: imageMode,
+            isReplaceAllMetadata: replaceAllMetadata,
+            isReplaceAllImages: replaceAllImages
+        )
+        _ = try await client.send(Paths.refreshItem(itemID: id, parameters: params))
+        cache.clear()
+    }
+
+    public func deleteItem(id: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.deleteItem(itemID: id))
+        cache.clear()
+    }
+
+    public func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.DownloadRemoteImageParameters(type: type, imageURL: imageURL)
+        _ = try await client.send(Paths.downloadRemoteImage(itemID: itemId, parameters: params))
+        cache.clear()
+    }
+
+    public func deleteItemImage(id: String, type: JellyfinAPI.ImageType, index: Int?) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        // SDK path takes imageType as String (the wire format is the raw value).
+        if let index {
+            _ = try await client.send(Paths.deleteItemImageByIndex(itemID: id, imageType: type.rawValue, imageIndex: index))
+        } else {
+            _ = try await client.send(Paths.deleteItemImage(itemID: id, imageType: type.rawValue))
+        }
+        cache.clear()
+    }
+
+    public func searchRemoteMovies(query: MovieInfoRemoteSearchQuery) async throws -> [RemoteSearchResult] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getMovieRemoteSearchResults(query))
+        return response.value
+    }
+
+    public func searchRemoteSeries(query: SeriesInfoRemoteSearchQuery) async throws -> [RemoteSearchResult] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getSeriesRemoteSearchResults(query))
+        return response.value
+    }
+
+    public func applyRemoteSearchResult(itemId: String, result: RemoteSearchResult, replaceAllImages: Bool) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.applySearchCriteria(itemID: itemId, isReplaceAllImages: replaceAllImages, result))
+        cache.clear()
+    }
+
     // MARK: - Media Segments
 
     public func getMediaSegments(itemId: String, includeSegmentTypes: [JellyfinAPI.MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {

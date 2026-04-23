@@ -19,10 +19,18 @@ public struct ImageURLBuilder: Sendable {
     }
 
     public func imageURL(itemId: String, imageType: ImageType, maxWidth: Int? = nil) -> URL {
+        imageURLRaw(itemId: itemId, imageTypeRaw: imageType.rawValue, maxWidth: maxWidth)
+    }
+
+    /// Raw-string overload for admin-only image types (Disc, Art, BoxRear,
+    /// Screenshot, Menu, Chapter, Profile) that fall outside the narrower
+    /// `CinemaxKit.ImageType`. Admin screens build URLs directly via this;
+    /// standard media surfaces keep using the typed overload.
+    public func imageURLRaw(itemId: String, imageTypeRaw: String, maxWidth: Int? = nil) -> URL {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL
         }
-        components.path = "/Items/\(itemId)/Images/\(imageType.rawValue)"
+        components.path = "/Items/\(itemId)/Images/\(imageTypeRaw)"
 
         var queryItems: [URLQueryItem] = []
         if let maxWidth {
