@@ -56,12 +56,6 @@ enum CinemaColor {
     static let secondary          = Color.dynamic(light: 0x55585E, dark: 0x9D9E9E)
     static let secondaryContainer = Color.dynamic(light: 0xC8CACE, dark: 0x3A3C3C)
 
-    // Tertiary (legacy accent — kept for lingering call sites)
-    static let tertiary          = Color.dynamic(light: 0x0060D6, dark: 0x679CFF)
-    static let tertiaryContainer = Color.dynamic(light: 0x007AFF, dark: 0x007AFF)
-    static let tertiaryDim       = Color.dynamic(light: 0x0050B8, dark: 0x0070EB)
-    static let onTertiary        = Color.dynamic(light: 0xFFFFFF, dark: 0x001F4A)
-
     // Outline
     static let outline        = Color.dynamic(light: 0xB0B1B5, dark: 0x767575)
     static let outlineVariant = Color.dynamic(light: 0xCFD0D3, dark: 0x484848)
@@ -80,7 +74,7 @@ enum CinemaColor {
 
 // MARK: - Global UI Scale
 
-/// Global UI text scale. Backed by UserDefaults key "uiScale" (set via ThemeManager.uiScale).
+/// Global UI text scale. Backed by `SettingsKey.uiScale` (set via ThemeManager.uiScale).
 /// All CinemaFont methods and explicit CinemaScale.pt() calls read this at view-render time,
 /// so bumping ThemeManager._accentRevision (which happens on uiScale write) re-renders
 /// all views and they pick up the new factor automatically.
@@ -89,7 +83,8 @@ enum CinemaScale {
     /// On tvOS a 1.4× base multiplier is applied on top, since base sizes
     /// are defined for iOS (~10 pt/m) but tvOS is viewed from ~3 m away.
     static var factor: CGFloat {
-        let stored = UserDefaults.standard.object(forKey: "uiScale") as? Double ?? 1.0
+        let stored = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double
+            ?? SettingsKey.Default.uiScale
         #if os(tvOS)
         return CGFloat(stored) * 1.4
         #else
@@ -199,12 +194,6 @@ enum CinemaRadius {
     static let full: CGFloat = 9999
 }
 
-// MARK: - Motion
-
-enum CinemaMotion {
-    static let standard: Double = 0.3
-}
-
 // MARK: - Gradients
 
 enum CinemaGradient {
@@ -224,16 +213,3 @@ enum CinemaGradient {
     )
 }
 
-// MARK: - Color Extension
-
-extension Color {
-    init(hex: UInt, alpha: Double = 1.0) {
-        self.init(
-            .sRGB,
-            red: Double((hex >> 16) & 0xFF) / 255,
-            green: Double((hex >> 8) & 0xFF) / 255,
-            blue: Double(hex & 0xFF) / 255,
-            opacity: alpha
-        )
-    }
-}

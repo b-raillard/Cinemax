@@ -31,15 +31,19 @@ Both safe when the body only reads its parameters.
 
 ```
 Shared/
-  DesignSystem/Components/  CinemaLazyImage, ProgressBarView, RatingBadge, LoadingStateView, ErrorStateView, PosterCard, WideCard, ContentRow, CinemaButton, FlowLayout
+  DesignSystem/             CinemaGlassTheme, ThemeManager, AccentOption (+ AccentEasterEgg), LocalizationManager, ToastCenter, GlassModifiers, FocusScaleModifier, AdaptiveLayout, TVButtonStyles, SettingsKeys, SleepTimerOption
+  DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges
   Navigation/               AppNavigation (auth routing), MainTabView (tab bar/sidebar)
-  Screens/                  Home/Login/ServerSetup/Search/MediaDetail/MovieLibrary/TVSeries/Settings/VideoPlayer (+ NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet, MediaQualityBadges, SettingsRowHelpers)
+  Screens/                  HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen (+ SettingsScreen+iOS, +tvOS, SettingsAppearanceView+iOS, SettingsRowHelpers, PrivacySecurityScreen, LicensesView), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet, LibraryGenreRow, LibraryHeroSection, LibraryPosterCard, LibrarySortFilterSheet, ServerDiscoverySheet, ServerHelpSheet, UserSwitchSheet
     VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController
   ViewModels/               Home/Login/Search/ServerSetup/MediaDetail/MediaLibrary ViewModels, VideoPlayerCoordinator
 iOS/ tvOS/                  app entry points
 Resources/{fr,en}.lproj/    Localization (fr default)
 Packages/CinemaxKit/        Models, Networking (JellyfinAPIClient, ImageURLBuilder), Persistence (KeychainService)
+docs/design-system/         Canonical design system reference (colors, typography, components, patterns, platforms, conventions)
 ```
+
+> `Shared/Screens/` is flat — no `Settings/` or `Home/` subfolders. `PlayLink.swift` intentionally stays in `Screens/` because it knows about `VideoPlayerView` (iOS) and `VideoPlayerCoordinator` (tvOS) — making it a design-system component would invert the dependency direction. `SettingsRowHelpers.swift` also stays because the tvOS renderers in `SettingsScreen+tvOS.swift` capture `@FocusState` from the screen.
 
 ## Design System
 
@@ -196,12 +200,13 @@ Every boolean toggle is declared once as `SettingsToggleRow` and rendered on bot
 | `sleepTimerDefaultMinutes` | `0` | Sleep timer duration (0/15/30/45/60/90) via `SleepTimerOption` |
 | `uiScale` | `1.0` | Font scale 80–130%. Bumps `_accentRevision` |
 | `darkMode` | `true` | **Toggle via `themeManager.darkModeEnabled`**, not directly |
-| `accentColor` | `"blue"` | Set via `themeManager.accentColorKey` for same reason |
+| `accentColor` | `"green"` | Set via `themeManager.accentColorKey` for same reason |
 | `home.showContinueWatching` | `true` | Continue Watching row |
 | `home.showRecentlyAdded` | `true` | Recently Added row |
 | `home.showGenreRows` | `true` | All 4 genre rows |
 | `home.showWatchingNow` | `true` | Watching Now row |
 | `detail.showQualityBadges` | `true` | Quality pill row on `MediaDetailScreen` |
+| `privacy.maxContentAge` | `0` | Content rating ceiling (years). `0` = unrestricted; 10/12/14/16/18 hide items rated above the ceiling. Applied via `apiClient.applyContentRatingLimit` |
 | `debug.fastSleepTimer` | `false` | Overrides sleep to 15 s |
 | `debug.showSkipToEnd` | `false` | "End" button seeking to `(duration − 15 s)` |
 | `easterEgg.rainbowUnlocked` | `false` | Unlocks the rainbow accent in the picker — flipped by the logo-tap easter egg on Server/Login mobile screens |
