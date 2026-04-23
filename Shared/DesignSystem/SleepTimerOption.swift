@@ -31,7 +31,7 @@ enum SleepTimerOption: Int, CaseIterable, Identifiable {
 
     /// Look up the user's default sleep-timer setting. Writes made via `@AppStorage` are reflected.
     static var currentDefault: SleepTimerOption {
-        let raw = UserDefaults.standard.integer(forKey: "sleepTimerDefaultMinutes")
+        let raw = UserDefaults.standard.integer(forKey: SettingsKey.sleepTimerDefaultMinutes)
         return SleepTimerOption(rawValue: raw) ?? .disabled
     }
 
@@ -40,7 +40,7 @@ enum SleepTimerOption: Int, CaseIterable, Identifiable {
     /// triggered quickly during testing without rewriting every option.
     /// Returns `0` when the timer is disabled and no debug override is active.
     static var currentDefaultSeconds: TimeInterval {
-        let fastDebug = UserDefaults.standard.bool(forKey: "debug.fastSleepTimer")
+        let fastDebug = UserDefaults.standard.bool(forKey: SettingsKey.debugFastSleepTimer)
         if fastDebug { return 15 }
         return currentDefault.seconds
     }

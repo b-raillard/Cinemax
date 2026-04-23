@@ -11,10 +11,10 @@ struct HomeScreen: View {
     #endif
     @State private var viewModel = HomeViewModel()
 
-    @AppStorage("home.showContinueWatching") private var showContinueWatching: Bool = true
-    @AppStorage("home.showRecentlyAdded") private var showRecentlyAdded: Bool = true
-    @AppStorage("home.showGenreRows") private var showGenreRows: Bool = true
-    @AppStorage("home.showWatchingNow") private var showWatchingNow: Bool = true
+    @AppStorage(SettingsKey.homeShowContinueWatching) private var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
+    @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
+    @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
+    @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
 
     var body: some View {
         ZStack {
@@ -190,7 +190,7 @@ struct HomeScreen: View {
             .frame(maxWidth: .infinity)
             .frame(height: heroHeight)
             .overlay {
-                if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
+                if let backdropId = item.backdropItemID {
                     CinemaLazyImage(
                         url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
                         fallbackIcon: nil,
@@ -319,7 +319,7 @@ struct HomeScreen: View {
     private func watchingNowCard(_ session: SessionInfoDto) -> some View {
         if let item = session.nowPlayingItem, let id = item.id {
             // Episodes → use parent series for backdrop; fall back to the episode itself.
-            let backdropId = item.parentBackdropItemID ?? item.seriesID ?? id
+            let backdropId = item.backdropItemID ?? id
             let title = (item.seriesName ?? item.name) ?? ""
             let subtitle = String(format: loc.localized("home.watchingNow.playing"), session.userName ?? "")
 
@@ -418,7 +418,7 @@ struct HomeScreen: View {
             if isEpisode {
                 var label = ""
                 if let season = item.parentIndexNumber, let ep = item.indexNumber {
-                    label = "S\(season):E\(ep)"
+                    label = String(format: "S%02d:E%02d", season, ep)
                 }
                 if let name = item.name, !name.isEmpty {
                     label = label.isEmpty ? name : "\(label) - \(name)"
@@ -434,7 +434,7 @@ struct HomeScreen: View {
 
         WideCard(
             title: cardTitle,
-            imageURL: (item.parentBackdropItemID ?? item.seriesID ?? item.id).map { appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
+            imageURL: item.backdropItemID.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
             progress: progress,
             subtitle: cardSubtitle
         )

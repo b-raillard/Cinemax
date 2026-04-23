@@ -1,6 +1,6 @@
 # Cinemax - Jellyfin Client for Apple Platforms
 
-Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
+Native Jellyfin media streaming client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders).
 
 ## Architecture
 
@@ -10,11 +10,12 @@ Native Jellyfin media streaming client for iOS 18+ and tvOS 26+. "Cinema Glass" 
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable conformance
 - **iOS `NavigationStack` caveat**: destinations pushed via `navigationDestination(item:)` render in a separate context — `@Observable` changes to environment objects won't re-render the destination unless it is a standalone `View` struct with its own `@Environment` properties. Use a proper struct, not an extension method returning `some View`.
 
-### Modern API requirements (iOS 18 / tvOS 26)
+### Modern API requirements (iOS 26 / tvOS 26)
 
 - **`UIButton`**: never use `UIButton(type:)` + `setTitle/setTitleColor/titleLabel?.font/backgroundColor/contentEdgeInsets`. Build with `UIButton.Configuration` (see the skip-intro button and debug "End" pill in `NativeVideoPresenter` for the pattern). Frosted background via `config.background.customView = UIVisualEffectView(...)`.
 - **Free SwiftUI helpers**: free functions returning `some View` that touch SwiftUI types (`PrimitiveButtonStyle.plain`, `Font`, etc.) must be `@MainActor` under Swift 6 — those types are main-actor-isolated. The `iOSToggleRow` / `iOSToggleRowsJoined` / `iOSSettingsRow` helpers in `SettingsRowHelpers.swift` follow this.
-- **iPad multitasking**: `UIRequiresFullScreen: true` in `project.yml`. Split view would interrupt playback and break hero/backdrop layouts; also satisfies the "all orientations unless full screen" warning. If ever changed, the iPhone orientation list must add `UIInterfaceOrientationPortraitUpsideDown`.
+- **iPad multitasking**: `UIRequiresFullScreen` was removed with the iOS 26 bump (Apple deprecated it and will ignore it in a future release). Both iPhone and iPad orientation lists include `UIInterfaceOrientationPortraitUpsideDown` to silence the "all orientations must be supported" warning. iPad split view / Stage Manager is therefore allowed at runtime — hero/backdrop layouts and playback-through-resize have not been hardened for that yet, so expect visual glitches on resized iPad windows until that work is done.
+- **Toolbar buttons + Liquid Glass**: in iOS 26, navigation-bar `ToolbarItem` buttons are automatically rendered with Liquid Glass by the system. **Do not add `.buttonStyle(.glass)` / `.glassProminent` on toolbar items** — it nests a second glass capsule inside the toolbar's own container (see `MovieLibraryScreen.filterButton`). Signal active state with `.tint(themeManager.accent)` + a `.fill` icon variant instead.
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
@@ -59,6 +60,21 @@ Packages/CinemaxKit/        Models, Networking (JellyfinAPIClient, ImageURLBuild
 - `AppNavigation` → Keychain session check → `apiClient.reconnect()` + `fetchServerInfo()`. Injects `ThemeManager`, `LocalizationManager`, `ToastCenter`; applies `.preferredColorScheme()` at root.
 - No server → `ServerSetupScreen` → `LoginScreen` → `MainTabView` (top tabs on tvOS, sidebar on iPad, bottom tabs on iPhone).
 - All play buttons use `PlayLink<Label>` (Button+coordinator on tvOS, NavigationLink on iOS) — never direct `NavigationLink` to `VideoPlayerView`.
+
+## Server Setup & Login
+
+Two-step pre-auth flow with a shared mobile design language so users perceive Server → Login as one journey. The two screens' `mobileLayout`s share: same icon block (rounded `surfaceContainerHigh` rect + accent-tinted symbol + shadow), same tracked label / big black title / centered subtitle (max 280pt), same glass-panel form, same primary `CinemaButton` + helper-link footer.
+
+**Server discovery** (`JellyfinServerDiscovery` in CinemaxKit + `ServerDiscoverySheet`):
+- UDP `"Who is JellyfinServer?"` broadcast on port 7359, listen for JSON `{Address,Id,Name}` replies.
+- Probes both the limited broadcast (`255.255.255.255`) **and** each interface's directed broadcast (e.g. `192.168.1.255`) via `getifaddrs` — many consumer routers drop the limited form but pass directed.
+- `ServerDiscoverySheet.scan()` clears `servers` at start (visible transition), then auto-retries once after 800ms when the first scan returns empty — covers the iPhone case where the very first probe races the iOS local-network permission prompt and gets silently blocked before the user can approve. Also re-scans on `scenePhase == .active` for the "user toggled Local Network in Settings.app and came back" path. iOS needs `NSLocalNetworkUsageDescription` in `iOS/Info.plist` (already declared).
+
+**`AppState.disconnectServer()`**: clears keychain server URL + flips `hasServer = false` so `AppNavigation` sends the user back to `ServerSetupScreen`. Surfaced as the "Change server" helper link in the bottom action area of `LoginScreen.mobileLayout`. Doesn't touch auth state — the user isn't authenticated at that point.
+
+**LoginScreen mobile layout caveat**: ServerSetupScreen's form uses `.padding(.horizontal, spacing4)` outside the `.glassPanel` to set its visual margin. The same modifier chain in `LoginScreen.mobileLayout` is silently dropped under iOS 26 (root cause untracked — possibly related to the multi-`GlassTextField` + `.ultraThinMaterial` interaction). Workaround: `.frame(maxWidth: formMaxWidth)` (350pt) on both the form panel and the actions VStack, letting the outer VStack center them. Don't "fix" this back to padding without verifying with pixel sampling.
+
+**Rainbow accent easter egg**: the rounded-icon block at the top of both mobile layouts is a `Button` that triggers `AccentEasterEgg.tap(…)` (pure resolver in `SettingsScreen.swift`). Each tap advances through `AccentOption.cyclingCases` (the 9 base accents) with a light haptic. When `previousTapCount + 1 >= cycle.count` and rainbow is still locked, the resolver returns `unlockedRainbow: true`; the screen then flips `@AppStorage(SettingsKey.rainbowUnlocked) = true`, applies `AccentOption.rainbow`, plays a success haptic, and emits a `toasts.success(…)` using `easterEgg.rainbow.title` / `.message`. `rainbow` has a placeholder palette because `ThemeManager` checks `isRainbow` first and returns HSB colors driven by `_rainbowHue` — a `Task { @MainActor }` advances the hue every ~33 ms while rainbow is the active accent and bumps `_accentRevision`; the task self-cancels as soon as the user picks a static accent (no cost outside easter-egg state). Pickers use `AccentOption.visibleCases(rainbowUnlocked:)` to hide rainbow until unlocked and `RainbowAccentSwatch` (conic gradient) as its preview dot on both platforms.
 
 ## Media Library (`MediaLibraryScreen`)
 
@@ -170,7 +186,7 @@ Every boolean toggle is declared once as `SettingsToggleRow` and rendered on bot
 ### Assets
 - `AppLogo.imageset`: iOS `app_logo.png` (full icon); tvOS `app_logo_tv.png` (front parallax layer — transparent bg, jellyfish only). No `clipShape` on tvOS logo.
 
-### `@AppStorage` keys (shared iOS/tvOS, declared in `SettingsScreen`)
+### `@AppStorage` keys (key names + defaults in `SettingsKey` / `SettingsKey.Default` — `Shared/DesignSystem/SettingsKeys.swift`)
 | Key | Default | Effect |
 |-----|---------|--------|
 | `motionEffects` | `true` | `motionEffectsEnabled` env key — disables all animations when off |
@@ -188,6 +204,7 @@ Every boolean toggle is declared once as `SettingsToggleRow` and rendered on bot
 | `detail.showQualityBadges` | `true` | Quality pill row on `MediaDetailScreen` |
 | `debug.fastSleepTimer` | `false` | Overrides sleep to 15 s |
 | `debug.showSkipToEnd` | `false` | "End" button seeking to `(duration − 15 s)` |
+| `easterEgg.rainbowUnlocked` | `false` | Unlocks the rainbow accent in the picker — flipped by the logo-tap easter egg on Server/Login mobile screens |
 
 ### Quick user switch
 `UserSwitchSheet` (Settings → Account) — two-step: user grid → password prompt → re-auth. Updates `AppState.accessToken` / `currentUserId`, calls `apiClient.reconnect(url:accessToken:)` without clearing server URL, emits success toast, dismisses. Errors stay inline.
@@ -286,7 +303,7 @@ Always visible (not `#if DEBUG`-gated) so QA / power users don't need a custom b
 - `ImageURLBuilder` → `/Items/{id}/Images/{type}`.
 - **Backdrop sizing**: use `ImageURLBuilder.screenPixelWidth` — never hardcode `1920`.
 - **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with a 500 MB disk cache (`com.cinemax.images`).
-- **Backdrop fallback**: `item.parentBackdropItemID ?? item.seriesID ?? item.id`.
+- **Backdrop fallback**: use `item.backdropItemID` (→ `parentBackdropItemID ?? seriesID ?? id`) from `BaseItemDto+Metadata`.
 - **All image loading via `CinemaLazyImage`** — never `LazyImage` directly. Params: `url`, `fallbackIcon: String?`, `fallbackBackground: Color`, `showLoadingIndicator: Bool`.
 - **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`.
 - **Backdrop (full-bleed ZStack)**: `CinemaLazyImage` inside a `ZStack` must have `.frame(maxWidth: .infinity, maxHeight: .infinity)` — otherwise ZStack sizes from the image's natural dimensions (e.g. 1920px), pushing the title VStack off-screen. Outer container must be `LazyVStack(alignment: .leading)`.

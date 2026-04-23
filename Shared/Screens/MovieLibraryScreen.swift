@@ -528,8 +528,9 @@ struct MediaLibraryScreen: View {
 
     // MARK: - Filter Button
 
+    @ViewBuilder
     private var filterButton: some View {
-        Button {
+        let button = Button {
             showSortFilter = true
         } label: {
             HStack(spacing: 6) {
@@ -551,6 +552,7 @@ struct MediaLibraryScreen: View {
                     .frame(width: 20, height: 20)
                 }
             }
+            #if os(tvOS)
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -560,11 +562,21 @@ struct MediaLibraryScreen: View {
                     : CinemaColor.surfaceContainerHigh
             )
             .clipShape(Capsule())
+            #endif
         }
+
         #if os(tvOS)
-        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: viewModel.sortFilter.isNonDefault ? .accent : .ghost))
+        button.buttonStyle(CinemaTVButtonStyle(cinemaStyle: viewModel.sortFilter.isNonDefault ? .accent : .ghost))
         #else
-        .buttonStyle(.plain)
+        // iOS 26: navigation-bar toolbar items are rendered with Liquid Glass
+        // automatically — adding `.buttonStyle(.glass)` here would nest a glass
+        // capsule inside the toolbar's own glass container. Active-state signal
+        // is the `.fill` icon variant + accent tint on the label.
+        if viewModel.sortFilter.isNonDefault {
+            button.tint(themeManager.accent)
+        } else {
+            button
+        }
         #endif
     }
 

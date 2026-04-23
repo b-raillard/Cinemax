@@ -28,6 +28,28 @@ struct SettingsToggleRow: Identifiable {
     }
 }
 
+// MARK: - Server Status Badge (shared)
+
+/// Green-dot + uppercase-label capsule used on the Server detail page to convey
+/// connection state. iOS shows "LIVE" at 13pt; tvOS shows "CONNECTED" at 14pt.
+/// Both sides previously inlined nearly-identical HStacks — this collapses that
+/// duplication while keeping each platform's label copy and size.
+@ViewBuilder
+func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) -> some View {
+    HStack(spacing: dotSize - 1) {
+        Circle()
+            .fill(CinemaColor.success)
+            .frame(width: dotSize, height: dotSize)
+        Text(label)
+            .font(.system(size: CinemaScale.pt(fontSize), weight: .bold))
+            .tracking(0.5)
+            .foregroundStyle(CinemaColor.success)
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    .background(Capsule().fill(CinemaColor.success.opacity(0.12)))
+}
+
 // MARK: - iOS Settings Row Helpers
 //
 // Shared layout helpers used by SettingsScreen and IOSAppearanceDetailView on iOS.

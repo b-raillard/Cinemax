@@ -56,6 +56,14 @@ extension SettingsScreen {
         } message: {
             Text(loc.localized("settings.switchAccountConfirm"))
         }
+        .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
+            Button(loc.localized("action.logOut"), role: .destructive) {
+                appState.logout()
+            }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        } message: {
+            Text(loc.localized("settings.logOutConfirm"))
+        }
     }
 
     // MARK: tvOS Landing Page
@@ -271,6 +279,22 @@ extension SettingsScreen {
     var tvAccountDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             tvProfileSection
+
+            tvActionRow(
+                id: "privacySecurity",
+                icon: "lock.shield",
+                label: loc.localized("settings.privacySecurity"),
+                showsChevron: true,
+                action: { showPrivacySecurity = true }
+            )
+
+            tvActionRow(
+                id: "logout",
+                icon: "rectangle.portrait.and.arrow.right",
+                label: loc.localized("action.logOut"),
+                tint: CinemaColor.error,
+                action: { showLogOutAlert = true }
+            )
         }
     }
 
@@ -302,17 +326,7 @@ extension SettingsScreen {
 
                     Spacer()
 
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(CinemaColor.success)
-                            .frame(width: 6, height: 6)
-                        Text(loc.localized("settings.connected"))
-                            .font(.system(size: CinemaScale.pt(14), weight: .bold))
-                            .foregroundStyle(CinemaColor.success)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(CinemaColor.success.opacity(0.1)))
+                    serverStatusBadge(label: loc.localized("settings.connected"), fontSize: 14)
                 }
 
                 tvRefreshConnectionButton
@@ -465,7 +479,7 @@ extension SettingsScreen {
 
     var tvAccentColorPicker: some View {
         let isFocused = focusedItem == .accentColor("row")
-        let allOptions = AccentOption.allCases
+        let allOptions = AccentOption.visibleCases(rainbowUnlocked: rainbowUnlocked)
 
         return Button {
             // Cycle to next accent color on press
@@ -502,7 +516,7 @@ extension SettingsScreen {
         .focused($focusedItem, equals: .accentColor("row"))
         .onMoveCommand { direction in
             guard isFocused else { return }
-            let allOpts = AccentOption.allCases
+            let allOpts = AccentOption.visibleCases(rainbowUnlocked: rainbowUnlocked)
             if let currentIndex = allOpts.firstIndex(where: { $0.rawValue == themeManager.accentColorKey }) {
                 let idx = allOpts.distance(from: allOpts.startIndex, to: currentIndex)
                 switch direction {
@@ -525,9 +539,13 @@ extension SettingsScreen {
         let isSelected = option.rawValue == themeManager.accentColorKey
 
         return ZStack {
-            Circle()
-                .fill(option.color)
-                .frame(width: 36, height: 36)
+            if option == .rainbow {
+                RainbowAccentSwatch(diameter: 36)
+            } else {
+                Circle()
+                    .fill(option.color)
+                    .frame(width: 36, height: 36)
+            }
 
             if isSelected {
                 Circle()
@@ -826,6 +844,7 @@ extension SettingsScreen {
         label: String,
         subtitle: String? = nil,
         showsChevron: Bool = false,
+        tint: Color? = nil,
         action: @escaping () -> Void
     ) -> some View {
         tvActionRow(
@@ -834,6 +853,7 @@ extension SettingsScreen {
             label: label,
             subtitle: subtitle,
             showsChevron: showsChevron,
+            tint: tint,
             action: action
         )
     }
@@ -845,21 +865,24 @@ extension SettingsScreen {
         label: String,
         subtitle: String? = nil,
         showsChevron: Bool = false,
+        tint: Color? = nil,
         action: @escaping () -> Void
     ) -> some View {
         let isFocused = focusedItem == focus
+        let iconColor = tint ?? themeManager.accent
+        let labelColor = tint ?? CinemaColor.onSurface
         Button(action: action) {
             HStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: icon)
                     .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(themeManager.accent)
+                    .foregroundStyle(iconColor)
                     .frame(width: 24)
 
                 if let subtitle {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(label)
                             .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                            .foregroundStyle(CinemaColor.onSurface)
+                            .foregroundStyle(labelColor)
                         Text(subtitle)
                             .font(.system(size: CinemaScale.pt(16), weight: .regular))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -867,7 +890,7 @@ extension SettingsScreen {
                 } else {
                     Text(label)
                         .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                        .foregroundStyle(CinemaColor.onSurface)
+                        .foregroundStyle(labelColor)
                 }
 
                 Spacer()

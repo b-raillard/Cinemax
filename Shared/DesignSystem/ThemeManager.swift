@@ -13,7 +13,7 @@ final class ThemeManager {
     // MARK: - Persisted Properties
 
     @ObservationIgnored
-    @AppStorage("accentColor") private var _accentColorKey: String = "blue"
+    @AppStorage(SettingsKey.accentColor) private var _accentColorKey: String = SettingsKey.Default.accentColor
 
     var accentColorKey: String {
         get {
@@ -23,11 +23,12 @@ final class ThemeManager {
         set {
             _accentColorKey = newValue
             _accentRevision += 1
+            startRainbowIfNeeded()
         }
     }
 
     @ObservationIgnored
-    @AppStorage("darkMode") private var _darkModeEnabled: Bool = true
+    @AppStorage(SettingsKey.darkMode) private var _darkModeEnabled: Bool = SettingsKey.Default.darkMode
 
     var darkModeEnabled: Bool {
         get { _darkModeEnabled }
@@ -38,7 +39,7 @@ final class ThemeManager {
     }
 
     @ObservationIgnored
-    @AppStorage("uiScale") private var _uiScale: Double = 1.0
+    @AppStorage(SettingsKey.uiScale) private var _uiScale: Double = SettingsKey.Default.uiScale
 
     /// Global UI text scale factor (0.8 – 1.4). Changing this re-renders all views.
     var uiScale: Double {
@@ -52,61 +53,93 @@ final class ThemeManager {
     /// Tracked revision counter — triggers SwiftUI updates when AppStorage values change.
     private var _accentRevision: Int = 0
 
+    // MARK: - Rainbow Easter Egg
+    //
+    // When `accentColorKey == "rainbow"`, a Task on the main actor advances
+    // `_rainbowHue` every ~33 ms and bumps `_accentRevision` so every view
+    // observing ThemeManager re-evaluates `accent`/`accentContainer`/`accentDim`
+    // against the new hue. The task self-exits as soon as the user switches to a
+    // static accent, so there's zero cost outside of the easter-egg state.
+
+    @ObservationIgnored private var _rainbowHue: Double = 0
+    @ObservationIgnored private var rainbowTask: Task<Void, Never>?
+
+    var isRainbow: Bool { accentColorKey == "rainbow" }
+
+    init() {
+        startRainbowIfNeeded()
+    }
+
+    deinit {
+        rainbowTask?.cancel()
+    }
+
+    private func startRainbowIfNeeded() {
+        rainbowTask?.cancel()
+        rainbowTask = nil
+        guard isRainbow else { return }
+        rainbowTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 33_000_000)
+                guard let self, self.isRainbow else { return }
+                self._rainbowHue = (self._rainbowHue + 0.006).truncatingRemainder(dividingBy: 1.0)
+                self._accentRevision += 1
+            }
+        }
+    }
+
     // MARK: - Dynamic Accent Colors
+    //
+    // The palette for each accent lives on `AccentOption.palette` — single source of truth.
+    // These computed properties just pick the right slice + wrap in `Color.dynamic`.
+    // Rainbow mode bypasses the palette and returns HSB colors driven by `_rainbowHue`.
+
+    /// Current palette. Falls back to green if `accentColorKey` is unrecognised (e.g. stale storage).
+    private var palette: AccentOption.Palette {
+        (AccentOption(rawValue: accentColorKey) ?? .green).palette
+    }
 
     /// Accent "light" variant — used for text, icons, active indicators.
     /// Light-mode values are deeper/more saturated for ≥4.5:1 contrast on the soft-grey background.
     var accent: Color {
         _ = _accentRevision
-        return switch accentColorKey {
-        case "purple": Color.dynamic(light: 0x7A2BD0, dark: 0xBF7FFF)
-        case "pink":   Color.dynamic(light: 0xC2185B, dark: 0xFF6BB5)
-        case "orange": Color.dynamic(light: 0xCC5A0A, dark: 0xFF8C42)
-        case "green":  Color.dynamic(light: 0x1F7A50, dark: 0x4CAF82)
-        case "cyan":   Color.dynamic(light: 0x0E8F84, dark: 0x2DD4BF)
-        default:       Color.dynamic(light: 0x0060D6, dark: 0x679CFF) // blue
+        if isRainbow {
+            return Color(hue: _rainbowHue, saturation: 0.85, brightness: 0.95)
         }
+        let p = palette
+        return Color.dynamic(light: p.accentLight, dark: p.accentDark)
     }
 
     /// Accent "container" — used for filled button backgrounds, selection highlights.
     /// Mid-tone saturated values work on both light and dark backgrounds.
     var accentContainer: Color {
         _ = _accentRevision
-        return switch accentColorKey {
-        case "purple": Color.dynamic(light: 0x8E3CE0, dark: 0x9B57E0)
-        case "pink":   Color.dynamic(light: 0xD63384, dark: 0xE0458F)
-        case "orange": Color.dynamic(light: 0xE06A1A, dark: 0xE06A1A)
-        case "green":  Color.dynamic(light: 0x2E8A5E, dark: 0x2E8A5E)
-        case "cyan":   Color.dynamic(light: 0x0BAEA0, dark: 0x0BAEA0)
-        default:       Color.dynamic(light: 0x007AFF, dark: 0x007AFF) // blue
+        if isRainbow {
+            return Color(hue: _rainbowHue, saturation: 0.9, brightness: 0.88)
         }
+        let p = palette
+        return Color.dynamic(light: p.containerLight, dark: p.containerDark)
     }
 
     /// Dimmed accent — used for hover/pressed states of accent-colored UI.
     var accentDim: Color {
         _ = _accentRevision
-        return switch accentColorKey {
-        case "purple": Color.dynamic(light: 0x651FB0, dark: 0x8B44CF)
-        case "pink":   Color.dynamic(light: 0xA0144A, dark: 0xCC3578)
-        case "orange": Color.dynamic(light: 0xA84508, dark: 0xCC5500)
-        case "green":  Color.dynamic(light: 0x155F3E, dark: 0x1F7A50)
-        case "cyan":   Color.dynamic(light: 0x08756B, dark: 0x009A8C)
-        default:       Color.dynamic(light: 0x0050B8, dark: 0x0070EB) // blue
+        if isRainbow {
+            return Color(hue: _rainbowHue, saturation: 0.75, brightness: 0.7)
         }
+        let p = palette
+        return Color.dynamic(light: p.dimLight, dark: p.dimDark)
     }
 
     /// On-accent — text/icon color placed on top of `accentContainer`.
     /// Always white in light mode (saturated containers host white); near-black in dark mode.
     var onAccent: Color {
         _ = _accentRevision
-        return switch accentColorKey {
-        case "purple": Color.dynamic(light: 0xFFFFFF, dark: 0x1A0040)
-        case "pink":   Color.dynamic(light: 0xFFFFFF, dark: 0x3D001A)
-        case "orange": Color.dynamic(light: 0xFFFFFF, dark: 0x3D1500)
-        case "green":  Color.dynamic(light: 0xFFFFFF, dark: 0x001A0D)
-        case "cyan":   Color.dynamic(light: 0xFFFFFF, dark: 0x001A18)
-        default:       Color.dynamic(light: 0xFFFFFF, dark: 0x001F4A) // blue
+        if isRainbow {
+            return .white
         }
+        let p = palette
+        return Color.dynamic(light: p.onAccentLight, dark: p.onAccentDark)
     }
 
     // MARK: - Color Scheme

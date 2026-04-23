@@ -25,6 +25,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Cinemax uses the microphone for voice search.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
@@ -43,8 +45,6 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<key>UIRequiresFullScreen</key>
-	<true/>
 	<key>UISupportedInterfaceOrientations~iPad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -55,6 +55,7 @@
 	<key>UISupportedInterfaceOrientations~iPhone</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>

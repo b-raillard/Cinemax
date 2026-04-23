@@ -188,7 +188,9 @@ extension SettingsScreen {
 
                     iOSSettingsDivider
 
-                    navigationRow(icon: "lock.shield", label: loc.localized("settings.privacySecurity")) {}
+                    navigationRow(icon: "lock.shield", label: loc.localized("settings.privacySecurity")) {
+                        showPrivacySecurity = true
+                    }
 
                     iOSSettingsDivider
 
@@ -217,6 +219,15 @@ extension SettingsScreen {
                 }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
+        }
+        .task { await fetchCurrentUser() }
+        .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
+            Button(loc.localized("action.logOut"), role: .destructive) {
+                appState.logout()
+            }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        } message: {
+            Text(loc.localized("settings.logOutConfirm"))
         }
     }
 
@@ -377,21 +388,8 @@ extension SettingsScreen {
 
     var profileHeader: some View {
         HStack(spacing: CinemaSpacing.spacing4) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [themeManager.accentContainer, themeManager.accent.opacity(0.6)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 56, height: 56)
-
-                Text(userInitial)
-                    .font(.system(size: 24, weight: .bold, design: .default))
-                    .foregroundStyle(.white)
-            }
+            profileAvatar
+                .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
                 Text(username)
@@ -409,20 +407,46 @@ extension SettingsScreen {
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
-    var liveBadge: some View {
-        HStack(spacing: 5) {
+    /// Account avatar. Renders the Jellyfin primary image for the signed-in
+    /// user when available, with an accent gradient + initial underneath as
+    /// the fallback (covers "no image set" and offline cases uniformly).
+    @ViewBuilder
+    var profileAvatar: some View {
+        let initialFallback = ZStack {
             Circle()
-                .fill(CinemaColor.success)
-                .frame(width: 6, height: 6)
-
-            Text(loc.localized("settings.live"))
-                .font(.system(size: CinemaScale.pt(13), weight: .bold))
-                .tracking(0.5)
-                .foregroundStyle(CinemaColor.success)
+                .fill(
+                    LinearGradient(
+                        colors: [themeManager.accentContainer, themeManager.accent.opacity(0.6)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Text(userInitial)
+                .font(.system(size: 24, weight: .bold, design: .default))
+                .foregroundStyle(.white)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(CinemaColor.success.opacity(0.12)))
+
+        if let id = appState.currentUserId {
+            initialFallback
+                .overlay {
+                    CinemaLazyImage(
+                        url: appState.imageBuilder.userImageURL(
+                            userId: id,
+                            tag: currentUser?.primaryImageTag,
+                            maxWidth: 200
+                        ),
+                        fallbackIcon: nil,
+                        fallbackBackground: .clear
+                    )
+                    .clipShape(Circle())
+                }
+        } else {
+            initialFallback
+        }
+    }
+
+    var liveBadge: some View {
+        serverStatusBadge(label: loc.localized("settings.live"), fontSize: 13)
     }
 
     @ViewBuilder

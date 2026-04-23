@@ -13,11 +13,11 @@ private let logger = Logger(subsystem: "com.cinemax", category: "Playback")
 @MainActor @Observable
 final class VideoPlayerCoordinator {
     @ObservationIgnored
-    @AppStorage("forceSubtitles") private var forceSubtitles: Bool = false
+    @AppStorage(SettingsKey.forceSubtitles) private var forceSubtitles: Bool = SettingsKey.Default.forceSubtitles
     @ObservationIgnored
-    @AppStorage("render4K") private var render4K: Bool = true
+    @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
     @ObservationIgnored
-    @AppStorage("autoPlayNextEpisode") private var autoPlayNextEpisode: Bool = true
+    @AppStorage(SettingsKey.autoPlayNextEpisode) private var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
 
     var localizationManager: LocalizationManager?
     /// Updated each time a playback session ends (player dismissed). MediaDetailScreen

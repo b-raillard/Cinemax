@@ -13,7 +13,7 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
-    @AppStorage("detail.showQualityBadges") private var showQualityBadges: Bool = true
+    @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
@@ -113,7 +113,7 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private func backdropSection(_ item: BaseItemDto) -> some View {
         ZStack(alignment: .bottomLeading) {
-            if let backdropId = item.parentBackdropItemID ?? item.seriesID ?? item.id {
+            if let backdropId = item.backdropItemID {
                 CinemaLazyImage(
                     url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
                     fallbackIcon: nil,
@@ -283,11 +283,16 @@ struct MediaDetailScreen: View {
 
         let nextEpisodeLabel: String? = {
             guard let ep = nextEp else { return nil }
-            let parts: [String] = [
-                ep.indexNumber.map { loc.localized("detail.episode", $0) },
-                ep.name
-            ].compactMap { $0 }
-            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+            let prefix: String?
+            if let season = ep.parentIndexNumber, let num = ep.indexNumber {
+                prefix = String(format: "S%02d:E%02d", season, num)
+            } else if let num = ep.indexNumber {
+                prefix = loc.localized("detail.episode", num)
+            } else {
+                prefix = nil
+            }
+            let parts: [String] = [prefix, ep.name].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: " - ")
         }()
 
         let remainingText: String? = showResume ? loc.remainingTime(minutes: remainingMinutes) : nil

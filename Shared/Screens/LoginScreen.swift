@@ -1,23 +1,31 @@
 import SwiftUI
 import CinemaxKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct LoginScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(ToastCenter.self) private var toasts
     @State private var viewModel = LoginViewModel()
+    @State private var easterEggTaps: Int = 0
+    @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        #if os(tvOS)
-        tvOSLayout
-        #else
-        if sizeClass == .regular {
+        Group {
+            #if os(tvOS)
             tvOSLayout
-        } else {
-            mobileLayout
+            #else
+            if sizeClass == .regular {
+                tvOSLayout
+            } else {
+                mobileLayout
+            }
+            #endif
         }
-        #endif
     }
 
     // MARK: - tvOS / iPad Layout
@@ -59,8 +67,10 @@ struct LoginScreen: View {
                             .foregroundStyle(CinemaColor.onSurface)
 
                         Text(loc.localized("login.subtitle"))
-                            .font(CinemaFont.bodyLarge)
+                            .font(CinemaFont.body)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     // Fields
@@ -94,12 +104,6 @@ struct LoginScreen: View {
                         Task { await viewModel.authenticate(using: appState) }
                     }
                     .disabled(viewModel.isAuthenticating)
-
-                    // Secondary actions
-                    HStack(spacing: CinemaSpacing.spacing6) {
-                        secondaryButton(loc.localized("login.forgotPassword"))
-                        secondaryButton(loc.localized("login.createAccount"))
-                    }
                 }
                 .padding(CinemaSpacing.spacing10)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
@@ -124,131 +128,154 @@ struct LoginScreen: View {
 
     // MARK: - Mobile Layout
 
+    /// Structure is copied from `ServerSetupScreen.mobileLayout` verbatim so both setup
+    /// screens share one visual rhythm. Only the strings, the icon, the field list, and
+    /// the action area differ.
     private var mobileLayout: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
             backgroundGlow
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 60)
-
-                    // Logo
-                    VStack(spacing: CinemaSpacing.spacing3) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: CinemaRadius.large)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: CinemaRadius.large)
-                                        .stroke(.white.opacity(0.1), lineWidth: 1)
-                                )
-                                .frame(width: 80, height: 80)
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 40))
-                                .foregroundStyle(CinemaColor.onSurface)
-                        }
-                        .accessibilityHidden(true)
-
-                        Text(loc.localized("login.header"))
-                            .font(.system(size: CinemaScale.pt(32), weight: .black))
-                            .tracking(-1)
-                            .foregroundStyle(.white)
-
-                        Text(loc.localized("login.tagline"))
-                            .font(.system(size: CinemaScale.pt(12), weight: .medium))
-                            .tracking(2)
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .textCase(.uppercase)
-                    }
-                    .padding(.bottom, CinemaSpacing.spacing8)
-
-                    // Form
-                    VStack(spacing: CinemaSpacing.spacing4) {
-                        Text(loc.localized("login.mobileTitle"))
-                            .font(CinemaFont.headline(.small))
-                            .foregroundStyle(.white)
-
-                        #if os(iOS)
-                        GlassTextField(
-                            label: "",
-                            text: $viewModel.username,
-                            placeholder: loc.localized("login.username"),
-                            icon: "person",
-                            keyboardType: .asciiCapable
-                        )
-                        #else
-                        GlassTextField(
-                            label: "",
-                            text: $viewModel.username,
-                            placeholder: loc.localized("login.username"),
-                            icon: "person"
-                        )
-                        #endif
-
-                        GlassTextField(
-                            label: "",
-                            text: $viewModel.password,
-                            placeholder: loc.localized("login.password"),
-                            icon: "lock",
-                            isSecure: true
-                        )
-
-                        if let error = viewModel.errorMessage {
-                            errorBanner(error)
-                        }
-
-                        CinemaButton(
-                            title: loc.localized("login.buttonMobile"),
-                            style: .accent,
-                            icon: "chevron.right",
-                            isLoading: viewModel.isAuthenticating
-                        ) {
-                            Task { await viewModel.authenticate(using: appState) }
-                        }
-                        .disabled(viewModel.isAuthenticating)
-
-                        VStack(spacing: 12) {
-                            secondaryButton(loc.localized("login.forgotPassword"))
-
-                            HStack(spacing: 4) {
-                                Text(loc.localized("login.noServer"))
-                                    .font(CinemaFont.label(.large))
-                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                Button(loc.localized("login.joinCommunity")) {}
-                                    .font(.system(size: CinemaScale.pt(15), weight: .semibold))
-                                    .foregroundStyle(themeManager.accent)
-                                    .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.top, CinemaSpacing.spacing2)
-                    }
-                    .padding(.horizontal, CinemaSpacing.spacing4)
-
-                    Spacer(minLength: 40)
-                }
-            }
-            .scrollDismissesKeyboard(.interactively)
-
-            // Bottom accent line
-            VStack {
+            VStack(spacing: 0) {
                 Spacer()
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.clear, themeManager.accent.opacity(0.3), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
+
+                // Header
+                VStack(spacing: CinemaSpacing.spacing3) {
+                    // Icon — secretly doubles as the accent-cycling easter egg.
+                    Button {
+                        triggerEasterEgg()
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                                .fill(CinemaColor.surfaceContainerHigh)
+                                .frame(width: 80, height: 80)
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 36))
+                                .foregroundStyle(themeManager.accent)
+                        }
+                        .shadow(color: .black.opacity(0.3), radius: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHidden(true)
+
+                    Text(loc.localized("login.header"))
+                        .font(CinemaFont.label(.small))
+                        .tracking(3)
+                        .foregroundStyle(CinemaColor.onSurface)
+
+                    Text(loc.localized("login.mobileTitle"))
+                        .font(.system(size: CinemaScale.pt(28), weight: .black))
+                        .tracking(-0.5)
+                        .foregroundStyle(.white)
+
+                    Text(loc.localized("login.mobileSubtitle"))
+                        .font(CinemaFont.label(.small))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                }
+                .padding(.bottom, CinemaSpacing.spacing8)
+
+                // Input card — `.frame(maxWidth:)` caps the form width explicitly, since the
+                // `.padding(.horizontal, spacing4)` pattern used by `ServerSetupScreen` gets
+                // silently dropped on this tree under iOS 26. Capping the width (and letting
+                // the VStack center it) gives the same visual result without relying on
+                // padding that isn't taking effect.
+                VStack(spacing: CinemaSpacing.spacing4) {
+                    GlassTextField(
+                        label: loc.localized("login.username"),
+                        text: $viewModel.username,
+                        placeholder: loc.localized("login.usernamePlaceholder"),
+                        icon: "person"
                     )
-                    .frame(height: 2)
+                    #if os(iOS)
+                    .keyboardType(.asciiCapable)
+                    #endif
+
+                    GlassTextField(
+                        label: loc.localized("login.password"),
+                        text: $viewModel.password,
+                        placeholder: loc.localized("login.passwordPlaceholder"),
+                        icon: "lock",
+                        isSecure: true
+                    )
+
+                    if let error = viewModel.errorMessage {
+                        errorBanner(error)
+                    }
+                }
+                .padding(CinemaSpacing.spacing4)
+                .glassPanel(cornerRadius: CinemaRadius.large)
+                .frame(maxWidth: formMaxWidth)
+
+                Spacer()
+
+                // Actions
+                VStack(spacing: CinemaSpacing.spacing3) {
+                    CinemaButton(
+                        title: loc.localized("login.buttonMobile"),
+                        style: .accent,
+                        icon: "chevron.right",
+                        isLoading: viewModel.isAuthenticating
+                    ) {
+                        Task { await viewModel.authenticate(using: appState) }
+                    }
+                    .disabled(viewModel.isAuthenticating)
+
+                    helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
+                        appState.disconnectServer()
+                    }
+                    .padding(.top, CinemaSpacing.spacing2)
+                }
+                .frame(maxWidth: formMaxWidth)
+                .padding(.bottom, CinemaSpacing.spacing6)
             }
-            .ignoresSafeArea()
 
             // Success toast
             if viewModel.showSuccess {
                 successToast(loc.localized("login.authenticated"))
             }
         }
+    }
+
+    /// Mobile form/button max width — matches the visual inset of ServerSetupScreen's
+    /// `.padding(.horizontal, spacing4)` (22pt each side) on a standard 390–440pt iPhone.
+    private var formMaxWidth: CGFloat { 350 }
+
+    private func triggerEasterEgg() {
+        let result = AccentEasterEgg.tap(
+            currentAccentKey: themeManager.accentColorKey,
+            previousTapCount: easterEggTaps,
+            rainbowAlreadyUnlocked: rainbowUnlocked
+        )
+        easterEggTaps += 1
+        themeManager.accentColorKey = result.nextAccentKey
+        if result.unlockedRainbow {
+            rainbowUnlocked = true
+            #if os(iOS)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            #endif
+            toasts.success(
+                loc.localized("easterEgg.rainbow.title"),
+                message: loc.localized("easterEgg.rainbow.message")
+            )
+        } else {
+            #if os(iOS)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            #endif
+        }
+    }
+
+    private func helperLink(icon: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                Text(title)
+            }
+            .font(CinemaFont.label(.medium))
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Shared Components
@@ -283,15 +310,6 @@ struct LoginScreen: View {
             RoundedRectangle(cornerRadius: CinemaRadius.medium)
                 .fill(CinemaColor.errorContainer.opacity(0.2))
         )
-    }
-
-    private func secondaryButton(_ title: String) -> some View {
-        Button {} label: {
-            Text(title)
-                .font(CinemaFont.label(.medium))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-        }
-        .buttonStyle(.plain)
     }
 
     private func serverFooter(_ info: ServerInfo) -> some View {

@@ -21,6 +21,7 @@ public final class JellyfinAPIClient: Sendable {
     private let lock = NSLock()
     nonisolated(unsafe) private var _jellyfinClient: JellyfinClient?
     nonisolated(unsafe) private var _serverURL: URL?
+    nonisolated(unsafe) private var _maxContentAge: Int = 0
     private let cache = APICache()
 
     public init() {}
@@ -42,6 +43,30 @@ public final class JellyfinAPIClient: Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _serverURL
+    }
+
+    private func getMaxContentAge() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _maxContentAge
+    }
+
+    /// See `ServerAPI.applyContentRatingLimit`. Pushes the user's Privacy &
+    /// Security selection into the client so every subsequent item query picks
+    /// it up automatically — no per-call plumbing needed.
+    public func applyContentRatingLimit(maxAge: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        _maxContentAge = max(0, maxAge)
+        cache.clear()
+    }
+
+    /// Keeps only items whose `officialRating` passes the active maximum-age
+    /// limit. A no-op when the limit is disabled.
+    private func applyRatingFilter(_ items: [BaseItemDto]) -> [BaseItemDto] {
+        let maxAge = getMaxContentAge()
+        guard maxAge > 0 else { return items }
+        return items.filter { ContentRatingClassifier.passes(rating: $0.officialRating, maxAge: maxAge) }
     }
 
     public func connectToServer(url: URL) async throws -> ServerInfo {
@@ -155,7 +180,7 @@ public final class JellyfinAPIClient: Sendable {
     // MARK: - Media Queries
 
     public func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
-        let cacheKey = "resume-\(userId)-\(limit)"
+        let cacheKey = "resume-\(userId)-\(limit)-\(getMaxContentAge())"
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
 
         guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -166,13 +191,13 @@ public final class JellyfinAPIClient: Sendable {
             enableImageTypes: [.primary, .backdrop, .thumb]
         )
         let response = try await client.send(Paths.getResumeItems(parameters: params))
-        let result = response.value.items ?? []
+        let result = applyRatingFilter(response.value.items ?? [])
         cache.set(cacheKey, value: result, ttl: 30)
         return result
     }
 
     public func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
-        let cacheKey = "latest-\(userId)-\(limit)"
+        let cacheKey = "latest-\(userId)-\(limit)-\(getMaxContentAge())"
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
 
         guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -185,7 +210,7 @@ public final class JellyfinAPIClient: Sendable {
             limit: limit
         )
         let response = try await client.send(Paths.getLatestMedia(parameters: params))
-        let result = response.value
+        let result = applyRatingFilter(response.value)
         cache.set(cacheKey, value: result, ttl: 60)
         return result
     }
@@ -204,8 +229,10 @@ public final class JellyfinAPIClient: Sendable {
         startIndex: Int? = nil
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         guard let client = getClient() else { throw JellyfinError.notConnected }
+        let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
         let params = Paths.GetItemsParameters(
             userID: userId,
+            maxOfficialRating: maxOfficialRating,
             startIndex: startIndex,
             limit: limit,
             isRecursive: true,
@@ -260,13 +287,15 @@ public final class JellyfinAPIClient: Sendable {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetSimilarItemsParameters(userID: userId, limit: limit)
         let response = try await client.send(Paths.getSimilarItems(itemID: itemId, parameters: params))
-        return response.value.items ?? []
+        return applyRatingFilter(response.value.items ?? [])
     }
 
     public func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
         guard let client = getClient() else { throw JellyfinError.notConnected }
+        let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
         let params = Paths.GetItemsParameters(
             userID: userId,
+            maxOfficialRating: maxOfficialRating,
             limit: limit,
             isRecursive: true,
             searchTerm: searchTerm,
@@ -287,7 +316,7 @@ public final class JellyfinAPIClient: Sendable {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetEpisodesParameters(userID: userId, fields: [.overview], seasonID: seasonId, enableUserData: true)
         let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
-        return response.value.items ?? []
+        return applyRatingFilter(response.value.items ?? [])
     }
 
     public func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
@@ -299,7 +328,29 @@ public final class JellyfinAPIClient: Sendable {
             enableUserData: true
         )
         let response = try await client.send(Paths.getNextUp(parameters: params))
-        return response.value.items?.first
+        guard let next = response.value.items?.first else { return nil }
+        return ContentRatingClassifier.passes(rating: next.officialRating, maxAge: getMaxContentAge()) ? next : nil
+    }
+
+    // MARK: - User Item Data
+
+    public func markItemUnplayed(itemId: String, userId: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.markUnplayedItem(itemID: itemId, userID: userId))
+        cache.clear()
+    }
+
+    // MARK: - Devices
+
+    public func getDevices() async throws -> [DeviceInfoDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getDevices())
+        return response.value.items ?? []
+    }
+
+    public func deleteDevice(id: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.deleteDevice(id: id))
     }
 
     // MARK: - Media Segments
