@@ -129,6 +129,48 @@ public protocol AdminAPI: Sendable {
     /// Server system info (version, OS, hardware) — admin-only because it
     /// exposes paths and architecture.
     func getSystemInfo() async throws -> SystemInfo
+
+    // MARK: Plugins
+
+    /// Lists installed plugins. Each entry carries `status` (`.active`,
+    /// `.disabled`, `.restart`, etc.) and a `canUninstall` flag.
+    func getInstalledPlugins() async throws -> [PluginInfo]
+    /// Enables a previously-disabled plugin. Server may need a restart.
+    func enablePlugin(id: String, version: String) async throws
+    /// Disables a plugin without uninstalling. Server may need a restart.
+    func disablePlugin(id: String, version: String) async throws
+    /// Uninstalls a specific version of a plugin. Server may need a restart.
+    func uninstallPlugin(id: String, version: String) async throws
+
+    // MARK: Plugin catalog
+
+    /// Lists packages available from server-configured repositories.
+    /// `PackageInfo.versions` holds the installable build list.
+    func getPluginCatalog() async throws -> [PackageInfo]
+    /// Installs a package by name. `version` and `repositoryURL` are optional —
+    /// omitted means "latest from any configured repo".
+    func installPackage(name: String, assemblyGuid: String?, version: String?, repositoryURL: String?) async throws
+
+    // MARK: Scheduled tasks
+
+    /// Lists server scheduled tasks. Visible-only by default (`isHidden: false`).
+    func getScheduledTasks(includeHidden: Bool) async throws -> [TaskInfo]
+    /// Starts a task. Fire-and-forget — the server runs it asynchronously;
+    /// `getScheduledTasks()` reflects the new state on next poll.
+    func startTask(id: String) async throws
+    /// Cancels a running task.
+    func stopTask(id: String) async throws
+    /// Replaces a task's trigger list.
+    func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws
+
+    // MARK: Server config (named)
+
+    /// Fetches the server's encoding config. Returns the raw `EncodingOptions`
+    /// decoded from the named-configuration blob.
+    func getEncodingOptions() async throws -> EncodingOptions
+    /// Replaces the server's encoding config. Round-trips through `AnyJSON`
+    /// since the SDK's named-configuration endpoint is type-erased.
+    func updateEncodingOptions(_ options: EncodingOptions) async throws
 }
 
 // MARK: - Aggregate

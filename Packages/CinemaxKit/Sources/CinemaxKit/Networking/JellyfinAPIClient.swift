@@ -416,6 +416,88 @@ public final class JellyfinAPIClient: Sendable {
         return response.value
     }
 
+    // MARK: - Plugins
+
+    public func getInstalledPlugins() async throws -> [PluginInfo] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getPlugins)
+        return response.value
+    }
+
+    public func enablePlugin(id: String, version: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.enablePlugin(pluginID: id, version: version))
+    }
+
+    public func disablePlugin(id: String, version: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.disablePlugin(pluginID: id, version: version))
+    }
+
+    public func uninstallPlugin(id: String, version: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.uninstallPluginByVersion(pluginID: id, version: version))
+    }
+
+    // MARK: - Plugin catalog
+
+    public func getPluginCatalog() async throws -> [PackageInfo] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getPackages)
+        return response.value
+    }
+
+    public func installPackage(name: String, assemblyGuid: String?, version: String?, repositoryURL: String?) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.InstallPackageParameters(
+            assemblyGuid: assemblyGuid,
+            version: version,
+            repositoryURL: repositoryURL
+        )
+        _ = try await client.send(Paths.installPackage(name: name, parameters: params))
+    }
+
+    // MARK: - Scheduled tasks
+
+    public func getScheduledTasks(includeHidden: Bool) async throws -> [TaskInfo] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        // `isHidden == false` requests visible-only; `nil` returns everything.
+        let response = try await client.send(Paths.getTasks(isHidden: includeHidden ? nil : false))
+        return response.value
+    }
+
+    public func startTask(id: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.startTask(taskID: id))
+    }
+
+    public func stopTask(id: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.stopTask(taskID: id))
+    }
+
+    public func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.updateTask(taskID: id, triggers))
+    }
+
+    // MARK: - Encoding options (named configuration)
+
+    public func getEncodingOptions() async throws -> EncodingOptions {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getNamedConfiguration(key: "encoding"))
+        return try JSONDecoder().decode(EncodingOptions.self, from: response.value)
+    }
+
+    public func updateEncodingOptions(_ options: EncodingOptions) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        // Round-trip through AnyJSON — SDK's named-configuration endpoint is
+        // type-erased so we can't hand it an EncodingOptions directly.
+        let data = try JSONEncoder().encode(options)
+        let anyJSON = try JSONDecoder().decode(AnyJSON.self, from: data)
+        _ = try await client.send(Paths.updateNamedConfiguration(key: "encoding", anyJSON))
+    }
+
     // MARK: - Media Segments
 
     public func getMediaSegments(itemId: String, includeSegmentTypes: [JellyfinAPI.MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {

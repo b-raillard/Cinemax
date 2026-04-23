@@ -324,6 +324,65 @@
 "admin.activity.empty.title" = "No activity";
 "admin.activity.empty.subtitle" = "The server event log will appear here.";
 
+// MARK: - Admin — Scheduled Tasks
+
+"admin.tasks.empty.title" = "No tasks";
+"admin.tasks.empty.subtitle" = "Server scheduled tasks will appear here.";
+"admin.tasks.state.running" = "RUNNING";
+"admin.tasks.state.cancelling" = "CANCELLING";
+"admin.tasks.state.idle" = "IDLE";
+"admin.tasks.started" = "Task started";
+"admin.tasks.stopped" = "Cancellation requested";
+
+// MARK: - Admin — Plugins
+
+"admin.plugins.empty.title" = "No plugins installed";
+"admin.plugins.empty.subtitle" = "Browse the catalog to add some.";
+"admin.plugins.uninstall" = "Uninstall";
+"admin.plugins.uninstall.title" = "Uninstall plugin?";
+"admin.plugins.uninstall.message" = "\"%@\" will be removed. A server restart may be required.";
+"admin.plugins.uninstall.confirm" = "Uninstall";
+"admin.plugins.uninstall.success" = "Plugin uninstalled";
+"admin.plugins.enabled" = "Plugin enabled";
+"admin.plugins.disabled" = "Plugin disabled";
+"admin.plugins.status.active" = "ACTIVE";
+"admin.plugins.status.disabled" = "DISABLED";
+"admin.plugins.status.restart" = "RESTART REQUIRED";
+"admin.plugins.status.error" = "ERROR";
+"admin.plugins.status.superseded" = "SUPERSEDED";
+"admin.plugins.status.deleted" = "DELETED";
+
+// MARK: - Admin — Plugin Catalog
+
+"admin.catalog.empty.title" = "Empty catalog";
+"admin.catalog.empty.subtitle" = "No repositories configured, or no packages published.";
+"admin.catalog.searchPrompt" = "Search plugins";
+"admin.catalog.detailTitle" = "Plugin details";
+"admin.catalog.latestVersion" = "Latest version: %@";
+"admin.catalog.install" = "Install";
+"admin.catalog.install.success" = "Installation started";
+"admin.catalog.install.restartHint" = "A server restart may be required to activate the plugin.";
+
+// MARK: - Admin — Playback (Encoding)
+
+"admin.playback.save.success" = "Settings saved";
+"admin.playback.hardware.title" = "Hardware";
+"admin.playback.hardware.footer" = "Pick the hardware acceleration your server supports. The wrong choice can break transcoding.";
+"admin.playback.hardwareAcceleration" = "Hardware acceleration";
+"admin.playback.enableHardwareEncoding" = "Hardware encoding";
+"admin.playback.encoding.title" = "Allowed codecs";
+"admin.playback.allowHevc" = "HEVC encoding";
+"admin.playback.allowAv1" = "AV1 encoding";
+"admin.playback.processing.title" = "Processing";
+"admin.playback.enableThrottling" = "Transcode throttling";
+"admin.playback.enableTonemapping" = "HDR → SDR tone mapping";
+"admin.playback.enableSubtitleExtraction" = "Subtitle extraction";
+"admin.playback.paths.title" = "Paths";
+"admin.playback.paths.footer" = "Read-only in the app — edit from the web admin or the server configuration file.";
+"admin.playback.encoderPath" = "Encoder path";
+"admin.playback.transcodingTempPath" = "Transcoding temp folder";
+"admin.playback.hwAccel.none" = "None";
+
 // MARK: - Debug
 
 "settings.debug" = "Debug";

@@ -108,6 +108,54 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedSystemInfo
     }
 
+    // MARK: - Admin P2
+
+    var stubbedPlugins: [PluginInfo] = []
+    var stubbedPackages: [PackageInfo] = []
+    var stubbedTasks: [TaskInfo] = []
+    var stubbedEncodingOptions: EncodingOptions = EncodingOptions()
+
+    func getInstalledPlugins() async throws -> [PluginInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedPlugins
+    }
+    func enablePlugin(id: String, version: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func disablePlugin(id: String, version: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func uninstallPlugin(id: String, version: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getPluginCatalog() async throws -> [PackageInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedPackages
+    }
+    func installPackage(name: String, assemblyGuid: String?, version: String?, repositoryURL: String?) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getScheduledTasks(includeHidden: Bool) async throws -> [TaskInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedTasks
+    }
+    func startTask(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func stopTask(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getEncodingOptions() async throws -> EncodingOptions {
+        if shouldThrow { throw stubbedError }
+        return stubbedEncodingOptions
+    }
+    func updateEncodingOptions(_ options: EncodingOptions) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+
     // MARK: - Cache
 
     func clearCache() {}

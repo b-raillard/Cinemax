@@ -36,7 +36,7 @@ Shared/
   Navigation/               AppNavigation (auth routing), MainTabView (tab bar/sidebar)
   Screens/                  HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen (+ SettingsScreen+iOS, +tvOS, SettingsAppearanceView+iOS, SettingsRowHelpers, PrivacySecurityScreen, LicensesView), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet, LibraryGenreRow, LibraryHeroSection, LibraryPosterCard, LibrarySortFilterSheet, ServerDiscoverySheet, ServerHelpSheet, UserSwitchSheet
     VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController
-    Admin/                  (iOS-only) AdminLandingScreen, AdvancedAdminLandingScreen, Dashboard/, Users/, Devices/, Activity/
+    Admin/                  (iOS-only) AdminLandingScreen, AdvancedAdminLandingScreen, Dashboard/, Users/, Devices/, Activity/, Tasks/, Plugins/, Catalog/, Playback/
     Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, DestructiveConfirmSheet, AdminComingSoonScreen
   ViewModels/               Home/Login/Search/ServerSetup/MediaDetail/MediaLibrary ViewModels, VideoPlayerCoordinator
 iOS/ tvOS/                  app entry points
@@ -253,7 +253,7 @@ Admin workflows are mobile-only by product decision — the admin Settings categ
 
 **Performance** — Dashboard fans out with `async let` so one slow endpoint doesn't gate the other (and a single failure still renders partial data rather than an error). Activity log uses infinite-scroll pagination (50/page) triggered on last-row `.onAppear`. Users / Devices lists are small enough to load fully; view models cache them and support optimistic local mutations (remove after delete, append after create). Admin gate is cached on `AppState` — refreshed only on login / reconnect / user switch, never per-view.
 
-**Phasing** — P1 delivers Dashboard / Users / Devices / Activity. P2 = Playback + Plugins + Catalog + Tasks. P3a = Network + Logs + API Keys. P3b = Metadata Manager (full parity, multi-tab item editor, with a `MediaDetailScreen` "Edit metadata" entry point gated on `appState.isAdministrator`).
+**Phasing** — P1 ships Dashboard / Users / Devices / Activity. **P2 ships** Playback (encoding defaults via `getNamedConfiguration(key: "encoding")` round-tripped through `AnyJSON`) / Installed Plugins (enable/disable/uninstall; `PluginStatus` badge signals restart-pending) / Plugin Catalog (search-and-install from server-configured repos) / Scheduled Tasks (grouped by category with live progress polling every 2 s while any task is running, self-cancels when none are). P3a = Network + Logs + API Keys. P3b = Metadata Manager (full parity, multi-tab item editor, with a `MediaDetailScreen` "Edit metadata" entry point gated on `appState.isAdministrator`).
 
 ## MediaDetailScreen
 

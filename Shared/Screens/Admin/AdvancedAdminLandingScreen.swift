@@ -45,10 +45,7 @@ struct AdvancedAdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.playback.title"),
                         subtitle: nil,
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.playback.title"),
-                            symbol: "play.square"
-                        )
+                        destination: AdminPlaybackScreen()
                     )
                     iOSSettingsDivider
                     adminNavRow(
@@ -56,10 +53,7 @@ struct AdvancedAdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.plugins.title"),
                         subtitle: nil,
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.plugins.title"),
-                            symbol: "puzzlepiece.extension"
-                        )
+                        destination: AdminPluginsScreen()
                     )
                     iOSSettingsDivider
                     adminNavRow(
@@ -67,10 +61,7 @@ struct AdvancedAdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.catalog.title"),
                         subtitle: nil,
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.catalog.title"),
-                            symbol: "globe"
-                        )
+                        destination: AdminCatalogScreen()
                     )
                     iOSSettingsDivider
                     adminNavRow(
@@ -78,10 +69,7 @@ struct AdvancedAdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.tasks.title"),
                         subtitle: nil,
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.tasks.title"),
-                            symbol: "calendar.badge.clock"
-                        )
+                        destination: AdminScheduledTasksScreen()
                     )
                 }
 

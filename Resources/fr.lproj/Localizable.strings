@@ -449,3 +449,62 @@
 "admin.activity.title" = "Activité";
 "admin.activity.empty.title" = "Aucune activité";
 "admin.activity.empty.subtitle" = "L'historique des événements du serveur apparaîtra ici.";
+
+// MARK: - Admin — Scheduled Tasks
+
+"admin.tasks.empty.title" = "Aucune tâche";
+"admin.tasks.empty.subtitle" = "Les tâches planifiées du serveur apparaîtront ici.";
+"admin.tasks.state.running" = "EN COURS";
+"admin.tasks.state.cancelling" = "ANNULATION";
+"admin.tasks.state.idle" = "INACTIVE";
+"admin.tasks.started" = "Tâche lancée";
+"admin.tasks.stopped" = "Annulation demandée";
+
+// MARK: - Admin — Plugins
+
+"admin.plugins.empty.title" = "Aucune extension installée";
+"admin.plugins.empty.subtitle" = "Parcourez le catalogue pour en ajouter.";
+"admin.plugins.uninstall" = "Désinstaller";
+"admin.plugins.uninstall.title" = "Désinstaller l'extension ?";
+"admin.plugins.uninstall.message" = "« %@ » sera supprimée. Un redémarrage du serveur peut être requis.";
+"admin.plugins.uninstall.confirm" = "Désinstaller";
+"admin.plugins.uninstall.success" = "Extension désinstallée";
+"admin.plugins.enabled" = "Extension activée";
+"admin.plugins.disabled" = "Extension désactivée";
+"admin.plugins.status.active" = "ACTIVE";
+"admin.plugins.status.disabled" = "DÉSACTIVÉE";
+"admin.plugins.status.restart" = "REDÉMARRAGE REQUIS";
+"admin.plugins.status.error" = "ERREUR";
+"admin.plugins.status.superseded" = "REMPLACÉE";
+"admin.plugins.status.deleted" = "SUPPRIMÉE";
+
+// MARK: - Admin — Plugin Catalog
+
+"admin.catalog.empty.title" = "Catalogue vide";
+"admin.catalog.empty.subtitle" = "Aucun dépôt configuré ou aucun paquet publié.";
+"admin.catalog.searchPrompt" = "Rechercher une extension";
+"admin.catalog.detailTitle" = "Détails de l'extension";
+"admin.catalog.latestVersion" = "Dernière version : %@";
+"admin.catalog.install" = "Installer";
+"admin.catalog.install.success" = "Installation lancée";
+"admin.catalog.install.restartHint" = "Un redémarrage du serveur peut être nécessaire pour activer l'extension.";
+
+// MARK: - Admin — Playback (Encoding)
+
+"admin.playback.save.success" = "Réglages enregistrés";
+"admin.playback.hardware.title" = "Matériel";
+"admin.playback.hardware.footer" = "Choisissez l'accélération matérielle compatible avec votre serveur. Un mauvais choix peut empêcher le transcodage.";
+"admin.playback.hardwareAcceleration" = "Accélération matérielle";
+"admin.playback.enableHardwareEncoding" = "Encodage matériel";
+"admin.playback.encoding.title" = "Codecs autorisés";
+"admin.playback.allowHevc" = "Encodage HEVC";
+"admin.playback.allowAv1" = "Encodage AV1";
+"admin.playback.processing.title" = "Traitement";
+"admin.playback.enableThrottling" = "Throttling du transcodage";
+"admin.playback.enableTonemapping" = "Tone mapping HDR → SDR";
+"admin.playback.enableSubtitleExtraction" = "Extraction des sous-titres";
+"admin.playback.paths.title" = "Chemins";
+"admin.playback.paths.footer" = "En lecture seule depuis l'application — à modifier depuis l'admin web ou le fichier de configuration du serveur.";
+"admin.playback.encoderPath" = "Chemin de l'encodeur";
+"admin.playback.transcodingTempPath" = "Dossier temporaire de transcodage";
+"admin.playback.hwAccel.none" = "Aucune";
