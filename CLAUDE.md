@@ -47,8 +47,10 @@ docs/design-system/         Canonical design system reference (colors, typograph
 
 ## Design System
 
+**Before editing any UI surface, read `docs/design-system/README.md` and the relevant topic file (colors / typography / spacing-layout / motion / components / patterns / platforms / conventions). The PR rejection checklist in `conventions.md` codifies load-bearing rules — consult it before adding borders, literal fonts, or new tokens.** The bullets below are a quick summary; the `docs/design-system/` folder is authoritative.
+
 - Color/font/spacing tokens in `CinemaGlassTheme.swift`. All `CinemaColor` tokens use `Color.dynamic(light:dark:)` backed by `UIColor(dynamicProvider:)` — they resolve against the active `UITraitCollection`. **Never use `Color(hex:)` for new tokens.**
-- **Shared toggle**: `CinemaToggleIndicator` (Capsule+Circle pill, in `SettingsScreen.swift`) — used on both platforms. Parent-driven (wrap in `Button { value.toggle() }`). Never use system `Toggle` in settings.
+- **Shared toggle**: `CinemaToggleIndicator` (Capsule+Circle pill, in `DesignSystem/Components/`) — used on both platforms. Parent-driven (wrap in `Button { value.toggle() }`). Never use system `Toggle` in settings.
 - **No 1px borders** — use color shifts. Glass panels: `.glassPanel()`.
 - **Dynamic accent**: `themeManager.accent` / `.accentContainer` / `.accentDim` / `.onAccent` — never `CinemaColor.tertiary*`. All four are dual-mode via `Color.dynamic`.
 - **Dark/Light mode**: `ThemeManager.darkModeEnabled` → `.preferredColorScheme()` at root (set in `AppNavigation`, nowhere else). Colors flip via `UITraitCollection`. **Always route through `themeManager.darkModeEnabled =`** — direct `@AppStorage("darkMode")` writes bypass `_accentRevision` and break reactivity. Same for `themeManager.accentColorKey`.
