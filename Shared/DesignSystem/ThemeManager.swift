@@ -4,8 +4,8 @@ import SwiftUI
 //
 // Single source of truth for dynamic theming: accent color and dark/light mode.
 // Injected as an @Observable into the environment from AppNavigation.
-// All screens that previously used CinemaColor.tertiary / tertiaryContainer /
-// tertiaryDim / onTertiary should read from ThemeManager instead.
+// Always read accent slots through `themeManager.accent` / `.accentContainer` /
+// `.accentDim` / `.onAccent`, never via static `CinemaColor` tokens.
 
 @MainActor @Observable
 final class ThemeManager {

@@ -924,7 +924,7 @@ extension SettingsScreen {
 // MARK: - tvOS Settings Focus Style
 
 extension View {
-    func tvSettingsFocusable(isFocused: Bool, accent: Color, animated: Bool = true, colorScheme: ColorScheme = .dark) -> some View {
+    func tvSettingsFocusable(isFocused: Bool, accent: Color, animated: Bool = true, colorScheme: ColorScheme) -> some View {
         self
             // Prevent tvOS's focus-induced trait collection override from flipping Color.dynamic
             // tokens (texts, chips, icons) inside the button label to their light-mode values.
