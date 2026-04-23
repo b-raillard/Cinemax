@@ -156,6 +156,39 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldThrow { throw stubbedError }
     }
 
+    // MARK: - Admin P3a (Network / Logs / API Keys)
+
+    var stubbedNetworkConfiguration: NetworkConfiguration = NetworkConfiguration()
+    var stubbedServerLogs: [LogFile] = []
+    var stubbedLogFileContents: String = ""
+    var stubbedApiKeys: [AuthenticationInfo] = []
+
+    func getNetworkConfiguration() async throws -> NetworkConfiguration {
+        if shouldThrow { throw stubbedError }
+        return stubbedNetworkConfiguration
+    }
+    func updateNetworkConfiguration(_ config: NetworkConfiguration) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getServerLogs() async throws -> [LogFile] {
+        if shouldThrow { throw stubbedError }
+        return stubbedServerLogs
+    }
+    func getLogFileContents(name: String) async throws -> String {
+        if shouldThrow { throw stubbedError }
+        return stubbedLogFileContents
+    }
+    func getApiKeys() async throws -> [AuthenticationInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedApiKeys
+    }
+    func createApiKey(app: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func revokeApiKey(key: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+
     // MARK: - Cache
 
     func clearCache() {}

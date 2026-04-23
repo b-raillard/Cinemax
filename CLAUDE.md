@@ -36,7 +36,7 @@ Shared/
   Navigation/               AppNavigation (auth routing), MainTabView (tab bar/sidebar)
   Screens/                  HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen (+ SettingsScreen+iOS, +tvOS, SettingsAppearanceView+iOS, SettingsRowHelpers, PrivacySecurityScreen, LicensesView), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet, LibraryGenreRow, LibraryHeroSection, LibraryPosterCard, LibrarySortFilterSheet, ServerDiscoverySheet, ServerHelpSheet, UserSwitchSheet
     VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController
-    Admin/                  (iOS-only) AdminLandingScreen, AdvancedAdminLandingScreen, Dashboard/, Users/, Devices/, Activity/, Tasks/, Plugins/, Catalog/, Playback/
+    Admin/                  (iOS-only) AdminLandingScreen, AdvancedAdminLandingScreen, Dashboard/, Users/, Devices/, Activity/, Tasks/, Plugins/, Catalog/, Playback/, Network/, Logs/, ApiKeys/
     Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, DestructiveConfirmSheet, AdminComingSoonScreen
   ViewModels/               Home/Login/Search/ServerSetup/MediaDetail/MediaLibrary ViewModels, VideoPlayerCoordinator
 iOS/ tvOS/                  app entry points
@@ -253,7 +253,15 @@ Admin workflows are mobile-only by product decision — the admin Settings categ
 
 **Performance** — Dashboard fans out with `async let` so one slow endpoint doesn't gate the other (and a single failure still renders partial data rather than an error). Activity log uses infinite-scroll pagination (50/page) triggered on last-row `.onAppear`. Users / Devices lists are small enough to load fully; view models cache them and support optimistic local mutations (remove after delete, append after create). Admin gate is cached on `AppState` — refreshed only on login / reconnect / user switch, never per-view.
 
-**Phasing** — P1 ships Dashboard / Users / Devices / Activity. **P2 ships** Playback (encoding defaults via `getNamedConfiguration(key: "encoding")` round-tripped through `AnyJSON`) / Installed Plugins (enable/disable/uninstall; `PluginStatus` badge signals restart-pending) / Plugin Catalog (search-and-install from server-configured repos) / Scheduled Tasks (grouped by category with live progress polling every 2 s while any task is running, self-cancels when none are). P3a = Network + Logs + API Keys. P3b = Metadata Manager (full parity, multi-tab item editor, with a `MediaDetailScreen` "Edit metadata" entry point gated on `appState.isAdministrator`).
+**Phasing** — P1 ships Dashboard / Users / Devices / Activity. **P2 ships** Playback (encoding defaults via `getNamedConfiguration(key: "encoding")` round-tripped through `AnyJSON`) / Installed Plugins (enable/disable/uninstall; `PluginStatus` badge signals restart-pending) / Plugin Catalog (search-and-install from server-configured repos) / Scheduled Tasks (grouped by category with live progress polling every 2 s while any task is running, self-cancels when none are). **P3a ships** Network (read-mostly + safe edits for ports / base URL / LAN subnets / features; explicit-confirm dialog before save since mis-config can lock clients out) / Logs (list + monospace viewer, tail-truncated at 200 KB, `.privacySensitive()`, no share sheet) / API Keys. P3b = Metadata Manager (full parity, multi-tab item editor, with a `MediaDetailScreen` "Edit metadata" entry point gated on `appState.isAdministrator`).
+
+**API key security model** (`Shared/Screens/Admin/ApiKeys/`) — keys grant full admin access, so UI treats them like passwords:
+- Masked by default (first 4 + last 4 chars, dots between). Per-row `eye` button toggles reveal; reveal state is transient (`revealedKeyIds: Set<Int>` dropped on `onDisappear`).
+- Token text is `.privacySensitive()` so iOS redacts it during screen mirroring / Control Center capture.
+- Copy button per row is the only export path — no share sheet (minimises accidental leak surface).
+- `appState.accessToken` is compared against each key's `accessToken`; the match is tagged `CURRENT SESSION` and its revoke action is hidden entirely (revoking our own would log us out).
+- Create flow refetches the list, identifies the new key by id-delta (not timestamp, which could collide), and auto-opens a dedicated "copy this now" modal. Done button explicit — no tap-outside-to-dismiss surprise.
+- Never log key values, never send to analytics/error reports. `revokeApiKey` takes the token itself as the identifier (Jellyfin quirk); callers should forget the value as soon as the call returns.
 
 ## MediaDetailScreen
 

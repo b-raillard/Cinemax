@@ -383,6 +383,73 @@
 "admin.playback.transcodingTempPath" = "Transcoding temp folder";
 "admin.playback.hwAccel.none" = "None";
 
+// MARK: - Admin — API Keys
+
+"admin.apiKeys.empty.title" = "No API keys";
+"admin.apiKeys.empty.subtitle" = "Create a key to let an external client connect to the server.";
+"admin.apiKeys.list" = "Active keys";
+"admin.apiKeys.create" = "Create key";
+"admin.apiKeys.warning.title" = "These keys are as powerful as an admin password.";
+"admin.apiKeys.warning.message" = "Anyone who holds one of these keys has full administrator access to the server. Don't share them, and revoke any key you think might be compromised.";
+"admin.apiKeys.thisSession" = "CURRENT SESSION";
+"admin.apiKeys.createdOn" = "Created %@";
+"admin.apiKeys.hide" = "Hide key";
+"admin.apiKeys.reveal" = "Reveal key";
+"admin.apiKeys.copy" = "Copy key";
+"admin.apiKeys.copied" = "Key copied";
+"admin.apiKeys.revoke" = "Revoke";
+"admin.apiKeys.revoke.title" = "Revoke this key?";
+"admin.apiKeys.revoke.message" = "Clients using \"%@\" will lose access to the server immediately. This cannot be undone.";
+"admin.apiKeys.revoke.confirm" = "Revoke";
+"admin.apiKeys.revoke.success" = "Key revoked";
+"admin.apiKeys.create.title" = "New API key";
+"admin.apiKeys.create.appName" = "Application name";
+"admin.apiKeys.create.appNamePlaceholder" = "e.g. my-backup-script";
+"admin.apiKeys.create.hint" = "Pick a descriptive name so you can identify the key later.";
+"admin.apiKeys.create.submit" = "Create key";
+"admin.apiKeys.created.title" = "Key created";
+"admin.apiKeys.created.message" = "Copy this key now and store it in a password manager. It will remain visible in the list, but treating it as a secret is the right practice.";
+"admin.apiKeys.created.tokenLabel" = "Key value";
+"admin.apiKeys.created.copy" = "Copy key";
+"admin.apiKeys.created.reminder" = "Never send it over unencrypted email or SMS.";
+
+// MARK: - Admin — Network
+
+"admin.network.warning" = "A wrong configuration can make the server unreachable from this app. Make sure you have another admin path before saving.";
+"admin.network.ports.title" = "Ports";
+"admin.network.ports.footer" = "Public ports should match the external port mapped on your router if the server is exposed to the internet.";
+"admin.network.internalHTTP" = "Internal HTTP";
+"admin.network.internalHTTPS" = "Internal HTTPS";
+"admin.network.publicHTTP" = "Public HTTP";
+"admin.network.publicHTTPS" = "Public HTTPS";
+"admin.network.urls.title" = "Base URL";
+"admin.network.urls.footer" = "Use when the server is behind a reverse proxy at a sub-path.";
+"admin.network.baseURL" = "Base path";
+"admin.network.lan.title" = "Local network";
+"admin.network.lan.footer" = "CIDR blocks, comma-separated. Clients on these subnets are treated as local.";
+"admin.network.lanSubnets" = "Local subnets";
+"admin.network.features.title" = "Options";
+"admin.network.autoDiscovery" = "Auto-discovery";
+"admin.network.upnp" = "UPnP";
+"admin.network.remoteAccess" = "Remote access";
+"admin.network.requireHTTPS" = "Require HTTPS";
+"admin.network.advanced.title" = "Advanced (read-only)";
+"admin.network.advanced.footer" = "Edit from the web admin or the server configuration file.";
+"admin.network.certPath" = "Certificate path";
+"admin.network.knownProxies" = "Known proxies";
+"admin.network.remoteIPFilter" = "Remote IP filter";
+"admin.network.virtualInterfaces" = "Ignored virtual interfaces";
+"admin.network.saveWarning.title" = "Apply network changes?";
+"admin.network.saveWarning.message" = "The wrong settings can make the server unreachable from this device. Confirm you have another way to administer the server before continuing.";
+"admin.network.saveWarning.confirm" = "Save";
+"admin.network.save.success" = "Network configuration saved";
+
+// MARK: - Admin — Logs
+
+"admin.logs.empty.title" = "No logs";
+"admin.logs.empty.subtitle" = "Server log files will appear here.";
+"admin.logs.truncated" = "Showing the last %@ of %@. Full logs are available in the web admin.";
+
 // MARK: - Debug
 
 "settings.debug" = "Debug";

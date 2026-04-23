@@ -508,3 +508,70 @@
 "admin.playback.encoderPath" = "Chemin de l'encodeur";
 "admin.playback.transcodingTempPath" = "Dossier temporaire de transcodage";
 "admin.playback.hwAccel.none" = "Aucune";
+
+// MARK: - Admin — API Keys
+
+"admin.apiKeys.empty.title" = "Aucune clé API";
+"admin.apiKeys.empty.subtitle" = "Créez une clé pour permettre à un client externe de se connecter au serveur.";
+"admin.apiKeys.list" = "Clés actives";
+"admin.apiKeys.create" = "Créer une clé";
+"admin.apiKeys.warning.title" = "Ces clés valent un mot de passe administrateur.";
+"admin.apiKeys.warning.message" = "Quiconque détient l'une de ces clés dispose d'un accès administrateur complet au serveur. Ne les partagez pas et révoquez toute clé compromise.";
+"admin.apiKeys.thisSession" = "SESSION ACTUELLE";
+"admin.apiKeys.createdOn" = "Créée le %@";
+"admin.apiKeys.hide" = "Masquer la clé";
+"admin.apiKeys.reveal" = "Afficher la clé";
+"admin.apiKeys.copy" = "Copier la clé";
+"admin.apiKeys.copied" = "Clé copiée";
+"admin.apiKeys.revoke" = "Révoquer";
+"admin.apiKeys.revoke.title" = "Révoquer cette clé ?";
+"admin.apiKeys.revoke.message" = "Les clients utilisant « %@ » perdront immédiatement l'accès au serveur. Cette action est irréversible.";
+"admin.apiKeys.revoke.confirm" = "Révoquer";
+"admin.apiKeys.revoke.success" = "Clé révoquée";
+"admin.apiKeys.create.title" = "Nouvelle clé API";
+"admin.apiKeys.create.appName" = "Nom de l'application";
+"admin.apiKeys.create.appNamePlaceholder" = "Ex. mon-script-sauvegarde";
+"admin.apiKeys.create.hint" = "Choisissez un nom explicite afin de pouvoir identifier la clé plus tard.";
+"admin.apiKeys.create.submit" = "Créer la clé";
+"admin.apiKeys.created.title" = "Clé créée";
+"admin.apiKeys.created.message" = "Copiez cette clé maintenant et stockez-la dans un gestionnaire de mots de passe. Elle restera visible dans la liste, mais la traiter comme un secret est la bonne pratique.";
+"admin.apiKeys.created.tokenLabel" = "Valeur de la clé";
+"admin.apiKeys.created.copy" = "Copier la clé";
+"admin.apiKeys.created.reminder" = "Ne l'envoyez jamais par messagerie non chiffrée ou SMS.";
+
+// MARK: - Admin — Network
+
+"admin.network.warning" = "Une mauvaise configuration peut rendre le serveur inaccessible depuis cette application. Assurez-vous de disposer d'un accès administrateur alternatif avant d'enregistrer.";
+"admin.network.ports.title" = "Ports";
+"admin.network.ports.footer" = "Les ports publics doivent correspondre au port externe mappé sur votre routeur si le serveur est accessible depuis Internet.";
+"admin.network.internalHTTP" = "HTTP interne";
+"admin.network.internalHTTPS" = "HTTPS interne";
+"admin.network.publicHTTP" = "HTTP public";
+"admin.network.publicHTTPS" = "HTTPS public";
+"admin.network.urls.title" = "URL de base";
+"admin.network.urls.footer" = "Utilisé lorsque le serveur est placé derrière un reverse-proxy sous un sous-chemin.";
+"admin.network.baseURL" = "Chemin de base";
+"admin.network.lan.title" = "Réseau local";
+"admin.network.lan.footer" = "CIDR, séparés par des virgules. Les clients sur ces sous-réseaux sont considérés comme locaux.";
+"admin.network.lanSubnets" = "Sous-réseaux locaux";
+"admin.network.features.title" = "Options";
+"admin.network.autoDiscovery" = "Découverte automatique";
+"admin.network.upnp" = "UPnP";
+"admin.network.remoteAccess" = "Accès distant";
+"admin.network.requireHTTPS" = "Exiger HTTPS";
+"admin.network.advanced.title" = "Avancé (lecture seule)";
+"admin.network.advanced.footer" = "À modifier depuis l'admin web ou le fichier de configuration du serveur.";
+"admin.network.certPath" = "Chemin du certificat";
+"admin.network.knownProxies" = "Proxys connus";
+"admin.network.remoteIPFilter" = "Filtre d'IP distantes";
+"admin.network.virtualInterfaces" = "Interfaces virtuelles ignorées";
+"admin.network.saveWarning.title" = "Appliquer les modifications réseau ?";
+"admin.network.saveWarning.message" = "Un mauvais paramétrage peut rendre le serveur inaccessible depuis cet appareil. Confirmez que vous disposez d'un autre moyen d'administrer le serveur avant de continuer.";
+"admin.network.saveWarning.confirm" = "Enregistrer";
+"admin.network.save.success" = "Configuration réseau enregistrée";
+
+// MARK: - Admin — Logs
+
+"admin.logs.empty.title" = "Aucun journal";
+"admin.logs.empty.subtitle" = "Les fichiers de journal du serveur apparaîtront ici.";
+"admin.logs.truncated" = "Affichage des %@ derniers octets sur %@. Les journaux complets sont disponibles dans l'admin web.";

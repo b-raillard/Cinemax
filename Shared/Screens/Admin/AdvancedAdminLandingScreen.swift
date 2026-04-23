@@ -79,10 +79,7 @@ struct AdvancedAdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.network.title"),
                         subtitle: nil,
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.network.title"),
-                            symbol: "network"
-                        )
+                        destination: AdminNetworkScreen()
                     )
                     iOSSettingsDivider
                     adminNavRow(
@@ -90,10 +87,7 @@ struct AdvancedAdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.logs.title"),
                         subtitle: nil,
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.logs.title"),
-                            symbol: "doc.text.magnifyingglass"
-                        )
+                        destination: AdminLogsScreen()
                     )
                     iOSSettingsDivider
                     adminNavRow(
@@ -101,10 +95,7 @@ struct AdvancedAdminLandingScreen: View {
                         tint: themeManager.accent,
                         label: loc.localized("admin.apiKeys.title"),
                         subtitle: nil,
-                        destination: AdminComingSoonScreen(
-                            title: loc.localized("admin.apiKeys.title"),
-                            symbol: "key"
-                        )
+                        destination: AdminApiKeysScreen()
                     )
                 }
             }

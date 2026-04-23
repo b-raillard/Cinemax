@@ -498,6 +498,57 @@ public final class JellyfinAPIClient: Sendable {
         _ = try await client.send(Paths.updateNamedConfiguration(key: "encoding", anyJSON))
     }
 
+    // MARK: - Network configuration
+
+    public func getNetworkConfiguration() async throws -> NetworkConfiguration {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getNamedConfiguration(key: "network"))
+        return try JSONDecoder().decode(NetworkConfiguration.self, from: response.value)
+    }
+
+    public func updateNetworkConfiguration(_ config: NetworkConfiguration) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let data = try JSONEncoder().encode(config)
+        let anyJSON = try JSONDecoder().decode(AnyJSON.self, from: data)
+        _ = try await client.send(Paths.updateNamedConfiguration(key: "network", anyJSON))
+    }
+
+    // MARK: - Logs
+
+    public func getServerLogs() async throws -> [LogFile] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getServerLogs)
+        return response.value
+    }
+
+    public func getLogFileContents(name: String) async throws -> String {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getLogFile(name: name))
+        return response.value
+    }
+
+    // MARK: - API keys
+    //
+    // We intentionally do not cache key responses (unlike resume/latest) — the
+    // list is small, changes at admin speed, and we don't want stale revoked
+    // keys lingering in memory longer than necessary.
+
+    public func getApiKeys() async throws -> [AuthenticationInfo] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getKeys)
+        return response.value.items ?? []
+    }
+
+    public func createApiKey(app: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.createKey(app: app))
+    }
+
+    public func revokeApiKey(key: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.revokeKey(key: key))
+    }
+
     // MARK: - Media Segments
 
     public func getMediaSegments(itemId: String, includeSegmentTypes: [JellyfinAPI.MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {

@@ -171,6 +171,42 @@ public protocol AdminAPI: Sendable {
     /// Replaces the server's encoding config. Round-trips through `AnyJSON`
     /// since the SDK's named-configuration endpoint is type-erased.
     func updateEncodingOptions(_ options: EncodingOptions) async throws
+
+    // MARK: Network config
+
+    /// Fetches the server's network config (ports, base URL, LAN subnets, etc.).
+    /// Returns the raw `NetworkConfiguration` decoded from the named-configuration blob.
+    func getNetworkConfiguration() async throws -> NetworkConfiguration
+    /// Replaces the server's network config. Caution: mis-setting ports or
+    /// published URLs can lock clients out of the server — the screen surfaces
+    /// that risk in a footer before save.
+    func updateNetworkConfiguration(_ config: NetworkConfiguration) async throws
+
+    // MARK: Logs
+
+    /// Lists server log files (name, size, timestamps). Newest first.
+    func getServerLogs() async throws -> [LogFile]
+    /// Fetches the full contents of a log file by name. Can be large —
+    /// callers should truncate before rendering.
+    func getLogFileContents(name: String) async throws -> String
+
+    // MARK: API Keys
+    //
+    // Security-sensitive. Jellyfin returns key tokens in list responses
+    // (unlike the "show-once" patterns in AWS IAM etc.), so treating these
+    // as recoverable is fine — but we still mask by default in the UI.
+    // Never log values, never send to analytics, never embed in URLs.
+
+    /// Lists all API keys registered on the server. Each entry carries the
+    /// full `accessToken` — UI code MUST treat it as secret.
+    func getApiKeys() async throws -> [AuthenticationInfo]
+    /// Creates a new API key scoped to the given app label. The server
+    /// returns `Void`; the caller is expected to refetch and show the
+    /// newest entry to the user.
+    func createApiKey(app: String) async throws
+    /// Revokes a key by its token value. Irreversible on the server side
+    /// — clients using the revoked key start getting 401s immediately.
+    func revokeApiKey(key: String) async throws
 }
 
 // MARK: - Aggregate
