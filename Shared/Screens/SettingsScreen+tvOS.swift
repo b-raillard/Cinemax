@@ -113,7 +113,10 @@ extension SettingsScreen {
             Spacer()
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                ForEach(SettingsCategory.allCases) { category in
+                // tvOS explicitly hides admin entries — admin workflows are
+                // iOS/iPadOS-only. `isAdmin: false` is safe because the filter
+                // short-circuits on `isTVOS: true` regardless of admin flag.
+                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true)) { category in
                     tvCategoryButton(category)
                 }
             }
@@ -247,6 +250,10 @@ extension SettingsScreen {
                     tvServerDetail
                 case .interface:
                     tvInterfaceDetail
+                case .administration, .advancedAdmin:
+                    // Never selected on tvOS — admin categories are filtered out
+                    // of the landing pill list. Render nothing as a safety net.
+                    EmptyView()
                 }
             }
             .padding(.horizontal, CinemaSpacing.spacing20)

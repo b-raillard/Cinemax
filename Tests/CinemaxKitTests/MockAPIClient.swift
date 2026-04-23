@@ -66,6 +66,48 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getDevices() async throws -> [DeviceInfoDto] { [] }
     func deleteDevice(id: String) async throws {}
 
+    // MARK: - Admin
+
+    var stubbedUserByID: UserDto = UserDto()
+    var stubbedCreatedUser: UserDto = UserDto()
+    var stubbedMediaFolders: [BaseItemDto] = []
+    var stubbedActivityLogEntries: [ActivityLogEntry] = []
+    var stubbedActivityLogTotal: Int = 0
+    var stubbedSystemInfo: SystemInfo = SystemInfo()
+
+    func getUserByID(id: String) async throws -> UserDto {
+        if shouldThrow { throw stubbedError }
+        return stubbedUserByID
+    }
+    func createUserByName(name: String, password: String?) async throws -> UserDto {
+        if shouldThrow { throw stubbedError }
+        return stubbedCreatedUser
+    }
+    func updateUser(id: String, user: UserDto) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func updateUserPolicy(id: String, policy: UserPolicy) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func updateUserPassword(id: String, newPassword: String, resetPassword: Bool) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func deleteUser(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getMediaFolders() async throws -> [BaseItemDto] {
+        if shouldThrow { throw stubbedError }
+        return stubbedMediaFolders
+    }
+    func getActivityLogEntries(startIndex: Int, limit: Int, minDate: Date?) async throws -> (entries: [ActivityLogEntry], total: Int) {
+        if shouldThrow { throw stubbedError }
+        return (stubbedActivityLogEntries, stubbedActivityLogTotal)
+    }
+    func getSystemInfo() async throws -> SystemInfo {
+        if shouldThrow { throw stubbedError }
+        return stubbedSystemInfo
+    }
+
     // MARK: - Cache
 
     func clearCache() {}

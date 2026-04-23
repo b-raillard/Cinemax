@@ -19,7 +19,7 @@ Native Jellyfin media streaming client for iOS 26+ and tvOS 26+. "Cinema Glass" 
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
-**API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): umbrella `APIClientProtocol` is a typealias for `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI`. View models needing multiple domains depend on `APIClientProtocol`; leaf controllers narrow to the slice they use (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`). `JellyfinAPIClient` conforms to all four; `MockAPIClient` declares `APIClientProtocol` and inherits transparently.
+**API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): umbrella `APIClientProtocol` is a typealias for `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI`. View models needing multiple domains depend on `APIClientProtocol`; leaf controllers narrow to the slice they use (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`). `JellyfinAPIClient` conforms to all five; `MockAPIClient` declares `APIClientProtocol` and inherits transparently. `AdminAPI` is a privilege boundary (not a domain) — admin screens gate entry on `AppState.isAdministrator` so non-admins never reach those methods in the first place.
 
 **Swift 6 `nonisolated` escape hatches**:
 1. `View, Equatable` sub-type inside an `@MainActor` screen needs `nonisolated static func ==` — `Equatable` isn't main-actor-isolated. See `PlayActionButtonsSection` in `MediaDetailScreen.swift`.
@@ -32,10 +32,12 @@ Both safe when the body only reads its parameters.
 ```
 Shared/
   DesignSystem/             CinemaGlassTheme, ThemeManager, AccentOption (+ AccentEasterEgg), LocalizationManager, ToastCenter, GlassModifiers, FocusScaleModifier, AdaptiveLayout, TVButtonStyles, SettingsKeys, SleepTimerOption
-  DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges
+  DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges, UserAvatar
   Navigation/               AppNavigation (auth routing), MainTabView (tab bar/sidebar)
   Screens/                  HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen (+ SettingsScreen+iOS, +tvOS, SettingsAppearanceView+iOS, SettingsRowHelpers, PrivacySecurityScreen, LicensesView), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet, LibraryGenreRow, LibraryHeroSection, LibraryPosterCard, LibrarySortFilterSheet, ServerDiscoverySheet, ServerHelpSheet, UserSwitchSheet
     VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController
+    Admin/                  (iOS-only) AdminLandingScreen, AdvancedAdminLandingScreen, Dashboard/, Users/, Devices/, Activity/
+    Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, DestructiveConfirmSheet, AdminComingSoonScreen
   ViewModels/               Home/Login/Search/ServerSetup/MediaDetail/MediaLibrary ViewModels, VideoPlayerCoordinator
 iOS/ tvOS/                  app entry points
 Resources/{fr,en}.lproj/    Localization (fr default)
@@ -44,6 +46,8 @@ docs/design-system/         Canonical design system reference (colors, typograph
 ```
 
 > `Shared/Screens/` is flat — no `Settings/` or `Home/` subfolders. `PlayLink.swift` intentionally stays in `Screens/` because it knows about `VideoPlayerView` (iOS) and `VideoPlayerCoordinator` (tvOS) — making it a design-system component would invert the dependency direction. `SettingsRowHelpers.swift` also stays because the tvOS renderers in `SettingsScreen+tvOS.swift` capture `@FocusState` from the screen.
+>
+> **Exception**: `Shared/Screens/Admin/` is grouped by feature (Dashboard/Users/Devices/Activity/…). The admin surface holds 30+ files by the time Metadata Manager lands in P3b; a flat folder would be unreadable.
 
 ## Design System
 
@@ -221,6 +225,35 @@ Settings → Server has "Refresh Catalogue" → `apiClient.clearCache()` + posts
 
 ### Debug section
 Always visible (not `#if DEBUG`-gated) so QA / power users don't need a custom build. Icons orange to signal developer territory.
+
+## Admin Section (iOS / iPadOS only)
+
+Admin workflows are mobile-only by product decision — the admin Settings categories are filtered out of the tvOS landing (`SettingsCategory.visibleCases(isAdmin:isTVOS:)` short-circuits when `isTVOS == true`), and every file under `Shared/Screens/Admin/` is wrapped in `#if os(iOS)` so tvOS compiles it as an empty module.
+
+**Gating** — `AppState.isAdministrator` (cached, refreshed on login / reconnect / user switch via `AppState.refreshCurrentUser()`). Every admin entry point reads this flag. The server is the authoritative authorization boundary; client gating is UX only — non-admins who somehow reach an admin endpoint just get a 401/403 surfaced as a toast. `AppState.currentUser: UserDto?` is populated alongside the flag so screens (Settings profile header, admin Users grid) can reuse the same primary-image tag without re-fetching.
+
+**API surface** — `AdminAPI` protocol slice in `APIClientProtocol.swift`. The umbrella is now a 5-way typealias: `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI`. Device listing/revocation stays on `AuthAPI` (the server returns the full fleet to admins and the caller's own devices otherwise — same endpoint, different payload by caller identity).
+
+**Settings routing** — two new categories, `.administration` (Dashboard + Metadata Manager) and `.advancedAdmin` (Users/Devices/Activity/Playback/Plugins/Catalog/Tasks/Network/Logs/API Keys). Both hidden when `!appState.isAdministrator`. P2/P3 entries currently land on `AdminComingSoonScreen` so the menu shape is navigable from day one.
+
+**Generic scaffolds** (`Shared/Screens/Admin/Components/`):
+- `AdminLoadStateContainer` — loading / error / empty / content switcher. Used by every admin list or grid so failure modes feel consistent.
+- `AdminFormScreen` — sticky `Sauvegarder` footer + `interactiveDismissDisabled(isDirty)` + discard-changes confirmation. **Every admin editor uses explicit save (never auto-save)** — admin-scoped changes have blast radius (policy revocations, password resets), so the user must intentionally confirm.
+- `AdminTabBar` — horizontally-scrolling segmented pills (user detail's 4 tabs, metadata editor's 5 tabs in P3b).
+- `AdminSectionGroup` — iOS grouped-list section (header + glass panel + optional footer).
+- `DestructiveConfirmSheet` — type-to-confirm sheet reserved for truly irreversible operations (delete user, delete item in P3b). Reversible destructives (revoke device, uninstall plugin) use `.confirmationDialog` with `.destructive` role instead.
+
+**Shared component** — `UserAvatar` (primary image + accent-gradient+initial fallback) collapses three identical implementations (`UserSwitchSheet`, Settings profile header, admin Users grid). Always tries the image request when a `userId` is given — `CinemaLazyImage.fallbackBackground = .clear` lets the gradient show through on 404/loading.
+
+**Self-protection (client-side; server enforces too)**:
+- Can't delete yourself (Users detail hides the toolbar delete menu when editing self).
+- Can't demote/disable yourself (those toggles render disabled with a hint when editing self).
+- Can't revoke the current device (`KeychainService.getOrCreateDeviceID()` compared against `DeviceInfoDto.id`; the swipe action is elided on that row and a "THIS DEVICE" pill renders instead).
+- Creating users: optimistic local append + sort — avoids a second round-trip just to see the new row.
+
+**Performance** — Dashboard fans out with `async let` so one slow endpoint doesn't gate the other (and a single failure still renders partial data rather than an error). Activity log uses infinite-scroll pagination (50/page) triggered on last-row `.onAppear`. Users / Devices lists are small enough to load fully; view models cache them and support optimistic local mutations (remove after delete, append after create). Admin gate is cached on `AppState` — refreshed only on login / reconnect / user switch, never per-view.
+
+**Phasing** — P1 delivers Dashboard / Users / Devices / Activity. P2 = Playback + Plugins + Catalog + Tasks. P3a = Network + Logs + API Keys. P3b = Metadata Manager (full parity, multi-tab item editor, with a `MediaDetailScreen` "Edit metadata" entry point gated on `appState.isAdministrator`).
 
 ## MediaDetailScreen
 

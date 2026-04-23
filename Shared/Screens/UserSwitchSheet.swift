@@ -104,32 +104,12 @@ struct UserSwitchSheet: View {
 
     @ViewBuilder
     private func avatar(for user: UserDto) -> some View {
-        let size: CGFloat = avatarSize
-        let initial = String((user.name ?? "?").prefix(1)).uppercased()
-
-        if let id = user.id,
-           let tag = user.primaryImageTag {
-            CinemaLazyImage(
-                url: appState.imageBuilder.userImageURL(userId: id, tag: tag, maxWidth: 200),
-                fallbackIcon: nil
-            )
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-        } else {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [themeManager.accentContainer, themeManager.accent.opacity(0.6)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: size, height: size)
-                Text(initial)
-                    .font(.system(size: size * 0.4, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-        }
+        UserAvatar(
+            userId: user.id,
+            name: user.name,
+            primaryImageTag: user.primaryImageTag,
+            size: avatarSize
+        )
     }
 
     // MARK: - Step 2: Password prompt
@@ -223,6 +203,9 @@ struct UserSwitchSheet: View {
                 accessToken: session.accessToken
             )
             appState.isAuthenticated = true
+            // Refresh admin flag + full user so Settings rerenders with the
+            // right categories for the switched-to user.
+            await appState.refreshCurrentUser()
 
             toasts.success(String(format: loc.localized("switchAccount.success"), username))
             password = ""

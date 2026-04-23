@@ -1,6 +1,7 @@
 import SwiftUI
 import CinemaxKit
 import Nuke
+@preconcurrency import JellyfinAPI
 
 @MainActor @Observable
 final class AppState {
@@ -22,6 +23,18 @@ final class AppState {
     var serverInfo: ServerInfo?
     var currentUserId: String?
     var accessToken: String?
+
+    /// Full `UserDto` for the signed-in user. Hydrated by `refreshCurrentUser()`
+    /// after session restore / login / user switch. Screens that need the
+    /// policy or primary image tag read from here rather than re-fetching.
+    var currentUser: UserDto?
+
+    /// Cached admin flag — single source of truth for gating admin surfaces
+    /// (Settings categories, "Edit metadata" button on MediaDetail). Always
+    /// kept in sync with `currentUser?.policy?.isAdministrator`. Derived so
+    /// that non-admins never *see* admin UI in the first place; the server
+    /// still enforces authorization on every endpoint.
+    private(set) var isAdministrator: Bool = false
 
     let apiClient: any APIClientProtocol
     let keychain: any SecureStorageProtocol
@@ -65,6 +78,29 @@ final class AppState {
         } catch {
             // Server may be temporarily unreachable, keep stored state
         }
+
+        await refreshCurrentUser()
+    }
+
+    /// Refreshes `currentUser` + `isAdministrator` from the server. Call on
+    /// login success, user switch, and session restore. Failures leave the
+    /// cached values untouched (we prefer a stale admin flag over kicking a
+    /// real admin out of the admin UI during a blip). `isAdministrator` only
+    /// flips to `false` on an explicit successful fetch that says so, or on
+    /// logout.
+    func refreshCurrentUser() async {
+        guard let id = currentUserId else {
+            currentUser = nil
+            isAdministrator = false
+            return
+        }
+        do {
+            let user = try await apiClient.getUserByID(id: id)
+            currentUser = user
+            isAdministrator = user.policy?.isAdministrator ?? false
+        } catch {
+            // Network blip — keep last-known values.
+        }
     }
 
     /// Returns the user from `LoginScreen` to `ServerSetupScreen` so they can pick a different
@@ -85,6 +121,8 @@ final class AppState {
         serverInfo = nil
         currentUserId = nil
         accessToken = nil
+        currentUser = nil
+        isAdministrator = false
     }
 }
 

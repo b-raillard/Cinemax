@@ -16,24 +16,33 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case account
     case server
     case interface
+    // Admin-only categories — gated by `AppState.isAdministrator` at the
+    // render site so non-admins never see these rows. Server still enforces
+    // authorization on every admin endpoint; client-side gating is UX only.
+    case administration
+    case advancedAdmin
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .appearance: "paintpalette"
-        case .account:    "person"
-        case .server:     "server.rack"
-        case .interface:  "tv"
+        case .appearance:     "paintpalette"
+        case .account:        "person"
+        case .server:         "server.rack"
+        case .interface:      "tv"
+        case .administration: "shield.lefthalf.filled"
+        case .advancedAdmin:  "wrench.and.screwdriver"
         }
     }
 
     @MainActor func localizedName(_ loc: LocalizationManager) -> String {
         switch self {
-        case .appearance: loc.localized("settings.appearance")
-        case .account:    loc.localized("settings.account")
-        case .server:     loc.localized("settings.server")
-        case .interface:  loc.localized("settings.interface")
+        case .appearance:     loc.localized("settings.appearance")
+        case .account:        loc.localized("settings.account")
+        case .server:         loc.localized("settings.server")
+        case .interface:      loc.localized("settings.interface")
+        case .administration: loc.localized("admin.landing.title")
+        case .advancedAdmin:  loc.localized("admin.advanced.title")
         }
     }
 
@@ -43,6 +52,26 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode")
         default:
             nil
+        }
+    }
+
+    /// Whether this category is admin-gated. Used by the iOS landing to hide
+    /// admin rows for non-admin users. tvOS never renders admin entries at
+    /// all (admin workflows are mobile-only by product decision).
+    var isAdminOnly: Bool {
+        switch self {
+        case .administration, .advancedAdmin: true
+        default: false
+        }
+    }
+
+    /// Filters `allCases` by admin visibility and platform. Use this instead of
+    /// raw `allCases` in rendering code — keeps gating in one place.
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [SettingsCategory] {
+        allCases.filter { category in
+            if isTVOS && category.isAdminOnly { return false }
+            if category.isAdminOnly && !isAdmin { return false }
+            return true
         }
     }
 }

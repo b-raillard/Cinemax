@@ -90,13 +90,54 @@ public protocol PlaybackAPI: Sendable {
     func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async
 }
 
+/// Admin-only operations: user management, activity log, system info, media
+/// folders. Calls return 401/403 when the authenticated user isn't an
+/// administrator — view models gate entry on `AppState.isAdministrator` so the
+/// privileged surfaces never render for non-admins in the first place.
+///
+/// Device and session listing already live on `AuthAPI` (the server returns the
+/// full fleet when the caller is admin, the caller's own devices otherwise), so
+/// admin screens reuse those methods rather than duplicating them here.
+public protocol AdminAPI: Sendable {
+    /// Fetch a single user by id. Used by the admin user detail screen to
+    /// re-hydrate the full `UserDto` (including `policy` and `configuration`)
+    /// before editing.
+    func getUserByID(id: String) async throws -> UserDto
+    /// Create a new user. `password` is optional — Jellyfin allows passwordless
+    /// accounts guarded by server policy.
+    func createUserByName(name: String, password: String?) async throws -> UserDto
+    /// Replace a user's profile (name, auto-login flag, etc.). Policy and
+    /// password live on their own dedicated endpoints.
+    func updateUser(id: String, user: UserDto) async throws
+    /// Replace a user's policy (permissions, library access, parental rating).
+    func updateUserPolicy(id: String, policy: UserPolicy) async throws
+    /// Set a user's password. `resetPassword: true` clears without replacing —
+    /// the user is prompted to set a new one on their next login.
+    func updateUserPassword(id: String, newPassword: String, resetPassword: Bool) async throws
+    /// Permanently delete a user. Callers must confirm client-side; the server
+    /// also enforces "cannot delete the last admin".
+    func deleteUser(id: String) async throws
+
+    /// Lists every media folder (library) on the server. Used by the user
+    /// access tab to render the per-library grant checklist.
+    func getMediaFolders() async throws -> [BaseItemDto]
+
+    /// Paginated activity log. `minDate` filters to entries newer than the
+    /// given timestamp; pass `nil` to fetch everything.
+    func getActivityLogEntries(startIndex: Int, limit: Int, minDate: Date?) async throws -> (entries: [ActivityLogEntry], total: Int)
+
+    /// Server system info (version, OS, hardware) — admin-only because it
+    /// exposes paths and architecture.
+    func getSystemInfo() async throws -> SystemInfo
+}
+
 // MARK: - Aggregate
 
 /// Umbrella protocol kept as the default dependency type — view models and
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI
 
 // MARK: - Default arguments
 
@@ -143,6 +184,18 @@ public extension AuthAPI {
     }
 }
 
+public extension AdminAPI {
+    func getActivityLogEntries(startIndex: Int = 0, limit: Int = 50, minDate: Date? = nil) async throws -> (entries: [ActivityLogEntry], total: Int) {
+        try await getActivityLogEntries(startIndex: startIndex, limit: limit, minDate: minDate)
+    }
+    func createUserByName(name: String, password: String? = nil) async throws -> UserDto {
+        try await createUserByName(name: name, password: password)
+    }
+    func updateUserPassword(id: String, newPassword: String, resetPassword: Bool = false) async throws {
+        try await updateUserPassword(id: id, newPassword: newPassword, resetPassword: resetPassword)
+    }
+}
+
 public extension PlaybackAPI {
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {
         try await getMediaSegments(itemId: itemId, includeSegmentTypes: includeSegmentTypes)
@@ -163,4 +216,4 @@ public extension PlaybackAPI {
 
 // MARK: - Conformance
 
-extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI {}
+extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI, AdminAPI {}

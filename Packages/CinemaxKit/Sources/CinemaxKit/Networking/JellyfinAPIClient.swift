@@ -353,6 +353,69 @@ public final class JellyfinAPIClient: Sendable {
         _ = try await client.send(Paths.deleteDevice(id: id))
     }
 
+    // MARK: - Admin
+
+    public func getUserByID(id: String) async throws -> UserDto {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getUserByID(userID: id))
+        return response.value
+    }
+
+    public func createUserByName(name: String, password: String?) async throws -> UserDto {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let body = CreateUserByName(name: name, password: password)
+        let response = try await client.send(Paths.createUserByName(body))
+        return response.value
+    }
+
+    public func updateUser(id: String, user: UserDto) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.updateUser(userID: id, user))
+    }
+
+    public func updateUserPolicy(id: String, policy: UserPolicy) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.updateUserPolicy(userID: id, policy))
+    }
+
+    public func updateUserPassword(id: String, newPassword: String, resetPassword: Bool) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        // Admin-as-another-user password resets don't require the target user's
+        // current password — the server trusts the admin's session, so we send
+        // only `newPw` (and `resetPassword` to clear without setting a new one).
+        let body = UpdateUserPassword(
+            currentPassword: nil,
+            currentPw: nil,
+            newPw: resetPassword ? nil : newPassword,
+            isResetPassword: resetPassword
+        )
+        _ = try await client.send(Paths.updateUserPassword(userID: id, body))
+    }
+
+    public func deleteUser(id: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        _ = try await client.send(Paths.deleteUser(userID: id))
+    }
+
+    public func getMediaFolders() async throws -> [BaseItemDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getMediaFolders())
+        return response.value.items ?? []
+    }
+
+    public func getActivityLogEntries(startIndex: Int, limit: Int, minDate: Date?) async throws -> (entries: [ActivityLogEntry], total: Int) {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.GetLogEntriesParameters(startIndex: startIndex, limit: limit, minDate: minDate)
+        let response = try await client.send(Paths.getLogEntries(parameters: params))
+        return (response.value.items ?? [], response.value.totalRecordCount ?? 0)
+    }
+
+    public func getSystemInfo() async throws -> SystemInfo {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let response = try await client.send(Paths.getSystemInfo)
+        return response.value
+    }
+
     // MARK: - Media Segments
 
     public func getMediaSegments(itemId: String, includeSegmentTypes: [JellyfinAPI.MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {

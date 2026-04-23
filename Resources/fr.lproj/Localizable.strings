@@ -320,3 +320,132 @@
 
 "easterEgg.rainbow.title" = "Arc-en-ciel débloqué !";
 "easterEgg.rainbow.message" = "Une nouvelle couleur d'accent vous attend dans les réglages.";
+
+// MARK: - Admin — Shared
+
+"action.save" = "Sauvegarder";
+"admin.comingSoon.title" = "Bientôt disponible";
+"admin.comingSoon.subtitle" = "Cette section sera disponible dans une prochaine mise à jour.";
+"admin.form.discardChanges.title" = "Abandonner les modifications ?";
+"admin.form.discardChanges.message" = "Les modifications non enregistrées seront perdues.";
+"admin.form.discard" = "Abandonner";
+"admin.destructive.typeToConfirm" = "Pour confirmer, saisissez « %@ » ci-dessous :";
+
+// MARK: - Admin — Landings
+
+"admin.landing.title" = "Administration";
+"admin.advanced.title" = "Admin avancée";
+"admin.landing.section.server" = "Serveur";
+"admin.landing.section.metadata" = "Métadonnées";
+"admin.landing.section.users" = "Utilisateurs et appareils";
+"admin.landing.section.extensions" = "Extensions et tâches";
+"admin.landing.section.advanced" = "Avancé";
+"admin.dashboard.subtitle" = "Sessions actives et état du serveur.";
+"admin.metadata.title" = "Gestionnaire de métadonnées";
+"admin.metadata.subtitle" = "Éditer titres, casting, images et rafraîchir les métadonnées.";
+"admin.users.subtitle" = "Gérer les comptes et les autorisations.";
+"admin.devices.subtitle" = "Voir et révoquer les appareils connectés.";
+"admin.activity.subtitle" = "Consulter les événements du serveur.";
+"admin.playback.title" = "Lecture";
+"admin.plugins.title" = "Mes extensions";
+"admin.catalog.title" = "Catalogue d'extensions";
+"admin.tasks.title" = "Tâches planifiées";
+"admin.network.title" = "Réseau";
+"admin.logs.title" = "Journaux";
+"admin.apiKeys.title" = "Clés API";
+
+// MARK: - Admin — Dashboard
+
+"admin.dashboard.title" = "Tableau de bord";
+"admin.dashboard.activeSessions" = "Sessions actives";
+"admin.dashboard.noActiveSessions" = "Aucune lecture en cours.";
+"admin.dashboard.unknownUser" = "Utilisateur inconnu";
+"admin.dashboard.serverInfo" = "Informations du serveur";
+"admin.dashboard.serverName" = "Nom";
+"admin.dashboard.serverVersion" = "Version";
+"admin.dashboard.operatingSystem" = "Système";
+"admin.dashboard.architecture" = "Architecture";
+"admin.dashboard.localAddress" = "Adresse locale";
+"admin.dashboard.restartPending" = "Redémarrage en attente";
+"admin.dashboard.serverInfoUnavailable" = "Informations indisponibles.";
+
+// MARK: - Admin — Users
+
+"admin.users.title" = "Utilisateurs";
+"admin.users.empty.title" = "Aucun utilisateur";
+"admin.users.empty.subtitle" = "Créez un utilisateur pour commencer à partager votre médiathèque.";
+"admin.users.add" = "Ajouter un utilisateur";
+"admin.users.neverActive" = "Jamais connecté";
+"admin.users.create.title" = "Nouvel utilisateur";
+"admin.users.create.name" = "Nom d'utilisateur";
+"admin.users.create.namePlaceholder" = "Saisir un nom";
+"admin.users.create.password" = "Mot de passe";
+"admin.users.create.passwordPlaceholder" = "Optionnel";
+"admin.users.create.passwordHint" = "Laissez vide pour créer un compte sans mot de passe ; l'utilisateur pourra en définir un à sa première connexion.";
+"admin.users.create.submit" = "Créer";
+"admin.users.create.success" = "Utilisateur créé";
+
+// MARK: - Admin — User Detail
+
+"admin.user.tab.profile" = "Profil";
+"admin.user.tab.access" = "Accès";
+"admin.user.tab.parental" = "Contrôle parental";
+"admin.user.tab.password" = "Mot de passe";
+"admin.user.delete" = "Supprimer l'utilisateur";
+"admin.user.delete.title" = "Supprimer l'utilisateur";
+"admin.user.delete.message" = "Cette action est irréversible. Toutes les données de lecture de « %@ » seront effacées.";
+"admin.user.delete.confirm" = "Supprimer";
+"admin.user.delete.success" = "Utilisateur supprimé";
+"admin.user.save.success" = "Modifications enregistrées";
+
+"admin.user.profile.identity" = "Identité";
+"admin.user.profile.name" = "Nom d'affichage";
+"admin.user.profile.permissions" = "Permissions";
+"admin.user.profile.isAdministrator" = "Administrateur";
+"admin.user.profile.cantDemoteSelf" = "Vous ne pouvez pas retirer vos propres droits d'administrateur.";
+"admin.user.profile.isHidden" = "Masquer de l'écran de connexion";
+"admin.user.profile.isDisabled" = "Désactiver le compte";
+"admin.user.profile.cantDisableSelf" = "Vous ne pouvez pas désactiver votre propre compte.";
+
+"admin.user.access.libraryAccess" = "Accès à la médiathèque";
+"admin.user.access.libraryAccess.footer" = "Quand désactivé, sélectionnez les médiathèques à partager avec cet utilisateur.";
+"admin.user.access.enableAllLibraries" = "Activer l'accès à toutes les médiathèques";
+"admin.user.access.libraries" = "Médiathèques";
+"admin.user.access.libraries.empty" = "Aucune médiathèque trouvée sur le serveur.";
+"admin.user.access.devices" = "Accès des appareils";
+"admin.user.access.enableAllDevices" = "Autoriser l'accès depuis tous les appareils";
+
+"admin.user.parental.rating.title" = "Classification maximale";
+"admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";
+"admin.user.parental.rating.label" = "Âge maximum autorisé";
+
+"admin.user.password.changeTitle" = "Définir un nouveau mot de passe";
+"admin.user.password.changeFooter" = "L'utilisateur pourra ensuite se connecter avec ce mot de passe.";
+"admin.user.password.new" = "Nouveau mot de passe";
+"admin.user.password.confirm" = "Confirmation";
+"admin.user.password.mismatch" = "Les mots de passe ne correspondent pas.";
+"admin.user.password.submit" = "Mettre à jour le mot de passe";
+"admin.user.password.success" = "Mot de passe mis à jour";
+"admin.user.password.resetTitle" = "Réinitialiser le mot de passe";
+"admin.user.password.resetFooter" = "Efface le mot de passe actuel. L'utilisateur devra en définir un nouveau à sa prochaine connexion.";
+"admin.user.password.resetAction" = "Réinitialiser";
+"admin.user.password.resetConfirm.title" = "Réinitialiser le mot de passe ?";
+"admin.user.password.resetConfirm.message" = "L'utilisateur pourra se connecter sans mot de passe tant qu'il n'en aura pas défini un nouveau.";
+"admin.user.password.resetSuccess" = "Mot de passe réinitialisé";
+
+// MARK: - Admin — Devices
+
+"admin.devices.title" = "Appareils";
+"admin.devices.empty.title" = "Aucun appareil";
+"admin.devices.empty.subtitle" = "Les appareils connectés à votre serveur s'afficheront ici.";
+"admin.devices.thisDevice" = "CET APPAREIL";
+"admin.devices.revoke" = "Révoquer";
+"admin.devices.revoke.title" = "Révoquer cet appareil ?";
+"admin.devices.revoke.message" = "« %@ » sera déconnecté immédiatement et devra se ré-authentifier pour accéder au serveur.";
+"admin.devices.revoke.success" = "Appareil révoqué";
+
+// MARK: - Admin — Activity
+
+"admin.activity.title" = "Activité";
+"admin.activity.empty.title" = "Aucune activité";
+"admin.activity.empty.subtitle" = "L'historique des événements du serveur apparaîtra ici.";
