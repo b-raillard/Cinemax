@@ -31,6 +31,7 @@
 // MARK: - Home Screen
 
 "home.continueWatching" = "Continue Watching";
+"home.liveSession" = "LIVE";
 "home.watchingNow" = "Watching Now";
 "home.watchingNow.playing" = "%@ is watching";
 "settings.homePage.watchingNow" = "Watching Now";
@@ -193,9 +194,13 @@
 "privacy.clearImageCache.subtitle" = "Frees the on-disk cache (~500 MB).";
 "privacy.clearImageCache.confirm" = "Images will be re-downloaded on demand.";
 "toast.continueWatchingCleared" = "Continue Watching cleared";
+"toast.continueWatchingClearFailed" = "Couldn't load the Continue Watching list";
+"toast.continueWatchingClearPartial" = "Some items couldn't be cleared";
 "toast.imageCacheCleared" = "Image cache cleared";
 "toast.deviceSignedOut" = "Device signed out";
 "toast.deviceSignOutFailed" = "Couldn't sign out that device";
+"toast.deviceListFailed" = "Couldn't load the device list";
+"toast.userListFailed" = "Couldn't load the user list";
 
 // MARK: - Admin — Shared
 

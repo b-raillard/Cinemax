@@ -24,3 +24,16 @@ struct RatingBadge: View {
             .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.small))
     }
 }
+
+#if DEBUG
+#Preview("RatingBadge") {
+    HStack(spacing: CinemaSpacing.spacing2) {
+        RatingBadge(rating: "PG-13")
+        RatingBadge(rating: "TV-MA")
+        RatingBadge(rating: "R")
+        RatingBadge(rating: "NC-17")
+    }
+    .padding(CinemaSpacing.spacing4)
+    .background(CinemaColor.surfaceContainerLowest)
+}
+#endif

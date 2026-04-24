@@ -31,6 +31,7 @@
 // MARK: - Home Screen
 
 "home.continueWatching" = "Reprendre";
+"home.liveSession" = "EN DIRECT";
 "home.watchingNow" = "En direct";
 "home.watchingNow.playing" = "%@ regarde";
 "settings.homePage.watchingNow" = "En direct";
@@ -193,9 +194,13 @@
 "privacy.clearImageCache.subtitle" = "Libère le cache disque (~500 Mo).";
 "privacy.clearImageCache.confirm" = "Les images seront retéléchargées à la demande.";
 "toast.continueWatchingCleared" = "Reprendre réinitialisé";
+"toast.continueWatchingClearFailed" = "Impossible de récupérer la liste Reprendre";
+"toast.continueWatchingClearPartial" = "Certains éléments n'ont pas pu être effacés";
 "toast.imageCacheCleared" = "Cache d'images vidé";
 "toast.deviceSignedOut" = "Appareil déconnecté";
 "toast.deviceSignOutFailed" = "Impossible de déconnecter cet appareil";
+"toast.deviceListFailed" = "Impossible de charger la liste des appareils";
+"toast.userListFailed" = "Impossible de charger la liste des utilisateurs";
 
 // MARK: - Debug
 

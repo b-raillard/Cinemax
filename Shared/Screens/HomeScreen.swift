@@ -192,7 +192,7 @@ struct HomeScreen: View {
             .overlay {
                 if let backdropId = item.backdropItemID {
                     CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
+                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
@@ -334,10 +334,10 @@ struct HomeScreen: View {
                 )
                 .overlay(alignment: .topLeading) {
                     // Small red "LIVE" pill to signal this is a session, not a recommendation.
-                    HStack(spacing: 4) {
+                    HStack(spacing: CinemaSpacing.spacing1) {
                         Circle().fill(Color.red).frame(width: 6, height: 6)
-                        Text("LIVE")
-                            .font(.system(size: 10, weight: .bold))
+                        Text(loc.localized("home.liveSession"))
+                            .font(.system(size: CinemaScale.pt(10), weight: .bold))
                             .tracking(0.5)
                             .foregroundStyle(.white)
                     }

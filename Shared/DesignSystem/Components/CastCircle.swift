@@ -1,5 +1,4 @@
 import SwiftUI
-import NukeUI
 
 struct CastCircle: View {
     let name: String
@@ -10,19 +9,12 @@ struct CastCircle: View {
 
     var body: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            LazyImage(url: imageURL) { state in
-                if let image = state.image {
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } else {
-                    Image(systemName: "person.fill")
-                        .font(.title2)
-                        .foregroundStyle(CinemaColor.outlineVariant)
-                }
-            }
+            CinemaLazyImage(
+                url: imageURL,
+                fallbackIcon: "person.fill",
+                fallbackBackground: CinemaColor.surfaceContainerHigh
+            )
             .frame(width: size, height: size)
-            .background(CinemaColor.surfaceContainerHigh)
             .clipShape(Circle())
 
             Text(name)
@@ -42,3 +34,14 @@ struct CastCircle: View {
         .accessibilityLabel([name, role].compactMap { $0 }.joined(separator: ", "))
     }
 }
+
+#if DEBUG
+#Preview("CastCircle — fallback and with role") {
+    HStack(spacing: CinemaSpacing.spacing3) {
+        CastCircle(name: "Jane Doe", role: "Director")
+        CastCircle(name: "John Smith")
+    }
+    .padding(CinemaSpacing.spacing4)
+    .background(CinemaColor.surfaceContainerLowest)
+}
+#endif

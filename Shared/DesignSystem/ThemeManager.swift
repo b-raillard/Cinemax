@@ -56,13 +56,19 @@ final class ThemeManager {
     // MARK: - Rainbow Easter Egg
     //
     // When `accentColorKey == "rainbow"`, a Task on the main actor advances
-    // `_rainbowHue` every ~33 ms and bumps `_accentRevision` so every view
-    // observing ThemeManager re-evaluates `accent`/`accentContainer`/`accentDim`
-    // against the new hue. The task self-exits as soon as the user switches to a
-    // static accent, so there's zero cost outside of the easter-egg state.
+    // `_rainbowHue` and bumps `_accentRevision`, which forces every view reading
+    // `themeManager.accent`/`.accentContainer`/`.accentDim` to re-evaluate.
+    // That's effectively the whole app tree, so we tick at 10 Hz (100 ms) rather
+    // than 30 Hz to keep the cost bounded, and compensate with a larger per-tick
+    // hue step so the visible cycle speed is unchanged (~5.5 s full rotation).
+    // The task also self-pauses when the user has disabled Motion Effects and
+    // exits as soon as the accent is switched away from rainbow.
 
     @ObservationIgnored private var _rainbowHue: Double = 0
     @ObservationIgnored private var rainbowTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    @AppStorage(SettingsKey.motionEffects) private var _motionEffectsEnabled: Bool = SettingsKey.Default.motionEffects
 
     var isRainbow: Bool { accentColorKey == "rainbow" }
 
@@ -74,15 +80,23 @@ final class ThemeManager {
         rainbowTask?.cancel()
     }
 
+    /// Call when the user toggles Motion Effects so the rainbow animation
+    /// starts/stops accordingly. `_motionEffectsEnabled` is `@AppStorage`-backed
+    /// so the binding stays in sync, but the already-running task only re-checks
+    /// on tick; nudging it here makes the toggle feel immediate.
+    func motionEffectsDidChange() {
+        startRainbowIfNeeded()
+    }
+
     private func startRainbowIfNeeded() {
         rainbowTask?.cancel()
         rainbowTask = nil
-        guard isRainbow else { return }
+        guard isRainbow, _motionEffectsEnabled else { return }
         rainbowTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 33_000_000)
-                guard let self, self.isRainbow else { return }
-                self._rainbowHue = (self._rainbowHue + 0.006).truncatingRemainder(dividingBy: 1.0)
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                guard let self, self.isRainbow, self._motionEffectsEnabled else { return }
+                self._rainbowHue = (self._rainbowHue + 0.018).truncatingRemainder(dividingBy: 1.0)
                 self._accentRevision += 1
             }
         }

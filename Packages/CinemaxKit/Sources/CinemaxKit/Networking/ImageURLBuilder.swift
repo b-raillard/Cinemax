@@ -58,6 +58,15 @@ public struct ImageURLBuilder: Sendable {
         #endif
     }
 
+    /// Pixel width for full-bleed hero backdrops. Capped at 1920 because the
+    /// hero sits behind a dark gradient scrim — higher-resolution frames are
+    /// invisible but the bytes (and decode memory) are real. Use for hero /
+    /// detail / library-hero backdrops, not for foreground imagery.
+    @MainActor
+    public static var backdropPixelWidth: Int {
+        min(screenPixelWidth, 1920)
+    }
+
     /// Builds the URL for a chapter thumbnail. Jellyfin exposes chapter images at
     /// `/Items/{id}/Images/Chapter/{index}` (0-based index into the chapter list).
     public func chapterImageURL(itemId: String, imageIndex: Int, tag: String? = nil, maxWidth: Int? = nil) -> URL {
