@@ -25,6 +25,8 @@
 "action.viewAll" = "View All";
 "action.refresh" = "Refresh";
 "action.surpriseMe" = "Surprise Me";
+"action.ok" = "OK";
+"action.back" = "Back";
 
 // MARK: - Home Screen
 
@@ -542,20 +544,36 @@
 "admin.metadata.cast.kind.guestStar" = "Guest star";
 "admin.metadata.cast.save" = "Save";
 
-// MARK: - Admin — Metadata / Identify
+// MARK: - Admin — Identify (standalone + tab)
 
-"admin.metadata.identify.searchTitle" = "Search for a match";
-"admin.metadata.identify.name" = "Title to search";
-"admin.metadata.identify.year" = "Year (optional)";
-"admin.metadata.identify.search" = "Search";
-"admin.metadata.identify.unsupported" = "Automatic identify isn't available for this item kind.";
-"admin.metadata.identify.results" = "Results";
-"admin.metadata.identify.applyConfirm.title" = "Apply these metadata?";
-"admin.metadata.identify.applyConfirm.message" = "The current metadata will be replaced with those of \"%@\". This can't be undone.";
-"admin.metadata.identify.replaceImages" = "Also replace images";
-"admin.metadata.identify.replaceImages.hint" = "Turn off to keep your custom artwork. Text metadata is overwritten regardless.";
-"admin.metadata.identify.apply" = "Apply";
-"admin.metadata.identify.apply.success" = "Metadata applied";
+"admin.identify.title" = "Identify";
+"admin.identify.prompt" = "Enter one or more search criteria. Remove criteria to broaden search results.";
+"admin.identify.path" = "Path";
+"admin.identify.criteriaHeader" = "Search criteria";
+"admin.identify.name" = "Name";
+"admin.identify.year" = "Year";
+"admin.identify.imdbId" = "IMDb ID";
+"admin.identify.tmdbFilmId" = "TheMovieDb Film ID";
+"admin.identify.tmdbCollectionId" = "TheMovieDb Collection ID";
+"admin.identify.tmdbSeriesId" = "TheMovieDb ID";
+"admin.identify.tvdbId" = "TheTVDb ID";
+"admin.identify.search" = "Search";
+"admin.identify.results" = "Search results";
+"admin.identify.noResults.title" = "No results";
+"admin.identify.noResults.subtitle" = "Try different criteria or a provider ID.";
+"admin.identify.applyConfirm.title" = "Confirm";
+"admin.identify.replaceImages" = "Replace existing images";
+"admin.identify.replaceImages.hint" = "Turn off to keep your custom artwork. Text metadata is overwritten regardless.";
+"admin.identify.apply.success" = "Metadata applied";
+"admin.identify.unsupported" = "Automatic identify isn't available for this item kind.";
+
+// MARK: - Admin — Item Menu (3-dot on detail + poster cards)
+
+"admin.item.menu" = "Admin";
+"admin.item.identify" = "Identify";
+"admin.item.editMetadata" = "Edit metadata";
+"admin.item.refreshMetadata" = "Refresh metadata";
+"admin.item.delete" = "Delete media";
 
 // MARK: - Admin — Metadata / Actions
 
@@ -577,10 +595,6 @@
 "admin.metadata.delete.message" = "\"%@\" will be removed from the library. This can't be undone.";
 "admin.metadata.delete.confirm" = "Delete permanently";
 "admin.metadata.delete.success" = "Item deleted";
-
-// MARK: - MediaDetail — Admin
-
-"detail.admin.editMetadata" = "Edit metadata";
 
 // MARK: - Debug
 

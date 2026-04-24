@@ -132,7 +132,7 @@ struct AdminCatalogScreen: View {
 
                     CinemaButton(
                         title: loc.localized("admin.catalog.install"),
-                        style: .primary,
+                        style: .accent,
                         isLoading: viewModel.isInstalling
                     ) {
                         Task {

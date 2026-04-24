@@ -223,7 +223,7 @@ struct MetadataImagesTab: View {
 
                     CinemaButton(
                         title: loc.localized("admin.metadata.images.add.submit"),
-                        style: .primary
+                        style: .accent
                     ) {
                         Task {
                             let ok = await viewModel.addImageFromURL(

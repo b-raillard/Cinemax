@@ -341,7 +341,7 @@ struct AdminUserDetailScreen: View {
 
                         CinemaButton(
                             title: loc.localized("admin.user.password.submit"),
-                            style: .primary,
+                            style: .accent,
                             isLoading: viewModel.isChangingPassword
                         ) {
                             Task {

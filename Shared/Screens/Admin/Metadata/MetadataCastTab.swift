@@ -225,7 +225,7 @@ private struct MetadataPersonEditor: View {
 
                     CinemaButton(
                         title: loc.localized("admin.metadata.cast.save"),
-                        style: .primary
+                        style: .accent
                     ) {
                         var updated = person
                         updated.name = name.trimmingCharacters(in: .whitespaces)

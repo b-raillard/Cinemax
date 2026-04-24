@@ -36,13 +36,13 @@ final class MetadataEditorViewModel {
     var editingPerson: BaseItemPerson?
     var pendingPersonDelete: Int?
 
-    // Identify
-    var identifyName: String = ""
-    var identifyYear: String = ""
-    var identifyResults: [RemoteSearchResult] = []
-    var isSearchingIdentify = false
+    // Identify — full flow state lives on the shared `IdentifyFlowModel` so
+    // the standalone `IdentifyScreen` and this tab stay feature-identical.
+    // `pendingIdentifyApply` is kept here because the tab uses a bottom sheet
+    // for the confirm step (instead of the wizard's step transition), which
+    // is a rendering choice local to the editor context.
+    var identify: IdentifyFlowModel
     var pendingIdentifyApply: RemoteSearchResult?
-    var identifyReplaceAllImages: Bool = false
 
     // Actions
     var refreshMetadataMode: MetadataRefreshMode = .default
@@ -54,8 +54,7 @@ final class MetadataEditorViewModel {
     init(item: BaseItemDto) {
         self.item = item
         self.original = item
-        self.identifyName = item.name ?? ""
-        if let year = item.productionYear { self.identifyYear = String(year) }
+        self.identify = IdentifyFlowModel(item: item)
     }
 
     var isDirty: Bool { item != original }
@@ -133,55 +132,25 @@ final class MetadataEditorViewModel {
 
     // MARK: - Identify
 
-    /// Dispatches to the right remote-search endpoint based on the item's
-    /// kind. Only movies and series are supported in P3b — other kinds
-    /// get a friendly "not supported" error so the UI can degrade cleanly.
+    /// Delegates to the shared `IdentifyFlowModel`. Kept as a pass-through
+    /// so existing tab callers don't have to know about the nested model.
     func runIdentifySearch(using apiClient: any APIClientProtocol) async {
-        guard let id = item.id else { return }
-        isSearchingIdentify = true
-        errorMessage = nil
-        defer { isSearchingIdentify = false }
-        let year = Int(identifyYear.trimmingCharacters(in: .whitespaces))
-        do {
-            switch item.type {
-            case .movie:
-                var info = MovieInfo()
-                info.name = identifyName
-                info.year = year
-                let query = MovieInfoRemoteSearchQuery(itemID: id, searchInfo: info)
-                identifyResults = try await apiClient.searchRemoteMovies(query: query)
-            case .series:
-                var info = SeriesInfo()
-                info.name = identifyName
-                info.year = year
-                let query = SeriesInfoRemoteSearchQuery(itemID: id, searchInfo: info)
-                identifyResults = try await apiClient.searchRemoteSeries(query: query)
-            default:
-                identifyResults = []
-                errorMessage = "Identify isn't supported for this item kind"
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await identify.runSearch(using: apiClient)
+        // Mirror the flow model's error into the editor so it surfaces in
+        // the same "error band" the other tabs use.
+        errorMessage = identify.errorMessage
     }
 
     func applyIdentifyResult(using apiClient: any APIClientProtocol, userId: String) async -> Bool {
-        guard let id = item.id, let result = pendingIdentifyApply else { return false }
-        errorMessage = nil
-        do {
-            try await apiClient.applyRemoteSearchResult(
-                itemId: id,
-                result: result,
-                replaceAllImages: identifyReplaceAllImages
-            )
+        guard let result = pendingIdentifyApply else { return false }
+        let ok = await identify.apply(result, using: apiClient)
+        if ok {
             pendingIdentifyApply = nil
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             await reloadItem(using: apiClient, userId: userId)
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
+        } else {
+            errorMessage = identify.errorMessage
         }
+        return ok
     }
 
     // MARK: - Actions

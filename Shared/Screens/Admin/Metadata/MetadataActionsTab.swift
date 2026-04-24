@@ -76,7 +76,7 @@ struct MetadataActionsTab: View {
             iOSSettingsRow {
                 CinemaButton(
                     title: loc.localized("admin.metadata.actions.refresh.submit"),
-                    style: .primary,
+                    style: .accent,
                     isLoading: viewModel.isRefreshing
                 ) {
                     Task {

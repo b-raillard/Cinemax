@@ -13,6 +13,9 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    #if os(iOS)
+    @Environment(\.dismiss) private var dismiss
+    #endif
     @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
@@ -61,11 +64,11 @@ struct MediaDetailScreen: View {
                     actionButtons(item)
 
                     #if os(iOS)
-                    // Admin-gated "Edit metadata" link — only rendered for admins.
-                    // Pushes the metadata editor for the current item. Server
-                    // enforces authorization on every endpoint; this is UX only.
+                    // Admin-gated 3-dot menu (Identifier / Edit metadata /
+                    // Refresh / Delete). Server enforces authorization on
+                    // every endpoint; client gating is UX only.
                     if appState.isAdministrator {
-                        editMetadataLink(for: item)
+                        adminMenuPill(for: item)
                     }
                     #endif
 
@@ -332,36 +335,33 @@ struct MediaDetailScreen: View {
         .equatable()
     }
 
-    // MARK: - Admin edit metadata link (iOS)
+    // MARK: - Admin menu pill (iOS)
 
     #if os(iOS)
-    /// Admin-only affordance below the play buttons. Pushes the metadata
-    /// editor for the current item. Styled as a ghost pill with a pencil
-    /// icon so it doesn't compete with the play CTA.
+    /// Admin-only affordance below the play buttons. Renders `AdminItemMenu`
+    /// (ellipsis + glass capsule with "Admin" caption) so all admin actions
+    /// on the item (Identifier, Edit metadata, Refresh, Delete) are reachable
+    /// from one place. Dismiss on delete so the user isn't left looking at a
+    /// freshly-deleted item.
     @ViewBuilder
-    private func editMetadataLink(for item: BaseItemDto) -> some View {
-        NavigationLink {
-            MetadataEditorScreen(item: item)
-        } label: {
-            HStack(spacing: CinemaSpacing.spacing2) {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-                Text(loc.localized("detail.admin.editMetadata"))
-                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-            }
-            .foregroundStyle(themeManager.accent)
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .padding(.vertical, CinemaSpacing.spacing2)
-            .background(
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Capsule()
-                            .fill(themeManager.accent.opacity(0.1))
-                    )
-            )
+    private func adminMenuPill(for item: BaseItemDto) -> some View {
+        HStack(spacing: CinemaSpacing.spacing2) {
+            Text(loc.localized("admin.item.menu"))
+                .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                .foregroundStyle(themeManager.accent)
+            AdminItemMenu(item: item, onItemDeleted: { dismiss() })
         }
-        .buttonStyle(.plain)
+        .padding(.leading, CinemaSpacing.spacing3)
+        .padding(.trailing, CinemaSpacing.spacing1)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Capsule()
+                        .fill(themeManager.accent.opacity(0.1))
+                )
+        )
         .padding(.horizontal, contentPadding)
     }
     #endif

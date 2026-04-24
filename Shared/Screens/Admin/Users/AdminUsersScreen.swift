@@ -159,7 +159,7 @@ struct AdminUsersScreen: View {
 
                     CinemaButton(
                         title: loc.localized("admin.users.create.submit"),
-                        style: .primary,
+                        style: .accent,
                         isLoading: viewModel.isCreating
                     ) {
                         Task {

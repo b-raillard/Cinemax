@@ -78,7 +78,7 @@ struct AdminFormScreen<Content: View>: View {
 
             CinemaButton(
                 title: loc.localized("action.save"),
-                style: .primary,
+                style: .accent,
                 isLoading: isSaving
             ) {
                 Task { await onSave() }

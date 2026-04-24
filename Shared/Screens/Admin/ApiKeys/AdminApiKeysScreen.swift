@@ -256,7 +256,7 @@ struct AdminApiKeysScreen: View {
 
                     CinemaButton(
                         title: loc.localized("admin.apiKeys.create.submit"),
-                        style: .primary,
+                        style: .accent,
                         isLoading: viewModel.isCreating
                     ) {
                         Task {
@@ -334,7 +334,7 @@ struct AdminApiKeysScreen: View {
 
                     CinemaButton(
                         title: loc.localized("admin.apiKeys.created.copy"),
-                        style: .primary,
+                        style: .accent,
                         icon: "doc.on.doc"
                     ) {
                         copyToken(key)

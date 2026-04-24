@@ -25,6 +25,8 @@
 "action.viewAll" = "Tout voir";
 "action.refresh" = "Actualiser";
 "action.surpriseMe" = "Au hasard";
+"action.ok" = "OK";
+"action.back" = "Retour";
 
 // MARK: - Home Screen
 
@@ -668,20 +670,36 @@
 "admin.metadata.cast.kind.guestStar" = "Invité";
 "admin.metadata.cast.save" = "Enregistrer";
 
-// MARK: - Admin — Metadata / Identify
+// MARK: - Admin — Identify (standalone + tab)
 
-"admin.metadata.identify.searchTitle" = "Rechercher une correspondance";
-"admin.metadata.identify.name" = "Nom à rechercher";
-"admin.metadata.identify.year" = "Année (optionnelle)";
-"admin.metadata.identify.search" = "Rechercher";
-"admin.metadata.identify.unsupported" = "L'identification automatique n'est pas disponible pour ce type d'élément.";
-"admin.metadata.identify.results" = "Résultats";
-"admin.metadata.identify.applyConfirm.title" = "Appliquer ces métadonnées ?";
-"admin.metadata.identify.applyConfirm.message" = "Les métadonnées actuelles seront remplacées par celles de « %@ ». Cette action est irréversible.";
-"admin.metadata.identify.replaceImages" = "Remplacer aussi les images";
-"admin.metadata.identify.replaceImages.hint" = "Désactivez pour conserver vos images personnalisées. Les métadonnées textuelles seront quand même écrasées.";
-"admin.metadata.identify.apply" = "Appliquer";
-"admin.metadata.identify.apply.success" = "Métadonnées appliquées";
+"admin.identify.title" = "Identifier";
+"admin.identify.prompt" = "Entrer un ou plusieurs critères de recherche. Retirer des critères pour élargir les résultats de la recherche.";
+"admin.identify.path" = "Chemin";
+"admin.identify.criteriaHeader" = "Critères de recherche";
+"admin.identify.name" = "Nom";
+"admin.identify.year" = "Année";
+"admin.identify.imdbId" = "ID IMDb";
+"admin.identify.tmdbFilmId" = "ID TheMovieDb Film";
+"admin.identify.tmdbCollectionId" = "ID TheMovieDb Coffret";
+"admin.identify.tmdbSeriesId" = "ID TheMovieDb";
+"admin.identify.tvdbId" = "ID TheTVDb";
+"admin.identify.search" = "Rechercher";
+"admin.identify.results" = "Résultats de la recherche";
+"admin.identify.noResults.title" = "Aucun résultat";
+"admin.identify.noResults.subtitle" = "Essayez d'autres critères ou un ID de fournisseur.";
+"admin.identify.applyConfirm.title" = "Confirmer";
+"admin.identify.replaceImages" = "Remplacer les images existantes";
+"admin.identify.replaceImages.hint" = "Désactivez pour conserver vos images personnalisées. Les métadonnées textuelles seront quand même écrasées.";
+"admin.identify.apply.success" = "Métadonnées appliquées";
+"admin.identify.unsupported" = "L'identification automatique n'est pas disponible pour ce type d'élément.";
+
+// MARK: - Admin — Item Menu (3-dot on detail + poster cards)
+
+"admin.item.menu" = "Admin";
+"admin.item.identify" = "Identifier";
+"admin.item.editMetadata" = "Éditer les métadonnées";
+"admin.item.refreshMetadata" = "Actualiser les métadonnées";
+"admin.item.delete" = "Supprimer le média";
 
 // MARK: - Admin — Metadata / Actions
 
@@ -704,6 +722,3 @@
 "admin.metadata.delete.confirm" = "Supprimer définitivement";
 "admin.metadata.delete.success" = "Élément supprimé";
 
-// MARK: - MediaDetail — Admin
-
-"detail.admin.editMetadata" = "Modifier les métadonnées";

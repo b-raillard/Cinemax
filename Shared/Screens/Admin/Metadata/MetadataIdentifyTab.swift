@@ -3,14 +3,14 @@ import SwiftUI
 import CinemaxKit
 @preconcurrency import JellyfinAPI
 
-/// Identify tab — search TMDB / IMDB / TVDB (whatever the server has
-/// configured) for a matching title and apply its metadata to the item.
-/// Only `.movie` and `.series` items are supported; other kinds show a
-/// friendly notice rather than a broken search form.
+/// Identify tab — hosts the shared `IdentifyFormView` + `IdentifyResultsGridView`
+/// inside the Metadata Editor. Apply confirmation is rendered as a sheet here
+/// instead of a pushed step (the outer editor has its own tab navigation, and
+/// stacking step transitions inside a tab gets disorienting).
 ///
-/// "Replace all images" is a separate toggle — applying metadata is
-/// usually what admins want (titles, overview, dates), and overwriting
-/// hand-picked artwork is an explicit opt-in.
+/// Both this tab and the standalone `IdentifyScreen` drive the same
+/// `IdentifyFlowModel`, so form fields / search results / provider-id
+/// behaviour stay in lock-step.
 struct MetadataIdentifyTab: View {
     @Bindable var viewModel: MetadataEditorViewModel
 
@@ -19,54 +19,26 @@ struct MetadataIdentifyTab: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
 
-    private var isSupportedKind: Bool {
-        switch viewModel.item.type {
-        case .movie, .series: true
-        default: false
-        }
-    }
-
     var body: some View {
-        if !isSupportedKind {
+        if !viewModel.identify.isSupportedKind {
             unsupportedKindNotice
         } else {
-            Group {
-                AdminSectionGroup(loc.localized("admin.metadata.identify.searchTitle")) {
-                    iOSSettingsRow {
-                        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                            GlassTextField(
-                                label: loc.localized("admin.metadata.identify.name"),
-                                text: $viewModel.identifyName,
-                                placeholder: ""
-                            )
-                            GlassTextField(
-                                label: loc.localized("admin.metadata.identify.year"),
-                                text: $viewModel.identifyYear,
-                                placeholder: "2024"
-                            )
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                IdentifyFormView(model: viewModel.identify) {
+                    Task { await viewModel.runIdentifySearch(using: appState.apiClient) }
+                }
 
-                            CinemaButton(
-                                title: loc.localized("admin.metadata.identify.search"),
-                                style: .primary,
-                                isLoading: viewModel.isSearchingIdentify
-                            ) {
-                                Task { await viewModel.runIdentifySearch(using: appState.apiClient) }
-                            }
-                            .disabled(viewModel.identifyName.trimmingCharacters(in: .whitespaces).isEmpty)
-                        }
+                if !viewModel.identify.results.isEmpty {
+                    IdentifyResultsGridView(results: viewModel.identify.results) { result in
+                        viewModel.pendingIdentifyApply = result
                     }
                 }
-
-                if let err = viewModel.errorMessage {
-                    Text(err)
-                        .font(CinemaFont.label(.medium))
-                        .foregroundStyle(CinemaColor.error)
-                        .padding(.horizontal, CinemaSpacing.spacing3)
-                }
-
-                if !viewModel.identifyResults.isEmpty {
-                    resultsSection
-                }
+            }
+            .task {
+                await viewModel.identify.loadPathIfNeeded(
+                    using: appState.apiClient,
+                    userId: appState.currentUserId ?? ""
+                )
             }
             .sheet(item: applyBinding) { wrapper in
                 applyConfirmSheet(for: wrapper.result)
@@ -81,7 +53,7 @@ struct MetadataIdentifyTab: View {
             Image(systemName: "info.circle")
                 .font(.system(size: CinemaScale.pt(18)))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
-            Text(loc.localized("admin.metadata.identify.unsupported"))
+            Text(loc.localized("admin.identify.unsupported"))
                 .font(CinemaFont.body)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
@@ -91,84 +63,7 @@ struct MetadataIdentifyTab: View {
         .padding(.horizontal, CinemaSpacing.spacing3)
     }
 
-    // MARK: - Results
-
-    private var resultsSection: some View {
-        AdminSectionGroup(loc.localized("admin.metadata.identify.results")) {
-            ForEach(Array(viewModel.identifyResults.enumerated()), id: \.offset) { index, result in
-                Button {
-                    viewModel.pendingIdentifyApply = result
-                } label: {
-                    resultRow(result)
-                }
-                .buttonStyle(.plain)
-                if index < viewModel.identifyResults.count - 1 {
-                    iOSSettingsDivider
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func resultRow(_ result: RemoteSearchResult) -> some View {
-        iOSSettingsRow {
-            HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
-                if let urlString = result.imageURL, let url = URL(string: urlString) {
-                    Color.clear
-                        .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                        .frame(width: 60)
-                        .overlay { CinemaLazyImage(url: url, fallbackIcon: "photo") }
-                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.small))
-                        .clipped()
-                } else {
-                    RoundedRectangle(cornerRadius: CinemaRadius.small)
-                        .fill(CinemaColor.surfaceContainerHigh)
-                        .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                        .frame(width: 60)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: CinemaSpacing.spacing2) {
-                        Text(result.name ?? "—")
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                            .lineLimit(1)
-                        if let year = result.productionYear {
-                            Text("(\(String(year)))")
-                                .font(CinemaFont.label(.medium))
-                                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        }
-                    }
-
-                    if let provider = result.searchProviderName {
-                        Text(provider)
-                            .font(.system(size: 10, weight: .bold))
-                            .tracking(0.5)
-                            .foregroundStyle(themeManager.accent)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(themeManager.accent.opacity(0.15)))
-                    }
-
-                    if let overview = result.overview, !overview.isEmpty {
-                        Text(overview)
-                            .font(CinemaFont.label(.small))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .lineLimit(3)
-                            .multilineTextAlignment(.leading)
-                            .padding(.top, 2)
-                    }
-                }
-
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: CinemaScale.pt(13), weight: .semibold))
-                    .foregroundStyle(CinemaColor.outlineVariant)
-            }
-        }
-    }
-
-    // MARK: - Apply confirmation
+    // MARK: - Apply confirmation sheet
 
     private var applyBinding: Binding<IdentifiableResult?> {
         Binding(
@@ -180,59 +75,38 @@ struct MetadataIdentifyTab: View {
     private func applyConfirmSheet(for result: RemoteSearchResult) -> some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                    Text(String(
-                        format: loc.localized("admin.metadata.identify.applyConfirm.message"),
-                        result.name ?? ""
-                    ))
-                    .font(CinemaFont.body)
-                    .foregroundStyle(CinemaColor.onSurface)
+                IdentifyConfirmView(
+                    result: result,
+                    replaceAllImages: $viewModel.identify.replaceAllImages,
+                    isApplying: viewModel.identify.isApplying,
+                    onConfirm: {}
+                )
+                .padding(.top, CinemaSpacing.spacing4)
 
-                    iOSSettingsRow {
-                        HStack {
-                            Text(loc.localized("admin.metadata.identify.replaceImages"))
-                                .font(CinemaFont.label(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-                            Spacer()
-                            Button { viewModel.identifyReplaceAllImages.toggle() } label: {
-                                CinemaToggleIndicator(
-                                    isOn: viewModel.identifyReplaceAllImages,
-                                    accent: themeManager.accent,
-                                    animated: true
-                                )
-                            }
-                            .buttonStyle(.plain)
+                CinemaButton(
+                    title: loc.localized("action.ok"),
+                    style: .accent,
+                    isLoading: viewModel.identify.isApplying
+                ) {
+                    Task {
+                        let ok = await viewModel.applyIdentifyResult(
+                            using: appState.apiClient,
+                            userId: appState.currentUserId ?? ""
+                        )
+                        if ok {
+                            toasts.success(loc.localized("admin.identify.apply.success"))
+                        } else if let err = viewModel.errorMessage {
+                            toasts.error(err)
                         }
                     }
-                    .background(CinemaColor.surfaceContainerHigh)
-                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
-
-                    Text(loc.localized("admin.metadata.identify.replaceImages.hint"))
-                        .font(CinemaFont.label(.small))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-
-                    CinemaButton(
-                        title: loc.localized("admin.metadata.identify.apply"),
-                        style: .primary
-                    ) {
-                        Task {
-                            let ok = await viewModel.applyIdentifyResult(
-                                using: appState.apiClient,
-                                userId: appState.currentUserId ?? ""
-                            )
-                            if ok {
-                                toasts.success(loc.localized("admin.metadata.identify.apply.success"))
-                            } else if let err = viewModel.errorMessage {
-                                toasts.error(err)
-                            }
-                        }
-                    }
-                    .padding(.top, CinemaSpacing.spacing3)
                 }
-                .padding(CinemaSpacing.spacing4)
+                .disabled(viewModel.identify.isApplying)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.top, CinemaSpacing.spacing4)
+                .padding(.bottom, CinemaSpacing.spacing6)
             }
             .background(CinemaColor.surface.ignoresSafeArea())
-            .navigationTitle(loc.localized("admin.metadata.identify.applyConfirm.title"))
+            .navigationTitle(loc.localized("admin.identify.applyConfirm.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -243,7 +117,7 @@ struct MetadataIdentifyTab: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 
