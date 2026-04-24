@@ -422,8 +422,16 @@ extension SettingsScreen {
     func loadServerUsers() async {
         do {
             serverUsers = try await appState.apiClient.getUsers()
+            return
         } catch {
-            do { serverUsers = try await appState.apiClient.getPublicUsers() } catch {}
+            // Authenticated list failed (permissions or network). Fall through
+            // to the public list so a signed-out user can still pick an account.
+        }
+        do {
+            serverUsers = try await appState.apiClient.getPublicUsers()
+        } catch {
+            serverUsers = []
+            toasts.error(loc.localized("toast.userListFailed"))
         }
     }
 
@@ -622,13 +630,20 @@ extension SettingsScreen {
                     if hasImage, appState.serverURL != nil {
                         let imageURL = appState.imageBuilder
                             .userImageURL(userId: userId, tag: user.primaryImageTag, maxWidth: 96)
-                        AsyncImage(url: imageURL) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            tvUserInitial(name: user.name ?? "?", size: 36)
-                        }
-                        .frame(width: 36, height: 36)
-                        .clipShape(Circle())
+                        // Initial serves as placeholder (while loading) and
+                        // fallback (on 404); CinemaLazyImage draws above it
+                        // once the image resolves (fallbackBackground is clear
+                        // so the initial shows through on transient states).
+                        tvUserInitial(name: user.name ?? "?", size: 36)
+                            .overlay {
+                                CinemaLazyImage(
+                                    url: imageURL,
+                                    fallbackIcon: nil,
+                                    fallbackBackground: .clear
+                                )
+                            }
+                            .frame(width: 36, height: 36)
+                            .clipShape(Circle())
                     } else {
                         tvUserInitial(name: user.name ?? "?", size: 36)
                     }

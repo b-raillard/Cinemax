@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
+import UniformTypeIdentifiers
 @preconcurrency import JellyfinAPI
 
 /// API Keys admin. Security-sensitive — tokens grant full admin access to
@@ -373,7 +374,17 @@ struct AdminApiKeysScreen: View {
 
     private func copyToken(_ key: AuthenticationInfo) {
         guard let token = key.accessToken else { return }
-        UIPasteboard.general.string = token
+        // Use `setItems(_:options:)` rather than `UIPasteboard.general.string =`
+        // so the token (a) never leaves the local device via Universal Clipboard
+        // and (b) expires after 60 s — long enough to paste once, short enough
+        // that a later-foregrounded app can't scrape it from the pasteboard.
+        UIPasteboard.general.setItems(
+            [[UTType.utf8PlainText.identifier: token]],
+            options: [
+                .localOnly: true,
+                .expirationDate: Date().addingTimeInterval(60)
+            ]
+        )
         toasts.success(loc.localized("admin.apiKeys.copied"))
     }
 }

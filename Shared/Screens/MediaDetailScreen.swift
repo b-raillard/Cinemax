@@ -127,7 +127,7 @@ struct MediaDetailScreen: View {
         ZStack(alignment: .bottomLeading) {
             if let backdropId = item.backdropItemID {
                 CinemaLazyImage(
-                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.screenPixelWidth),
+                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
                     fallbackIcon: nil,
                     fallbackBackground: CinemaColor.surfaceContainerLow
                 )
@@ -406,7 +406,7 @@ struct MediaDetailScreen: View {
                             Text(season.name ?? loc.localized("detail.season"))
                                 .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
                                 .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, CinemaSpacing.spacing3)
                                 .padding(.vertical, 8)
                                 .background(
                                     isSelected
@@ -449,7 +449,7 @@ struct MediaDetailScreen: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(themeManager.accent)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, CinemaSpacing.spacing3)
                 .padding(.vertical, 10)
                 .background(CinemaColor.surfaceContainerHigh)
                 .clipShape(Capsule())

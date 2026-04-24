@@ -259,17 +259,30 @@ struct PrivacySecurityScreen: View {
         guard let userId = appState.currentUserId else { return }
         isClearingContinueWatching = true
         defer { isClearingContinueWatching = false }
+        // The resume list is a small window (~10 items) and the mutation is
+        // idempotent, so iterate sequentially. Track per-item failures so a
+        // partial failure is visible instead of pretending everything cleared.
+        let resume: [BaseItemDto]
         do {
-            // The resume list is a small window (~10 items) and the mutation is
-            // idempotent, so iterate sequentially. If the list is longer the
-            // action still drops everything — subsequent calls would no-op.
-            let resume = (try? await appState.apiClient.getResumeItems(userId: userId, limit: 50)) ?? []
-            for item in resume {
-                guard let id = item.id else { continue }
-                try? await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            resume = try await appState.apiClient.getResumeItems(userId: userId, limit: 50)
+        } catch {
+            toasts.error(loc.localized("toast.continueWatchingClearFailed"))
+            return
+        }
+        var failures = 0
+        for item in resume {
+            guard let id = item.id else { continue }
+            do {
+                try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            } catch {
+                failures += 1
             }
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+        }
+        NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+        if failures == 0 {
             toasts.success(loc.localized("toast.continueWatchingCleared"))
+        } else {
+            toasts.error(loc.localized("toast.continueWatchingClearPartial"))
         }
     }
 
@@ -464,7 +477,12 @@ private struct ConnectedDevicesList: View {
     private func load() async {
         isLoading = true
         defer { isLoading = false }
-        devices = (try? await appState.apiClient.getDevices()) ?? []
+        do {
+            devices = try await appState.apiClient.getDevices()
+        } catch {
+            devices = []
+            toasts.error(loc.localized("toast.deviceListFailed"))
+        }
     }
 
     private func revoke(_ device: DeviceInfoDto) async {

@@ -31,7 +31,7 @@ struct CinemaLazyImage: View {
                     .overlay {
                         if let icon = fallbackIcon {
                             Image(systemName: icon)
-                                .font(.largeTitle)
+                                .font(.system(size: CinemaScale.pt(28), weight: .regular))
                                 .foregroundStyle(CinemaColor.outlineVariant)
                         }
                     }
@@ -39,3 +39,20 @@ struct CinemaLazyImage: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("CinemaLazyImage — fallback variants") {
+    HStack(spacing: CinemaSpacing.spacing3) {
+        // Nil URL → icon fallback
+        CinemaLazyImage(url: nil, fallbackIcon: "film")
+            .frame(width: 120, height: 180)
+            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+        // Nil URL, no icon → solid fallback
+        CinemaLazyImage(url: nil, fallbackIcon: nil, fallbackBackground: CinemaColor.surfaceContainerHighest)
+            .frame(width: 120, height: 180)
+            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+    }
+    .padding(CinemaSpacing.spacing4)
+    .background(CinemaColor.surfaceContainerLowest)
+}
+#endif

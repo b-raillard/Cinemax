@@ -76,7 +76,7 @@ struct VideoPlayerView: View {
             let bitrate = render4K ? 120_000_000 : 20_000_000
             let info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
             #if DEBUG
-            logger.info("iOS play: method=\(info.playMethod.rawValue), url=\(info.url.absoluteString)")
+            logger.info("iOS play: method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
             #endif
 
             let p = NativeVideoPresenter(

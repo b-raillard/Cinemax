@@ -202,6 +202,11 @@ struct UserSwitchSheet: View {
                 url: appState.serverURL ?? AppState.placeholderServerURL,
                 accessToken: session.accessToken
             )
+            // Drop cached DTOs from the previous user's session — APICache is
+            // keyed by query params only, so personalised views (resume, next-up,
+            // rating-filtered lists) would otherwise bleed across accounts
+            // until each screen refreshed on its own.
+            appState.apiClient.clearCache()
             appState.isAuthenticated = true
             // Refresh admin flag + full user so Settings rerenders with the
             // right categories for the switched-to user.

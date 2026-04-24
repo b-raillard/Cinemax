@@ -42,3 +42,16 @@ struct PosterCard: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("PosterCard — with + without subtitle") {
+    HStack(spacing: CinemaSpacing.spacing3) {
+        PosterCard(title: "The Long Movie Title That Wraps", imageURL: nil, subtitle: "2024")
+        PosterCard(title: "Short", imageURL: nil)
+    }
+    .padding(CinemaSpacing.spacing4)
+    .frame(width: 360)
+    .background(CinemaColor.surfaceContainerLowest)
+    .environment(ThemeManager())
+}
+#endif

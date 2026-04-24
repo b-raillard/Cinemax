@@ -22,3 +22,15 @@ struct CinemaToggleIndicator: View {
             .animation(animated ? .easeInOut(duration: 0.15) : nil, value: isOn)
     }
 }
+
+#if DEBUG
+#Preview("CinemaToggleIndicator — states") {
+    let accent = Color.green
+    return HStack(spacing: CinemaSpacing.spacing3) {
+        CinemaToggleIndicator(isOn: true, accent: accent)
+        CinemaToggleIndicator(isOn: false, accent: accent)
+    }
+    .padding(CinemaSpacing.spacing4)
+    .background(CinemaColor.surfaceContainerLowest)
+}
+#endif

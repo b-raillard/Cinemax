@@ -103,6 +103,13 @@ targets:
     scheme:
       testTargets: []
 
+  # Both CinemaxKit-internal tests (APICacheTests, PlayMethodTests) and app-layer
+  # VM tests live under Tests/CinemaxKitTests/. The natural home for package-
+  # internal tests is Packages/CinemaxKit/Tests/, but adding `package: CinemaxKit`
+  # as a dependency here causes `Get` (a transitive Nuke dep via jellyfin-sdk-swift)
+  # to be double-linked, breaking the build. The app target already embeds the
+  # package, so `@testable import CinemaxKit` resolves without re-declaring it.
+  # Keep all tests here until the transitive graph allows otherwise.
   CinemaxTests:
     type: bundle.unit-test
     platform: iOS

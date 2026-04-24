@@ -24,3 +24,16 @@ struct ErrorStateView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("ErrorStateView") {
+    ErrorStateView(
+        message: "Couldn't reach the server. Check your connection and try again.",
+        retryTitle: "Retry"
+    ) {}
+    .frame(maxWidth: 480)
+    .padding(CinemaSpacing.spacing10)
+    .background(CinemaColor.surfaceContainerLowest)
+    .environment(ThemeManager())
+}
+#endif

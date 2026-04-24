@@ -43,3 +43,25 @@ struct EmptyStateView: View {
         .padding(.vertical, CinemaSpacing.spacing10)
     }
 }
+
+#if DEBUG
+#Preview("EmptyStateView — with action") {
+    EmptyStateView(
+        systemImage: "tray",
+        title: "No results",
+        subtitle: "Try removing a filter to see more items.",
+        actionTitle: "Clear filters",
+        onAction: {}
+    )
+    .frame(maxWidth: 480)
+    .background(CinemaColor.surfaceContainerLowest)
+    .environment(ThemeManager())
+}
+
+#Preview("EmptyStateView — minimal") {
+    EmptyStateView(systemImage: "film", title: "Nothing yet")
+        .frame(maxWidth: 480)
+        .background(CinemaColor.surfaceContainerLowest)
+        .environment(ThemeManager())
+}
+#endif

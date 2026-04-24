@@ -136,11 +136,19 @@ struct AppNavigation: View {
 
     @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
 
-    init() {
+    /// SwiftUI may recreate the root `AppNavigation` struct on scene events;
+    /// guard the one-time `ImagePipeline.shared` replacement so we don't throw
+    /// away the in-memory `ImageCache` (and orphan in-flight decodes) on every
+    /// recreation.
+    private static let configurePipeline: Void = {
         ImagePipeline.shared = ImagePipeline(configuration: .withDataCache(
             name: "com.cinemax.images",
             sizeLimit: 500 * 1024 * 1024 // 500 MB disk cache
         ))
+    }()
+
+    init() {
+        _ = Self.configurePipeline
     }
 
     var body: some View {
@@ -179,6 +187,12 @@ struct AppNavigation: View {
             if newPhase == .background {
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
             }
+        }
+        .onChange(of: motionEffects) { _, _ in
+            // Restart/stop the rainbow accent animation task when the user
+            // toggles Motion Effects — the task otherwise only re-checks the
+            // flag on each tick.
+            themeManager.motionEffectsDidChange()
         }
     }
 

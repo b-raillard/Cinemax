@@ -143,3 +143,18 @@ struct CinemaTVButtonStyle: ButtonStyle {
     }
 }
 #endif
+
+#if DEBUG
+#Preview("CinemaButton styles") {
+    VStack(spacing: CinemaSpacing.spacing3) {
+        CinemaButton(title: "Play", style: .accent, icon: "play.fill") {}
+        CinemaButton(title: "Cancel", style: .primary) {}
+        CinemaButton(title: "Retry", style: .ghost, icon: "arrow.clockwise") {}
+        CinemaButton(title: "Loading", style: .accent, isLoading: true) {}
+    }
+    .padding(CinemaSpacing.spacing4)
+    .frame(maxWidth: 400)
+    .background(CinemaColor.surfaceContainerLowest)
+    .environment(ThemeManager())
+}
+#endif
