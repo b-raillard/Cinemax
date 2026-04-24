@@ -19,7 +19,7 @@ Native Jellyfin media streaming client for iOS 26+ and tvOS 26+. "Cinema Glass" 
 
 **Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
 
-**API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): umbrella `APIClientProtocol` is a typealias for `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI`. View models needing multiple domains depend on `APIClientProtocol`; leaf controllers narrow to the slice they use (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`). `JellyfinAPIClient` conforms to all four; `MockAPIClient` declares `APIClientProtocol` and inherits transparently.
+**API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): umbrella `APIClientProtocol` is a typealias for `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI`. View models needing multiple domains depend on `APIClientProtocol`; leaf controllers narrow to the slice they use (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`). `JellyfinAPIClient` conforms to all five; `MockAPIClient` declares `APIClientProtocol` and inherits transparently. `AdminAPI` is a privilege boundary (not a domain) — admin screens gate entry on `AppState.isAdministrator` so non-admins never reach those methods in the first place.
 
 **Swift 6 `nonisolated` escape hatches**:
 1. `View, Equatable` sub-type inside an `@MainActor` screen needs `nonisolated static func ==` — `Equatable` isn't main-actor-isolated. See `PlayActionButtonsSection` in `MediaDetailScreen.swift`.
@@ -32,10 +32,12 @@ Both safe when the body only reads its parameters.
 ```
 Shared/
   DesignSystem/             CinemaGlassTheme, ThemeManager, AccentOption (+ AccentEasterEgg), LocalizationManager, ToastCenter, GlassModifiers, FocusScaleModifier, AdaptiveLayout, TVButtonStyles, SettingsKeys, SleepTimerOption
-  DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges
+  DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges, UserAvatar
   Navigation/               AppNavigation (auth routing), MainTabView (tab bar/sidebar)
   Screens/                  HomeScreen, LoginScreen, ServerSetupScreen, SearchScreen, MediaDetailScreen, MovieLibraryScreen, TVSeriesScreen, SettingsScreen (+ SettingsScreen+iOS, +tvOS, SettingsAppearanceView+iOS, SettingsRowHelpers, PrivacySecurityScreen, LicensesView), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, TrackPickerSheet, LibraryGenreRow, LibraryHeroSection, LibraryPosterCard, LibrarySortFilterSheet, ServerDiscoverySheet, ServerHelpSheet, UserSwitchSheet
     VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController
+    Admin/                  (iOS-only) AdminLandingScreen, AdvancedAdminLandingScreen, Dashboard/, Users/, Devices/, Activity/, Tasks/, Plugins/, Catalog/, Playback/, Network/, Logs/, ApiKeys/, Metadata/, Identify/
+    Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, AdminItemMenu, DestructiveConfirmSheet, AdminComingSoonScreen
   ViewModels/               Home/Login/Search/ServerSetup/MediaDetail/MediaLibrary ViewModels, VideoPlayerCoordinator
 iOS/ tvOS/                  app entry points
 Resources/{fr,en}.lproj/    Localization (fr default)
@@ -44,6 +46,8 @@ docs/design-system/         Canonical design system reference (colors, typograph
 ```
 
 > `Shared/Screens/` is flat — no `Settings/` or `Home/` subfolders. `PlayLink.swift` intentionally stays in `Screens/` because it knows about `VideoPlayerView` (iOS) and `VideoPlayerCoordinator` (tvOS) — making it a design-system component would invert the dependency direction. `SettingsRowHelpers.swift` also stays because the tvOS renderers in `SettingsScreen+tvOS.swift` capture `@FocusState` from the screen.
+>
+> **Exception**: `Shared/Screens/Admin/` is grouped by feature (Dashboard/Users/Devices/Activity/…). The admin surface holds 30+ files by the time Metadata Manager lands in P3b; a flat folder would be unreadable.
 
 ## Design System
 
@@ -58,6 +62,7 @@ docs/design-system/         Canonical design system reference (colors, typograph
 - **Font scaling**: `CinemaScale.factor` = 1.4× base on tvOS × user `uiScale` (80–130%). All `CinemaFont` and `CinemaScale.pt()` multiply by this. **Exception**: Play/Lecture button labels hardcode `28pt` on tvOS.
 - **tvOS focus**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. Indicator is a 2px accent `strokeBorder` — no scale, no white bg. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. **Trait-collection caveat**: a focused `Button` overrides the `UITraitCollection` inside its label, flipping all `Color.dynamic` tokens to light-mode values. `tvSettingsFocusable` takes a `colorScheme` parameter and injects `.environment(\.colorScheme, colorScheme)` on both content and background shape. Always pass `colorScheme: themeManager.darkModeEnabled ? .dark : .light`.
 - **iOS focus**: `.cinemaFocus()` (accent border + shadow).
+- **CinemaButton styles**: primary CTAs use `style: .accent` (saturated `accentContainer` fill, `.white` text — matches Play / Login / ServerSetup / every admin save/submit). `.primary` is the neutral gradient and is **not** a primary-CTA style; it survives on `DestructiveConfirmSheet` only (destructive confirm, not an accent action). `.ghost` is for secondary actions (Retry, Clear Filters, etc.). When in doubt: if the button *does* something the user will want to see highlighted, it's `.accent`.
 - **Motion Effects**: `motionEffectsEnabled` env key (from `AppNavigation` via `@AppStorage("motionEffects")`). When off, all `.animation()` calls use `nil`. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators.
 - Platform-adaptive layouts: `#if os(tvOS)` or `horizontalSizeClass`.
 
@@ -221,6 +226,50 @@ Settings → Server has "Refresh Catalogue" → `apiClient.clearCache()` + posts
 
 ### Debug section
 Always visible (not `#if DEBUG`-gated) so QA / power users don't need a custom build. Icons orange to signal developer territory.
+
+## Admin Section (iOS / iPadOS only)
+
+Admin workflows are mobile-only by product decision — the admin Settings categories are filtered out of the tvOS landing (`SettingsCategory.visibleCases(isAdmin:isTVOS:)` short-circuits when `isTVOS == true`), and every file under `Shared/Screens/Admin/` is wrapped in `#if os(iOS)` so tvOS compiles it as an empty module.
+
+**Gating** — `AppState.isAdministrator` (cached, refreshed on login / reconnect / user switch via `AppState.refreshCurrentUser()`). Every admin entry point reads this flag. The server is the authoritative authorization boundary; client gating is UX only — non-admins who somehow reach an admin endpoint just get a 401/403 surfaced as a toast. `AppState.currentUser: UserDto?` is populated alongside the flag so screens (Settings profile header, admin Users grid) can reuse the same primary-image tag without re-fetching.
+
+**API surface** — `AdminAPI` protocol slice in `APIClientProtocol.swift`. The umbrella is now a 5-way typealias: `ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI`. Device listing/revocation stays on `AuthAPI` (the server returns the full fleet to admins and the caller's own devices otherwise — same endpoint, different payload by caller identity).
+
+**Settings routing** — two new categories, `.administration` (Dashboard + Metadata Manager) and `.advancedAdmin` (Users/Devices/Activity/Playback/Plugins/Catalog/Tasks/Network/Logs/API Keys). Both hidden when `!appState.isAdministrator`. P2/P3 entries currently land on `AdminComingSoonScreen` so the menu shape is navigable from day one.
+
+**Generic scaffolds** (`Shared/Screens/Admin/Components/`):
+- `AdminLoadStateContainer` — loading / error / empty / content switcher. Used by every admin list or grid so failure modes feel consistent.
+- `AdminFormScreen` — sticky `Sauvegarder` footer + `interactiveDismissDisabled(isDirty)` + discard-changes confirmation. **Every admin editor uses explicit save (never auto-save)** — admin-scoped changes have blast radius (policy revocations, password resets), so the user must intentionally confirm.
+- `AdminTabBar` — horizontally-scrolling segmented pills (user detail's 4 tabs, metadata editor's 5 tabs in P3b).
+- `AdminSectionGroup` — iOS grouped-list section (header + glass panel + optional footer).
+- `AdminItemMenu` — shared SwiftUI `Menu` (ellipsis label) scoped to one `BaseItemDto`. Four actions: Identifier (pushes `IdentifyScreen`) / Edit metadata (pushes `MetadataEditorScreen`) / Refresh metadata (fire-and-forget, default refresh mode) / Delete media (via `DestructiveConfirmSheet`). Hosts its own `.navigationDestination(item:)` so picking an action pushes onto the ambient `NavigationStack`. Mounted on `MediaDetailScreen` (admin pill next to Play) and overlaid on library poster cards (see `LibraryPosterCard` below).
+- `DestructiveConfirmSheet` — type-to-confirm sheet reserved for truly irreversible operations (delete user, delete item in P3b). Reversible destructives (revoke device, uninstall plugin) use `.confirmationDialog` with `.destructive` role instead.
+
+**Shared component** — `UserAvatar` (primary image + accent-gradient+initial fallback) collapses three identical implementations (`UserSwitchSheet`, Settings profile header, admin Users grid). Always tries the image request when a `userId` is given — `CinemaLazyImage.fallbackBackground = .clear` lets the gradient show through on 404/loading.
+
+**Self-protection (client-side; server enforces too)**:
+- Can't delete yourself (Users detail hides the toolbar delete menu when editing self).
+- Can't demote/disable yourself (those toggles render disabled with a hint when editing self).
+- Can't revoke the current device (`KeychainService.getOrCreateDeviceID()` compared against `DeviceInfoDto.id`; the swipe action is elided on that row and a "THIS DEVICE" pill renders instead).
+- Creating users: optimistic local append + sort — avoids a second round-trip just to see the new row.
+
+**Performance** — Dashboard fans out with `async let` so one slow endpoint doesn't gate the other (and a single failure still renders partial data rather than an error). Activity log uses infinite-scroll pagination (50/page) triggered on last-row `.onAppear`. Users / Devices lists are small enough to load fully; view models cache them and support optimistic local mutations (remove after delete, append after create). Admin gate is cached on `AppState` — refreshed only on login / reconnect / user switch, never per-view.
+
+**Phasing** — P1 ships Dashboard / Users / Devices / Activity. **P2 ships** Playback (encoding defaults via `getNamedConfiguration(key: "encoding")` round-tripped through `AnyJSON`) / Installed Plugins (enable/disable/uninstall; `PluginStatus` badge signals restart-pending) / Plugin Catalog (search-and-install from server-configured repos) / Scheduled Tasks (grouped by category with live progress polling every 2 s while any task is running, self-cancels when none are). **P3a ships** Network (read-mostly + safe edits for ports / base URL / LAN subnets / features; explicit-confirm dialog before save since mis-config can lock clients out) / Logs (list + monospace viewer, tail-truncated at 200 KB, `.privacySensitive()`, no share sheet) / API Keys. **P3b ships** the Metadata Manager — five-tab item editor (General / Images / Cast / Identify / Actions), accessible from Settings → Metadata Manager (library picker → items grid → editor) and from `MediaDetailScreen` via an admin-gated 3-dot menu (`AdminItemMenu`) rendered as an "Admin" pill next to Play. Images use `downloadRemoteImage` so the server fetches from a URL rather than proxying bytes through the phone. Identify is scoped to `.movie` and `.series` (other kinds render a friendly "not supported" notice). Delete goes through `DestructiveConfirmSheet` with the item title as the type-to-confirm phrase. **P3c ships** the standalone Identify wizard — quick-access path to the same Jellyfin remote-search flow without going through the full metadata editor.
+
+**Identify flow** (`Shared/Screens/Admin/Identify/`) — three files: `IdentifyFlowModel` (`@Observable` state + search/apply methods, hosted both by `IdentifyScreen` and by `MetadataEditorViewModel.identify` via composition), shared subviews (`IdentifyFormView` / `IdentifyResultsGridView` / `IdentifyConfirmView`), and the standalone `IdentifyScreen` 3-step wizard (form → results grid → confirm). Form fields are kind-aware: movies show IMDb / TMDb Film / TMDb Coffret, series show IMDb / TMDb / TVDb. Provider IDs are stamped onto `MovieInfo.providerIDs` / `SeriesInfo.providerIDs` under the standard Jellyfin keys (`"Imdb"`, `"Tmdb"`, `"TmdbCollection"`, `"Tvdb"`). The wizard's back button decrements step rather than dismissing so the user unwinds one screen at a time. `MetadataIdentifyTab` hosts the same subviews in the editor tab (form → grid inline, confirm in a sheet) so both entry points stay feature-identical. Reachable from `AdminItemMenu` (detail screen pill, poster-card overlay) and from the Metadata Manager's Identify tab.
+
+**Poster-card admin overlay** — `LibraryPosterCard` paints an ellipsis-in-blur-circle `AdminItemMenu` at the bottom-right of the poster when `appState.isAdministrator`. The menu and the detail-push `NavigationLink` are `ZStack` siblings (not nested) — tapping the ellipsis opens the Menu, tapping elsewhere on the poster navigates. Title/subtitle rows have their own `NavigationLink` so the full card still reads as one tappable unit visually.
+
+**ImageType quirk** — CinemaxKit declares its own narrow `ImageType` enum (Primary/Backdrop/Thumb/Logo/Banner — the set the standard UI needs) in `ImageURLBuilder.swift`. `JellyfinAPI.ImageType` has the full 13-case enum (adds Disc, Art, BoxRear, Screenshot, Menu, Chapter, Profile, …). Admin metadata code uses `JellyfinAPI.ImageType` explicitly-qualified to avoid ambiguity, and `ImageURLBuilder` exposes an `imageURLRaw(itemId:imageTypeRaw:)` string-keyed overload so admin image slots can render the wider set without widening `CinemaxKit.ImageType`.
+
+**API key security model** (`Shared/Screens/Admin/ApiKeys/`) — keys grant full admin access, so UI treats them like passwords:
+- Masked by default (first 4 + last 4 chars, dots between). Per-row `eye` button toggles reveal; reveal state is transient (`revealedKeyIds: Set<Int>` dropped on `onDisappear`).
+- Token text is `.privacySensitive()` so iOS redacts it during screen mirroring / Control Center capture.
+- Copy button per row is the only export path — no share sheet (minimises accidental leak surface).
+- `appState.accessToken` is compared against each key's `accessToken`; the match is tagged `CURRENT SESSION` and its revoke action is hidden entirely (revoking our own would log us out).
+- Create flow refetches the list, identifies the new key by id-delta (not timestamp, which could collide), and auto-opens a dedicated "copy this now" modal. Done button explicit — no tap-outside-to-dismiss surprise.
+- Never log key values, never send to analytics/error reports. `revokeApiKey` takes the token itself as the identifier (Jellyfin quirk); callers should forget the value as soon as the call returns.
 
 ## MediaDetailScreen
 

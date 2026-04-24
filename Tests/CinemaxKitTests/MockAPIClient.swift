@@ -66,6 +66,160 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getDevices() async throws -> [DeviceInfoDto] { [] }
     func deleteDevice(id: String) async throws {}
 
+    // MARK: - Admin
+
+    var stubbedUserByID: UserDto = UserDto()
+    var stubbedCreatedUser: UserDto = UserDto()
+    var stubbedMediaFolders: [BaseItemDto] = []
+    var stubbedActivityLogEntries: [ActivityLogEntry] = []
+    var stubbedActivityLogTotal: Int = 0
+    var stubbedSystemInfo: SystemInfo = SystemInfo()
+
+    func getUserByID(id: String) async throws -> UserDto {
+        if shouldThrow { throw stubbedError }
+        return stubbedUserByID
+    }
+    func createUserByName(name: String, password: String?) async throws -> UserDto {
+        if shouldThrow { throw stubbedError }
+        return stubbedCreatedUser
+    }
+    func updateUser(id: String, user: UserDto) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func updateUserPolicy(id: String, policy: UserPolicy) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func updateUserPassword(id: String, newPassword: String, resetPassword: Bool) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func deleteUser(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getMediaFolders() async throws -> [BaseItemDto] {
+        if shouldThrow { throw stubbedError }
+        return stubbedMediaFolders
+    }
+    func getActivityLogEntries(startIndex: Int, limit: Int, minDate: Date?) async throws -> (entries: [ActivityLogEntry], total: Int) {
+        if shouldThrow { throw stubbedError }
+        return (stubbedActivityLogEntries, stubbedActivityLogTotal)
+    }
+    func getSystemInfo() async throws -> SystemInfo {
+        if shouldThrow { throw stubbedError }
+        return stubbedSystemInfo
+    }
+
+    // MARK: - Admin P2
+
+    var stubbedPlugins: [PluginInfo] = []
+    var stubbedPackages: [PackageInfo] = []
+    var stubbedTasks: [TaskInfo] = []
+    var stubbedEncodingOptions: EncodingOptions = EncodingOptions()
+
+    func getInstalledPlugins() async throws -> [PluginInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedPlugins
+    }
+    func enablePlugin(id: String, version: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func disablePlugin(id: String, version: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func uninstallPlugin(id: String, version: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getPluginCatalog() async throws -> [PackageInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedPackages
+    }
+    func installPackage(name: String, assemblyGuid: String?, version: String?, repositoryURL: String?) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getScheduledTasks(includeHidden: Bool) async throws -> [TaskInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedTasks
+    }
+    func startTask(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func stopTask(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getEncodingOptions() async throws -> EncodingOptions {
+        if shouldThrow { throw stubbedError }
+        return stubbedEncodingOptions
+    }
+    func updateEncodingOptions(_ options: EncodingOptions) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+
+    // MARK: - Admin P3a (Network / Logs / API Keys)
+
+    var stubbedNetworkConfiguration: NetworkConfiguration = NetworkConfiguration()
+    var stubbedServerLogs: [LogFile] = []
+    var stubbedLogFileContents: String = ""
+    var stubbedApiKeys: [AuthenticationInfo] = []
+
+    func getNetworkConfiguration() async throws -> NetworkConfiguration {
+        if shouldThrow { throw stubbedError }
+        return stubbedNetworkConfiguration
+    }
+    func updateNetworkConfiguration(_ config: NetworkConfiguration) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func getServerLogs() async throws -> [LogFile] {
+        if shouldThrow { throw stubbedError }
+        return stubbedServerLogs
+    }
+    func getLogFileContents(name: String) async throws -> String {
+        if shouldThrow { throw stubbedError }
+        return stubbedLogFileContents
+    }
+    func getApiKeys() async throws -> [AuthenticationInfo] {
+        if shouldThrow { throw stubbedError }
+        return stubbedApiKeys
+    }
+    func createApiKey(app: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func revokeApiKey(key: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+
+    // MARK: - Admin P3b (Metadata)
+
+    var stubbedRemoteResults: [RemoteSearchResult] = []
+
+    func updateItem(id: String, item: BaseItemDto) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func refreshItem(id: String, metadataMode: MetadataRefreshMode, imageMode: MetadataRefreshMode, replaceAllMetadata: Bool, replaceAllImages: Bool) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func deleteItem(id: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func deleteItemImage(id: String, type: JellyfinAPI.ImageType, index: Int?) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+    func searchRemoteMovies(query: MovieInfoRemoteSearchQuery) async throws -> [RemoteSearchResult] {
+        if shouldThrow { throw stubbedError }
+        return stubbedRemoteResults
+    }
+    func searchRemoteSeries(query: SeriesInfoRemoteSearchQuery) async throws -> [RemoteSearchResult] {
+        if shouldThrow { throw stubbedError }
+        return stubbedRemoteResults
+    }
+    func applyRemoteSearchResult(itemId: String, result: RemoteSearchResult, replaceAllImages: Bool) async throws {
+        if shouldThrow { throw stubbedError }
+    }
+
     // MARK: - Cache
 
     func clearCache() {}

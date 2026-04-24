@@ -90,13 +90,176 @@ public protocol PlaybackAPI: Sendable {
     func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async
 }
 
+/// Admin-only operations: user management, activity log, system info, media
+/// folders. Calls return 401/403 when the authenticated user isn't an
+/// administrator — view models gate entry on `AppState.isAdministrator` so the
+/// privileged surfaces never render for non-admins in the first place.
+///
+/// Device and session listing already live on `AuthAPI` (the server returns the
+/// full fleet when the caller is admin, the caller's own devices otherwise), so
+/// admin screens reuse those methods rather than duplicating them here.
+public protocol AdminAPI: Sendable {
+    /// Fetch a single user by id. Used by the admin user detail screen to
+    /// re-hydrate the full `UserDto` (including `policy` and `configuration`)
+    /// before editing.
+    func getUserByID(id: String) async throws -> UserDto
+    /// Create a new user. `password` is optional — Jellyfin allows passwordless
+    /// accounts guarded by server policy.
+    func createUserByName(name: String, password: String?) async throws -> UserDto
+    /// Replace a user's profile (name, auto-login flag, etc.). Policy and
+    /// password live on their own dedicated endpoints.
+    func updateUser(id: String, user: UserDto) async throws
+    /// Replace a user's policy (permissions, library access, parental rating).
+    func updateUserPolicy(id: String, policy: UserPolicy) async throws
+    /// Set a user's password. `resetPassword: true` clears without replacing —
+    /// the user is prompted to set a new one on their next login.
+    func updateUserPassword(id: String, newPassword: String, resetPassword: Bool) async throws
+    /// Permanently delete a user. Callers must confirm client-side; the server
+    /// also enforces "cannot delete the last admin".
+    func deleteUser(id: String) async throws
+
+    /// Lists every media folder (library) on the server. Used by the user
+    /// access tab to render the per-library grant checklist.
+    func getMediaFolders() async throws -> [BaseItemDto]
+
+    /// Paginated activity log. `minDate` filters to entries newer than the
+    /// given timestamp; pass `nil` to fetch everything.
+    func getActivityLogEntries(startIndex: Int, limit: Int, minDate: Date?) async throws -> (entries: [ActivityLogEntry], total: Int)
+
+    /// Server system info (version, OS, hardware) — admin-only because it
+    /// exposes paths and architecture.
+    func getSystemInfo() async throws -> SystemInfo
+
+    // MARK: Plugins
+
+    /// Lists installed plugins. Each entry carries `status` (`.active`,
+    /// `.disabled`, `.restart`, etc.) and a `canUninstall` flag.
+    func getInstalledPlugins() async throws -> [PluginInfo]
+    /// Enables a previously-disabled plugin. Server may need a restart.
+    func enablePlugin(id: String, version: String) async throws
+    /// Disables a plugin without uninstalling. Server may need a restart.
+    func disablePlugin(id: String, version: String) async throws
+    /// Uninstalls a specific version of a plugin. Server may need a restart.
+    func uninstallPlugin(id: String, version: String) async throws
+
+    // MARK: Plugin catalog
+
+    /// Lists packages available from server-configured repositories.
+    /// `PackageInfo.versions` holds the installable build list.
+    func getPluginCatalog() async throws -> [PackageInfo]
+    /// Installs a package by name. `version` and `repositoryURL` are optional —
+    /// omitted means "latest from any configured repo".
+    func installPackage(name: String, assemblyGuid: String?, version: String?, repositoryURL: String?) async throws
+
+    // MARK: Scheduled tasks
+
+    /// Lists server scheduled tasks. Visible-only by default (`isHidden: false`).
+    func getScheduledTasks(includeHidden: Bool) async throws -> [TaskInfo]
+    /// Starts a task. Fire-and-forget — the server runs it asynchronously;
+    /// `getScheduledTasks()` reflects the new state on next poll.
+    func startTask(id: String) async throws
+    /// Cancels a running task.
+    func stopTask(id: String) async throws
+    /// Replaces a task's trigger list.
+    func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws
+
+    // MARK: Server config (named)
+
+    /// Fetches the server's encoding config. Returns the raw `EncodingOptions`
+    /// decoded from the named-configuration blob.
+    func getEncodingOptions() async throws -> EncodingOptions
+    /// Replaces the server's encoding config. Round-trips through `AnyJSON`
+    /// since the SDK's named-configuration endpoint is type-erased.
+    func updateEncodingOptions(_ options: EncodingOptions) async throws
+
+    // MARK: Network config
+
+    /// Fetches the server's network config (ports, base URL, LAN subnets, etc.).
+    /// Returns the raw `NetworkConfiguration` decoded from the named-configuration blob.
+    func getNetworkConfiguration() async throws -> NetworkConfiguration
+    /// Replaces the server's network config. Caution: mis-setting ports or
+    /// published URLs can lock clients out of the server — the screen surfaces
+    /// that risk in a footer before save.
+    func updateNetworkConfiguration(_ config: NetworkConfiguration) async throws
+
+    // MARK: Logs
+
+    /// Lists server log files (name, size, timestamps). Newest first.
+    func getServerLogs() async throws -> [LogFile]
+    /// Fetches the full contents of a log file by name. Can be large —
+    /// callers should truncate before rendering.
+    func getLogFileContents(name: String) async throws -> String
+
+    // MARK: API Keys
+    //
+    // Security-sensitive. Jellyfin returns key tokens in list responses
+    // (unlike the "show-once" patterns in AWS IAM etc.), so treating these
+    // as recoverable is fine — but we still mask by default in the UI.
+    // Never log values, never send to analytics, never embed in URLs.
+
+    /// Lists all API keys registered on the server. Each entry carries the
+    /// full `accessToken` — UI code MUST treat it as secret.
+    func getApiKeys() async throws -> [AuthenticationInfo]
+    /// Creates a new API key scoped to the given app label. The server
+    /// returns `Void`; the caller is expected to refetch and show the
+    /// newest entry to the user.
+    func createApiKey(app: String) async throws
+    /// Revokes a key by its token value. Irreversible on the server side
+    /// — clients using the revoked key start getting 401s immediately.
+    func revokeApiKey(key: String) async throws
+
+    // MARK: Metadata editor (P3b)
+
+    /// Persists edits to a `BaseItemDto` — name, overview, cast, provider
+    /// ids, etc. The server accepts the full DTO and diffs internally, so
+    /// callers send the edited object without worrying about change-sets.
+    func updateItem(id: String, item: BaseItemDto) async throws
+    /// Kicks off a metadata + image refresh. `fullRefresh` passes
+    /// `.fullRefresh` for both modes; `replaceAll*` wipes local edits and
+    /// re-pulls everything from the active providers.
+    func refreshItem(
+        id: String,
+        metadataMode: MetadataRefreshMode,
+        imageMode: MetadataRefreshMode,
+        replaceAllMetadata: Bool,
+        replaceAllImages: Bool
+    ) async throws
+    /// Deletes an item from the library. Whether the underlying files are
+    /// also removed is controlled by the server's `DeleteContent` policy —
+    /// clients can't opt in/out per-call.
+    func deleteItem(id: String) async throws
+
+    /// Instructs the server to fetch an image from a URL and attach it to
+    /// the item under the given type. Preferred over raw-bytes upload when
+    /// the admin has a URL handy — the server does the download, we don't
+    /// proxy bytes through the phone.
+    ///
+    /// Uses `JellyfinAPI.ImageType` (not the narrower `CinemaxKit.ImageType`
+    /// exposed by `ImageURLBuilder`) because admin workflows need the full
+    /// Jellyfin image-type surface (Disc, Art, BoxRear, Screenshot, …) that
+    /// the UI builder doesn't model.
+    func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws
+    /// Deletes an image from an item. `index` is required for image types
+    /// that can have multiples (Backdrop); pass `nil` for singleton types.
+    func deleteItemImage(id: String, type: JellyfinAPI.ImageType, index: Int?) async throws
+
+    /// Remote-metadata search (TMDB / IMDB / etc.) scoped to movies.
+    func searchRemoteMovies(query: MovieInfoRemoteSearchQuery) async throws -> [RemoteSearchResult]
+    /// Remote-metadata search scoped to series.
+    func searchRemoteSeries(query: SeriesInfoRemoteSearchQuery) async throws -> [RemoteSearchResult]
+    /// Applies a remote search result — server overwrites the item's metadata
+    /// from the chosen provider entry. `replaceAllImages` is destructive to
+    /// any manually-uploaded artwork; surface that in the UI.
+    func applyRemoteSearchResult(itemId: String, result: RemoteSearchResult, replaceAllImages: Bool) async throws
+}
+
 // MARK: - Aggregate
 
 /// Umbrella protocol kept as the default dependency type — view models and
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI
 
 // MARK: - Default arguments
 
@@ -143,6 +306,18 @@ public extension AuthAPI {
     }
 }
 
+public extension AdminAPI {
+    func getActivityLogEntries(startIndex: Int = 0, limit: Int = 50, minDate: Date? = nil) async throws -> (entries: [ActivityLogEntry], total: Int) {
+        try await getActivityLogEntries(startIndex: startIndex, limit: limit, minDate: minDate)
+    }
+    func createUserByName(name: String, password: String? = nil) async throws -> UserDto {
+        try await createUserByName(name: name, password: password)
+    }
+    func updateUserPassword(id: String, newPassword: String, resetPassword: Bool = false) async throws {
+        try await updateUserPassword(id: id, newPassword: newPassword, resetPassword: resetPassword)
+    }
+}
+
 public extension PlaybackAPI {
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {
         try await getMediaSegments(itemId: itemId, includeSegmentTypes: includeSegmentTypes)
@@ -163,4 +338,4 @@ public extension PlaybackAPI {
 
 // MARK: - Conformance
 
-extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI {}
+extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI, AdminAPI {}

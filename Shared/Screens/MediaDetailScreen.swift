@@ -13,6 +13,9 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    #if os(iOS)
+    @Environment(\.dismiss) private var dismiss
+    #endif
     @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
@@ -59,6 +62,15 @@ struct MediaDetailScreen: View {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
                     // Action buttons
                     actionButtons(item)
+
+                    #if os(iOS)
+                    // Admin-gated 3-dot menu (Identifier / Edit metadata /
+                    // Refresh / Delete). Server enforces authorization on
+                    // every endpoint; client gating is UX only.
+                    if appState.isAdministrator {
+                        adminMenuPill(for: item)
+                    }
+                    #endif
 
                     // Quality badges
                     if showQualityBadges {
@@ -322,6 +334,37 @@ struct MediaDetailScreen: View {
         )
         .equatable()
     }
+
+    // MARK: - Admin menu pill (iOS)
+
+    #if os(iOS)
+    /// Admin-only affordance below the play buttons. Renders `AdminItemMenu`
+    /// (ellipsis + glass capsule with "Admin" caption) so all admin actions
+    /// on the item (Identifier, Edit metadata, Refresh, Delete) are reachable
+    /// from one place. Dismiss on delete so the user isn't left looking at a
+    /// freshly-deleted item.
+    @ViewBuilder
+    private func adminMenuPill(for item: BaseItemDto) -> some View {
+        HStack(spacing: CinemaSpacing.spacing2) {
+            Text(loc.localized("admin.item.menu"))
+                .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                .foregroundStyle(themeManager.accent)
+            AdminItemMenu(item: item, onItemDeleted: { dismiss() })
+        }
+        .padding(.leading, CinemaSpacing.spacing3)
+        .padding(.trailing, CinemaSpacing.spacing1)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Capsule()
+                        .fill(themeManager.accent.opacity(0.1))
+                )
+        )
+        .padding(.horizontal, contentPadding)
+    }
+    #endif
 
     // MARK: - Cast
 

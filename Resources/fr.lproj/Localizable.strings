@@ -25,6 +25,8 @@
 "action.viewAll" = "Tout voir";
 "action.refresh" = "Actualiser";
 "action.surpriseMe" = "Au hasard";
+"action.ok" = "OK";
+"action.back" = "Retour";
 
 // MARK: - Home Screen
 
@@ -320,3 +322,403 @@
 
 "easterEgg.rainbow.title" = "Arc-en-ciel débloqué !";
 "easterEgg.rainbow.message" = "Une nouvelle couleur d'accent vous attend dans les réglages.";
+
+// MARK: - Admin — Shared
+
+"action.save" = "Sauvegarder";
+"admin.comingSoon.title" = "Bientôt disponible";
+"admin.comingSoon.subtitle" = "Cette section sera disponible dans une prochaine mise à jour.";
+"admin.form.discardChanges.title" = "Abandonner les modifications ?";
+"admin.form.discardChanges.message" = "Les modifications non enregistrées seront perdues.";
+"admin.form.discard" = "Abandonner";
+"admin.destructive.typeToConfirm" = "Pour confirmer, saisissez « %@ » ci-dessous :";
+
+// MARK: - Admin — Landings
+
+"admin.landing.title" = "Administration";
+"admin.advanced.title" = "Admin avancée";
+"admin.landing.section.server" = "Serveur";
+"admin.landing.section.metadata" = "Métadonnées";
+"admin.landing.section.users" = "Utilisateurs et appareils";
+"admin.landing.section.extensions" = "Extensions et tâches";
+"admin.landing.section.advanced" = "Avancé";
+"admin.dashboard.subtitle" = "Sessions actives et état du serveur.";
+"admin.metadata.title" = "Gestionnaire de métadonnées";
+"admin.metadata.subtitle" = "Éditer titres, casting, images et rafraîchir les métadonnées.";
+"admin.users.subtitle" = "Gérer les comptes et les autorisations.";
+"admin.devices.subtitle" = "Voir et révoquer les appareils connectés.";
+"admin.activity.subtitle" = "Consulter les événements du serveur.";
+"admin.playback.title" = "Lecture";
+"admin.plugins.title" = "Mes extensions";
+"admin.catalog.title" = "Catalogue d'extensions";
+"admin.tasks.title" = "Tâches planifiées";
+"admin.network.title" = "Réseau";
+"admin.logs.title" = "Journaux";
+"admin.apiKeys.title" = "Clés API";
+
+// MARK: - Admin — Dashboard
+
+"admin.dashboard.title" = "Tableau de bord";
+"admin.dashboard.activeSessions" = "Sessions actives";
+"admin.dashboard.noActiveSessions" = "Aucune lecture en cours.";
+"admin.dashboard.unknownUser" = "Utilisateur inconnu";
+"admin.dashboard.serverInfo" = "Informations du serveur";
+"admin.dashboard.serverName" = "Nom";
+"admin.dashboard.serverVersion" = "Version";
+"admin.dashboard.operatingSystem" = "Système";
+"admin.dashboard.architecture" = "Architecture";
+"admin.dashboard.localAddress" = "Adresse locale";
+"admin.dashboard.restartPending" = "Redémarrage en attente";
+"admin.dashboard.serverInfoUnavailable" = "Informations indisponibles.";
+
+// MARK: - Admin — Users
+
+"admin.users.title" = "Utilisateurs";
+"admin.users.empty.title" = "Aucun utilisateur";
+"admin.users.empty.subtitle" = "Créez un utilisateur pour commencer à partager votre médiathèque.";
+"admin.users.add" = "Ajouter un utilisateur";
+"admin.users.neverActive" = "Jamais connecté";
+"admin.users.create.title" = "Nouvel utilisateur";
+"admin.users.create.name" = "Nom d'utilisateur";
+"admin.users.create.namePlaceholder" = "Saisir un nom";
+"admin.users.create.password" = "Mot de passe";
+"admin.users.create.passwordPlaceholder" = "Optionnel";
+"admin.users.create.passwordHint" = "Laissez vide pour créer un compte sans mot de passe ; l'utilisateur pourra en définir un à sa première connexion.";
+"admin.users.create.submit" = "Créer";
+"admin.users.create.success" = "Utilisateur créé";
+
+// MARK: - Admin — User Detail
+
+"admin.user.tab.profile" = "Profil";
+"admin.user.tab.access" = "Accès";
+"admin.user.tab.parental" = "Contrôle parental";
+"admin.user.tab.password" = "Mot de passe";
+"admin.user.delete" = "Supprimer l'utilisateur";
+"admin.user.delete.title" = "Supprimer l'utilisateur";
+"admin.user.delete.message" = "Cette action est irréversible. Toutes les données de lecture de « %@ » seront effacées.";
+"admin.user.delete.confirm" = "Supprimer";
+"admin.user.delete.success" = "Utilisateur supprimé";
+"admin.user.save.success" = "Modifications enregistrées";
+
+"admin.user.profile.identity" = "Identité";
+"admin.user.profile.name" = "Nom d'affichage";
+"admin.user.profile.permissions" = "Permissions";
+"admin.user.profile.isAdministrator" = "Administrateur";
+"admin.user.profile.cantDemoteSelf" = "Vous ne pouvez pas retirer vos propres droits d'administrateur.";
+"admin.user.profile.isHidden" = "Masquer de l'écran de connexion";
+"admin.user.profile.isDisabled" = "Désactiver le compte";
+"admin.user.profile.cantDisableSelf" = "Vous ne pouvez pas désactiver votre propre compte.";
+
+"admin.user.access.libraryAccess" = "Accès à la médiathèque";
+"admin.user.access.libraryAccess.footer" = "Quand désactivé, sélectionnez les médiathèques à partager avec cet utilisateur.";
+"admin.user.access.enableAllLibraries" = "Activer l'accès à toutes les médiathèques";
+"admin.user.access.libraries" = "Médiathèques";
+"admin.user.access.libraries.empty" = "Aucune médiathèque trouvée sur le serveur.";
+"admin.user.access.devices" = "Accès des appareils";
+"admin.user.access.enableAllDevices" = "Autoriser l'accès depuis tous les appareils";
+
+"admin.user.parental.rating.title" = "Classification maximale";
+"admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";
+"admin.user.parental.rating.label" = "Âge maximum autorisé";
+
+"admin.user.password.changeTitle" = "Définir un nouveau mot de passe";
+"admin.user.password.changeFooter" = "L'utilisateur pourra ensuite se connecter avec ce mot de passe.";
+"admin.user.password.new" = "Nouveau mot de passe";
+"admin.user.password.confirm" = "Confirmation";
+"admin.user.password.mismatch" = "Les mots de passe ne correspondent pas.";
+"admin.user.password.submit" = "Mettre à jour le mot de passe";
+"admin.user.password.success" = "Mot de passe mis à jour";
+"admin.user.password.resetTitle" = "Réinitialiser le mot de passe";
+"admin.user.password.resetFooter" = "Efface le mot de passe actuel. L'utilisateur devra en définir un nouveau à sa prochaine connexion.";
+"admin.user.password.resetAction" = "Réinitialiser";
+"admin.user.password.resetConfirm.title" = "Réinitialiser le mot de passe ?";
+"admin.user.password.resetConfirm.message" = "L'utilisateur pourra se connecter sans mot de passe tant qu'il n'en aura pas défini un nouveau.";
+"admin.user.password.resetSuccess" = "Mot de passe réinitialisé";
+
+// MARK: - Admin — Devices
+
+"admin.devices.title" = "Appareils";
+"admin.devices.empty.title" = "Aucun appareil";
+"admin.devices.empty.subtitle" = "Les appareils connectés à votre serveur s'afficheront ici.";
+"admin.devices.thisDevice" = "CET APPAREIL";
+"admin.devices.revoke" = "Révoquer";
+"admin.devices.revoke.title" = "Révoquer cet appareil ?";
+"admin.devices.revoke.message" = "« %@ » sera déconnecté immédiatement et devra se ré-authentifier pour accéder au serveur.";
+"admin.devices.revoke.success" = "Appareil révoqué";
+
+// MARK: - Admin — Activity
+
+"admin.activity.title" = "Activité";
+"admin.activity.empty.title" = "Aucune activité";
+"admin.activity.empty.subtitle" = "L'historique des événements du serveur apparaîtra ici.";
+
+// MARK: - Admin — Scheduled Tasks
+
+"admin.tasks.empty.title" = "Aucune tâche";
+"admin.tasks.empty.subtitle" = "Les tâches planifiées du serveur apparaîtront ici.";
+"admin.tasks.state.running" = "EN COURS";
+"admin.tasks.state.cancelling" = "ANNULATION";
+"admin.tasks.state.idle" = "INACTIVE";
+"admin.tasks.started" = "Tâche lancée";
+"admin.tasks.stopped" = "Annulation demandée";
+
+// MARK: - Admin — Plugins
+
+"admin.plugins.empty.title" = "Aucune extension installée";
+"admin.plugins.empty.subtitle" = "Parcourez le catalogue pour en ajouter.";
+"admin.plugins.uninstall" = "Désinstaller";
+"admin.plugins.uninstall.title" = "Désinstaller l'extension ?";
+"admin.plugins.uninstall.message" = "« %@ » sera supprimée. Un redémarrage du serveur peut être requis.";
+"admin.plugins.uninstall.confirm" = "Désinstaller";
+"admin.plugins.uninstall.success" = "Extension désinstallée";
+"admin.plugins.enabled" = "Extension activée";
+"admin.plugins.disabled" = "Extension désactivée";
+"admin.plugins.status.active" = "ACTIVE";
+"admin.plugins.status.disabled" = "DÉSACTIVÉE";
+"admin.plugins.status.restart" = "REDÉMARRAGE REQUIS";
+"admin.plugins.status.error" = "ERREUR";
+"admin.plugins.status.superseded" = "REMPLACÉE";
+"admin.plugins.status.deleted" = "SUPPRIMÉE";
+
+// MARK: - Admin — Plugin Catalog
+
+"admin.catalog.empty.title" = "Catalogue vide";
+"admin.catalog.empty.subtitle" = "Aucun dépôt configuré ou aucun paquet publié.";
+"admin.catalog.searchPrompt" = "Rechercher une extension";
+"admin.catalog.detailTitle" = "Détails de l'extension";
+"admin.catalog.latestVersion" = "Dernière version : %@";
+"admin.catalog.install" = "Installer";
+"admin.catalog.install.success" = "Installation lancée";
+"admin.catalog.install.restartHint" = "Un redémarrage du serveur peut être nécessaire pour activer l'extension.";
+
+// MARK: - Admin — Playback (Encoding)
+
+"admin.playback.save.success" = "Réglages enregistrés";
+"admin.playback.hardware.title" = "Matériel";
+"admin.playback.hardware.footer" = "Choisissez l'accélération matérielle compatible avec votre serveur. Un mauvais choix peut empêcher le transcodage.";
+"admin.playback.hardwareAcceleration" = "Accélération matérielle";
+"admin.playback.enableHardwareEncoding" = "Encodage matériel";
+"admin.playback.encoding.title" = "Codecs autorisés";
+"admin.playback.allowHevc" = "Encodage HEVC";
+"admin.playback.allowAv1" = "Encodage AV1";
+"admin.playback.processing.title" = "Traitement";
+"admin.playback.enableThrottling" = "Throttling du transcodage";
+"admin.playback.enableTonemapping" = "Tone mapping HDR → SDR";
+"admin.playback.enableSubtitleExtraction" = "Extraction des sous-titres";
+"admin.playback.paths.title" = "Chemins";
+"admin.playback.paths.footer" = "En lecture seule depuis l'application — à modifier depuis l'admin web ou le fichier de configuration du serveur.";
+"admin.playback.encoderPath" = "Chemin de l'encodeur";
+"admin.playback.transcodingTempPath" = "Dossier temporaire de transcodage";
+"admin.playback.hwAccel.none" = "Aucune";
+
+// MARK: - Admin — API Keys
+
+"admin.apiKeys.empty.title" = "Aucune clé API";
+"admin.apiKeys.empty.subtitle" = "Créez une clé pour permettre à un client externe de se connecter au serveur.";
+"admin.apiKeys.list" = "Clés actives";
+"admin.apiKeys.create" = "Créer une clé";
+"admin.apiKeys.warning.title" = "Ces clés valent un mot de passe administrateur.";
+"admin.apiKeys.warning.message" = "Quiconque détient l'une de ces clés dispose d'un accès administrateur complet au serveur. Ne les partagez pas et révoquez toute clé compromise.";
+"admin.apiKeys.thisSession" = "SESSION ACTUELLE";
+"admin.apiKeys.createdOn" = "Créée le %@";
+"admin.apiKeys.hide" = "Masquer la clé";
+"admin.apiKeys.reveal" = "Afficher la clé";
+"admin.apiKeys.copy" = "Copier la clé";
+"admin.apiKeys.copied" = "Clé copiée";
+"admin.apiKeys.revoke" = "Révoquer";
+"admin.apiKeys.revoke.title" = "Révoquer cette clé ?";
+"admin.apiKeys.revoke.message" = "Les clients utilisant « %@ » perdront immédiatement l'accès au serveur. Cette action est irréversible.";
+"admin.apiKeys.revoke.confirm" = "Révoquer";
+"admin.apiKeys.revoke.success" = "Clé révoquée";
+"admin.apiKeys.create.title" = "Nouvelle clé API";
+"admin.apiKeys.create.appName" = "Nom de l'application";
+"admin.apiKeys.create.appNamePlaceholder" = "Ex. mon-script-sauvegarde";
+"admin.apiKeys.create.hint" = "Choisissez un nom explicite afin de pouvoir identifier la clé plus tard.";
+"admin.apiKeys.create.submit" = "Créer la clé";
+"admin.apiKeys.created.title" = "Clé créée";
+"admin.apiKeys.created.message" = "Copiez cette clé maintenant et stockez-la dans un gestionnaire de mots de passe. Elle restera visible dans la liste, mais la traiter comme un secret est la bonne pratique.";
+"admin.apiKeys.created.tokenLabel" = "Valeur de la clé";
+"admin.apiKeys.created.copy" = "Copier la clé";
+"admin.apiKeys.created.reminder" = "Ne l'envoyez jamais par messagerie non chiffrée ou SMS.";
+
+// MARK: - Admin — Network
+
+"admin.network.warning" = "Une mauvaise configuration peut rendre le serveur inaccessible depuis cette application. Assurez-vous de disposer d'un accès administrateur alternatif avant d'enregistrer.";
+"admin.network.ports.title" = "Ports";
+"admin.network.ports.footer" = "Les ports publics doivent correspondre au port externe mappé sur votre routeur si le serveur est accessible depuis Internet.";
+"admin.network.internalHTTP" = "HTTP interne";
+"admin.network.internalHTTPS" = "HTTPS interne";
+"admin.network.publicHTTP" = "HTTP public";
+"admin.network.publicHTTPS" = "HTTPS public";
+"admin.network.urls.title" = "URL de base";
+"admin.network.urls.footer" = "Utilisé lorsque le serveur est placé derrière un reverse-proxy sous un sous-chemin.";
+"admin.network.baseURL" = "Chemin de base";
+"admin.network.lan.title" = "Réseau local";
+"admin.network.lan.footer" = "CIDR, séparés par des virgules. Les clients sur ces sous-réseaux sont considérés comme locaux.";
+"admin.network.lanSubnets" = "Sous-réseaux locaux";
+"admin.network.features.title" = "Options";
+"admin.network.autoDiscovery" = "Découverte automatique";
+"admin.network.upnp" = "UPnP";
+"admin.network.remoteAccess" = "Accès distant";
+"admin.network.requireHTTPS" = "Exiger HTTPS";
+"admin.network.advanced.title" = "Avancé (lecture seule)";
+"admin.network.advanced.footer" = "À modifier depuis l'admin web ou le fichier de configuration du serveur.";
+"admin.network.certPath" = "Chemin du certificat";
+"admin.network.knownProxies" = "Proxys connus";
+"admin.network.remoteIPFilter" = "Filtre d'IP distantes";
+"admin.network.virtualInterfaces" = "Interfaces virtuelles ignorées";
+"admin.network.saveWarning.title" = "Appliquer les modifications réseau ?";
+"admin.network.saveWarning.message" = "Un mauvais paramétrage peut rendre le serveur inaccessible depuis cet appareil. Confirmez que vous disposez d'un autre moyen d'administrer le serveur avant de continuer.";
+"admin.network.saveWarning.confirm" = "Enregistrer";
+"admin.network.save.success" = "Configuration réseau enregistrée";
+
+// MARK: - Admin — Logs
+
+"admin.logs.empty.title" = "Aucun journal";
+"admin.logs.empty.subtitle" = "Les fichiers de journal du serveur apparaîtront ici.";
+"admin.logs.truncated" = "Affichage des %@ derniers octets sur %@. Les journaux complets sont disponibles dans l'admin web.";
+
+// MARK: - Admin — Metadata (shared)
+
+"admin.metadata.browser.pickLibrary" = "Choisir une médiathèque";
+"admin.metadata.browser.empty.title" = "Aucune médiathèque";
+"admin.metadata.browser.empty.subtitle" = "Créez une médiathèque depuis l'admin web pour commencer.";
+"admin.metadata.browser.items.empty.title" = "Aucun élément";
+"admin.metadata.browser.items.searchPrompt" = "Rechercher un titre";
+
+"admin.metadata.tab.general" = "Général";
+"admin.metadata.tab.images" = "Images";
+"admin.metadata.tab.cast" = "Casting";
+"admin.metadata.tab.identify" = "Identifier";
+"admin.metadata.tab.actions" = "Actions";
+"admin.metadata.save.success" = "Métadonnées enregistrées";
+
+"admin.metadata.chip.remove" = "Retirer";
+"admin.metadata.kv.remove" = "Retirer la ligne";
+
+// MARK: - Admin — Metadata / General
+
+"admin.metadata.general.titles" = "Titres";
+"admin.metadata.general.name" = "Nom";
+"admin.metadata.general.originalTitle" = "Titre original";
+"admin.metadata.general.sortName" = "Nom de tri";
+"admin.metadata.general.forcedSortName" = "Nom de tri forcé";
+"admin.metadata.general.overview" = "Synopsis";
+"admin.metadata.general.taglines" = "Accroches";
+"admin.metadata.general.addTagline" = "Ajouter une accroche";
+"admin.metadata.general.releaseInfo" = "Dates";
+"admin.metadata.general.year" = "Année";
+"admin.metadata.general.premiereDate" = "Première";
+"admin.metadata.general.endDate" = "Dernière";
+"admin.metadata.general.setDate" = "Définir";
+"admin.metadata.general.ratings" = "Classifications";
+"admin.metadata.general.officialRating" = "Officielle";
+"admin.metadata.general.customRating" = "Personnalisée";
+"admin.metadata.general.communityRating" = "Note communauté";
+"admin.metadata.general.genresTags" = "Genres et tags";
+"admin.metadata.general.chipHint" = "Appuyez sur la croix pour retirer un élément, sur le + pour en ajouter.";
+"admin.metadata.general.genres" = "Genres";
+"admin.metadata.general.addGenre" = "Ajouter un genre";
+"admin.metadata.general.tags" = "Tags";
+"admin.metadata.general.addTag" = "Ajouter un tag";
+"admin.metadata.general.studios" = "Studios";
+"admin.metadata.general.addStudio" = "Ajouter un studio";
+"admin.metadata.general.providerIds" = "Identifiants externes";
+"admin.metadata.general.providerIds.footer" = "Clés typiques : Imdb, Tmdb, Tvdb, MusicBrainzAlbum.";
+
+// MARK: - Admin — Metadata / Images
+
+"admin.metadata.images.primary" = "Affiche principale";
+"admin.metadata.images.backdrop" = "Arrière-plans";
+"admin.metadata.images.logo" = "Logo";
+"admin.metadata.images.thumb" = "Vignette";
+"admin.metadata.images.banner" = "Bannière";
+"admin.metadata.images.disc" = "Jaquette disque";
+"admin.metadata.images.art" = "Illustration";
+"admin.metadata.images.backdrop.footer" = "Jellyfin accepte plusieurs arrière-plans. Le lecteur choisit lequel afficher.";
+"admin.metadata.images.backdrop.empty" = "Aucun arrière-plan";
+"admin.metadata.images.add" = "Ajouter";
+"admin.metadata.images.replace" = "Remplacer";
+"admin.metadata.images.delete" = "Supprimer";
+"admin.metadata.images.delete.title" = "Supprimer l'image ?";
+"admin.metadata.images.delete.confirm" = "Supprimer";
+"admin.metadata.images.delete.success" = "Image supprimée";
+"admin.metadata.images.add.title" = "Ajouter une image";
+"admin.metadata.images.add.description" = "Le serveur téléchargera l'image à partir de cette URL et l'attachera comme « %@ ».";
+"admin.metadata.images.add.urlLabel" = "URL de l'image";
+"admin.metadata.images.add.submit" = "Télécharger l'image";
+"admin.metadata.images.add.success" = "Image téléchargée";
+
+// MARK: - Admin — Metadata / Cast
+
+"admin.metadata.cast.title" = "Casting et équipe";
+"admin.metadata.cast.footer" = "Glissez vers la gauche sur une ligne pour retirer une personne.";
+"admin.metadata.cast.empty" = "Aucune personne enregistrée.";
+"admin.metadata.cast.addPerson" = "Ajouter une personne";
+"admin.metadata.cast.editPerson" = "Modifier la personne";
+"admin.metadata.cast.remove" = "Retirer";
+"admin.metadata.cast.name" = "Nom";
+"admin.metadata.cast.namePlaceholder" = "Nom complet";
+"admin.metadata.cast.role" = "Rôle";
+"admin.metadata.cast.rolePlaceholder" = "Personnage ou fonction";
+"admin.metadata.cast.kind" = "Fonction";
+"admin.metadata.cast.kind.actor" = "Acteur";
+"admin.metadata.cast.kind.director" = "Réalisateur";
+"admin.metadata.cast.kind.writer" = "Scénariste";
+"admin.metadata.cast.kind.producer" = "Producteur";
+"admin.metadata.cast.kind.composer" = "Compositeur";
+"admin.metadata.cast.kind.guestStar" = "Invité";
+"admin.metadata.cast.save" = "Enregistrer";
+
+// MARK: - Admin — Identify (standalone + tab)
+
+"admin.identify.title" = "Identifier";
+"admin.identify.prompt" = "Entrer un ou plusieurs critères de recherche. Retirer des critères pour élargir les résultats de la recherche.";
+"admin.identify.path" = "Chemin";
+"admin.identify.criteriaHeader" = "Critères de recherche";
+"admin.identify.name" = "Nom";
+"admin.identify.year" = "Année";
+"admin.identify.imdbId" = "ID IMDb";
+"admin.identify.tmdbFilmId" = "ID TheMovieDb Film";
+"admin.identify.tmdbCollectionId" = "ID TheMovieDb Coffret";
+"admin.identify.tmdbSeriesId" = "ID TheMovieDb";
+"admin.identify.tvdbId" = "ID TheTVDb";
+"admin.identify.search" = "Rechercher";
+"admin.identify.results" = "Résultats de la recherche";
+"admin.identify.noResults.title" = "Aucun résultat";
+"admin.identify.noResults.subtitle" = "Essayez d'autres critères ou un ID de fournisseur.";
+"admin.identify.applyConfirm.title" = "Confirmer";
+"admin.identify.replaceImages" = "Remplacer les images existantes";
+"admin.identify.replaceImages.hint" = "Désactivez pour conserver vos images personnalisées. Les métadonnées textuelles seront quand même écrasées.";
+"admin.identify.apply.success" = "Métadonnées appliquées";
+"admin.identify.unsupported" = "L'identification automatique n'est pas disponible pour ce type d'élément.";
+
+// MARK: - Admin — Item Menu (3-dot on detail + poster cards)
+
+"admin.item.menu" = "Admin";
+"admin.item.identify" = "Identifier";
+"admin.item.editMetadata" = "Éditer les métadonnées";
+"admin.item.refreshMetadata" = "Actualiser les métadonnées";
+"admin.item.delete" = "Supprimer le média";
+
+// MARK: - Admin — Metadata / Actions
+
+"admin.metadata.actions.refresh.title" = "Actualiser depuis les fournisseurs";
+"admin.metadata.actions.refresh.footer" = "Relance le rafraîchissement des métadonnées et images auprès des fournisseurs configurés côté serveur.";
+"admin.metadata.actions.refresh.metadataMode" = "Mode métadonnées";
+"admin.metadata.actions.refresh.imageMode" = "Mode images";
+"admin.metadata.actions.refresh.replaceMetadata" = "Remplacer toutes les métadonnées";
+"admin.metadata.actions.refresh.replaceImages" = "Remplacer toutes les images";
+"admin.metadata.actions.refresh.submit" = "Lancer l'actualisation";
+"admin.metadata.actions.refresh.success" = "Actualisation lancée";
+"admin.metadata.actions.refresh.mode.none" = "Aucun";
+"admin.metadata.actions.refresh.mode.validation" = "Validation uniquement";
+"admin.metadata.actions.refresh.mode.default" = "Par défaut";
+"admin.metadata.actions.refresh.mode.full" = "Complet";
+"admin.metadata.actions.delete.title" = "Zone dangereuse";
+"admin.metadata.actions.delete.footer" = "La suppression retire l'élément de la médiathèque. Selon la politique du serveur, les fichiers sous-jacents peuvent aussi être effacés.";
+"admin.metadata.delete.title" = "Supprimer l'élément";
+"admin.metadata.delete.message" = "« %@ » sera supprimé de la médiathèque. Cette action est irréversible.";
+"admin.metadata.delete.confirm" = "Supprimer définitivement";
+"admin.metadata.delete.success" = "Élément supprimé";
+

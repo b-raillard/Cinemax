@@ -63,7 +63,7 @@ extension SettingsScreen {
 
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsCategory.allCases) { category in
+            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false)) { category in
                 iOSCategoryButton(category)
             }
         }
@@ -153,25 +153,38 @@ extension SettingsScreen {
 
     @ViewBuilder
     func settingsDetailView(for category: SettingsCategory) -> some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-                switch category {
-                case .appearance:
-                    IOSAppearanceDetailView()
-                case .account:
-                    iOSAccountDetail
-                case .server:
-                    iOSServerDetail
-                case .interface:
-                    iOSInterfaceDetail
+        // Admin landings manage their own scrolling + background so users can
+        // navigate into admin sub-screens without the wrapping ScrollView
+        // fighting the push transitions. Non-admin categories keep the
+        // original ScrollView wrapper.
+        switch category {
+        case .administration:
+            AdminLandingScreen()
+        case .advancedAdmin:
+            AdvancedAdminLandingScreen()
+        default:
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                    switch category {
+                    case .appearance:
+                        IOSAppearanceDetailView()
+                    case .account:
+                        iOSAccountDetail
+                    case .server:
+                        iOSServerDetail
+                    case .interface:
+                        iOSInterfaceDetail
+                    case .administration, .advancedAdmin:
+                        EmptyView() // handled above
+                    }
                 }
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                .padding(.bottom, CinemaSpacing.spacing8)
             }
-            .padding(.horizontal, CinemaSpacing.spacing3)
-            .padding(.bottom, CinemaSpacing.spacing8)
+            .background(CinemaColor.surface.ignoresSafeArea())
+            .navigationTitle(category.localizedName(loc))
+            .navigationBarTitleDisplayMode(.large)
         }
-        .background(CinemaColor.surface.ignoresSafeArea())
-        .navigationTitle(category.localizedName(loc))
-        .navigationBarTitleDisplayMode(.large)
     }
 
     // MARK: Account Detail (iOS)
@@ -412,37 +425,12 @@ extension SettingsScreen {
     /// the fallback (covers "no image set" and offline cases uniformly).
     @ViewBuilder
     var profileAvatar: some View {
-        let initialFallback = ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [themeManager.accentContainer, themeManager.accent.opacity(0.6)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            Text(userInitial)
-                .font(.system(size: 24, weight: .bold, design: .default))
-                .foregroundStyle(.white)
-        }
-
-        if let id = appState.currentUserId {
-            initialFallback
-                .overlay {
-                    CinemaLazyImage(
-                        url: appState.imageBuilder.userImageURL(
-                            userId: id,
-                            tag: currentUser?.primaryImageTag,
-                            maxWidth: 200
-                        ),
-                        fallbackIcon: nil,
-                        fallbackBackground: .clear
-                    )
-                    .clipShape(Circle())
-                }
-        } else {
-            initialFallback
-        }
+        UserAvatar(
+            userId: appState.currentUserId,
+            name: username,
+            primaryImageTag: currentUser?.primaryImageTag,
+            size: 56
+        )
     }
 
     var liveBadge: some View {

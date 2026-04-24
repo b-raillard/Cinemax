@@ -25,6 +25,8 @@
 "action.viewAll" = "View All";
 "action.refresh" = "Refresh";
 "action.surpriseMe" = "Surprise Me";
+"action.ok" = "OK";
+"action.back" = "Back";
 
 // MARK: - Home Screen
 
@@ -194,6 +196,405 @@
 "toast.imageCacheCleared" = "Image cache cleared";
 "toast.deviceSignedOut" = "Device signed out";
 "toast.deviceSignOutFailed" = "Couldn't sign out that device";
+
+// MARK: - Admin — Shared
+
+"action.save" = "Save";
+"admin.comingSoon.title" = "Coming soon";
+"admin.comingSoon.subtitle" = "This section will be available in a future update.";
+"admin.form.discardChanges.title" = "Discard changes?";
+"admin.form.discardChanges.message" = "Unsaved changes will be lost.";
+"admin.form.discard" = "Discard";
+"admin.destructive.typeToConfirm" = "To confirm, type \"%@\" below:";
+
+// MARK: - Admin — Landings
+
+"admin.landing.title" = "Administration";
+"admin.advanced.title" = "Advanced admin";
+"admin.landing.section.server" = "Server";
+"admin.landing.section.metadata" = "Metadata";
+"admin.landing.section.users" = "Users & devices";
+"admin.landing.section.extensions" = "Extensions & tasks";
+"admin.landing.section.advanced" = "Advanced";
+"admin.dashboard.subtitle" = "Active sessions and server state.";
+"admin.metadata.title" = "Metadata Manager";
+"admin.metadata.subtitle" = "Edit titles, cast, images and refresh metadata.";
+"admin.users.subtitle" = "Manage accounts and permissions.";
+"admin.devices.subtitle" = "Review and revoke connected devices.";
+"admin.activity.subtitle" = "Browse server events.";
+"admin.playback.title" = "Playback";
+"admin.plugins.title" = "My plugins";
+"admin.catalog.title" = "Plugin catalog";
+"admin.tasks.title" = "Scheduled tasks";
+"admin.network.title" = "Network";
+"admin.logs.title" = "Logs";
+"admin.apiKeys.title" = "API Keys";
+
+// MARK: - Admin — Dashboard
+
+"admin.dashboard.title" = "Dashboard";
+"admin.dashboard.activeSessions" = "Active sessions";
+"admin.dashboard.noActiveSessions" = "No active playback.";
+"admin.dashboard.unknownUser" = "Unknown user";
+"admin.dashboard.serverInfo" = "Server info";
+"admin.dashboard.serverName" = "Name";
+"admin.dashboard.serverVersion" = "Version";
+"admin.dashboard.operatingSystem" = "Operating system";
+"admin.dashboard.architecture" = "Architecture";
+"admin.dashboard.localAddress" = "Local address";
+"admin.dashboard.restartPending" = "Restart pending";
+"admin.dashboard.serverInfoUnavailable" = "Server info unavailable.";
+
+// MARK: - Admin — Users
+
+"admin.users.title" = "Users";
+"admin.users.empty.title" = "No users";
+"admin.users.empty.subtitle" = "Create a user to start sharing your library.";
+"admin.users.add" = "Add user";
+"admin.users.neverActive" = "Never signed in";
+"admin.users.create.title" = "New user";
+"admin.users.create.name" = "Username";
+"admin.users.create.namePlaceholder" = "Enter a name";
+"admin.users.create.password" = "Password";
+"admin.users.create.passwordPlaceholder" = "Optional";
+"admin.users.create.passwordHint" = "Leave empty to create a passwordless account; the user can set one on first sign-in.";
+"admin.users.create.submit" = "Create";
+"admin.users.create.success" = "User created";
+
+// MARK: - Admin — User Detail
+
+"admin.user.tab.profile" = "Profile";
+"admin.user.tab.access" = "Access";
+"admin.user.tab.parental" = "Parental";
+"admin.user.tab.password" = "Password";
+"admin.user.delete" = "Delete user";
+"admin.user.delete.title" = "Delete user";
+"admin.user.delete.message" = "This cannot be undone. All of \"%@\"'s playback data will be erased.";
+"admin.user.delete.confirm" = "Delete";
+"admin.user.delete.success" = "User deleted";
+"admin.user.save.success" = "Changes saved";
+
+"admin.user.profile.identity" = "Identity";
+"admin.user.profile.name" = "Display name";
+"admin.user.profile.permissions" = "Permissions";
+"admin.user.profile.isAdministrator" = "Administrator";
+"admin.user.profile.cantDemoteSelf" = "You can't revoke your own administrator rights.";
+"admin.user.profile.isHidden" = "Hide from login screen";
+"admin.user.profile.isDisabled" = "Disable account";
+"admin.user.profile.cantDisableSelf" = "You can't disable your own account.";
+
+"admin.user.access.libraryAccess" = "Library access";
+"admin.user.access.libraryAccess.footer" = "When off, pick which libraries to share with this user.";
+"admin.user.access.enableAllLibraries" = "Enable access to all libraries";
+"admin.user.access.libraries" = "Libraries";
+"admin.user.access.libraries.empty" = "No libraries found on the server.";
+"admin.user.access.devices" = "Device access";
+"admin.user.access.enableAllDevices" = "Allow access from all devices";
+
+"admin.user.parental.rating.title" = "Max content rating";
+"admin.user.parental.rating.footer" = "Hides content rated above the chosen age for this user. Unrated titles stay visible.";
+"admin.user.parental.rating.label" = "Max age allowed";
+
+"admin.user.password.changeTitle" = "Set a new password";
+"admin.user.password.changeFooter" = "The user will be able to sign in with this password.";
+"admin.user.password.new" = "New password";
+"admin.user.password.confirm" = "Confirmation";
+"admin.user.password.mismatch" = "Passwords don't match.";
+"admin.user.password.submit" = "Update password";
+"admin.user.password.success" = "Password updated";
+"admin.user.password.resetTitle" = "Reset password";
+"admin.user.password.resetFooter" = "Clears the current password. The user will need to set a new one on their next sign-in.";
+"admin.user.password.resetAction" = "Reset";
+"admin.user.password.resetConfirm.title" = "Reset password?";
+"admin.user.password.resetConfirm.message" = "The user will be able to sign in without a password until they set a new one.";
+"admin.user.password.resetSuccess" = "Password reset";
+
+// MARK: - Admin — Devices
+
+"admin.devices.title" = "Devices";
+"admin.devices.empty.title" = "No devices";
+"admin.devices.empty.subtitle" = "Devices connected to your server will appear here.";
+"admin.devices.thisDevice" = "THIS DEVICE";
+"admin.devices.revoke" = "Revoke";
+"admin.devices.revoke.title" = "Revoke this device?";
+"admin.devices.revoke.message" = "\"%@\" will be signed out immediately and must re-authenticate to reach the server.";
+"admin.devices.revoke.success" = "Device revoked";
+
+// MARK: - Admin — Activity
+
+"admin.activity.title" = "Activity";
+"admin.activity.empty.title" = "No activity";
+"admin.activity.empty.subtitle" = "The server event log will appear here.";
+
+// MARK: - Admin — Scheduled Tasks
+
+"admin.tasks.empty.title" = "No tasks";
+"admin.tasks.empty.subtitle" = "Server scheduled tasks will appear here.";
+"admin.tasks.state.running" = "RUNNING";
+"admin.tasks.state.cancelling" = "CANCELLING";
+"admin.tasks.state.idle" = "IDLE";
+"admin.tasks.started" = "Task started";
+"admin.tasks.stopped" = "Cancellation requested";
+
+// MARK: - Admin — Plugins
+
+"admin.plugins.empty.title" = "No plugins installed";
+"admin.plugins.empty.subtitle" = "Browse the catalog to add some.";
+"admin.plugins.uninstall" = "Uninstall";
+"admin.plugins.uninstall.title" = "Uninstall plugin?";
+"admin.plugins.uninstall.message" = "\"%@\" will be removed. A server restart may be required.";
+"admin.plugins.uninstall.confirm" = "Uninstall";
+"admin.plugins.uninstall.success" = "Plugin uninstalled";
+"admin.plugins.enabled" = "Plugin enabled";
+"admin.plugins.disabled" = "Plugin disabled";
+"admin.plugins.status.active" = "ACTIVE";
+"admin.plugins.status.disabled" = "DISABLED";
+"admin.plugins.status.restart" = "RESTART REQUIRED";
+"admin.plugins.status.error" = "ERROR";
+"admin.plugins.status.superseded" = "SUPERSEDED";
+"admin.plugins.status.deleted" = "DELETED";
+
+// MARK: - Admin — Plugin Catalog
+
+"admin.catalog.empty.title" = "Empty catalog";
+"admin.catalog.empty.subtitle" = "No repositories configured, or no packages published.";
+"admin.catalog.searchPrompt" = "Search plugins";
+"admin.catalog.detailTitle" = "Plugin details";
+"admin.catalog.latestVersion" = "Latest version: %@";
+"admin.catalog.install" = "Install";
+"admin.catalog.install.success" = "Installation started";
+"admin.catalog.install.restartHint" = "A server restart may be required to activate the plugin.";
+
+// MARK: - Admin — Playback (Encoding)
+
+"admin.playback.save.success" = "Settings saved";
+"admin.playback.hardware.title" = "Hardware";
+"admin.playback.hardware.footer" = "Pick the hardware acceleration your server supports. The wrong choice can break transcoding.";
+"admin.playback.hardwareAcceleration" = "Hardware acceleration";
+"admin.playback.enableHardwareEncoding" = "Hardware encoding";
+"admin.playback.encoding.title" = "Allowed codecs";
+"admin.playback.allowHevc" = "HEVC encoding";
+"admin.playback.allowAv1" = "AV1 encoding";
+"admin.playback.processing.title" = "Processing";
+"admin.playback.enableThrottling" = "Transcode throttling";
+"admin.playback.enableTonemapping" = "HDR → SDR tone mapping";
+"admin.playback.enableSubtitleExtraction" = "Subtitle extraction";
+"admin.playback.paths.title" = "Paths";
+"admin.playback.paths.footer" = "Read-only in the app — edit from the web admin or the server configuration file.";
+"admin.playback.encoderPath" = "Encoder path";
+"admin.playback.transcodingTempPath" = "Transcoding temp folder";
+"admin.playback.hwAccel.none" = "None";
+
+// MARK: - Admin — API Keys
+
+"admin.apiKeys.empty.title" = "No API keys";
+"admin.apiKeys.empty.subtitle" = "Create a key to let an external client connect to the server.";
+"admin.apiKeys.list" = "Active keys";
+"admin.apiKeys.create" = "Create key";
+"admin.apiKeys.warning.title" = "These keys are as powerful as an admin password.";
+"admin.apiKeys.warning.message" = "Anyone who holds one of these keys has full administrator access to the server. Don't share them, and revoke any key you think might be compromised.";
+"admin.apiKeys.thisSession" = "CURRENT SESSION";
+"admin.apiKeys.createdOn" = "Created %@";
+"admin.apiKeys.hide" = "Hide key";
+"admin.apiKeys.reveal" = "Reveal key";
+"admin.apiKeys.copy" = "Copy key";
+"admin.apiKeys.copied" = "Key copied";
+"admin.apiKeys.revoke" = "Revoke";
+"admin.apiKeys.revoke.title" = "Revoke this key?";
+"admin.apiKeys.revoke.message" = "Clients using \"%@\" will lose access to the server immediately. This cannot be undone.";
+"admin.apiKeys.revoke.confirm" = "Revoke";
+"admin.apiKeys.revoke.success" = "Key revoked";
+"admin.apiKeys.create.title" = "New API key";
+"admin.apiKeys.create.appName" = "Application name";
+"admin.apiKeys.create.appNamePlaceholder" = "e.g. my-backup-script";
+"admin.apiKeys.create.hint" = "Pick a descriptive name so you can identify the key later.";
+"admin.apiKeys.create.submit" = "Create key";
+"admin.apiKeys.created.title" = "Key created";
+"admin.apiKeys.created.message" = "Copy this key now and store it in a password manager. It will remain visible in the list, but treating it as a secret is the right practice.";
+"admin.apiKeys.created.tokenLabel" = "Key value";
+"admin.apiKeys.created.copy" = "Copy key";
+"admin.apiKeys.created.reminder" = "Never send it over unencrypted email or SMS.";
+
+// MARK: - Admin — Network
+
+"admin.network.warning" = "A wrong configuration can make the server unreachable from this app. Make sure you have another admin path before saving.";
+"admin.network.ports.title" = "Ports";
+"admin.network.ports.footer" = "Public ports should match the external port mapped on your router if the server is exposed to the internet.";
+"admin.network.internalHTTP" = "Internal HTTP";
+"admin.network.internalHTTPS" = "Internal HTTPS";
+"admin.network.publicHTTP" = "Public HTTP";
+"admin.network.publicHTTPS" = "Public HTTPS";
+"admin.network.urls.title" = "Base URL";
+"admin.network.urls.footer" = "Use when the server is behind a reverse proxy at a sub-path.";
+"admin.network.baseURL" = "Base path";
+"admin.network.lan.title" = "Local network";
+"admin.network.lan.footer" = "CIDR blocks, comma-separated. Clients on these subnets are treated as local.";
+"admin.network.lanSubnets" = "Local subnets";
+"admin.network.features.title" = "Options";
+"admin.network.autoDiscovery" = "Auto-discovery";
+"admin.network.upnp" = "UPnP";
+"admin.network.remoteAccess" = "Remote access";
+"admin.network.requireHTTPS" = "Require HTTPS";
+"admin.network.advanced.title" = "Advanced (read-only)";
+"admin.network.advanced.footer" = "Edit from the web admin or the server configuration file.";
+"admin.network.certPath" = "Certificate path";
+"admin.network.knownProxies" = "Known proxies";
+"admin.network.remoteIPFilter" = "Remote IP filter";
+"admin.network.virtualInterfaces" = "Ignored virtual interfaces";
+"admin.network.saveWarning.title" = "Apply network changes?";
+"admin.network.saveWarning.message" = "The wrong settings can make the server unreachable from this device. Confirm you have another way to administer the server before continuing.";
+"admin.network.saveWarning.confirm" = "Save";
+"admin.network.save.success" = "Network configuration saved";
+
+// MARK: - Admin — Logs
+
+"admin.logs.empty.title" = "No logs";
+"admin.logs.empty.subtitle" = "Server log files will appear here.";
+"admin.logs.truncated" = "Showing the last %@ of %@. Full logs are available in the web admin.";
+
+// MARK: - Admin — Metadata (shared)
+
+"admin.metadata.browser.pickLibrary" = "Pick a library";
+"admin.metadata.browser.empty.title" = "No libraries";
+"admin.metadata.browser.empty.subtitle" = "Create a library from the web admin to get started.";
+"admin.metadata.browser.items.empty.title" = "No items";
+"admin.metadata.browser.items.searchPrompt" = "Search a title";
+
+"admin.metadata.tab.general" = "General";
+"admin.metadata.tab.images" = "Images";
+"admin.metadata.tab.cast" = "Cast";
+"admin.metadata.tab.identify" = "Identify";
+"admin.metadata.tab.actions" = "Actions";
+"admin.metadata.save.success" = "Metadata saved";
+
+"admin.metadata.chip.remove" = "Remove";
+"admin.metadata.kv.remove" = "Remove entry";
+
+// MARK: - Admin — Metadata / General
+
+"admin.metadata.general.titles" = "Titles";
+"admin.metadata.general.name" = "Name";
+"admin.metadata.general.originalTitle" = "Original title";
+"admin.metadata.general.sortName" = "Sort name";
+"admin.metadata.general.forcedSortName" = "Forced sort name";
+"admin.metadata.general.overview" = "Overview";
+"admin.metadata.general.taglines" = "Taglines";
+"admin.metadata.general.addTagline" = "Add a tagline";
+"admin.metadata.general.releaseInfo" = "Dates";
+"admin.metadata.general.year" = "Year";
+"admin.metadata.general.premiereDate" = "Premiere";
+"admin.metadata.general.endDate" = "End date";
+"admin.metadata.general.setDate" = "Set";
+"admin.metadata.general.ratings" = "Ratings";
+"admin.metadata.general.officialRating" = "Official";
+"admin.metadata.general.customRating" = "Custom";
+"admin.metadata.general.communityRating" = "Community rating";
+"admin.metadata.general.genresTags" = "Genres & tags";
+"admin.metadata.general.chipHint" = "Tap × to remove an entry, + to add a new one.";
+"admin.metadata.general.genres" = "Genres";
+"admin.metadata.general.addGenre" = "Add a genre";
+"admin.metadata.general.tags" = "Tags";
+"admin.metadata.general.addTag" = "Add a tag";
+"admin.metadata.general.studios" = "Studios";
+"admin.metadata.general.addStudio" = "Add a studio";
+"admin.metadata.general.providerIds" = "Provider IDs";
+"admin.metadata.general.providerIds.footer" = "Common keys: Imdb, Tmdb, Tvdb, MusicBrainzAlbum.";
+
+// MARK: - Admin — Metadata / Images
+
+"admin.metadata.images.primary" = "Primary (poster)";
+"admin.metadata.images.backdrop" = "Backdrops";
+"admin.metadata.images.logo" = "Logo";
+"admin.metadata.images.thumb" = "Thumbnail";
+"admin.metadata.images.banner" = "Banner";
+"admin.metadata.images.disc" = "Disc art";
+"admin.metadata.images.art" = "Art";
+"admin.metadata.images.backdrop.footer" = "Jellyfin supports multiple backdrops. The player picks one to display.";
+"admin.metadata.images.backdrop.empty" = "No backdrops";
+"admin.metadata.images.add" = "Add";
+"admin.metadata.images.replace" = "Replace";
+"admin.metadata.images.delete" = "Delete";
+"admin.metadata.images.delete.title" = "Delete this image?";
+"admin.metadata.images.delete.confirm" = "Delete";
+"admin.metadata.images.delete.success" = "Image deleted";
+"admin.metadata.images.add.title" = "Add image";
+"admin.metadata.images.add.description" = "The server will download the image from this URL and attach it as \"%@\".";
+"admin.metadata.images.add.urlLabel" = "Image URL";
+"admin.metadata.images.add.submit" = "Download image";
+"admin.metadata.images.add.success" = "Image downloaded";
+
+// MARK: - Admin — Metadata / Cast
+
+"admin.metadata.cast.title" = "Cast & crew";
+"admin.metadata.cast.footer" = "Swipe left on a row to remove someone.";
+"admin.metadata.cast.empty" = "No cast recorded.";
+"admin.metadata.cast.addPerson" = "Add person";
+"admin.metadata.cast.editPerson" = "Edit person";
+"admin.metadata.cast.remove" = "Remove";
+"admin.metadata.cast.name" = "Name";
+"admin.metadata.cast.namePlaceholder" = "Full name";
+"admin.metadata.cast.role" = "Role";
+"admin.metadata.cast.rolePlaceholder" = "Character or role";
+"admin.metadata.cast.kind" = "Kind";
+"admin.metadata.cast.kind.actor" = "Actor";
+"admin.metadata.cast.kind.director" = "Director";
+"admin.metadata.cast.kind.writer" = "Writer";
+"admin.metadata.cast.kind.producer" = "Producer";
+"admin.metadata.cast.kind.composer" = "Composer";
+"admin.metadata.cast.kind.guestStar" = "Guest star";
+"admin.metadata.cast.save" = "Save";
+
+// MARK: - Admin — Identify (standalone + tab)
+
+"admin.identify.title" = "Identify";
+"admin.identify.prompt" = "Enter one or more search criteria. Remove criteria to broaden search results.";
+"admin.identify.path" = "Path";
+"admin.identify.criteriaHeader" = "Search criteria";
+"admin.identify.name" = "Name";
+"admin.identify.year" = "Year";
+"admin.identify.imdbId" = "IMDb ID";
+"admin.identify.tmdbFilmId" = "TheMovieDb Film ID";
+"admin.identify.tmdbCollectionId" = "TheMovieDb Collection ID";
+"admin.identify.tmdbSeriesId" = "TheMovieDb ID";
+"admin.identify.tvdbId" = "TheTVDb ID";
+"admin.identify.search" = "Search";
+"admin.identify.results" = "Search results";
+"admin.identify.noResults.title" = "No results";
+"admin.identify.noResults.subtitle" = "Try different criteria or a provider ID.";
+"admin.identify.applyConfirm.title" = "Confirm";
+"admin.identify.replaceImages" = "Replace existing images";
+"admin.identify.replaceImages.hint" = "Turn off to keep your custom artwork. Text metadata is overwritten regardless.";
+"admin.identify.apply.success" = "Metadata applied";
+"admin.identify.unsupported" = "Automatic identify isn't available for this item kind.";
+
+// MARK: - Admin — Item Menu (3-dot on detail + poster cards)
+
+"admin.item.menu" = "Admin";
+"admin.item.identify" = "Identify";
+"admin.item.editMetadata" = "Edit metadata";
+"admin.item.refreshMetadata" = "Refresh metadata";
+"admin.item.delete" = "Delete media";
+
+// MARK: - Admin — Metadata / Actions
+
+"admin.metadata.actions.refresh.title" = "Refresh from providers";
+"admin.metadata.actions.refresh.footer" = "Runs a metadata + image refresh against the providers configured server-side.";
+"admin.metadata.actions.refresh.metadataMode" = "Metadata mode";
+"admin.metadata.actions.refresh.imageMode" = "Image mode";
+"admin.metadata.actions.refresh.replaceMetadata" = "Replace all metadata";
+"admin.metadata.actions.refresh.replaceImages" = "Replace all images";
+"admin.metadata.actions.refresh.submit" = "Start refresh";
+"admin.metadata.actions.refresh.success" = "Refresh started";
+"admin.metadata.actions.refresh.mode.none" = "None";
+"admin.metadata.actions.refresh.mode.validation" = "Validation only";
+"admin.metadata.actions.refresh.mode.default" = "Default";
+"admin.metadata.actions.refresh.mode.full" = "Full";
+"admin.metadata.actions.delete.title" = "Danger zone";
+"admin.metadata.actions.delete.footer" = "Deleting removes the item from the library. Depending on server policy, the underlying files may also be erased.";
+"admin.metadata.delete.title" = "Delete item";
+"admin.metadata.delete.message" = "\"%@\" will be removed from the library. This can't be undone.";
+"admin.metadata.delete.confirm" = "Delete permanently";
+"admin.metadata.delete.success" = "Item deleted";
 
 // MARK: - Debug
 

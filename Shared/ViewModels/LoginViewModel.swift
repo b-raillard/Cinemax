@@ -33,6 +33,12 @@ final class LoginViewModel {
             password = ""
             showSuccess = true
 
+            // Hydrate admin flag + full user before flipping isAuthenticated,
+            // so Settings (and the admin "Edit metadata" button on MediaDetail)
+            // renders correctly from first paint instead of flashing non-admin
+            // UI and then swapping.
+            await appState.refreshCurrentUser()
+
             try? await Task.sleep(for: .seconds(1))
 
             appState.isAuthenticated = true
