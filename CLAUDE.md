@@ -385,3 +385,18 @@ xcodebuild build -project Cinemax.xcodeproj -scheme CinemaxTV -destination 'plat
 # Regenerate Xcode project
 cd Cinemax && xcodegen generate
 ```
+
+## Claude Code automations (`.claude/`)
+
+Project-shared config — checked into git. Per-developer overrides go in `.claude/settings.local.json` (gitignored).
+
+- **Hooks** (`.claude/settings.json`):
+  - `PreToolUse` blocks edits to `Cinemax.xcodeproj/project.pbxproj` (XcodeGen output — edit `project.yml` instead).
+  - `PostToolUse` auto-runs `xcodegen generate` after any edit to `project.yml`.
+- **Skills** (`.claude/skills/`):
+  - `localize-check` — diffs FR/EN `Localizable.strings` keys + greps `Shared/` for hardcoded user-facing strings.
+  - `design-system-review` — runs the `docs/design-system/conventions.md` rejection checklist as grep sweeps on staged files.
+- **Subagents** (`.claude/agents/`):
+  - `tvos-focus-reviewer` — focus model, settings-row colorScheme injection, `AVPlayerViewController` rules, `transportBarCustomMenuItems` / `contextualActions` constraint, admin iOS-only gating.
+  - `swift6-concurrency-reviewer` — `@MainActor`, Sendable, the two documented `nonisolated` escape hatches, lock-protected `JellyfinClient` access, API protocol slicing.
+- **MCP servers** (`~/.claude.json` project scope): `context7` (live docs for Apple frameworks + jellyfin-sdk-swift + Nuke), `github` (PRs / issues / Actions — token sourced from `gh auth token`).
