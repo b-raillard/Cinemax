@@ -48,14 +48,6 @@ extension SettingsScreen {
                 .blur(radius: 280)
         }
         .task { await loadServerUsers() }
-        .alert(loc.localized("settings.switchAccount"), isPresented: $showSwitchAccountAlert) {
-            Button(loc.localized("settings.switchAccount")) {
-                showUserSwitch = true
-            }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        } message: {
-            Text(loc.localized("settings.switchAccountConfirm"))
-        }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
                 appState.logout()
@@ -624,7 +616,7 @@ extension SettingsScreen {
         let isFocused = focusedItem == .profile(userId)
 
         return Button {
-            if !isCurrentUser { showSwitchAccountAlert = true }
+            if !isCurrentUser { showUserSwitch = true }
         } label: {
             VStack(spacing: CinemaSpacing.spacing2) {
                 Group {
@@ -680,7 +672,7 @@ extension SettingsScreen {
         let isFocused = focusedItem == .switchAccount
 
         return Button {
-            showSwitchAccountAlert = true
+            showUserSwitch = true
         } label: {
             VStack(spacing: CinemaSpacing.spacing2) {
                 Image(systemName: "arrow.left.arrow.right")

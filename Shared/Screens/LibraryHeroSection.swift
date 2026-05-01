@@ -131,6 +131,12 @@ struct LibraryHeroSection: View {
             .fixedSize()
             #endif
         }
+        #if os(tvOS)
+        // Pair with `.focusSection()` on the library top bar so the focus
+        // engine can step up out of the hero's bottom-aligned button row to
+        // the sort/filter chips / tab bar above without getting trapped.
+        .focusSection()
+        #endif
     }
 
     private var heroMetadataText: some View {

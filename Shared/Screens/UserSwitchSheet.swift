@@ -178,8 +178,10 @@ struct UserSwitchSheet: View {
         isLoading = true
         defer { isLoading = false }
         // Prefer authenticated list when available (richer); fall back to public users.
+        // Admin's getUsers() returns hidden users too — filter them out so the
+        // switcher honors the per-user "Hide from login screens" policy.
         if let fetched = try? await appState.apiClient.getUsers(), !fetched.isEmpty {
-            users = fetched
+            users = fetched.filter { $0.policy?.isHidden != true }
             return
         }
         users = (try? await appState.apiClient.getPublicUsers()) ?? []

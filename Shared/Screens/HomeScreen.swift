@@ -289,6 +289,12 @@ struct HomeScreen: View {
                             .fixedSize()
                         }
                     }
+                    #if os(tvOS)
+                    // Discrete focus section so up-presses from Play / More Info
+                    // can escape the bottom-aligned overlay and reach the tab
+                    // bar instead of getting trapped inside the hero bounds.
+                    .focusSection()
+                    #endif
                 }
                 .padding(.horizontal, heroPadding)
                 .padding(.bottom, heroPadding + CinemaSpacing.spacing6)

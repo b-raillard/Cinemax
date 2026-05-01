@@ -158,7 +158,6 @@
 "settings.admin" = "Admin";
 "settings.user" = "User";
 "settings.switchAccount" = "Switch Account";
-"settings.switchAccountConfirm" = "You will be logged out and returned to the login screen.";
 "switchAccount.pickUser" = "Pick a user";
 "switchAccount.enterPasswordFor" = "Enter password for %@";
 "switchAccount.signIn" = "Sign In";

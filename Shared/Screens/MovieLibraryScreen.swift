@@ -270,6 +270,11 @@ struct MediaLibraryScreen: View {
             tvFilterSheetButton
         }
         .padding(.horizontal, CinemaSpacing.spacing20)
+        // Group sort/filter as a discrete focus section so up-presses from the
+        // hero's Play/More Info row reliably bridge the ~700pt of empty hero
+        // backdrop and land on the top bar (and ultimately escape upward to
+        // the tab bar) instead of getting absorbed by the hero's own bounds.
+        .focusSection()
     }
 
     /// Opens a `confirmationDialog` listing every sort field doubled by direction

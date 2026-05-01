@@ -391,35 +391,39 @@ struct MediaDetailScreen: View {
         let currentSeasonName = viewModel.seasons.first { $0.id == viewModel.selectedSeasonId }?.name
             ?? loc.localized("detail.season")
 
+        let showSeasonPicker = viewModel.seasons.count > 1
+
         return VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             #if os(tvOS)
-            // tvOS: horizontal scroll of season pills
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(viewModel.seasons, id: \.id) { season in
-                        let isSelected = season.id == viewModel.selectedSeasonId
-                        Button {
-                            if let id = season.id {
-                                Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
+            // tvOS: horizontal scroll of season pills (hidden when only one season)
+            if showSeasonPicker {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(viewModel.seasons, id: \.id) { season in
+                            let isSelected = season.id == viewModel.selectedSeasonId
+                            Button {
+                                if let id = season.id {
+                                    Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
+                                }
+                            } label: {
+                                Text(season.name ?? loc.localized("detail.season"))
+                                    .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
+                                    .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
+                                    .padding(.horizontal, CinemaSpacing.spacing3)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        isSelected
+                                            ? Capsule().fill(themeManager.accentContainer)
+                                            : Capsule().fill(CinemaColor.surfaceContainerHigh)
+                                    )
                             }
-                        } label: {
-                            Text(season.name ?? loc.localized("detail.season"))
-                                .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
-                                .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
-                                .padding(.horizontal, CinemaSpacing.spacing3)
-                                .padding(.vertical, 8)
-                                .background(
-                                    isSelected
-                                        ? Capsule().fill(themeManager.accentContainer)
-                                        : Capsule().fill(CinemaColor.surfaceContainerHigh)
-                                )
+                            .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
+                            .focusEffectDisabled()
+                            .hoverEffectDisabled()
                         }
-                        .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
-                        .focusEffectDisabled()
-                        .hoverEffectDisabled()
                     }
+                    .padding(.horizontal, contentPadding)
                 }
-                .padding(.horizontal, contentPadding)
             }
             // tvOS: vertical list of unified episode rows
             VStack(spacing: 12) {
@@ -429,32 +433,34 @@ struct MediaDetailScreen: View {
             }
             .padding(.horizontal, contentPadding)
             #else
-            // iOS: dropdown Menu for season selection
-            Menu {
-                ForEach(viewModel.seasons, id: \.id) { season in
-                    Button {
-                        if let id = season.id {
-                            Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
+            // iOS: dropdown Menu for season selection (hidden when only one season)
+            if showSeasonPicker {
+                Menu {
+                    ForEach(viewModel.seasons, id: \.id) { season in
+                        Button {
+                            if let id = season.id {
+                                Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
+                            }
+                        } label: {
+                            Text(season.name ?? loc.localized("detail.season"))
                         }
-                    } label: {
-                        Text(season.name ?? loc.localized("detail.season"))
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(currentSeasonName)
+                            .font(.system(size: seasonTabFontSize, weight: .bold))
+                            .foregroundStyle(themeManager.accent)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(themeManager.accent)
+                    }
+                    .padding(.horizontal, CinemaSpacing.spacing3)
+                    .padding(.vertical, 10)
+                    .background(CinemaColor.surfaceContainerHigh)
+                    .clipShape(Capsule())
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(currentSeasonName)
-                        .font(.system(size: seasonTabFontSize, weight: .bold))
-                        .foregroundStyle(themeManager.accent)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(themeManager.accent)
-                }
-                .padding(.horizontal, CinemaSpacing.spacing3)
-                .padding(.vertical, 10)
-                .background(CinemaColor.surfaceContainerHigh)
-                .clipShape(Capsule())
+                .padding(.horizontal, contentPadding)
             }
-            .padding(.horizontal, contentPadding)
             // iOS: horizontal scroll of episode cards
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 16) {

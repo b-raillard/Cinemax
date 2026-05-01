@@ -12,9 +12,9 @@ import CinemaxKit
 /// shared `AdminItemMenu` (Identifier / Edit metadata / Refresh / Delete).
 /// The admin menu is a `ZStack` sibling of the image `NavigationLink`, not
 /// nested inside its label — taps on the ellipsis hit the Menu, taps on the
-/// rest of the poster hit the link. The title/subtitle row has its own
-/// NavigationLink so the whole card still acts like a single card visually
-/// while each region owns its own hit target.
+/// rest of the poster hit the link. The title/subtitle row is plain text —
+/// not a separate focusable target — so tvOS focus moves directly between
+/// posters without an extra step landing on the label.
 struct LibraryPosterCard: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
@@ -61,15 +61,8 @@ struct LibraryPosterCard: View {
                 #endif
             }
 
-            NavigationLink {
-                if let id = item.id {
-                    MediaDetailScreen(itemId: id, itemType: itemType)
-                }
-            } label: {
-                titleRows(subtitle: subtitle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHidden(true)
+            titleRows(subtitle: subtitle)
+                .accessibilityHidden(true)
         }
     }
 

@@ -158,7 +158,6 @@
 "settings.admin" = "Admin";
 "settings.user" = "Utilisateur";
 "settings.switchAccount" = "Changer de compte";
-"settings.switchAccountConfirm" = "Vous serez déconnecté et redirigé vers l'écran de connexion.";
 "switchAccount.pickUser" = "Choisir un utilisateur";
 "switchAccount.enterPasswordFor" = "Mot de passe de %@";
 "switchAccount.signIn" = "Connexion";

@@ -129,7 +129,6 @@ struct SettingsScreen: View {
     #if os(tvOS)
     @FocusState var focusedItem: SettingsFocus?
     @State var serverUsers: [UserDto] = []
-    @State var showSwitchAccountAlert = false
     @State var showSleepTimerPicker = false
     @State var showLibraryLayoutPicker = false
     #endif
