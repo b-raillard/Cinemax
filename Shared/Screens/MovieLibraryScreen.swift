@@ -13,6 +13,10 @@ struct MediaLibraryScreen: View {
     #endif
     @State private var viewModel: MediaLibraryViewModel
     @State private var showSortFilter = false
+    #if os(tvOS)
+    @State private var showSortPicker = false
+    @AppStorage(SettingsKey.libraryTVBrowseLayout) private var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
+    #endif
 
     let itemType: BaseItemKind
 
@@ -48,6 +52,23 @@ struct MediaLibraryScreen: View {
         .sheet(isPresented: $showSortFilter) {
             makeSortFilterSheet()
         }
+        #else
+        // tvOS: use `.fullScreenCover`. `.sheet` renders as a narrow centered
+        // modal with a broken NavigationStack toolbar — see the bug we fixed
+        // by giving the sheet its own tvOS body in `LibrarySortFilterSheet`.
+        .fullScreenCover(isPresented: $showSortFilter) {
+            makeSortFilterSheet()
+                .environment(themeManager)
+                .environment(loc)
+        }
+        .confirmationDialog(loc.localized("sort.by"), isPresented: $showSortPicker, titleVisibility: .visible) {
+            ForEach(tvSortDirectionalOptions, id: \.id) { option in
+                Button(option.label) {
+                    viewModel.sortFilter.sortBy = option.value
+                    viewModel.sortFilter.sortAscending = option.ascending
+                }
+            }
+        }
         #endif
         .task {
             await viewModel.loadInitial(using: appState)
@@ -61,117 +82,87 @@ struct MediaLibraryScreen: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        #if os(tvOS)
-        tvMainContent
-        #else
-        if viewModel.sortFilter.isNonDefault {
+        if shouldShowFilteredView {
             filteredView
         } else {
             browseView
         }
+    }
+
+    /// Filtered grid is shown when:
+    /// - iOS: any non-default state (sort or filter)
+    /// - tvOS: any active *filter*, OR the user opted into the flat grid layout
+    ///   in Settings → Interface. Sort changes alone don't switch out of browse,
+    ///   matching the iOS default-sort browse experience.
+    private var shouldShowFilteredView: Bool {
+        #if os(tvOS)
+        if viewModel.sortFilter.isFiltered { return true }
+        return LibraryTVBrowseLayout(rawValue: libraryTVBrowseLayout) == .grid
+        #else
+        return viewModel.sortFilter.isNonDefault
         #endif
     }
 
-    // MARK: - tvOS Main Content (inline filter)
+    // MARK: Browse View (hero + genre rows + browse-genres grid)
 
-    #if os(tvOS)
-    private var tvMainContent: some View {
-        // ScrollViewReader so we can pop back to the top of the page (and reveal
-        // the tvOS top tab bar) whenever the screen reappears after a deep nav.
+    /// Shared between iOS and tvOS. tvOS additionally wraps the content in a
+    /// `ScrollViewReader` so we can scroll back to the `library.top` anchor
+    /// when the screen reappears (reveals the top tab bar after deep nav).
+    private var browseView: some View {
+        #if os(tvOS)
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: 0).id("library.top")
-
-                    tvFilterBar
-                        .padding(.bottom, CinemaSpacing.spacing6)
-
-                    if viewModel.sortFilter.isFiltered {
-                        // Filtered grid (genre selected)
-                        if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
-                            filteredLoadingState
-                        } else if viewModel.filteredLoader.items.isEmpty {
-                            filteredEmptyState
-                        } else {
-                            LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
-                                ForEach(viewModel.filteredLoader.items, id: \.id) { item in
-                                    LibraryPosterCard(item: item, itemType: itemType)
-                                        .onAppear { maybeLoadMore(triggerId: item.id) }
-                                }
-                            }
-                            .padding(.horizontal, CinemaSpacing.spacing20)
-
-                            if viewModel.filteredLoader.isLoadingMore {
-                                filteredPaginationFooter
-                            }
-                        }
-                    } else {
-                        // Browse genre rows
-                        ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
-                            if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
-                                LibraryGenreRow(genre: genre, items: items, itemType: itemType) {
-                                    viewModel.sortFilter.selectedGenres = [genre]
-                                }
-                                .padding(.bottom, CinemaSpacing.spacing6)
-                            }
-                        }
-
-                        if !viewModel.genres.isEmpty {
-                            browseGenresSection
-                                .padding(.bottom, CinemaSpacing.spacing6)
-                        }
-                    }
-
-                    Spacer(minLength: 80)
-                }
+                browseStack
             }
             .scrollClipDisabled()
-            .refreshable {
-                await viewModel.reload(using: appState)
-            }
+            .refreshable { await viewModel.reload(using: appState) }
             .task(id: viewModel.sortFilter) {
-                if viewModel.sortFilter.isFiltered {
-                    await viewModel.applyFilter(using: appState)
-                } else if !viewModel.genres.isEmpty {
+                if !viewModel.genres.isEmpty {
                     await viewModel.reloadGenreItems(using: appState)
                 }
             }
-            .onAppear {
-                proxy.scrollTo("library.top", anchor: .top)
-            }
+            .onAppear { proxy.scrollTo("library.top", anchor: .top) }
         }
-    }
-    #endif
-
-    // MARK: Browse View (iOS — genre rows + hero)
-
-    private var browseView: some View {
+        #else
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                if let hero = viewModel.heroItem {
-                    LibraryHeroSection(item: hero, itemType: itemType)
-                        .padding(.bottom, CinemaSpacing.spacing6)
-                }
-
-                ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
-                    if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
-                        LibraryGenreRow(genre: genre, items: items, itemType: itemType) {
-                            viewModel.sortFilter.selectedGenres = [genre]
-                        }
-                        .padding(.bottom, CinemaSpacing.spacing6)
-                    }
-                }
-
-                if !viewModel.genres.isEmpty {
-                    browseGenresSection
-                        .padding(.bottom, CinemaSpacing.spacing6)
-                }
-
-                Spacer(minLength: 80)
-            }
+            browseStack
         }
-        .refreshable {
-            await viewModel.reload(using: appState)
+        .refreshable { await viewModel.reload(using: appState) }
+        #endif
+    }
+
+    /// Vertical stack shared by iOS and tvOS browse views. tvOS prepends the
+    /// compact top bar (sort menu + filters button + count) so it sits above
+    /// the hero; iOS uses the navigation toolbar instead.
+    @ViewBuilder
+    private var browseStack: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            #if os(tvOS)
+            Color.clear.frame(height: 0).id("library.top")
+            tvTopBar
+                .padding(.bottom, CinemaSpacing.spacing4)
+            #endif
+
+            if let hero = viewModel.heroItem {
+                LibraryHeroSection(item: hero, itemType: itemType)
+                    .padding(.bottom, CinemaSpacing.spacing6)
+            }
+
+            ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
+                if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
+                    LibraryGenreRow(genre: genre, items: items, itemType: itemType) {
+                        viewModel.sortFilter.selectedGenres = [genre]
+                    }
+                    .padding(.bottom, CinemaSpacing.spacing6)
+                }
+            }
+
+            if !viewModel.genres.isEmpty {
+                browseGenresSection
+                    .padding(.bottom, CinemaSpacing.spacing6)
+            }
+
+            Spacer(minLength: 80)
         }
     }
 
@@ -189,10 +180,15 @@ struct MediaLibraryScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+                    #if os(tvOS)
+                    Color.clear.frame(height: 0).id("library.top")
+                    tvTopBar
+                    #else
                     Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredLoader.totalCount))
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .padding(.horizontal, gridPadding)
+                    #endif
 
                     if viewModel.filteredLoader.items.isEmpty && viewModel.filteredLoader.isLoadingMore {
                         filteredLoadingState
@@ -217,12 +213,18 @@ struct MediaLibraryScreen: View {
                 }
                 .padding(.top, CinemaSpacing.spacing3)
             }
+            #if os(tvOS)
+            .scrollClipDisabled()
+            #endif
             .refreshable {
                 await viewModel.reload(using: appState)
             }
             .task(id: viewModel.sortFilter) {
                 await viewModel.applyFilter(using: appState)
             }
+            #if os(tvOS)
+            .onAppear { proxy.scrollTo("library.top", anchor: .top) }
+            #endif
             #if os(iOS)
             .overlay(alignment: .trailing) {
                 if shouldShowJumpBar {
@@ -241,13 +243,17 @@ struct MediaLibraryScreen: View {
         }
     }
 
-    // MARK: - tvOS Inline Filter Bar
+    // MARK: - tvOS Compact Top Bar
 
     #if os(tvOS)
-    private var tvFilterBar: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            // Title row
-            HStack(alignment: .center) {
+    /// Compact top bar that replaces the previous full-screen filter wall:
+    /// title + count on the left, sort menu and filters button on the right.
+    /// Filter detail (chips for watch status / decade / genre) lives inside
+    /// the shared `LibrarySortFilterSheet` — one focusable button reaches
+    /// all of it, freeing the entire viewport for posters and the hero.
+    private var tvTopBar: some View {
+        HStack(alignment: .center, spacing: CinemaSpacing.spacing4) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(screenTitle)
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
@@ -256,215 +262,117 @@ struct MediaLibraryScreen: View {
                 Text(loc.localized("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredLoader.totalCount : viewModel.totalCount))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
-
-                Spacer()
             }
 
-            // Sort section
-            Text(loc.localized("sort.by"))
-                .font(CinemaFont.label(.large))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .textCase(.uppercase)
-                .tracking(0.8)
+            Spacer()
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(tvSortOptions, id: \.value.rawValue) { option in
-                        let isSelected = viewModel.sortFilter.sortBy == option.value
-                        Button {
-                            if isSelected {
-                                viewModel.sortFilter.sortAscending.toggle()
-                            } else {
-                                viewModel.sortFilter.sortBy = option.value
-                                viewModel.sortFilter.sortAscending = (option.value == .sortName || option.value == .communityRating)
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(option.label)
-                                    .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
-                                if isSelected {
-                                    Image(systemName: viewModel.sortFilter.sortAscending ? "arrow.up" : "arrow.down")
-                                        .font(.system(size: CinemaScale.pt(14), weight: .bold))
-                                }
-                            }
-                            .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(
-                                isSelected
-                                    ? themeManager.accentContainer
-                                    : CinemaColor.surfaceContainerHigh
-                            )
-                            .clipShape(Capsule())
-                        }
-                        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                        .focusEffectDisabled()
-                        .hoverEffectDisabled()
-                    }
-                }
-            }
-            .scrollClipDisabled()
-
-            // Watch Status section
-            Text(loc.localized("filter.watchStatus"))
-                .font(CinemaFont.label(.large))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .textCase(.uppercase)
-                .tracking(0.8)
-
-            HStack(spacing: 10) {
-                let isSelected = viewModel.sortFilter.showUnwatchedOnly
-                Button {
-                    viewModel.sortFilter.showUnwatchedOnly.toggle()
-                } label: {
-                    Text(loc.localized("filter.unwatchedOnly"))
-                        .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
-                        .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .background(
-                            isSelected
-                                ? themeManager.accentContainer
-                                : CinemaColor.surfaceContainerHigh
-                        )
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                .focusEffectDisabled()
-                .hoverEffectDisabled()
-            }
-
-            // Decade section
-            Text(loc.localized("filter.byDecade"))
-                .font(CinemaFont.label(.large))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .textCase(.uppercase)
-                .tracking(0.8)
-
-            FlowLayout(spacing: 10) {
-                ForEach(tvDecadeOptions, id: \.self) { decade in
-                    let isSelected = viewModel.sortFilter.selectedDecades.contains(decade)
-                    Button {
-                        if isSelected {
-                            viewModel.sortFilter.selectedDecades.remove(decade)
-                        } else {
-                            viewModel.sortFilter.selectedDecades.insert(decade)
-                        }
-                    } label: {
-                        Text(loc.localized("filter.decade", decade))
-                            .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
-                            .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(
-                                isSelected
-                                    ? themeManager.accentContainer
-                                    : CinemaColor.surfaceContainerHigh
-                            )
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                    .focusEffectDisabled()
-                    .hoverEffectDisabled()
-                }
-            }
-
-            // Genre section
-            if !viewModel.genres.isEmpty {
-                Text(loc.localized("filter.byGenre"))
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-
-                FlowLayout(spacing: 10) {
-                    // "All" chip
-                    let allSelected = viewModel.sortFilter.selectedGenres.isEmpty
-                    Button {
-                        viewModel.sortFilter.selectedGenres = []
-                    } label: {
-                        Text(loc.localized("tvShows.all"))
-                            .font(.system(size: CinemaScale.pt(18), weight: allSelected ? .bold : .medium))
-                            .foregroundStyle(allSelected ? themeManager.onAccent : CinemaColor.onSurface)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(
-                                allSelected
-                                    ? themeManager.accentContainer
-                                    : CinemaColor.surfaceContainerHigh
-                            )
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                    .focusEffectDisabled()
-                    .hoverEffectDisabled()
-
-                    ForEach(viewModel.genres, id: \.self) { genre in
-                        let isSelected = viewModel.sortFilter.selectedGenres.contains(genre)
-                        Button {
-                            if isSelected {
-                                viewModel.sortFilter.selectedGenres.remove(genre)
-                            } else {
-                                viewModel.sortFilter.selectedGenres.insert(genre)
-                            }
-                        } label: {
-                            Text(genre)
-                                .font(.system(size: CinemaScale.pt(18), weight: isSelected ? .bold : .medium))
-                                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 10)
-                                .background(
-                                    isSelected
-                                        ? themeManager.accentContainer
-                                        : CinemaColor.surfaceContainerHigh
-                                )
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                        .focusEffectDisabled()
-                        .hoverEffectDisabled()
-                    }
-                }
-            }
-
-            // Reset button (refresh moved to Settings > Server > Refresh Catalogue)
-            if viewModel.sortFilter.isNonDefault {
-                HStack(spacing: 10) {
-                    Button {
-                        viewModel.sortFilter = LibrarySortFilterState()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: CinemaScale.pt(18), weight: .medium))
-                            Text(loc.localized("action.reset"))
-                                .font(.system(size: CinemaScale.pt(18), weight: .semibold))
-                        }
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(CinemaColor.surfaceContainerHigh)
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                    .focusEffectDisabled()
-                    .hoverEffectDisabled()
-                }
-            }
+            tvSortButton
+            tvFilterSheetButton
         }
         .padding(.horizontal, CinemaSpacing.spacing20)
     }
 
-    private var tvSortOptions: [(label: String, value: ItemSortBy)] {
-        [
-            (loc.localized("sort.dateAdded"), .dateCreated),
-            (loc.localized("sort.name"), .sortName),
-            (loc.localized("sort.releaseYear"), .productionYear),
-            (loc.localized("sort.rating"), .communityRating)
-        ]
+    /// Opens a `confirmationDialog` listing every sort field doubled by direction
+    /// (e.g. "Date Added ↓", "Date Added ↑"). Direction-as-separate-items keeps
+    /// the action one focused click away — re-tap-to-reverse never worked well
+    /// with remote navigation.
+    private var tvSortButton: some View {
+        Button {
+            showSortPicker = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: CinemaScale.pt(16), weight: .semibold))
+                Text(currentSortLabel)
+                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(CinemaColor.onSurface)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(CinemaColor.surfaceContainerHigh)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
     }
 
-    /// Decades offered as chips on tvOS, most-recent-first.
-    private var tvDecadeOptions: [Int] { [2020, 2010, 2000, 1990, 1980, 1970, 1960, 1950] }
+    /// Opens `LibrarySortFilterSheet` (full-screen overlay on tvOS). Active
+    /// state mirrors iOS: filled icon + accent background + numeric badge
+    /// when filters are applied.
+    private var tvFilterSheetButton: some View {
+        let isActive = viewModel.sortFilter.isFiltered
+        return Button {
+            showSortFilter = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal.decrease.circle\(isActive ? ".fill" : "")")
+                    .font(.system(size: CinemaScale.pt(16), weight: .semibold))
+                Text(loc.localized("library.filter.button"))
+                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                if isActive {
+                    Text("\(activeFilterCount)")
+                        .font(.system(size: CinemaScale.pt(14), weight: .bold))
+                        .foregroundStyle(themeManager.onAccent)
+                        .frame(minWidth: 22, minHeight: 22)
+                        .background(Circle().fill(CinemaColor.onSurface.opacity(0.25)))
+                }
+            }
+            .foregroundStyle(isActive ? themeManager.onAccent : CinemaColor.onSurface)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(isActive ? themeManager.accentContainer : CinemaColor.surfaceContainerHigh)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+    }
+
+    /// Sort options × direction. Each label encodes both, so the dialog is
+    /// flat and one focused click commits both sortBy and sortAscending.
+    private var tvSortDirectionalOptions: [(id: String, label: String, value: ItemSortBy, ascending: Bool)] {
+        let fields: [(label: String, value: ItemSortBy, ascendingFirst: Bool)] = [
+            (loc.localized("sort.dateAdded"), .dateCreated, false),       // newest first feels natural
+            (loc.localized("sort.name"), .sortName, true),                // A→Z first
+            (loc.localized("sort.releaseYear"), .productionYear, false),  // newest first
+            (loc.localized("sort.rating"), .communityRating, false)       // highest first
+        ]
+        var out: [(String, String, ItemSortBy, Bool)] = []
+        for f in fields {
+            let descLabel = "\(f.label) ↓"
+            let ascLabel = "\(f.label) ↑"
+            if f.ascendingFirst {
+                out.append((f.value.rawValue + ".asc", ascLabel, f.value, true))
+                out.append((f.value.rawValue + ".desc", descLabel, f.value, false))
+            } else {
+                out.append((f.value.rawValue + ".desc", descLabel, f.value, false))
+                out.append((f.value.rawValue + ".asc", ascLabel, f.value, true))
+            }
+        }
+        return out
+    }
+
+    /// Label shown on the sort button — current field + direction arrow.
+    private var currentSortLabel: String {
+        let fieldLabel: String
+        switch viewModel.sortFilter.sortBy {
+        case .dateCreated:     fieldLabel = loc.localized("sort.dateAdded")
+        case .sortName:        fieldLabel = loc.localized("sort.name")
+        case .productionYear:  fieldLabel = loc.localized("sort.releaseYear")
+        case .communityRating: fieldLabel = loc.localized("sort.rating")
+        default:               fieldLabel = loc.localized("sort.dateAdded")
+        }
+        return "\(fieldLabel) \(viewModel.sortFilter.sortAscending ? "↑" : "↓")"
+    }
+
+    /// Count of active filters shown as a numeric badge on the filters button.
+    private var activeFilterCount: Int {
+        viewModel.sortFilter.selectedGenres.count
+            + viewModel.sortFilter.selectedDecades.count
+            + (viewModel.sortFilter.showUnwatchedOnly ? 1 : 0)
+    }
     #endif
 
     // MARK: - Browse Genres Section
@@ -526,8 +434,13 @@ struct MediaLibraryScreen: View {
         Task { await viewModel.loadMoreFiltered(using: appState) }
     }
 
-    // MARK: - Filter Button
+    // MARK: - Filter Button (iOS toolbar)
 
+    #if os(iOS)
+    /// iOS 26 navigation-bar toolbar items are rendered with Liquid Glass
+    /// automatically — adding `.buttonStyle(.glass)` here would nest a glass
+    /// capsule inside the toolbar's own glass container. Active-state signal
+    /// is the `.fill` icon variant + accent tint on the label.
     @ViewBuilder
     private var filterButton: some View {
         let button = Button {
@@ -552,33 +465,15 @@ struct MediaLibraryScreen: View {
                     .frame(width: 20, height: 20)
                 }
             }
-            #if os(tvOS)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                viewModel.sortFilter.isNonDefault
-                    ? themeManager.accentContainer
-                    : CinemaColor.surfaceContainerHigh
-            )
-            .clipShape(Capsule())
-            #endif
         }
 
-        #if os(tvOS)
-        button.buttonStyle(CinemaTVButtonStyle(cinemaStyle: viewModel.sortFilter.isNonDefault ? .accent : .ghost))
-        #else
-        // iOS 26: navigation-bar toolbar items are rendered with Liquid Glass
-        // automatically — adding `.buttonStyle(.glass)` here would nest a glass
-        // capsule inside the toolbar's own glass container. Active-state signal
-        // is the `.fill` icon variant + accent tint on the label.
         if viewModel.sortFilter.isNonDefault {
             button.tint(themeManager.accent)
         } else {
             button
         }
-        #endif
     }
+    #endif
 
     // MARK: - Loading & Error
 
@@ -690,21 +585,10 @@ struct MediaLibraryScreen: View {
         #endif
     }
 
-    private var filterIconSize: CGFloat {
-        #if os(tvOS)
-        CinemaScale.pt(24)
-        #else
-        CinemaScale.pt(16)
-        #endif
-    }
-
-    private var filterLabelSize: CGFloat {
-        #if os(tvOS)
-        CinemaScale.pt(22)
-        #else
-        CinemaScale.pt(14)
-        #endif
-    }
+    #if os(iOS)
+    private var filterIconSize: CGFloat { CinemaScale.pt(16) }
+    private var filterLabelSize: CGFloat { CinemaScale.pt(14) }
+    #endif
 
     private var genreCardHeight: CGFloat {
         #if os(tvOS)

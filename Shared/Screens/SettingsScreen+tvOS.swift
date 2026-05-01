@@ -384,6 +384,7 @@ extension SettingsScreen {
 
                 tvSleepTimerRow
                 tvFontSizeRow
+                tvLibraryLayoutRow
             }
 
             // Home Page section
@@ -779,6 +780,47 @@ extension SettingsScreen {
     var tvLandingMinHeight: CGFloat { 720 }
 
     // MARK: - Sleep Timer Row (tvOS)
+
+    /// Library landing layout (browse vs flat grid). tvOS-only setting; iOS
+    /// always uses the browse view because the screen has a real toolbar.
+    var tvLibraryLayoutRow: some View {
+        let isFocused = focusedItem == .toggle("libraryLayout")
+        let selected = LibraryTVBrowseLayout(rawValue: libraryTVBrowseLayout) ?? .browse
+        return Button {
+            showLibraryLayoutPicker = true
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+                Text(loc.localized("settings.libraryLayout"))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                Text(loc.localized(selected == .browse ? "settings.libraryLayout.browse" : "settings.libraryLayout.grid"))
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle("libraryLayout"))
+        .confirmationDialog(loc.localized("settings.libraryLayout"), isPresented: $showLibraryLayoutPicker) {
+            ForEach(LibraryTVBrowseLayout.allCases) { option in
+                Button(loc.localized(option == .browse ? "settings.libraryLayout.browse" : "settings.libraryLayout.grid")) {
+                    libraryTVBrowseLayout = option.rawValue
+                }
+            }
+        }
+    }
 
     var tvSleepTimerRow: some View {
         let isFocused = focusedItem == .toggle("sleepTimer")

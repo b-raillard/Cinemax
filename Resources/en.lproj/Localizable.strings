@@ -44,6 +44,7 @@
 
 "movies.title" = "Movies";
 "movies.sortFilter" = "Sort & Filter";
+"library.filter.button" = "Filters";
 "movies.count" = "%d Movies";
 "movies.titles" = "%d titles";
 "sort.ascending" = "Ascending";
@@ -626,6 +627,9 @@
 "settings.homePage.genreRows" = "Genre Rows";
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
+"settings.libraryLayout" = "Library landing";
+"settings.libraryLayout.browse" = "Browse";
+"settings.libraryLayout.grid" = "Grid";
 
 // MARK: - Media Detail
 

@@ -90,7 +90,7 @@ Unified, parameterized by `BaseItemKind` (movies or series).
 **Sort & Filter** (`LibrarySortFilterState`):
 - Default: `dateCreated` descending. `isNonDefault` = sort or filter differs.
 - `isFiltered` = genre chips OR `showUnwatchedOnly` OR `selectedDecades` non-empty.
-- **Browse vs filtered**: browse (genre rows) when `!isFiltered`, regardless of sort. Any filter → flat grid.
+- **Browse vs filtered**: browse (hero + genre rows + browse-genres grid) when `!isFiltered`, regardless of sort. Any filter → flat grid. tvOS additionally honors `library.tvBrowseLayout` (`browse` default / `grid`) — set to `grid` forces the flat grid even with no filters.
 - Title count uses `isFiltered` (not `isNonDefault`) — sort-only changes don't affect count. `filteredTotalCount` when filtered else `totalCount`.
 - Sort change → `reloadGenreItems`; filter change → `applyFilter`.
 - `loadInitial` guarded by `hasLoaded` (prevents re-randomization on tab switch). `reload(using:)` bypasses — triggered by pull-to-refresh and `.cinemaxShouldRefreshCatalogue`.
@@ -99,7 +99,16 @@ Unified, parameterized by `BaseItemKind` (movies or series).
 - Unwatched → `filters: [.isUnplayed]`.
 - Decade: `selectedDecades: Set<Int>` (starting year). `expandedYears` explodes for `getItems(years:)`. UI: 1950s–2020s chips.
 
-**tvOS filter bar**: inline — sort pills + watch-status + decade + genre chips (`FlowLayout`) + Reset. `TVFilterChipButtonStyle`.
+**tvOS layout** (post-refactor): same hero + genre rows shape as iOS, with a compact top bar (`tvTopBar` in `MovieLibraryScreen.swift`) — title + count on the left, sort `confirmationDialog` button (8 directional options: field × ↑/↓) + Filters button on the right. The Filters button opens `LibrarySortFilterSheet` via **`.fullScreenCover`** (not `.sheet` — `.sheet` on tvOS 26 renders a narrow centered modal whose `NavigationStack` toolbar items show as broken white pills; `.fullScreenCover` is the only working full-bleed modal).
+
+**`LibrarySortFilterSheet`** has split bodies:
+- iOS: `NavigationStack` + toolbar Apply/Reset (existing pattern).
+- tvOS: explicit title at top, scrollable filter sections, sticky footer with two `CinemaButton`s — Reset (`.ghost` + `arrow.counterclockwise`) and Apply (`.accent` + `checkmark`). Sort section hidden on tvOS (sort lives in the top-bar `confirmationDialog`).
+- Per-section "Clear" lives **inline as a trailing chip** in the `FlowLayout` on tvOS (right-arrow from the last filter chip lands on it). iOS keeps the top-right text "Clear" (tappable, pointer-driven).
+
+**tvOS button styles** (`TVButtonStyles.swift`):
+- `TVFilterChipButtonStyle` — capsule chips (sort/decade/genre/clear). Press scales by 0.95.
+- `TVFilterRowButtonStyle` — full-width rectangular rows (`unwatchedSection`). **No press scale** — on a wide row, even small scale visibly shifts label/indicator sideways. Same accent stroke as the chip style but with `RoundedRectangle` border to match the row shape.
 
 **iOS jump bar**: `AlphabeticalJumpBar` (right edge, Contacts-style, `ultraThinMaterial`). `ScrollViewReader` + `proxy.scrollTo(firstItemID(for: letter))` + `UISelectionFeedbackGenerator`. Only when `sortBy == .sortName && sortAscending && items.count > 20`.
 
@@ -208,6 +217,7 @@ Every boolean toggle declared once as `SettingsToggleRow`, rendered on both plat
 | `home.showGenreRows` | `true` | All 4 genre rows |
 | `home.showWatchingNow` | `true` | Watching Now row |
 | `detail.showQualityBadges` | `true` | Quality pill row on `MediaDetailScreen` |
+| `library.tvBrowseLayout` | `"browse"` | tvOS-only. `browse` = hero + genre rows; `grid` = flat poster grid using default sort. Filter state still forces grid regardless. `LibraryTVBrowseLayout` enum |
 | `privacy.maxContentAge` | `0` | Rating ceiling (0=unrestricted; 10/12/14/16/18). Via `apiClient.applyContentRatingLimit` |
 | `debug.fastSleepTimer` | `false` | Overrides sleep to 15s |
 | `debug.showSkipToEnd` | `false` | "End" button seeking to `(duration − 15s)` |
