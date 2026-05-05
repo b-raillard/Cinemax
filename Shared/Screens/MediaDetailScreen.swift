@@ -125,7 +125,7 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private func backdropSection(_ item: BaseItemDto) -> some View {
         ZStack(alignment: .bottomLeading) {
-            if let backdropId = item.backdropItemID {
+            if item.hasBackdropImage, let backdropId = item.backdropItemID {
                 CinemaLazyImage(
                     url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
                     fallbackIcon: nil,
@@ -133,6 +133,9 @@ struct MediaDetailScreen: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityHidden(true)
+            } else {
+                BackdropFallbackView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             CinemaGradient.heroOverlay

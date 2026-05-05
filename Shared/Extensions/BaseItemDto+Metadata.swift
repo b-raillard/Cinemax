@@ -14,4 +14,14 @@ extension BaseItemDto {
     var backdropItemID: String? {
         parentBackdropItemID ?? seriesID ?? id
     }
+
+    /// True only when Jellyfin reports an actual backdrop tag (own or parent's).
+    /// Use this to decide between rendering a `CinemaLazyImage` backdrop vs the
+    /// `BackdropFallbackView`. `backdropItemID` always returns non-nil for items
+    /// with an `id`, so it can't be used as an availability check.
+    var hasBackdropImage: Bool {
+        if let tags = backdropImageTags, !tags.isEmpty { return true }
+        if let parentTags = parentBackdropImageTags, !parentTags.isEmpty { return true }
+        return false
+    }
 }

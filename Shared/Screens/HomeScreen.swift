@@ -190,13 +190,15 @@ struct HomeScreen: View {
             .frame(maxWidth: .infinity)
             .frame(height: heroHeight)
             .overlay {
-                if let backdropId = item.backdropItemID {
+                if item.hasBackdropImage, let backdropId = item.backdropItemID {
                     CinemaLazyImage(
                         url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
                     .accessibilityHidden(true)
+                } else {
+                    BackdropFallbackView()
                 }
             }
             .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }

@@ -28,13 +28,15 @@ struct LibraryHeroSection: View {
             .frame(maxWidth: .infinity)
             .frame(height: heroHeight)
             .overlay {
-                if let id = item.id {
+                if item.hasBackdropImage, let id = item.id {
                     CinemaLazyImage(
                         url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
                     .accessibilityHidden(true)
+                } else {
+                    BackdropFallbackView()
                 }
             }
             .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
