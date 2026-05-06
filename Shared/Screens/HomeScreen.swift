@@ -264,6 +264,7 @@ struct HomeScreen: View {
                             .buttonStyle(.plain)
                             #endif
                             .frame(width: playButtonWidth)
+                            .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
 
                             NavigationLink {
                                 MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
@@ -289,6 +290,7 @@ struct HomeScreen: View {
                             .buttonStyle(.plain)
                             #endif
                             .fixedSize()
+                            .accessibilityLabel(String(format: loc.localized("accessibility.moreInfoAbout"), item.name ?? ""))
                         }
                     }
                     #if os(tvOS)

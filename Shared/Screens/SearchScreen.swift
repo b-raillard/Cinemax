@@ -57,8 +57,12 @@ struct SearchScreen: View {
                 }
             }
             #else
+            // iOS: native `.searchable()` is the iOS 26 HIG-compliant pattern.
+            // The search field lives in the navigation bar (auto-presented by
+            // `Tab(role: .search)`) and integrates with system dictation,
+            // Spotlight, and keyboard. Voice search is exposed as a leading
+            // toolbar button. The body renders results / empty / listening states.
             VStack(spacing: 0) {
-                searchField
                 listeningLabel
                 resultContent
             }
@@ -68,16 +72,45 @@ struct SearchScreen: View {
             MediaDetailScreen(itemId: dest.id, itemType: dest.itemType)
         }
         #if os(iOS)
+        .navigationTitle(loc.localized("search.title"))
+        .searchable(
+            text: Bindable(viewModel).searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text(loc.localized("search.placeholder"))
+        )
+        .searchFocused($searchFieldFocused)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .onChange(of: viewModel.searchText) {
+            viewModel.search(using: appState)
+        }
+        .toolbar {
+            // Voice mic — trailing toolbar item, paired with the native search
+            // field's clear button. The mic is a separate `ToolbarItem` so it
+            // sits above the search drawer and isn't tied to the field's
+            // trailing accessory area.
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    viewModel.toggleListening(using: appState)
+                } label: {
+                    Image(systemName: viewModel.isListening ? "mic.fill" : "mic")
+                        .foregroundStyle(viewModel.isListening
+                                         ? themeManager.accent
+                                         : CinemaColor.onSurface)
+                }
+                .accessibilityLabel(viewModel.isListening
+                    ? loc.localized("accessibility.stopVoiceSearch")
+                    : loc.localized("accessibility.voiceSearch"))
+            }
+        }
         .background {
-            // ⌘F focuses the search field. Hidden button → keyboard-only affordance
-            // (the shortcut fires even though the button is off-screen).
+            // ⌘F focuses the search field. Hidden button → keyboard-only affordance.
             Button("") { searchFieldFocused = true }
                 .keyboardShortcut("f", modifiers: .command)
                 .opacity(0)
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
         }
-        .navigationTitle(loc.localized("search.title"))
         .alert(loc.localized("search.permissionRequired"), isPresented: Bindable(viewModel).showPermissionAlert) {
             Button(loc.localized("search.openSettings")) {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -223,7 +256,7 @@ struct SearchScreen: View {
     private var surpriseMePills: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
             Text(loc.localized("search.surpriseMePrompt"))
-                .font(CinemaFont.label(.medium))
+                .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
 
             HStack(spacing: CinemaSpacing.spacing3) {

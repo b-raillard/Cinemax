@@ -21,6 +21,15 @@ struct LibraryPosterCard: View {
 
     let item: BaseItemDto
     let itemType: BaseItemKind
+    #if os(iOS)
+    /// Caller-provided hook for the admin 3-dot menu's destination
+    /// selection. The card is rendered inside a lazy grid/row, so the
+    /// matching `navigationDestination(item:)` MUST live on a non-lazy
+    /// ancestor — the screen body. This callback bubbles the
+    /// `(item, destination)` pair up; the screen stores it in a
+    /// `@State AdminMenuPushIntent?` and hosts the destination there.
+    var onAdminAction: ((BaseItemDto, AdminItemMenu.Destination) -> Void)? = nil
+    #endif
 
     var body: some View {
         let subtitle = subtitleText
@@ -54,9 +63,14 @@ struct LibraryPosterCard: View {
 
                 #if os(iOS)
                 if appState.isAdministrator {
-                    AdminItemMenu(item: item)
-                        .background(Circle().fill(.ultraThinMaterial))
-                        .padding(CinemaSpacing.spacing2)
+                    AdminItemMenu(
+                        item: item,
+                        onSelectDestination: { dest in
+                            onAdminAction?(item, dest)
+                        }
+                    )
+                    .background(Circle().fill(.ultraThinMaterial))
+                    .padding(CinemaSpacing.spacing2)
                 }
                 #endif
             }

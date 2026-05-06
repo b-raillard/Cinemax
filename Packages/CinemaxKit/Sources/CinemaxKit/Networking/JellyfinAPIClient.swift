@@ -44,6 +44,11 @@ public final class JellyfinAPIClient: Sendable {
     nonisolated(unsafe) private var _jellyfinClient: JellyfinClient?
     nonisolated(unsafe) private var _serverURL: URL?
     nonisolated(unsafe) private var _maxContentAge: Int = 0
+    /// Fired by `notifyIfUnauthorized` whenever the Jellyfin SDK surfaces an
+    /// HTTP 401 from any session-scoped call. Set once at app launch by
+    /// `AppState.init()`; the closure must be `@Sendable` because it's
+    /// invoked from whatever actor the failing API call ran on.
+    nonisolated(unsafe) private var _onUnauthorized: (@Sendable () -> Void)?
     internal let cache = APICache()
 
     public init() {}
@@ -71,6 +76,41 @@ public final class JellyfinAPIClient: Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _maxContentAge
+    }
+
+    public func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        _onUnauthorized = callback
+    }
+
+    private func getOnUnauthorized() -> (@Sendable () -> Void)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _onUnauthorized
+    }
+
+    /// Inspects an error thrown from `client.send(...)` and fires the
+    /// unauthorized callback if the underlying HTTP status was 401.
+    /// `Get.APIError.unacceptableStatusCode(401)` is the canonical signal
+    /// from the Jellyfin SDK, but `Get` is not a direct CinemaxKit
+    /// dependency — only transitive via jellyfin-sdk-swift. Rather than
+    /// add a fourth package dependency just for one type cast, we match
+    /// on the error's textual representation. Get's APIError prints as
+    /// `"unacceptableStatusCode(401)"` and `URLError` for HTTP 401
+    /// surfaces NSURLErrorUserAuthenticationRequired (-1013). Either
+    /// signal fires the callback. Called from the catch block of every
+    /// session-scoped public method that surfaces results to the UI;
+    /// fire-and-forget reporters in `+Playback.swift` skip it because
+    /// they swallow errors silently anyway.
+    internal func notifyIfUnauthorized(_ error: Error) {
+        let description = String(describing: error)
+        let isHTTP401 = description.contains("unacceptableStatusCode(401)")
+            || description.contains("(401)")
+        let isURLAuth = (error as NSError).code == NSURLErrorUserAuthenticationRequired
+        if isHTTP401 || isURLAuth {
+            getOnUnauthorized()?()
+        }
     }
 
     /// See `ServerAPI.applyContentRatingLimit`. Pushes the user's Privacy &

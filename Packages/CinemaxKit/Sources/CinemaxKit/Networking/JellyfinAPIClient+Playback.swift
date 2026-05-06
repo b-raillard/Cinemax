@@ -10,6 +10,15 @@ extension JellyfinAPIClient {
     /// 2. POST PlaybackInfo with device profile
     /// 3. Build stream URL from response (transcodingURL or direct stream)
     public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000, audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil) async throws -> PlaybackInfo {
+        do {
+            return try await _getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: maxBitrate, audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex)
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?) async throws -> PlaybackInfo {
         guard let client = getClient(),
               let serverURL = getServerURL() else {
             throw JellyfinError.notConnected

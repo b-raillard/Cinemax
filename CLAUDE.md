@@ -9,6 +9,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 - **Swift 6** strict concurrency; `@Observable` + `@MainActor` for all state
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable
 - **iOS `NavigationStack` caveat**: destinations pushed via `navigationDestination(item:)` render in a separate context — `@Observable` changes won't re-render unless the destination is a standalone `View` struct with its own `@Environment` properties, not an extension method returning `some View`.
+- **Lazy-container navigation rule**: SwiftUI silently ignores `navigationDestination(item:)` placed inside `LazyVGrid`/`LazyVStack`/`LazyHStack`/`List` and emits a runtime warning ("Do not put a navigation destination modifier inside a 'lazy' container"). Hoist the modifier to a non-lazy ancestor; bubble action up via a callback that mutates a screen-level `@State`. Reference pattern: `AdminItemMenu` (no internal destination) → `LibraryPosterCard.onAdminAction` → `MovieLibraryScreen.adminPushIntent` (`@State`) + `.navigationDestination(item: $adminPushIntent) { adminMenuPushDestination(for: $0) }` on the body's outer `ZStack`. Same shape on `MediaDetailScreen`.
 
 ### iOS 26 / tvOS 26 API rules
 
@@ -24,6 +25,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 **Swift 6 `nonisolated` escape hatches** (safe when body only reads parameters):
 1. `View, Equatable` sub-type inside a `@MainActor` screen needs `nonisolated static func ==` — `Equatable` isn't main-actor-isolated. See `PlayActionButtonsSection` in `MediaDetailScreen.swift`.
 2. A `@MainActor` class's `static func` returning non-Sendable types into a `TaskGroup @Sendable` closure needs `nonisolated private static func`. See `HomeViewModel.fetchGenreItems`.
+3. A `nonisolated static func` on a `@MainActor` class that reads a `static let` constant needs the constant marked `nonisolated` too — Sendable types only (`Int`, `String`, etc.). See `SearchViewModel.sanitize` + `maxQueryLength`.
 
 ## Project Structure
 
@@ -67,6 +69,7 @@ docs/design-system/         Canonical design system reference
 - `AppNavigation` → Keychain session check → `apiClient.reconnect()` + `fetchServerInfo()`. Injects `ThemeManager`, `LocalizationManager`, `ToastCenter`; applies `.preferredColorScheme()` at root.
 - Flow: no server → `ServerSetupScreen` → `LoginScreen` → `MainTabView` (top tabs on tvOS, sidebar on iPad, bottom tabs on iPhone).
 - All play buttons use `PlayLink<Label>` (Button+coordinator on tvOS, `NavigationLink` on iOS) — never direct `NavigationLink` to `VideoPlayerView`.
+- **Session expiry / 401 recovery**: `JellyfinAPIClient.setOnUnauthorized` (on `ServerAPI`) accepts a `@Sendable () -> Void` callback. `AppState.init` wires it to post `.cinemaxSessionExpired`; `AppNavigation` observes and runs `appState.logout()` + `session.expired` toast → user lands on `LoginScreen`. The 6 hot paths instrumented: `getResumeItems` / `getLatestMedia` / `getItems` / `getItem` / `searchItems` / `getPlaybackInfo` — each `do/catch`-wraps `client.send` and calls `notifyIfUnauthorized(error)`. Detection is string-match (`"unacceptableStatusCode(401)"` / `"(401)"` / `NSURLErrorUserAuthenticationRequired`) because `Get` is only a transitive dep — adding it as a direct dep just for one type cast wasn't worth it. **Lazy** recovery: no eager validation on `.active`; the next failing call trips the interceptor.
 
 ## Server Setup & Login
 
@@ -155,7 +158,7 @@ Rendering:
 
 **Chapters** (tvOS only): from `BaseItemDto.chapters` → `AVPlayerItem.navigationMarkerGroups = [AVNavigationMarkersGroup(...)]`. Each marker carries `commonIdentifierTitle` + optional `commonIdentifierArtwork` (JPEG from `ImageURLBuilder.chapterImageURL(itemId:imageIndex:)`). `AVNavigationMarkersGroup` is tvOS-only; iOS path is `#if os(tvOS)` no-op.
 
-**Sleep timer**: `SleepTimerOption` enum (Off/15/30/45/60/90 min) via `@AppStorage("sleepTimerDefaultMinutes")`. `currentDefaultSeconds` returns 15s when `debug.fastSleepTimer` on. Moon-icon blur pill bottom-left. On fire: pauses + "Still watching?" — `UIAlertController` (tvOS), custom blur card (iOS).
+**Sleep timer**: `SleepTimerOption` enum (Off/15/30/45/60/90 min) via `@AppStorage("sleepTimerDefaultMinutes")`. `currentDefaultSeconds` returns 15s when `debug.fastSleepTimer` on. Moon-icon blur pill bottom-left. On fire: pauses + "Still watching?" — `UIAlertController` (tvOS), custom blur card (iOS). **PiP gating** (iOS): the controller's `isInPictureInPictureProvider` closure (wired by `NativeVideoPresenter` to its `isInPictureInPicture` flag, set by `IOSPlayerDelegate`) — when `true`, the timer pauses silently and skips the overlay (the prompt is unreachable from the floating PiP window). Wrapped in `#if os(iOS)`; tvOS uses the default `{ false }` provider since tvOS has no PiP. `AVPlayerViewController` does NOT expose a public `isPictureInPictureActive` — track it via the delegate, not the VC.
 
 **End-of-series completion**: `didPlayToEndTime` + autoplay + no next + `episodeNavigator != nil` → "You finished {Series Name}" overlay. `currentSeriesName` captured with the same `getItem` that fetches chapters.
 
@@ -247,7 +250,7 @@ Admin workflows mobile-only by product decision. `SettingsCategory.visibleCases(
 - `AdminFormScreen` — sticky `Sauvegarder` footer + `interactiveDismissDisabled(isDirty)` + discard-changes confirmation. **Every admin editor uses explicit save (never auto-save)** — admin-scoped changes have blast radius (policy revocations, password resets).
 - `AdminTabBar` — horizontally-scrolling segmented pills.
 - `AdminSectionGroup` — iOS grouped-list section.
-- `AdminItemMenu` — shared `Menu` (ellipsis) for one `BaseItemDto`. Actions: Identifier / Edit metadata / Refresh (fire-and-forget) / Delete (via `DestructiveConfirmSheet`). Hosts its own `.navigationDestination(item:)` so actions push onto the ambient `NavigationStack`. Mounted on `MediaDetailScreen` (Admin pill next to Play) and `LibraryPosterCard` overlay.
+- `AdminItemMenu` — shared `Menu` (ellipsis) for one `BaseItemDto`. Actions: Identifier / Edit metadata / Refresh (fire-and-forget) / Delete (via `DestructiveConfirmSheet`). **Does NOT host its own `.navigationDestination`** (would be silently ignored — its hosts live inside lazy containers; see "Lazy-container navigation rule"). Fires `onSelectDestination(_:)`; callers store the result in `@State AdminMenuPushIntent?` and host `adminMenuPushDestination(for:)` on a non-lazy ancestor. `LibraryPosterCard` and `LibraryGenreRow` forward via an optional `onAdminAction` closure. Mounted on `MediaDetailScreen` (Admin pill next to Play) and `LibraryPosterCard` overlay.
 - `DestructiveConfirmSheet` — type-to-confirm sheet reserved for truly irreversible ops (delete user, delete item). Reversible destructives (revoke device, uninstall plugin) use `.confirmationDialog` with `.destructive` role.
 
 **Shared** — `UserAvatar` (primary image + accent-gradient+initial fallback). `CinemaLazyImage.fallbackBackground = .clear` lets gradient show through on 404/loading.
@@ -396,6 +399,12 @@ xcodebuild build -project Cinemax.xcodeproj -scheme CinemaxTV -destination 'plat
 # Regenerate Xcode project
 cd Cinemax && xcodegen generate
 ```
+
+**Build verification gotchas**:
+- Always pair pipes with `set -o pipefail` (`set -o pipefail; xcodebuild ... | grep ...`) — without it, `tail`/`grep` swallow xcodebuild's exit code and a failed build returns 0. Confirm by reading the output for `** BUILD SUCCEEDED **` / `** BUILD FAILED **`, not just the shell exit.
+- Don't run iOS + tvOS builds in parallel against the same DerivedData — they race on `build.db` ("database is locked"). Run serially.
+
+**Versioning**: `iOS/Info.plist` and `tvOS/Info.plist` use `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` substitutions — `project.yml` `settings.base` is the single source of truth. Bump `MARKETING_VERSION` per user-visible release; bump `CURRENT_PROJECT_VERSION` per archive/upload.
 
 ## Claude Code automations (`.claude/`)
 

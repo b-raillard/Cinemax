@@ -294,7 +294,7 @@ struct MetadataGeneralTab: View {
                     .keyboardType(.decimalPad)
                     .font(CinemaFont.body)
                     .foregroundStyle(CinemaColor.onSurface)
-                Text("/ 10")
+                Text(loc.localized("admin.metadata.ratingDenominator"))
                     .font(CinemaFont.label(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }

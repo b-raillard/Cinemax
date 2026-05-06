@@ -46,12 +46,22 @@ struct VideoPlayerView: View {
                 }
             }
             #else
-            // tvOS: VideoPlayerView is not used directly — playback goes through VideoPlayerCoordinator.
-            // This branch should not be reached in normal flow.
+            // tvOS: VideoPlayerView is normally bypassed — playback goes through
+            // VideoPlayerCoordinator. This branch can still be reached if a
+            // future code path mounts VideoPlayerView directly, so render a
+            // styled error card matching the iOS pattern instead of leaking a
+            // raw NSError string onto a black screen.
             if let error = errorMessage {
-                Text(error).foregroundStyle(.white)
+                tvOSErrorView(error: error)
             } else {
-                ProgressView().tint(.white)
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.5)
+                    Text(loc.localized("player.preparing"))
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                }
             }
             #endif
         }
@@ -114,6 +124,29 @@ struct VideoPlayerView: View {
                 Task { await startIOSPlayback() }
             }
             .frame(width: 160)
+        }
+    }
+    #endif
+
+    #if os(tvOS)
+    /// Mirror of `iOSErrorView` for the tvOS fallback path. Same shape, larger
+    /// type for couch-distance reading. No retry — tvOS playback is owned by
+    /// `VideoPlayerCoordinator`, so the only sensible action here is to back
+    /// out via the Menu button.
+    private func tvOSErrorView(error: String) -> some View {
+        VStack(spacing: CinemaSpacing.spacing4) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: CinemaScale.pt(64)))
+                .foregroundStyle(CinemaColor.error)
+            Text(error)
+                .font(CinemaFont.body)
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 600)
+                .padding(.horizontal, 48)
+            Text(loc.localized("player.tvOS.dismissHint"))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.outlineVariant)
         }
     }
     #endif

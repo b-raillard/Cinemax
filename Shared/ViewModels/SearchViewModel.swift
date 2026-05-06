@@ -196,9 +196,17 @@ final class SearchViewModel {
 
     // MARK: Text search
 
+    /// Defensive cap on search input — anything beyond this is almost
+    /// certainly noise (paste accident, malformed dictation), and Jellyfin's
+    /// search endpoint doesn't benefit from longer terms. Also bounds the
+    /// payload sent in the URL.
+    /// `nonisolated` so the matching `nonisolated static func sanitize`
+    /// can read it; `Int` is Sendable so this is safe.
+    nonisolated private static let maxQueryLength = 200
+
     func search(using appState: AppState) {
         searchTask?.cancel()
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = Self.sanitize(searchText)
 
         guard !query.isEmpty else {
             results = []
@@ -248,4 +256,23 @@ final class SearchViewModel {
         isListening = false
     }
     #endif
+
+    /// Trims whitespace, strips control / illegal chars, and caps length.
+    /// `BaseItemDto` search terms flow into a URL query string — keeping the
+    /// input bounded and printable is a small defense against pathological
+    /// values from voice dictation, paste, or future-untrusted sources.
+    /// `nonisolated` so it can be called from any context (matches the
+    /// documented escape hatch for pure-input/Sendable-output static funcs
+    /// on `@MainActor` types — see CLAUDE.md).
+    nonisolated private static func sanitize(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let stripped = trimmed.unicodeScalars
+            .filter { !CharacterSet.controlCharacters.contains($0) && !CharacterSet.illegalCharacters.contains($0) }
+        let cleaned = String(String.UnicodeScalarView(stripped))
+        if cleaned.count > maxQueryLength {
+            return String(cleaned.prefix(maxQueryLength))
+        }
+        return cleaned
+    }
 }

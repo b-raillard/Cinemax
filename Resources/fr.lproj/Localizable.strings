@@ -730,3 +730,22 @@
 "admin.metadata.delete.confirm" = "Supprimer définitivement";
 "admin.metadata.delete.success" = "Élément supprimé";
 
+
+// MARK: - Session expiry (lazy 401 recovery)
+
+"session.expired" = "Session expirée — veuillez vous reconnecter.";
+
+// MARK: - Player (tvOS dismiss hint)
+
+"player.tvOS.dismissHint" = "Appuyez sur Menu pour quitter.";
+
+// MARK: - Accessibility (added in v1.0 audit)
+
+"accessibility.playItem" = "Lire %@";
+"accessibility.moreInfoAbout" = "Plus d'informations sur %@";
+
+// MARK: - Admin — formatting glyphs
+
+"admin.plugins.versionLabel" = "v%@";
+"admin.dashboard.sessionClient" = "• %@";
+"admin.metadata.ratingDenominator" = "/ 10";

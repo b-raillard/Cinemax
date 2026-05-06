@@ -98,7 +98,7 @@ struct AdminPluginsScreen: View {
 
                     HStack(spacing: CinemaSpacing.spacing2) {
                         if let version = plugin.version {
-                            Text("v\(version)")
+                            Text(String(format: loc.localized("admin.plugins.versionLabel"), version))
                                 .font(CinemaFont.label(.small))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }

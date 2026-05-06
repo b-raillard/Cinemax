@@ -15,6 +15,11 @@ struct MediaDetailScreen: View {
     @State private var episodeOverview: EpisodeOverviewItem?
     #if os(iOS)
     @Environment(\.dismiss) private var dismiss
+    /// Lifted from `AdminItemMenu` so SwiftUI honors the destination —
+    /// `adminMenuPill` is rendered inside `detailContent`'s `LazyVStack`,
+    /// and `navigationDestination` placed inside lazy containers is
+    /// silently dropped by the runtime.
+    @State private var adminPushIntent: AdminMenuPushIntent?
     #endif
     @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
 
@@ -36,6 +41,11 @@ struct MediaDetailScreen: View {
         }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        // Hosted on the body's outer ZStack — eager — so the destination
+        // doesn't get swallowed by the `LazyVStack` inside `detailContent`.
+        .navigationDestination(item: $adminPushIntent) { intent in
+            adminMenuPushDestination(for: intent)
+        }
         #endif
         .task {
             await viewModel.load(using: appState)
@@ -352,7 +362,13 @@ struct MediaDetailScreen: View {
             Text(loc.localized("admin.item.menu"))
                 .font(.system(size: CinemaScale.pt(14), weight: .semibold))
                 .foregroundStyle(themeManager.accent)
-            AdminItemMenu(item: item, onItemDeleted: { dismiss() })
+            AdminItemMenu(
+                item: item,
+                onItemDeleted: { dismiss() },
+                onSelectDestination: { dest in
+                    adminPushIntent = AdminMenuPushIntent(item: item, destination: dest)
+                }
+            )
         }
         .padding(.leading, CinemaSpacing.spacing3)
         .padding(.trailing, CinemaSpacing.spacing1)

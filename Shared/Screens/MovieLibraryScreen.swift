@@ -13,6 +13,14 @@ struct MediaLibraryScreen: View {
     #endif
     @State private var viewModel: MediaLibraryViewModel
     @State private var showSortFilter = false
+    #if os(iOS)
+    /// Lifted from `AdminItemMenu` so `navigationDestination(item:)` can
+    /// live outside the lazy grid/row hosting the poster cards. The menu
+    /// fires `onSelectDestination(_:)` and the card forwards it via
+    /// `onAdminAction:` — we bind the resulting `AdminMenuPushIntent`
+    /// here and host the destination on the body's outer ZStack.
+    @State private var adminPushIntent: AdminMenuPushIntent?
+    #endif
     #if os(tvOS)
     @State private var showSortPicker = false
     @AppStorage(SettingsKey.libraryTVBrowseLayout) private var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
@@ -42,6 +50,13 @@ struct MediaLibraryScreen: View {
             }
         }
         #if os(iOS)
+        // Lifted out of `AdminItemMenu` so SwiftUI honors it — the menu's
+        // host (`LibraryPosterCard`) lives inside `LazyVGrid`/`LazyHStack`,
+        // and SwiftUI silently ignores `navigationDestination` placed
+        // inside lazy containers. The outer ZStack here is eager.
+        .navigationDestination(item: $adminPushIntent) { intent in
+            adminMenuPushDestination(for: intent)
+        }
         .navigationTitle(screenTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -150,10 +165,25 @@ struct MediaLibraryScreen: View {
 
             ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
                 if let items = viewModel.itemsByGenre[genre], !items.isEmpty {
+                    #if os(iOS)
+                    LibraryGenreRow(
+                        genre: genre,
+                        items: items,
+                        itemType: itemType,
+                        onViewAll: {
+                            viewModel.sortFilter.selectedGenres = [genre]
+                        },
+                        onAdminAction: { item, dest in
+                            adminPushIntent = AdminMenuPushIntent(item: item, destination: dest)
+                        }
+                    )
+                    .padding(.bottom, CinemaSpacing.spacing6)
+                    #else
                     LibraryGenreRow(genre: genre, items: items, itemType: itemType) {
                         viewModel.sortFilter.selectedGenres = [genre]
                     }
                     .padding(.bottom, CinemaSpacing.spacing6)
+                    #endif
                 }
             }
 
@@ -197,9 +227,21 @@ struct MediaLibraryScreen: View {
                     } else {
                         LazyVGrid(columns: filteredColumns, spacing: gridSpacing) {
                             ForEach(viewModel.filteredLoader.items, id: \.id) { item in
+                                #if os(iOS)
+                                LibraryPosterCard(
+                                    item: item,
+                                    itemType: itemType,
+                                    onAdminAction: { item, dest in
+                                        adminPushIntent = AdminMenuPushIntent(item: item, destination: dest)
+                                    }
+                                )
+                                .id(item.id)
+                                .onAppear { maybeLoadMore(triggerId: item.id) }
+                                #else
                                 LibraryPosterCard(item: item, itemType: itemType)
                                     .id(item.id)
                                     .onAppear { maybeLoadMore(triggerId: item.id) }
+                                #endif
                             }
                         }
                         .padding(.horizontal, gridPadding)

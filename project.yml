@@ -21,6 +21,11 @@ settings:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: 1
+    # Distribution signing: Xcode auto-creates an "iOS App Store" / "tvOS App
+    # Store" provisioning profile on first archive when DEVELOPMENT_TEAM is set
+    # below. Override DEVELOPMENT_TEAM per-machine in Xcode (Signing & Capabilities)
+    # rather than committing it — open-source friendly.
+    CODE_SIGN_STYLE: Automatic
 
 targets:
   Cinemax:
@@ -41,6 +46,10 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIApplicationSupportsIndirectInputEvents: true
+        # App uses only standard HTTPS encryption — exempt from US export
+        # compliance. Auto-answers the App Store Connect questionnaire so we
+        # don't have to reconfirm it on every TestFlight upload.
+        ITSAppUsesNonExemptEncryption: false
         # AirPlay to Apple TV / external speakers needs both `audio` (keeps
         # playback alive when the iPhone is locked mid-cast) and `airplay`.
         UIBackgroundModes:
@@ -89,6 +98,8 @@ targets:
           NSAllowsArbitraryLoadsForMedia: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # Standard HTTPS encryption only — exempt from US export compliance.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers on your Wi-Fi."
     settings:

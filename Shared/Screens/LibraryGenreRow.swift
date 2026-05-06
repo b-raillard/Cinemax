@@ -11,6 +11,13 @@ struct LibraryGenreRow: View {
     let items: [BaseItemDto]
     let itemType: BaseItemKind
     let onViewAll: () -> Void
+    #if os(iOS)
+    /// Forwarded to each `LibraryPosterCard` in the row. The row itself
+    /// is rendered inside `ContentRow`'s `LazyHStack`, so it cannot host
+    /// `navigationDestination(item:)` either. See `AdminItemMenu` for
+    /// the contract.
+    var onAdminAction: ((BaseItemDto, AdminItemMenu.Destination) -> Void)? = nil
+    #endif
 
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -24,8 +31,13 @@ struct LibraryGenreRow: View {
             data: items,
             id: \.id
         ) { item in
+            #if os(iOS)
+            LibraryPosterCard(item: item, itemType: itemType, onAdminAction: onAdminAction)
+                .frame(width: posterCardWidth)
+            #else
             LibraryPosterCard(item: item, itemType: itemType)
                 .frame(width: posterCardWidth)
+            #endif
         }
     }
 

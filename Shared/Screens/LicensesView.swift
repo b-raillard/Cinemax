@@ -10,7 +10,7 @@ struct LicensesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                     Text(loc.localized("settings.licenses.description"))
-                        .font(CinemaFont.body)
+                        .font(CinemaFont.dynamicBody)
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .padding(.bottom, CinemaSpacing.spacing2)
 
@@ -115,6 +115,12 @@ struct LicensesView: View {
                 version: "2.2.1",
                 url: "github.com/kean/Get",
                 text: "Copyright (c) Alexander Grebenyuk\n\n" + mitLicense
+            ),
+            OSSLicense(
+                name: "URLQueryEncoder",
+                version: "0.2.1",
+                url: "github.com/CreateAPI/URLQueryEncoder",
+                text: "Copyright (c) CreateAPI\n\n" + mitLicense
             ),
         ]
     }
