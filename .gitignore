@@ -12,3 +12,7 @@ xcuserdata/
 
 # Swift Package Manager
 .swiftpm/
+
+# Claude Code (per-developer overrides only — shared config is checked in)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

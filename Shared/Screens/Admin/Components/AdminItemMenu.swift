@@ -8,10 +8,14 @@ import CinemaxKit
 /// four actions (Identifier / Edit metadata / Refresh metadata / Delete
 /// media) map onto existing admin endpoints.
 ///
-/// Hosts its own `navigationDestination(item:)` so picking an action from
-/// the menu pushes the corresponding admin screen onto the surrounding
-/// NavigationStack. Callers wrap the menu in whatever label they want
-/// (an ellipsis toolbar button, a blur-circle overlay on a poster card, …).
+/// **Navigation contract**: the menu does NOT host its own
+/// `navigationDestination(item:)`. SwiftUI silently ignores destination
+/// modifiers placed inside lazy containers (`LazyVGrid`/`LazyHStack`/
+/// `LazyVStack`/`List`), and `LibraryPosterCard` — the menu's main
+/// caller — is rendered inside the library `LazyVGrid`. Instead, the
+/// menu fires `onSelectDestination(_:)` and the caller stores the result
+/// in a `@State AdminMenuPushIntent?` hosted on the screen body (outside
+/// the lazy container) and binds `.navigationDestination(item:)` there.
 ///
 /// Refresh uses the server's default mode (no "replace all" flags); power
 /// users reach the full refresh-options form via Edit metadata → Actions.
@@ -23,12 +27,16 @@ struct AdminItemMenu: View {
     /// the item from a local list. Nil by default — callers that rely on
     /// the `.cinemaxShouldRefreshCatalogue` broadcast can skip this.
     var onItemDeleted: (() -> Void)? = nil
+    /// Fired when the user picks a menu action that requires pushing a
+    /// new screen (Identify / Edit metadata). The caller stores the value
+    /// in an `@State AdminMenuPushIntent?` and hosts the matching
+    /// `navigationDestination` on a non-lazy ancestor.
+    var onSelectDestination: (Destination) -> Void
 
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
 
-    @State private var destination: Destination?
     @State private var showDeleteConfirm = false
     @State private var isRefreshing = false
 
@@ -40,13 +48,13 @@ struct AdminItemMenu: View {
     var body: some View {
         Menu {
             Button {
-                destination = .identify
+                onSelectDestination(.identify)
             } label: {
                 Label(loc.localized("admin.item.identify"), systemImage: "magnifyingglass")
             }
 
             Button {
-                destination = .editMetadata
+                onSelectDestination(.editMetadata)
             } label: {
                 Label(loc.localized("admin.item.editMetadata"), systemImage: "square.and.pencil")
             }
@@ -73,14 +81,6 @@ struct AdminItemMenu: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel(loc.localized("admin.item.menu"))
-        .navigationDestination(item: $destination) { dest in
-            switch dest {
-            case .identify:
-                IdentifyScreen(item: item)
-            case .editMetadata:
-                MetadataEditorScreen(item: item)
-            }
-        }
         .sheet(isPresented: $showDeleteConfirm) {
             DestructiveConfirmSheet(
                 title: loc.localized("admin.metadata.delete.title"),
@@ -126,6 +126,47 @@ struct AdminItemMenu: View {
         } catch {
             toasts.error(error.localizedDescription)
         }
+    }
+}
+
+/// Pending admin-menu navigation push, lifted to a screen-level
+/// `@State` so `navigationDestination(item:)` can live outside lazy
+/// containers (per the contract on `AdminItemMenu`). Hashable
+/// implementation is id-based — `BaseItemDto` itself doesn't need to
+/// be Hashable.
+struct AdminMenuPushIntent: Hashable, Identifiable {
+    let item: BaseItemDto
+    let destination: AdminItemMenu.Destination
+
+    var id: String { (item.id ?? "") + "|" + destinationKey }
+
+    private var destinationKey: String {
+        switch destination {
+        case .identify:     return "identify"
+        case .editMetadata: return "editMetadata"
+        }
+    }
+
+    static func == (lhs: AdminMenuPushIntent, rhs: AdminMenuPushIntent) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+/// Shared `navigationDestination` body for `AdminMenuPushIntent`. Use as
+/// `.navigationDestination(item: $adminPushIntent) { intent in
+///     adminMenuPushDestination(for: intent)
+/// }` on any non-lazy ancestor of an `AdminItemMenu` host.
+@MainActor @ViewBuilder
+func adminMenuPushDestination(for intent: AdminMenuPushIntent) -> some View {
+    switch intent.destination {
+    case .identify:
+        IdentifyScreen(item: intent.item)
+    case .editMetadata:
+        MetadataEditorScreen(item: intent.item)
     }
 }
 #endif

@@ -45,6 +45,15 @@ final class AppState {
     ) {
         self.apiClient = apiClient
         self.keychain = keychain
+
+        // Wire lazy session-expiry recovery. The callback is `@Sendable` and
+        // called from whatever actor the failing API call ran on, so it can
+        // NOT capture `self` (a `@MainActor`-isolated reference). Bridge
+        // through `NotificationCenter` — `AppNavigation` listens on MainActor
+        // and runs `logout()` + the toast.
+        apiClient.setOnUnauthorized {
+            NotificationCenter.default.post(name: .cinemaxSessionExpired, object: nil)
+        }
     }
 
     // Stored so it is only rebuilt when serverURL changes, not on every access.
@@ -188,6 +197,16 @@ struct AppNavigation: View {
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in
+            // Lazy 401 recovery — fired by any API call that surfaces an HTTP
+            // 401 (token expired, revoked, or password reset elsewhere).
+            // Idempotent: `logout()` is safe to call repeatedly. The toast
+            // queue replaces older messages, so concurrent fires collapse to
+            // a single visible "session expired" pill.
+            guard appState.isAuthenticated else { return }
+            appState.logout()
+            toasts.error(loc.localized("session.expired"))
+        }
         .onChange(of: motionEffects) { _, _ in
             // Restart/stop the rainbow accent animation task when the user
             // toggles Motion Effects — the task otherwise only re-checks the
@@ -203,6 +222,11 @@ extension Notification.Name {
     /// Posted when the user taps "Refresh Catalogue" in Settings → Server.
     /// Home and Library observe this and reload their content (cache-busted).
     static let cinemaxShouldRefreshCatalogue = Notification.Name("cinemaxShouldRefreshCatalogue")
+    /// Posted by the API client when any session-scoped call returns HTTP 401.
+    /// `AppNavigation` observes this on MainActor and runs the logout + toast.
+    /// Cross-actor bridge: the API callback runs from a non-MainActor context
+    /// and cannot capture MainActor state directly.
+    static let cinemaxSessionExpired = Notification.Name("cinemaxSessionExpired")
 }
 
 private extension AppNavigation {

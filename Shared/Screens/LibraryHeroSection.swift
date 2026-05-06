@@ -2,9 +2,9 @@ import SwiftUI
 import CinemaxKit
 @preconcurrency import JellyfinAPI
 
-/// Full-bleed hero block at the top of the iOS browse view. tvOS does not
-/// render this — the tvOS library screen leads with the inline filter bar
-/// directly because the top tab bar already dominates that area.
+/// Full-bleed hero block at the top of the library browse view. Used on
+/// both iOS and tvOS — sizing/typography branch on platform via the
+/// `*Size`/`*Padding` computed properties below.
 struct LibraryHeroSection: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -28,13 +28,15 @@ struct LibraryHeroSection: View {
             .frame(maxWidth: .infinity)
             .frame(height: heroHeight)
             .overlay {
-                if let id = item.id {
+                if item.hasBackdropImage, let id = item.id {
                     CinemaLazyImage(
                         url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
                     .accessibilityHidden(true)
+                } else {
+                    BackdropFallbackView()
                 }
             }
             .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
@@ -101,6 +103,7 @@ struct LibraryHeroSection: View {
             .buttonStyle(.plain)
             #endif
             .frame(width: heroButtonWidth)
+            .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
 
             NavigationLink {
                 MediaDetailScreen(itemId: id, itemType: itemType)
@@ -130,7 +133,14 @@ struct LibraryHeroSection: View {
             .buttonStyle(.plain)
             .fixedSize()
             #endif
+            .accessibilityLabel(String(format: loc.localized("accessibility.moreInfoAbout"), item.name ?? ""))
         }
+        #if os(tvOS)
+        // Pair with `.focusSection()` on the library top bar so the focus
+        // engine can step up out of the hero's bottom-aligned button row to
+        // the sort/filter chips / tab bar above without getting trapped.
+        .focusSection()
+        #endif
     }
 
     private var heroMetadataText: some View {

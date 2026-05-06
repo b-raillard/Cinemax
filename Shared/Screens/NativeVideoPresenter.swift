@@ -117,11 +117,23 @@ final class NativeVideoPresenter {
             apiClient: apiClient, loc: loc,
             playerVCProvider: { [weak self] in self?.playerVC }
         )
+        // PiP gating is iOS-only — `isInPictureInPicture` lives in the iOS
+        // arm of the `#if os(tvOS)` block above. On tvOS the controller's
+        // default provider (`{ false }`) is correct because tvOS has no PiP.
+        #if os(iOS)
+        self.sleepTimer = SleepTimerController(
+            loc: loc,
+            playerVCProvider: { [weak self] in self?.playerVC },
+            onStopPlayback: { [weak self] in self?.playerVC?.dismiss(animated: true) },
+            isInPictureInPictureProvider: { [weak self] in self?.isInPictureInPicture ?? false }
+        )
+        #else
         self.sleepTimer = SleepTimerController(
             loc: loc,
             playerVCProvider: { [weak self] in self?.playerVC },
             onStopPlayback: { [weak self] in self?.playerVC?.dismiss(animated: true) }
         )
+        #endif
         self.chapters = ChapterController(
             apiClient: apiClient, userId: userId, imageBuilder: imageBuilder
         )

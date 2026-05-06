@@ -44,6 +44,7 @@
 
 "movies.title" = "Movies";
 "movies.sortFilter" = "Sort & Filter";
+"library.filter.button" = "Filters";
 "movies.count" = "%d Movies";
 "movies.titles" = "%d titles";
 "sort.ascending" = "Ascending";
@@ -157,7 +158,6 @@
 "settings.admin" = "Admin";
 "settings.user" = "User";
 "settings.switchAccount" = "Switch Account";
-"settings.switchAccountConfirm" = "You will be logged out and returned to the login screen.";
 "switchAccount.pickUser" = "Pick a user";
 "switchAccount.enterPasswordFor" = "Enter password for %@";
 "switchAccount.signIn" = "Sign In";
@@ -626,6 +626,9 @@
 "settings.homePage.genreRows" = "Genre Rows";
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
+"settings.libraryLayout" = "Library landing";
+"settings.libraryLayout.browse" = "Browse";
+"settings.libraryLayout.grid" = "Grid";
 
 // MARK: - Media Detail
 
@@ -726,3 +729,22 @@
 
 "easterEgg.rainbow.title" = "Rainbow unlocked!";
 "easterEgg.rainbow.message" = "A new accent color is waiting for you in settings.";
+
+// MARK: - Session expiry (lazy 401 recovery)
+
+"session.expired" = "Session expired — please sign in again.";
+
+// MARK: - Player (tvOS dismiss hint)
+
+"player.tvOS.dismissHint" = "Press Menu to dismiss.";
+
+// MARK: - Accessibility (added in v1.0 audit)
+
+"accessibility.playItem" = "Play %@";
+"accessibility.moreInfoAbout" = "More information about %@";
+
+// MARK: - Admin — formatting glyphs
+
+"admin.plugins.versionLabel" = "v%@";
+"admin.dashboard.sessionClient" = "• %@";
+"admin.metadata.ratingDenominator" = "/ 10";

@@ -15,6 +15,12 @@ final class SleepTimerController {
     private let loc: LocalizationManager
     private let playerVCProvider: @MainActor () -> AVPlayerViewController?
     private let onStopPlayback: @MainActor () -> Void
+    /// PiP state from `NativeVideoPresenter.isInPictureInPicture` — set by
+    /// `IOSPlayerDelegate` on iOS, always `false` on tvOS (no PiP). Provided
+    /// as a closure rather than read from `AVPlayerViewController` because
+    /// AVKit doesn't expose `isPictureInPictureActive` on the VC; PiP state
+    /// only lives on the controller's delegate transitions.
+    private let isInPictureInPictureProvider: @MainActor () -> Bool
 
     private var tickTask: Task<Void, Never>?
     private var endDate: Date?
@@ -25,11 +31,13 @@ final class SleepTimerController {
     init(
         loc: LocalizationManager,
         playerVCProvider: @MainActor @escaping () -> AVPlayerViewController?,
-        onStopPlayback: @MainActor @escaping () -> Void
+        onStopPlayback: @MainActor @escaping () -> Void,
+        isInPictureInPictureProvider: @MainActor @escaping () -> Bool = { false }
     ) {
         self.loc = loc
         self.playerVCProvider = playerVCProvider
         self.onStopPlayback = onStopPlayback
+        self.isInPictureInPictureProvider = isInPictureInPictureProvider
     }
 
     /// Read the effective sleep-timer duration (user setting or debug override)
@@ -79,7 +87,20 @@ final class SleepTimerController {
     }
 
     private func trigger() {
-        playerVCProvider()?.player?.pause()
+        guard let vc = playerVCProvider() else { return }
+        vc.player?.pause()
+        #if os(iOS)
+        // PiP gating: when the player is in Picture-in-Picture, the host VC
+        // is no longer the active scene presenter — the iOS blur card
+        // (overlay on `vc.view`) is not reachable from the floating PiP
+        // window. Pausing alone is the correct user-visible signal (the
+        // user sees the PiP frame freeze); skip the prompt entirely so we
+        // don't queue an invisible modal. tvOS has no PiP, so this branch
+        // doesn't compile there.
+        if isInPictureInPictureProvider() {
+            return
+        }
+        #endif
         showOverlay()
     }
 

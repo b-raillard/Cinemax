@@ -20,6 +20,17 @@ struct LibrarySortFilterSheet: View {
     }
 
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        iOSBody
+        #endif
+    }
+
+    // MARK: iOS Body
+
+    #if os(iOS)
+    private var iOSBody: some View {
         NavigationStack {
             ZStack {
                 CinemaColor.surface.ignoresSafeArea()
@@ -35,14 +46,12 @@ struct LibrarySortFilterSheet: View {
                         }
                         Spacer(minLength: 80)
                     }
-                    .padding(.horizontal, CinemaSpacing.spacing4)
+                    .padding(.horizontal, sheetHorizontalPadding)
                     .padding(.top, CinemaSpacing.spacing4)
                 }
             }
             .navigationTitle(loc.localized("movies.sortFilter"))
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(loc.localized("action.apply")) {
@@ -64,6 +73,73 @@ struct LibrarySortFilterSheet: View {
             }
         }
     }
+    #endif
+
+    // MARK: tvOS Body
+    //
+    // tvOS sheets render full-screen, but `NavigationStack` toolbar items
+    // come out as the broken white pills shown in the bug report. We bypass
+    // that here: explicit title at the top, scrollable filter sections in
+    // the middle, sticky footer with `CinemaButton` Apply (.accent) + Reset
+    // (.ghost) — same look as every other admin/save screen. Dismiss via
+    // the Menu remote button (default sheet behavior).
+
+    #if os(tvOS)
+    private var tvBody: some View {
+        ZStack {
+            CinemaColor.surface.ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 0) {
+                // Title row
+                HStack {
+                    Text(loc.localized("movies.sortFilter"))
+                        .font(CinemaFont.headline(.large))
+                        .foregroundStyle(CinemaColor.onSurface)
+                    Spacer()
+                }
+                .padding(.horizontal, sheetHorizontalPadding)
+                .padding(.top, CinemaSpacing.spacing8)
+                .padding(.bottom, CinemaSpacing.spacing4)
+
+                // Filter sections
+                ScrollView {
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                        unwatchedSection
+                        decadeSection
+                        if !availableGenres.isEmpty {
+                            genreSection
+                        }
+                        Spacer(minLength: CinemaSpacing.spacing6)
+                    }
+                    .padding(.horizontal, sheetHorizontalPadding)
+                    .padding(.top, CinemaSpacing.spacing2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollClipDisabled()
+
+                // Footer actions — same pattern as AdminFormScreen / DestructiveConfirmSheet:
+                // primary accent on the right, ghost reset on the left, both `CinemaButton`.
+                HStack(spacing: CinemaSpacing.spacing4) {
+                    CinemaButton(title: loc.localized("action.reset"), style: .ghost, icon: "arrow.counterclockwise") {
+                        sortFilter = LibrarySortFilterState()
+                        onApply()
+                        dismiss()
+                    }
+                    .frame(maxWidth: 360)
+
+                    CinemaButton(title: loc.localized("action.apply"), style: .accent, icon: "checkmark") {
+                        onApply()
+                        dismiss()
+                    }
+                    .frame(maxWidth: 360)
+                }
+                .padding(.horizontal, sheetHorizontalPadding)
+                .padding(.vertical, CinemaSpacing.spacing5)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+    #endif
 
     // MARK: Sort By
 
@@ -161,7 +237,7 @@ struct LibrarySortFilterSheet: View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             sectionHeader(loc.localized("filter.watchStatus"))
 
-            Button {
+            let row = Button {
                 sortFilter.showUnwatchedOnly.toggle()
             } label: {
                 HStack {
@@ -179,7 +255,14 @@ struct LibrarySortFilterSheet: View {
                 .background(CinemaColor.surfaceContainerHigh)
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
             }
-            .buttonStyle(.plain)
+
+            #if os(tvOS)
+            row.buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+                .focusEffectDisabled()
+                .hoverEffectDisabled()
+            #else
+            row.buttonStyle(.plain)
+            #endif
         }
     }
 
@@ -193,6 +276,11 @@ struct LibrarySortFilterSheet: View {
             HStack {
                 sectionHeader(loc.localized("filter.byDecade"))
                 Spacer()
+                #if !os(tvOS)
+                // iOS keeps the top-right Clear because it's tappable. On tvOS
+                // the same button is unreachable via remote (right-arrow from
+                // the last chip never lands on it), so it lives inline as a
+                // trailing chip in the FlowLayout below.
                 if !sortFilter.selectedDecades.isEmpty {
                     Button {
                         sortFilter.selectedDecades = []
@@ -203,12 +291,18 @@ struct LibrarySortFilterSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
+                #endif
             }
 
             FlowLayout(spacing: CinemaSpacing.spacing2) {
                 ForEach(Self.decadeOptions, id: \.self) { decade in
                     decadeChip(decade)
                 }
+                #if os(tvOS)
+                if !sortFilter.selectedDecades.isEmpty {
+                    clearChip { sortFilter.selectedDecades = [] }
+                }
+                #endif
             }
         }
     }
@@ -217,7 +311,7 @@ struct LibrarySortFilterSheet: View {
     private func decadeChip(_ decade: Int) -> some View {
         let isSelected = sortFilter.selectedDecades.contains(decade)
 
-        Button {
+        let button = Button {
             if isSelected {
                 sortFilter.selectedDecades.remove(decade)
             } else {
@@ -225,10 +319,10 @@ struct LibrarySortFilterSheet: View {
             }
         } label: {
             Text(loc.localized("filter.decade", decade))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
-                .padding(.horizontal, CinemaSpacing.spacing3)
-                .padding(.vertical, CinemaSpacing.spacing2)
+                .font(.system(size: chipFontSize, weight: isSelected ? .bold : .medium))
+                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+                .padding(.horizontal, chipHorizontalPadding)
+                .padding(.vertical, chipVerticalPadding)
                 .background(
                     isSelected
                         ? themeManager.accentContainer
@@ -236,7 +330,15 @@ struct LibrarySortFilterSheet: View {
                 )
                 .clipShape(Capsule())
         }
-        .buttonStyle(.plain)
+
+        #if os(tvOS)
+        button
+            .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+        #else
+        button.buttonStyle(.plain)
+        #endif
     }
 
     // MARK: Genre Filter
@@ -246,6 +348,7 @@ struct LibrarySortFilterSheet: View {
             HStack {
                 sectionHeader(loc.localized("filter.byGenre"))
                 Spacer()
+                #if !os(tvOS)
                 if !sortFilter.selectedGenres.isEmpty {
                     Button {
                         sortFilter.selectedGenres = []
@@ -256,12 +359,18 @@ struct LibrarySortFilterSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
+                #endif
             }
 
             FlowLayout(spacing: CinemaSpacing.spacing2) {
                 ForEach(availableGenres, id: \.self) { genre in
                     genreChip(genre)
                 }
+                #if os(tvOS)
+                if !sortFilter.selectedGenres.isEmpty {
+                    clearChip { sortFilter.selectedGenres = [] }
+                }
+                #endif
             }
         }
     }
@@ -270,7 +379,7 @@ struct LibrarySortFilterSheet: View {
     private func genreChip(_ genre: String) -> some View {
         let isSelected = sortFilter.selectedGenres.contains(genre)
 
-        Button {
+        let button = Button {
             if isSelected {
                 sortFilter.selectedGenres.remove(genre)
             } else {
@@ -278,10 +387,10 @@ struct LibrarySortFilterSheet: View {
             }
         } label: {
             Text(genre)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
-                .padding(.horizontal, CinemaSpacing.spacing3)
-                .padding(.vertical, CinemaSpacing.spacing2)
+                .font(.system(size: chipFontSize, weight: isSelected ? .bold : .medium))
+                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+                .padding(.horizontal, chipHorizontalPadding)
+                .padding(.vertical, chipVerticalPadding)
                 .background(
                     isSelected
                         ? themeManager.accentContainer
@@ -289,8 +398,45 @@ struct LibrarySortFilterSheet: View {
                 )
                 .clipShape(Capsule())
         }
-        .buttonStyle(.plain)
+
+        #if os(tvOS)
+        button
+            .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+        #else
+        button.buttonStyle(.plain)
+        #endif
     }
+
+    // MARK: Clear Chip (tvOS)
+    //
+    // Trailing chip in the FlowLayout that resets the section's selection.
+    // Living inside the flow makes it remote-reachable: right-arrow from the
+    // last chip lands here. Visually distinct from filter chips: ghost outline,
+    // accent foreground, with an x-circle icon to read as a destructive action.
+
+    #if os(tvOS)
+    @ViewBuilder
+    private func clearChip(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: chipFontSize - 2, weight: .semibold))
+                Text(loc.localized("action.clear"))
+                    .font(.system(size: chipFontSize, weight: .semibold))
+            }
+            .foregroundStyle(themeManager.accent)
+            .padding(.horizontal, chipHorizontalPadding)
+            .padding(.vertical, chipVerticalPadding)
+            .background(CinemaColor.surfaceContainerHigh)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+    }
+    #endif
 
     // MARK: Section Header
 
@@ -300,5 +446,39 @@ struct LibrarySortFilterSheet: View {
             .foregroundStyle(CinemaColor.onSurfaceVariant)
             .textCase(.uppercase)
             .tracking(0.8)
+    }
+
+    /// tvOS sheets are full-screen overlays — bumping horizontal padding keeps
+    /// the chip flow readable on a 1080p viewport.
+    private var sheetHorizontalPadding: CGFloat {
+        #if os(tvOS)
+        CinemaSpacing.spacing20
+        #else
+        CinemaSpacing.spacing4
+        #endif
+    }
+
+    private var chipFontSize: CGFloat {
+        #if os(tvOS)
+        CinemaScale.pt(18)
+        #else
+        14
+        #endif
+    }
+
+    private var chipHorizontalPadding: CGFloat {
+        #if os(tvOS)
+        18
+        #else
+        CinemaSpacing.spacing3
+        #endif
+    }
+
+    private var chipVerticalPadding: CGFloat {
+        #if os(tvOS)
+        10
+        #else
+        CinemaSpacing.spacing2
+        #endif
     }
 }

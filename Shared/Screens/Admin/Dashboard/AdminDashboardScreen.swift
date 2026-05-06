@@ -82,7 +82,7 @@ struct AdminDashboardScreen: View {
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }
                         if let client = session.client {
-                            Text("• \(client)")
+                            Text(String(format: loc.localized("admin.dashboard.sessionClient"), client))
                                 .font(CinemaFont.label(.small))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }

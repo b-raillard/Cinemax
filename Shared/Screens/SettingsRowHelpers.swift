@@ -89,9 +89,10 @@ var iOSSettingsDivider: some View {
 }
 
 /// Uppercase section header label.
+@MainActor
 func iOSSettingsSectionHeader(_ title: String) -> some View {
     Text(title.uppercased())
-        .font(CinemaFont.label(.small))
+        .font(CinemaFont.dynamicLabel(.small))
         .foregroundStyle(CinemaColor.onSurfaceVariant)
         .tracking(1.2)
         .padding(.horizontal, CinemaSpacing.spacing2)
@@ -124,6 +125,7 @@ func iOSToggleRow(
                 CinemaToggleIndicator(isOn: value.wrappedValue, accent: accent, animated: animated)
             }
             .buttonStyle(.plain)
+            .sensoryFeedback(.selection, trigger: value.wrappedValue)
         }
     }
 }

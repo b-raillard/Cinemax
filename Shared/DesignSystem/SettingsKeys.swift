@@ -31,6 +31,10 @@ enum SettingsKey {
     // Detail page
     static let detailShowQualityBadges = "detail.showQualityBadges"
 
+    // Library landing (tvOS only)
+    /// `"browse"` (default) shows hero + genre rows; `"grid"` shows a flat poster grid using the default sort.
+    static let libraryTVBrowseLayout = "library.tvBrowseLayout"
+
     // Privacy & Security
     /// Maximum content age (years) for items shown across the app.
     /// `0` = unrestricted; 10/12/14/16/18 select a ceiling and any item rated
@@ -63,6 +67,8 @@ enum SettingsKey {
 
         static let detailShowQualityBadges = true
 
+        static let libraryTVBrowseLayout = LibraryTVBrowseLayout.browse.rawValue
+
         static let privacyMaxContentAge = 0
 
         static let debugFastSleepTimer = false
@@ -70,4 +76,15 @@ enum SettingsKey {
 
         static let rainbowUnlocked = false
     }
+}
+
+/// tvOS landing layout for `MediaLibraryScreen`. Controls whether the screen
+/// opens on the cinematic browse view (hero + genre rows + browse grid) or on
+/// the flat poster grid using the default sort. Filter state still toggles to
+/// the grid regardless — this only governs the *unfiltered* landing.
+enum LibraryTVBrowseLayout: String, CaseIterable, Identifiable {
+    case browse
+    case grid
+
+    var id: String { rawValue }
 }

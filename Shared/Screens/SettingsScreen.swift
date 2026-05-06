@@ -116,6 +116,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
+    @AppStorage(SettingsKey.libraryTVBrowseLayout) var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
@@ -128,8 +129,8 @@ struct SettingsScreen: View {
     #if os(tvOS)
     @FocusState var focusedItem: SettingsFocus?
     @State var serverUsers: [UserDto] = []
-    @State var showSwitchAccountAlert = false
     @State var showSleepTimerPicker = false
+    @State var showLibraryLayoutPicker = false
     #endif
 
     // MARK: Shared Computed Properties

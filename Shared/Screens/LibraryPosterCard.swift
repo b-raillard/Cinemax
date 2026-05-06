@@ -12,15 +12,24 @@ import CinemaxKit
 /// shared `AdminItemMenu` (Identifier / Edit metadata / Refresh / Delete).
 /// The admin menu is a `ZStack` sibling of the image `NavigationLink`, not
 /// nested inside its label — taps on the ellipsis hit the Menu, taps on the
-/// rest of the poster hit the link. The title/subtitle row has its own
-/// NavigationLink so the whole card still acts like a single card visually
-/// while each region owns its own hit target.
+/// rest of the poster hit the link. The title/subtitle row is plain text —
+/// not a separate focusable target — so tvOS focus moves directly between
+/// posters without an extra step landing on the label.
 struct LibraryPosterCard: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
 
     let item: BaseItemDto
     let itemType: BaseItemKind
+    #if os(iOS)
+    /// Caller-provided hook for the admin 3-dot menu's destination
+    /// selection. The card is rendered inside a lazy grid/row, so the
+    /// matching `navigationDestination(item:)` MUST live on a non-lazy
+    /// ancestor — the screen body. This callback bubbles the
+    /// `(item, destination)` pair up; the screen stores it in a
+    /// `@State AdminMenuPushIntent?` and hosts the destination there.
+    var onAdminAction: ((BaseItemDto, AdminItemMenu.Destination) -> Void)? = nil
+    #endif
 
     var body: some View {
         let subtitle = subtitleText
@@ -54,22 +63,20 @@ struct LibraryPosterCard: View {
 
                 #if os(iOS)
                 if appState.isAdministrator {
-                    AdminItemMenu(item: item)
-                        .background(Circle().fill(.ultraThinMaterial))
-                        .padding(CinemaSpacing.spacing2)
+                    AdminItemMenu(
+                        item: item,
+                        onSelectDestination: { dest in
+                            onAdminAction?(item, dest)
+                        }
+                    )
+                    .background(Circle().fill(.ultraThinMaterial))
+                    .padding(CinemaSpacing.spacing2)
                 }
                 #endif
             }
 
-            NavigationLink {
-                if let id = item.id {
-                    MediaDetailScreen(itemId: id, itemType: itemType)
-                }
-            } label: {
-                titleRows(subtitle: subtitle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHidden(true)
+            titleRows(subtitle: subtitle)
+                .accessibilityHidden(true)
         }
     }
 

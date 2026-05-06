@@ -9,6 +9,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 - **Swift 6** strict concurrency; `@Observable` + `@MainActor` for all state
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable
 - **iOS `NavigationStack` caveat**: destinations pushed via `navigationDestination(item:)` render in a separate context — `@Observable` changes won't re-render unless the destination is a standalone `View` struct with its own `@Environment` properties, not an extension method returning `some View`.
+- **Lazy-container navigation rule**: SwiftUI silently ignores `navigationDestination(item:)` placed inside `LazyVGrid`/`LazyVStack`/`LazyHStack`/`List` and emits a runtime warning ("Do not put a navigation destination modifier inside a 'lazy' container"). Hoist the modifier to a non-lazy ancestor; bubble action up via a callback that mutates a screen-level `@State`. Reference pattern: `AdminItemMenu` (no internal destination) → `LibraryPosterCard.onAdminAction` → `MovieLibraryScreen.adminPushIntent` (`@State`) + `.navigationDestination(item: $adminPushIntent) { adminMenuPushDestination(for: $0) }` on the body's outer `ZStack`. Same shape on `MediaDetailScreen`.
 
 ### iOS 26 / tvOS 26 API rules
 
@@ -24,6 +25,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 **Swift 6 `nonisolated` escape hatches** (safe when body only reads parameters):
 1. `View, Equatable` sub-type inside a `@MainActor` screen needs `nonisolated static func ==` — `Equatable` isn't main-actor-isolated. See `PlayActionButtonsSection` in `MediaDetailScreen.swift`.
 2. A `@MainActor` class's `static func` returning non-Sendable types into a `TaskGroup @Sendable` closure needs `nonisolated private static func`. See `HomeViewModel.fetchGenreItems`.
+3. A `nonisolated static func` on a `@MainActor` class that reads a `static let` constant needs the constant marked `nonisolated` too — Sendable types only (`Int`, `String`, etc.). See `SearchViewModel.sanitize` + `maxQueryLength`.
 
 ## Project Structure
 
@@ -56,7 +58,7 @@ docs/design-system/         Canonical design system reference
 - **Dark/Light mode**: `ThemeManager.darkModeEnabled` → `.preferredColorScheme()` at root (in `AppNavigation` only). Colors flip via `UITraitCollection`. **Always route through `themeManager.darkModeEnabled =`** — direct `@AppStorage("darkMode")` writes bypass `_accentRevision` and break reactivity. Same for `themeManager.accentColorKey`.
 - **Hardcoded `.white`/`.black`**: only inside the video player (always dark) and on elements on saturated `accentContainer`. Else `CinemaColor.onSurface` / `.onSurfaceVariant`.
 - **Font scaling**: `CinemaScale.factor` = 1.4× base on tvOS × user `uiScale` (80–130%). Exception: Play/Lecture button labels hardcode 28pt on tvOS.
-- **tvOS focus**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. 2px accent `strokeBorder`, no scale/white bg. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. **Trait caveat**: a focused `Button` flips `UITraitCollection` inside its label to light-mode values; `tvSettingsFocusable` takes `colorScheme` and injects it on both content and background shape — always pass `themeManager.darkModeEnabled ? .dark : .light`.
+- **tvOS focus**: `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()`. 2px accent `strokeBorder`, no scale/white bg. Cards: `CinemaTVCardButtonStyle`. Settings rows: `.tvSettingsFocusable()`. **Trait caveat**: a focused `Button` flips `UITraitCollection` inside its label to light-mode values; `tvSettingsFocusable` takes `colorScheme` and injects it on both content and background shape — always pass `themeManager.darkModeEnabled ? .dark : .light`. **Hero `.focusSection()` rule**: any hero whose Play/More Info buttons sit in `.overlay(alignment: .bottomLeading)` of a tall `Color.clear` sizing block (Home + Library) needs `.focusSection()` on the buttons row, AND the immediate row above (`tvTopBar`, etc.) must also be a focus section. Without this the engine can't bridge the ~700pt empty backdrop above the bottom-aligned buttons and up-presses get absorbed inside the hero bounds — focus never escapes to the tab bar / sort+filter chips.
 - **iOS focus**: `.cinemaFocus()` (accent border + shadow).
 - **CinemaButton styles**: `.accent` = primary CTAs (saturated `accentContainer` + `.white` text — Play/Login/ServerSetup/every admin save). `.primary` = neutral gradient, survives only on `DestructiveConfirmSheet`. `.ghost` = secondary (Retry, Clear Filters).
 - **Motion Effects**: `motionEffectsEnabled` env key (from `@AppStorage("motionEffects")`). When off, all `.animation()` → nil. Consumed by `CinemaFocusModifier`, `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, toggle indicators.
@@ -67,6 +69,7 @@ docs/design-system/         Canonical design system reference
 - `AppNavigation` → Keychain session check → `apiClient.reconnect()` + `fetchServerInfo()`. Injects `ThemeManager`, `LocalizationManager`, `ToastCenter`; applies `.preferredColorScheme()` at root.
 - Flow: no server → `ServerSetupScreen` → `LoginScreen` → `MainTabView` (top tabs on tvOS, sidebar on iPad, bottom tabs on iPhone).
 - All play buttons use `PlayLink<Label>` (Button+coordinator on tvOS, `NavigationLink` on iOS) — never direct `NavigationLink` to `VideoPlayerView`.
+- **Session expiry / 401 recovery**: `JellyfinAPIClient.setOnUnauthorized` (on `ServerAPI`) accepts a `@Sendable () -> Void` callback. `AppState.init` wires it to post `.cinemaxSessionExpired`; `AppNavigation` observes and runs `appState.logout()` + `session.expired` toast → user lands on `LoginScreen`. The 6 hot paths instrumented: `getResumeItems` / `getLatestMedia` / `getItems` / `getItem` / `searchItems` / `getPlaybackInfo` — each `do/catch`-wraps `client.send` and calls `notifyIfUnauthorized(error)`. Detection is string-match (`"unacceptableStatusCode(401)"` / `"(401)"` / `NSURLErrorUserAuthenticationRequired`) because `Get` is only a transitive dep — adding it as a direct dep just for one type cast wasn't worth it. **Lazy** recovery: no eager validation on `.active`; the next failing call trips the interceptor.
 
 ## Server Setup & Login
 
@@ -90,7 +93,7 @@ Unified, parameterized by `BaseItemKind` (movies or series).
 **Sort & Filter** (`LibrarySortFilterState`):
 - Default: `dateCreated` descending. `isNonDefault` = sort or filter differs.
 - `isFiltered` = genre chips OR `showUnwatchedOnly` OR `selectedDecades` non-empty.
-- **Browse vs filtered**: browse (genre rows) when `!isFiltered`, regardless of sort. Any filter → flat grid.
+- **Browse vs filtered**: browse (hero + genre rows + browse-genres grid) when `!isFiltered`, regardless of sort. Any filter → flat grid. tvOS additionally honors `library.tvBrowseLayout` (`browse` default / `grid`) — set to `grid` forces the flat grid even with no filters.
 - Title count uses `isFiltered` (not `isNonDefault`) — sort-only changes don't affect count. `filteredTotalCount` when filtered else `totalCount`.
 - Sort change → `reloadGenreItems`; filter change → `applyFilter`.
 - `loadInitial` guarded by `hasLoaded` (prevents re-randomization on tab switch). `reload(using:)` bypasses — triggered by pull-to-refresh and `.cinemaxShouldRefreshCatalogue`.
@@ -99,7 +102,16 @@ Unified, parameterized by `BaseItemKind` (movies or series).
 - Unwatched → `filters: [.isUnplayed]`.
 - Decade: `selectedDecades: Set<Int>` (starting year). `expandedYears` explodes for `getItems(years:)`. UI: 1950s–2020s chips.
 
-**tvOS filter bar**: inline — sort pills + watch-status + decade + genre chips (`FlowLayout`) + Reset. `TVFilterChipButtonStyle`.
+**tvOS layout** (post-refactor): same hero + genre rows shape as iOS, with a compact top bar (`tvTopBar` in `MovieLibraryScreen.swift`) — title + count on the left, sort `confirmationDialog` button (8 directional options: field × ↑/↓) + Filters button on the right. The Filters button opens `LibrarySortFilterSheet` via **`.fullScreenCover`** (not `.sheet` — `.sheet` on tvOS 26 renders a narrow centered modal whose `NavigationStack` toolbar items show as broken white pills; `.fullScreenCover` is the only working full-bleed modal).
+
+**`LibrarySortFilterSheet`** has split bodies:
+- iOS: `NavigationStack` + toolbar Apply/Reset (existing pattern).
+- tvOS: explicit title at top, scrollable filter sections, sticky footer with two `CinemaButton`s — Reset (`.ghost` + `arrow.counterclockwise`) and Apply (`.accent` + `checkmark`). Sort section hidden on tvOS (sort lives in the top-bar `confirmationDialog`).
+- Per-section "Clear" lives **inline as a trailing chip** in the `FlowLayout` on tvOS (right-arrow from the last filter chip lands on it). iOS keeps the top-right text "Clear" (tappable, pointer-driven).
+
+**tvOS button styles** (`TVButtonStyles.swift`):
+- `TVFilterChipButtonStyle` — capsule chips (sort/decade/genre/clear). Press scales by 0.95.
+- `TVFilterRowButtonStyle` — full-width rectangular rows (`unwatchedSection`). **No press scale** — on a wide row, even small scale visibly shifts label/indicator sideways. Same accent stroke as the chip style but with `RoundedRectangle` border to match the row shape.
 
 **iOS jump bar**: `AlphabeticalJumpBar` (right edge, Contacts-style, `ultraThinMaterial`). `ScrollViewReader` + `proxy.scrollTo(firstItemID(for: letter))` + `UISelectionFeedbackGenerator`. Only when `sortBy == .sortName && sortAscending && items.count > 20`.
 
@@ -146,7 +158,7 @@ Rendering:
 
 **Chapters** (tvOS only): from `BaseItemDto.chapters` → `AVPlayerItem.navigationMarkerGroups = [AVNavigationMarkersGroup(...)]`. Each marker carries `commonIdentifierTitle` + optional `commonIdentifierArtwork` (JPEG from `ImageURLBuilder.chapterImageURL(itemId:imageIndex:)`). `AVNavigationMarkersGroup` is tvOS-only; iOS path is `#if os(tvOS)` no-op.
 
-**Sleep timer**: `SleepTimerOption` enum (Off/15/30/45/60/90 min) via `@AppStorage("sleepTimerDefaultMinutes")`. `currentDefaultSeconds` returns 15s when `debug.fastSleepTimer` on. Moon-icon blur pill bottom-left. On fire: pauses + "Still watching?" — `UIAlertController` (tvOS), custom blur card (iOS).
+**Sleep timer**: `SleepTimerOption` enum (Off/15/30/45/60/90 min) via `@AppStorage("sleepTimerDefaultMinutes")`. `currentDefaultSeconds` returns 15s when `debug.fastSleepTimer` on. Moon-icon blur pill bottom-left. On fire: pauses + "Still watching?" — `UIAlertController` (tvOS), custom blur card (iOS). **PiP gating** (iOS): the controller's `isInPictureInPictureProvider` closure (wired by `NativeVideoPresenter` to its `isInPictureInPicture` flag, set by `IOSPlayerDelegate`) — when `true`, the timer pauses silently and skips the overlay (the prompt is unreachable from the floating PiP window). Wrapped in `#if os(iOS)`; tvOS uses the default `{ false }` provider since tvOS has no PiP. `AVPlayerViewController` does NOT expose a public `isPictureInPictureActive` — track it via the delegate, not the VC.
 
 **End-of-series completion**: `didPlayToEndTime` + autoplay + no next + `episodeNavigator != nil` → "You finished {Series Name}" overlay. `currentSeriesName` captured with the same `getItem` that fetches chapters.
 
@@ -208,6 +220,7 @@ Every boolean toggle declared once as `SettingsToggleRow`, rendered on both plat
 | `home.showGenreRows` | `true` | All 4 genre rows |
 | `home.showWatchingNow` | `true` | Watching Now row |
 | `detail.showQualityBadges` | `true` | Quality pill row on `MediaDetailScreen` |
+| `library.tvBrowseLayout` | `"browse"` | tvOS-only. `browse` = hero + genre rows; `grid` = flat poster grid using default sort. Filter state still forces grid regardless. `LibraryTVBrowseLayout` enum |
 | `privacy.maxContentAge` | `0` | Rating ceiling (0=unrestricted; 10/12/14/16/18). Via `apiClient.applyContentRatingLimit` |
 | `debug.fastSleepTimer` | `false` | Overrides sleep to 15s |
 | `debug.showSkipToEnd` | `false` | "End" button seeking to `(duration − 15s)` |
@@ -237,7 +250,7 @@ Admin workflows mobile-only by product decision. `SettingsCategory.visibleCases(
 - `AdminFormScreen` — sticky `Sauvegarder` footer + `interactiveDismissDisabled(isDirty)` + discard-changes confirmation. **Every admin editor uses explicit save (never auto-save)** — admin-scoped changes have blast radius (policy revocations, password resets).
 - `AdminTabBar` — horizontally-scrolling segmented pills.
 - `AdminSectionGroup` — iOS grouped-list section.
-- `AdminItemMenu` — shared `Menu` (ellipsis) for one `BaseItemDto`. Actions: Identifier / Edit metadata / Refresh (fire-and-forget) / Delete (via `DestructiveConfirmSheet`). Hosts its own `.navigationDestination(item:)` so actions push onto the ambient `NavigationStack`. Mounted on `MediaDetailScreen` (Admin pill next to Play) and `LibraryPosterCard` overlay.
+- `AdminItemMenu` — shared `Menu` (ellipsis) for one `BaseItemDto`. Actions: Identifier / Edit metadata / Refresh (fire-and-forget) / Delete (via `DestructiveConfirmSheet`). **Does NOT host its own `.navigationDestination`** (would be silently ignored — its hosts live inside lazy containers; see "Lazy-container navigation rule"). Fires `onSelectDestination(_:)`; callers store the result in `@State AdminMenuPushIntent?` and host `adminMenuPushDestination(for:)` on a non-lazy ancestor. `LibraryPosterCard` and `LibraryGenreRow` forward via an optional `onAdminAction` closure. Mounted on `MediaDetailScreen` (Admin pill next to Play) and `LibraryPosterCard` overlay.
 - `DestructiveConfirmSheet` — type-to-confirm sheet reserved for truly irreversible ops (delete user, delete item). Reversible destructives (revoke device, uninstall plugin) use `.confirmationDialog` with `.destructive` role.
 
 **Shared** — `UserAvatar` (primary image + accent-gradient+initial fallback). `CinemaLazyImage.fallbackBackground = .clear` lets gradient show through on 404/loading.
@@ -361,6 +374,7 @@ Admin workflows mobile-only by product decision. `SettingsCategory.visibleCases(
 - **Backdrop sizing**: use `ImageURLBuilder.screenPixelWidth` — never hardcode `1920`.
 - **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with 500 MB disk (`com.cinemax.images`).
 - **Backdrop fallback**: `item.backdropItemID` (→ `parentBackdropItemID ?? seriesID ?? id`) from `BaseItemDto+Metadata`.
+- **No-backdrop placeholder**: when Jellyfin has no backdrop tag, render `BackdropFallbackView` instead of `CinemaLazyImage`. Gate on `item.hasBackdropImage` (checks `backdropImageTags` / `parentBackdropImageTags` — `backdropItemID` always returns non-nil so it can't be used as availability check). Component is a centered `film` SF Symbol (~42% of min hero side, anchored at 35% of height so it lands in the visible area above the title VStack, not behind it) over `surfaceContainerLow` + soft accent radial wash from top-trailing. Sits *under* `CinemaGradient.heroOverlay` so the bottom fade keeps title/buttons legible — same visual contract as a real backdrop. Wired in `MediaDetailScreen.backdropSection`, `HomeScreen.heroSection`, `LibraryHeroSection`.
 - **Always `CinemaLazyImage`** — never `LazyImage` directly. Params: `url`, `fallbackIcon: String?`, `fallbackBackground: Color`, `showLoadingIndicator: Bool`.
 - **Card containers**: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`.
 - **Backdrop (full-bleed ZStack)**: `CinemaLazyImage` must have `.frame(maxWidth: .infinity, maxHeight: .infinity)` — else ZStack sizes from image's natural dims (1920px) pushing title VStack off-screen. Outer container: `LazyVStack(alignment: .leading)`.
@@ -385,3 +399,24 @@ xcodebuild build -project Cinemax.xcodeproj -scheme CinemaxTV -destination 'plat
 # Regenerate Xcode project
 cd Cinemax && xcodegen generate
 ```
+
+**Build verification gotchas**:
+- Always pair pipes with `set -o pipefail` (`set -o pipefail; xcodebuild ... | grep ...`) — without it, `tail`/`grep` swallow xcodebuild's exit code and a failed build returns 0. Confirm by reading the output for `** BUILD SUCCEEDED **` / `** BUILD FAILED **`, not just the shell exit.
+- Don't run iOS + tvOS builds in parallel against the same DerivedData — they race on `build.db` ("database is locked"). Run serially.
+
+**Versioning**: `iOS/Info.plist` and `tvOS/Info.plist` use `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` substitutions — `project.yml` `settings.base` is the single source of truth. Bump `MARKETING_VERSION` per user-visible release; bump `CURRENT_PROJECT_VERSION` per archive/upload.
+
+## Claude Code automations (`.claude/`)
+
+Project-shared config — checked into git. Per-developer overrides go in `.claude/settings.local.json` (gitignored).
+
+- **Hooks** (`.claude/settings.json`):
+  - `PreToolUse` blocks edits to `Cinemax.xcodeproj/project.pbxproj` (XcodeGen output — edit `project.yml` instead).
+  - `PostToolUse` auto-runs `xcodegen generate` after any edit to `project.yml`.
+- **Skills** (`.claude/skills/`):
+  - `localize-check` — diffs FR/EN `Localizable.strings` keys + greps `Shared/` for hardcoded user-facing strings.
+  - `design-system-review` — runs the `docs/design-system/conventions.md` rejection checklist as grep sweeps on staged files.
+- **Subagents** (`.claude/agents/`):
+  - `tvos-focus-reviewer` — focus model, settings-row colorScheme injection, `AVPlayerViewController` rules, `transportBarCustomMenuItems` / `contextualActions` constraint, admin iOS-only gating.
+  - `swift6-concurrency-reviewer` — `@MainActor`, Sendable, the two documented `nonisolated` escape hatches, lock-protected `JellyfinClient` access, API protocol slicing.
+- **MCP servers** (`~/.claude.json` project scope): `context7` (live docs for Apple frameworks + jellyfin-sdk-swift + Nuke), `github` (PRs / issues / Actions — token sourced from `gh auth token`).

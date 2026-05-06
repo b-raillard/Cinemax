@@ -64,9 +64,9 @@ Apple requires that apps comply with the licenses of their dependencies. All thr
 |------|-------|--------|
 | iOS bundle ID | `com.cinemax.ios` | OK |
 | tvOS bundle ID | `com.cinemax.tvos` | OK |
-| Code signing | `iPhone Developer` only | Needs distribution certificate + provisioning profiles |
+| Code signing | `Automatic` (project.yml `CODE_SIGN_STYLE: Automatic`) | DEVELOPMENT_TEAM still per-developer in Xcode UI |
 
-**Action**: Configure App Store distribution signing before archive/upload.
+**Action**: User must set `DEVELOPMENT_TEAM` in Xcode → Signing & Capabilities for both targets (Cinemax + CinemaxTV) before the first archive. Xcode will then auto-create the App Store provisioning profile on Distribute App. Not committed to project.yml so the repo stays open-source friendly.
 
 ---
 
@@ -110,20 +110,20 @@ No `.entitlements` files — appropriate since the app doesn't use push notifica
 
 | Severity | Issue | Status |
 |----------|-------|--------|
-| Critical | Auth token logged in production (`VideoPlayerView.swift:797`) | **Still open** |
-| High | Weak ATS — HTTP allowed for media | Open (required for LAN servers) |
-| High | No TLS certificate pinning | Open |
-| Medium | Password not cleared after login | **Still open** |
-| Medium | Token in error messages | **Still open** |
-| Medium | No search input sanitization | Open |
+| Critical | Auth token logged in production (`VideoPlayerView.swift:797`) | **Fixed** (guarded under `#if DEBUG`) |
+| High | Weak ATS — HTTP allowed for media | **Accepted** (required for LAN-only Jellyfin servers; documented) |
+| High | No TLS certificate pinning | **Accepted** (self-hosted servers preclude pinning to a known CA/cert; users connect to their own infra) |
+| Medium | Password not cleared after login | **Fixed** |
+| Medium | Token in error messages | **Fixed** |
+| Medium | No search input sanitization | **Fixed** (`SearchViewModel.sanitize` strips control/illegal scalars + caps at 200 chars before query) |
 
 ### 2.2 Additional Findings
 
 | Severity | Issue | Details |
 |----------|-------|---------|
-| Medium | Force unwraps in URL construction | `AppNavigation.swift:10,28,30`, `ImageURLBuilder.swift:22,32,47,60`, `JellyfinAPIClient.swift:470,571` — potential crashes on malformed URLs |
-| Low | No biometric auth option | Users must re-enter credentials if Keychain is cleared |
-| Low | No session expiry/timeout | Token persists indefinitely in Keychain |
+| Medium | Force unwraps in URL construction | **Fixed** — `AppNavigation`, `ImageURLBuilder`, `JellyfinAPIClient` all use `??` / `guard let` fallbacks; SwiftLint's `force_unwrapping` rule now enforces this going forward |
+| Low | No biometric auth option | Users must re-enter credentials if Keychain is cleared (deferred — Priority 4 roadmap) |
+| Low | No session expiry/timeout | Token persists indefinitely in Keychain (deferred — Priority 4 roadmap) |
 | Info | Keychain implementation is solid | `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, proper cleanup on logout |
 | Info | No hardcoded secrets found | Clean |
 | Info | Device ID properly in Keychain | Migrated from UserDefaults |
@@ -140,13 +140,13 @@ No `.entitlements` files — appropriate since the app doesn't use push notifica
 | High | No Nuke cache configuration | **Fixed** — 500 MB disk cache configured |
 | High | Image size mismatch (always 1920px) | **Fixed** — `ImageURLBuilder.screenPixelWidth` now used |
 | Medium | Race condition on season selection | **Fixed** — generation counter added |
-| Medium | Missing task cancellation in coordinator | **Still open** |
+| Medium | Missing task cancellation in coordinator | **Fixed** — `playTask?.cancel()` + `currentGeneration` counter in `VideoPlayerCoordinator.play()` |
 
 ### 3.2 Remaining Performance Concerns
 
 | Priority | Issue | Details |
 |----------|-------|---------|
-| Medium | Sequential API calls in `MediaDetailViewModel` | Series load does seasons → episodes → nextUp sequentially. Could use `async let` for parallelism |
+| Medium | Sequential API calls in `MediaDetailViewModel` | **Fixed** — `loadSeriesDetail` fans out similar / seasons / next-up via `async let`; second stage parallelizes both seasons' episodes when next-up sits in a different season |
 | Medium | `ContentRow` builds all item views upfront | `LazyHStack` defers rendering but not view creation |
 | Medium | `.onAppear` pagination can fire multiple times | Consider debounce or threshold-based approach |
 | Low | Computed adaptive sizing in `HomeScreen` | Called multiple times per layout pass |
@@ -176,9 +176,9 @@ No `.entitlements` files — appropriate since the app doesn't use push notifica
 | Dark/Light mode | Excellent | Excellent |
 | Safe areas | Excellent | Excellent |
 | Orientation | All orientations | N/A (landscape) |
-| Haptic feedback | Not implemented | N/A |
+| Haptic feedback | Implemented (`.sensoryFeedback` on toggles, primary CTAs, tab nav, toasts; existing UIImpact on Login/ServerSetup) | N/A |
 | iPad layout | Good — split view support | N/A |
-| Search | Custom (no `.searchable()`) | Custom |
+| Search | Native `.searchable()` (iOS 26 HIG-compliant) | Custom |
 
 ### 4.3 Missing App Lifecycle Handling
 
@@ -196,9 +196,9 @@ No `.entitlements` files — appropriate since the app doesn't use push notifica
 
 | Priority | Issue | Details |
 |----------|-------|---------|
-| High | No CI/CD pipeline | No GitHub Actions, Fastlane, or automated builds |
-| High | No SwiftLint/SwiftFormat | No automated code style enforcement |
-| Medium | tvOS has no test target | Only iOS has `CinemaxTests` |
+| High | No CI/CD pipeline | **Fixed** — `.github/workflows/ci.yml` runs iOS test + tvOS build + SwiftLint on PR/push |
+| High | No SwiftLint/SwiftFormat | **Fixed** — `.swiftlint.yml` at repo root; force_unwrapping enforced |
+| Medium | tvOS has no test target | Deferred — current tests `@testable import Cinemax`, mirroring needs duplicate bundle |
 | Medium | Limited test coverage | 26 test methods total — covers ViewModels only |
 | Low | No Fastlane for release automation | Manual archive/upload required |
 
@@ -227,21 +227,21 @@ No `.entitlements` files — appropriate since the app doesn't use push notifica
 
 - [x] Add accessibility labels to all interactive elements (cards, buttons, rows) — **DONE** (audit 1.1.1)
 - [x] Add accessibility labels to all images (poster cards, backdrops) — **DONE** (audit 1.1.1: decorative images hidden, cards labeled)
-- [ ] Respect iOS Dynamic Type settings (or document custom scaling)
+- [x] Respect iOS Dynamic Type settings (or document custom scaling) — **DONE** (`.dynamicTypeSize(.xSmall ... .accessibility2)` cap at AppNavigation root + `CinemaFont.dynamicBody` / `dynamicBodyLarge` / `dynamicLabel(_:)` helpers using `UIFontMetrics`. Reading-heavy surfaces — MediaDetail overview, settings rows — use the dynamic variants. Fixed-size variants kept for layout-sensitive display/headline text by design.)
 - [x] Clear password from memory after login — **DONE** (already fixed in prior audit)
 - [x] Handle `scenePhase` — pause playback on background — **DONE** (audit 1.1.1: reports progress on background)
 - [x] Remove 33 unused localization keys — **DONE** (already fixed in prior audit)
-- [ ] Replace force unwraps with safe unwrapping in URL construction
+- [x] Replace force unwraps with safe unwrapping in URL construction — **DONE** (`AppState.placeholderServerURL` builds via `URLComponents` with `?? URL(fileURLWithPath:)` fallback; `ImageURLBuilder.imageURL(itemId:)`, `imageURLRaw`, `chapterImageURL`, `userImageURL` all use `guard var components ... else { return serverURL }`. Verified: zero `URL(string: "...")!` patterns remain in Shared/, Packages/, iOS/, tvOS/.)
 
 ### Nice-to-Fix (Improve Quality)
 
-- [ ] Add haptic feedback on iOS interactions
-- [ ] Implement `.searchable()` modifier on iOS
-- [ ] Cancel previous task in `VideoPlayerCoordinator.play()`
-- [ ] Parallelize API calls in `MediaDetailViewModel`
-- [ ] Add SwiftLint configuration
-- [ ] Set up basic CI (GitHub Actions for build verification)
-- [ ] Add tvOS test target
+- [x] Add haptic feedback on iOS interactions — **DONE** (`.sensoryFeedback` on settings toggles, primary CTAs via `CinemaButton`, tab navigation, toasts; existing Login/ServerSetup haptics retained.)
+- [x] Implement `.searchable()` modifier on iOS — **DONE** (SearchScreen iOS now uses `.searchable(text:placement:.navigationBarDrawer(displayMode: .always))` with `.searchFocused` for ⌘F shortcut. Voice mic moved to trailing toolbar item. tvOS keeps its custom field — `.searchable` doesn't fit tvOS UX.)
+- [x] Cancel previous task in `VideoPlayerCoordinator.play()` — **DONE** (`playTask?.cancel()` + monotonic `currentGeneration` counter prevents stale `onDismiss` from clobbering replacement presenter.)
+- [x] Parallelize API calls in `MediaDetailViewModel` — **DONE** (`async let similarTask` / `seasonsTask` / `nextUpTask` fan out series-level fetches; second stage parallelizes current-season + next-up-season episode fetches when they differ.)
+- [x] Add SwiftLint configuration — **DONE** (`.swiftlint.yml` at repo root with force_unwrapping/force_cast/force_try as warnings + curated opt-in rules.)
+- [x] Set up basic CI (GitHub Actions for build verification) — **DONE** (`.github/workflows/ci.yml`: macos-15 runner, xcodegen + iOS build/test + tvOS build, SwiftLint job.)
+- [ ] Add tvOS test target — **DEFERRED** (existing tests under `Tests/CinemaxKitTests/` import `@testable import Cinemax` (iOS app target). Mirroring for tvOS requires a duplicate test bundle and platform-conditioned imports — wait until coverage justifies the friction.)
 
 ---
 

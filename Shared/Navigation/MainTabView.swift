@@ -72,6 +72,7 @@ struct MainTabView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tint(themeManager.accentContainer)
+        .sensoryFeedback(.selection, trigger: selectedTab)
     }
     #endif
 

@@ -44,6 +44,7 @@
 
 "movies.title" = "Films";
 "movies.sortFilter" = "Trier et filtrer";
+"library.filter.button" = "Filtres";
 "movies.count" = "%d films";
 "movies.titles" = "%d titres";
 "sort.ascending" = "Croissant";
@@ -157,7 +158,6 @@
 "settings.admin" = "Admin";
 "settings.user" = "Utilisateur";
 "settings.switchAccount" = "Changer de compte";
-"settings.switchAccountConfirm" = "Vous serez déconnecté et redirigé vers l'écran de connexion.";
 "switchAccount.pickUser" = "Choisir un utilisateur";
 "switchAccount.enterPasswordFor" = "Mot de passe de %@";
 "switchAccount.signIn" = "Connexion";
@@ -227,6 +227,9 @@
 "settings.homePage.genreRows" = "Rangées par genre";
 "settings.detailPage" = "Page de détail";
 "settings.detailPage.qualityBadges" = "Badges de qualité";
+"settings.libraryLayout" = "Page d'accueil bibliothèque";
+"settings.libraryLayout.browse" = "Parcourir";
+"settings.libraryLayout.grid" = "Grille";
 
 // MARK: - Media Detail
 
@@ -727,3 +730,22 @@
 "admin.metadata.delete.confirm" = "Supprimer définitivement";
 "admin.metadata.delete.success" = "Élément supprimé";
 
+
+// MARK: - Session expiry (lazy 401 recovery)
+
+"session.expired" = "Session expirée — veuillez vous reconnecter.";
+
+// MARK: - Player (tvOS dismiss hint)
+
+"player.tvOS.dismissHint" = "Appuyez sur Menu pour quitter.";
+
+// MARK: - Accessibility (added in v1.0 audit)
+
+"accessibility.playItem" = "Lire %@";
+"accessibility.moreInfoAbout" = "Plus d'informations sur %@";
+
+// MARK: - Admin — formatting glyphs
+
+"admin.plugins.versionLabel" = "v%@";
+"admin.dashboard.sessionClient" = "• %@";
+"admin.metadata.ratingDenominator" = "/ 10";

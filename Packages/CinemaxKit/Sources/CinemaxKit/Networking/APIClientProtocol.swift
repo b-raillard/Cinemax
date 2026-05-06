@@ -22,6 +22,21 @@ public protocol ServerAPI: Sendable {
     /// limit holds uniformly across Home, Library, Search, Similar, Next Up,
     /// and Episodes.
     func applyContentRatingLimit(maxAge: Int)
+
+    /// Installs a callback fired whenever any session-scoped API call returns
+    /// HTTP 401 (token expired, revoked, or password reset elsewhere). Used
+    /// by `AppState` to drive lazy session-expiry recovery — clear keychain,
+    /// flip `isAuthenticated`, surface a toast, route back to login. The
+    /// callback is invoked from whatever actor the failing call ran on, so
+    /// it MUST be `@Sendable` and cannot capture MainActor state directly;
+    /// bridge through `NotificationCenter` if it needs to mutate UI state.
+    func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void)
+}
+
+public extension ServerAPI {
+    /// Default no-op so test mocks that don't care about 401 flow keep
+    /// compiling without an explicit override.
+    func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void) {}
 }
 
 /// Authentication, user listing, and active-session queries.

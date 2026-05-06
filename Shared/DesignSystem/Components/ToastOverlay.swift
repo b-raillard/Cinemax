@@ -22,6 +22,18 @@ struct ToastOverlay: View {
         .allowsHitTesting(toasts.current != nil)
         .animation(motionEnabled ? .spring(response: 0.4, dampingFraction: 0.82) : nil,
                    value: toasts.current)
+        #if os(iOS)
+        // Haptic feedback paired to toast level — fires only when a new toast
+        // appears (not on dismiss). tvOS has no Taptic Engine.
+        .sensoryFeedback(trigger: toasts.current) { _, new in
+            guard let new else { return nil }
+            switch new.level {
+            case .success: return .success
+            case .error:   return .error
+            case .info:    return .selection
+            }
+        }
+        #endif
     }
 }
 

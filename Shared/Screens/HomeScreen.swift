@@ -190,13 +190,15 @@ struct HomeScreen: View {
             .frame(maxWidth: .infinity)
             .frame(height: heroHeight)
             .overlay {
-                if let backdropId = item.backdropItemID {
+                if item.hasBackdropImage, let backdropId = item.backdropItemID {
                     CinemaLazyImage(
                         url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
                     .accessibilityHidden(true)
+                } else {
+                    BackdropFallbackView()
                 }
             }
             .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
@@ -262,6 +264,7 @@ struct HomeScreen: View {
                             .buttonStyle(.plain)
                             #endif
                             .frame(width: playButtonWidth)
+                            .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
 
                             NavigationLink {
                                 MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
@@ -287,8 +290,15 @@ struct HomeScreen: View {
                             .buttonStyle(.plain)
                             #endif
                             .fixedSize()
+                            .accessibilityLabel(String(format: loc.localized("accessibility.moreInfoAbout"), item.name ?? ""))
                         }
                     }
+                    #if os(tvOS)
+                    // Discrete focus section so up-presses from Play / More Info
+                    // can escape the bottom-aligned overlay and reach the tab
+                    // bar instead of getting trapped inside the hero bounds.
+                    .focusSection()
+                    #endif
                 }
                 .padding(.horizontal, heroPadding)
                 .padding(.bottom, heroPadding + CinemaSpacing.spacing6)

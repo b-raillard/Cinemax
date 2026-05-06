@@ -14,8 +14,15 @@ struct CinemaButton: View {
     var isLoading: Bool = false
     let action: () -> Void
 
+    /// Bumped on every tap so `.sensoryFeedback` fires once per press without
+    /// needing the caller to provide a state value to observe.
+    @State private var tapCount = 0
+
     var body: some View {
-        Button(action: action) {
+        Button {
+            tapCount &+= 1
+            action()
+        } label: {
             HStack(spacing: CinemaSpacing.spacing2) {
                 if isLoading {
                     ProgressView()
@@ -47,8 +54,18 @@ struct CinemaButton: View {
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: style))
         #else
         .buttonStyle(.plain)
+        .sensoryFeedback(hapticForStyle, trigger: tapCount)
         #endif
     }
+
+    #if os(iOS)
+    /// Accent CTAs (Play, Login, Save) get a meatier impact; primary/ghost get
+    /// a light selection tap. Skip when isLoading so multi-tap during async
+    /// work doesn't fire repeated haptics.
+    private var hapticForStyle: SensoryFeedback {
+        isLoading ? .selection : (style == .accent ? .impact(weight: .medium) : .selection)
+    }
+    #endif
 
     @ViewBuilder
     var background: some View {
