@@ -23,7 +23,7 @@ struct TrackPickerSheet: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 if !info.audioTracks.isEmpty {
                     Section(loc.localized("player.audio")) {

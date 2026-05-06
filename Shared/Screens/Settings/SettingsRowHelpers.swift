@@ -34,6 +34,7 @@ struct SettingsToggleRow: Identifiable {
 /// connection state. iOS shows "LIVE" at 13pt; tvOS shows "CONNECTED" at 14pt.
 /// Both sides previously inlined nearly-identical HStacks — this collapses that
 /// duplication while keeping each platform's label copy and size.
+@MainActor
 @ViewBuilder
 func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) -> some View {
     HStack(spacing: dotSize - 1) {
@@ -58,6 +59,7 @@ func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) ->
 #if os(iOS)
 
 /// Standard padded row container for settings cells.
+@MainActor
 @ViewBuilder
 func iOSSettingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
     content()
@@ -66,6 +68,7 @@ func iOSSettingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some 
 }
 
 /// Colored icon badge used as the leading element of a settings row.
+@MainActor
 @ViewBuilder
 func iOSRowIcon(systemName: String, color: Color) -> some View {
     ZStack {

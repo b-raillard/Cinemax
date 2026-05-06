@@ -34,46 +34,10 @@ extension JellyfinAPIClient {
         debugLog("Item '\(item.name ?? "?")': type=\(item.type?.rawValue ?? "nil"), mediaSources=\(item.mediaSources?.count ?? 0)")
         #endif
 
-        // If this is a Series or Season, resolve to a playable episode
-        if item.type == .series {
-            let resolvedId: String
-            if let nextEp = try await getNextUp(seriesId: itemId, userId: userId),
-               let epId = nextEp.id {
-                resolvedId = epId
-                #if DEBUG
-                debugLog("Resolved Series → next up episode (\(epId))")
-                #endif
-            } else {
-                // No next up — try first episode of first season
-                let seasons = try await getSeasons(seriesId: itemId, userId: userId)
-                guard let firstSeason = seasons.first, let seasonId = firstSeason.id else {
-                    throw JellyfinError.playbackFailed("No episodes available")
-                }
-                let episodes = try await getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
-                guard let firstEp = episodes.first, let firstEpId = firstEp.id else {
-                    throw JellyfinError.playbackFailed("No episodes available")
-                }
-                resolvedId = firstEpId
-                #if DEBUG
-                debugLog("Resolved Series → first episode (\(firstEpId))")
-                #endif
-            }
-            item = try await getItem(userId: userId, itemId: resolvedId)
-            effectiveItemId = resolvedId
-        } else if item.type == .season {
-            guard let seriesId = item.seriesID else {
-                throw JellyfinError.playbackFailed("No series ID for season")
-            }
-            let episodes = try await getEpisodes(seriesId: seriesId, seasonId: itemId, userId: userId)
-            guard let firstEp = episodes.first, let firstEpId = firstEp.id else {
-                throw JellyfinError.playbackFailed("No episodes in this season")
-            }
-            item = try await getItem(userId: userId, itemId: firstEpId)
-            effectiveItemId = firstEpId
-            #if DEBUG
-            debugLog("Resolved Season → first episode (\(firstEpId))")
-            #endif
-        }
+        // If this is a Series or Season, resolve to a playable episode.
+        let resolved = try await resolvePlayableEpisode(item: item, itemId: itemId, userId: userId)
+        item = resolved.item
+        effectiveItemId = resolved.itemId
 
         let initialMediaSource = item.mediaSources?.first
         let initialMediaSourceId = initialMediaSource?.id
@@ -218,6 +182,56 @@ extension JellyfinAPIClient {
             selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
             authToken: token
         )
+    }
+
+    /// Resolves a Series/Season to a playable Episode, fetching the full DTO.
+    /// Movies (and any other already-playable kind) pass through unchanged.
+    /// Series prefers the user's "Next Up" episode; falls back to the first
+    /// episode of the first season. Season picks the first episode.
+    private func resolvePlayableEpisode(
+        item: BaseItemDto,
+        itemId: String,
+        userId: String
+    ) async throws -> (item: BaseItemDto, itemId: String) {
+        if item.type == .series {
+            let resolvedId: String
+            if let nextEp = try await getNextUp(seriesId: itemId, userId: userId),
+               let epId = nextEp.id {
+                resolvedId = epId
+                #if DEBUG
+                debugLog("Resolved Series → next up episode (\(epId))")
+                #endif
+            } else {
+                let seasons = try await getSeasons(seriesId: itemId, userId: userId)
+                guard let firstSeason = seasons.first, let seasonId = firstSeason.id else {
+                    throw JellyfinError.playbackFailed("No episodes available")
+                }
+                let episodes = try await getEpisodes(seriesId: itemId, seasonId: seasonId, userId: userId)
+                guard let firstEp = episodes.first, let firstEpId = firstEp.id else {
+                    throw JellyfinError.playbackFailed("No episodes available")
+                }
+                resolvedId = firstEpId
+                #if DEBUG
+                debugLog("Resolved Series → first episode (\(firstEpId))")
+                #endif
+            }
+            let resolved = try await getItem(userId: userId, itemId: resolvedId)
+            return (resolved, resolvedId)
+        } else if item.type == .season {
+            guard let seriesId = item.seriesID else {
+                throw JellyfinError.playbackFailed("No series ID for season")
+            }
+            let episodes = try await getEpisodes(seriesId: seriesId, seasonId: itemId, userId: userId)
+            guard let firstEp = episodes.first, let firstEpId = firstEp.id else {
+                throw JellyfinError.playbackFailed("No episodes in this season")
+            }
+            let resolved = try await getItem(userId: userId, itemId: firstEpId)
+            #if DEBUG
+            debugLog("Resolved Season → first episode (\(firstEpId))")
+            #endif
+            return (resolved, firstEpId)
+        }
+        return (item, itemId)
     }
 
     /// Raw HTTP POST to PlaybackInfo, captures the full response body for diagnosis.
