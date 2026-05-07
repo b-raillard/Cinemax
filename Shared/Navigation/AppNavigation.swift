@@ -149,11 +149,19 @@ struct AppNavigation: View {
     /// guard the one-time `ImagePipeline.shared` replacement so we don't throw
     /// away the in-memory `ImageCache` (and orphan in-flight decodes) on every
     /// recreation.
+    ///
+    /// The in-memory cost limit is bumped from Nuke's ~100 MB default to 256 MB
+    /// because tvOS 4K backdrops decode to 4–8 MB each — the default evicts
+    /// mid-render when scrolling library / detail screens.
     private static let configurePipeline: Void = {
-        ImagePipeline.shared = ImagePipeline(configuration: .withDataCache(
+        var config = ImagePipeline.Configuration.withDataCache(
             name: "com.cinemax.images",
             sizeLimit: 500 * 1024 * 1024 // 500 MB disk cache
-        ))
+        )
+        let memoryCache = ImageCache()
+        memoryCache.costLimit = 256 * 1024 * 1024 // 256 MB decoded images
+        config.imageCache = memoryCache
+        ImagePipeline.shared = ImagePipeline(configuration: config)
     }()
 
     init() {

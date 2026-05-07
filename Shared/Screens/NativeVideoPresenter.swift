@@ -49,6 +49,7 @@ final class NativeVideoPresenter {
     private var sleepTimer: SleepTimerController!
     private var chapters: ChapterController!
     private var endOfSeries: EndOfSeriesOverlayController!
+    private var remoteCommands: RemoteCommandController!
 
     // Track state
     private var audioTracks: [MediaTrackInfo] = []
@@ -142,6 +143,9 @@ final class NativeVideoPresenter {
             playerVCProvider: { [weak self] in self?.playerVC },
             onDone: { [weak self] in self?.playerVC?.dismiss(animated: true) }
         )
+        self.remoteCommands = RemoteCommandController(
+            onNavigate: { [weak self] ref in self?.navigateToEpisode(ref) }
+        )
     }
 
     func present(info: PlaybackInfo) {
@@ -189,7 +193,7 @@ final class NativeVideoPresenter {
         vc.canStartPictureInPictureAutomaticallyFromInline = true
         #endif
         self.playerVC = vc
-        setupRemoteCommands()
+        remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
         setupTrackMenus()
         setupBackgroundObserver()
 
@@ -317,49 +321,6 @@ final class NativeVideoPresenter {
         observeItemEnd(playerItem, player: player)
     }
     #endif
-
-    // MARK: - Remote Command Center (prev/next in native HUD)
-
-    private var prevCommandTarget: Any?
-    private var nextCommandTarget: Any?
-
-    private func setupRemoteCommands() {
-        let center = MPRemoteCommandCenter.shared()
-
-        if let prev = previousEpisode, episodeNavigator != nil {
-            center.previousTrackCommand.isEnabled = true
-            prevCommandTarget = center.previousTrackCommand.addTarget { [weak self] _ in
-                Task { @MainActor [weak self] in self?.navigateToEpisode(prev) }
-                return .success
-            }
-        } else {
-            center.previousTrackCommand.isEnabled = false
-        }
-
-        if let next = nextEpisode, episodeNavigator != nil {
-            center.nextTrackCommand.isEnabled = true
-            nextCommandTarget = center.nextTrackCommand.addTarget { [weak self] _ in
-                Task { @MainActor [weak self] in self?.navigateToEpisode(next) }
-                return .success
-            }
-        } else {
-            center.nextTrackCommand.isEnabled = false
-        }
-    }
-
-    private func teardownRemoteCommands() {
-        let center = MPRemoteCommandCenter.shared()
-        if let target = prevCommandTarget {
-            center.previousTrackCommand.removeTarget(target)
-            prevCommandTarget = nil
-        }
-        if let target = nextCommandTarget {
-            center.nextTrackCommand.removeTarget(target)
-            nextCommandTarget = nil
-        }
-        center.previousTrackCommand.isEnabled = false
-        center.nextTrackCommand.isEnabled = false
-    }
 
     // MARK: - Track Menus (native transport bar)
 
@@ -518,10 +479,10 @@ final class NativeVideoPresenter {
             let avPlayer = AVPlayer(playerItem: playerItem)
             avPlayer.automaticallyWaitsToMinimizeStalling = true
             vc.player = avPlayer
-            teardownRemoteCommands()
-            setupRemoteCommands()
+            remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
             setupTrackMenus()              // refreshes native "..." menu for new episode
 
+            playerObservation?.invalidate()
             playerObservation = playerItem.observe(\.status) { item, _ in
                 Task { @MainActor in
                     if item.status == .failed {
@@ -829,7 +790,7 @@ final class NativeVideoPresenter {
     }
 
     private func cleanup() {
-        teardownRemoteCommands()
+        remoteCommands.detach()
         if let vc = playerVC { applyTransportBarItems([], to: vc) }
         #if os(tvOS)
         dismissDelegate = nil

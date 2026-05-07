@@ -2,15 +2,8 @@ import SwiftUI
 
 // MARK: - Motion Effects Environment Key
 
-private struct MotionEffectsEnabledKey: EnvironmentKey {
-    static let defaultValue: Bool = true
-}
-
 extension EnvironmentValues {
-    var motionEffectsEnabled: Bool {
-        get { self[MotionEffectsEnabledKey.self] }
-        set { self[MotionEffectsEnabledKey.self] = newValue }
-    }
+    @Entry var motionEffectsEnabled: Bool = true
 }
 
 // MARK: - Cinema Focus Modifier

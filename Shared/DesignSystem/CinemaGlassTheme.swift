@@ -194,6 +194,16 @@ enum CinemaRadius {
     static let full: CGFloat = 9999
 }
 
+// MARK: - Bloom Tokens
+//
+// Sizes for the centered accent-color radial bloom that sits behind the tvOS
+// settings landing/detail pages.
+
+enum CinemaBloom {
+    static let settingsSize: CGFloat = 1200
+    static let settingsBlur: CGFloat = 280
+}
+
 // MARK: - Gradients
 
 enum CinemaGradient {

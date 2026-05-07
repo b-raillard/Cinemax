@@ -9,7 +9,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 - **Swift 6** strict concurrency; `@Observable` + `@MainActor` for all state
 - **JellyfinClient** wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable
 - **iOS `NavigationStack` caveat**: destinations pushed via `navigationDestination(item:)` render in a separate context — `@Observable` changes won't re-render unless the destination is a standalone `View` struct with its own `@Environment` properties, not an extension method returning `some View`.
-- **Lazy-container navigation rule**: SwiftUI silently ignores `navigationDestination(item:)` placed inside `LazyVGrid`/`LazyVStack`/`LazyHStack`/`List` and emits a runtime warning ("Do not put a navigation destination modifier inside a 'lazy' container"). Hoist the modifier to a non-lazy ancestor; bubble action up via a callback that mutates a screen-level `@State`. Reference pattern: `AdminItemMenu` (no internal destination) → `LibraryPosterCard.onAdminAction` → `MovieLibraryScreen.adminPushIntent` (`@State`) + `.navigationDestination(item: $adminPushIntent) { adminMenuPushDestination(for: $0) }` on the body's outer `ZStack`. Same shape on `MediaDetailScreen`.
+- **Lazy-container navigation rule**: SwiftUI silently ignores `navigationDestination(item:)` inside `LazyVGrid`/`LazyVStack`/`LazyHStack`/`List` (runtime warning: "Do not put a navigation destination modifier inside a 'lazy' container"). Hoist the modifier to a non-lazy ancestor and bubble the action up via a callback that mutates a screen-level `@State`. Reference: `AdminItemMenu.onSelectDestination` → screen-level `@State AdminMenuPushIntent?` + `.navigationDestination(item:)` on the outer `ZStack`. Used by `MovieLibraryScreen` and `MediaDetailScreen`.
 
 ### iOS 26 / tvOS 26 API rules
 
@@ -26,6 +26,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 1. `View, Equatable` sub-type inside a `@MainActor` screen needs `nonisolated static func ==` — `Equatable` isn't main-actor-isolated. See `PlayActionButtonsSection` in `MediaDetailScreen.swift`.
 2. A `@MainActor` class's `static func` returning non-Sendable types into a `TaskGroup @Sendable` closure needs `nonisolated private static func`. See `HomeViewModel.fetchGenreItems`.
 3. A `nonisolated static func` on a `@MainActor` class that reads a `static let` constant needs the constant marked `nonisolated` too — Sendable types only (`Int`, `String`, etc.). See `SearchViewModel.sanitize` + `maxQueryLength`.
+4. When `nonisolated static func ==` must read a stored property typed as a non-Sendable DTO (e.g. `BaseItemDto`/`[BaseItemPerson]`), wrap the body in `MainActor.assumeIsolated { ... }`. Safe because SwiftUI runs view diffing on the main actor. See the `MediaDetail*Section` / `MediaDetailEpisodeCard` / `MediaDetailEpisodeRow` extractions.
 
 ## Project Structure
 
@@ -34,8 +35,9 @@ Shared/
   DesignSystem/             CinemaGlassTheme, ThemeManager, AccentOption (+ AccentEasterEgg), LocalizationManager, ToastCenter, GlassModifiers, FocusScaleModifier, AdaptiveLayout, TVButtonStyles, SettingsKeys, SleepTimerOption
   DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges, UserAvatar
   Navigation/               AppNavigation (auth routing), MainTabView
-  Screens/                  Home/Login/ServerSetup/Search/MediaDetail/MovieLibrary/TVSeries/Settings screens, VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, sheets/helpers
-    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController
+  Screens/                  Home/Login/ServerSetup/Search/MovieLibrary/TVSeries/PrivacySecurity (+ ConnectedDevicesList), MediaDetailScreen + sibling extractions (EpisodeCard/EpisodeRow/EpisodeMetadataLine/EpisodeOverviewSheet/CastSection/SimilarSection/ButtonStyles), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, sheets/helpers
+    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController
+    Settings/               SettingsScreen + iOS/tvOS extensions, SettingsAppearanceView+iOS, SettingsRowHelpers, SettingsTV{AccentPicker,LanguagePicker,ProfileSection,ActionRow}
     Admin/                  (iOS-only) Dashboard/Users/Devices/Activity/Tasks/Plugins/Catalog/Playback/Network/Logs/ApiKeys/Metadata/Identify
     Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, AdminItemMenu, DestructiveConfirmSheet, AdminComingSoonScreen
   ViewModels/               per-screen view models + VideoPlayerCoordinator
@@ -45,7 +47,7 @@ Packages/CinemaxKit/        Models, Networking (JellyfinAPIClient, ImageURLBuild
 docs/design-system/         Canonical design system reference
 ```
 
-`Shared/Screens/` is flat (no `Settings/`/`Home/` subfolders). `PlayLink.swift` stays in `Screens/` because it knows about `VideoPlayerView`/`VideoPlayerCoordinator`. `SettingsRowHelpers.swift` stays because tvOS renderers capture `@FocusState`. Exception: `Shared/Screens/Admin/` is feature-grouped (30+ files).
+`Shared/Screens/` is mostly flat. Two feature folders exist as exceptions: `Settings/` (5 base files + 4 tvOS sub-views) and `Admin/` (30+ files). `PlayLink.swift` stays at the root because it knows about `VideoPlayerView`/`VideoPlayerCoordinator`. Sibling extractions of the same screen (e.g. `MediaDetail*.swift`) stay at the root — they're tightly coupled to their parent.
 
 ## Design System
 
@@ -128,12 +130,15 @@ Unified, parameterized by `BaseItemKind` (movies or series).
 
 ### Native Player (`NativeVideoPresenter.swift`)
 
-Both platforms use `AVPlayerViewController` presented via UIKit modal (`UIViewController.present()`). Three `@MainActor` sub-controllers in `Shared/Screens/VideoPlayer/`:
+Both platforms use `AVPlayerViewController` presented via UIKit modal (`UIViewController.present()`). `@MainActor` sub-controllers live in `Shared/Screens/VideoPlayer/`:
 - `PlaybackReporter` — reportStart/Stop/Background + periodic progress (10-tick throttle).
 - `SkipSegmentController` — intro/outro (iOS floating UIButton / tvOS `contextualActions`). Cancels in-flight fetches on teardown.
 - `SleepTimerController` — countdown + "Still watching?" prompt. Presenter passes `playerVCProvider` closure + `onStopPlayback` callback.
+- `ChapterController` — fetches chapters, wires `AVNavigationMarkersGroup` (tvOS only), captures `currentSeriesName` for end-of-series overlay.
+- `EndOfSeriesOverlayController` — "You finished {Series Name}" overlay on auto-play end with no next episode.
+- `RemoteCommandController` — `MPRemoteCommandCenter` prev/next bindings; `attach(previous:next:hasNavigator:)` on play / episode-nav, `detach()` on cleanup. Owns the prev/next target tokens.
 
-Presenter keeps **one** `addPeriodicTimeObserver` (1s) and fans ticks to both `skipSegments.onTick` + `playbackReporter.onTick`. Sub-controllers never add their own observers.
+Presenter keeps **one** `addPeriodicTimeObserver` (1s) and fans ticks to both `skipSegments.onTick` + `playbackReporter.onTick`. Sub-controllers never add their own observers. Episode navigation rebinds: `playerObservation?.invalidate()` before reassignment, then `remoteCommands.attach(...)` with the new prev/next refs.
 
 - **MUST present via UIKit modal** — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss.
 - **iOS dismiss detection**: `PlayerHostingVC` wrapper with `viewWillDisappear(isBeingDismissed:)`.
@@ -190,7 +195,7 @@ Rendering:
 - Category pills (landing): focused = `accentContainer` fill + scale 1.05 + glow.
 - Back button: `.focused($focusedItem, equals: .back)`, accent-highlighted.
 
-### Settings row SSOT (`SettingsRowHelpers.swift` + platform extensions)
+### Settings row SSOT (`Settings/SettingsRowHelpers.swift` + platform extensions)
 
 Every boolean toggle declared once as `SettingsToggleRow`, rendered on both platforms from the same list. Four catalogue properties on `SettingsScreen`: `interfaceToggleRows` / `homePageToggleRows` / `detailPageToggleRows` / `debugToggleRows`. Adding/renaming a toggle is a one-line edit.
 
@@ -293,7 +298,7 @@ Admin workflows mobile-only by product decision. `SettingsCategory.visibleCases(
 - tvOS overview uses `.focusable()` for focus-driven scrolling past non-interactive content.
 - **tvOS detail refresh**: `VideoPlayerCoordinator.lastDismissedAt: Date?` updated via `onDismiss` (triggered by `TVDismissDelegate`); screen observes `.onChange` to reload after dismiss (iOS reloads automatically via `.task` on `NavigationLink` pop).
 
-**Resume / next-up** (`actionButtons` → `PlayActionButtonsSection: View, Equatable`): custom `nonisolated static func ==` compares resume state + prev/next episode identity, ignores `epNavigator` closure → `.equatable()` short-circuits re-renders.
+**Resume / next-up** (`actionButtons` → `PlayActionButtonsSection: View, Equatable`): custom `nonisolated static func ==` compares resume state + prev/next episode identity, ignores `epNavigator` closure → `.equatable()` short-circuits re-renders. Same `View, Equatable` pattern is applied to the extracted `MediaDetail{Cast,Similar}Section` and `MediaDetailEpisode{Card,Row}` — when `==` reads non-Sendable DTO fields, wrap in `MainActor.assumeIsolated` (escape hatch #4 above). The tvOS episode list uses `LazyVStack` so 20+ episodes don't render up-front.
 - Movie with `playbackPositionTicks > 0` and not `isPlayed`: progress bar (accent, `playButtonWidth`) + `loc.remainingTime(minutes:)` + "Lecture" resuming via `PlayLink(startTime:)`.
 - Series: uses `viewModel.nextUpEpisode`. In-progress → progress + remaining + resume. Finished/next → episode label + play. Falls back to series-level play if no next-up.
 - **Play from beginning**: when `showResume`, secondary ghost `PlayLink` (`detail.playFromBeginning`, `backward.end.fill`) under resume with `startTime: nil`.
@@ -314,7 +319,7 @@ Admin workflows mobile-only by product decision. `SettingsCategory.visibleCases(
 
 **Studio / Network label** (`studioLine`): up to 2 from `item.studios`. "STUDIO" (movies) / "NETWORK" (series). `EmptyView` when empty.
 
-**Episode metadata line** (`episodeMetadataLine`): shared by tvOS `episodeRow` + iOS `iOSEpisodeCard`, joined with ` • `:
+**Episode metadata line** (`MediaDetailEpisodeMetadataLine`, own file): shared by tvOS `MediaDetailEpisodeRow` + iOS `MediaDetailEpisodeCard`, joined with ` • `:
 - In-progress → "Xm remaining" via `loc.remainingTime(minutes:)`.
 - Else `runTimeTicks > 0` → total runtime via `detail.runtime.min`.
 - Plus `premiereDate` as `.dateTime.month(.abbreviated).day().year()`.
@@ -372,7 +377,7 @@ Admin workflows mobile-only by product decision. `SettingsCategory.visibleCases(
 
 - `ImageURLBuilder` → `/Items/{id}/Images/{type}`.
 - **Backdrop sizing**: use `ImageURLBuilder.screenPixelWidth` — never hardcode `1920`.
-- **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with 500 MB disk (`com.cinemax.images`).
+- **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with 500 MB disk (`com.cinemax.images`) **and** an explicit `ImageCache` with `costLimit = 256 MB` for decoded images — Nuke's ~100 MB default evicts mid-render on tvOS where 4K backdrops decode to 4–8 MB each.
 - **Backdrop fallback**: `item.backdropItemID` (→ `parentBackdropItemID ?? seriesID ?? id`) from `BaseItemDto+Metadata`.
 - **No-backdrop placeholder**: when Jellyfin has no backdrop tag, render `BackdropFallbackView` instead of `CinemaLazyImage`. Gate on `item.hasBackdropImage` (checks `backdropImageTags` / `parentBackdropImageTags` — `backdropItemID` always returns non-nil so it can't be used as availability check). Component is a centered `film` SF Symbol (~42% of min hero side, anchored at 35% of height so it lands in the visible area above the title VStack, not behind it) over `surfaceContainerLow` + soft accent radial wash from top-trailing. Sits *under* `CinemaGradient.heroOverlay` so the bottom fade keeps title/buttons legible — same visual contract as a real backdrop. Wired in `MediaDetailScreen.backdropSection`, `HomeScreen.heroSection`, `LibraryHeroSection`.
 - **Always `CinemaLazyImage`** — never `LazyImage` directly. Params: `url`, `fallbackIcon: String?`, `fallbackBackground: Color`, `showLoadingIndicator: Bool`.
