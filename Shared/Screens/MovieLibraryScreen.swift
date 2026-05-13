@@ -8,6 +8,7 @@ struct MediaLibraryScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(NetworkMonitor.self) private var network
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -41,6 +42,17 @@ struct MediaLibraryScreen: View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
+            #if os(iOS)
+            if !network.isOnline {
+                OfflineLibraryView(scope: itemType == .series ? .series : .movies)
+            } else if viewModel.isLoading {
+                loadingView
+            } else if let error = viewModel.errorMessage {
+                errorView(error)
+            } else {
+                mainContent
+            }
+            #else
             if viewModel.isLoading {
                 loadingView
             } else if let error = viewModel.errorMessage {
@@ -48,6 +60,7 @@ struct MediaLibraryScreen: View {
             } else {
                 mainContent
             }
+            #endif
         }
         #if os(iOS)
         // Lifted out of `AdminItemMenu` so SwiftUI honors it — the menu's

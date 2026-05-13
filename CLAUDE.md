@@ -18,9 +18,9 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 - **iPad multitasking**: `UIRequiresFullScreen` removed (deprecated). iPad split view / Stage Manager allowed — hero/backdrop layouts not yet hardened for resize, expect glitches.
 - **Toolbar + Liquid Glass**: iOS 26 auto-renders `ToolbarItem` buttons with Liquid Glass. **Never** add `.buttonStyle(.glass)` / `.glassProminent` on toolbar items — nests double capsules. Signal active state via `.tint(themeManager.accent)` + `.fill` icon variant.
 
-**Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`
+**Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`, `VLCKitSPM` v3.6.0 ([tylerjonesio/vlckit-spm](https://github.com/tylerjonesio/vlckit-spm) — `import VLCKitSPM` re-exports `MobileVLCKit` on iOS / `TVVLCKit` on tvOS). VLC is iOS-only by linkage (only the `Cinemax` target depends on the SPM package).
 
-**API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): `APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI`. View models needing multiple domains take `APIClientProtocol`; leaf controllers narrow to a slice (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`). `AdminAPI` is a privilege boundary — gated on `AppState.isAdministrator`; server enforces authoritatively.
+**API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): `APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI`. View models needing multiple domains take `APIClientProtocol`; leaf controllers narrow to a slice (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`; `DownloadManager` → `any DownloadAPI`). `AdminAPI` is a privilege boundary — gated on `AppState.isAdministrator`; server enforces authoritatively.
 
 **Swift 6 `nonisolated` escape hatches** (safe when body only reads parameters):
 1. `View, Equatable` sub-type inside a `@MainActor` screen needs `nonisolated static func ==` — `Equatable` isn't main-actor-isolated. See `PlayActionButtonsSection` in `MediaDetailScreen.swift`.
@@ -36,14 +36,15 @@ Shared/
   DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges, UserAvatar
   Navigation/               AppNavigation (auth routing), MainTabView
   Screens/                  Home/Login/ServerSetup/Search/MovieLibrary/TVSeries/PrivacySecurity (+ ConnectedDevicesList), MediaDetailScreen + sibling extractions (EpisodeCard/EpisodeRow/EpisodeMetadataLine/EpisodeOverviewSheet/CastSection/SimilarSection/ButtonStyles), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, sheets/helpers
-    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController
+    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController, VLCOfflinePresenter (iOS)
     Settings/               SettingsScreen + iOS/tvOS extensions, SettingsAppearanceView+iOS, SettingsRowHelpers, SettingsTV{AccentPicker,LanguagePicker,ProfileSection,ActionRow}
+    Downloads/              (iOS-only) DownloadButton, DownloadsScreen, OfflineLibraryView, OfflineMediaDetailView, DownloadItem+BaseItemDto
     Admin/                  (iOS-only) Dashboard/Users/Devices/Activity/Tasks/Plugins/Catalog/Playback/Network/Logs/ApiKeys/Metadata/Identify
     Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, AdminItemMenu, DestructiveConfirmSheet, AdminComingSoonScreen
-  ViewModels/               per-screen view models + VideoPlayerCoordinator
+  ViewModels/               per-screen view models + VideoPlayerCoordinator + DownloadManager (iOS) + NetworkMonitor
 iOS/ tvOS/                  app entry points
 Resources/{fr,en}.lproj/    Localization (fr default)
-Packages/CinemaxKit/        Models, Networking (JellyfinAPIClient, ImageURLBuilder), Persistence (KeychainService)
+Packages/CinemaxKit/        Models (incl. DownloadItem), Networking (JellyfinAPIClient, ImageURLBuilder, JellyfinAPIClient+Downloads), Persistence (KeychainService, DownloadStore, DownloadStorage)
 docs/design-system/         Canonical design system reference
 ```
 
@@ -240,7 +241,87 @@ Settings → Server: `apiClient.clearCache()` + posts `.cinemaxShouldRefreshCata
 ### Debug section
 Always visible (not `#if DEBUG`-gated) so QA/power users don't need a custom build. Icons orange.
 
-## Admin Section (iOS / iPadOS only)
+## Offline Downloads (iOS / iPadOS only)
+
+Mobile-only by product decision. Every download file is wrapped in `#if os(iOS)`; `SettingsCategory.downloads` carries `isIOSOnly = true` so `visibleCases(isAdmin:isTVOS:)` filters it out on tvOS.
+
+### URL negotiation (`JellyfinAPIClient+Downloads.swift`)
+
+`DownloadAPI.buildDownloadRequest(itemId:userId:)` is `async` — it POSTs PlaybackInfo with a **download-specific DeviceProfile** so Jellyfin hands back a single playable file:
+- **DirectPlayProfile**: `container = mp4,m4v,mov,m4a` × `videoCodec = h264,hevc` × broad audio. Direct hits → static-stream URL bound to a `playSessionId`.
+- **TranscodingProfile**: `protocol = .http` (single MP4, **NOT** HLS — HLS is multi-segment and unsuitable for download), `container = mp4`, `context = .static`, `videoCodec = h264`, `audioCodec = aac`. Source that can't direct-play (MKV / AVI / HEVC-in-Matroska) → Jellyfin opens a real transcoding session and returns `mediaSource.transcodingURL` (progressive MP4, `moov` atom at EOF — works once fully downloaded).
+- Last-resort fallback: `/Items/{id}/Download` (raw source bytes).
+
+**Never** use `?static=true` straight off — got us MKV files AVPlayer can't decode. **Never** use `/Videos/{id}/stream.mp4` without a PlaySessionId — without a negotiated session Jellyfin can return an audio-only mux (the QuickTime audio-icon bug).
+
+`resolvePlayableEpisode` + `rawPostPlaybackInfo` are `internal` on `JellyfinAPIClient` (not `private`) so `+Downloads.swift` can reuse them.
+
+### Manager (`Shared/ViewModels/DownloadManager.swift`)
+
+`@MainActor @Observable`. Owns a **background `URLSession`** with identifier `com.cinemax.downloads` and a max-concurrent throttle of 2. The session's `URLSessionDownloadDelegate` is a nested `Adapter: NSObject, @unchecked Sendable` that bridges callbacks back to MainActor via `Task { @MainActor [weak owner] in … }`.
+
+- **`attach(apiClient:userId:)`** wires the API client *and* caches the user id (PlaybackInfo negotiation requires it; queued / resumed tasks don't have a UI call site to provide it). Called from `AppNavigation.task` and re-fired on `appState.currentUserId` change (login / quick switch).
+- **`startTask(for:)`** is the hot path: if `entry.resumeData` exists it relaunches with that blob (URLSession's resume data already encodes the URL); otherwise it fires a detached Task that awaits a fresh PlaybackInfo negotiation, then calls `launchTask(itemId:request:)` back on MainActor.
+- **`enqueue(item:posterURL:backdropURL:)`** stores the catalog entry, kicks off **artwork prefetch** (a detached `URLSession.shared.data(from:)` writes JPEGs to `art/<id>-poster.jpg` and `<id>-backdrop.jpg` so offline screens have thumbnails even for items the user never opened online), and promotes the queue.
+- **`removeAll()`** cancels live tasks, drops the catalog, `DownloadStorage.wipeEverything()` nukes `files/ resume/ art/`. Exposed as "Remove all downloads" via the storage banner menu in `DownloadsScreen`.
+- **`reconcileOrphans`** runs on init — wipes any file in `files/` whose itemId isn't in the catalog. Catches the "catalog reset but media still on disk" drift.
+
+**Background-session relaunch**: `CinemaxAppDelegate.backgroundSessionCompletion` (set in `application(_:handleEventsForBackgroundURLSession:completionHandler:)`) is consumed by the adapter's `urlSessionDidFinishEvents(forBackgroundURLSession:)` so iOS knows our bookkeeping finished and can suspend us again.
+
+### Completion bookkeeping (`didFinish`)
+
+Container detection order (server is authoritative — we never re-encode locally):
+1. **`Content-Disposition: filename=…`** (Jellyfin's `/Items/{id}/Download` always sets this).
+2. **`Content-Type`** mime mapping.
+3. Catalog's initial guess (the source `mediaSource.container`).
+
+`extensionFromDisposition` parses both `filename=` and the RFC 5987 `filename*=UTF-8''…` form. The detected extension overwrites `DownloadItem.containerExt` and the file is moved to `files/<id>.<ext>`.
+
+**File size**: chunked transfer responses have no `Content-Length`, so URLSession reports `totalBytesExpectedToWrite = -1` and the in-flight `totalBytes` stays 0. After move, `didFinish` `stat`s the destination and overwrites BOTH `totalBytes` and `bytesReceived` from the on-disk size. **Don't `bytesReceived = totalBytes`** — that's how the "Zéro ko" labels regressed.
+
+### Storage (`Packages/CinemaxKit/.../Persistence/DownloadStorage.swift`)
+
+```
+Application Support/Cinemax/Downloads/
+  index.json                   ← `DownloadStore` catalog (atomic-write JSON)
+  files/  <itemId>.<ext>       ← finished media; `isExcludedFromBackup = true`
+  resume/ <itemId>.resume      ← URLSession resume blobs for paused / interrupted tasks
+  art/    <itemId>-poster.jpg
+          <itemId>-backdrop.jpg
+```
+
+The whole `Downloads` subtree is excluded from iCloud backup so a 30 GB offline library doesn't pollute the user's backup quota. `DownloadStorage.totalDiskUsage` walks BOTH `files/` AND `art/` so the storage banner matches what "Remove all" actually frees.
+
+### Playback dual path (offline)
+
+`VideoPlayerView.startIOSPlayback` checks `downloads.item(for: itemId)` BEFORE calling `getPlaybackInfo`:
+1. **AVKit-friendly container** (`DownloadItem.isOfflinePlayable` → `mp4, m4v, m4a, mov, ts, m2ts, 3gp, 3g2`) → AVPlayer via `NativeVideoPresenter` (full feature set: skip intro/outro, chapter markers, AirPlay, PiP, audio/subtitle menus).
+2. **Not AVKit-friendly** (mkv, avi, webm…) → `VLCOfflinePresenter` (libVLC modal — black bg, tap-to-toggle controls, scrubber, Done button). Same approach Swiftfin / Streamyfin use. Less chrome (no skip intro, no AirPlay) but it actually decodes Matroska instead of showing the QuickTime audio-only icon.
+
+`VLCOfflinePresenter` lives in `Shared/Screens/VideoPlayer/` next to `NativeVideoPresenter`. It uses `VLCMediaPlayer.drawable` (`UIView`), sets `:file-caching=3000` on the `VLCMedia` so scrubbing through multi-GB MKVs doesn't lag, and seeks to `startTime` exactly once after `mediaPlayerTimeChanged` reports a non-zero `length` (VLC needs media-parsed to honor seeks). Delegate methods are `nonisolated` because `VLCMediaPlayerDelegate` isn't main-actor-isolated; they bridge through `Task { @MainActor }`.
+
+### Network awareness (`Shared/ViewModels/NetworkMonitor.swift`)
+
+`@MainActor @Observable` around `NWPathMonitor`. Seeds `isOnline` synchronously from `monitor.currentPath` (after `start(queue:)` returns) so the very first SwiftUI render already reflects reality — the path handler then flips it in real time. Injected at `AppNavigation` root.
+
+**Fast-fail timeouts**: every `JellyfinClient` we build now takes `sessionConfiguration: Self.fastFailSessionConfiguration` (timeoutIntervalForRequest = 8, timeoutIntervalForResource = 20, `waitsForConnectivity = false`). The raw PlaybackInfo POST adds `request.timeoutInterval = 8`. Without these the default 60s timeout makes airplane-mode launches feel frozen.
+
+**Non-blocking launch**: `AppState.restoreSession` hydrates from keychain immediately and dispatches `fetchServerInfo` + `refreshCurrentUser` in a detached `Task` — the splash no longer waits on a server round-trip when the user is offline.
+
+### Offline UI surfaces
+
+- **`OfflineLibraryView`** (`scope: .all/.movies/.series`) replaces the regular tab content when `!network.isOnline`. Yellow banner + grid of downloaded posters. Cards push `MediaDetailScreen`, whose body short-circuits to `OfflineMediaDetailView` when `network.isOnline == false` AND `downloads.item(for:)` (or `downloads.episodes(forSeriesId:)`) returns a completed entry.
+- **`OfflineMediaDetailView`** renders directly from cached `DownloadItem` metadata (`overview`, `productionYear`, `genres`, `officialRating`, `communityRating`, `premiereDate`, `backdropItemID`) — no API call. Movie shows Play + Remove; episode shows series header + auto-grouped episode list from `episodes(forSeriesId:)`.
+- All offline image consumers (`DownloadsScreen.thumbnail`, `OfflineLibraryView.posterCard`, `OfflineMediaDetailView.header` + episode rows) check `downloads.localPosterURL(forItemId:)` / `localBackdropURL` first, fall back to the remote `imageBuilder` URL only when nothing's cached. Critical because Nuke's disk cache keys per-URL — a poster cached at `maxWidth=180` is a *different cache entry* from `maxWidth=360`, so a screen the user never visited online would otherwise miss.
+- **`SettingsCategory.downloads`** routes to `DownloadsScreen` (iOS only). Movies + per-series episode buckets, per-row Menu (pause / resume / retry / remove), tap-to-play `PlayLink` overlay on completed rows. Storage banner is a Menu with "Remove all downloads" (confirmation dialog).
+
+### Download surfaces on detail screens
+
+- **Movie detail / episode detail**: `DownloadButton` next to Play (icon-only, top-aligned). State machine reflects `DownloadStatus` — `arrow.down.circle` / progress ring (with pause overlay) / `play.circle` (paused) / `arrow.triangle.2.circlepath` (failed) / `checkmark.circle.fill` (completed → long-press menu → remove).
+- **Series detail**: same button surfaced as a `Menu` — "Download season" enqueues the currently selected season's episodes; "Download whole series" runs an async `fetchAllEpisodes` closure that loops `getEpisodes(seriesId:seasonId:)` across every season and enqueues them. The button captures `viewModel.seasons` and the API client by value so the closure stays `@Sendable`-clean.
+- **Per-episode** (iOS `MediaDetailEpisodeCard`): a small `DownloadButton` is inline next to the episode-number label so individual episodes can be queued without grabbing the whole season.
+
+
 
 Admin workflows mobile-only by product decision. `SettingsCategory.visibleCases(isAdmin:isTVOS:)` short-circuits when `isTVOS`; every file under `Shared/Screens/Admin/` is wrapped in `#if os(iOS)` so tvOS compiles an empty module.
 

@@ -139,7 +139,8 @@ public final class JellyfinAPIClient: Sendable {
                 deviceName: deviceName,
                 deviceID: deviceID,
                 version: appVersion
-            )
+            ),
+            sessionConfiguration: Self.fastFailSessionConfiguration
         )
 
         let response = try await client.send(Paths.getPublicSystemInfo)
@@ -203,7 +204,8 @@ public final class JellyfinAPIClient: Sendable {
                     deviceName: deviceName,
                     deviceID: deviceID,
                     version: appVersion
-                )
+                ),
+                sessionConfiguration: Self.fastFailSessionConfiguration
             )
             setClient(authedClient, url: url)
         }
@@ -233,10 +235,26 @@ public final class JellyfinAPIClient: Sendable {
                 deviceName: deviceName,
                 deviceID: deviceID,
                 version: appVersion
-            )
+            ),
+            sessionConfiguration: Self.fastFailSessionConfiguration
         )
         setClient(client, url: url)
     }
+
+    /// URLSession configuration applied to every `JellyfinClient` we hand out.
+    /// Default system timeouts (~60s per request, 7 days per resource) make
+    /// the app feel frozen when the user goes offline mid-flow — these tight
+    /// values surface a `URLError` in ~8s so callers can fall back to cached
+    /// or downloaded content. NetworkMonitor in the app layer gives us the
+    /// fast path; this is the safety net for cases where the OS hasn't yet
+    /// flipped path status.
+    fileprivate static let fastFailSessionConfiguration: URLSessionConfiguration = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 8
+        c.timeoutIntervalForResource = 20
+        c.waitsForConnectivity = false
+        return c
+    }()
 
     private var deviceName: String {
         #if os(tvOS)

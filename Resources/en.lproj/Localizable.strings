@@ -748,3 +748,51 @@
 "admin.plugins.versionLabel" = "v%@";
 "admin.dashboard.sessionClient" = "• %@";
 "admin.metadata.ratingDenominator" = "/ 10";
+
+// MARK: - Downloads (offline)
+
+"settings.downloads" = "Downloads";
+"settings.downloads.subtitle" = "Your offline movies & shows";
+"downloads.title" = "Downloads";
+"downloads.empty.title" = "No downloads yet";
+"downloads.empty.subtitle" = "Download a movie or episode to watch it offline.";
+"downloads.section.movies" = "Movies";
+"downloads.section.series" = "Shows";
+"downloads.totalSpace" = "%@ used";
+"downloads.status.queued" = "Queued";
+"downloads.status.downloading" = "Downloading";
+"downloads.status.paused" = "Paused";
+"downloads.status.completed" = "Downloaded";
+"downloads.status.failed" = "Failed";
+"downloads.progress" = "%d %%";
+"downloads.action.pause" = "Pause";
+"downloads.action.resume" = "Resume";
+"downloads.action.retry" = "Retry";
+"downloads.action.cancel" = "Cancel";
+"downloads.action.remove" = "Remove";
+"downloads.action.removeAll" = "Remove all";
+"downloads.confirmRemove.title" = "Remove this download?";
+"downloads.confirmRemove.message" = "The file will be deleted from this device.";
+"downloads.removeAll.title" = "Remove all downloads?";
+"downloads.removeAll.message" = "Every download and any leftover files will be deleted from this device.";
+
+"detail.download" = "Download";
+"detail.downloading" = "Downloading…";
+"detail.downloaded" = "Downloaded";
+"detail.download.cancel" = "Cancel download";
+"detail.download.removeFromDevice" = "Remove from device";
+"detail.download.queueSeason" = "Download season";
+"detail.download.queueSeries" = "Download series";
+
+"toast.download.queued" = "Download queued";
+"toast.download.queuedMany" = "%d episodes queued";
+"toast.download.removed" = "Download removed";
+"toast.download.error" = "Download failed";
+"toast.download.unsupportedContainer" = "Download started — but this format isn't playable offline on iOS.";
+"player.error.unsupportedOfflineContainer" = "This file (%@) can't be played offline on iOS. Re-encode it to MP4 on your Jellyfin server to enjoy it without a network.";
+
+// MARK: - Offline mode
+
+"offline.banner" = "Offline mode · downloaded content only";
+"offline.empty.title" = "You're offline";
+"offline.empty.subtitle" = "Download movies or episodes while you have a connection to find them here.";

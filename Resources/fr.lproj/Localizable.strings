@@ -748,4 +748,52 @@
 
 "admin.plugins.versionLabel" = "v%@";
 "admin.dashboard.sessionClient" = "• %@";
+
+// MARK: - Downloads (offline)
+
+"settings.downloads" = "Téléchargements";
+"settings.downloads.subtitle" = "Vos films et séries hors-ligne";
+"downloads.title" = "Téléchargements";
+"downloads.empty.title" = "Aucun téléchargement";
+"downloads.empty.subtitle" = "Téléchargez un film ou un épisode pour le regarder hors-ligne.";
+"downloads.section.movies" = "Films";
+"downloads.section.series" = "Séries";
+"downloads.totalSpace" = "%@ utilisés";
+"downloads.status.queued" = "En attente";
+"downloads.status.downloading" = "En cours";
+"downloads.status.paused" = "En pause";
+"downloads.status.completed" = "Téléchargé";
+"downloads.status.failed" = "Échec";
+"downloads.progress" = "%d %%";
+"downloads.action.pause" = "Mettre en pause";
+"downloads.action.resume" = "Reprendre";
+"downloads.action.retry" = "Réessayer";
+"downloads.action.cancel" = "Annuler";
+"downloads.action.remove" = "Supprimer";
+"downloads.action.removeAll" = "Tout supprimer";
+"downloads.confirmRemove.title" = "Supprimer ce téléchargement ?";
+"downloads.confirmRemove.message" = "Le fichier sera supprimé de cet appareil.";
+"downloads.removeAll.title" = "Tout supprimer ?";
+"downloads.removeAll.message" = "Tous les téléchargements et fichiers résiduels seront effacés de cet appareil.";
+
+"detail.download" = "Télécharger";
+"detail.downloading" = "Téléchargement…";
+"detail.downloaded" = "Téléchargé";
+"detail.download.cancel" = "Annuler le téléchargement";
+"detail.download.removeFromDevice" = "Supprimer de l'appareil";
+"detail.download.queueSeason" = "Télécharger la saison";
+"detail.download.queueSeries" = "Télécharger la série";
+
+"toast.download.queued" = "Téléchargement ajouté à la file";
+"toast.download.queuedMany" = "%d épisodes ajoutés à la file";
+"toast.download.removed" = "Téléchargement supprimé";
+"toast.download.error" = "Échec du téléchargement";
+"toast.download.unsupportedContainer" = "Téléchargement lancé, mais ce format n'est pas lisible hors-ligne sur iOS.";
+"player.error.unsupportedOfflineContainer" = "Ce fichier (%@) ne peut pas être lu hors-ligne sur iOS. Reconvertissez-le en MP4 sur votre serveur Jellyfin pour le regarder sans réseau.";
+
+// MARK: - Offline mode
+
+"offline.banner" = "Mode hors-ligne · Contenu téléchargé uniquement";
+"offline.empty.title" = "Vous êtes hors-ligne";
+"offline.empty.subtitle" = "Téléchargez des films ou des épisodes lorsque vous avez du réseau pour les retrouver ici.";
 "admin.metadata.ratingDenominator" = "/ 10";

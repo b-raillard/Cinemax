@@ -188,7 +188,7 @@ extension JellyfinAPIClient {
     /// Movies (and any other already-playable kind) pass through unchanged.
     /// Series prefers the user's "Next Up" episode; falls back to the first
     /// episode of the first season. Season picks the first episode.
-    private func resolvePlayableEpisode(
+    internal func resolvePlayableEpisode(
         item: BaseItemDto,
         itemId: String,
         userId: String
@@ -235,7 +235,7 @@ extension JellyfinAPIClient {
     }
 
     /// Raw HTTP POST to PlaybackInfo, captures the full response body for diagnosis.
-    private func rawPostPlaybackInfo(
+    internal func rawPostPlaybackInfo(
         serverURL: URL,
         itemId: String,
         client: JellyfinClient,
@@ -270,6 +270,7 @@ extension JellyfinAPIClient {
         }
         #endif
 
+        request.timeoutInterval = 8
         let (data, urlResponse) = try await URLSession.shared.data(for: request)
         let httpResponse = urlResponse as? HTTPURLResponse
 

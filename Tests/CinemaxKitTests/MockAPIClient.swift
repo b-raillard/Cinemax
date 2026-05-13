@@ -303,6 +303,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             authToken: "mock-token"
         )
     }
+
+    // MARK: - Downloads
+
+    func buildDownloadRequest(itemId: String, userId: String) async throws -> DownloadStreamRequest {
+        if shouldThrow { throw stubbedError }
+        let url = URL(string: "http://localhost/Videos/\(itemId)/stream")!
+        return DownloadStreamRequest(itemId: itemId, url: url, authHeader: "MediaBrowser Token=mock")
+    }
 }
 
 // MARK: - Mock Keychain

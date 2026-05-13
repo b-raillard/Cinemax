@@ -15,6 +15,12 @@ options:
 packages:
   CinemaxKit:
     path: Packages/CinemaxKit
+  # VLCKit (libVLC) for offline playback of containers AVPlayer can't decode
+  # (MKV / AVI / WebM). Same approach Swiftfin uses — AVPlayer drives streaming
+  # and AVKit-friendly offline files; VLC handles everything else.
+  VLCKitSPM:
+    url: https://github.com/tylerjonesio/vlckit-spm
+    from: "3.6.0"
 
 settings:
   base:
@@ -37,6 +43,8 @@ targets:
       - path: Resources
     dependencies:
       - package: CinemaxKit
+      - package: VLCKitSPM
+        product: VLCKitSPM
     info:
       path: iOS/Info.plist
       properties:

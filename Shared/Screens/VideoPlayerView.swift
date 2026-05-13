@@ -10,6 +10,9 @@ struct VideoPlayerView: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
+    @Environment(DownloadManager.self) private var downloads
+    #endif
     @AppStorage(SettingsKey.autoPlayNextEpisode) private var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
 
@@ -22,6 +25,7 @@ struct VideoPlayerView: View {
 
     #if os(iOS)
     @State private var presenter: NativeVideoPresenter?
+    @State private var vlcPresenter: VLCOfflinePresenter?
     @State private var didPresent = false
     #endif
 
@@ -84,10 +88,41 @@ struct VideoPlayerView: View {
 
         do {
             let bitrate = render4K ? 120_000_000 : 20_000_000
-            let info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
-            #if DEBUG
-            logger.info("iOS play: method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
-            #endif
+            // Offline-completed file gets two routes:
+            //   1. AVKit-friendly container → AVPlayer (full feature set —
+            //      skip intro/outro, chapter markers, AirPlay, PiP).
+            //   2. MKV / AVI / WebM → libVLC via `VLCOfflinePresenter`.
+            //      Smaller feature set but it actually decodes the file
+            //      instead of the QuickTime audio-only icon AVKit shows.
+            // Streaming always uses AVPlayer because the Jellyfin streaming
+            // pipeline targets HLS that AVKit handles natively.
+            let info: PlaybackInfo
+            if let entry = downloads.item(for: itemId), entry.status == .completed,
+               let local = downloads.localURL(forItemId: itemId) {
+                if entry.isOfflinePlayable {
+                    info = PlaybackInfo(
+                        url: local,
+                        playSessionId: nil,
+                        mediaSourceId: itemId,
+                        playMethod: .directStream,
+                        audioTracks: [], subtitleTracks: [],
+                        selectedAudioIndex: nil, selectedSubtitleIndex: nil,
+                        authToken: nil
+                    )
+                    #if DEBUG
+                    logger.info("iOS play (offline AVKit): \(local.lastPathComponent)")
+                    #endif
+                } else {
+                    // Hand off to libVLC and skip the rest of the AVKit path.
+                    presentVLC(localURL: local)
+                    return
+                }
+            } else {
+                info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
+                #if DEBUG
+                logger.info("iOS play: method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
+                #endif
+            }
 
             let p = NativeVideoPresenter(
                 itemId: itemId, title: title, startTime: startTime,
@@ -106,6 +141,18 @@ struct VideoPlayerView: View {
             logger.error("iOS playback error: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func presentVLC(localURL: URL) {
+        let p = VLCOfflinePresenter(
+            title: title,
+            startTime: startTime,
+            loc: loc,
+            onDismiss: { dismiss() }
+        )
+        vlcPresenter = p
+        didPresent = true
+        p.present(localURL: localURL)
     }
 
     private func iOSErrorView(error: String) -> some View {
