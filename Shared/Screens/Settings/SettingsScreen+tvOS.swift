@@ -242,9 +242,10 @@ extension SettingsScreen {
                     tvServerDetail
                 case .interface:
                     tvInterfaceDetail
-                case .administration, .advancedAdmin:
-                    // Never selected on tvOS — admin categories are filtered out
-                    // of the landing pill list. Render nothing as a safety net.
+                case .administration, .advancedAdmin, .downloads:
+                    // Never selected on tvOS — admin + downloads categories
+                    // are filtered out of the landing pill list. Render
+                    // nothing as a safety net.
                     EmptyView()
                 }
             }

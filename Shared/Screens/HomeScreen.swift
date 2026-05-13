@@ -6,6 +6,7 @@ struct HomeScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(NetworkMonitor.self) private var network
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -20,6 +21,17 @@ struct HomeScreen: View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
+            #if os(iOS)
+            if !network.isOnline {
+                OfflineLibraryView(scope: .all)
+            } else if viewModel.isLoading {
+                LoadingStateView()
+            } else if isHomeEmpty {
+                homeEmptyState
+            } else {
+                content
+            }
+            #else
             if viewModel.isLoading {
                 LoadingStateView()
             } else if isHomeEmpty {
@@ -27,6 +39,7 @@ struct HomeScreen: View {
             } else {
                 content
             }
+            #endif
         }
         #if os(iOS)
         .navigationTitle(loc.localized("tab.home"))

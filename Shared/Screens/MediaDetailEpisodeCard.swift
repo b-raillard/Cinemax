@@ -93,10 +93,14 @@ struct MediaDetailEpisodeCard: View, Equatable {
 
                 // Info below image
                 VStack(alignment: .leading, spacing: 4) {
-                    if let num = episode.indexNumber {
-                        Text(loc.localized("detail.episode", num))
-                            .font(CinemaFont.label(.medium))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    HStack(alignment: .center, spacing: CinemaSpacing.spacing2) {
+                        if let num = episode.indexNumber {
+                            Text(loc.localized("detail.episode", num))
+                                .font(CinemaFont.label(.medium))
+                                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        }
+                        Spacer(minLength: 0)
+                        DownloadButton(item: episode)
                     }
                     Text(episode.name ?? "")
                         .font(.system(size: episodeTitleFontSize, weight: .bold))

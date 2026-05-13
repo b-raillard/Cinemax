@@ -9,6 +9,7 @@ struct SearchScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(NetworkMonitor.self) private var network
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @FocusState private var searchFieldFocused: Bool
@@ -62,9 +63,15 @@ struct SearchScreen: View {
             // `Tab(role: .search)`) and integrates with system dictation,
             // Spotlight, and keyboard. Voice search is exposed as a leading
             // toolbar button. The body renders results / empty / listening states.
-            VStack(spacing: 0) {
-                listeningLabel
-                resultContent
+            // When offline, swap in the downloads-only library instead of
+            // searching against an unreachable server.
+            if !network.isOnline {
+                OfflineLibraryView(scope: .all)
+            } else {
+                VStack(spacing: 0) {
+                    listeningLabel
+                    resultContent
+                }
             }
             #endif
         }

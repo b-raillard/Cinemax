@@ -274,7 +274,7 @@ public protocol AdminAPI: Sendable {
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI
 
 // MARK: - Default arguments
 

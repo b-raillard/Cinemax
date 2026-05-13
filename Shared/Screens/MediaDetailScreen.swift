@@ -13,7 +13,9 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    @Environment(NetworkMonitor.self) private var network
     #if os(iOS)
+    @Environment(DownloadManager.self) private var downloads
     @Environment(\.dismiss) private var dismiss
     /// Lifted from `AdminItemMenu` so SwiftUI honors the destination —
     /// `adminMenuPill` is rendered inside `detailContent`'s `LazyVStack`,
@@ -27,10 +29,42 @@ struct MediaDetailScreen: View {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
     }
 
+    #if os(iOS)
+    /// Resolves a `DownloadItem` that should drive the offline detail view.
+    /// Tries the item id directly first (movie / specific episode), then
+    /// falls back to "any episode whose `seriesId` matches" so navigating to
+    /// a series id while offline still works.
+    private func offlineEntry() -> DownloadItem? {
+        let id = viewModel.itemId
+        if let direct = downloads.item(for: id), direct.status == .completed {
+            return direct
+        }
+        if let firstEpisode = downloads.episodes(forSeriesId: id).first(where: { $0.status == .completed }) {
+            return firstEpisode
+        }
+        return nil
+    }
+    #endif
+
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
+            #if os(iOS)
+            // Offline shortcut: if the user has a download for the item id
+            // (movie or any episode of a series the screen represents),
+            // render the offline detail and skip every server call.
+            if !network.isOnline,
+               let entry = offlineEntry() {
+                OfflineMediaDetailView(entry: entry)
+            } else if viewModel.isLoading {
+                LoadingStateView()
+            } else if let error = viewModel.errorMessage {
+                errorView(error)
+            } else if let item = viewModel.item {
+                detailContent(item)
+            }
+            #else
             if viewModel.isLoading {
                 LoadingStateView()
             } else if let error = viewModel.errorMessage {
@@ -38,6 +72,7 @@ struct MediaDetailScreen: View {
             } else if let item = viewModel.item {
                 detailContent(item)
             }
+            #endif
         }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -327,26 +362,69 @@ struct MediaDetailScreen: View {
             return episodeNavigation(for: id)
         }
 
-        return PlayActionButtonsSection(
-            playItemId: playItemId,
-            playTitle: playTitle,
-            nextEpisodeLabel: nextEpisodeLabel,
-            startSeconds: startSeconds,
-            showResume: showResume,
-            progress: progress,
-            remainingText: remainingText,
-            epPrev: epNav?.previous,
-            epNext: epNav?.next,
-            epNavigator: epNav?.navigator,
-            playLabel: loc.localized("detail.play"),
-            playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
-            buttonFontSize: buttonFontSize,
-            buttonVerticalPadding: buttonVerticalPadding,
-            playButtonWidth: playButtonWidth,
-            contentPadding: contentPadding
-        )
-        .equatable()
+        return HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+            PlayActionButtonsSection(
+                playItemId: playItemId,
+                playTitle: playTitle,
+                nextEpisodeLabel: nextEpisodeLabel,
+                startSeconds: startSeconds,
+                showResume: showResume,
+                progress: progress,
+                remainingText: remainingText,
+                epPrev: epNav?.previous,
+                epNext: epNav?.next,
+                epNavigator: epNav?.navigator,
+                playLabel: loc.localized("detail.play"),
+                playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
+                buttonFontSize: buttonFontSize,
+                buttonVerticalPadding: buttonVerticalPadding,
+                playButtonWidth: playButtonWidth,
+                contentPadding: 0
+            )
+            .equatable()
+            #if os(iOS)
+            downloadAffordance(for: item, resolvedNextEpisode: nextEp)
+                .padding(.top, nextEpisodeLabel != nil ? 18 : 0)
+            #endif
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, contentPadding)
     }
+
+    // MARK: - Download affordance (iOS)
+
+    #if os(iOS)
+    @ViewBuilder
+    private func downloadAffordance(for item: BaseItemDto, resolvedNextEpisode: BaseItemDto?) -> some View {
+        let isSeries = viewModel.resolvedType == .series
+        if isSeries {
+            let seasonName = viewModel.seasons.first { $0.id == viewModel.selectedSeasonId }?.name
+                ?? loc.localized("detail.season")
+            let seriesId = item.id ?? viewModel.itemId
+            let seasons = viewModel.seasons
+            DownloadButton(
+                item: resolvedNextEpisode ?? item,
+                bulk: .series(
+                    currentSeasonEpisodes: viewModel.episodes,
+                    currentSeasonName: seasonName,
+                    fetchAllEpisodes: { @MainActor [appState] in
+                        guard let userId = appState.currentUserId else { return [] }
+                        var all: [BaseItemDto] = []
+                        for season in seasons {
+                            guard let sid = season.id else { continue }
+                            if let eps = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: sid, userId: userId) {
+                                all.append(contentsOf: eps)
+                            }
+                        }
+                        return all
+                    }
+                )
+            )
+        } else {
+            DownloadButton(item: item)
+        }
+    }
+    #endif
 
     // MARK: - Admin menu pill (iOS)
 

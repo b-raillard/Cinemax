@@ -61,6 +61,11 @@ final class AppState {
 
     var imageServerURL: URL { serverURL ?? Self.placeholderServerURL }
 
+    /// Hydrates auth state from the keychain. Network probes (server info,
+    /// admin flag) are dispatched in the background so the UI doesn't wait
+    /// on them — important when the user launches the app offline, where
+    /// each probe would otherwise eat a request timeout before the launch
+    /// screen disappears.
     func restoreSession() async {
         guard let serverURL = keychain.getServerURL(),
               let session = keychain.getUserSession() else {
@@ -80,15 +85,17 @@ final class AppState {
         let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
         apiClient.applyContentRatingLimit(maxAge: storedAge)
 
-        // Fetch server info without replacing the authenticated client
-        do {
-            let info = try await apiClient.fetchServerInfo()
-            self.serverInfo = info
-        } catch {
-            // Server may be temporarily unreachable, keep stored state
+        // Non-blocking: kick the server-info + admin-policy fetches behind the
+        // launch transition. They populate `serverInfo` / `isAdministrator`
+        // when (and if) they succeed; failures are non-fatal and leave the
+        // user authenticated with last-known values.
+        Task { [weak self] in
+            guard let self else { return }
+            if let info = try? await self.apiClient.fetchServerInfo() {
+                self.serverInfo = info
+            }
+            await self.refreshCurrentUser()
         }
-
-        await refreshCurrentUser()
     }
 
     /// Refreshes `currentUser` + `isAdministrator` from the server. Call on
@@ -140,6 +147,10 @@ struct AppNavigation: View {
     @State private var themeManager = ThemeManager()
     @State private var loc = LocalizationManager()
     @State private var toasts = ToastCenter()
+    @State private var network = NetworkMonitor()
+    #if os(iOS)
+    @State private var downloads = DownloadManager()
+    #endif
     @State private var hasCheckedSession = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -190,6 +201,10 @@ struct AppNavigation: View {
         .environment(themeManager)
         .environment(loc)
         .environment(toasts)
+        .environment(network)
+        #if os(iOS)
+        .environment(downloads)
+        #endif
         .environment(\.motionEffectsEnabled, motionEffects)
         // Respect the user's OS Dynamic Type setting while capping at a size
         // that won't collapse layouts (hero titles, tab bar). The app also has
@@ -199,7 +214,18 @@ struct AppNavigation: View {
         .task {
             await appState.restoreSession()
             hasCheckedSession = true
+            #if os(iOS)
+            downloads.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
+            #endif
         }
+        #if os(iOS)
+        .onChange(of: appState.currentUserId) { _, newId in
+            // Re-attach when the active user changes (login, quick switch).
+            // The manager caches `userId` for queued-task negotiation, so it
+            // needs to know about the swap.
+            downloads.attach(apiClient: appState.apiClient, userId: newId)
+        }
+        #endif
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
