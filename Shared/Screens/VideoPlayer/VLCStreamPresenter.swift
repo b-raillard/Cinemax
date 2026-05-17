@@ -141,10 +141,8 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     private let slider = UISlider()
     private var isScrubbing = false
     #else
-    // tvOS custom transport: a tall rounded scrub bar + a focusable control row.
-    private let scrubTrack = UIView()
-    private let scrubFill = UIView()
-    private var scrubFillWidth: NSLayoutConstraint?
+    // tvOS custom transport: a focusable scrub bar + a focusable control row.
+    private let tvScrub = TVScrubBar()
     private let controlBar = UIStackView()
     private let tvPlayButton = UIButton(type: .system)
     private let tvAudioButton = UIButton(type: .system)
@@ -522,12 +520,12 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         videoView.addGestureRecognizer(tap)
         videoView.isUserInteractionEnabled = true
         #else
-        // Focusable on-screen buttons handle Select/navigation natively via the
-        // focus engine — we only intercept transport-level presses here.
+        // Focus engine drives navigation between the scrub bar and the control
+        // buttons. Left/right seeking is handled by TVScrubBar ONLY while it is
+        // focused, so it never blocks moving focus to the menu buttons. We only
+        // intercept the dedicated Play/Pause and Menu presses globally.
         addPress(.playPause, #selector(playPauseTapped))
         addPress(.menu, #selector(menuPressed))
-        addPress(.leftArrow, #selector(skipBackward))
-        addPress(.rightArrow, #selector(skipForward))
         #endif
     }
 
@@ -542,18 +540,6 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         dismiss(animated: true)
     }
 
-    @objc private func skipBackward() {
-        mediaPlayer.jumpBackward(15)
-        showSkipHUD("−15s")
-        showControls(); scheduleHideControls()
-    }
-
-    @objc private func skipForward() {
-        mediaPlayer.jumpForward(15)
-        showSkipHUD("+15s")
-        showControls(); scheduleHideControls()
-    }
-
     // MARK: tvOS transport UI
 
     private func buildTVTransport(safe: UILayoutGuide) {
@@ -563,18 +549,18 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         scrim.backgroundColor = UIColor.black.withAlphaComponent(0.45)
         controlsContainer.insertSubview(scrim, at: 0)
 
-        // Tall rounded scrub bar.
-        scrubTrack.translatesAutoresizingMaskIntoConstraints = false
-        scrubTrack.backgroundColor = UIColor.white.withAlphaComponent(0.28)
-        scrubTrack.layer.cornerRadius = 4
-        scrubTrack.clipsToBounds = true
-        controlsContainer.addSubview(scrubTrack)
-
-        scrubFill.translatesAutoresizingMaskIntoConstraints = false
-        scrubFill.backgroundColor = .white
-        scrubTrack.addSubview(scrubFill)
-        let fillW = scrubFill.widthAnchor.constraint(equalToConstant: 0)
-        scrubFillWidth = fillW
+        // Focusable scrub bar: left/right seek ±15 s ONLY while it holds focus,
+        // so the focus engine can move left/right between the control buttons
+        // when the bar is not focused.
+        tvScrub.translatesAutoresizingMaskIntoConstraints = false
+        tvScrub.onSeek = { [weak self] delta in
+            guard let self else { return }
+            if delta < 0 { self.mediaPlayer.jumpBackward(15); self.showSkipHUD("−15s") }
+            else { self.mediaPlayer.jumpForward(15); self.showSkipHUD("+15s") }
+            self.scheduleHideControls()
+        }
+        tvScrub.onSelect = { [weak self] in self?.playPauseTapped() }
+        controlsContainer.addSubview(tvScrub)
 
         controlBar.translatesAutoresizingMaskIntoConstraints = false
         controlBar.axis = .horizontal
@@ -607,22 +593,17 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             scrim.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor),
             scrim.trailingAnchor.constraint(equalTo: controlsContainer.trailingAnchor),
             scrim.bottomAnchor.constraint(equalTo: controlsContainer.bottomAnchor),
-            scrim.topAnchor.constraint(equalTo: scrubTrack.topAnchor, constant: -40),
+            scrim.topAnchor.constraint(equalTo: tvScrub.topAnchor, constant: -56),
 
             timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 64),
-            timeLabel.bottomAnchor.constraint(equalTo: scrubTrack.topAnchor, constant: -14),
+            timeLabel.bottomAnchor.constraint(equalTo: tvScrub.topAnchor, constant: -14),
             durationLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -64),
-            durationLabel.bottomAnchor.constraint(equalTo: scrubTrack.topAnchor, constant: -14),
+            durationLabel.bottomAnchor.constraint(equalTo: tvScrub.topAnchor, constant: -14),
 
-            scrubTrack.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 64),
-            scrubTrack.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -64),
-            scrubTrack.heightAnchor.constraint(equalToConstant: 8),
-            scrubTrack.bottomAnchor.constraint(equalTo: controlBar.topAnchor, constant: -28),
-
-            scrubFill.leadingAnchor.constraint(equalTo: scrubTrack.leadingAnchor),
-            scrubFill.topAnchor.constraint(equalTo: scrubTrack.topAnchor),
-            scrubFill.bottomAnchor.constraint(equalTo: scrubTrack.bottomAnchor),
-            fillW,
+            tvScrub.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 64),
+            tvScrub.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -64),
+            tvScrub.heightAnchor.constraint(equalToConstant: 24),
+            tvScrub.bottomAnchor.constraint(equalTo: controlBar.topAnchor, constant: -28),
 
             controlBar.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
             controlBar.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -36)
@@ -654,15 +635,14 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     }
 
     private func updateScrubBar(progress: Float) {
-        let w = scrubTrack.bounds.width * CGFloat(max(0, min(1, progress)))
-        scrubFillWidth?.constant = w
+        tvScrub.setProgress(progress)
     }
 
     @objc private func prevEpisodeTapped() { if let p = previousEpisode { navigateToEpisode(p) } }
     @objc private func nextEpisodeTapped() { if let n = nextEpisode { navigateToEpisode(n) } }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        controlsContainer.alpha > 0 ? [tvPlayButton] : []
+        controlsContainer.alpha > 0 ? [tvScrub] : []
     }
     #endif
 
@@ -997,3 +977,78 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 }
+
+#if os(tvOS)
+/// Focusable tvOS scrub bar. Left/right seek ±15 s ONLY while this view holds
+/// focus — every other press (up/down to move focus to the control buttons,
+/// Play/Pause, Menu) is passed to `super` so the focus engine keeps working.
+/// This is what lets the user reach the Audio/Subtitles/episode buttons; the
+/// previous view-level arrow gestures swallowed left/right globally.
+private final class TVScrubBar: UIView {
+    var onSeek: ((Int) -> Void)?
+    var onSelect: (() -> Void)?
+
+    private let track = UIView()
+    private let fill = UIView()
+    private let knob = UIView()
+    private var progressValue: Float = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        track.backgroundColor = UIColor.white.withAlphaComponent(0.28)
+        track.layer.cornerRadius = 4
+        track.clipsToBounds = true
+        fill.backgroundColor = .white
+        fill.layer.cornerRadius = 4
+        knob.backgroundColor = .white
+        knob.layer.cornerRadius = 11
+        knob.alpha = 0
+        addSubview(track)
+        track.addSubview(fill)
+        addSubview(knob)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
+
+    func setProgress(_ p: Float) {
+        progressValue = max(0, min(1, p))
+        setNeedsLayout()
+    }
+
+    override var canBecomeFocused: Bool { true }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let focused = isFocused
+        let h: CGFloat = focused ? 12 : 8
+        track.frame = CGRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
+        track.layer.cornerRadius = h / 2
+        let w = bounds.width * CGFloat(progressValue)
+        fill.frame = CGRect(x: 0, y: 0, width: w, height: h)
+        fill.layer.cornerRadius = h / 2
+        knob.frame = CGRect(x: w - 11, y: bounds.midY - 11, width: 22, height: 22)
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        coordinator.addCoordinatedAnimations({
+            self.knob.alpha = self.isFocused ? 1 : 0
+            self.setNeedsLayout()
+            self.layoutIfNeeded()
+        })
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var handled = false
+        for press in presses {
+            switch press.type {
+            case .leftArrow:  onSeek?(-1); handled = true
+            case .rightArrow: onSeek?(1);  handled = true
+            case .select:     onSelect?(); handled = true
+            default: break
+            }
+        }
+        if !handled { super.pressesBegan(presses, with: event) }
+    }
+}
+#endif
