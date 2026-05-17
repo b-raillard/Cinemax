@@ -133,12 +133,26 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     private let timeLabel = UILabel()
     private let durationLabel = UILabel()
     private let progress = UIProgressView(progressViewStyle: .default)
+    private let skipHUD = UILabel()
     #if os(iOS)
     private let doneButton = UIButton(type: .system)
     private let playPauseButton = UIButton(type: .system)
     private let tracksButton = UIButton(type: .system)
     private let slider = UISlider()
     private var isScrubbing = false
+    #else
+    // tvOS custom transport: a tall rounded scrub bar + a focusable control row.
+    private let scrubTrack = UIView()
+    private let scrubFill = UIView()
+    private var scrubFillWidth: NSLayoutConstraint?
+    private let controlBar = UIStackView()
+    private let tvPlayButton = UIButton(type: .system)
+    private let tvAudioButton = UIButton(type: .system)
+    private let tvSubtitleButton = UIButton(type: .system)
+    private let tvChaptersButton = UIButton(type: .system)
+    private let tvPrevButton = UIButton(type: .system)
+    private let tvNextButton = UIButton(type: .system)
+    private var skipHUDHide: DispatchWorkItem?
     #endif
 
     private var reporter: PlaybackReporter?
@@ -388,29 +402,65 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         titleLabel.lineBreakMode = .byTruncatingTail
         controlsContainer.addSubview(titleLabel)
 
+        #if os(tvOS)
+        let timeFont: CGFloat = 26
+        let hudFont: CGFloat = 34
+        let titleTop: CGFloat = 48
+        let titleLead: CGFloat = 64
+        let hudMinW: CGFloat = 220
+        let hudH: CGFloat = 80
+        #else
+        let timeFont: CGFloat = 14
+        let hudFont: CGFloat = 20
+        let titleTop: CGFloat = 16
+        let titleLead: CGFloat = 24
+        let hudMinW: CGFloat = 140
+        let hudH: CGFloat = 56
+        #endif
+
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
         timeLabel.text = "0:00"
-        timeLabel.font = .monospacedDigitSystemFont(ofSize: 14, weight: .medium)
+        timeLabel.font = .monospacedDigitSystemFont(ofSize: timeFont, weight: .semibold)
         timeLabel.textColor = .white
         controlsContainer.addSubview(timeLabel)
 
         durationLabel.translatesAutoresizingMaskIntoConstraints = false
         durationLabel.text = "0:00"
-        durationLabel.font = .monospacedDigitSystemFont(ofSize: 14, weight: .medium)
+        durationLabel.font = .monospacedDigitSystemFont(ofSize: timeFont, weight: .semibold)
         durationLabel.textColor = .white
         controlsContainer.addSubview(durationLabel)
 
+        // Transient HUD shown on ±15 s skip (both platforms).
+        skipHUD.translatesAutoresizingMaskIntoConstraints = false
+        skipHUD.font = .systemFont(ofSize: hudFont, weight: .bold)
+        skipHUD.textColor = .white
+        skipHUD.textAlignment = .center
+        skipHUD.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+        skipHUD.layer.cornerRadius = 16
+        skipHUD.clipsToBounds = true
+        skipHUD.alpha = 0
+        view.addSubview(skipHUD)
+
+        let safe = view.safeAreaLayoutGuide
+        NSLayoutConstraint.activate([
+            titleLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: titleTop),
+            titleLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: titleLead),
+            titleLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
+
+            skipHUD.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            skipHUD.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            skipHUD.widthAnchor.constraint(greaterThanOrEqualToConstant: hudMinW),
+            skipHUD.heightAnchor.constraint(equalToConstant: hudH)
+        ])
+
+        #if os(tvOS)
+        buildTVTransport(safe: safe)
+        #else
         progress.translatesAutoresizingMaskIntoConstraints = false
         progress.progressTintColor = .white
         progress.trackTintColor = UIColor.white.withAlphaComponent(0.3)
         controlsContainer.addSubview(progress)
-
-        let safe = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: 16),
-            titleLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
-            titleLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
-
             timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
             timeLabel.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -24),
             durationLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
@@ -420,7 +470,6 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             progress.centerYAnchor.constraint(equalTo: timeLabel.centerYAnchor)
         ])
 
-        #if os(iOS)
         var doneConfig = UIButton.Configuration.plain()
         doneConfig.title = loc.localized("action.done")
         doneConfig.baseForegroundColor = .white
@@ -473,12 +522,12 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         videoView.addGestureRecognizer(tap)
         videoView.isUserInteractionEnabled = true
         #else
+        // Focusable on-screen buttons handle Select/navigation natively via the
+        // focus engine — we only intercept transport-level presses here.
         addPress(.playPause, #selector(playPauseTapped))
-        addPress(.select, #selector(selectPressed))
         addPress(.menu, #selector(menuPressed))
         addPress(.leftArrow, #selector(skipBackward))
         addPress(.rightArrow, #selector(skipForward))
-        addPress(.downArrow, #selector(openTrackMenu))
         #endif
     }
 
@@ -489,24 +538,181 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         view.addGestureRecognizer(g)
     }
 
-    @objc private func selectPressed() {
-        if controlsContainer.alpha > 0 { playPauseTapped() } else { showControls(); scheduleHideControls() }
-    }
-
     @objc private func menuPressed() {
         dismiss(animated: true)
     }
 
     @objc private func skipBackward() {
         mediaPlayer.jumpBackward(15)
+        showSkipHUD("−15s")
         showControls(); scheduleHideControls()
     }
 
     @objc private func skipForward() {
         mediaPlayer.jumpForward(15)
+        showSkipHUD("+15s")
         showControls(); scheduleHideControls()
     }
+
+    // MARK: tvOS transport UI
+
+    private func buildTVTransport(safe: UILayoutGuide) {
+        // Bottom scrim so white text/controls stay legible over bright video.
+        let scrim = UIView()
+        scrim.translatesAutoresizingMaskIntoConstraints = false
+        scrim.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+        controlsContainer.insertSubview(scrim, at: 0)
+
+        // Tall rounded scrub bar.
+        scrubTrack.translatesAutoresizingMaskIntoConstraints = false
+        scrubTrack.backgroundColor = UIColor.white.withAlphaComponent(0.28)
+        scrubTrack.layer.cornerRadius = 4
+        scrubTrack.clipsToBounds = true
+        controlsContainer.addSubview(scrubTrack)
+
+        scrubFill.translatesAutoresizingMaskIntoConstraints = false
+        scrubFill.backgroundColor = .white
+        scrubTrack.addSubview(scrubFill)
+        let fillW = scrubFill.widthAnchor.constraint(equalToConstant: 0)
+        scrubFillWidth = fillW
+
+        controlBar.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.axis = .horizontal
+        controlBar.alignment = .center
+        controlBar.spacing = 8
+        controlsContainer.addSubview(controlBar)
+
+        configureTV(tvPrevButton, "backward.end.fill", loc.localized("player.previousEpisode"))
+        tvPrevButton.addTarget(self, action: #selector(prevEpisodeTapped), for: .primaryActionTriggered)
+        configureTV(tvPlayButton, "pause.fill", loc.localized("player.playPause"))
+        tvPlayButton.addTarget(self, action: #selector(playPauseTapped), for: .primaryActionTriggered)
+        configureTV(tvAudioButton, "waveform", loc.localized("player.audio"))
+        tvAudioButton.addTarget(self, action: #selector(openAudioMenu), for: .primaryActionTriggered)
+        configureTV(tvSubtitleButton, "captions.bubble", loc.localized("player.subtitles"))
+        tvSubtitleButton.addTarget(self, action: #selector(openSubtitleMenu), for: .primaryActionTriggered)
+        configureTV(tvChaptersButton, "list.bullet", loc.localized("player.chapters"))
+        tvChaptersButton.addTarget(self, action: #selector(openChapterMenu), for: .primaryActionTriggered)
+        configureTV(tvNextButton, "forward.end.fill", loc.localized("player.nextEpisode"))
+        tvNextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .primaryActionTriggered)
+
+        if previousEpisode != nil { controlBar.addArrangedSubview(tvPrevButton) }
+        controlBar.addArrangedSubview(tvPlayButton)
+        if nextEpisode != nil { controlBar.addArrangedSubview(tvNextButton) }
+        controlBar.addArrangedSubview(tvAudioButton)
+        controlBar.addArrangedSubview(tvSubtitleButton)
+        tvChaptersButton.isHidden = true
+        controlBar.addArrangedSubview(tvChaptersButton)
+
+        NSLayoutConstraint.activate([
+            scrim.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor),
+            scrim.trailingAnchor.constraint(equalTo: controlsContainer.trailingAnchor),
+            scrim.bottomAnchor.constraint(equalTo: controlsContainer.bottomAnchor),
+            scrim.topAnchor.constraint(equalTo: scrubTrack.topAnchor, constant: -40),
+
+            timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 64),
+            timeLabel.bottomAnchor.constraint(equalTo: scrubTrack.topAnchor, constant: -14),
+            durationLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -64),
+            durationLabel.bottomAnchor.constraint(equalTo: scrubTrack.topAnchor, constant: -14),
+
+            scrubTrack.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 64),
+            scrubTrack.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -64),
+            scrubTrack.heightAnchor.constraint(equalToConstant: 8),
+            scrubTrack.bottomAnchor.constraint(equalTo: controlBar.topAnchor, constant: -28),
+
+            scrubFill.leadingAnchor.constraint(equalTo: scrubTrack.leadingAnchor),
+            scrubFill.topAnchor.constraint(equalTo: scrubTrack.topAnchor),
+            scrubFill.bottomAnchor.constraint(equalTo: scrubTrack.bottomAnchor),
+            fillW,
+
+            controlBar.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
+            controlBar.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -36)
+        ])
+    }
+
+    private func configureTV(_ b: UIButton, _ symbol: String, _ accessibility: String) {
+        var cfg = UIButton.Configuration.plain()
+        cfg.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 34, weight: .semibold))
+        cfg.baseForegroundColor = .white
+        cfg.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 24, bottom: 14, trailing: 24)
+        b.configuration = cfg
+        b.accessibilityLabel = accessibility
+    }
+
+    private func setTVPlayIcon(playing: Bool) {
+        configureTV(tvPlayButton, playing ? "pause.fill" : "play.fill", loc.localized("player.playPause"))
+    }
+
+    private func showSkipHUD(_ text: String) {
+        skipHUDHide?.cancel()
+        skipHUD.text = "  \(text)  "
+        skipHUD.alpha = 1
+        let work = DispatchWorkItem { [weak self] in
+            UIView.animate(withDuration: 0.3) { self?.skipHUD.alpha = 0 }
+        }
+        skipHUDHide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
+    }
+
+    private func updateScrubBar(progress: Float) {
+        let w = scrubTrack.bounds.width * CGFloat(max(0, min(1, progress)))
+        scrubFillWidth?.constant = w
+    }
+
+    @objc private func prevEpisodeTapped() { if let p = previousEpisode { navigateToEpisode(p) } }
+    @objc private func nextEpisodeTapped() { if let n = nextEpisode { navigateToEpisode(n) } }
+
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        controlsContainer.alpha > 0 ? [tvPlayButton] : []
+    }
     #endif
+
+    // MARK: - Single-purpose track / chapter menus
+
+    private func presentPicker(_ title: String, _ build: (UIAlertController) -> Void) {
+        let sheet = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
+        build(sheet)
+        sheet.addAction(UIAlertAction(title: loc.localized("action.cancel"), style: .cancel))
+        present(sheet, animated: true)
+    }
+
+    @objc private func openAudioMenu() {
+        presentPicker(loc.localized("player.audio")) { sheet in
+            let idx = mediaPlayer.audioTrackIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
+            let names = mediaPlayer.audioTrackNames.compactMap { $0 as? String }
+            for (i, name) in names.enumerated() where i < idx.count {
+                let track = idx[i]
+                let on = track == mediaPlayer.currentAudioTrackIndex
+                sheet.addAction(UIAlertAction(title: name + (on ? "  ✓" : ""), style: .default) { [weak self] _ in
+                    self?.mediaPlayer.currentAudioTrackIndex = track
+                })
+            }
+        }
+    }
+
+    @objc private func openSubtitleMenu() {
+        presentPicker(loc.localized("player.subtitles")) { sheet in
+            let idx = mediaPlayer.videoSubTitlesIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
+            let names = mediaPlayer.videoSubTitlesNames.compactMap { $0 as? String }
+            for (i, name) in names.enumerated() where i < idx.count {
+                let track = idx[i]
+                let on = track == mediaPlayer.currentVideoSubTitleIndex
+                sheet.addAction(UIAlertAction(title: name + (on ? "  ✓" : ""), style: .default) { [weak self] _ in
+                    self?.mediaPlayer.currentVideoSubTitleIndex = track
+                })
+            }
+        }
+    }
+
+    @objc private func openChapterMenu() {
+        presentPicker(loc.localized("player.chapters")) { sheet in
+            sheet.addAction(UIAlertAction(title: loc.localized("player.chapter.previous"), style: .default) { [weak self] _ in
+                self?.mediaPlayer.previousChapter()
+            })
+            sheet.addAction(UIAlertAction(title: loc.localized("player.chapter.next"), style: .default) { [weak self] _ in
+                self?.mediaPlayer.nextChapter()
+            })
+        }
+    }
 
     // MARK: - Playback
 
@@ -656,10 +862,20 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
 
     private func hideControlsImmediately() {
         UIView.animate(withDuration: 0.25) { self.controlsContainer.alpha = 0 }
+        #if os(tvOS)
+        controlsContainer.isUserInteractionEnabled = false
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        #endif
     }
 
     private func showControls() {
         UIView.animate(withDuration: 0.2) { self.controlsContainer.alpha = 1 }
+        #if os(tvOS)
+        controlsContainer.isUserInteractionEnabled = true
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        #endif
     }
 
     // MARK: - VLCMediaPlayerDelegate
@@ -676,10 +892,15 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
                 self.didRetry = false
                 #if os(iOS)
                 self.setPlayPauseIcon(playing: true)
+                #else
+                self.setTVPlayIcon(playing: true)
                 #endif
-            #if os(iOS)
-            case .paused: self.setPlayPauseIcon(playing: false)
-            #endif
+            case .paused:
+                #if os(iOS)
+                self.setPlayPauseIcon(playing: false)
+                #else
+                self.setTVPlayIcon(playing: false)
+                #endif
             default: break
             }
         }
@@ -754,8 +975,12 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             }
             #else
             self.timeLabel.text = Self.formatMs(currentMs)
-            self.durationLabel.text = Self.formatMs(lengthMs)
-            if lengthMs > 0 { self.progress.progress = Float(currentMs) / Float(lengthMs) }
+            self.durationLabel.text = "-" + Self.formatMs(max(0, lengthMs - currentMs))
+            if lengthMs > 0 { self.updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
+            if self.tvChaptersButton.isHidden,
+               self.mediaPlayer.numberOfChapters(forTitle: self.mediaPlayer.currentTitleIndex) > 1 {
+                self.tvChaptersButton.isHidden = false
+            }
             #endif
             if !self.didSeekToStart, let start = self.startTime, start > 0, lengthMs > 0 {
                 self.didSeekToStart = true

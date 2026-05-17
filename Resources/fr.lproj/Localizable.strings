@@ -24,6 +24,10 @@
 "player.tracks.title" = "Audio et sous-titres";
 "player.chapter.previous" = "Chapitre précédent";
 "player.chapter.next" = "Chapitre suivant";
+"player.previousEpisode" = "Épisode précédent";
+"player.nextEpisode" = "Épisode suivant";
+"player.playPause" = "Lecture / Pause";
+"player.chapters" = "Chapitres";
 "action.logOut" = "Déconnexion";
 "action.viewAll" = "Tout voir";
 "action.refresh" = "Actualiser";
