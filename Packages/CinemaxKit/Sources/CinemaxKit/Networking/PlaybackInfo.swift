@@ -1,5 +1,16 @@
 import Foundation
 
+/// Which client-side playback engine will consume the stream. Drives the
+/// `DeviceProfile` sent in the PlaybackInfo negotiation:
+/// - `.vlc` advertises broad DirectPlay (any container) so Jellyfin serves the
+///   raw file with **no transcode** — VLC decodes MKV/HEVC/Dolby Vision natively.
+/// - `.native` advertises the AVFoundation-safe profile (mp4/mov + HLS
+///   transcode fallback) for `AVPlayer`/AVKit.
+public enum VideoPlaybackEngine: String, Sendable {
+    case vlc
+    case native
+}
+
 /// Playback info returned after negotiating streaming parameters with the Jellyfin server.
 public struct PlaybackInfo: Sendable {
     public let url: URL

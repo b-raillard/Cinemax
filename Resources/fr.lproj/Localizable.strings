@@ -21,6 +21,9 @@
 "action.reset" = "Réinitialiser";
 "action.clear" = "Effacer";
 "action.done" = "Terminé";
+"player.tracks.title" = "Audio et sous-titres";
+"player.chapter.previous" = "Chapitre précédent";
+"player.chapter.next" = "Chapitre suivant";
 "action.logOut" = "Déconnexion";
 "action.viewAll" = "Tout voir";
 "action.refresh" = "Actualiser";
@@ -215,6 +218,7 @@
 "settings.forceSubtitles" = "Forcer les sous-titres";
 "settings.4kRendering" = "Rendu 4K";
 "settings.autoPlayNextEpisode" = "Enchaîner les épisodes";
+"settings.forceNativeAVPlayer" = "Lecteur natif";
 "settings.systemSettings" = "Réglages système";
 "settings.version" = "Version %@";
 "settings.systemInformation" = "Information système";

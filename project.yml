@@ -58,15 +58,23 @@ targets:
         # compliance. Auto-answers the App Store Connect questionnaire so we
         # don't have to reconfirm it on every TestFlight upload.
         ITSAppUsesNonExemptEncryption: false
-        # AirPlay to Apple TV / external speakers needs both `audio` (keeps
-        # playback alive when the iPhone is locked mid-cast) and `airplay`.
+        # `audio` keeps playback alive when the iPhone locks mid-cast — that
+        # covers AirPlay too (AirPlay is not its own background mode value;
+        # the App Store validator rejects `airplay` as invalid).
         UIBackgroundModes:
           - audio
-          - airplay
         UILaunchScreen: {}
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
         NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi."
+        # Base `UISupportedInterfaceOrientations` is required by the App Store
+        # validator (iPad multitasking check) even when iPhone/iPad variants
+        # are provided; the variants still override on their device class.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~iPad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
@@ -98,6 +106,8 @@ targets:
       - path: Resources
     dependencies:
       - package: CinemaxKit
+      - package: VLCKitSPM
+        product: VLCKitSPM
     info:
       path: tvOS/Info.plist
       properties:

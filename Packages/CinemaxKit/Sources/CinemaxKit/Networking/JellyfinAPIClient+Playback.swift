@@ -9,16 +9,16 @@ extension JellyfinAPIClient {
     /// 1. Get full item → extract initial media source
     /// 2. POST PlaybackInfo with device profile
     /// 3. Build stream URL from response (transcodingURL or direct stream)
-    public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000, audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil) async throws -> PlaybackInfo {
+    public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000, audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil, engine: VideoPlaybackEngine = .native) async throws -> PlaybackInfo {
         do {
-            return try await _getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: maxBitrate, audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex)
+            return try await _getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: maxBitrate, audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex, engine: engine)
         } catch {
             notifyIfUnauthorized(error)
             throw error
         }
     }
 
-    private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?) async throws -> PlaybackInfo {
+    private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?, engine: VideoPlaybackEngine) async throws -> PlaybackInfo {
         guard let client = getClient(),
               let serverURL = getServerURL() else {
             throw JellyfinError.notConnected
@@ -55,7 +55,10 @@ extension JellyfinAPIClient {
         #endif
 
         // Step 2: POST PlaybackInfo (matching Swiftfin exactly)
-        var body = PlaybackInfoDto(deviceProfile: Self.buildAppleDeviceProfile(maxBitrate: maxBitrate))
+        let deviceProfile: DeviceProfile = (engine == .vlc)
+            ? Self.buildVLCDeviceProfile(maxBitrate: maxBitrate)
+            : Self.buildAppleDeviceProfile(maxBitrate: maxBitrate)
+        var body = PlaybackInfoDto(deviceProfile: deviceProfile)
         body.isAutoOpenLiveStream = true
         body.maxStreamingBitrate = maxBitrate
         body.userID = userId
@@ -122,7 +125,7 @@ extension JellyfinAPIClient {
             let baseURL = serverURL.absoluteString.trimmingCharacters(in: ["/"])
             if let url = URL(string: baseURL + transcodingPath) {
                 #if DEBUG
-                debugLog("Transcode URL: \(redactedURL(url))")
+                Self.logPlaybackDecision(method: "transcode", item: item, source: mediaSource, url: url)
                 #endif
                 let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
                 return PlaybackInfo(
@@ -168,7 +171,7 @@ extension JellyfinAPIClient {
         }
 
         #if DEBUG
-        debugLog("Direct stream URL: \(redactedURL(url))")
+        Self.logPlaybackDecision(method: "directStream", item: item, source: mediaSource, url: url)
         #endif
         let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
         return PlaybackInfo(
@@ -368,6 +371,51 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.reportPlaybackStopped(body))
     }
 
+    /// Compact, single-tag diagnostic for the playback decision.
+    /// Filter the Xcode console / Console.app for `CINEMAX-PLAYBACK` to capture it.
+    ///
+    /// The decisive field is `TranscodeReasons` (NOT the `VideoCodec` URL param — that's
+    /// just the list of output codecs the client accepts, not the server's decision).
+    ///   • no `Video*` reason          → server REMUXES (`-c:v copy`): fast start, DV/HDR intact
+    ///   • any `Video*` reason present → server RE-ENCODES the video: slow, the freeze bug
+    /// `ContainerNotSupported` / `SubtitleCodecNotSupported` / `AudioCodecNotSupported`
+    /// alone do not force a video re-encode (remux + sidecar subs / audio transcode).
+    fileprivate static func logPlaybackDecision(
+        method: String,
+        item: BaseItemDto,
+        source: MediaSourceInfo,
+        url: URL?
+    ) {
+        #if DEBUG
+        let videoStream = source.mediaStreams?.first { $0.type == .video }
+        debugLog("CINEMAX-PLAYBACK ▸ item=\(item.name ?? "?") method=\(method)")
+        debugLog("CINEMAX-PLAYBACK ▸ srcContainer=\(source.container ?? "?") videoCodec=\(videoStream?.codec ?? "?") range=\(videoStream?.videoRangeType?.rawValue ?? videoStream?.videoRange?.rawValue ?? "?") bitDepth=\(videoStream?.bitDepth.map(String.init) ?? "?")")
+        debugLog("CINEMAX-PLAYBACK ▸ directPlay=\(source.isSupportsDirectPlay ?? false) directStream=\(source.isSupportsDirectStream ?? false)")
+        if let url, let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
+            let wanted = ["VideoCodec", "AudioCodec", "TranscodeReasons", "videoCodec", "audioCodec", "static"]
+            let picked = q
+                .filter { wanted.contains($0.name) }
+                .map { "\($0.name)=\($0.value ?? "")" }
+                .joined(separator: " ")
+            if !picked.isEmpty { debugLog("CINEMAX-PLAYBACK ▸ \(picked)") }
+            let reasons = (q.first { $0.name == "TranscodeReasons" }?.value ?? "")
+                .split(whereSeparator: { $0 == "," || $0 == " " })
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            if q.first(where: { $0.name == "TranscodeReasons" }) == nil {
+                debugLog("CINEMAX-PLAYBACK ▸ verdict=✅ \(method) (no server transcode at all)")
+            } else if let videoReason = reasons.first(where: { $0.lowercased().hasPrefix("video") }) {
+                debugLog("CINEMAX-PLAYBACK ▸ verdict=⚠️ RE-ENCODE — video transcode forced by \(videoReason). Profile fix NOT effective.")
+            } else {
+                debugLog("CINEMAX-PLAYBACK ▸ verdict=✅ REMUX (-c:v copy) — reasons=[\(reasons.joined(separator: ", "))] are container/subtitle/audio only; video copied, DV/HDR intact, fast start. Confirm with server ffmpeg line (-codec:v:0 copy).")
+            }
+        } else {
+            debugLog("CINEMAX-PLAYBACK ▸ verdict=✅ \(method) (no server transcode)")
+        }
+        debugLog("CINEMAX-PLAYBACK ▸ url=\(redactedURL(url?.absoluteString))")
+        #endif
+    }
+
     /// Extracts audio and subtitle track info from a media source's stream list.
     fileprivate static func extractTracks(from source: MediaSourceInfo) -> (audio: [MediaTrackInfo], subtitles: [MediaTrackInfo]) {
         let streams = source.mediaStreams ?? []
@@ -429,6 +477,49 @@ extension JellyfinAPIClient {
             videoCodec: "hevc,h264"
         ),
     ]
+    // Without these, Jellyfin has no signal that the Apple TV / iOS device can decode
+    // HEVC Main 10 + Dolby Vision / HDR10 inside an HLS fMP4 container, so it falls back
+    // to its most conservative decision: a full 4K re-encode + DV/HDR→SDR tonemap +
+    // 10-bit→8-bit conversion. That transcode is so slow to produce segments that
+    // AVPlayer stalls, the server's kill timer keeps restarting ffmpeg at new -ss
+    // offsets, and playback freezes (see server logs: repeated "Stopping ffmpeg" /
+    // sub-second "Playback stopped" reports).
+    //
+    // Declaring the supported bit depth, level and (critically) VideoRangeType set tells
+    // Jellyfin the source is playable as-is, so for MKV sources it emits a *remux* —
+    // `-codec:v copy` into HLS fMP4 — which starts in well under a second. Apple TV 4K
+    // natively decodes HEVC Main 10 and Dolby Vision Profile 5/8 (incl. the HDR10/HLG/SDR
+    // cross-compatible variants); when DV isn't engaged the HDR10 base layer still plays.
+    nonisolated(unsafe) fileprivate static let _codecProfiles: [CodecProfile] = [
+        CodecProfile(
+            codec: "hevc",
+            conditions: [
+                ProfileCondition(condition: .lessThanEqual, isRequired: false, property: .videoBitDepth, value: "10"),
+                ProfileCondition(condition: .lessThanEqual, isRequired: false, property: .videoLevel, value: "183"),
+                ProfileCondition(
+                    condition: .equalsAny,
+                    isRequired: false,
+                    property: .videoRangeType,
+                    value: "SDR|HDR10|HLG|HDR10Plus|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR"
+                ),
+            ],
+            type: .video
+        ),
+        CodecProfile(
+            codec: "h264",
+            conditions: [
+                ProfileCondition(condition: .lessThanEqual, isRequired: false, property: .videoBitDepth, value: "8"),
+                ProfileCondition(condition: .lessThanEqual, isRequired: false, property: .videoLevel, value: "52"),
+                ProfileCondition(
+                    condition: .equalsAny,
+                    isRequired: false,
+                    property: .videoRangeType,
+                    value: "SDR"
+                ),
+            ],
+            type: .video
+        ),
+    ]
     nonisolated(unsafe) fileprivate static let _subtitleProfiles: [SubtitleProfile] = [
         SubtitleProfile(format: "srt",    method: .hls),
         SubtitleProfile(format: "subrip", method: .hls),
@@ -447,10 +538,68 @@ extension JellyfinAPIClient {
     /// Builds a DeviceProfile matching Swiftfin's native player profile.
     fileprivate static func buildAppleDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
         DeviceProfile(
+            codecProfiles: _codecProfiles,
             directPlayProfiles: _directPlayProfiles,
             maxStreamingBitrate: maxBitrate,
             subtitleProfiles: _subtitleProfiles,
             transcodingProfiles: _transcodingProfiles
+        )
+    }
+
+    // MARK: - VLC Device Profile
+
+    // libVLC decodes virtually any container/codec, so we advertise a single
+    // DirectPlayProfile with **no container restriction** (container == nil ⇒
+    // "any"). Jellyfin then serves the raw file (`/Videos/{id}/stream?static=true`)
+    // with NO transcode — preserving 4K / HEVC 10-bit / Dolby Vision and
+    // eliminating the slow-transcode segment thrash that froze AVPlayer.
+    // Mirrors Swiftfin's `_swiftfinDirectPlayProfiles`.
+    nonisolated(unsafe) fileprivate static let _vlcDirectPlayProfiles: [DirectPlayProfile] = [
+        DirectPlayProfile(
+            audioCodec: "aac,ac3,alac,amr_nb,amr_wb,dts,eac3,flac,mp1,mp2,mp3,nellymoser,opus,pcm_alaw,pcm_bluray,pcm_dvd,pcm_mulaw,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_u8,speex,truehd,vorbis,wavpack,wmalossless,wmapro,wmav1,wmav2",
+            container: nil, // any container — VLC handles mkv/avi/ts/webm/…
+            type: .video,
+            videoCodec: "av1,dirac,dv,ffv1,flv1,h261,h263,h264,hevc,mjpeg,mpeg1video,mpeg2video,mpeg4,msmpeg4v1,msmpeg4v2,msmpeg4v3,prores,theora,vc1,vp8,vp9,wmv1,wmv2,wmv3"
+        ),
+    ]
+    // Last-resort fallback only — VLC direct-plays essentially everything, but
+    // if the server still insists on transcoding (e.g. a codec it can't even
+    // remux) we keep an HLS path so playback isn't impossible.
+    nonisolated(unsafe) fileprivate static let _vlcTranscodingProfiles: [TranscodingProfile] = [
+        TranscodingProfile(
+            audioCodec: "aac,ac3,alac,dts,eac3,flac,mp1,mp2,mp3,opus,vorbis",
+            isBreakOnNonKeyFrames: true,
+            container: "mp4",
+            context: .streaming,
+            maxAudioChannels: "8",
+            minSegments: 2,
+            protocol: .hls,
+            type: .video,
+            videoCodec: "hevc,h264"
+        ),
+    ]
+    // VLC renders embedded text subtitles itself; image subs delivered as-is.
+    nonisolated(unsafe) fileprivate static let _vlcSubtitleProfiles: [SubtitleProfile] = [
+        SubtitleProfile(format: "ass",    method: .embed),
+        SubtitleProfile(format: "ssa",    method: .embed),
+        SubtitleProfile(format: "srt",    method: .embed),
+        SubtitleProfile(format: "subrip", method: .embed),
+        SubtitleProfile(format: "vtt",    method: .embed),
+        SubtitleProfile(format: "webvtt", method: .embed),
+        SubtitleProfile(format: "ttml",   method: .embed),
+        SubtitleProfile(format: "pgssub", method: .embed),
+        SubtitleProfile(format: "dvbsub", method: .embed),
+        SubtitleProfile(format: "dvdsub", method: .embed),
+    ]
+
+    /// Broad-DirectPlay profile for the VLC engine — Jellyfin serves the raw
+    /// file with no transcode (4K / HEVC 10-bit / Dolby Vision preserved).
+    fileprivate static func buildVLCDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
+        DeviceProfile(
+            directPlayProfiles: _vlcDirectPlayProfiles,
+            maxStreamingBitrate: maxBitrate,
+            subtitleProfiles: _vlcSubtitleProfiles,
+            transcodingProfiles: _vlcTranscodingProfiles
         )
     }
 }

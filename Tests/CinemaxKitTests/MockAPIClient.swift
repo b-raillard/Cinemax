@@ -290,7 +290,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     func getPlaybackInfo(
         itemId: String, userId: String, maxBitrate: Int,
-        audioStreamIndex: Int?, subtitleStreamIndex: Int?
+        audioStreamIndex: Int?, subtitleStreamIndex: Int?,
+        engine: VideoPlaybackEngine
     ) async throws -> PlaybackInfo {
         if shouldThrow { throw stubbedError }
         return PlaybackInfo(

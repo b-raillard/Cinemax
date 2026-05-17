@@ -18,6 +18,8 @@ final class VideoPlayerCoordinator {
     @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
     @ObservationIgnored
     @AppStorage(SettingsKey.autoPlayNextEpisode) private var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
+    @ObservationIgnored
+    @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
 
     var localizationManager: LocalizationManager?
     /// Updated each time a playback session ends (player dismissed). MediaDetailScreen
@@ -26,6 +28,8 @@ final class VideoPlayerCoordinator {
 
     /// Retained so the presenter isn't deallocated during playback.
     private var presenter: NativeVideoPresenter?
+    /// VLC engine presenter (default online path). Same lifetime contract.
+    private var vlcPresenter: VLCStreamPresenter?
     private var playTask: Task<Void, Never>?
     /// Monotonic counter used to identify the current play session. Incremented each
     /// time `play()` starts a new session, so a stale `onDismiss` firing after a
@@ -52,6 +56,9 @@ final class VideoPlayerCoordinator {
         // stuck presenter (onDismiss never fired — crash, hardware back, edge cases)
         // doesn't linger on the coordinator indefinitely.
         presenter = nil
+        vlcPresenter = nil
+        let useVLC = !forceNativeAVPlayer
+        let engine: VideoPlaybackEngine = useVLC ? .vlc : .native
         currentGeneration &+= 1
         let generation = currentGeneration
         playTask = Task {
@@ -60,10 +67,28 @@ final class VideoPlayerCoordinator {
                 return
             }
             do {
-                let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
+                let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine)
                 #if DEBUG
-                logger.info("tvOS play: method=\(info.playMethod.rawValue), url=\(info.url.absoluteString)")
+                logger.info("tvOS play: engine=\(engine.rawValue), method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
                 #endif
+                if useVLC {
+                    let v = VLCStreamPresenter(
+                        itemId: itemId, title: title, startTime: startTime,
+                        previousEpisode: previousEpisode, nextEpisode: nextEpisode,
+                        episodeNavigator: episodeNavigator,
+                        apiClient: apiClient, userId: userId,
+                        autoPlayNext: autoPlayNextEpisode, loc: loc,
+                        onDismiss: { [weak self] in
+                            guard let self, self.currentGeneration == generation else { return }
+                            self.vlcPresenter = nil
+                            self.lastDismissedAt = Date()
+                        }
+                    )
+                    guard self.currentGeneration == generation else { return }
+                    self.vlcPresenter = v
+                    v.present(info: info)
+                    return
+                }
                 let p = NativeVideoPresenter(
                     itemId: itemId, title: title, startTime: startTime,
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,

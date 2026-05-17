@@ -21,6 +21,9 @@
 "action.reset" = "Reset";
 "action.clear" = "Clear";
 "action.done" = "Done";
+"player.tracks.title" = "Audio & Subtitles";
+"player.chapter.previous" = "Previous Chapter";
+"player.chapter.next" = "Next Chapter";
 "action.logOut" = "Log Out";
 "action.viewAll" = "View All";
 "action.refresh" = "Refresh";
@@ -614,6 +617,7 @@
 "settings.forceSubtitles" = "Force Subtitles";
 "settings.4kRendering" = "4K UI Rendering";
 "settings.autoPlayNextEpisode" = "Auto-play Next Episode";
+"settings.forceNativeAVPlayer" = "Use Native Player";
 "settings.systemSettings" = "System Settings";
 "settings.version" = "Version %@";
 "settings.systemInformation" = "System Information";

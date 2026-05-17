@@ -15,6 +15,7 @@ struct VideoPlayerView: View {
     #endif
     @AppStorage(SettingsKey.autoPlayNextEpisode) private var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
+    @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
 
     let itemId: String
     let title: String
@@ -26,6 +27,7 @@ struct VideoPlayerView: View {
     #if os(iOS)
     @State private var presenter: NativeVideoPresenter?
     @State private var vlcPresenter: VLCOfflinePresenter?
+    @State private var vlcStreamPresenter: VLCStreamPresenter?
     @State private var didPresent = false
     #endif
 
@@ -117,10 +119,31 @@ struct VideoPlayerView: View {
                     presentVLC(localURL: local)
                     return
                 }
-            } else {
-                info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate)
+            } else if !forceNativeAVPlayer {
+                // Default online path: VLC DirectPlays the raw file (no server
+                // transcode → no freeze, 4K/HEVC/Dolby Vision preserved).
+                let vlcInfo = try await appState.apiClient.getPlaybackInfo(
+                    itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .vlc
+                )
                 #if DEBUG
-                logger.info("iOS play: method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
+                logger.info("iOS play: engine=vlc, method=\(vlcInfo.playMethod.rawValue), url=\(redactedURL(vlcInfo.url))")
+                #endif
+                let v = VLCStreamPresenter(
+                    itemId: itemId, title: title, startTime: startTime,
+                    previousEpisode: previousEpisode, nextEpisode: nextEpisode,
+                    episodeNavigator: episodeNavigator,
+                    apiClient: appState.apiClient, userId: userId,
+                    autoPlayNext: autoPlayNextEpisode, loc: loc,
+                    onDismiss: { dismiss() }
+                )
+                vlcStreamPresenter = v
+                didPresent = true
+                v.present(info: vlcInfo)
+                return
+            } else {
+                info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .native)
+                #if DEBUG
+                logger.info("iOS play: engine=native, method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
                 #endif
             }
 

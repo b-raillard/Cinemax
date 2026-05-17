@@ -92,7 +92,8 @@ public protocol PlaybackAPI: Sendable {
         userId: String,
         maxBitrate: Int,
         audioStreamIndex: Int?,
-        subtitleStreamIndex: Int?
+        subtitleStreamIndex: Int?,
+        engine: VideoPlaybackEngine
     ) async throws -> PlaybackInfo
 
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto]
@@ -342,11 +343,13 @@ public extension PlaybackAPI {
         userId: String,
         maxBitrate: Int = 40_000_000,
         audioStreamIndex: Int? = nil,
-        subtitleStreamIndex: Int? = nil
+        subtitleStreamIndex: Int? = nil,
+        engine: VideoPlaybackEngine = .native
     ) async throws -> PlaybackInfo {
         try await getPlaybackInfo(
             itemId: itemId, userId: userId, maxBitrate: maxBitrate,
-            audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex
+            audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex,
+            engine: engine
         )
     }
 }

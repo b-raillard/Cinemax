@@ -21,6 +21,11 @@ enum SettingsKey {
     static let render4K = "render4K"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
     static let sleepTimerDefaultMinutes = "sleepTimerDefaultMinutes"
+    /// When `true`, online playback uses the native `AVPlayer` engine (AVKit
+    /// chrome) instead of the default VLC engine. VLC DirectPlays MKV/HEVC/DV
+    /// without a server transcode (no freezes); native is the escape hatch for
+    /// edge cases. Default `false` ⇒ VLC.
+    static let forceNativeAVPlayer = "forceNativeAVPlayer"
 
     // Home page sections
     static let homeShowContinueWatching = "home.showContinueWatching"
@@ -59,6 +64,7 @@ enum SettingsKey {
         static let render4K = true
         static let autoPlayNextEpisode = true
         static let sleepTimerDefaultMinutes = 0
+        static let forceNativeAVPlayer = false
 
         static let homeShowContinueWatching = true
         static let homeShowRecentlyAdded = true
