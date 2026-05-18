@@ -151,6 +151,13 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     private let tvPrevButton = UIButton(type: .system)
     private let tvNextButton = UIButton(type: .system)
     private var skipHUDHide: DispatchWorkItem?
+    // Inline chapter picker: a horizontal focusable strip under the controls.
+    private let chapterScroll = UIScrollView()
+    private let chapterStack = UIStackView()
+    private var chaptersBuilt = false
+    // Native-style center play/pause flash.
+    private let centerGlyph = UIImageView()
+    private var centerGlyphHide: DispatchWorkItem?
     #endif
 
     private var reporter: PlaybackReporter?
@@ -172,6 +179,9 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     // P3: end-of-series / error
     private var didReportEnd = false
     private var didRetry = false
+
+    // Polish: a track/chapter picker is up — freeze the HUD behind it.
+    private var pickerPresented = false
 
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
@@ -520,24 +530,42 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         videoView.addGestureRecognizer(tap)
         videoView.isUserInteractionEnabled = true
         #else
-        // Focus engine drives navigation between the scrub bar and the control
-        // buttons. Left/right seeking is handled by TVScrubBar ONLY while it is
-        // focused, so it never blocks moving focus to the menu buttons. We only
-        // intercept the dedicated Play/Pause and Menu presses globally.
-        addPress(.playPause, #selector(playPauseTapped))
-        addPress(.menu, #selector(menuPressed))
+        // No global press gestures: presses flow through the responder chain to
+        // `pressesBegan` below. The focus engine drives navigation; TVScrubBar
+        // seeks left/right only while focused.
         #endif
     }
 
     #if os(tvOS)
-    private func addPress(_ type: UIPress.PressType, _ action: Selector) {
-        let g = UITapGestureRecognizer(target: self, action: action)
-        g.allowedPressTypes = [NSNumber(value: type.rawValue)]
-        view.addGestureRecognizer(g)
+    /// Any remote press while the HUD is hidden just brings the controls back
+    /// (and is consumed). While visible, focus/seek work normally and every
+    /// press keeps the HUD alive. Menu always exits; Play/Pause always toggles.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            if press.type == .menu { dismiss(animated: true); return }
+            if press.type == .playPause {
+                playPauseTapped()
+                revealControls()
+                return
+            }
+        }
+        if controlsContainer.alpha == 0 {
+            revealControls() // consume — first press only un-hides the HUD
+            return
+        }
+        scheduleHideControls() // visible: any press keeps it alive
+        super.pressesBegan(presses, with: event)
     }
 
-    @objc private func menuPressed() {
-        dismiss(animated: true)
+    /// Moving focus (the user is clearly interacting) keeps the HUD alive.
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        if controlsContainer.alpha > 0 { scheduleHideControls() }
+    }
+
+    private func revealControls() {
+        showControls()
+        scheduleHideControls()
     }
 
     // MARK: tvOS transport UI
@@ -577,7 +605,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         configureTV(tvSubtitleButton, "captions.bubble", loc.localized("player.subtitles"))
         tvSubtitleButton.addTarget(self, action: #selector(openSubtitleMenu), for: .primaryActionTriggered)
         configureTV(tvChaptersButton, "list.bullet", loc.localized("player.chapters"))
-        tvChaptersButton.addTarget(self, action: #selector(openChapterMenu), for: .primaryActionTriggered)
+        tvChaptersButton.addTarget(self, action: #selector(toggleChapterStrip), for: .primaryActionTriggered)
         configureTV(tvNextButton, "forward.end.fill", loc.localized("player.nextEpisode"))
         tvNextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .primaryActionTriggered)
 
@@ -588,6 +616,27 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         controlBar.addArrangedSubview(tvSubtitleButton)
         tvChaptersButton.isHidden = true
         controlBar.addArrangedSubview(tvChaptersButton)
+
+        // Inline chapter strip — horizontal, focusable, hidden until toggled.
+        chapterScroll.translatesAutoresizingMaskIntoConstraints = false
+        chapterScroll.showsHorizontalScrollIndicator = false
+        chapterScroll.isHidden = true
+        chapterScroll.alpha = 0
+        chapterStack.axis = .horizontal
+        chapterStack.spacing = 14
+        chapterStack.translatesAutoresizingMaskIntoConstraints = false
+        chapterScroll.addSubview(chapterStack)
+        controlsContainer.addSubview(chapterScroll)
+
+        // Native-style center play/pause flash.
+        centerGlyph.translatesAutoresizingMaskIntoConstraints = false
+        centerGlyph.tintColor = .white
+        centerGlyph.contentMode = .center
+        centerGlyph.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+        centerGlyph.layer.cornerRadius = 60
+        centerGlyph.clipsToBounds = true
+        centerGlyph.alpha = 0
+        view.addSubview(centerGlyph)
 
         NSLayoutConstraint.activate([
             scrim.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor),
@@ -606,8 +655,62 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             tvScrub.bottomAnchor.constraint(equalTo: controlBar.topAnchor, constant: -28),
 
             controlBar.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
-            controlBar.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -36)
+            controlBar.bottomAnchor.constraint(equalTo: chapterScroll.topAnchor, constant: -20),
+
+            chapterScroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 64),
+            chapterScroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -64),
+            chapterScroll.heightAnchor.constraint(equalToConstant: 72),
+            chapterScroll.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -28),
+            chapterStack.topAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.topAnchor),
+            chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
+            chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
+            chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
+            chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor),
+
+            centerGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            centerGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            centerGlyph.widthAnchor.constraint(equalToConstant: 120),
+            centerGlyph.heightAnchor.constraint(equalToConstant: 120)
         ])
+    }
+
+    @objc private func toggleChapterStrip() {
+        if !chaptersBuilt { buildChapterChips(); chaptersBuilt = true }
+        let show = chapterScroll.isHidden
+        chapterScroll.isHidden = false
+        UIView.animate(withDuration: 0.2) { self.chapterScroll.alpha = show ? 1 : 0 } completion: { _ in
+            if !show { self.chapterScroll.isHidden = true }
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        scheduleHideControls()
+    }
+
+    private func buildChapterChips() {
+        chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        let descs = mediaPlayer.chapterDescriptions(ofTitle: mediaPlayer.currentTitleIndex)
+        for (i, d) in descs.enumerated() {
+            let name = (d as? [String: Any])?[VLCChapterDescriptionName] as? String
+            var cfg = UIButton.Configuration.gray()
+            cfg.cornerStyle = .large
+            cfg.title = name?.isEmpty == false ? name : "\(loc.localized("player.chapters")) \(i + 1)"
+            cfg.baseForegroundColor = .white
+            cfg.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 22, bottom: 14, trailing: 22)
+            let b = UIButton(configuration: cfg)
+            b.tag = i
+            b.addTarget(self, action: #selector(chapterChipTapped(_:)), for: .primaryActionTriggered)
+            chapterStack.addArrangedSubview(b)
+        }
+    }
+
+    @objc private func chapterChipTapped(_ sender: UIButton) {
+        mediaPlayer.currentChapterIndex = Int32(sender.tag)
+        UIView.animate(withDuration: 0.2) { self.chapterScroll.alpha = 0 } completion: { _ in
+            self.chapterScroll.isHidden = true
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        scheduleHideControls()
     }
 
     private func configureTV(_ b: UIButton, _ symbol: String, _ accessibility: String) {
@@ -621,6 +724,23 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
 
     private func setTVPlayIcon(playing: Bool) {
         configureTV(tvPlayButton, playing ? "pause.fill" : "play.fill", loc.localized("player.playPause"))
+    }
+
+    /// Brief native-style center glyph when play/pause toggles.
+    private func flashCenterGlyph(playing: Bool) {
+        centerGlyphHide?.cancel()
+        centerGlyph.image = UIImage(
+            systemName: playing ? "play.fill" : "pause.fill",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 52, weight: .bold)
+        )
+        centerGlyph.alpha = 1
+        centerGlyph.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+        UIView.animate(withDuration: 0.2) { self.centerGlyph.transform = .identity }
+        let work = DispatchWorkItem { [weak self] in
+            UIView.animate(withDuration: 0.35) { self?.centerGlyph.alpha = 0 }
+        }
+        centerGlyphHide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
     private func showSkipHUD(_ text: String) {
@@ -642,56 +762,65 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     @objc private func nextEpisodeTapped() { if let n = nextEpisode { navigateToEpisode(n) } }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        controlsContainer.alpha > 0 ? [tvScrub] : []
+        guard controlsContainer.alpha > 0 else { return [] }
+        if !chapterScroll.isHidden, chapterScroll.alpha > 0,
+           let firstChip = chapterStack.arrangedSubviews.first {
+            return [firstChip]
+        }
+        return [tvScrub]
     }
     #endif
 
-    // MARK: - Single-purpose track / chapter menus
+    // MARK: - Single-purpose track pickers
 
-    private func presentPicker(_ title: String, _ build: (UIAlertController) -> Void) {
+    private func presentPicker(_ title: String,
+                               _ options: [(title: String, selected: Bool, action: () -> Void)]) {
+        pickerPresented = true
+        hideControlsWorkItem?.cancel()
+        showControls()
         let sheet = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
-        build(sheet)
-        sheet.addAction(UIAlertAction(title: loc.localized("action.cancel"), style: .cancel))
+        for opt in options {
+            sheet.addAction(UIAlertAction(title: opt.title + (opt.selected ? "  ✓" : ""), style: .default) { [weak self] _ in
+                opt.action()
+                self?.endPicker()
+            })
+        }
+        sheet.addAction(UIAlertAction(title: loc.localized("action.cancel"), style: .cancel) { [weak self] _ in
+            self?.endPicker()
+        })
         present(sheet, animated: true)
     }
 
+    private func endPicker() {
+        pickerPresented = false
+        showControls()
+        scheduleHideControls()
+    }
+
     @objc private func openAudioMenu() {
-        presentPicker(loc.localized("player.audio")) { sheet in
-            let idx = mediaPlayer.audioTrackIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
-            let names = mediaPlayer.audioTrackNames.compactMap { $0 as? String }
-            for (i, name) in names.enumerated() where i < idx.count {
-                let track = idx[i]
-                let on = track == mediaPlayer.currentAudioTrackIndex
-                sheet.addAction(UIAlertAction(title: name + (on ? "  ✓" : ""), style: .default) { [weak self] _ in
-                    self?.mediaPlayer.currentAudioTrackIndex = track
-                })
-            }
+        let idx = mediaPlayer.audioTrackIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
+        let names = mediaPlayer.audioTrackNames.compactMap { $0 as? String }
+        var opts: [(String, Bool, () -> Void)] = []
+        for (i, name) in names.enumerated() where i < idx.count {
+            let track = idx[i]
+            opts.append((name, track == mediaPlayer.currentAudioTrackIndex, { [weak self] in
+                self?.mediaPlayer.currentAudioTrackIndex = track
+            }))
         }
+        presentPicker(loc.localized("player.audio"), opts)
     }
 
     @objc private func openSubtitleMenu() {
-        presentPicker(loc.localized("player.subtitles")) { sheet in
-            let idx = mediaPlayer.videoSubTitlesIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
-            let names = mediaPlayer.videoSubTitlesNames.compactMap { $0 as? String }
-            for (i, name) in names.enumerated() where i < idx.count {
-                let track = idx[i]
-                let on = track == mediaPlayer.currentVideoSubTitleIndex
-                sheet.addAction(UIAlertAction(title: name + (on ? "  ✓" : ""), style: .default) { [weak self] _ in
-                    self?.mediaPlayer.currentVideoSubTitleIndex = track
-                })
-            }
+        let idx = mediaPlayer.videoSubTitlesIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
+        let names = mediaPlayer.videoSubTitlesNames.compactMap { $0 as? String }
+        var opts: [(String, Bool, () -> Void)] = []
+        for (i, name) in names.enumerated() where i < idx.count {
+            let track = idx[i]
+            opts.append((name, track == mediaPlayer.currentVideoSubTitleIndex, { [weak self] in
+                self?.mediaPlayer.currentVideoSubTitleIndex = track
+            }))
         }
-    }
-
-    @objc private func openChapterMenu() {
-        presentPicker(loc.localized("player.chapters")) { sheet in
-            sheet.addAction(UIAlertAction(title: loc.localized("player.chapter.previous"), style: .default) { [weak self] _ in
-                self?.mediaPlayer.previousChapter()
-            })
-            sheet.addAction(UIAlertAction(title: loc.localized("player.chapter.next"), style: .default) { [weak self] _ in
-                self?.mediaPlayer.nextChapter()
-            })
-        }
+        presentPicker(loc.localized("player.subtitles"), opts)
     }
 
     // MARK: - Playback
@@ -710,7 +839,11 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     }
 
     @objc private func playPauseTapped() {
+        let willPlay = !mediaPlayer.isPlaying
         if mediaPlayer.isPlaying { mediaPlayer.pause() } else { mediaPlayer.play() }
+        #if os(tvOS)
+        flashCenterGlyph(playing: willPlay)
+        #endif
         scheduleHideControls()
     }
 
@@ -835,7 +968,13 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
 
     private func scheduleHideControls() {
         hideControlsWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.hideControlsImmediately() }
+        // Never auto-hide while a track/chapter picker is up — the controls must
+        // stay put behind it so focus returns somewhere sensible.
+        if pickerPresented { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.pickerPresented else { return }
+            self.hideControlsImmediately()
+        }
         hideControlsWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 4.0, execute: work)
     }
