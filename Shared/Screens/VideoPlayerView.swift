@@ -133,7 +133,8 @@ struct VideoPlayerView: View {
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                     episodeNavigator: episodeNavigator,
                     apiClient: appState.apiClient, userId: userId,
-                    autoPlayNext: autoPlayNextEpisode, loc: loc,
+                    autoPlayNext: autoPlayNextEpisode,
+                    imageBuilder: appState.imageBuilder, loc: loc,
                     onDismiss: { dismiss() }
                 )
                 vlcStreamPresenter = v

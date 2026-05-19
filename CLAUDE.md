@@ -18,7 +18,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 - **iPad multitasking**: `UIRequiresFullScreen` removed (deprecated). iPad split view / Stage Manager allowed — hero/backdrop layouts not yet hardened for resize, expect glitches.
 - **Toolbar + Liquid Glass**: iOS 26 auto-renders `ToolbarItem` buttons with Liquid Glass. **Never** add `.buttonStyle(.glass)` / `.glassProminent` on toolbar items — nests double capsules. Signal active state via `.tint(themeManager.accent)` + `.fill` icon variant.
 
-**Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`, `VLCKitSPM` v3.6.0 ([tylerjonesio/vlckit-spm](https://github.com/tylerjonesio/vlckit-spm) — `import VLCKitSPM` re-exports `MobileVLCKit` on iOS / `TVVLCKit` on tvOS). VLC is iOS-only by linkage (only the `Cinemax` target depends on the SPM package).
+**Dependencies**: `jellyfin-sdk-swift` v0.6.0, `Nuke`/`NukeUI` v12.9.0, `AVKit`/`AVPlayer`, `VLCKitSPM` v3.6.0 ([tylerjonesio/vlckit-spm](https://github.com/tylerjonesio/vlckit-spm) — `import VLCKitSPM` re-exports `MobileVLCKit` on iOS / `TVVLCKit` on tvOS). **Both** the `Cinemax` (iOS) and `CinemaxTV` (tvOS) targets link the SPM package — VLC is the **default online playback engine** on both platforms (see "Playback engine"). Adding a new file under `Shared/` requires re-running `xcodegen generate` before it builds (the PostToolUse hook only auto-regens on `project.yml` edits, not on new files; symptom of forgetting: "cannot find type X in scope" for a type that exists).
 
 **API protocol split** (`Packages/CinemaxKit/.../APIClientProtocol.swift`): `APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI`. View models needing multiple domains take `APIClientProtocol`; leaf controllers narrow to a slice (`PlaybackReporter` / `SkipSegmentController` → `any PlaybackAPI`; `DownloadManager` → `any DownloadAPI`). `AdminAPI` is a privilege boundary — gated on `AppState.isAdministrator`; server enforces authoritatively.
 
@@ -36,7 +36,7 @@ Shared/
   DesignSystem/Components/  CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges, UserAvatar
   Navigation/               AppNavigation (auth routing), MainTabView
   Screens/                  Home/Login/ServerSetup/Search/MovieLibrary/TVSeries/PrivacySecurity (+ ConnectedDevicesList), MediaDetailScreen + sibling extractions (EpisodeCard/EpisodeRow/EpisodeMetadataLine/EpisodeOverviewSheet/CastSection/SimilarSection/ButtonStyles), VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink, sheets/helpers
-    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController, VLCOfflinePresenter (iOS)
+    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController, VLCStreamPresenter (online, iOS+tvOS), VLCOfflinePresenter (offline, iOS)
     Settings/               SettingsScreen + iOS/tvOS extensions, SettingsAppearanceView+iOS, SettingsRowHelpers, SettingsTV{AccentPicker,LanguagePicker,ProfileSection,ActionRow}
     Downloads/              (iOS-only) DownloadButton, DownloadsScreen, OfflineLibraryView, OfflineMediaDetailView, DownloadItem+BaseItemDto
     Admin/                  (iOS-only) Dashboard/Users/Devices/Activity/Tasks/Plugins/Catalog/Playback/Network/Logs/ApiKeys/Metadata/Identify
@@ -120,7 +120,20 @@ Unified, parameterized by `BaseItemKind` (movies or series).
 
 ## Video Playback
 
-### Flow
+### Playback engine (VLC default — fixes the MKV/Dolby-Vision freeze)
+
+Online playback defaults to a **VLC engine** on both iOS and tvOS, with a Settings → Interface **"Use Native Player"** toggle (`SettingsKey.forceNativeAVPlayer`, default `false`) to fall back to `AVPlayer`/`NativeVideoPresenter`.
+
+**Why:** `AVPlayer` can't open MKV, so Jellyfin was forced into a full 4K HEVC + Dolby-Vision→SDR re-encode that the server couldn't do in real time → segment-request thrash → frozen playback. No `AVPlayer` device profile can make Jellyfin remux DV-in-MKV (verified against Swiftfin's own native profile — Jellyfin only passes DV through on DirectPlay/DirectStream, never inside a transcode). VLC DirectPlays the raw file → **zero server transcode**, 4K/HEVC/DV preserved.
+
+- **Device profile split** (`JellyfinAPIClient+Playback.swift`): `getPlaybackInfo(... engine: VideoPlaybackEngine)`. `.vlc` → `buildVLCDeviceProfile` (one broad DirectPlayProfile, **no container restriction** → Jellyfin serves `/Videos/{id}/stream?static=true`, no transcode). `.native` → `buildAppleDeviceProfile` (AVKit-safe + the HEVC/H.264 codec profiles mirroring Swiftfin's native profile). **API default is `.native`** so internal AVPlayer-only calls (track-switch, in-presenter episode-nav) are unaffected; the engine is chosen explicitly at `VideoPlayerCoordinator` (tvOS) / `VideoPlayerView` (iOS) from `forceNativeAVPlayer`.
+- **`VLCStreamPresenter`** (`Shared/Screens/VideoPlayer/`, iOS+tvOS): the online VLC player. Auth via `api_key` **query param** (libVLC can't reliably inject the `MediaBrowser Token=` header). Full parity: resume, Jellyfin progress reporting, episode prev/next + autoplay, audio/subtitle, skip intro/outro, sleep timer, end-of-series, chapter strip, single error-retry. AirPlay/PiP remain AVKit-only (not on the VLC path).
+- **`PlaybackReporter`** is engine-agnostic via an optional `TimeSource` closure (AVPlayer path passes nil → reads `Context.player`; VLC injects VLC time).
+- **tvOS transport is custom** (no `AVPlayerViewController`): `TVScrubBar` (focusable; ±15 s seek only while focused, so left/right otherwise navigates the control row), focusable control bar (Prev/Next/Audio/Subtitles — **no on-screen play/pause**, the Siri Remote has a physical one; feedback is a center glyph flash), native `gobackward.15`/`goforward.15` skip glyph, and an always-on **chapter strip** that peeks (40 pt) and expands (178 pt) when focus enters it. `ChapterChip` draws its own focus state (custom buttons get no system focus appearance). Any press while the HUD is hidden just re-reveals it; the HUD is frozen visible while a picker is open. After every programmatic seek, `refreshTimeUISoon()` repaints the bar (VLC emits no time updates while paused).
+- **Chapter thumbnails** come from Jellyfin `getItem().chapters` (name + `startPositionTicks` + `imageTag`); requests are skipped when `imageTag` is nil. Blank thumbnails ⇒ the server hasn't run **Jellyfin Dashboard → Scheduled Tasks → "Chapter image extraction"** (off by default for movies; CPU-heavy on 4K HEVC). The chip degrades to a `film` icon + title + timestamp.
+- **iOS note**: iOS already runs the VLC engine + all P2/P3 logic (shared), but the iOS controls are the touch UI (`#if os(iOS)`: tap-to-toggle, `UISlider`, combined `openTrackMenu`). The focus-driven transport above is tvOS-only by design. The simulator has no HW HEVC/DV decoder — judge 4K/DV playback only on real hardware.
+
+### Flow (native/AVPlayer path)
 1. `getItem()` — full metadata.
 2. Resolve non-playable: Series → `getNextUp()` or first episode; Season → first episode. **Must resolve to Episode — Series/Season have no media sources.**
 3. POST PlaybackInfo with `DeviceProfile` (`isAutoOpenLiveStream=true`, `mediaSourceID`, `userID`).
@@ -170,7 +183,7 @@ Rendering:
 
 **Picture-in-Picture** (iOS): `allowsPictureInPicturePlayback = true` + `canStartPictureInPictureAutomaticallyFromInline = true`. `IOSPlayerDelegate` (file-private): `willStart` flips `isInPictureInPicture = true` and clears `didRestoreFromPiP`; modal auto-dismisses, `PlayerHostingVC.shouldFireOnDismiss` suppresses cleanup. `restoreUserInterfaceForPictureInPictureStop…` flips `didRestoreFromPiP = true` and re-presents via `restoreFromPiP` (new `PlayerHostingVC` around same retained `playerVC`). `didStopPictureInPicture` runs full cleanup **only** when `didRestoreFromPiP == false`. `PiPRestoreHandlerBox` (`@unchecked Sendable`) wraps the non-Sendable AVKit completion handler for Swift 6 region analysis. `PlayerHostingVC.viewDidLoad` defensively detaches `playerVC` from any prior parent.
 
-**AirPlay** (iOS): `UIBackgroundModes = [audio, airplay]` in `project.yml` — required so playback continues when iPhone locks during a cast. `present` calls `activatePlaybackAudioSession()` (`.playback` + `.moviePlayback`), sets `allowsExternalPlayback = true` + `usesExternalPlaybackWhileExternalScreenIsActive = true`; `cleanup()` deactivates with `.notifyOthersOnDeactivation`. `SearchViewModel` voice-search briefly flips category to `.record` — do not start voice search during active playback.
+**AirPlay** (iOS): `UIBackgroundModes = [audio]` in `project.yml` — required so playback continues when iPhone locks during a cast. **Do not add `airplay`** as a background mode value — it isn't a valid `UIBackgroundModes` key and the App Store validator rejects the upload (`Invalid value: 'airplay'`); `audio` alone covers AirPlay. `present` calls `activatePlaybackAudioSession()` (`.playback` + `.moviePlayback`), sets `allowsExternalPlayback = true` + `usesExternalPlaybackWhileExternalScreenIsActive = true`; `cleanup()` deactivates with `.notifyOthersOnDeactivation`. `SearchViewModel` voice-search briefly flips category to `.record` — do not start voice search during active playback.
 
 **Error recovery**: `showPlaybackErrorAlert(error:)` — `-12881 / -12886 / -16170` → transcode guidance, `-12938 / -1001 / -1004 / -1005 / -1009` → network, else generic. On iOS the alert fires only after `retryWithDirectURL` itself fails. `isShowingErrorAlert` prevents stacking.
 
@@ -217,6 +230,7 @@ Every boolean toggle declared once as `SettingsToggleRow`, rendered on both plat
 | `forceSubtitles` | `false` | Auto-selects first `.legible`; disables `appliesMediaSelectionCriteriaAutomatically` |
 | `render4K` | `true` | `maxBitrate` 120/20 Mbps |
 | `autoPlayNextEpisode` | `true` | Auto-nav via `didPlayToEndTime` |
+| `forceNativeAVPlayer` | `false` | `false` ⇒ VLC online engine; `true` ⇒ native `AVPlayer`. See "Playback engine" |
 | `sleepTimerDefaultMinutes` | `0` | 0/15/30/45/60/90 via `SleepTimerOption` |
 | `uiScale` | `1.0` | Font scale 80–130%. Bumps `_accentRevision` |
 | `darkMode` | `true` | **Via `themeManager.darkModeEnabled`**, not directly |

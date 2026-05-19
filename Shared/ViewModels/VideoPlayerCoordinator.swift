@@ -77,7 +77,8 @@ final class VideoPlayerCoordinator {
                         previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                         episodeNavigator: episodeNavigator,
                         apiClient: apiClient, userId: userId,
-                        autoPlayNext: autoPlayNextEpisode, loc: loc,
+                        autoPlayNext: autoPlayNextEpisode,
+                        imageBuilder: appState.imageBuilder, loc: loc,
                         onDismiss: { [weak self] in
                             guard let self, self.currentGeneration == generation else { return }
                             self.vlcPresenter = nil
