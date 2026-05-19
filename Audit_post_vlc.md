@@ -134,15 +134,22 @@ Each phase build-verified (iOS + tvOS) + tests; separate commits.
 - Phase 1 ✅ — H1, H2, H2b, M4, L1.
 - Phase 2 ✅ — M1, CLAUDE.md stale docs, L5.
 - Phase 3 ✅ — M5, L3, L4 (FR/EN parity verified 660/660).
-- Phase 4 ⚠️ partial — done: shared `PlayerTimeFormat` (deduped byte-identical
-  `formatMs`, M2-safe subset); L2 key-window preference in NativeVideoPresenter.
-  **Deferred (device-validation gate):** M3 controller extraction from the
-  1792-LOC `VLCStreamPresenter`, the `EngineSurface`/event-loop merge, the
-  end-of-media-guard extraction, and L6 (`refreshTimeUISoon` coalescing).
-  These alter playback runtime behavior that the simulator cannot validate
-  (no HW HEVC/DV/PiP decode); landing them blind on the just-migrated SwiftVLC
-  engine is too risky. Recommend a dedicated branch + on-device test pass
-  (4K/DV playback, scrub-bar repaint after seek, PiP, end-of-series autoplay).
+- Phase 4 ✅ (safe subset) / ⚠️ residual device-gated —
+  done: `PlayerTimeFormat` dedupe (M2); L2 key-window preference;
+  L6 `refreshTimeUISoon` coalescing (cancellable work items, same delays);
+  M2 shared `PlayerEngineSurface` (merged byte-equivalent EngineSurface /
+  OfflineEngineSurface); M3 *safe decomposition* — relocated the 3
+  self-contained leaf UIKit transport views (`TVScrubBar`, `ChapterChip`,
+  `PassthroughView`) to `PlayerTransportViews.swift`, shrinking
+  `VLCStreamPresenter.swift` 1768→1659 with zero behavior change.
+  **Still deferred (genuine device-validation gate):** extracting the
+  HUD/glyph + inline sleep-timer + skip-intro logic out of the 1659-LOC
+  `VLCStreamViewController`. That code is tightly interwoven with engine
+  pause/play, `present`/`dismiss`, and the time-tick loop — any extraction
+  changes object lifecycle in the most fragile, just-migrated SwiftVLC code
+  and cannot be validated by build/unit tests (sim has no HW HEVC/DV/PiP).
+  Needs a dedicated branch + on-device pass (4K/DV playback, HUD reveal,
+  glyph flash, scrub-after-seek repaint, sleep prompt, PiP, end-of-series).
 - Phase 5 ✅ — M6: wrapped all 62 bare `.font(.system(size: N))` numeric
   literals across 34 files in `CinemaScale.pt(...)` so they honor `uiScale` /
   tvOS 1.4× (identity at default iOS settings — no visual regression; the
