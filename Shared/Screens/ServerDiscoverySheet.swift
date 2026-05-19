@@ -140,7 +140,7 @@ struct ServerDiscoverySheet: View {
         VStack(spacing: CinemaSpacing.spacing5) {
             Spacer()
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 48, weight: .light))
+                .font(.system(size: CinemaScale.pt(48), weight: .light))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
             VStack(spacing: CinemaSpacing.spacing2) {
                 Text(loc.localized("server.discovery.noResults.title"))
@@ -221,7 +221,7 @@ struct ServerDiscoverySheet: View {
                         .fill(themeManager.accentContainer.opacity(0.25))
                         .frame(width: 48, height: 48)
                     Image(systemName: "server.rack")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.system(size: CinemaScale.pt(20), weight: .medium))
                         .foregroundStyle(themeManager.accent)
                 }
 
@@ -240,7 +240,7 @@ struct ServerDiscoverySheet: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.6))
             }
             .padding(CinemaSpacing.spacing3)

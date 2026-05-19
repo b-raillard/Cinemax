@@ -23,7 +23,7 @@ struct EpisodeOverviewSheet: View {
             HStack(alignment: .center) {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: CinemaScale.pt(14), weight: .bold))
                         .foregroundStyle(.white)
                         .padding(10)
                         .background(themeManager.accentContainer)
@@ -34,7 +34,7 @@ struct EpisodeOverviewSheet: View {
                 Spacer()
 
                 Text(item.title)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: CinemaScale.pt(17), weight: .bold))
                     .foregroundStyle(CinemaColor.onSurface)
                     .multilineTextAlignment(.center)
 

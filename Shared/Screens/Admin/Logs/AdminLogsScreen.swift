@@ -132,7 +132,7 @@ struct AdminLogViewerScreen: View {
                         }
 
                         Text(viewModel.contents)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(size: CinemaScale.pt(11), design: .monospaced))
                             .foregroundStyle(CinemaColor.onSurface)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)

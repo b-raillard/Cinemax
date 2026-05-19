@@ -171,7 +171,7 @@ struct LibrarySortFilterSheet: View {
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
                         .foregroundStyle(themeManager.accent)
                 }
             }
@@ -214,9 +214,9 @@ struct LibrarySortFilterSheet: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(13), weight: .semibold))
                 Text(label)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: CinemaScale.pt(15), weight: .medium))
             }
             .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
             .padding(.horizontal, CinemaSpacing.spacing3)

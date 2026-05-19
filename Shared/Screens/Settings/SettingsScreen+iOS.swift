@@ -85,7 +85,7 @@ extension SettingsScreen {
                         .frame(width: 40, height: 40)
 
                     Image(systemName: category.icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(18), weight: .semibold))
                         .foregroundStyle(isFirst ? .white : themeManager.accent)
                 }
 
@@ -136,7 +136,7 @@ extension SettingsScreen {
                 .clipShape(Capsule())
 
             Text(loc.localized("settings.authenticatedDevice").uppercased())
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: CinemaScale.pt(10), weight: .bold))
                 .tracking(2)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
 

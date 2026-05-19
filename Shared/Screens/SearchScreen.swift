@@ -223,7 +223,7 @@ struct SearchScreen: View {
             Spacer()
             VStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 48))
+                    .font(.system(size: CinemaScale.pt(48)))
                     .foregroundStyle(CinemaColor.outlineVariant)
                     .accessibilityHidden(true)
                 Text(loc.localized("search.noResults"))
@@ -235,7 +235,7 @@ struct SearchScreen: View {
             Spacer()
             VStack(spacing: CinemaSpacing.spacing4) {
                 Image(systemName: "sparkle.magnifyingglass")
-                    .font(.system(size: 48))
+                    .font(.system(size: CinemaScale.pt(48)))
                     .foregroundStyle(CinemaColor.outlineVariant)
                     .accessibilityHidden(true)
                 Text(loc.localized("search.searchLibrary"))

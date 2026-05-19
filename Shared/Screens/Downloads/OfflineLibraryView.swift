@@ -73,7 +73,7 @@ struct OfflineLibraryView: View {
     private var offlineBanner: some View {
         HStack(spacing: CinemaSpacing.spacing2) {
             Image(systemName: "wifi.slash")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: CinemaScale.pt(14), weight: .semibold))
             Text(loc.localized("offline.banner"))
                 .font(CinemaFont.label(.medium))
             Spacer()
@@ -128,7 +128,7 @@ struct OfflineLibraryView: View {
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
                     .overlay(alignment: .topTrailing) {
                         Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(size: CinemaScale.pt(16), weight: .bold))
                             .foregroundStyle(.white, themeManager.accent)
                             .padding(6)
                     }

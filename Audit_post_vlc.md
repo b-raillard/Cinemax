@@ -143,4 +143,11 @@ Each phase build-verified (iOS + tvOS) + tests; separate commits.
   (no HW HEVC/DV/PiP decode); landing them blind on the just-migrated SwiftVLC
   engine is too risky. Recommend a dedicated branch + on-device test pass
   (4K/DV playback, scrub-bar repaint after seek, PiP, end-of-series autoplay).
-- Phase 5 — pending.
+- Phase 5 ✅ — M6: wrapped all 62 bare `.font(.system(size: N))` numeric
+  literals across 34 files in `CinemaScale.pt(...)` so they honor `uiScale` /
+  tvOS 1.4× (identity at default iOS settings — no visual regression; the
+  documented computed-var Play-button 28pt exception is untouched). A full
+  semantic remap into `CinemaFont.*` tokens is intentionally NOT done: arbitrary
+  sizes (11/13/24/28…) don't map to the semantic scale and forcing them would
+  change the visual design — that requires per-site design decisions + on-device
+  visual QA, recommended as a separate design pass.

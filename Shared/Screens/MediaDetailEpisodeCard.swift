@@ -81,7 +81,7 @@ struct MediaDetailEpisodeCard: View, Equatable {
                         .overlay(alignment: .bottomTrailing) {
                             if isPlayed {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 28, weight: .semibold))
+                                    .font(.system(size: CinemaScale.pt(28), weight: .semibold))
                                     .foregroundStyle(.white, CinemaColor.surface.opacity(0.8))
                                     .padding(10)
                             }

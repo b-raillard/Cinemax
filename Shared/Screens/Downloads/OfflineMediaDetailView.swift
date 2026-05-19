@@ -101,7 +101,7 @@ struct OfflineMediaDetailView: View {
                             .foregroundStyle(themeManager.accent)
                     }
                     Text(headerTitle)
-                        .font(.system(size: 26, weight: .black))
+                        .font(.system(size: CinemaScale.pt(26), weight: .black))
                         .tracking(-1)
                         .foregroundStyle(.white)
                         .lineLimit(2)
@@ -115,7 +115,7 @@ struct OfflineMediaDetailView: View {
                     HStack(spacing: CinemaSpacing.spacing2) {
                         Image(systemName: "play.fill")
                         Text(loc.localized("detail.play"))
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(size: CinemaScale.pt(18), weight: .bold))
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -130,7 +130,7 @@ struct OfflineMediaDetailView: View {
                     pendingRemoval = entry
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(18), weight: .semibold))
                         .foregroundStyle(CinemaColor.onSurface)
                         .padding(CinemaSpacing.spacing2)
                         .background(.ultraThinMaterial)
@@ -256,7 +256,7 @@ struct OfflineMediaDetailView: View {
                 }
                 Spacer()
                 Image(systemName: "play.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(16), weight: .semibold))
                     .foregroundStyle(themeManager.accent)
             }
             .padding(.horizontal, CinemaSpacing.spacing3)

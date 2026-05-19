@@ -520,7 +520,7 @@ struct MediaLibraryScreen: View {
                         Circle()
                             .fill(CinemaColor.onSurface.opacity(0.25))
                         Text("\(filterCount)")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: CinemaScale.pt(11), weight: .bold))
                     }
                     .frame(width: 20, height: 20)
                 }

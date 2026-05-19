@@ -541,7 +541,7 @@ struct MediaDetailScreen: View {
                             .font(.system(size: seasonTabFontSize, weight: .bold))
                             .foregroundStyle(themeManager.accent)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
                             .foregroundStyle(themeManager.accent)
                     }
                     .padding(.horizontal, CinemaSpacing.spacing3)

@@ -155,7 +155,7 @@ struct AdminApiKeysScreen: View {
                                 .foregroundStyle(CinemaColor.onSurface)
                             if isCurrentSession {
                                 Text(loc.localized("admin.apiKeys.thisSession"))
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.system(size: CinemaScale.pt(10), weight: .bold))
                                     .tracking(0.5)
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 6)

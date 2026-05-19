@@ -135,7 +135,7 @@ struct ServerHelpSheet: View {
                         .fill(themeManager.accentContainer.opacity(0.25))
                         .frame(width: 40, height: 40)
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .medium))
+                        .font(.system(size: CinemaScale.pt(18), weight: .medium))
                         .foregroundStyle(themeManager.accent)
                 }
 

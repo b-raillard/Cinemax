@@ -162,7 +162,7 @@ struct ServerSetupScreen: View {
                                 .fill(CinemaColor.surfaceContainerHigh)
                                 .frame(width: 80, height: 80)
                             Image(systemName: "server.rack")
-                                .font(.system(size: 36))
+                                .font(.system(size: CinemaScale.pt(36)))
                                 .foregroundStyle(themeManager.accent)
                         }
                         .shadow(color: .black.opacity(0.3), radius: 20)

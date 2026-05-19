@@ -80,7 +80,7 @@ struct IdentifyConfirmView: View {
                     ZStack {
                         CinemaColor.surfaceContainerHigh
                         Image(systemName: "photo")
-                            .font(.system(size: 32))
+                            .font(.system(size: CinemaScale.pt(32)))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                     }
                 }
@@ -95,7 +95,7 @@ struct IdentifyConfirmView: View {
                 replaceAllImages.toggle()
             } label: {
                 Image(systemName: replaceAllImages ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 26, weight: .regular))
+                    .font(.system(size: CinemaScale.pt(26), weight: .regular))
                     .foregroundStyle(replaceAllImages ? themeManager.accent : CinemaColor.outline)
             }
             .buttonStyle(.plain)

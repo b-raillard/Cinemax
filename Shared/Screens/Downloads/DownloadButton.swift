@@ -120,26 +120,26 @@ struct DownloadButton: View {
             switch entry?.status {
             case .none:
                 Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
                     .foregroundStyle(themeManager.accent)
             case .queued:
                 Image(systemName: "clock")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
                     .foregroundStyle(themeManager.accent)
             case .downloading:
                 ProgressRing(progress: entry?.progress ?? 0, tint: themeManager.accent)
                     .frame(width: 28, height: 28)
             case .paused:
                 Image(systemName: "play.circle")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
                     .foregroundStyle(themeManager.accent)
             case .failed:
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                     .foregroundStyle(CinemaColor.error)
             case .completed:
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
                     .foregroundStyle(themeManager.accent)
             }
         }
@@ -259,7 +259,7 @@ struct ProgressRing: View {
                 .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Image(systemName: "pause.fill")
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: CinemaScale.pt(10), weight: .bold))
                 .foregroundStyle(tint)
         }
     }

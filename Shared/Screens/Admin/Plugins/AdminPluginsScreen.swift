@@ -177,7 +177,7 @@ struct AdminPluginsScreen: View {
 
         if !label.isEmpty {
             Text(label)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: CinemaScale.pt(10), weight: .bold))
                 .tracking(0.5)
                 .foregroundStyle(color)
                 .padding(.horizontal, 6)

@@ -88,7 +88,7 @@ struct IdentifyResultsGridView: View {
                     ZStack {
                         CinemaColor.surfaceContainerHigh
                         Image(systemName: "photo")
-                            .font(.system(size: 32))
+                            .font(.system(size: CinemaScale.pt(32)))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                     }
                 }

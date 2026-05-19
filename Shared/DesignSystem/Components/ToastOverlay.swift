@@ -44,7 +44,7 @@ private struct ToastView: View {
     var body: some View {
         HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
             Image(systemName: toast.level.systemImage)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                 .foregroundStyle(toast.level.tint)
                 .accessibilityHidden(true)
 
@@ -64,7 +64,7 @@ private struct ToastView: View {
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: CinemaScale.pt(13), weight: .bold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .padding(6)
                     .contentShape(Rectangle())

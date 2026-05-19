@@ -165,7 +165,7 @@ struct HomeScreen: View {
             } label: {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     Image(systemName: "exclamationmark.arrow.circlepath")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(14), weight: .semibold))
                     Text(loc.localized("home.genreRow.failed"))
                         .font(CinemaFont.label(.medium))
                     Text("·")

@@ -134,7 +134,7 @@ struct MetadataCastTab: View {
                     .fill(CinemaColor.surfaceContainerHigh)
                     .frame(width: size, height: size)
                 Text(String((person.name ?? "?").prefix(1)).uppercased())
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: CinemaScale.pt(16), weight: .bold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
         }
@@ -211,7 +211,7 @@ private struct MetadataPersonEditor: View {
 
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                         Text(loc.localized("admin.metadata.cast.kind").uppercased())
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: CinemaScale.pt(11), weight: .bold))
                             .tracking(1.2)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                         Picker("", selection: $kind) {

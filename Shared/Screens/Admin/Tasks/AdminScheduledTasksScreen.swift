@@ -112,7 +112,7 @@ struct AdminScheduledTasksScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                 HStack(spacing: 4) {
                     Image(systemName: resultStatus == .completed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(11), weight: .semibold))
                         .foregroundStyle(resultStatus == .completed ? CinemaColor.success : CinemaColor.error)
                     if let endTime = last.endTimeUtc {
                         Text(relativeShort(endTime))
@@ -144,7 +144,7 @@ struct AdminScheduledTasksScreen: View {
 
     private func labelBadge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(size: CinemaScale.pt(10), weight: .bold))
             .tracking(0.5)
             .foregroundStyle(color)
             .padding(.horizontal, 8)
