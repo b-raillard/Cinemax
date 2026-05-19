@@ -83,11 +83,11 @@ struct MediaDetailScreen: View {
         }
         #endif
         .task {
-            await viewModel.load(using: appState)
+            await viewModel.load(using: appState, loc: loc)
         }
         #if os(tvOS)
         .onChange(of: coordinator.lastDismissedAt) { _, _ in
-            Task { await viewModel.load(using: appState) }
+            Task { await viewModel.load(using: appState, loc: loc) }
         }
         #endif
         .sheet(item: $episodeOverview) { ep in
@@ -580,7 +580,7 @@ struct MediaDetailScreen: View {
 
     private func errorView(_ message: String) -> some View {
         ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
-            Task { await viewModel.load(using: appState) }
+            Task { await viewModel.load(using: appState, loc: loc) }
         }
     }
 

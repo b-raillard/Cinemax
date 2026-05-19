@@ -19,6 +19,15 @@
 "action.cancel" = "Cancel";
 "action.apply" = "Apply";
 "action.reset" = "Reset";
+
+"error.network" = "Can't reach the server. Check your connection and try again.";
+"error.sessionExpired" = "Your session has expired. Please sign in again.";
+"error.generic" = "Something went wrong. Please try again.";
+"login.usernameRequired" = "Please enter your username.";
+"login.failed" = "Sign-in failed. Check your username and password.";
+"server.addressRequired" = "Please enter a server address.";
+"server.invalidURL" = "That doesn't look like a valid server address.";
+"server.connectFailed" = "Couldn't connect to that server. Check the address and that it's reachable.";
 "action.clear" = "Clear";
 "action.done" = "Done";
 "player.tracks.title" = "Audio & Subtitles";
@@ -135,6 +144,9 @@
 "search.topMatches" = "Top Matches";
 "search.permissionRequired" = "Permission Required";
 "search.openSettings" = "Open Settings";
+"search.voice.microphoneDenied" = "Microphone access is required for voice search. Enable it in Settings > Privacy & Security > Microphone.";
+"search.voice.speechDenied" = "Speech recognition access is required for voice search. Enable it in Settings > Privacy & Security > Speech Recognition.";
+"search.voice.unavailable" = "Speech recognition is not available on this device.";
 "search.surpriseMePrompt" = "Not sure what to watch?";
 "search.surprise.movie" = "Surprise movie";
 "search.surprise.series" = "Surprise series";

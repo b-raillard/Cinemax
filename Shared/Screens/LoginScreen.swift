@@ -101,7 +101,7 @@ struct LoginScreen: View {
                         style: .accent,
                         isLoading: viewModel.isAuthenticating
                     ) {
-                        Task { await viewModel.authenticate(using: appState) }
+                        Task { await viewModel.authenticate(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isAuthenticating)
                 }
@@ -218,7 +218,7 @@ struct LoginScreen: View {
                         icon: "chevron.right",
                         isLoading: viewModel.isAuthenticating
                     ) {
-                        Task { await viewModel.authenticate(using: appState) }
+                        Task { await viewModel.authenticate(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isAuthenticating)
 

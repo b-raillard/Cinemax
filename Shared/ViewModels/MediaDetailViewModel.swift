@@ -1,6 +1,9 @@
 import SwiftUI
+import OSLog
 import CinemaxKit
 import JellyfinAPI
+
+private let logger = Logger(subsystem: "com.cinemax", category: "MediaDetail")
 
 @MainActor @Observable
 final class MediaDetailViewModel {
@@ -34,7 +37,7 @@ final class MediaDetailViewModel {
         self.itemType = itemType
     }
 
-    func load(using appState: AppState) async {
+    func load(using appState: AppState, loc: LocalizationManager) async {
         guard let userId = appState.currentUserId else { return }
         isLoading = true
 
@@ -62,7 +65,8 @@ final class MediaDetailViewModel {
                 }
             }
         } catch {
-            errorMessage = error.localizedDescription
+            logger.error("MediaDetail load failed: \(error.localizedDescription, privacy: .public)")
+            errorMessage = loc.userFacingMessage(for: error)
         }
 
         isLoading = false

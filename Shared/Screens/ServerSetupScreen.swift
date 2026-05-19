@@ -109,7 +109,7 @@ struct ServerSetupScreen: View {
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
                     ) {
-                        Task { await viewModel.connect(using: appState) }
+                        Task { await viewModel.connect(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isConnecting)
                 }
@@ -222,7 +222,7 @@ struct ServerSetupScreen: View {
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
                     ) {
-                        Task { await viewModel.connect(using: appState) }
+                        Task { await viewModel.connect(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isConnecting)
 

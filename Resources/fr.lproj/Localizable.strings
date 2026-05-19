@@ -19,6 +19,15 @@
 "action.cancel" = "Annuler";
 "action.apply" = "Appliquer";
 "action.reset" = "Réinitialiser";
+
+"error.network" = "Serveur injoignable. Vérifiez votre connexion et réessayez.";
+"error.sessionExpired" = "Votre session a expiré. Veuillez vous reconnecter.";
+"error.generic" = "Une erreur est survenue. Veuillez réessayer.";
+"login.usernameRequired" = "Veuillez saisir votre nom d'utilisateur.";
+"login.failed" = "Échec de la connexion. Vérifiez votre nom d'utilisateur et votre mot de passe.";
+"server.addressRequired" = "Veuillez saisir une adresse de serveur.";
+"server.invalidURL" = "Cette adresse de serveur ne semble pas valide.";
+"server.connectFailed" = "Connexion au serveur impossible. Vérifiez l'adresse et qu'il est accessible.";
 "action.clear" = "Effacer";
 "action.done" = "Terminé";
 "player.tracks.title" = "Audio et sous-titres";
@@ -135,6 +144,9 @@
 "search.topMatches" = "Meilleurs résultats";
 "search.permissionRequired" = "Autorisation requise";
 "search.openSettings" = "Ouvrir les réglages";
+"search.voice.microphoneDenied" = "L'accès au micro est requis pour la recherche vocale. Activez-le dans Réglages > Confidentialité et sécurité > Microphone.";
+"search.voice.speechDenied" = "L'accès à la reconnaissance vocale est requis pour la recherche vocale. Activez-le dans Réglages > Confidentialité et sécurité > Reconnaissance vocale.";
+"search.voice.unavailable" = "La reconnaissance vocale n'est pas disponible sur cet appareil.";
 "search.surpriseMePrompt" = "Pas d'idée de ce que regarder ?";
 "search.surprise.movie" = "Film surprise";
 "search.surprise.series" = "Série surprise";

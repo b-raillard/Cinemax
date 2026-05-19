@@ -20,7 +20,7 @@ struct LoginViewModelTests {
         vm.username = "   "
         vm.password = "secret"
 
-        await vm.authenticate(using: makeAppState(api: api))
+        await vm.authenticate(using: makeAppState(api: api), loc: LocalizationManager())
 
         #expect(vm.errorMessage != nil)
         #expect(!api.authenticateCalled)
@@ -40,7 +40,7 @@ struct LoginViewModelTests {
         vm.password = "password"
 
         // Run without awaiting the 1s sleep to keep tests fast
-        let task = Task { await vm.authenticate(using: appState) }
+        let task = Task { await vm.authenticate(using: appState, loc: LocalizationManager()) }
         // Poll until showSuccess is set (before the sleep finishes)
         for _ in 0..<50 {
             if vm.showSuccess { break }
@@ -65,7 +65,7 @@ struct LoginViewModelTests {
         vm.username = "Alice"
         vm.password = "wrong"
 
-        await vm.authenticate(using: makeAppState(api: api))
+        await vm.authenticate(using: makeAppState(api: api), loc: LocalizationManager())
 
         #expect(vm.errorMessage != nil)
         #expect(!vm.isAuthenticating)
@@ -78,7 +78,7 @@ struct LoginViewModelTests {
         vm.username = "Alice"
         vm.password = "secret"
 
-        await vm.authenticate(using: makeAppState())
+        await vm.authenticate(using: makeAppState(), loc: LocalizationManager())
 
         #expect(!vm.isAuthenticating)
     }

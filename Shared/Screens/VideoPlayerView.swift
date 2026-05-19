@@ -84,7 +84,7 @@ struct VideoPlayerView: View {
     private func startIOSPlayback() async {
         guard !didPresent else { return }
         guard let userId = appState.currentUserId else {
-            errorMessage = "Not authenticated"
+            errorMessage = loc.localized("error.sessionExpired")
             return
         }
 
@@ -163,7 +163,7 @@ struct VideoPlayerView: View {
             p.present(info: info)
         } catch {
             logger.error("iOS playback error: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 

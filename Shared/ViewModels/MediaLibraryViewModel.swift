@@ -1,7 +1,10 @@
 import Foundation
 import Observation
+import OSLog
 import CinemaxKit
 @preconcurrency import JellyfinAPI
+
+private let logger = Logger(subsystem: "com.cinemax", category: "Library")
 
 // MARK: - Sort & Filter State
 
@@ -56,20 +59,20 @@ final class MediaLibraryViewModel {
         self.itemType = itemType
     }
 
-    func loadInitial(using appState: AppState) async {
+    func loadInitial(using appState: AppState, loc: LocalizationManager) async {
         guard !hasLoaded else { return }
         hasLoaded = true
-        await performLoad(using: appState)
+        await performLoad(using: appState, loc: loc)
     }
 
-    func reload(using appState: AppState) async {
-        await performLoad(using: appState)
+    func reload(using appState: AppState, loc: LocalizationManager) async {
+        await performLoad(using: appState, loc: loc)
         if sortFilter.isFiltered {
             await applyFilter(using: appState)
         }
     }
 
-    private func performLoad(using appState: AppState) async {
+    private func performLoad(using appState: AppState, loc: LocalizationManager) async {
         guard let userId = appState.currentUserId else { return }
         isLoading = true
         errorMessage = nil
@@ -104,7 +107,8 @@ final class MediaLibraryViewModel {
 
             try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
         } catch {
-            errorMessage = error.localizedDescription
+            logger.error("Library load failed: \(error.localizedDescription, privacy: .public)")
+            errorMessage = loc.userFacingMessage(for: error)
         }
 
         isLoading = false

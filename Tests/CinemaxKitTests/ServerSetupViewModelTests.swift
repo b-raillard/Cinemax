@@ -19,7 +19,7 @@ struct ServerSetupViewModelTests {
         let vm = ServerSetupViewModel()
         vm.serverURL = "   "
 
-        await vm.connect(using: makeAppState(api: api))
+        await vm.connect(using: makeAppState(api: api), loc: LocalizationManager())
 
         #expect(vm.errorMessage != nil)
         #expect(!api.connectCalled)
@@ -32,7 +32,7 @@ struct ServerSetupViewModelTests {
         let vm = ServerSetupViewModel()
         vm.serverURL = "jellyfin.local"
 
-        await vm.connect(using: makeAppState(api: api))
+        await vm.connect(using: makeAppState(api: api), loc: LocalizationManager())
 
         #expect(api.connectCalled)
         #expect(vm.errorMessage == nil)
@@ -44,7 +44,7 @@ struct ServerSetupViewModelTests {
         let vm = ServerSetupViewModel()
         vm.serverURL = "not a url at all !!!"
 
-        await vm.connect(using: makeAppState(api: api))
+        await vm.connect(using: makeAppState(api: api), loc: LocalizationManager())
 
         #expect(vm.errorMessage != nil)
         #expect(!api.connectCalled)
@@ -60,7 +60,7 @@ struct ServerSetupViewModelTests {
         let vm = ServerSetupViewModel()
         vm.serverURL = "http://localhost:8096"
 
-        await vm.connect(using: appState)
+        await vm.connect(using: appState, loc: LocalizationManager())
 
         #expect(appState.hasServer)
         #expect(keychain.savedServerURL?.host == "localhost")
@@ -78,7 +78,7 @@ struct ServerSetupViewModelTests {
         let vm = ServerSetupViewModel()
         vm.serverURL = "http://unreachable.local"
 
-        await vm.connect(using: makeAppState(api: api))
+        await vm.connect(using: makeAppState(api: api), loc: LocalizationManager())
 
         #expect(vm.errorMessage != nil)
         #expect(!vm.isConnecting)

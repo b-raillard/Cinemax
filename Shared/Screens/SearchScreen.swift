@@ -126,7 +126,7 @@ struct SearchScreen: View {
             }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
-            Text(viewModel.permissionAlertMessage)
+            Text(loc.localized(viewModel.permissionError?.localizationKey ?? "search.voice.unavailable"))
         }
         .onDisappear {
             // Stop any active recognition session when leaving the screen

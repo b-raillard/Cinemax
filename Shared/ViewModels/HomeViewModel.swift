@@ -1,7 +1,10 @@
 import Foundation
 import Observation
+import OSLog
 import CinemaxKit
 @preconcurrency import JellyfinAPI
+
+private let logger = Logger(subsystem: "com.cinemax", category: "Home")
 
 /// Presentation state for a single genre row on Home. `.failed` surfaces a
 /// retry chip instead of silently skipping the row, so transient server
@@ -47,12 +50,20 @@ final class HomeViewModel {
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
-                (try? await appState.apiClient.getResumeItems(userId: userId, limit: 20))
-                    .map { .resume($0) }
+                do {
+                    return .resume(try await appState.apiClient.getResumeItems(userId: userId, limit: 20))
+                } catch {
+                    logger.warning("Home resume fetch failed: \(error.localizedDescription, privacy: .public)")
+                    return nil
+                }
             }
             group.addTask {
-                (try? await appState.apiClient.getLatestMedia(userId: userId, limit: 20))
-                    .map { .latest($0) }
+                do {
+                    return .latest(try await appState.apiClient.getLatestMedia(userId: userId, limit: 20))
+                } catch {
+                    logger.warning("Home latest fetch failed: \(error.localizedDescription, privacy: .public)")
+                    return nil
+                }
             }
             for await result in group {
                 switch result {
