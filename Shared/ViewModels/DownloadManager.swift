@@ -539,6 +539,11 @@ final class DownloadManager {
     // MARK: - Delegate adapter
 
     private final class Adapter: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+        /// Write-once: set exactly once on the MainActor in `DownloadManager.init`
+        /// before the session issues any callback, then only read (each read
+        /// immediately hops via `Task { @MainActor [weak owner] }`). Never
+        /// mutated after wiring — same single-assignment invariant as the
+        /// lock-protected `JellyfinClient` reference.
         weak var owner: DownloadManager?
 
         func urlSession(_ session: URLSession,

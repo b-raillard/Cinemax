@@ -17,7 +17,6 @@ enum SettingsKey {
 
     // Interface
     static let motionEffects = "motionEffects"
-    static let forceSubtitles = "forceSubtitles"
     static let render4K = "render4K"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
     static let sleepTimerDefaultMinutes = "sleepTimerDefaultMinutes"
@@ -60,7 +59,6 @@ enum SettingsKey {
         static let appLanguage = "fr"
 
         static let motionEffects = true
-        static let forceSubtitles = false
         static let render4K = true
         static let autoPlayNextEpisode = true
         static let sleepTimerDefaultMinutes = 0

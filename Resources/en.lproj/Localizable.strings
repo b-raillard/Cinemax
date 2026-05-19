@@ -618,7 +618,6 @@
 "settings.interface" = "Interface";
 "settings.motionEffects" = "Motion Effects";
 "settings.fontSize" = "Text Size";
-"settings.forceSubtitles" = "Force Subtitles";
 "settings.4kRendering" = "4K UI Rendering";
 "settings.autoPlayNextEpisode" = "Auto-play Next Episode";
 "settings.forceNativeAVPlayer" = "Use Native Player";

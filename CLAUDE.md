@@ -49,7 +49,7 @@ Shared/
     Settings/               SettingsScreen + iOS/tvOS extensions, SettingsAppearanceView+iOS, SettingsRowHelpers, SettingsTV{AccentPicker,LanguagePicker,ProfileSection,ActionRow}
     Downloads/              (iOS-only) DownloadButton, DownloadsScreen, OfflineLibraryView, OfflineMediaDetailView, DownloadItem+BaseItemDto
     Admin/                  (iOS-only) Dashboard/Users/Devices/Activity/Tasks/Plugins/Catalog/Playback/Network/Logs/ApiKeys/Metadata/Identify
-    Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, AdminItemMenu, DestructiveConfirmSheet, AdminComingSoonScreen
+    Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, AdminItemMenu, DestructiveConfirmSheet
   ViewModels/               per-screen VMs + VideoPlayerCoordinator + DownloadManager (iOS) + NetworkMonitor
 iOS/ tvOS/                  app entry points
 Resources/{fr,en}.lproj/    Localization (fr default)
@@ -155,7 +155,6 @@ Two-level navigation. Landing — tvOS: split (left brand, right 4 nav pills, pe
 | Key | Default | Effect |
 |-----|---------|--------|
 | `motionEffects` | `true` | `motionEffectsEnabled` env — disables all animations when off |
-| `forceSubtitles` | `false` | Auto-selects first `.legible`; disables auto media selection |
 | `render4K` | `true` | `maxBitrate` 120/20 Mbps |
 | `autoPlayNextEpisode` | `true` | Auto-nav via `didPlayToEndTime` |
 | `forceNativeAVPlayer` | `false` | `false` ⇒ VLC online engine; `true` ⇒ native `AVPlayer` |
