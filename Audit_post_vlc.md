@@ -153,8 +153,13 @@ Each phase build-verified (iOS + tvOS) + tests; separate commits.
 - Phase 5 ✅ — M6: wrapped all 62 bare `.font(.system(size: N))` numeric
   literals across 34 files in `CinemaScale.pt(...)` so they honor `uiScale` /
   tvOS 1.4× (identity at default iOS settings — no visual regression; the
-  documented computed-var Play-button 28pt exception is untouched). A full
-  semantic remap into `CinemaFont.*` tokens is intentionally NOT done: arbitrary
-  sizes (11/13/24/28…) don't map to the semantic scale and forcing them would
-  change the visual design — that requires per-site design decisions + on-device
-  visual QA, recommended as a separate design pass.
+  documented computed-var Play-button 28pt exception is untouched).
+- M6b ✅ (exact-match subset) — substituted the only 6 sites whose
+  (size,weight) is byte-equivalent to a `CinemaFont` token
+  (`pt(28).bold`→`headline(.medium)`, `pt(24).semibold`→`headline(.small)`,
+  4×`pt(14).medium`→`label(.small)`). **Concluded NOT mechanical for the
+  rest:** the codebase's sizes/weights (lots of `.semibold` at 14/16/20)
+  don't map onto the 3-tier semantic scale (`.medium`/`.bold`/`.regular`
+  only) — converting them changes rendered weight/size, i.e. a design
+  decision requiring on-device visual QA, not a refactor. Left as a
+  design-team pass.
