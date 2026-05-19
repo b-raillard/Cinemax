@@ -153,7 +153,8 @@ final class NativeVideoPresenter {
 
         guard let windowScene = UIApplication.shared.connectedScenes
                 .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = windowScene.windows.first?.rootViewController else {
+              let rootVC = (windowScene.windows.first(where: { $0.isKeyWindow })
+                ?? windowScene.windows.first)?.rootViewController else {
             logger.error("NativeVideoPresenter: no root view controller")
             return
         }
@@ -845,7 +846,8 @@ final class NativeVideoPresenter {
         guard let vc = playerVC,
               let windowScene = UIApplication.shared.connectedScenes
                 .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = windowScene.windows.first?.rootViewController else {
+              let rootVC = (windowScene.windows.first(where: { $0.isKeyWindow })
+                ?? windowScene.windows.first)?.rootViewController else {
             completion(false); return
         }
         // If the modal somehow stayed up (shouldn't happen with default

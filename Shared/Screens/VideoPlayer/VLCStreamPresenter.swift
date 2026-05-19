@@ -1047,7 +1047,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 let startSec = Double(ch.startPositionTicks ?? 0) / 10_000_000
                 let title = (ch.name?.isEmpty == false ? ch.name : nil)
                     ?? "\(self.loc.localized("player.chapters")) \(i + 1)"
-                let chip = self.makeChapterChip(index: i, title: title, time: Self.formatMs(Int32(startSec * 1000)))
+                let chip = self.makeChapterChip(index: i, title: title, time: PlayerTimeFormat.ms(Int32(startSec * 1000)))
                 self.chapterStack.addArrangedSubview(chip)
             }
             #if os(tvOS)
@@ -1136,7 +1136,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let i = sender.tag
         guard i < chapterStartTicks.count else { return }
         engineSeek(ms: Int32(chapterStartTicks[i] / 10_000))
-        showSkipHUD(Self.formatMs(Int32(chapterStartTicks[i] / 10_000)))
+        showSkipHUD(PlayerTimeFormat.ms(Int32(chapterStartTicks[i] / 10_000)))
         refreshTimeUISoon()
         scheduleHideControls()
     }
@@ -1465,7 +1465,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hideControlsWorkItem?.cancel()
         let length = lengthMs
         guard length > 0 else { return }
-        timeLabel.text = Self.formatMs(Int32(Float(length) * slider.value))
+        timeLabel.text = PlayerTimeFormat.ms(Int32(Float(length) * slider.value))
     }
 
     @objc private func scrubberDone() {
@@ -1628,13 +1628,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let lengthMs = self.lengthMs
         #if os(iOS)
         if !isScrubbing {
-            timeLabel.text = Self.formatMs(currentMs)
-            durationLabel.text = "-" + Self.formatMs(max(0, lengthMs - currentMs))
+            timeLabel.text = PlayerTimeFormat.ms(currentMs)
+            durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
             if lengthMs > 0 { slider.value = Float(currentMs) / Float(lengthMs) }
         }
         #else
-        timeLabel.text = Self.formatMs(currentMs)
-        durationLabel.text = "-" + Self.formatMs(max(0, lengthMs - currentMs))
+        timeLabel.text = PlayerTimeFormat.ms(currentMs)
+        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
         if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
         #endif
     }
@@ -1650,13 +1650,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
     }
 
-    private static func formatMs(_ ms: Int32) -> String {
-        let total = Int(max(0, ms) / 1000)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
-    }
 }
 
 #if os(tvOS)
