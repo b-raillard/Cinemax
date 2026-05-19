@@ -4,6 +4,13 @@ import Security
 public struct KeychainService: Sendable {
     private static let serviceName = "com.cinemax.jellyfin"
 
+    /// Session fallback for the device id: if the keychain is locked at first
+    /// launch the `SecItemAdd` below fails, and without this every call would
+    /// mint a fresh UUID and fragment device identity. Lock-guarded so the
+    /// static accessor stays Sendable-safe.
+    private static let deviceIDLock = NSLock()
+    nonisolated(unsafe) private static var cachedDeviceID: String?
+
     public init() {}
 
     // MARK: - Access Token
@@ -68,6 +75,14 @@ public struct KeychainService: Sendable {
     /// Migrates from UserDefaults if a legacy value exists.
     public static func getOrCreateDeviceID() -> String {
         let account = "device_id"
+        // Return the session-cached id if a prior call already resolved one
+        // (covers the keychain-locked first-launch case).
+        deviceIDLock.lock()
+        if let cached = cachedDeviceID {
+            deviceIDLock.unlock()
+            return cached
+        }
+        deviceIDLock.unlock()
         // Try Keychain first
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -80,6 +95,9 @@ public struct KeychainService: Sendable {
         if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
            let data = result as? Data,
            let id = String(data: data, encoding: .utf8) {
+            deviceIDLock.lock()
+            cachedDeviceID = id
+            deviceIDLock.unlock()
             return id
         }
 
@@ -99,7 +117,18 @@ public struct KeychainService: Sendable {
             kSecValueData as String: Data(id.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
-        SecItemAdd(saveQuery as CFDictionary, nil)
+        // Cache for the session regardless: if the add fails (keychain locked
+        // at first launch) we still want a stable id for this run instead of a
+        // new UUID on every call.
+        deviceIDLock.lock()
+        cachedDeviceID = id
+        deviceIDLock.unlock()
+        let status = SecItemAdd(saveQuery as CFDictionary, nil)
+        if status != errSecSuccess && status != errSecDuplicateItem {
+            // Persisted-store write failed; the session cache above keeps the
+            // id stable until the next launch retries.
+            assertionFailure("Keychain device-id write failed: \(status)")
+        }
         return id
     }
 

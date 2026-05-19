@@ -12,6 +12,10 @@ public final class DownloadStore: @unchecked Sendable {
     private let lock = NSLock()
     private var items: [String: DownloadItem] = [:]
     private let url: URL?
+    /// Throttle window for progress-only writes. Status transitions still
+    /// persist immediately; only the sub-second byte-count churn is coalesced.
+    private static let progressPersistInterval: TimeInterval = 5
+    private var lastProgressPersist = Date.distantPast
 
     public init() {
         let resolved = (try? DownloadStorage.indexURL())
@@ -60,6 +64,32 @@ public final class DownloadStore: @unchecked Sendable {
         return current
     }
 
+    /// Progress-only mutation from the per-tick download delegate. Updates the
+    /// in-memory catalog every call but writes to disk at most once per
+    /// `progressPersistInterval` — the old code re-encoded + atomically
+    /// rewrote the whole catalog on every URLSession byte callback (several
+    /// times/sec/download), which was pure write amplification. Interrupted
+    /// progress is recoverable from resume blobs / disk scan on next launch.
+    @discardableResult
+    public func updateProgress(id: String, received: Int64, total: Int64) -> DownloadItem? {
+        lock.lock()
+        guard var current = items[id] else {
+            lock.unlock()
+            return nil
+        }
+        current.bytesReceived = received
+        if total > 0 { current.totalBytes = total }
+        current.status = .downloading
+        items[id] = current
+        let now = Date()
+        let due = now.timeIntervalSince(lastProgressPersist) >= Self.progressPersistInterval
+        let snapshot: [DownloadItem]? = due ? Array(items.values) : nil
+        if due { lastProgressPersist = now }
+        lock.unlock()
+        if let snapshot { persist(snapshot) }
+        return current
+    }
+
     public func remove(id: String) {
         lock.lock()
         items.removeValue(forKey: id)
@@ -100,7 +130,9 @@ extension JSONEncoder {
     static let cinemax: JSONEncoder = {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .iso8601
-        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        // On-disk machine file — no need for pretty/sorted output; keeping it
+        // compact avoids needless encode cost on catalog writes.
+        e.outputFormatting = []
         return e
     }()
 }

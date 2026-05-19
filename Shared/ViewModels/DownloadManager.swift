@@ -68,6 +68,7 @@ final class DownloadManager {
         // saw in the field (banner reported 6 GB used while the catalog only
         // showed a 2 GB entry).
         DownloadStorage.reconcileOrphans(against: Set(items.map(\.id)))
+        refreshDiskUsage()
     }
 
     /// Wires the API client + signed-in user id so we can negotiate fresh
@@ -142,7 +143,18 @@ final class DownloadManager {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    var totalDiskBytes: Int64 { DownloadStorage.totalDiskUsage() }
+    /// Cached on-disk footprint. `DownloadStorage.totalDiskUsage()` is a
+    /// blocking recursive walk of the multi-GB media tree — never compute it
+    /// in a SwiftUI `body`. Refreshed off-main only on catalog lifecycle
+    /// events (finish / remove / wipe / enqueue), never on progress ticks.
+    private(set) var totalDiskBytes: Int64 = 0
+
+    private func refreshDiskUsage() {
+        Task.detached(priority: .utility) {
+            let bytes = DownloadStorage.totalDiskUsage()
+            await MainActor.run { self.totalDiskBytes = bytes }
+        }
+    }
 
     /// Returns the on-disk poster file URL when we've already cached the
     /// artwork during enqueue. Offline screens prefer this over a remote URL
@@ -177,6 +189,7 @@ final class DownloadManager {
         items = store.all()
         cachePoster(for: item.id, posterURL: posterURL, backdropURL: backdropURL)
         promoteQueueIfPossible()
+        refreshDiskUsage()
     }
 
     /// Wipes everything: cancels in-flight tasks, drops the catalog, deletes
@@ -192,6 +205,7 @@ final class DownloadManager {
         }
         DownloadStorage.wipeEverything()
         items = []
+        refreshDiskUsage()
     }
 
     // MARK: - Artwork prefetch
@@ -273,6 +287,7 @@ final class DownloadManager {
         store.remove(id: id)
         items = store.all()
         promoteQueueIfPossible()
+        refreshDiskUsage()
     }
 
     // MARK: - Internal task plumbing
@@ -376,11 +391,9 @@ final class DownloadManager {
     // MARK: - Delegate callbacks (called by Adapter, on MainActor)
 
     fileprivate func didWrite(taskId: String, received: Int64, total: Int64) {
-        store.update(id: taskId) { item in
-            item.bytesReceived = received
-            if total > 0 { item.totalBytes = total }
-            item.status = .downloading
-        }
+        // Throttled disk write inside the store — no full catalog re-encode
+        // on every byte callback.
+        store.updateProgress(id: taskId, received: received, total: total)
         // Avoid rebuilding the full list on every progress tick — replace in place.
         if let idx = items.firstIndex(where: { $0.id == taskId }) {
             var copy = items[idx]
@@ -457,6 +470,7 @@ final class DownloadManager {
         tasksByItemId.removeValue(forKey: taskId)
         items = store.all()
         promoteQueueIfPossible()
+        refreshDiskUsage()
     }
 
     fileprivate func didFail(taskId: String, error: Error?) {

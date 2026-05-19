@@ -116,16 +116,22 @@ final class MediaLibraryViewModel {
             let items: [BaseItemDto]
         }
         let genresToLoad = Array(genreList.prefix(genreLoadLimit))
+        // Snapshot @MainActor state before the @Sendable task group — reading
+        // self.sortFilter/itemType inside addTask would race with sort/filter
+        // UI mutations on the main actor (same pattern as loadMoreFiltered).
+        let snapshot = sortFilter
+        let kind = itemType
+        let limit = genreItemLimit
         try await withThrowingTaskGroup(of: GenreResult.self) { group in
             for genre in genresToLoad {
                 group.addTask {
                     let result = try await appState.apiClient.getItems(
                         userId: userId,
-                        includeItemTypes: [self.itemType],
-                        sortBy: [self.sortFilter.sortBy],
-                        sortOrder: self.sortFilter.sortAscending ? [.ascending] : [.descending],
+                        includeItemTypes: [kind],
+                        sortBy: [snapshot.sortBy],
+                        sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
                         genres: [genre],
-                        limit: self.genreItemLimit
+                        limit: limit
                     )
                     return GenreResult(genre: genre, items: result.items)
                 }
