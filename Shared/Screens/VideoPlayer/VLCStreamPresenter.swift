@@ -1,11 +1,26 @@
 import UIKit
+import SwiftUI
 import QuartzCore
-import VLCKitSPM
+import SwiftVLC
 import OSLog
 import CinemaxKit
 import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "VLCPlayback")
+
+/// Single source of truth for the ±N-second skip interval used by EVERY
+/// in-app skip affordance (double-tap, ±N buttons, tvOS scrub bar, the
+/// center skip glyph). Set to **10 s** to match the system Picture-in-Picture
+/// overlay: AVKit hands SwiftVLC's `PiPController` a system-fixed skip
+/// interval (±10 s for sample-buffer PiP) that apps cannot override, so the
+/// only way to keep PiP and normal mode consistent is to align normal mode
+/// to it. SF Symbols only exist for discrete values (…10/.15/.30…) — keep
+/// `intervalSeconds` to one of those.
+enum PlayerSkipConfig {
+    static let intervalSeconds: Int = 10
+    static var backwardSymbol: String { "gobackward.\(intervalSeconds)" }
+    static var forwardSymbol: String { "goforward.\(intervalSeconds)" }
+}
 
 /// Online VLC player (iOS + tvOS). VLC DirectPlays the raw Jellyfin file
 /// (MKV / HEVC 10-bit / Dolby Vision) so the server performs **no transcode** —
@@ -114,7 +129,7 @@ final class VLCStreamPresenter: NSObject {
 
 // MARK: - View controller
 
-private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDelegate, UIScrollViewDelegate {
+private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate {
     // Mutable across episode navigation.
     private var itemId: String
     private var info: PlaybackInfo
@@ -131,8 +146,23 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
 
-    private let mediaPlayer = VLCMediaPlayer()
+    // SwiftVLC engine (libVLC 4.0). `videoView` stays a plain UIView so the
+    // existing gesture / HUD layout is untouched; the SwiftVLC rendering
+    // surface is embedded into it via a child UIHostingController.
+    private let player = Player()
     private let videoView = UIView()
+    private var videoHost: UIViewController?
+    private var eventsTask: Task<Void, Never>?
+    /// Latest known media length in ms. SwiftVLC's `player.duration` can lag a
+    /// beat after `.lengthChanged`; cache it from the events stream so the
+    /// scrub bar / remaining-time math stays correct (mirrors the old
+    /// `mediaPlayer.media?.length` reads).
+    private var mediaLengthMs: Int32 = 0
+    private var didApplyServerTrackDefaults = false
+    #if os(iOS)
+    private var pipController: PiPController?
+    private let pipButton = UIButton(type: .system)
+    #endif
     private let controlsContainer = PassthroughView()
     private let titleLabel = UILabel()
     private let timeLabel = UILabel()
@@ -211,6 +241,13 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     private var didReportEnd = false
     private var didRetry = false
 
+    // SwiftVLC end-of-media disambiguation: `.stopped` fires for natural end,
+    // teardown, AND media swap. `isTearingDown` suppresses end handling during
+    // dismissal; `lastPlayStart` ignores the `.stopped` that can follow a
+    // fresh `play(media)` (old media winding down).
+    private var isTearingDown = false
+    private var lastPlayStart = Date.distantPast
+
     // Polish: a track/chapter picker is up — freeze the HUD behind it.
     private var pickerPresented = false
 
@@ -270,6 +307,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     }
 
     private func teardown() {
+        isTearingDown = true
         progressTimer?.invalidate()
         progressTimer = nil
         remoteCommands.detach()
@@ -277,8 +315,75 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         pendingTapWork?.cancel()
         segmentFetchTask?.cancel()
         chapterFetchTask?.cancel()
-        mediaPlayer.stop()
-        mediaPlayer.delegate = nil
+        eventsTask?.cancel()
+        eventsTask = nil
+        #if os(iOS)
+        pipController = nil
+        #endif
+        player.stop()
+    }
+
+    // MARK: - Engine bridge (SwiftVLC)
+
+    /// Current position in ms (mirrors the old `mediaPlayer.time.intValue`).
+    private var currentMs: Int32 {
+        let c = player.currentTime.components
+        return Int32(clamping: Int(c.seconds) * 1000
+            + Int(c.attoseconds / 1_000_000_000_000_000))
+    }
+
+    /// Cached media length in ms (mirrors `mediaPlayer.media?.length.intValue`).
+    private var lengthMs: Int32 { mediaLengthMs }
+
+    /// True only while actively playing (matches VLCKit's `isPlaying`, which
+    /// was false during pause/stop/buffering).
+    private var enginePlaying: Bool { player.state == .playing }
+
+    private func engineSeek(ms: Int32) {
+        player.seek(to: .milliseconds(Int(max(0, ms))))
+    }
+
+    private func engineSeek(bySeconds s: Int) {
+        player.seek(by: .seconds(s))
+    }
+
+    private func enginePlay() { player.resume() }
+    private func enginePause() { player.pause() }
+
+    /// Builds the authed SwiftVLC `Media` with the same network-caching option
+    /// the VLCKit path used.
+    private func makeMedia(_ url: URL) -> Media? {
+        guard let media = try? Media(url: url) else { return nil }
+        media.addOption(":network-caching=3000")
+        return media
+    }
+
+    /// Consume SwiftVLC's event stream — replaces the old
+    /// `VLCMediaPlayerDelegate` callbacks. One Task per presenter lifetime;
+    /// rebinding media (episode nav / retry) keeps the same stream.
+    private func startEventLoop() {
+        guard eventsTask == nil else { return }
+        eventsTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for await event in self.player.events {
+                switch event {
+                case .lengthChanged(let d):
+                    let c = d.components
+                    self.mediaLengthMs = Int32(clamping: Int(c.seconds) * 1000
+                        + Int(c.attoseconds / 1_000_000_000_000_000))
+                case .timeChanged:
+                    self.onEngineTimeChanged()
+                case .stateChanged(let state):
+                    self.onEngineStateChanged(state)
+                case .tracksChanged:
+                    self.applyServerTrackDefaultsIfNeeded()
+                case .encounteredError:
+                    self.handlePlaybackError()
+                default:
+                    break
+                }
+            }
+        }
     }
 
     // MARK: - Reporter
@@ -293,7 +398,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             },
             timeSource: { [weak self] in
                 guard let self else { return (0, true) }
-                return (Double(self.mediaPlayer.time.intValue) / 1000.0, !self.mediaPlayer.isPlaying)
+                return (Double(self.currentMs) / 1000.0, !self.enginePlaying)
             }
         )
         let center = remoteCommands
@@ -312,7 +417,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     /// Single 1 s heartbeat: progress reporting + skip-segment check + sleep countdown.
     private func onSecondTick() {
         reporter?.onTick()
-        let now = Double(mediaPlayer.time.intValue) / 1000.0
+        let now = Double(currentMs) / 1000.0
         updateSkipButton(currentTime: now)
         if sleepActive {
             sleepRemaining -= 1
@@ -384,7 +489,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     @objc private func skipSegmentTapped() {
         for segment in segments where segment.type == activeSegmentType {
             let end = Int32(Double(segment.endTicks ?? 0) / 10_000_000 * 1000)
-            mediaPlayer.time = VLCTime(int: end)
+            engineSeek(ms: end)
             skipButton.isHidden = true
             activeSegmentType = nil
             refreshTimeUISoon()
@@ -403,14 +508,14 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
 
     private func fireSleepTimer() {
         sleepActive = false
-        mediaPlayer.pause()
+        enginePause()
         let alert = UIAlertController(
             title: loc.localized("sleep.prompt.title"),
             message: loc.localized("sleep.prompt.subtitle"),
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: loc.localized("sleep.prompt.keepWatching"), style: .default) { [weak self] _ in
-            self?.mediaPlayer.play()
+            self?.enginePlay()
             self?.startSleepTimerIfNeeded()
         })
         alert.addAction(UIAlertAction(title: loc.localized("sleep.prompt.stop"), style: .destructive) { [weak self] _ in
@@ -431,7 +536,30 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             videoView.topAnchor.constraint(equalTo: view.topAnchor),
             videoView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-        mediaPlayer.drawable = videoView
+
+        // SwiftVLC renders through a SwiftUI representable. Host it in a child
+        // UIHostingController pinned to `videoView`. Interaction is disabled so
+        // the tap recognizer on `videoView` keeps receiving HUD toggles (the
+        // old VLCKit `drawable` was a plain UIView with the same behavior).
+        let surface = EngineSurface(player: player) { [weak self] controller in
+            #if os(iOS)
+            self?.pipController = controller as? PiPController
+            #endif
+        }
+        let host = UIHostingController(rootView: surface)
+        host.view.backgroundColor = .clear
+        host.view.isUserInteractionEnabled = false
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(host)
+        videoView.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: videoView.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: videoView.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: videoView.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: videoView.bottomAnchor)
+        ])
+        host.didMove(toParent: self)
+        videoHost = host
     }
 
     private func setupControls() {
@@ -447,7 +575,17 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = titleText
+        #if os(iOS)
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        // The title must yield to the top-right control cluster: in narrow
+        // portrait a long title would otherwise win the layout and shove the
+        // PiP/audio/subtitle buttons into each other. Low compression
+        // resistance + truncation keeps the buttons tappable.
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        #else
         titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+        #endif
         titleLabel.textColor = .white
         titleLabel.lineBreakMode = .byTruncatingTail
         controlsContainer.addSubview(titleLabel)
@@ -577,11 +715,11 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         // Close (✕) — part of the HUD, so it fades in/out with the controls.
         var closeConfig = UIButton.Configuration.plain()
         closeConfig.image = UIImage(systemName: "xmark",
-                                    withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .bold))
+                                    withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold))
         closeConfig.baseForegroundColor = .white
         closeConfig.background.backgroundColor = UIColor.black.withAlphaComponent(0.45)
         closeConfig.cornerStyle = .capsule
-        closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 11, leading: 11, bottom: 11, trailing: 11)
+        closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 9, bottom: 9, trailing: 9)
         closeButton.configuration = closeConfig
         closeButton.translatesAutoresizingMaskIntoConstraints = false
         closeButton.accessibilityLabel = loc.localized("action.done")
@@ -589,12 +727,15 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         controlsContainer.addSubview(closeButton)
         controlsContainer.bringSubviewToFront(closeButton)
 
-        configureIOS(audioButton, "waveform", pt: 22, loc.localized("player.audio"))
+        configureIOS(audioButton, "waveform", pt: 17, loc.localized("player.audio"), compact: true)
         audioButton.addTarget(self, action: #selector(openAudioMenu), for: .touchUpInside)
         controlsContainer.addSubview(audioButton)
-        configureIOS(subtitleButton, "captions.bubble", pt: 22, loc.localized("player.subtitles"))
+        configureIOS(subtitleButton, "captions.bubble", pt: 17, loc.localized("player.subtitles"), compact: true)
         subtitleButton.addTarget(self, action: #selector(openSubtitleMenu), for: .touchUpInside)
         controlsContainer.addSubview(subtitleButton)
+        configureIOS(pipButton, "pip.enter", pt: 17, loc.localized("player.pip"), compact: true)
+        pipButton.addTarget(self, action: #selector(pipTapped), for: .touchUpInside)
+        controlsContainer.addSubview(pipButton)
 
         transportRow.translatesAutoresizingMaskIntoConstraints = false
         transportRow.axis = .horizontal
@@ -604,7 +745,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
 
         configureIOS(prevButton, "backward.end.fill", pt: 24, loc.localized("player.previousEpisode"))
         prevButton.addTarget(self, action: #selector(prevEpisodeTapped), for: .touchUpInside)
-        configureIOS(skipBackButton, "gobackward.15", pt: 30, loc.localized("player.skipIntro"))
+        configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, loc.localized("player.skipIntro"))
         skipBackButton.addTarget(self, action: #selector(iosSkipBack), for: .touchUpInside)
 
         var ppCfg = UIButton.Configuration.plain()
@@ -615,7 +756,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         playPauseButton.translatesAutoresizingMaskIntoConstraints = false
         playPauseButton.addTarget(self, action: #selector(playPauseTapped), for: .touchUpInside)
 
-        configureIOS(skipFwdButton, "goforward.15", pt: 30, loc.localized("player.skipCredits"))
+        configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, loc.localized("player.skipCredits"))
         skipFwdButton.addTarget(self, action: #selector(iosSkipForward), for: .touchUpInside)
         configureIOS(nextButton, "forward.end.fill", pt: 24, loc.localized("player.nextEpisode"))
         nextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
@@ -650,11 +791,13 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             closeButton.trailingAnchor.constraint(equalTo: cSafe.trailingAnchor, constant: -12),
             closeButton.topAnchor.constraint(equalTo: cSafe.topAnchor, constant: 8),
             // Title can never run under the top-right cluster.
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: audioButton.leadingAnchor, constant: -12),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: pipButton.leadingAnchor, constant: -12),
             subtitleButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
             subtitleButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             audioButton.trailingAnchor.constraint(equalTo: subtitleButton.leadingAnchor, constant: -4),
             audioButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            pipButton.trailingAnchor.constraint(equalTo: audioButton.leadingAnchor, constant: -4),
+            pipButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
 
             slider.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
             slider.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
@@ -679,11 +822,16 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         ])
     }
 
-    private func configureIOS(_ b: UIButton, _ symbol: String, pt: CGFloat, _ a11y: String) {
+    private func configureIOS(_ b: UIButton, _ symbol: String, pt: CGFloat, _ a11y: String, compact: Bool = false) {
         var cfg = UIButton.Configuration.plain()
         cfg.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: pt, weight: .semibold))
         cfg.baseForegroundColor = .white
-        cfg.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+        // `compact` = the top-right cluster (PiP/audio/subtitle): tighter
+        // insets so four icons + a title fit in narrow portrait. Default
+        // insets are for the larger center transport controls.
+        cfg.contentInsets = compact
+            ? NSDirectionalEdgeInsets(top: 7, leading: 7, bottom: 7, trailing: 7)
+            : NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
         b.configuration = cfg
         b.accessibilityLabel = a11y
         // Without this, buttons added directly to the container (audio /
@@ -691,6 +839,10 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         // break the top-right Auto Layout chain — collapsing the close button
         // to a 0-height strip on the left.
         b.translatesAutoresizingMaskIntoConstraints = false
+        // Buttons must keep their intrinsic size so the 4-icon cluster never
+        // compresses/overlaps in narrow portrait — the title yields instead.
+        b.setContentCompressionResistancePriority(.required, for: .horizontal)
+        b.setContentHuggingPriority(.required, for: .horizontal)
     }
 
     private var audioPickerSource: UIView? { audioButton }
@@ -782,8 +934,8 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         tvScrub.translatesAutoresizingMaskIntoConstraints = false
         tvScrub.onSeek = { [weak self] delta in
             guard let self else { return }
-            if delta < 0 { self.mediaPlayer.jumpBackward(15); self.showSkipGlyph(forward: false) }
-            else { self.mediaPlayer.jumpForward(15); self.showSkipGlyph(forward: true) }
+            if delta < 0 { self.engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: false) }
+            else { self.engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: true) }
             self.refreshTimeUISoon()
             self.scheduleHideControls()
         }
@@ -983,7 +1135,7 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     @objc private func chapterChipTapped(_ sender: UIButton) {
         let i = sender.tag
         guard i < chapterStartTicks.count else { return }
-        mediaPlayer.time = VLCTime(int: Int32(chapterStartTicks[i] / 10_000))
+        engineSeek(ms: Int32(chapterStartTicks[i] / 10_000))
         showSkipHUD(Self.formatMs(Int32(chapterStartTicks[i] / 10_000)))
         refreshTimeUISoon()
         scheduleHideControls()
@@ -1040,12 +1192,12 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
     }
 
-    /// Native-style ±15 s indicator: the system `gobackward.15` /
-    /// `goforward.15` glyph, briefly flashed with a small bounce.
+    /// Native-style ±N s indicator (N = `PlayerSkipConfig.intervalSeconds`),
+    /// briefly flashed with a small bounce.
     private func showSkipGlyph(forward: Bool) {
         skipGlyphHide?.cancel()
         skipGlyph.image = UIImage(
-            systemName: forward ? "goforward.15" : "gobackward.15",
+            systemName: forward ? PlayerSkipConfig.forwardSymbol : PlayerSkipConfig.backwardSymbol,
             withConfiguration: UIImage.SymbolConfiguration(pointSize: 64, weight: .semibold)
         )
         skipGlyph.alpha = 1
@@ -1102,42 +1254,78 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         scheduleHideControls()
     }
 
+    /// Prefer Jellyfin's DisplayTitle (nicer than libVLC's "Track 1"), mapped
+    /// by ordinal within the type; fall back to the SwiftVLC track name.
+    private func displayLabel(forAudioOrdinal i: Int, track: Track) -> String {
+        if i < info.audioTracks.count { return info.audioTracks[i].label }
+        if let lang = track.language, !lang.isEmpty { return "\(track.name) (\(lang))" }
+        return track.name
+    }
+
+    private func displayLabel(forSubtitleOrdinal i: Int, track: Track) -> String {
+        if i < info.subtitleTracks.count { return info.subtitleTracks[i].label }
+        if let lang = track.language, !lang.isEmpty { return "\(track.name) (\(lang))" }
+        return track.name
+    }
+
     @objc private func openAudioMenu() {
-        let idx = mediaPlayer.audioTrackIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
-        let names = mediaPlayer.audioTrackNames.compactMap { $0 as? String }
         var opts: [(String, Bool, () -> Void)] = []
-        for (i, name) in names.enumerated() where i < idx.count {
-            let track = idx[i]
-            opts.append((name, track == mediaPlayer.currentAudioTrackIndex, { [weak self] in
-                self?.mediaPlayer.currentAudioTrackIndex = track
+        for (i, track) in player.audioTracks.enumerated() {
+            let selected = player.selectedAudioTrack == track
+            opts.append((displayLabel(forAudioOrdinal: i, track: track), selected, { [weak self] in
+                self?.player.selectedAudioTrack = track
             }))
         }
         presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, opts)
     }
 
     @objc private func openSubtitleMenu() {
-        let idx = mediaPlayer.videoSubTitlesIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
-        let names = mediaPlayer.videoSubTitlesNames.compactMap { $0 as? String }
         var opts: [(String, Bool, () -> Void)] = []
-        for (i, name) in names.enumerated() where i < idx.count {
-            let track = idx[i]
-            opts.append((name, track == mediaPlayer.currentVideoSubTitleIndex, { [weak self] in
-                self?.mediaPlayer.currentVideoSubTitleIndex = track
+        opts.append((loc.localized("player.subtitles.off"),
+                     player.selectedSubtitleTrack == nil,
+                     { [weak self] in self?.player.selectedSubtitleTrack = nil }))
+        for (i, track) in player.subtitleTracks.enumerated() {
+            let selected = player.selectedSubtitleTrack == track
+            opts.append((displayLabel(forSubtitleOrdinal: i, track: track), selected, { [weak self] in
+                self?.player.selectedSubtitleTrack = track
             }))
         }
         presentPicker(loc.localized("player.subtitles"), sourceView: subtitlePickerSource, opts)
+    }
+
+    /// Apply Jellyfin's negotiated default audio/subtitle (absolute stream
+    /// index) onto SwiftVLC tracks by ordinal-within-type. Runs once per media
+    /// (on `.tracksChanged`); `selectedSubtitleIndex` nil/-1 ⇒ off.
+    private func applyServerTrackDefaultsIfNeeded() {
+        guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
+        didApplyServerTrackDefaults = true
+
+        if let wantAudio = info.selectedAudioIndex,
+           let ordinal = info.audioTracks.firstIndex(where: { $0.id == wantAudio }),
+           ordinal < player.audioTracks.count {
+            player.selectedAudioTrack = player.audioTracks[ordinal]
+        }
+
+        if let wantSub = info.selectedSubtitleIndex, wantSub >= 0,
+           let ordinal = info.subtitleTracks.firstIndex(where: { $0.id == wantSub }),
+           ordinal < player.subtitleTracks.count {
+            player.selectedSubtitleTrack = player.subtitleTracks[ordinal]
+        } else {
+            player.selectedSubtitleTrack = nil
+        }
     }
 
     // MARK: - Playback
 
     private func startPlayback() {
         hasValidTime = false
+        didApplyServerTrackDefaults = false
+        mediaLengthMs = 0
         let url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-        let media = VLCMedia(url: url)
-        media.addOption(":network-caching=3000")
-        mediaPlayer.media = media
-        mediaPlayer.delegate = self
-        mediaPlayer.play()
+        guard let media = makeMedia(url) else { handlePlaybackError(); return }
+        startEventLoop()
+        lastPlayStart = Date()
+        try? player.play(media)
         reporter?.reportStart(startTime: startTime)
         startProgressTimer()
         fetchSegments()
@@ -1146,8 +1334,8 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     }
 
     @objc private func playPauseTapped() {
-        let willPlay = !mediaPlayer.isPlaying
-        if mediaPlayer.isPlaying { mediaPlayer.pause() } else { mediaPlayer.play() }
+        let willPlay = !enginePlaying
+        if enginePlaying { enginePause() } else { enginePlay() }
         flashCenterGlyph(playing: willPlay)
         #if os(iOS)
         setPlayPauseIcon(playing: willPlay)
@@ -1179,14 +1367,15 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             self.hasValidTime = false
             self.didRetry = false
             self.didReportEnd = false
+            self.didApplyServerTrackDefaults = false
+            self.mediaLengthMs = 0
             self.previousEpisode = nav?.1
             self.nextEpisode = nav?.2
             self.titleLabel.text = ref.title
             let url = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
-            let media = VLCMedia(url: url)
-            media.addOption(":network-caching=3000")
-            self.mediaPlayer.media = media
-            self.mediaPlayer.play()
+            guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
+            self.lastPlayStart = Date()
+            try? self.player.play(media)
             self.refreshTimeUISoon()
             self.reporter?.resetTicking()
             self.reporter?.reportStart(startTime: nil)
@@ -1208,6 +1397,14 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         dismiss(animated: true)
     }
 
+    /// Native Picture-in-Picture via SwiftVLC's libVLC pixel-buffer →
+    /// `AVPictureInPictureController` pipeline (works for all content incl.
+    /// MKV/Dolby-Vision — no AVPlayer handoff needed).
+    @objc private func pipTapped() {
+        guard let pip = pipController, pip.isPossible else { return }
+        pip.toggle()
+    }
+
     /// Single tap → toggle HUD (deferred ~0.28 s so a double tap can pre-empt
     /// it). Double tap → seek ∓15 s by screen half; a hidden HUD stays hidden
     /// (skip glyph is the only feedback), a visible HUD just gets its timer
@@ -1221,10 +1418,10 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             pendingTapWork = nil
             lastTapTime = 0
             if x < view.bounds.width / 2 {
-                mediaPlayer.jumpBackward(15)
+                engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: false)
             } else {
-                mediaPlayer.jumpForward(15)
+                engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: true)
             }
             refreshTimeUISoon()
@@ -1244,14 +1441,14 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     }
 
     @objc private func iosSkipBack() {
-        mediaPlayer.jumpBackward(15)
+        engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: false)
         refreshTimeUISoon()
         scheduleHideControls()
     }
 
     @objc private func iosSkipForward() {
-        mediaPlayer.jumpForward(15)
+        engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: true)
         refreshTimeUISoon()
         scheduleHideControls()
@@ -1266,15 +1463,15 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     @objc private func scrubberChanged() {
         isScrubbing = true
         hideControlsWorkItem?.cancel()
-        let length = mediaPlayer.media?.length.intValue ?? 0
+        let length = lengthMs
         guard length > 0 else { return }
         timeLabel.text = Self.formatMs(Int32(Float(length) * slider.value))
     }
 
     @objc private func scrubberDone() {
-        let length = mediaPlayer.media?.length.intValue ?? 0
+        let length = lengthMs
         guard length > 0 else { isScrubbing = false; return }
-        mediaPlayer.time = VLCTime(int: Int32(Float(length) * slider.value))
+        engineSeek(ms: Int32(Float(length) * slider.value))
         isScrubbing = false
         scheduleHideControls()
     }
@@ -1328,27 +1525,31 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         #endif
     }
 
-    // MARK: - VLCMediaPlayerDelegate
+    // MARK: - Engine events (was VLCMediaPlayerDelegate)
 
-    nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            switch self.mediaPlayer.state {
-            case .error:
-                self.handlePlaybackError()
-            case .ended:
-                self.handlePlaybackEnded()
-            case .playing:
-                self.didRetry = false
-                #if os(iOS)
-                self.setPlayPauseIcon(playing: true)
-                #endif
-            case .paused:
-                #if os(iOS)
-                self.setPlayPauseIcon(playing: false)
-                #endif
-            default: break
-            }
+    /// SwiftVLC has no distinct `.ended` state — libVLC 4.0 end-of-media
+    /// surfaces as `.stopped`. Distinguish a natural end (autoplay / overlay)
+    /// from teardown / media-swap via the tear-down flag + a near-end / not-
+    /// just-started guard.
+    private func onEngineStateChanged(_ state: PlayerState) {
+        switch state {
+        case .error:
+            handlePlaybackError()
+        case .stopped:
+            guard !isTearingDown,
+                  Date().timeIntervalSince(lastPlayStart) > 1.0,
+                  lengthMs > 0, currentMs >= lengthMs - 2000 else { return }
+            handlePlaybackEnded()
+        case .playing:
+            didRetry = false
+            #if os(iOS)
+            setPlayPauseIcon(playing: true)
+            #endif
+        case .paused:
+            #if os(iOS)
+            setPlayPauseIcon(playing: false)
+            #endif
+        default: break
         }
     }
 
@@ -1390,10 +1591,11 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
             didRetry = true
             logger.error("VLC stream error for \(self.itemId, privacy: .public) — retrying once")
             let url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-            let media = VLCMedia(url: url)
-            media.addOption(":network-caching=5000")
-            mediaPlayer.media = media
-            mediaPlayer.play()
+            if let media = try? Media(url: url) {
+                media.addOption(":network-caching=5000")
+                lastPlayStart = Date()
+                try? player.play(media)
+            }
             return
         }
         logger.error("VLC stream error for \(self.itemId, privacy: .public) — giving up")
@@ -1408,16 +1610,12 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
         present(alert, animated: true)
     }
 
-    nonisolated func mediaPlayerTimeChanged(_ aNotification: Notification) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.refreshTimeUI()
-            if self.mediaPlayer.time.intValue > 0 { self.hasValidTime = true }
-            let lengthMs = self.mediaPlayer.media?.length.intValue ?? 0
-            if !self.didSeekToStart, let start = self.startTime, start > 0, lengthMs > 0 {
-                self.didSeekToStart = true
-                self.mediaPlayer.time = VLCTime(int: Int32(start * 1000))
-            }
+    private func onEngineTimeChanged() {
+        refreshTimeUI()
+        if currentMs > 0 { hasValidTime = true }
+        if !didSeekToStart, let start = startTime, start > 0, lengthMs > 0 {
+            didSeekToStart = true
+            engineSeek(ms: Int32(start * 1000))
         }
     }
 
@@ -1426,8 +1624,8 @@ private final class VLCStreamViewController: UIViewController, VLCMediaPlayerDel
     /// after every programmatic seek — VLC doesn't emit time updates while
     /// paused, so without this a seek-while-paused wouldn't move the bar.
     private func refreshTimeUI() {
-        let currentMs = mediaPlayer.time.intValue
-        let lengthMs = mediaPlayer.media?.length.intValue ?? 0
+        let currentMs = self.currentMs
+        let lengthMs = self.lengthMs
         #if os(iOS)
         if !isScrubbing {
             timeLabel.text = Self.formatMs(currentMs)
@@ -1551,6 +1749,29 @@ private final class ChapterChip: UIButton {
             thumb?.layer.borderWidth = focused ? 3 : 0
             thumb?.layer.borderColor = UIColor.white.cgColor
         })
+    }
+}
+
+/// SwiftUI host for the SwiftVLC rendering surface. iOS uses `PiPVideoView`
+/// (libVLC pixel-buffer → `AVPictureInPictureController`) and publishes the
+/// `PiPController` back to the presenter; tvOS uses plain `VideoView` (no PiP).
+@MainActor
+private struct EngineSurface: View {
+    let player: Player
+    var onController: (AnyObject?) -> Void = { _ in }
+    #if os(iOS)
+    @State private var controller: PiPController?
+    #endif
+
+    var body: some View {
+        #if os(iOS)
+        PiPVideoView(player, controller: Binding(
+            get: { controller },
+            set: { controller = $0; onController($0) }
+        ))
+        #else
+        VideoView(player)
+        #endif
     }
 }
 

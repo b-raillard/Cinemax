@@ -716,6 +716,7 @@
 "player.audio" = "Audio";
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
+"player.pip" = "Picture in Picture";
 "player.trackPicker.title" = "Playback Tracks";
 "player.skipIntro" = "Skip Intro";
 "player.skipCredits" = "Skip Credits";

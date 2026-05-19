@@ -1,22 +1,20 @@
 #if os(iOS)
 import UIKit
-import VLCKitSPM
+import SwiftUI
+import SwiftVLC
 import OSLog
 import CinemaxKit
 
 private let logger = Logger(subsystem: "com.cinemax", category: "VLCPlayback")
 
 /// Plays offline files AVKit can't demux (MKV / AVI / WebM / HEVC-in-Matroska)
-/// using libVLC. Same role `NativeVideoPresenter` plays for streaming —
-/// instantiate, call `present(localURL:title:startTime:)`, lifetime is
+/// using libVLC (SwiftVLC / libVLC 4.0). Same role `NativeVideoPresenter`
+/// plays for streaming — instantiate, call `present(localURL:)`, lifetime is
 /// managed by the modal it puts up.
 ///
 /// Built deliberately small: a black-background view controller, a tap-to-
-/// toggle controls overlay, scrubber + time labels, and a Done button. The
-/// rich AVKit chrome (subtitles UI, chapter markers, sleep timer prompt) is
-/// out of scope here — the VLC path exists so the file *plays at all*, and
-/// users with AVKit-compatible libraries still get the polished AVPlayer
-/// experience.
+/// toggle controls overlay, scrubber + time labels, a Done button, and (now,
+/// for free via SwiftVLC) a Picture-in-Picture button.
 @MainActor
 final class VLCOfflinePresenter: NSObject {
     private let title: String
@@ -66,20 +64,40 @@ final class VLCOfflinePresenter: NSObject {
     }
 }
 
+// MARK: - SwiftUI rendering surface (libVLC pixel-buffer → AVKit PiP)
+
+@MainActor
+private struct OfflineEngineSurface: View {
+    let player: Player
+    var onController: (AnyObject?) -> Void = { _ in }
+    @State private var controller: PiPController?
+
+    var body: some View {
+        PiPVideoView(player, controller: Binding(
+            get: { controller },
+            set: { controller = $0; onController($0) }
+        ))
+    }
+}
+
 // MARK: - View controller
 
-private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
+private final class VLCPlayerViewController: UIViewController {
     private let localURL: URL
     private let titleText: String
     private let startTime: Double?
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
 
-    private let mediaPlayer = VLCMediaPlayer()
+    private let player = Player()
     private let videoView = UIView()
+    private var videoHost: UIViewController?
+    private var eventsTask: Task<Void, Never>?
+    private var pipController: PiPController?
     private let controlsContainer = UIView()
     private let titleLabel = UILabel()
     private let doneButton = UIButton(type: .system)
+    private let pipButton = UIButton(type: .system)
     private let playPauseButton = UIButton(type: .system)
     private let slider = UISlider()
     private let timeLabel = UILabel()
@@ -87,9 +105,14 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
 
     /// Hides the chrome after 3 s of no interaction. Tap restores it.
     private var hideControlsWorkItem: DispatchWorkItem?
-    /// Once the first time observer reports a non-zero position we know the
-    /// media is loaded; only then is it safe to seek to `startTime`.
+    /// Once the first time event reports a non-zero length we know the media
+    /// is loaded; only then is it safe to seek to `startTime`. Done once.
     private var didSeekToStart = false
+    private var isScrubbing = false
+    private var isTearingDown = false
+    private var lastPlayStart = Date.distantPast
+    /// Latest media length in ms (SwiftVLC `duration` can lag `.lengthChanged`).
+    private var mediaLengthMs: Int32 = 0
 
     init(localURL: URL, title: String, startTime: Double?, loc: LocalizationManager, onDismiss: (() -> Void)?) {
         self.localURL = localURL
@@ -120,11 +143,52 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        mediaPlayer.stop()
-        mediaPlayer.delegate = nil
-        hideControlsWorkItem?.cancel()
         if isBeingDismissed {
+            isTearingDown = true
+            eventsTask?.cancel()
+            eventsTask = nil
+            pipController = nil
+            player.stop()
+            hideControlsWorkItem?.cancel()
             onDismiss?()
+        }
+    }
+
+    // MARK: - Engine bridge (SwiftVLC)
+
+    private var currentMs: Int32 {
+        let c = player.currentTime.components
+        return Int32(clamping: Int(c.seconds) * 1000
+            + Int(c.attoseconds / 1_000_000_000_000_000))
+    }
+    private var lengthMs: Int32 { mediaLengthMs }
+    private var enginePlaying: Bool { player.state == .playing }
+
+    private func engineSeek(ms: Int32) {
+        player.seek(to: .milliseconds(Int(max(0, ms))))
+    }
+
+    private func startEventLoop() {
+        guard eventsTask == nil else { return }
+        eventsTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for await event in self.player.events {
+                switch event {
+                case .lengthChanged(let d):
+                    let c = d.components
+                    self.mediaLengthMs = Int32(clamping: Int(c.seconds) * 1000
+                        + Int(c.attoseconds / 1_000_000_000_000_000))
+                case .timeChanged:
+                    self.onEngineTimeChanged()
+                case .stateChanged(let state):
+                    self.onEngineStateChanged(state)
+                case .encounteredError:
+                    logger.error("VLC offline error for \(self.localURL.lastPathComponent, privacy: .public)")
+                    self.dismiss(animated: true)
+                default:
+                    break
+                }
+            }
         }
     }
 
@@ -140,7 +204,24 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
             videoView.topAnchor.constraint(equalTo: view.topAnchor),
             videoView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-        mediaPlayer.drawable = videoView
+
+        let surface = OfflineEngineSurface(player: player) { [weak self] controller in
+            self?.pipController = controller as? PiPController
+        }
+        let host = UIHostingController(rootView: surface)
+        host.view.backgroundColor = .clear
+        host.view.isUserInteractionEnabled = false
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(host)
+        videoView.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: videoView.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: videoView.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: videoView.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: videoView.bottomAnchor)
+        ])
+        host.didMove(toParent: self)
+        videoHost = host
     }
 
     private func setupControls() {
@@ -162,6 +243,17 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
         doneButton.translatesAutoresizingMaskIntoConstraints = false
         doneButton.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
         controlsContainer.addSubview(doneButton)
+
+        // PiP button (top-right)
+        var pipConfig = UIButton.Configuration.plain()
+        pipConfig.image = UIImage(systemName: "pip.enter",
+                                  withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
+        pipConfig.baseForegroundColor = .white
+        pipButton.configuration = pipConfig
+        pipButton.accessibilityLabel = loc.localized("player.pip")
+        pipButton.translatesAutoresizingMaskIntoConstraints = false
+        pipButton.addTarget(self, action: #selector(pipTapped), for: .touchUpInside)
+        controlsContainer.addSubview(pipButton)
 
         // Title
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -205,9 +297,11 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
         NSLayoutConstraint.activate([
             doneButton.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 8),
             doneButton.topAnchor.constraint(equalTo: safe.topAnchor, constant: 8),
+            pipButton.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -12),
+            pipButton.centerYAnchor.constraint(equalTo: doneButton.centerYAnchor),
             titleLabel.centerYAnchor.constraint(equalTo: doneButton.centerYAnchor),
             titleLabel.leadingAnchor.constraint(equalTo: doneButton.trailingAnchor, constant: 16),
-            titleLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: pipButton.leadingAnchor, constant: -16),
 
             playPauseButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             playPauseButton.centerYAnchor.constraint(equalTo: view.centerYAnchor),
@@ -233,28 +327,37 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
     // MARK: - Playback
 
     private func startPlayback() {
-        let media = VLCMedia(url: localURL)
+        guard let media = try? Media(url: localURL) else {
+            logger.error("VLC offline: failed to open \(self.localURL.lastPathComponent, privacy: .public)")
+            dismiss(animated: true)
+            return
+        }
         // File-cache option speeds up scrubbing through large MKV files; VLC's
-        // default (300 ms) makes the slider feel laggy on multi-GB downloads.
+        // default makes the slider feel laggy on multi-GB downloads.
         media.addOption(":file-caching=3000")
-        mediaPlayer.media = media
-        mediaPlayer.delegate = self
-        mediaPlayer.play()
+        startEventLoop()
+        lastPlayStart = Date()
+        try? player.play(media)
     }
 
     // MARK: - Controls
 
     @objc private func doneTapped() {
-        mediaPlayer.stop()
+        player.stop()
         dismiss(animated: true)
     }
 
+    @objc private func pipTapped() {
+        guard let pip = pipController, pip.isPossible else { return }
+        pip.toggle()
+    }
+
     @objc private func playPauseTapped() {
-        if mediaPlayer.isPlaying {
-            mediaPlayer.pause()
+        if enginePlaying {
+            player.pause()
             setPlayPauseIcon(playing: false)
         } else {
-            mediaPlayer.play()
+            player.resume()
             setPlayPauseIcon(playing: true)
         }
         scheduleHideControls()
@@ -269,24 +372,18 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
         }
     }
 
-    /// Tracks whether the user is actively dragging the scrubber so the
-    /// playback time observer doesn't fight their thumb.
-    private var isScrubbing = false
-
     @objc private func scrubberChanged() {
         isScrubbing = true
-        let length = mediaPlayer.media?.length.intValue ?? 0
+        let length = lengthMs
         guard length > 0 else { return }
         let targetMs = Int32(Float(length) * slider.value)
-        // Live time label update for nicer feedback during drag.
         timeLabel.text = Self.formatMs(targetMs)
     }
 
     @objc private func scrubberDone() {
-        let length = mediaPlayer.media?.length.intValue ?? 0
+        let length = lengthMs
         guard length > 0 else { isScrubbing = false; return }
-        let target = VLCTime(int: Int32(Float(length) * slider.value))
-        mediaPlayer.time = target
+        engineSeek(ms: Int32(Float(length) * slider.value))
         isScrubbing = false
         scheduleHideControls()
     }
@@ -319,44 +416,41 @@ private final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDel
         }
     }
 
-    // MARK: - VLCMediaPlayerDelegate
+    // MARK: - Engine events (was VLCMediaPlayerDelegate)
 
-    nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let state = self.mediaPlayer.state
-            switch state {
-            case .error:
-                logger.error("VLC media player entered error state for \(self.localURL.lastPathComponent, privacy: .public)")
-                self.dismiss(animated: true)
-            case .ended:
-                self.dismiss(animated: true)
-            case .paused:
-                self.setPlayPauseIcon(playing: false)
-            case .playing:
-                self.setPlayPauseIcon(playing: true)
-            default:
-                break
-            }
+    private func onEngineStateChanged(_ state: PlayerState) {
+        switch state {
+        case .error:
+            logger.error("VLC media player entered error state for \(self.localURL.lastPathComponent, privacy: .public)")
+            dismiss(animated: true)
+        case .stopped:
+            // libVLC 4.0 has no distinct `.ended`; treat a near-end stop that
+            // isn't teardown / a fresh start as end-of-media.
+            guard !isTearingDown,
+                  Date().timeIntervalSince(lastPlayStart) > 1.0,
+                  lengthMs > 0, currentMs >= lengthMs - 2000 else { return }
+            dismiss(animated: true)
+        case .paused:
+            setPlayPauseIcon(playing: false)
+        case .playing:
+            setPlayPauseIcon(playing: true)
+        default:
+            break
         }
     }
 
-    nonisolated func mediaPlayerTimeChanged(_ aNotification: Notification) {
-        Task { @MainActor [weak self] in
-            guard let self, !self.isScrubbing else { return }
-            let currentMs = self.mediaPlayer.time.intValue
-            let lengthMs = self.mediaPlayer.media?.length.intValue ?? 0
-            self.timeLabel.text = Self.formatMs(currentMs)
-            self.durationLabel.text = Self.formatMs(lengthMs)
-            if lengthMs > 0 {
-                self.slider.value = Float(currentMs) / Float(lengthMs)
-            }
-            // Seek to the requested start once VLC has populated `length` and
-            // we can trust the seekability. Done exactly once per session.
-            if !self.didSeekToStart, let start = self.startTime, start > 0, lengthMs > 0 {
-                self.didSeekToStart = true
-                self.mediaPlayer.time = VLCTime(int: Int32(start * 1000))
-            }
+    private func onEngineTimeChanged() {
+        guard !isScrubbing else { return }
+        let cur = currentMs
+        let len = lengthMs
+        timeLabel.text = Self.formatMs(cur)
+        durationLabel.text = Self.formatMs(len)
+        if len > 0 {
+            slider.value = Float(cur) / Float(len)
+        }
+        if !didSeekToStart, let start = startTime, start > 0, len > 0 {
+            didSeekToStart = true
+            engineSeek(ms: Int32(start * 1000))
         }
     }
 

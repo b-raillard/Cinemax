@@ -1,9 +1,14 @@
 name: Cinemax
 options:
   bundleIdPrefix: com.cinemax
+  # 26.2 (not 26.0): SwiftVLC ships a prebuilt libvlc.xcframework built with a
+  # 26.2 min-OS. Linking it at 26.0 emits "object file was built for newer iOS
+  # version (26.2) than being linked (26.0)" warnings for every libvlc .o.
+  # Matching the deployment target to the binary clears them. Bump only when
+  # SwiftVLC's binary min-OS changes.
   deploymentTarget:
-    iOS: "26.0"
-    tvOS: "26.0"
+    iOS: "26.2"
+    tvOS: "26.2"
   xcodeVersion: "26.2"
   createIntermediateGroups: true
   groupSortPosition: top
@@ -15,12 +20,18 @@ options:
 packages:
   CinemaxKit:
     path: Packages/CinemaxKit
-  # VLCKit (libVLC) for offline playback of containers AVPlayer can't decode
-  # (MKV / AVI / WebM). Same approach Swiftfin uses — AVPlayer drives streaming
-  # and AVKit-friendly offline files; VLC handles everything else.
-  VLCKitSPM:
-    url: https://github.com/tylerjonesio/vlckit-spm
-    from: "3.6.0"
+  # SwiftVLC (libVLC 4.0, Swift 6) is the VLC engine for BOTH online streaming
+  # (VLCStreamPresenter, iOS + tvOS) and offline playback (VLCOfflinePresenter,
+  # iOS). It replaced VLCKitSPM (libVLC 3.x): native iOS Picture-in-Picture
+  # (impossible in VLCKit), an object-based track API that fixes the
+  # audio-switch silence bug, and Swift-6-native @Observable/@MainActor design.
+  # Pinned to 0.3.0 EXACTLY: SwiftVLC >= 0.4.0 declares swift-tools-version 6.3
+  # (needs Xcode 26.3+); local toolchain is Swift 6.2.3 / Xcode 26.2. 0.3.0 is
+  # the highest tag that is both 6.2-compatible AND ships the PiP API. Bump
+  # when the toolchain reaches 6.3.
+  SwiftVLC:
+    url: https://github.com/harflabs/SwiftVLC
+    exactVersion: 0.3.0
 
 settings:
   base:
@@ -43,8 +54,8 @@ targets:
       - path: Resources
     dependencies:
       - package: CinemaxKit
-      - package: VLCKitSPM
-        product: VLCKitSPM
+      - package: SwiftVLC
+        product: SwiftVLC
     info:
       path: iOS/Info.plist
       properties:
@@ -106,8 +117,8 @@ targets:
       - path: Resources
     dependencies:
       - package: CinemaxKit
-      - package: VLCKitSPM
-        product: VLCKitSPM
+      - package: SwiftVLC
+        product: SwiftVLC
     info:
       path: tvOS/Info.plist
       properties:

@@ -1,5 +1,5 @@
 {
-  "originHash" : "c1114a8d98e3c5ecc9f781b103ea4218c72d280452d90442ddbed13cbbbcecc3",
+  "originHash" : "8081b4a42b71bf9a012d1102105ab6f2fc93f9db6a45118838d625cdaf9bc2a5",
   "pins" : [
     {
       "identity" : "get",
@@ -29,21 +29,21 @@
       }
     },
     {
+      "identity" : "swiftvlc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/harflabs/SwiftVLC",
+      "state" : {
+        "revision" : "0f1ce3f1d976f7638ffa66f368d2c890f012259a",
+        "version" : "0.3.0"
+      }
+    },
+    {
       "identity" : "urlqueryencoder",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/CreateAPI/URLQueryEncoder",
       "state" : {
         "revision" : "4ce950479707ea109f229d7230ec074a133b15d7",
         "version" : "0.2.1"
-      }
-    },
-    {
-      "identity" : "vlckit-spm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tylerjonesio/vlckit-spm",
-      "state" : {
-        "revision" : "e932bbd488872fdb74f6654d28c2f291eae03daf",
-        "version" : "3.6.0"
       }
     }
   ],

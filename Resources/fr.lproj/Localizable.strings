@@ -317,6 +317,7 @@
 "player.audio" = "Audio";
 "player.subtitles" = "Sous-titres";
 "player.subtitles.off" = "Désactivé";
+"player.pip" = "Image dans l'image";
 "player.trackPicker.title" = "Pistes de lecture";
 "player.skipIntro" = "Passer l'intro";
 "player.skipCredits" = "Passer le générique";
