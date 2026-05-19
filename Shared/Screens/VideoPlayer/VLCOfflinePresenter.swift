@@ -64,22 +64,6 @@ final class VLCOfflinePresenter: NSObject {
     }
 }
 
-// MARK: - SwiftUI rendering surface (libVLC pixel-buffer → AVKit PiP)
-
-@MainActor
-private struct OfflineEngineSurface: View {
-    let player: Player
-    var onController: (AnyObject?) -> Void = { _ in }
-    @State private var controller: PiPController?
-
-    var body: some View {
-        PiPVideoView(player, controller: Binding(
-            get: { controller },
-            set: { controller = $0; onController($0) }
-        ))
-    }
-}
-
 // MARK: - View controller
 
 private final class VLCPlayerViewController: UIViewController {
@@ -205,7 +189,7 @@ private final class VLCPlayerViewController: UIViewController {
             videoView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
 
-        let surface = OfflineEngineSurface(player: player) { [weak self] controller in
+        let surface = PlayerEngineSurface(player: player) { [weak self] controller in
             self?.pipController = controller as? PiPController
         }
         let host = UIHostingController(rootView: surface)

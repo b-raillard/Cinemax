@@ -541,7 +541,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // UIHostingController pinned to `videoView`. Interaction is disabled so
         // the tap recognizer on `videoView` keeps receiving HUD toggles (the
         // old VLCKit `drawable` was a plain UIView with the same behavior).
-        let surface = EngineSurface(player: player) { [weak self] controller in
+        let surface = PlayerEngineSurface(player: player) { [weak self] controller in
             #if os(iOS)
             self?.pipController = controller as? PiPController
             #endif
@@ -1639,14 +1639,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #endif
     }
 
+    /// Follow-up repaints pending from the last `refreshTimeUISoon()`. Held so
+    /// a rapid scrub burst coalesces instead of stacking dozens of closures
+    /// (each call cancels the previous follow-ups before scheduling fresh ones).
+    private var pendingTimeRefreshes: [DispatchWorkItem] = []
+
     /// Refreshes now and again shortly after — VLC applies a seek asynchronously,
     /// so `mediaPlayer.time` may not reflect the new position for a beat.
     private func refreshTimeUISoon() {
         refreshTimeUI()
-        for delay in [0.15, 0.4] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.refreshTimeUI()
-            }
+        pendingTimeRefreshes.forEach { $0.cancel() }
+        pendingTimeRefreshes = [0.15, 0.4].map { delay in
+            let work = DispatchWorkItem { [weak self] in self?.refreshTimeUI() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return work
         }
     }
 
@@ -1742,29 +1748,6 @@ private final class ChapterChip: UIButton {
             thumb?.layer.borderWidth = focused ? 3 : 0
             thumb?.layer.borderColor = UIColor.white.cgColor
         })
-    }
-}
-
-/// SwiftUI host for the SwiftVLC rendering surface. iOS uses `PiPVideoView`
-/// (libVLC pixel-buffer → `AVPictureInPictureController`) and publishes the
-/// `PiPController` back to the presenter; tvOS uses plain `VideoView` (no PiP).
-@MainActor
-private struct EngineSurface: View {
-    let player: Player
-    var onController: (AnyObject?) -> Void = { _ in }
-    #if os(iOS)
-    @State private var controller: PiPController?
-    #endif
-
-    var body: some View {
-        #if os(iOS)
-        PiPVideoView(player, controller: Binding(
-            get: { controller },
-            set: { controller = $0; onController($0) }
-        ))
-        #else
-        VideoView(player)
-        #endif
     }
 }
 
