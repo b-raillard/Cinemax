@@ -206,6 +206,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// surface — suppresses the periodic time tick so the preview isn't
     /// snapped back (mirrors the iOS slider's `isScrubbing`).
     private var isScrubbing = false
+    /// Set on scrub release: VLC applies a seek asynchronously, so until
+    /// `currentMs` reaches this the periodic tick must keep showing the
+    /// target instead of snapping back to the stale pre-seek position.
+    private var pendingScrubTargetMs: Int32?
     private let tvAudioButton = UIButton(type: .system)
     private let tvSubtitleButton = UIButton(type: .system)
     private let tvPrevButton = UIButton(type: .system)
@@ -938,6 +942,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.translatesAutoresizingMaskIntoConstraints = false
         tvScrub.onSeek = { [weak self] delta in
             guard let self else { return }
+            self.pendingScrubTargetMs = nil
             if delta < 0 { self.engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: false) }
             else { self.engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: true) }
             self.refreshTimeUISoon()
@@ -959,9 +964,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.onScrubCommit = { [weak self] progress in
             guard let self else { return }
             let len = self.lengthMs
-            if len > 0 { self.engineSeek(ms: Int32(Float(len) * progress)) }
             self.isScrubbing = false
-            self.refreshTimeUISoon()
+            guard len > 0 else { self.scheduleHideControls(); return }
+            let target = Int32(Float(len) * progress)
+            // Hold the bar/labels at the target; the periodic tick keeps
+            // showing it (not the stale pre-seek currentMs) until VLC's
+            // position actually reaches it — no snap-back flicker.
+            self.pendingScrubTargetMs = target
+            self.timeLabel.text = PlayerTimeFormat.ms(target)
+            self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
+            self.updateScrubBar(progress: progress)
+            self.engineSeek(ms: target)
             self.scheduleHideControls()
         }
         controlsContainer.addSubview(tvScrub)
@@ -1657,13 +1670,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if lengthMs > 0 { slider.value = Float(currentMs) / Float(lengthMs) }
         }
         #else
-        // While the user is sliding on the touch surface the preview owns the
-        // bar + labels — don't let a periodic tick snap them back.
-        if !isScrubbing {
-            timeLabel.text = PlayerTimeFormat.ms(currentMs)
-            durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
-            if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
+        // While the user is sliding, the preview owns the bar + labels.
+        if isScrubbing { return }
+        // After release, keep showing the seek target until VLC's position
+        // actually reaches it (within ~1.2 s) — otherwise the tick paints the
+        // stale pre-seek position for a beat and the bar visibly snaps back.
+        if let target = pendingScrubTargetMs {
+            if abs(Int(currentMs) - Int(target)) <= 1200 {
+                pendingScrubTargetMs = nil
+            } else {
+                timeLabel.text = PlayerTimeFormat.ms(target)
+                durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - target))
+                if lengthMs > 0 { updateScrubBar(progress: Float(target) / Float(lengthMs)) }
+                return
+            }
         }
+        timeLabel.text = PlayerTimeFormat.ms(currentMs)
+        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
+        if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
         #endif
     }
 

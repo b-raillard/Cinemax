@@ -25,8 +25,13 @@ final class TVScrubBar: UIView {
     private let fill = UIView()
     private let knob = UIView()
     private var progressValue: Float = 0
-    private var scrubStartProgress: Float = 0
+    private var scrubProgress: Float = 0
     private var isScrubbing = false
+
+    /// Touch-surface gain: fraction of the *whole timeline* covered per one
+    /// full bar-width of finger travel on the remote. Lower = less sensitive /
+    /// finer control. 0.5 ⇒ a full swipe ≈ half the movie. Tune here.
+    private let scrubGain: Float = 0.5
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -101,20 +106,24 @@ final class TVScrubBar: UIView {
     @objc private func handlePan(_ g: UIPanGestureRecognizer) {
         switch g.state {
         case .began:
+            // Anchor to the real current playhead and own the bar from here —
+            // the caller suppresses the periodic tick so nothing fights it.
             isScrubbing = true
-            scrubStartProgress = progressValue
-            onScrubPreview?(progressValue)
+            scrubProgress = progressValue
+            onScrubPreview?(scrubProgress)
         case .changed:
-            // 1:1 surface→bar mapping: a full swipe across the touch surface
-            // moves the playhead across the whole bar (= whole duration).
+            // Incremental, not absolute: consume the delta each frame and
+            // reset the recognizer. Avoids the "jump then snap to current"
+            // glitch (no stale absolute baseline) and keeps motion fluid.
             let dx = Float(g.translation(in: self).x)
-            let frac = scrubStartProgress + dx / Float(max(bounds.width, 1))
-            let clamped = max(0, min(1, frac))
-            setProgress(clamped)
-            onScrubPreview?(clamped)
+            g.setTranslation(.zero, in: self)
+            scrubProgress += (dx / Float(max(bounds.width, 1))) * scrubGain
+            scrubProgress = max(0, min(1, scrubProgress))
+            setProgress(scrubProgress)
+            onScrubPreview?(scrubProgress)
         case .ended, .cancelled, .failed:
             isScrubbing = false
-            onScrubCommit?(progressValue)
+            onScrubCommit?(scrubProgress)
         default:
             break
         }
