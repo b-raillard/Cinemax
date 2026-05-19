@@ -202,6 +202,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // feedback is the center glyph flash only.
     private let tvScrub = TVScrubBar()
     private let controlBar = UIStackView()
+    /// True while the user is sliding the scrub bar via the Siri Remote touch
+    /// surface — suppresses the periodic time tick so the preview isn't
+    /// snapped back (mirrors the iOS slider's `isScrubbing`).
+    private var isScrubbing = false
     private let tvAudioButton = UIButton(type: .system)
     private let tvSubtitleButton = UIButton(type: .system)
     private let tvPrevButton = UIButton(type: .system)
@@ -940,6 +944,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.scheduleHideControls()
         }
         tvScrub.onSelect = { [weak self] in self?.playPauseTapped() }
+        // Siri Remote touch-surface slide: live label preview while sliding
+        // (no engine thrash), single seek committed on release.
+        tvScrub.onScrubPreview = { [weak self] progress in
+            guard let self else { return }
+            self.isScrubbing = true
+            self.hideControlsWorkItem?.cancel()
+            let len = self.lengthMs
+            guard len > 0 else { return }
+            let target = Int32(Float(len) * progress)
+            self.timeLabel.text = PlayerTimeFormat.ms(target)
+            self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
+        }
+        tvScrub.onScrubCommit = { [weak self] progress in
+            guard let self else { return }
+            let len = self.lengthMs
+            if len > 0 { self.engineSeek(ms: Int32(Float(len) * progress)) }
+            self.isScrubbing = false
+            self.refreshTimeUISoon()
+            self.scheduleHideControls()
+        }
         controlsContainer.addSubview(tvScrub)
 
         controlBar.translatesAutoresizingMaskIntoConstraints = false
@@ -1633,9 +1657,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if lengthMs > 0 { slider.value = Float(currentMs) / Float(lengthMs) }
         }
         #else
-        timeLabel.text = PlayerTimeFormat.ms(currentMs)
-        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
-        if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
+        // While the user is sliding on the touch surface the preview owns the
+        // bar + labels — don't let a periodic tick snap them back.
+        if !isScrubbing {
+            timeLabel.text = PlayerTimeFormat.ms(currentMs)
+            durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
+            if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
+        }
         #endif
     }
 

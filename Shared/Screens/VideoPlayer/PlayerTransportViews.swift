@@ -12,13 +12,21 @@ import UIKit
 /// This is what lets the user reach the Audio/Subtitles/episode buttons; the
 /// previous view-level arrow gestures swallowed left/right globally.
 final class TVScrubBar: UIView {
+    /// Discrete clickpad arrow press → ±1 step (caller maps to ±15 s).
     var onSeek: ((Int) -> Void)?
     var onSelect: (() -> Void)?
+    /// Live position [0,1] while the user slides on the Siri Remote touch
+    /// surface — caller updates the time labels only (no engine seek yet).
+    var onScrubPreview: ((Float) -> Void)?
+    /// Final position [0,1] when the slide ends — caller commits the seek.
+    var onScrubCommit: ((Float) -> Void)?
 
     private let track = UIView()
     private let fill = UIView()
     private let knob = UIView()
     private var progressValue: Float = 0
+    private var scrubStartProgress: Float = 0
+    private var isScrubbing = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -33,6 +41,15 @@ final class TVScrubBar: UIView {
         addSubview(track)
         track.addSubview(fill)
         addSubview(knob)
+
+        // Siri Remote touch-surface slide → variable scrubbing. tvOS delivers
+        // indirect (remote touchpad) pans to the *focused* view's recognizers,
+        // so this only fires while the bar holds focus — same contract as the
+        // ±15 s clickpad presses below. Restricted to indirect touches so it
+        // never competes with the focus engine's directional clicks.
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        addGestureRecognizer(pan)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
@@ -66,6 +83,9 @@ final class TVScrubBar: UIView {
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // A slide that ends in a click would otherwise also fire a ±15 s jump
+        // on top of the scrub — ignore presses while a scrub is in flight.
+        if isScrubbing { return }
         var handled = false
         for press in presses {
             switch press.type {
@@ -76,6 +96,28 @@ final class TVScrubBar: UIView {
             }
         }
         if !handled { super.pressesBegan(presses, with: event) }
+    }
+
+    @objc private func handlePan(_ g: UIPanGestureRecognizer) {
+        switch g.state {
+        case .began:
+            isScrubbing = true
+            scrubStartProgress = progressValue
+            onScrubPreview?(progressValue)
+        case .changed:
+            // 1:1 surface→bar mapping: a full swipe across the touch surface
+            // moves the playhead across the whole bar (= whole duration).
+            let dx = Float(g.translation(in: self).x)
+            let frac = scrubStartProgress + dx / Float(max(bounds.width, 1))
+            let clamped = max(0, min(1, frac))
+            setProgress(clamped)
+            onScrubPreview?(clamped)
+        case .ended, .cancelled, .failed:
+            isScrubbing = false
+            onScrubCommit?(progressValue)
+        default:
+            break
+        }
     }
 }
 #endif
