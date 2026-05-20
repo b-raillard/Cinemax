@@ -1,6 +1,9 @@
 import Foundation
 import Observation
+import OSLog
 import CinemaxKit
+
+private let logger = Logger(subsystem: "com.cinemax", category: "ServerSetup")
 
 @MainActor @Observable
 final class ServerSetupViewModel {
@@ -9,10 +12,10 @@ final class ServerSetupViewModel {
     var errorMessage: String?
     var serverInfo: ServerInfo?
 
-    func connect(using appState: AppState) async {
+    func connect(using appState: AppState, loc: LocalizationManager) async {
         let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            errorMessage = "Please enter a server address."
+            errorMessage = loc.localized("server.addressRequired")
             return
         }
 
@@ -25,7 +28,7 @@ final class ServerSetupViewModel {
         guard let url = URL(string: urlString),
               let host = url.host, !host.isEmpty,
               url.scheme == "http" || url.scheme == "https" else {
-            errorMessage = "Invalid URL format."
+            errorMessage = loc.localized("server.invalidURL")
             return
         }
 
@@ -40,7 +43,8 @@ final class ServerSetupViewModel {
             appState.serverInfo = info
             appState.hasServer = true
         } catch {
-            errorMessage = "Unable to connect: \(error.localizedDescription)"
+            logger.error("Server connect failed: \(error.localizedDescription, privacy: .public)")
+            errorMessage = loc.localized("server.connectFailed")
         }
 
         isConnecting = false

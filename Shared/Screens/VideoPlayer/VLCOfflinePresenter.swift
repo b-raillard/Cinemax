@@ -64,22 +64,6 @@ final class VLCOfflinePresenter: NSObject {
     }
 }
 
-// MARK: - SwiftUI rendering surface (libVLC pixel-buffer → AVKit PiP)
-
-@MainActor
-private struct OfflineEngineSurface: View {
-    let player: Player
-    var onController: (AnyObject?) -> Void = { _ in }
-    @State private var controller: PiPController?
-
-    var body: some View {
-        PiPVideoView(player, controller: Binding(
-            get: { controller },
-            set: { controller = $0; onController($0) }
-        ))
-    }
-}
-
 // MARK: - View controller
 
 private final class VLCPlayerViewController: UIViewController {
@@ -205,7 +189,7 @@ private final class VLCPlayerViewController: UIViewController {
             videoView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
 
-        let surface = OfflineEngineSurface(player: player) { [weak self] controller in
+        let surface = PlayerEngineSurface(player: player) { [weak self] controller in
             self?.pipController = controller as? PiPController
         }
         let host = UIHostingController(rootView: surface)
@@ -377,7 +361,7 @@ private final class VLCPlayerViewController: UIViewController {
         let length = lengthMs
         guard length > 0 else { return }
         let targetMs = Int32(Float(length) * slider.value)
-        timeLabel.text = Self.formatMs(targetMs)
+        timeLabel.text = PlayerTimeFormat.ms(targetMs)
     }
 
     @objc private func scrubberDone() {
@@ -443,8 +427,8 @@ private final class VLCPlayerViewController: UIViewController {
         guard !isScrubbing else { return }
         let cur = currentMs
         let len = lengthMs
-        timeLabel.text = Self.formatMs(cur)
-        durationLabel.text = Self.formatMs(len)
+        timeLabel.text = PlayerTimeFormat.ms(cur)
+        durationLabel.text = PlayerTimeFormat.ms(len)
         if len > 0 {
             slider.value = Float(cur) / Float(len)
         }
@@ -454,14 +438,5 @@ private final class VLCPlayerViewController: UIViewController {
         }
     }
 
-    // MARK: - Format
-
-    private static func formatMs(_ ms: Int32) -> String {
-        let total = Int(max(0, ms) / 1000)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
-    }
 }
 #endif

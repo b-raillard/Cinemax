@@ -1,7 +1,10 @@
 import Foundation
 import Observation
+import OSLog
 import CinemaxKit
 @preconcurrency import JellyfinAPI
+
+private let logger = Logger(subsystem: "com.cinemax", category: "Library")
 
 // MARK: - Sort & Filter State
 
@@ -56,20 +59,20 @@ final class MediaLibraryViewModel {
         self.itemType = itemType
     }
 
-    func loadInitial(using appState: AppState) async {
+    func loadInitial(using appState: AppState, loc: LocalizationManager) async {
         guard !hasLoaded else { return }
         hasLoaded = true
-        await performLoad(using: appState)
+        await performLoad(using: appState, loc: loc)
     }
 
-    func reload(using appState: AppState) async {
-        await performLoad(using: appState)
+    func reload(using appState: AppState, loc: LocalizationManager) async {
+        await performLoad(using: appState, loc: loc)
         if sortFilter.isFiltered {
             await applyFilter(using: appState)
         }
     }
 
-    private func performLoad(using appState: AppState) async {
+    private func performLoad(using appState: AppState, loc: LocalizationManager) async {
         guard let userId = appState.currentUserId else { return }
         isLoading = true
         errorMessage = nil
@@ -104,7 +107,8 @@ final class MediaLibraryViewModel {
 
             try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
         } catch {
-            errorMessage = error.localizedDescription
+            logger.error("Library load failed: \(error.localizedDescription, privacy: .public)")
+            errorMessage = loc.userFacingMessage(for: error)
         }
 
         isLoading = false
@@ -116,16 +120,22 @@ final class MediaLibraryViewModel {
             let items: [BaseItemDto]
         }
         let genresToLoad = Array(genreList.prefix(genreLoadLimit))
+        // Snapshot @MainActor state before the @Sendable task group — reading
+        // self.sortFilter/itemType inside addTask would race with sort/filter
+        // UI mutations on the main actor (same pattern as loadMoreFiltered).
+        let snapshot = sortFilter
+        let kind = itemType
+        let limit = genreItemLimit
         try await withThrowingTaskGroup(of: GenreResult.self) { group in
             for genre in genresToLoad {
                 group.addTask {
                     let result = try await appState.apiClient.getItems(
                         userId: userId,
-                        includeItemTypes: [self.itemType],
-                        sortBy: [self.sortFilter.sortBy],
-                        sortOrder: self.sortFilter.sortAscending ? [.ascending] : [.descending],
+                        includeItemTypes: [kind],
+                        sortBy: [snapshot.sortBy],
+                        sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
                         genres: [genre],
-                        limit: self.genreItemLimit
+                        limit: limit
                     )
                     return GenreResult(genre: genre, items: result.items)
                 }

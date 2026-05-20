@@ -124,5 +124,16 @@ public enum DownloadStorage {
             var mutable = url
             try? mutable.setResourceValues(values)
         }
+        #if os(iOS)
+        // Offline media + the catalog hold viewing history and metadata.
+        // `completeUntilFirstUserAuthentication` keeps them readable for
+        // background-download writes after the first post-boot unlock while
+        // still protecting them on a powered-off lost/stolen device. Files
+        // created inside inherit the directory's protection class.
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path
+        )
+        #endif
     }
 }

@@ -99,10 +99,10 @@ struct MediaLibraryScreen: View {
         }
         #endif
         .task {
-            await viewModel.loadInitial(using: appState)
+            await viewModel.loadInitial(using: appState, loc: loc)
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
-            Task { await viewModel.reload(using: appState) }
+            Task { await viewModel.reload(using: appState, loc: loc) }
         }
     }
 
@@ -143,7 +143,7 @@ struct MediaLibraryScreen: View {
                 browseStack
             }
             .scrollClipDisabled()
-            .refreshable { await viewModel.reload(using: appState) }
+            .refreshable { await viewModel.reload(using: appState, loc: loc) }
             .task(id: viewModel.sortFilter) {
                 if !viewModel.genres.isEmpty {
                     await viewModel.reloadGenreItems(using: appState)
@@ -155,7 +155,7 @@ struct MediaLibraryScreen: View {
         ScrollView {
             browseStack
         }
-        .refreshable { await viewModel.reload(using: appState) }
+        .refreshable { await viewModel.reload(using: appState, loc: loc) }
         #endif
     }
 
@@ -272,7 +272,7 @@ struct MediaLibraryScreen: View {
             .scrollClipDisabled()
             #endif
             .refreshable {
-                await viewModel.reload(using: appState)
+                await viewModel.reload(using: appState, loc: loc)
             }
             .task(id: viewModel.sortFilter) {
                 await viewModel.applyFilter(using: appState)
@@ -520,7 +520,7 @@ struct MediaLibraryScreen: View {
                         Circle()
                             .fill(CinemaColor.onSurface.opacity(0.25))
                         Text("\(filterCount)")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: CinemaScale.pt(11), weight: .bold))
                     }
                     .frame(width: 20, height: 20)
                 }
@@ -541,7 +541,7 @@ struct MediaLibraryScreen: View {
 
     private func errorView(_ message: String) -> some View {
         ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
-            Task { await viewModel.loadInitial(using: appState) }
+            Task { await viewModel.loadInitial(using: appState, loc: loc) }
         }
     }
 

@@ -38,7 +38,7 @@ struct GlassTextField: View {
         HStack(spacing: 12) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 24))
+                    .font(.system(size: CinemaScale.pt(24)))
                     .foregroundStyle(
                         isFocused ? themeManager.accent : CinemaColor.outline
                     )
@@ -76,7 +76,7 @@ struct GlassTextField: View {
         HStack(spacing: 12) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 18))
+                    .font(.system(size: CinemaScale.pt(18)))
                     .foregroundStyle(
                         isFocused ? themeManager.accent : CinemaColor.outline
                     )
@@ -87,14 +87,14 @@ struct GlassTextField: View {
                 SecureField(placeholder, text: $text)
                     .focused($isFocused)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: CinemaScale.pt(18), weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
                     .tint(themeManager.accent)
             } else {
                 TextField(placeholder, text: $text)
                     .focused($isFocused)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: CinemaScale.pt(18), weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
                     .tint(themeManager.accent)
                     .keyboardType(keyboardType)

@@ -138,7 +138,7 @@ extension SettingsScreen {
                         .frame(width: 56, height: 56)
 
                     Image(systemName: category.icon)
-                        .font(.system(size: CinemaScale.pt(24), weight: .semibold))
+                        .font(CinemaFont.headline(.small))
                         .foregroundStyle(isFocused ? .white : CinemaColor.onSurfaceVariant)
                 }
 
@@ -224,7 +224,7 @@ extension SettingsScreen {
                         Image(systemName: "chevron.left")
                             .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                         Text(category.localizedName(loc))
-                            .font(.system(size: CinemaScale.pt(28), weight: .bold))
+                            .font(CinemaFont.headline(.medium))
                     }
                     .foregroundStyle(backFocused ? themeManager.accent : CinemaColor.onSurface)
                 }
@@ -461,7 +461,7 @@ extension SettingsScreen {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .monospacedDigit()
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                    .font(CinemaFont.label(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
@@ -510,7 +510,7 @@ extension SettingsScreen {
                     .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                    .font(CinemaFont.label(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
@@ -549,7 +549,7 @@ extension SettingsScreen {
                     .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                    .font(CinemaFont.label(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)

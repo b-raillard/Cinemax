@@ -240,7 +240,7 @@ struct PrivacySecurityScreen: View {
                 .fill(color.opacity(0.12))
                 .frame(width: 32, height: 32)
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: CinemaScale.pt(14), weight: .semibold))
                 .foregroundStyle(color)
         }
         .padding(.trailing, CinemaSpacing.spacing2)

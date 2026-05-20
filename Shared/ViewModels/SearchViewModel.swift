@@ -7,6 +7,23 @@ import Speech
 import AVFoundation
 #endif
 
+/// Typed voice-search failures so user-facing copy lives in
+/// Localizable.strings (localized at the view) instead of being hardcoded
+/// English in the speech helper.
+enum VoiceSearchPermissionError: Sendable {
+    case microphoneDenied
+    case speechRecognitionDenied
+    case recognizerUnavailable
+
+    var localizationKey: String {
+        switch self {
+        case .microphoneDenied: "search.voice.microphoneDenied"
+        case .speechRecognitionDenied: "search.voice.speechDenied"
+        case .recognizerUnavailable: "search.voice.unavailable"
+        }
+    }
+}
+
 // MARK: - Speech Recognition Helper (iOS only)
 
 #if os(iOS)
@@ -21,25 +38,26 @@ final class SpeechRecognitionHelper {
 
     var onTranscript: ((String) -> Void)?
     var onStopped: (() -> Void)?
-    var onPermissionError: ((String) -> Void)?
+    var onPermissionError: ((VoiceSearchPermissionError) -> Void)?
 
     func requestPermissionsAndStart() {
         SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
-            DispatchQueue.main.async {
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 switch authStatus {
                 case .authorized:
                     AVAudioApplication.requestRecordPermission { granted in
-                        DispatchQueue.main.async {
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
                             if granted {
                                 self.startListening()
                             } else {
-                                self.onPermissionError?("Microphone access is required for voice search. Enable it in Settings > Privacy & Security > Microphone.")
+                                self.onPermissionError?(.microphoneDenied)
                             }
                         }
                     }
                 case .denied, .restricted:
-                    self.onPermissionError?("Speech recognition access is required for voice search. Enable it in Settings > Privacy & Security > Speech Recognition.")
+                    self.onPermissionError?(.speechRecognitionDenied)
                 case .notDetermined:
                     break
                 @unknown default:
@@ -67,7 +85,7 @@ final class SpeechRecognitionHelper {
         recognitionRequest = request
 
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
-            onPermissionError?("Speech recognition is not available on this device.")
+            onPermissionError?(.recognizerUnavailable)
             return
         }
 
@@ -90,15 +108,11 @@ final class SpeechRecognitionHelper {
             var isFinal = false
             if let result {
                 let transcript = result.bestTranscription.formattedString
-                DispatchQueue.main.async {
-                    self.onTranscript?(transcript)
-                }
+                Task { @MainActor [weak self] in self?.onTranscript?(transcript) }
                 isFinal = result.isFinal
             }
             if error != nil || isFinal {
-                DispatchQueue.main.async {
-                    self.stop()
-                }
+                Task { @MainActor [weak self] in self?.stop() }
             }
         }
     }
@@ -128,7 +142,7 @@ final class SearchViewModel {
     // Voice search state (iOS only)
     var isListening = false
     var showPermissionAlert = false
-    var permissionAlertMessage = ""
+    var permissionError: VoiceSearchPermissionError?
 
     private var searchTask: Task<Void, Never>?
 
@@ -151,8 +165,8 @@ final class SearchViewModel {
         speechHelper.onStopped = { [weak self] in
             self?.isListening = false
         }
-        speechHelper.onPermissionError = { [weak self] message in
-            self?.permissionAlertMessage = message
+        speechHelper.onPermissionError = { [weak self] error in
+            self?.permissionError = error
             self?.showPermissionAlert = true
         }
     }

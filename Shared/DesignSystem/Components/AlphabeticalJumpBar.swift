@@ -23,7 +23,7 @@ struct AlphabeticalJumpBar: View {
         VStack(spacing: 0) {
             ForEach(Self.letters, id: \.self) { letter in
                 Text(letter)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(11), weight: .semibold))
                     .foregroundStyle(accent)
                     .frame(width: 18, height: 14)
                     .contentShape(Rectangle())

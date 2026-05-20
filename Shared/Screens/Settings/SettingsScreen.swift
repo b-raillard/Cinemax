@@ -117,7 +117,6 @@ struct SettingsScreen: View {
 
     // Shared stored properties — keys + defaults live in SettingsKey
     @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects
-    @AppStorage(SettingsKey.forceSubtitles) var forceSubtitles: Bool = SettingsKey.Default.forceSubtitles
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
@@ -191,7 +190,6 @@ struct SettingsScreen: View {
     var interfaceToggleRows: [SettingsToggleRow] {
         [
             .init(id: "motion", icon: "sparkles", label: loc.localized("settings.motionEffects"), value: $motionEffects),
-            .init(id: "subtitles", icon: "captions.bubble", label: loc.localized("settings.forceSubtitles"), value: $forceSubtitles),
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
             .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer)

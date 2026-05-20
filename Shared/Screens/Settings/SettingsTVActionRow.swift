@@ -74,7 +74,7 @@ extension SettingsScreen {
 
                 if showsChevron {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: CinemaScale.pt(14), weight: .medium))
+                        .font(CinemaFont.label(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
             }

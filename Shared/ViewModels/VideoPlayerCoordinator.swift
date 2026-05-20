@@ -13,8 +13,6 @@ private let logger = Logger(subsystem: "com.cinemax", category: "Playback")
 @MainActor @Observable
 final class VideoPlayerCoordinator {
     @ObservationIgnored
-    @AppStorage(SettingsKey.forceSubtitles) private var forceSubtitles: Bool = SettingsKey.Default.forceSubtitles
-    @ObservationIgnored
     @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
     @ObservationIgnored
     @AppStorage(SettingsKey.autoPlayNextEpisode) private var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode

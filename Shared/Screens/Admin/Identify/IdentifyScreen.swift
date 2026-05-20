@@ -84,7 +84,7 @@ struct IdentifyScreen: View {
                     handleBack()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                         .foregroundStyle(CinemaColor.onSurface)
                 }
                 .accessibilityLabel(loc.localized("action.back"))
@@ -162,7 +162,7 @@ struct IdentifyScreen: View {
     private var unsupportedNotice: some View {
         VStack(spacing: CinemaSpacing.spacing4) {
             Image(systemName: "info.circle")
-                .font(.system(size: 44))
+                .font(.system(size: CinemaScale.pt(44)))
                 .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.7))
             Text(loc.localized("admin.identify.unsupported"))
                 .font(CinemaFont.body)

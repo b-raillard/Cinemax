@@ -101,7 +101,7 @@ struct LoginScreen: View {
                         style: .accent,
                         isLoading: viewModel.isAuthenticating
                     ) {
-                        Task { await viewModel.authenticate(using: appState) }
+                        Task { await viewModel.authenticate(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isAuthenticating)
                 }
@@ -150,7 +150,7 @@ struct LoginScreen: View {
                                 .fill(CinemaColor.surfaceContainerHigh)
                                 .frame(width: 80, height: 80)
                             Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 36))
+                                .font(.system(size: CinemaScale.pt(36)))
                                 .foregroundStyle(themeManager.accent)
                         }
                         .shadow(color: .black.opacity(0.3), radius: 20)
@@ -218,7 +218,7 @@ struct LoginScreen: View {
                         icon: "chevron.right",
                         isLoading: viewModel.isAuthenticating
                     ) {
-                        Task { await viewModel.authenticate(using: appState) }
+                        Task { await viewModel.authenticate(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isAuthenticating)
 
@@ -334,7 +334,7 @@ struct LoginScreen: View {
                         .fill(themeManager.accentContainer)
                         .frame(width: 32, height: 32)
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: CinemaScale.pt(14), weight: .bold))
                         .foregroundStyle(themeManager.onAccent)
                 }
                 Text(message)

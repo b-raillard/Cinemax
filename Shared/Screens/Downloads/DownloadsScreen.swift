@@ -96,14 +96,14 @@ struct DownloadsScreen: View {
         } label: {
             HStack {
                 Image(systemName: "internaldrive")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(16), weight: .semibold))
                     .foregroundStyle(themeManager.accent)
                 Text(loc.localized("downloads.totalSpace", formatBytes(downloads.totalDiskBytes)))
                     .font(CinemaFont.label(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                 Spacer()
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: CinemaScale.pt(11), weight: .semibold))
                     .foregroundStyle(CinemaColor.outlineVariant)
             }
             .padding(CinemaSpacing.spacing3)
@@ -165,7 +165,7 @@ struct DownloadsScreen: View {
                         .overlay {
                             if entry.status == .completed {
                                 Image(systemName: "play.fill")
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(.system(size: CinemaScale.pt(14), weight: .bold))
                                     .foregroundStyle(.white)
                                     .padding(6)
                                     .background(Circle().fill(.black.opacity(0.55)))
@@ -247,7 +247,7 @@ struct DownloadsScreen: View {
             }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .font(.system(size: 22, weight: .semibold))
+                .font(.system(size: CinemaScale.pt(22), weight: .semibold))
                 .foregroundStyle(themeManager.accent)
         }
     }

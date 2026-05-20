@@ -149,7 +149,7 @@ struct MetadataImagesTab: View {
                         RoundedRectangle(cornerRadius: CinemaRadius.small)
                             .fill(CinemaColor.surfaceContainerHigh)
                         Image(systemName: "photo")
-                            .font(.system(size: 24))
+                            .font(.system(size: CinemaScale.pt(24)))
                             .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.5))
                     }
                 }

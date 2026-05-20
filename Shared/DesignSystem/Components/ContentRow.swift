@@ -35,7 +35,7 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
                             Text(loc.localized("action.viewAll"))
                                 .font(CinemaFont.label(.large))
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: CinemaScale.pt(12), weight: .semibold))
                         }
                         .foregroundStyle(themeManager.accent)
                     }

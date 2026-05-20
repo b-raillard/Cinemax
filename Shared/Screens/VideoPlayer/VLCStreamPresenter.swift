@@ -202,6 +202,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // feedback is the center glyph flash only.
     private let tvScrub = TVScrubBar()
     private let controlBar = UIStackView()
+    /// True while the user is sliding the scrub bar via the Siri Remote touch
+    /// surface — suppresses the periodic time tick so the preview isn't
+    /// snapped back (mirrors the iOS slider's `isScrubbing`).
+    private var isScrubbing = false
+    /// Set on scrub release: VLC applies a seek asynchronously, so until
+    /// `currentMs` reaches this the periodic tick must keep showing the
+    /// target instead of snapping back to the stale pre-seek position.
+    private var pendingScrubTargetMs: Int32?
     private let tvAudioButton = UIButton(type: .system)
     private let tvSubtitleButton = UIButton(type: .system)
     private let tvPrevButton = UIButton(type: .system)
@@ -541,7 +549,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // UIHostingController pinned to `videoView`. Interaction is disabled so
         // the tap recognizer on `videoView` keeps receiving HUD toggles (the
         // old VLCKit `drawable` was a plain UIView with the same behavior).
-        let surface = EngineSurface(player: player) { [weak self] controller in
+        let surface = PlayerEngineSurface(player: player) { [weak self] controller in
             #if os(iOS)
             self?.pipController = controller as? PiPController
             #endif
@@ -934,12 +942,41 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.translatesAutoresizingMaskIntoConstraints = false
         tvScrub.onSeek = { [weak self] delta in
             guard let self else { return }
+            self.pendingScrubTargetMs = nil
             if delta < 0 { self.engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: false) }
             else { self.engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: true) }
             self.refreshTimeUISoon()
             self.scheduleHideControls()
         }
         tvScrub.onSelect = { [weak self] in self?.playPauseTapped() }
+        // Siri Remote touch-surface slide: live label preview while sliding
+        // (no engine thrash), single seek committed on release.
+        tvScrub.onScrubPreview = { [weak self] progress in
+            guard let self else { return }
+            self.isScrubbing = true
+            self.hideControlsWorkItem?.cancel()
+            let len = self.lengthMs
+            guard len > 0 else { return }
+            let target = Int32(Float(len) * progress)
+            self.timeLabel.text = PlayerTimeFormat.ms(target)
+            self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
+        }
+        tvScrub.onScrubCommit = { [weak self] progress in
+            guard let self else { return }
+            let len = self.lengthMs
+            self.isScrubbing = false
+            guard len > 0 else { self.scheduleHideControls(); return }
+            let target = Int32(Float(len) * progress)
+            // Hold the bar/labels at the target; the periodic tick keeps
+            // showing it (not the stale pre-seek currentMs) until VLC's
+            // position actually reaches it — no snap-back flicker.
+            self.pendingScrubTargetMs = target
+            self.timeLabel.text = PlayerTimeFormat.ms(target)
+            self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
+            self.updateScrubBar(progress: progress)
+            self.engineSeek(ms: target)
+            self.scheduleHideControls()
+        }
         controlsContainer.addSubview(tvScrub)
 
         controlBar.translatesAutoresizingMaskIntoConstraints = false
@@ -1047,7 +1084,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 let startSec = Double(ch.startPositionTicks ?? 0) / 10_000_000
                 let title = (ch.name?.isEmpty == false ? ch.name : nil)
                     ?? "\(self.loc.localized("player.chapters")) \(i + 1)"
-                let chip = self.makeChapterChip(index: i, title: title, time: Self.formatMs(Int32(startSec * 1000)))
+                let chip = self.makeChapterChip(index: i, title: title, time: PlayerTimeFormat.ms(Int32(startSec * 1000)))
                 self.chapterStack.addArrangedSubview(chip)
             }
             #if os(tvOS)
@@ -1136,7 +1173,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let i = sender.tag
         guard i < chapterStartTicks.count else { return }
         engineSeek(ms: Int32(chapterStartTicks[i] / 10_000))
-        showSkipHUD(Self.formatMs(Int32(chapterStartTicks[i] / 10_000)))
+        showSkipHUD(PlayerTimeFormat.ms(Int32(chapterStartTicks[i] / 10_000)))
         refreshTimeUISoon()
         scheduleHideControls()
     }
@@ -1465,7 +1502,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hideControlsWorkItem?.cancel()
         let length = lengthMs
         guard length > 0 else { return }
-        timeLabel.text = Self.formatMs(Int32(Float(length) * slider.value))
+        timeLabel.text = PlayerTimeFormat.ms(Int32(Float(length) * slider.value))
     }
 
     @objc private func scrubberDone() {
@@ -1628,165 +1665,47 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let lengthMs = self.lengthMs
         #if os(iOS)
         if !isScrubbing {
-            timeLabel.text = Self.formatMs(currentMs)
-            durationLabel.text = "-" + Self.formatMs(max(0, lengthMs - currentMs))
+            timeLabel.text = PlayerTimeFormat.ms(currentMs)
+            durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
             if lengthMs > 0 { slider.value = Float(currentMs) / Float(lengthMs) }
         }
         #else
-        timeLabel.text = Self.formatMs(currentMs)
-        durationLabel.text = "-" + Self.formatMs(max(0, lengthMs - currentMs))
+        // While the user is sliding, the preview owns the bar + labels.
+        if isScrubbing { return }
+        // After release, keep showing the seek target until VLC's position
+        // actually reaches it (within ~1.2 s) — otherwise the tick paints the
+        // stale pre-seek position for a beat and the bar visibly snaps back.
+        if let target = pendingScrubTargetMs {
+            if abs(Int(currentMs) - Int(target)) <= 1200 {
+                pendingScrubTargetMs = nil
+            } else {
+                timeLabel.text = PlayerTimeFormat.ms(target)
+                durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - target))
+                if lengthMs > 0 { updateScrubBar(progress: Float(target) / Float(lengthMs)) }
+                return
+            }
+        }
+        timeLabel.text = PlayerTimeFormat.ms(currentMs)
+        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
         if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
         #endif
     }
+
+    /// Follow-up repaints pending from the last `refreshTimeUISoon()`. Held so
+    /// a rapid scrub burst coalesces instead of stacking dozens of closures
+    /// (each call cancels the previous follow-ups before scheduling fresh ones).
+    private var pendingTimeRefreshes: [DispatchWorkItem] = []
 
     /// Refreshes now and again shortly after — VLC applies a seek asynchronously,
     /// so `mediaPlayer.time` may not reflect the new position for a beat.
     private func refreshTimeUISoon() {
         refreshTimeUI()
-        for delay in [0.15, 0.4] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.refreshTimeUI()
-            }
+        pendingTimeRefreshes.forEach { $0.cancel() }
+        pendingTimeRefreshes = [0.15, 0.4].map { delay in
+            let work = DispatchWorkItem { [weak self] in self?.refreshTimeUI() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return work
         }
     }
 
-    private static func formatMs(_ ms: Int32) -> String {
-        let total = Int(max(0, ms) / 1000)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
-    }
-}
-
-#if os(tvOS)
-/// Focusable tvOS scrub bar. Left/right seek ±15 s ONLY while this view holds
-/// focus — every other press (up/down to move focus to the control buttons,
-/// Play/Pause, Menu) is passed to `super` so the focus engine keeps working.
-/// This is what lets the user reach the Audio/Subtitles/episode buttons; the
-/// previous view-level arrow gestures swallowed left/right globally.
-private final class TVScrubBar: UIView {
-    var onSeek: ((Int) -> Void)?
-    var onSelect: (() -> Void)?
-
-    private let track = UIView()
-    private let fill = UIView()
-    private let knob = UIView()
-    private var progressValue: Float = 0
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        track.backgroundColor = UIColor.white.withAlphaComponent(0.28)
-        track.layer.cornerRadius = 4
-        track.clipsToBounds = true
-        fill.backgroundColor = .white
-        fill.layer.cornerRadius = 4
-        knob.backgroundColor = .white
-        knob.layer.cornerRadius = 11
-        knob.alpha = 0
-        addSubview(track)
-        track.addSubview(fill)
-        addSubview(knob)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
-
-    func setProgress(_ p: Float) {
-        progressValue = max(0, min(1, p))
-        setNeedsLayout()
-    }
-
-    override var canBecomeFocused: Bool { true }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        let focused = isFocused
-        let h: CGFloat = focused ? 12 : 8
-        track.frame = CGRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
-        track.layer.cornerRadius = h / 2
-        let w = bounds.width * CGFloat(progressValue)
-        fill.frame = CGRect(x: 0, y: 0, width: w, height: h)
-        fill.layer.cornerRadius = h / 2
-        knob.frame = CGRect(x: w - 11, y: bounds.midY - 11, width: 22, height: 22)
-    }
-
-    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
-        super.didUpdateFocus(in: context, with: coordinator)
-        coordinator.addCoordinatedAnimations({
-            self.knob.alpha = self.isFocused ? 1 : 0
-            self.setNeedsLayout()
-            self.layoutIfNeeded()
-        })
-    }
-
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        var handled = false
-        for press in presses {
-            switch press.type {
-            case .leftArrow:  onSeek?(-1); handled = true
-            case .rightArrow: onSeek?(1);  handled = true
-            case .select:     onSelect?(); handled = true
-            default: break
-            }
-        }
-        if !handled { super.pressesBegan(presses, with: event) }
-    }
-}
-#endif
-
-/// Chapter strip cell. On tvOS, custom buttons get no system focus appearance,
-/// so it draws its own: a clear lift + white ring on the thumbnail + un-dimming
-/// so the focused chapter is unmistakable. On iOS it never receives focus, so
-/// `didUpdateFocus` simply never fires and it behaves as a plain button.
-private final class ChapterChip: UIButton {
-    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
-        super.didUpdateFocus(in: context, with: coordinator)
-        let focused = isFocused
-        let thumb = viewWithTag(99)
-        coordinator.addCoordinatedAnimations({
-            self.alpha = focused ? 1.0 : 0.5
-            self.transform = focused ? CGAffineTransform(scaleX: 1.04, y: 1.04) : .identity
-            thumb?.layer.borderWidth = focused ? 3 : 0
-            thumb?.layer.borderColor = UIColor.white.cgColor
-        })
-    }
-}
-
-/// SwiftUI host for the SwiftVLC rendering surface. iOS uses `PiPVideoView`
-/// (libVLC pixel-buffer → `AVPictureInPictureController`) and publishes the
-/// `PiPController` back to the presenter; tvOS uses plain `VideoView` (no PiP).
-@MainActor
-private struct EngineSurface: View {
-    let player: Player
-    var onController: (AnyObject?) -> Void = { _ in }
-    #if os(iOS)
-    @State private var controller: PiPController?
-    #endif
-
-    var body: some View {
-        #if os(iOS)
-        PiPVideoView(player, controller: Binding(
-            get: { controller },
-            set: { controller = $0; onController($0) }
-        ))
-        #else
-        VideoView(player)
-        #endif
-    }
-}
-
-/// HUD container that lets taps on its own (scrim/empty) area fall through to
-/// the video view beneath — which hosts the tap recognizer. Taps that land on
-/// an actual control (button / slider / chapter strip) are returned normally,
-/// so the controls keep working and the tap-to-toggle never conflicts with
-/// them. On tvOS it behaves like a plain `UIView` (focus, not hit-testing).
-private final class PassthroughView: UIView {
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let hit = super.hitTest(point, with: event)
-        #if os(iOS)
-        return hit === self ? nil : hit
-        #else
-        return hit
-        #endif
-    }
 }
