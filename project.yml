@@ -20,9 +20,9 @@ options:
 packages:
   CinemaxKit:
     path: Packages/CinemaxKit
-  # SwiftVLC (libVLC 4.0, Swift 6) is the VLC engine for BOTH online streaming
-  # (VLCStreamPresenter, iOS + tvOS) and offline playback (VLCOfflinePresenter,
-  # iOS). It replaced VLCKitSPM (libVLC 3.x): native iOS Picture-in-Picture
+  # SwiftVLC (libVLC 4.0, Swift 6) is the VLC engine for `VLCStreamPresenter`,
+  # which now covers BOTH online streaming (iOS + tvOS) and offline playback
+  # (iOS-only, second init). It replaced VLCKitSPM (libVLC 3.x): native iOS Picture-in-Picture
   # (impossible in VLCKit), an object-based track API that fixes the
   # audio-switch silence bug, and Swift-6-native @Observable/@MainActor design.
   # Pinned to 0.3.0 EXACTLY: SwiftVLC >= 0.4.0 declares swift-tools-version 6.3

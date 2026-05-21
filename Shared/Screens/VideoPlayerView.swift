@@ -26,8 +26,11 @@ struct VideoPlayerView: View {
 
     #if os(iOS)
     @State private var presenter: NativeVideoPresenter?
-    @State private var vlcPresenter: VLCOfflinePresenter?
+    // One VLC presenter for both modes — stream and offline. Two refs let the
+    // SwiftUI state machine cleanly distinguish "I started a stream" vs
+    // "I started an offline session" without juggling a sum type.
     @State private var vlcStreamPresenter: VLCStreamPresenter?
+    @State private var vlcOfflinePresenter: VLCStreamPresenter?
     @State private var didPresent = false
     #endif
 
@@ -93,11 +96,9 @@ struct VideoPlayerView: View {
             // Offline-completed file gets two routes:
             //   1. AVKit-friendly container → AVPlayer (full feature set —
             //      skip intro/outro, chapter markers, AirPlay, PiP).
-            //   2. MKV / AVI / WebM → libVLC via `VLCOfflinePresenter`.
-            //      Smaller feature set but it actually decodes the file
-            //      instead of the QuickTime audio-only icon AVKit shows.
-            // Streaming always uses AVPlayer because the Jellyfin streaming
-            // pipeline targets HLS that AVKit handles natively.
+            //   2. MKV / AVI / WebM → libVLC via `VLCStreamPresenter` in
+            //      offline mode: same HUD as online (audio/subtitle pickers,
+            //      sleep timer, ±N skip, PiP) minus the network-only bits.
             let info: PlaybackInfo
             if let entry = downloads.item(for: itemId), entry.status == .completed,
                let local = downloads.localURL(forItemId: itemId) {
@@ -168,15 +169,16 @@ struct VideoPlayerView: View {
     }
 
     private func presentVLC(localURL: URL) {
-        let p = VLCOfflinePresenter(
+        let p = VLCStreamPresenter(
+            localURL: localURL,
             title: title,
             startTime: startTime,
             loc: loc,
             onDismiss: { dismiss() }
         )
-        vlcPresenter = p
+        vlcOfflinePresenter = p
         didPresent = true
-        p.present(localURL: localURL)
+        p.presentOffline()
     }
 
     private func iOSErrorView(error: String) -> some View {

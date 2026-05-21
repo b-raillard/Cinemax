@@ -22,30 +22,43 @@ enum PlayerSkipConfig {
     static var forwardSymbol: String { "goforward.\(intervalSeconds)" }
 }
 
-/// Online VLC player (iOS + tvOS). VLC DirectPlays the raw Jellyfin file
-/// (MKV / HEVC 10-bit / Dolby Vision) so the server performs **no transcode** —
-/// eliminating the slow-transcode segment thrash that froze `AVPlayer`.
+/// Unified VLC player (iOS + tvOS) covering both online streaming and (iOS-only)
+/// offline downloaded files. In **stream** mode VLC DirectPlays the raw
+/// Jellyfin file (MKV / HEVC 10-bit / Dolby Vision) so the server performs **no
+/// transcode** — eliminating the slow-transcode segment thrash that froze
+/// `AVPlayer`. In **offline** mode the same HUD plays a local file from the
+/// downloads cache.
 ///
-/// Parity: playback + resume, Jellyfin progress reporting, episode prev/next +
-/// auto-play-next, audio/subtitle selection, skip intro/outro, sleep timer +
-/// still-watching, end-of-series overlay, chapter navigation, single error
-/// retry. AirPlay/PiP are AVKit-only (iOS native path), out of scope here.
+/// Stream mode parity: playback + resume, Jellyfin progress reporting, episode
+/// prev/next + auto-play-next, audio/subtitle selection, skip intro/outro,
+/// sleep timer + still-watching, end-of-series overlay, chapter navigation,
+/// single error retry. Offline mode keeps the same transport (±N s skip,
+/// play/pause, scrub bar, sleep timer, audio/subtitle pickers from libVLC
+/// tracks, PiP) and naturally omits network-only affordances (chapter strip,
+/// intro/outro segments, prev/next episode, progress reporting) — those need
+/// API calls or data not cached at download time.
 @MainActor
 final class VLCStreamPresenter: NSObject {
     private let title: String
     private let startTime: Double?
     private let loc: LocalizationManager
-    private let apiClient: any PlaybackAPI & LibraryAPI
-    private let userId: String
+    private let apiClient: (any PlaybackAPI & LibraryAPI)?
+    private let userId: String?
     private let autoPlayNext: Bool
     private let previousEpisode: EpisodeRef?
     private let nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
-    private let imageBuilder: ImageURLBuilder
+    private let imageBuilder: ImageURLBuilder?
     private let onDismiss: (() -> Void)?
+    private let _initialItemId: String?
+    #if os(iOS)
+    private let offlineLocalURL: URL?
+    #endif
 
     private weak var hostingVC: VLCStreamViewController?
 
+    /// Stream init — online playback negotiated through Jellyfin's PlaybackInfo
+    /// flow with VLC's broad DirectPlay profile.
     init(
         itemId: String,
         title: String,
@@ -72,28 +85,76 @@ final class VLCStreamPresenter: NSObject {
         self.loc = loc
         self.onDismiss = onDismiss
         self._initialItemId = itemId
+        #if os(iOS)
+        self.offlineLocalURL = nil
+        #endif
     }
 
-    private let _initialItemId: String
+    #if os(iOS)
+    /// Offline init — plays a downloaded file with the same HUD as stream mode.
+    /// Stream-only fields are stubbed nil; network-dependent features are
+    /// gated off internally.
+    init(
+        localURL: URL,
+        title: String,
+        startTime: Double?,
+        loc: LocalizationManager,
+        onDismiss: (() -> Void)?
+    ) {
+        self.title = title
+        self.startTime = startTime
+        self.previousEpisode = nil
+        self.nextEpisode = nil
+        self.episodeNavigator = nil
+        self.apiClient = nil
+        self.userId = nil
+        self.autoPlayNext = false
+        self.imageBuilder = nil
+        self.loc = loc
+        self.onDismiss = onDismiss
+        self._initialItemId = nil
+        self.offlineLocalURL = localURL
+    }
+    #endif
 
-    /// Presents modally on top of the active scene and starts playback.
+    /// Presents modally on top of the active scene and starts streaming.
     func present(info: PlaybackInfo) {
-        guard let topVC = Self.topMostViewController() else {
-            logger.error("VLC stream present: no top VC found")
+        guard let topVC = Self.topMostViewController(), let id = _initialItemId,
+              let client = apiClient, let uid = userId, let builder = imageBuilder else {
+            logger.error("VLC stream present: missing stream context or no top VC")
             onDismiss?()
             return
         }
         let vc = VLCStreamViewController(
-            itemId: _initialItemId, info: info, title: title, startTime: startTime,
+            itemId: id, info: info, title: title, startTime: startTime,
             previousEpisode: previousEpisode, nextEpisode: nextEpisode,
-            episodeNavigator: episodeNavigator, apiClient: apiClient, userId: userId,
-            autoPlayNext: autoPlayNext, imageBuilder: imageBuilder, loc: loc, onDismiss: onDismiss
+            episodeNavigator: episodeNavigator, apiClient: client, userId: uid,
+            autoPlayNext: autoPlayNext, imageBuilder: builder, loc: loc, onDismiss: onDismiss
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
         hostingVC = vc
         topVC.present(vc, animated: true)
     }
+
+    #if os(iOS)
+    /// Presents the offline player modally. Requires the offline init was used.
+    func presentOffline() {
+        guard let topVC = Self.topMostViewController(), let url = offlineLocalURL else {
+            logger.error("VLC offline present: missing local URL or no top VC")
+            onDismiss?()
+            return
+        }
+        let vc = VLCStreamViewController(
+            offlineLocalURL: url, title: title, startTime: startTime,
+            loc: loc, onDismiss: onDismiss
+        )
+        vc.modalPresentationStyle = .overFullScreen
+        vc.modalTransitionStyle = .crossDissolve
+        hostingVC = vc
+        topVC.present(vc, animated: true)
+    }
+    #endif
 
     // MARK: - Helpers
 
@@ -130,19 +191,24 @@ final class VLCStreamPresenter: NSObject {
 // MARK: - View controller
 
 private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate {
-    // Mutable across episode navigation.
+    // Mutable across episode navigation. Empty / nil in offline mode.
     private var itemId: String
-    private var info: PlaybackInfo
+    private var info: PlaybackInfo?
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private var startTime: Double?
 
+    /// Local downloaded file URL when in offline mode; nil in stream mode.
+    private let offlineLocalURL: URL?
+    /// True when the controller was constructed with the offline init.
+    private var isOffline: Bool { offlineLocalURL != nil }
+
     private let titleText: String
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any PlaybackAPI & LibraryAPI
-    private let userId: String
+    private let apiClient: (any PlaybackAPI & LibraryAPI)?
+    private let userId: String?
     private let autoPlayNext: Bool
-    private let imageBuilder: ImageURLBuilder
+    private let imageBuilder: ImageURLBuilder?
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
 
@@ -268,6 +334,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     ) {
         self.itemId = itemId
         self.info = info
+        self.offlineLocalURL = nil
         self.titleText = title
         self.startTime = startTime
         self.previousEpisode = previousEpisode
@@ -283,6 +350,31 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.remoteCommands = RemoteCommandController(onNavigate: { ref in navTarget?(ref) })
         super.init(nibName: nil, bundle: nil)
         navTarget = { [weak self] ref in self?.navigateToEpisode(ref) }
+    }
+
+    /// Offline init — same HUD scaffolding, no Jellyfin context. Network-only
+    /// affordances (chapter strip, intro/outro skip, prev/next episode,
+    /// progress reporting) are gated off in their respective call sites.
+    init(
+        offlineLocalURL: URL, title: String, startTime: Double?,
+        loc: LocalizationManager, onDismiss: (() -> Void)?
+    ) {
+        self.itemId = ""
+        self.info = nil
+        self.offlineLocalURL = offlineLocalURL
+        self.titleText = title
+        self.startTime = startTime
+        self.previousEpisode = nil
+        self.nextEpisode = nil
+        self.episodeNavigator = nil
+        self.apiClient = nil
+        self.userId = nil
+        self.autoPlayNext = false
+        self.imageBuilder = nil
+        self.loc = loc
+        self.onDismiss = onDismiss
+        self.remoteCommands = RemoteCommandController(onNavigate: { _ in })
+        super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
@@ -358,11 +450,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func enginePlay() { player.resume() }
     private func enginePause() { player.pause() }
 
-    /// Builds the authed SwiftVLC `Media` with the same network-caching option
-    /// the VLCKit path used.
+    /// Builds the SwiftVLC `Media` with a caching option appropriate to the
+    /// source: `network-caching` for streamed URLs (matches the VLCKit path),
+    /// `file-caching` for the local downloaded file (makes scrubbing through
+    /// multi-GB MKV files responsive).
     private func makeMedia(_ url: URL) -> Media? {
         guard let media = try? Media(url: url) else { return nil }
-        media.addOption(":network-caching=3000")
+        if isOffline {
+            media.addOption(":file-caching=3000")
+        } else {
+            media.addOption(":network-caching=3000")
+        }
         return media
     }
 
@@ -397,20 +495,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // MARK: - Reporter
 
     private func setupReporter() {
+        // Offline: no PlaybackReporter (nothing to phone home to) and no
+        // remote-command prev/next (episode graph isn't cached locally).
+        guard let apiClient, let userId, let info else { return }
         reporter = PlaybackReporter(
             apiClient: apiClient,
             userId: userId,
             context: { [weak self] in
                 guard let self else { return nil }
-                return PlaybackReporter.Context(itemId: self.itemId, info: self.info, player: nil)
+                return PlaybackReporter.Context(itemId: self.itemId, info: info, player: nil)
             },
             timeSource: { [weak self] in
                 guard let self else { return (0, true) }
                 return (Double(self.currentMs) / 1000.0, !self.enginePlaying)
             }
         )
-        let center = remoteCommands
-        center.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
+        remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
     }
 
     private func startProgressTimer() {
@@ -458,7 +558,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         segments = []
         activeSegmentType = nil
         skipButton.isHidden = true
-        let client = apiClient
+        // Offline: skip — intro/outro segments aren't cached at download time.
+        guard let client = apiClient, !isOffline else { return }
         let id = itemId
         segmentFetchTask = Task { [weak self] in
             let fetched = (try? await client.getMediaSegments(itemId: id, includeSegmentTypes: [.intro, .outro])) ?? []
@@ -1070,11 +1171,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterStartTicks = []
         chapterScroll.isHidden = true
         chapterHeightConstraint?.constant = 0
-        let client = apiClient
-        let builder = imageBuilder
+        // Offline: skip — chapter metadata + thumbnails come from the API.
+        guard let client = apiClient, let builder = imageBuilder, let uid = userId, !isOffline else { return }
         let id = itemId
-        let uid = userId
-        let token = info.authToken
+        let token = info?.authToken
         chapterFetchTask = Task { @MainActor [weak self] in
             guard let item = try? await client.getItem(userId: uid, itemId: id),
                   let chapters = item.chapters, chapters.count > 1,
@@ -1293,14 +1393,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Prefer Jellyfin's DisplayTitle (nicer than libVLC's "Track 1"), mapped
     /// by ordinal within the type; fall back to the SwiftVLC track name.
+    /// Offline mode has no Jellyfin label list so it always takes the fallback.
     private func displayLabel(forAudioOrdinal i: Int, track: Track) -> String {
-        if i < info.audioTracks.count { return info.audioTracks[i].label }
+        if let info, i < info.audioTracks.count { return info.audioTracks[i].label }
         if let lang = track.language, !lang.isEmpty { return "\(track.name) (\(lang))" }
         return track.name
     }
 
     private func displayLabel(forSubtitleOrdinal i: Int, track: Track) -> String {
-        if i < info.subtitleTracks.count { return info.subtitleTracks[i].label }
+        if let info, i < info.subtitleTracks.count { return info.subtitleTracks[i].label }
         if let lang = track.language, !lang.isEmpty { return "\(track.name) (\(lang))" }
         return track.name
     }
@@ -1332,10 +1433,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Apply Jellyfin's negotiated default audio/subtitle (absolute stream
     /// index) onto SwiftVLC tracks by ordinal-within-type. Runs once per media
-    /// (on `.tracksChanged`); `selectedSubtitleIndex` nil/-1 ⇒ off.
+    /// (on `.tracksChanged`); `selectedSubtitleIndex` nil/-1 ⇒ off. Offline
+    /// has no negotiated defaults so the libVLC defaults stand.
     private func applyServerTrackDefaultsIfNeeded() {
         guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
         didApplyServerTrackDefaults = true
+        guard let info else { return }
 
         if let wantAudio = info.selectedAudioIndex,
            let ordinal = info.audioTracks.firstIndex(where: { $0.id == wantAudio }),
@@ -1358,7 +1461,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hasValidTime = false
         didApplyServerTrackDefaults = false
         mediaLengthMs = 0
-        let url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+        let url: URL
+        if let local = offlineLocalURL {
+            url = local
+        } else if let info {
+            url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+        } else {
+            handlePlaybackError(); return
+        }
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
         lastPlayStart = Date()
@@ -1383,7 +1493,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // MARK: - Episode navigation
 
     private func navigateToEpisode(_ ref: EpisodeRef) {
-        guard let navigator = episodeNavigator else { return }
+        // Episode nav is stream-only — offline has no nav graph and no apiClient.
+        guard let navigator = episodeNavigator, let apiClient, let userId else { return }
         reporter?.reportStop()
         progressTimer?.invalidate()
         Task { [weak self] in
@@ -1391,8 +1502,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Navigator yields the new prev/next graph (its PlaybackInfo is
             // negotiated for the native engine, so we re-negotiate for VLC).
             let nav = await navigator(ref.id)
-            guard let vlcInfo = try? await self.apiClient.getPlaybackInfo(
-                itemId: ref.id, userId: self.userId, engine: .vlc
+            guard let vlcInfo = try? await apiClient.getPlaybackInfo(
+                itemId: ref.id, userId: userId, engine: .vlc
             ) else {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
                 return
@@ -1607,9 +1718,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func showEndOfSeriesOverlay() {
+        // Stream-only — the overlay is gated on `episodeNavigator != nil`,
+        // which is always nil offline.
+        guard let apiClient, let userId else { return }
         Task { [weak self] in
             guard let self else { return }
-            let item = try? await self.apiClient.getItem(userId: self.userId, itemId: self.itemId)
+            let item = try? await apiClient.getItem(userId: userId, itemId: self.itemId)
             let seriesName = item?.seriesName ?? item?.name ?? self.titleText
             let alert = UIAlertController(
                 title: String(format: self.loc.localized("player.finishedSeries.title"), seriesName),
@@ -1626,16 +1740,27 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackError() {
         if !didRetry {
             didRetry = true
-            logger.error("VLC stream error for \(self.itemId, privacy: .public) — retrying once")
-            let url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-            if let media = try? Media(url: url) {
-                media.addOption(":network-caching=5000")
+            let target = isOffline ? "offline:\(offlineLocalURL?.lastPathComponent ?? "?")" : itemId
+            logger.error("VLC error for \(target, privacy: .public) — retrying once")
+            let url: URL?
+            if let local = offlineLocalURL {
+                url = local
+            } else if let info {
+                url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+            } else {
+                url = nil
+            }
+            if let url, let media = try? Media(url: url) {
+                // Stream retry bumps network-caching; offline retry just
+                // reuses the file-caching setting.
+                media.addOption(isOffline ? ":file-caching=3000" : ":network-caching=5000")
                 lastPlayStart = Date()
                 try? player.play(media)
             }
             return
         }
-        logger.error("VLC stream error for \(self.itemId, privacy: .public) — giving up")
+        let target = isOffline ? "offline:\(offlineLocalURL?.lastPathComponent ?? "?")" : itemId
+        logger.error("VLC error for \(target, privacy: .public) — giving up")
         let alert = UIAlertController(
             title: loc.localized("playback.error.title"),
             message: loc.localized("playback.error.generic"),
