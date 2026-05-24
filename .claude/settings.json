@@ -18,6 +18,10 @@
           {
             "type": "command",
             "command": "jq -r '.tool_input.file_path // \"\"' | grep -qE '/project\\.yml$' && (cd \"$CLAUDE_PROJECT_DIR\" && xcodegen generate >/dev/null 2>&1 && echo 'xcodegen: project regenerated' >&2) || true"
+          },
+          {
+            "type": "command",
+            "command": "command -v swiftlint >/dev/null 2>&1 && FILE=$(jq -r '.tool_input.file_path // \"\"') && echo \"$FILE\" | grep -qE '\\.swift$' && (cd \"$CLAUDE_PROJECT_DIR\" && swiftlint lint --quiet \"$FILE\" 2>&1 | head -40 >&2) || true"
           }
         ]
       }
