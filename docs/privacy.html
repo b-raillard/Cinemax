@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cinemax — Politique de confidentialité / Privacy Policy</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+    line-height: 1.6;
+    color: #1c1c1e;
+    background: #fafafa;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #f2f2f7; background: #0c0c0e; }
+    a { color: #4ade80; }
+    hr { border-color: #2a2a2e; }
+  }
+  h1 { font-size: 1.85rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.3rem; margin-top: 2rem; border-bottom: 1px solid currentColor; padding-bottom: 0.25rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .lang-switch { font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .updated { color: #6b6b70; font-size: 0.9rem; }
+  hr { margin: 4rem 0; opacity: 0.3; }
+  a { color: #16a34a; }
+</style>
+</head>
+<body>
+
+<p class="lang-switch"><a href="#fr">Français</a> · <a href="#en">English</a></p>
+
+<section id="fr">
+<h1>Cinemax — Politique de confidentialité</h1>
+<p class="updated">Dernière mise à jour : 24 mai 2026</p>
+
+<h2>1. Résumé</h2>
+<p>
+  Cinemax est un client tiers pour les serveurs <a href="https://jellyfin.org">Jellyfin</a>.
+  L'application <strong>ne collecte, ne stocke et ne transmet aucune donnée personnelle</strong>
+  vers les développeurs de Cinemax ou des tiers. Toutes les communications ont lieu directement
+  entre votre appareil et le serveur Jellyfin que <em>vous</em> avez configuré.
+</p>
+
+<h2>2. Données traitées localement sur votre appareil</h2>
+<p>L'application stocke localement, uniquement sur votre appareil :</p>
+<ul>
+  <li>L'URL du serveur Jellyfin et le jeton d'authentification, conservés dans le trousseau iOS / tvOS chiffré (Keychain).</li>
+  <li>Vos préférences d'interface (thème, couleur d'accent, taille de police, options de lecture).</li>
+  <li>Le cache d'images des affiches et arrière-plans (géré par la bibliothèque Nuke).</li>
+  <li>Les vidéos téléchargées hors-ligne (iOS / iPadOS uniquement), exclues de la sauvegarde iCloud.</li>
+</ul>
+<p>
+  Ces données ne quittent jamais votre appareil. Elles sont supprimées lorsque vous désinstallez
+  l'application ou utilisez l'option « Se déconnecter ».
+</p>
+
+<h2>3. Communication avec votre serveur Jellyfin</h2>
+<p>
+  Lorsque vous utilisez Cinemax, votre appareil échange des données avec le serveur Jellyfin
+  dont vous avez fourni l'adresse : informations d'authentification, listes de médias,
+  miniatures, flux vidéo et audio, position de lecture, états de visionnage. Ces échanges
+  sont régis par la politique de confidentialité de votre serveur Jellyfin et de son
+  hébergeur. Cinemax n'a aucun contrôle sur ces données.
+</p>
+
+<h2>4. Permissions système demandées</h2>
+<ul>
+  <li><strong>Réseau local</strong> (iOS) : pour découvrir automatiquement les serveurs Jellyfin présents sur votre Wi-Fi via une diffusion UDP. Aucune donnée n'est envoyée à l'extérieur de votre réseau local lors de cette découverte.</li>
+  <li><strong>Microphone et reconnaissance vocale</strong> (iOS) : uniquement lorsque vous utilisez la recherche vocale. L'audio est traité par Apple Speech Recognition selon la politique d'Apple ; Cinemax ne conserve aucun enregistrement.</li>
+</ul>
+
+<h2>5. Suivi et publicité</h2>
+<p>
+  Cinemax <strong>n'utilise aucun service d'analyse, de télémétrie, de publicité ou de suivi</strong>.
+  Aucun SDK tiers de suivi n'est intégré. App Tracking Transparency n'est pas sollicité car
+  l'application ne suit pas l'utilisateur.
+</p>
+
+<h2>6. Enfants</h2>
+<p>
+  L'application ne collecte aucune donnée d'aucun utilisateur, y compris les enfants de moins
+  de 13 ans. Le contenu accessible dépend exclusivement de la bibliothèque du serveur Jellyfin
+  configuré par l'utilisateur.
+</p>
+
+<h2>7. Modifications de cette politique</h2>
+<p>
+  Toute modification sera publiée sur cette page avec une nouvelle date de mise à jour.
+  L'historique complet est disponible sur
+  <a href="https://github.com/b-raillard/Cinemax">le dépôt GitHub du projet</a>.
+</p>
+
+<h2>8. Contact</h2>
+<p>
+  Pour toute question : <a href="mailto:bastienraillard@gmail.com">bastienraillard@gmail.com</a>
+  ou via les <a href="https://github.com/b-raillard/Cinemax/issues">issues GitHub</a>.
+</p>
+</section>
+
+<hr>
+
+<section id="en">
+<h1>Cinemax — Privacy Policy</h1>
+<p class="updated">Last updated: May 24, 2026</p>
+
+<h2>1. Summary</h2>
+<p>
+  Cinemax is a third-party client for <a href="https://jellyfin.org">Jellyfin</a> media servers.
+  The app <strong>does not collect, store, or transmit any personal data</strong> to the Cinemax
+  developers or any third party. All communications happen directly between your device and
+  the Jellyfin server <em>you</em> configured.
+</p>
+
+<h2>2. Data processed locally on your device</h2>
+<p>The app stores locally, on your device only:</p>
+<ul>
+  <li>The Jellyfin server URL and authentication token, stored in the encrypted iOS / tvOS Keychain.</li>
+  <li>Your interface preferences (theme, accent color, font size, playback options).</li>
+  <li>Image cache for posters and backdrops (managed by the Nuke library).</li>
+  <li>Offline-downloaded videos (iOS / iPadOS only), excluded from iCloud backup.</li>
+</ul>
+<p>
+  This data never leaves your device. It is deleted when you uninstall the app or use the
+  "Sign out" option.
+</p>
+
+<h2>3. Communication with your Jellyfin server</h2>
+<p>
+  When you use Cinemax, your device exchanges data with the Jellyfin server whose address you
+  provided: authentication credentials, media lists, thumbnails, video and audio streams,
+  playback position, watched state. These exchanges are governed by the privacy policy of
+  your Jellyfin server and its host. Cinemax has no control over this data.
+</p>
+
+<h2>4. System permissions requested</h2>
+<ul>
+  <li><strong>Local Network</strong> (iOS): to automatically discover Jellyfin servers on your Wi-Fi via UDP broadcast. No data is sent outside your local network during this discovery.</li>
+  <li><strong>Microphone and Speech Recognition</strong> (iOS): only when you use voice search. Audio is processed by Apple Speech Recognition under Apple's policy; Cinemax stores no recordings.</li>
+</ul>
+
+<h2>5. Tracking and advertising</h2>
+<p>
+  Cinemax <strong>uses no analytics, telemetry, advertising, or tracking services</strong>.
+  No third-party tracking SDKs are integrated. App Tracking Transparency is not requested
+  because the app does not track the user.
+</p>
+
+<h2>6. Children</h2>
+<p>
+  The app collects no data from any user, including children under 13. Accessible content
+  depends solely on the library of the Jellyfin server configured by the user.
+</p>
+
+<h2>7. Changes to this policy</h2>
+<p>
+  Any changes will be published on this page with a new update date. Full history is available
+  in the <a href="https://github.com/b-raillard/Cinemax">project's GitHub repository</a>.
+</p>
+
+<h2>8. Contact</h2>
+<p>
+  For any questions: <a href="mailto:bastienraillard@gmail.com">bastienraillard@gmail.com</a>
+  or via <a href="https://github.com/b-raillard/Cinemax/issues">GitHub Issues</a>.
+</p>
+</section>
+
+</body>
+</html>
