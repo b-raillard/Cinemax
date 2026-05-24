@@ -347,9 +347,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.loc = loc
         self.onDismiss = onDismiss
         var navTarget: ((EpisodeRef) -> Void)?
-        self.remoteCommands = RemoteCommandController(onNavigate: { ref in navTarget?(ref) })
+        var playPauseTarget: (() -> Void)?
+        self.remoteCommands = RemoteCommandController(
+            onNavigate: { ref in navTarget?(ref) },
+            onTogglePlayPause: { playPauseTarget?() }
+        )
         super.init(nibName: nil, bundle: nil)
         navTarget = { [weak self] ref in self?.navigateToEpisode(ref) }
+        playPauseTarget = { [weak self] in self?.handleRemotePlayPause() }
     }
 
     /// Offline init — same HUD scaffolding, no Jellyfin context. Network-only
@@ -373,8 +378,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.imageBuilder = nil
         self.loc = loc
         self.onDismiss = onDismiss
-        self.remoteCommands = RemoteCommandController(onNavigate: { _ in })
+        var playPauseTarget: (() -> Void)?
+        self.remoteCommands = RemoteCommandController(
+            onNavigate: { _ in },
+            onTogglePlayPause: { playPauseTarget?() }
+        )
         super.init(nibName: nil, bundle: nil)
+        playPauseTarget = { [weak self] in self?.handleRemotePlayPause() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
@@ -495,8 +505,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // MARK: - Reporter
 
     private func setupReporter() {
-        // Offline: no PlaybackReporter (nothing to phone home to) and no
-        // remote-command prev/next (episode graph isn't cached locally).
+        // System-button targets (play/pause + prev/next on tvOS Siri Remote,
+        // Lock Screen / CarPlay on iOS) attach for *every* session — play/pause
+        // is the dedicated remote button and must work even offline, where the
+        // episode-nav graph is absent (prev/next are then suppressed by the
+        // nil EpisodeRefs + hasNavigator).
+        remoteCommands.attach(
+            previous: previousEpisode,
+            next: nextEpisode,
+            hasNavigator: episodeNavigator != nil
+        )
+        // Offline: no PlaybackReporter (nothing to phone home to).
         guard let apiClient, let userId, let info else { return }
         reporter = PlaybackReporter(
             apiClient: apiClient,
@@ -510,7 +529,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 return (Double(self.currentMs) / 1000.0, !self.enginePlaying)
             }
         )
-        remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
     }
 
     private func startProgressTimer() {
@@ -1478,6 +1496,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         fetchSegments()
         startSleepTimerIfNeeded()
         fetchChapters()
+    }
+
+    /// Called by `RemoteCommandController` when the Siri Remote / Lock Screen /
+    /// CarPlay play-pause command fires. Reveals the HUD on tvOS so the user
+    /// gets visual feedback (HUD often hidden when the press lands here —
+    /// that's exactly when `pressesBegan` doesn't reach the controller).
+    private func handleRemotePlayPause() {
+        playPauseTapped()
+        #if os(tvOS)
+        revealControls()
+        #endif
     }
 
     @objc private func playPauseTapped() {

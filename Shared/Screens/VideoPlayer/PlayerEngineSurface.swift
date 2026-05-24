@@ -15,13 +15,22 @@ struct PlayerEngineSurface: View {
     #endif
 
     var body: some View {
+        // `.ignoresSafeArea()` is required: SwiftUI's safe area on tvOS is the
+        // TV's overscan margin (~5% inset per edge); on iOS it's the status
+        // bar / notch area. Without it the hosted `UIViewRepresentable`
+        // shrinks inside the inset and libVLC's drawable sits in a centered
+        // rectangle smaller than the screen — "video in a smaller window with
+        // black bars on all 4 sides." `AVPlayerViewController` is unaffected
+        // because it's pure UIKit and never traverses SwiftUI layout.
         #if os(iOS)
         PiPVideoView(player, controller: Binding(
             get: { controller },
             set: { controller = $0; onController($0) }
         ))
+        .ignoresSafeArea()
         #else
         VideoView(player)
+            .ignoresSafeArea()
         #endif
     }
 }
