@@ -144,8 +144,23 @@ final class NativeVideoPresenter {
             onDone: { [weak self] in self?.playerVC?.dismiss(animated: true) }
         )
         self.remoteCommands = RemoteCommandController(
-            onNavigate: { [weak self] ref in self?.navigateToEpisode(ref) }
+            onNavigate: { [weak self] ref in self?.navigateToEpisode(ref) },
+            onTogglePlayPause: { [weak self] in self?.toggleAVPlayerPlayback() }
         )
+    }
+
+    /// Called by `RemoteCommandController` when the system play/pause command
+    /// fires (Siri Remote dedicated button, Lock Screen, CarPlay).
+    /// `AVPlayerViewController` already handles the on-screen transport-bar
+    /// play/pause press itself; this covers the case where the system delivers
+    /// the press out-of-band (no focused control or HUD hidden).
+    private func toggleAVPlayerPlayback() {
+        guard let player = playerVC?.player else { return }
+        if player.timeControlStatus == .playing {
+            player.pause()
+        } else {
+            player.play()
+        }
     }
 
     func present(info: PlaybackInfo) {
