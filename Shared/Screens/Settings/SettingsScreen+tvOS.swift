@@ -46,9 +46,13 @@ extension SettingsScreen {
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
             }
-            .onAppear {
-                proxy.scrollTo("settings.top", anchor: .top)
-            }
+            // No `.onAppear { scrollTo(top) }` — that fired whenever SwiftUI
+            // re-presented this view inside the `TabView` (which happens on
+            // every `MenuConfigStore` mutation now that the sub-nav state
+            // survives the remount via `SettingsNavCoordinator`), yanking the
+            // user back to the top of the page and dropping focus on the
+            // row they were just touching. A fresh `ScrollView` already
+            // starts at the top — no explicit reset needed on first appear.
         }
         .background {
             // Centered accent bloom — persists across all settings pages
