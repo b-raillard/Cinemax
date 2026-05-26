@@ -146,13 +146,30 @@ struct SettingsScreen: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) var toasts
+    /// Hoisted out of this view's `@State` because tvOS's `UITabBarController`-
+    /// backed `TabView` recreates the hosting controller (and resets `@State`)
+    /// whenever the Settings tab's position-index in the bar shifts — toggle
+    /// off / reorder / change tab source. The coordinator lives on
+    /// `AppNavigation`, which never remounts during normal usage, so the
+    /// sub-navigation depth survives the Settings remount.
+    @Environment(SettingsNavCoordinator.self) var settingsNav
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
     @State var showPrivacySecurity = false
-    @State var selectedCategory: SettingsCategory? = nil
-    @State var selectedInterfaceSub: InterfaceSubcategory? = nil
     @State var currentUser: UserDto? = nil
+
+    /// Convenience pass-throughs so the rest of the code keeps using
+    /// `selectedCategory` / `selectedInterfaceSub` and the `$`-projection
+    /// bindings without churn. The actual storage is on `settingsNav`.
+    var selectedCategory: SettingsCategory? {
+        get { settingsNav.selectedCategory }
+        nonmutating set { settingsNav.selectedCategory = newValue }
+    }
+    var selectedInterfaceSub: InterfaceSubcategory? {
+        get { settingsNav.selectedInterfaceSub }
+        nonmutating set { settingsNav.selectedInterfaceSub = newValue }
+    }
 
     // Shared stored properties — keys + defaults live in SettingsKey
     @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects

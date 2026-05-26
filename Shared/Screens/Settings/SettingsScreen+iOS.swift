@@ -13,7 +13,12 @@ extension SettingsScreen {
     /// screen is reached through the More tab — SwiftUI gets confused about
     /// which stack owns the push when there are 3+ nested stacks.
     var iOSLayout: some View {
-        ScrollView(showsIndicators: false) {
+        // `@Bindable` is the iOS 17+ way to project bindings off an
+        // `@Observable` reference type — replaces the previous `$`-projection
+        // on `@State` (now hoisted to `settingsNav` so the depth survives
+        // a `SettingsScreen` remount triggered by tvOS tab reorder).
+        @Bindable var nav = settingsNav
+        return ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
                 iOSHeader
                 iOSNavigationList
@@ -21,10 +26,10 @@ extension SettingsScreen {
             }
         }
         .background(CinemaColor.surfaceContainerLowest)
-        .navigationDestination(item: $selectedCategory) { category in
+        .navigationDestination(item: $nav.selectedCategory) { category in
             settingsDetailView(for: category)
         }
-        .navigationDestination(item: $selectedInterfaceSub) { sub in
+        .navigationDestination(item: $nav.selectedInterfaceSub) { sub in
             iOSInterfaceSubDetailView(for: sub)
         }
     }

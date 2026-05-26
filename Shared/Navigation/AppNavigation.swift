@@ -149,6 +149,7 @@ struct AppNavigation: View {
     @State private var toasts = ToastCenter()
     @State private var network = NetworkMonitor()
     @State private var menuConfig = MenuConfigStore()
+    @State private var settingsNav = SettingsNavCoordinator()
     #if os(iOS)
     @State private var downloads = DownloadManager()
     #endif
@@ -204,6 +205,7 @@ struct AppNavigation: View {
         .environment(toasts)
         .environment(network)
         .environment(menuConfig)
+        .environment(settingsNav)
         #if os(iOS)
         .environment(downloads)
         #endif
