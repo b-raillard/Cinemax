@@ -35,19 +35,28 @@ struct MainTabView: View {
     }
 
     // MARK: - tvOS Tab Bar (native top tab bar)
+    //
+    // Uses the iOS 18 / tvOS 18 `Tab(value:)` API. The earlier `.tabItem
+    // + .tag` pattern (pre-18) wasn't preserving child-view `@State`
+    // across a `ForEach` diff when `MenuConfigStore` mutates — every
+    // toggle / kind-change was remounting `SettingsScreen` and dropping
+    // its `selectedCategory`/`selectedInterfaceSub`, dumping the user
+    // back to the Settings landing (or rendering a transient empty
+    // page). The newer `Tab(value:)` builds an identity off the `value`
+    // and survives collection mutations cleanly.
 
     #if os(tvOS)
     @ViewBuilder
     private func tvTabLayout(tabs: [ResolvedTab]) -> some View {
         TabView(selection: $selectedTabID) {
             ForEach(tabs) { tab in
-                NavigationStack {
-                    destinationView(for: tab)
-                }
-                .tabItem {
+                Tab(value: tab.id) {
+                    NavigationStack {
+                        destinationView(for: tab)
+                    }
+                } label: {
                     Label(tab.displayTitle(loc), systemImage: tab.icon)
                 }
-                .tag(tab.id)
             }
         }
     }
