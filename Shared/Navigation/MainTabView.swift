@@ -51,9 +51,11 @@ struct MainTabView: View {
             }
         }
         .onChange(of: menuConfig.resolvedTabs) { _, new in
-            // While the menu editor is open, freeze the bar so toggles /
-            // reorders don't rip focus out of the inner page. The bar
-            // catches up the moment the user backs out.
+            // Fine-grained edits (toggle / reorder / library refresh)
+            // freeze the bar while the menu editor is open — otherwise
+            // every toggle reconfigures the tab bar and rips focus off
+            // the row the user is touching. The bar catches up the
+            // moment they back out (handled below).
             guard !isEditingMenu else { return }
             displayedTabs = new
         }
@@ -62,6 +64,19 @@ struct MainTabView: View {
             if !editing {
                 displayedTabs = menuConfig.resolvedTabs
             }
+        }
+        .onChange(of: menuConfig.mode) { _, _ in
+            // Mode change (default ↔ custom, including Reset which forces
+            // back to default) is a *structural* edit — refresh the bar
+            // even while the editor is open. Same intent as the user
+            // explicitly asking for a different menu.
+            displayedTabs = menuConfig.resolvedTabs
+        }
+        .onChange(of: menuConfig.customKind) { _, _ in
+            // Switching the tab source (content type ↔ library) replaces
+            // the entire set of entries — refresh the bar live so the
+            // user sees what they're configuring.
+            displayedTabs = menuConfig.resolvedTabs
         }
     }
 
