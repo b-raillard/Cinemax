@@ -10,28 +10,59 @@ struct MainTabView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(MenuConfigStore.self) private var menuConfig
+    @Environment(SettingsNavCoordinator.self) private var settingsNav
     @State private var selectedTabID: String = "home"
+
+    /// Snapshot of `menuConfig.resolvedTabs` used to render the tab bar.
+    /// Decoupling from the live `@Observable` reads stops the `TabView`
+    /// from reconfiguring its UIKit-backed bar on every mutation while the
+    /// user is actively editing in the Main Menu sub-page — that reconfig
+    /// (tab added/removed/reordered) made tvOS's focus engine bail out of
+    /// the inner page and snap focus onto the top-bar `Réglages` pill, so
+    /// every toggle felt like a full page reload. Snapshot only refreshes
+    /// when the user is *not* on the menu editor.
+    @State private var displayedTabs: [ResolvedTab] = []
 
     #if os(tvOS)
     @State private var playerCoordinator = VideoPlayerCoordinator()
     #endif
 
+    /// True only while the user is editing the menu on the Main Menu
+    /// sub-page. Drives whether the bar snapshot keeps pace with the live
+    /// store or stays frozen until they back out.
+    private var isEditingMenu: Bool {
+        settingsNav.selectedInterfaceSub == .menu
+    }
+
     var body: some View {
-        let tabs = menuConfig.resolvedTabs
         Group {
             #if os(tvOS)
-            tvTabLayout(tabs: tabs)
+            tvTabLayout(tabs: displayedTabs)
                 .environment(playerCoordinator)
                 .task { playerCoordinator.localizationManager = loc }
             #else
-            iOSTabLayout(tabs: tabs)
+            iOSTabLayout(tabs: displayedTabs)
             #endif
         }
-        // No `reconcileSelection` — `TabView`'s `selection` binding keeps the
-        // current tab id even when the underlying list reorders. Reassigning
-        // `selectedTabID` on every list change was bumping the user to a
-        // different tab during reorder/toggle (the source of the "redirected
-        // to Search/Home for no reason" reports).
+        .onAppear {
+            // Initial seed — without this the bar is empty for one frame.
+            if displayedTabs.isEmpty {
+                displayedTabs = menuConfig.resolvedTabs
+            }
+        }
+        .onChange(of: menuConfig.resolvedTabs) { _, new in
+            // While the menu editor is open, freeze the bar so toggles /
+            // reorders don't rip focus out of the inner page. The bar
+            // catches up the moment the user backs out.
+            guard !isEditingMenu else { return }
+            displayedTabs = new
+        }
+        .onChange(of: isEditingMenu) { _, editing in
+            // Editor just closed → flush pending edits into the bar.
+            if !editing {
+                displayedTabs = menuConfig.resolvedTabs
+            }
+        }
     }
 
     // MARK: - tvOS Tab Bar (native top tab bar)
