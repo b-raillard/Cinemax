@@ -178,6 +178,12 @@ struct SettingsScreen: View {
     #if os(tvOS)
     @FocusState var focusedItem: SettingsFocus?
     @State var serverUsers: [UserDto] = []
+    /// Idempotency guard for `loadServerUsers`. tvOS `.task` re-fires every
+    /// time SwiftUI re-enters the view hierarchy (which happens whenever
+    /// `MenuConfigStore` mutates — refresh libraries, change tab source,
+    /// reorder), and we don't want to spam `getUsers`/`getPublicUsers`
+    /// requests (and any toast on failure) on every menu interaction.
+    @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
     @State var showLibraryLayoutPicker = false
     #endif

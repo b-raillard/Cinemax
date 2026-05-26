@@ -488,19 +488,27 @@ extension SettingsScreen {
     // MARK: - tvOS Reusable Components
 
     func loadServerUsers() async {
+        // Idempotent guard — `.task` re-fires every time `MainTabView` rebuilds
+        // its `TabView` content (any menu mutation does this), which would
+        // otherwise hit `getUsers`/`getPublicUsers` and trigger a toast on
+        // every refresh / kind change. The quick-switch profile section
+        // gracefully renders nothing if the list stays empty, and
+        // `UserSwitchSheet` does its own fetch with `try?` when opened.
+        guard !serverUsersLoadAttempted else { return }
+        serverUsersLoadAttempted = true
+
         do {
             serverUsers = try await appState.apiClient.getUsers()
             return
         } catch {
-            // Authenticated list failed (permissions or network). Fall through
-            // to the public list so a signed-out user can still pick an account.
+            // Authenticated list failed (permissions or network). Fall
+            // through to the public list so a signed-out user can still pick
+            // an account.
         }
-        do {
-            serverUsers = try await appState.apiClient.getPublicUsers()
-        } catch {
-            serverUsers = []
-            toasts.error(loc.localized("toast.userListFailed"))
-        }
+        // Silent fallback — `UserSwitchSheet` handles a deeper retry path
+        // when the user actually tries to switch users; surfacing a toast
+        // here would just spam them every time they edit the menu.
+        serverUsers = (try? await appState.apiClient.getPublicUsers()) ?? []
     }
 
     // MARK: - Server Connection
