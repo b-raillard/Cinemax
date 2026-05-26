@@ -6,19 +6,26 @@ import CinemaxKit
 #if os(iOS)
 extension SettingsScreen {
 
+    /// Renders directly into whatever `NavigationStack` wraps this screen
+    /// (provided by `MainTabView`'s `Tab` block, or by `MoreTabScreen`'s push
+    /// path). A *second* nested `NavigationStack` here would silently swallow
+    /// the `.navigationDestination(item:)` of `selectedInterfaceSub` when the
+    /// screen is reached through the More tab — SwiftUI gets confused about
+    /// which stack owns the push when there are 3+ nested stacks.
     var iOSLayout: some View {
-        NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    iOSHeader
-                    iOSNavigationList
-                    iOSDeviceInfo
-                }
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                iOSHeader
+                iOSNavigationList
+                iOSDeviceInfo
             }
-            .background(CinemaColor.surfaceContainerLowest)
-            .navigationDestination(item: $selectedCategory) { category in
-                settingsDetailView(for: category)
-            }
+        }
+        .background(CinemaColor.surfaceContainerLowest)
+        .navigationDestination(item: $selectedCategory) { category in
+            settingsDetailView(for: category)
+        }
+        .navigationDestination(item: $selectedInterfaceSub) { sub in
+            iOSInterfaceSubDetailView(for: sub)
         }
     }
 
@@ -323,80 +330,130 @@ extension SettingsScreen {
         }
     }
 
-    // MARK: Interface Detail (iOS)
+    // MARK: Interface Detail (iOS) — Hub of sub-pages
+    //
+    // Renders Interface sub-pages as standalone pill buttons mirroring the
+    // Settings landing chrome (accent-filled hero on the first row, glass
+    // material on the others). Keeps the visual identity consistent between
+    // the two hubs and makes the accent-color theme front-and-center.
 
     var iOSInterfaceDetail: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                iOSSettingsSectionHeader(loc.localized("settings.interface"))
-
-                VStack(spacing: 0) {
-                    iOSToggleRowsJoined(interfaceToggleRows, accent: themeManager.accent, animated: motionEffects)
-                    iOSSettingsDivider
-
-                    iOSSleepTimerRow
-                    iOSSettingsDivider
-
-                    iOSSettingsRow {
-                        HStack {
-                            iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
-                            Text(loc.localized("settings.fontSize"))
-                                .font(CinemaFont.label(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-                            Spacer()
-                            Stepper(
-                                "\(Int(fontScale * 100))%",
-                                onIncrement: {
-                                    if let idx = fontScaleOptions.firstIndex(of: fontScale), idx < fontScaleOptions.count - 1 {
-                                        fontScale = fontScaleOptions[idx + 1]
-                                        themeManager.uiScale = fontScale
-                                    }
-                                },
-                                onDecrement: {
-                                    if let idx = fontScaleOptions.firstIndex(of: fontScale), idx > 0 {
-                                        fontScale = fontScaleOptions[idx - 1]
-                                        themeManager.uiScale = fontScale
-                                    }
-                                }
-                            )
-                            .fixedSize()
-                            .tint(themeManager.accent)
-                        }
-                    }
-                }
-                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-            }
-
-            // Home Page section
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                iOSSettingsSectionHeader(loc.localized("settings.homePage"))
-
-                VStack(spacing: 0) {
-                    iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects)
-                }
-                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-            }
-
-            // Detail Page section
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                iOSSettingsSectionHeader(loc.localized("settings.detailPage"))
-
-                VStack(spacing: 0) {
-                    iOSToggleRowsJoined(detailPageToggleRows, accent: themeManager.accent, animated: motionEffects)
-                }
-                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-            }
-
-            // Debug section
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                iOSSettingsSectionHeader(loc.localized("settings.debug"))
-
-                VStack(spacing: 0) {
-                    iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects)
-                }
-                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        VStack(spacing: CinemaSpacing.spacing2) {
+            ForEach(InterfaceSubcategory.allCases) { sub in
+                iOSInterfaceSubButton(sub)
             }
         }
+    }
+
+    @ViewBuilder
+    func iOSInterfaceSubButton(_ sub: InterfaceSubcategory) -> some View {
+        let isFirst = sub == InterfaceSubcategory.allCases.first
+
+        Button {
+            selectedInterfaceSub = sub
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                // Icon circle — accent-filled on the hero, neutral material on the rest
+                ZStack {
+                    Circle()
+                        .fill(isFirst ? themeManager.accent.opacity(0.18) : CinemaColor.surfaceContainerHighest)
+                        .frame(width: 40, height: 40)
+                    Image(systemName: sub.icon)
+                        .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                        .foregroundStyle(isFirst ? .white : themeManager.accent)
+                }
+
+                Text(sub.localizedName(loc))
+                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                    .tracking(-0.3)
+                    .foregroundStyle(isFirst ? .white : CinemaColor.onSurface)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                    .foregroundStyle(isFirst ? CinemaColor.onSurface.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .background {
+                if isFirst {
+                    RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                        .fill(themeManager.accentContainer)
+                } else {
+                    RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                                .fill(CinemaColor.surfaceContainerHigh.opacity(0.6))
+                        )
+                }
+            }
+            .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                    .strokeBorder(CinemaColor.onSurface.opacity(isFirst ? 0.12 : 0.06), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - iOS Interface Sub-Detail Views
+
+    @ViewBuilder
+    func iOSInterfaceSubDetailView(for sub: InterfaceSubcategory) -> some View {
+        // Menu has its own root chrome (background + title); the other
+        // sub-pages share the standard ScrollView + glassPanel wrapper.
+        if sub == .menu {
+            MenuSettingsScreen()
+        } else {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                    switch sub {
+                    case .menu:       EmptyView() // handled above
+                    case .homePage:   iOSHomePageSection
+                    case .detailPage: iOSDetailPageSection
+                    case .playback:   iOSPlaybackSection
+                    case .debug:      iOSDebugSection
+                    }
+                }
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                .padding(.bottom, CinemaSpacing.spacing8)
+            }
+            .background(CinemaColor.surface.ignoresSafeArea())
+            .navigationTitle(sub.localizedName(loc))
+            .navigationBarTitleDisplayMode(.large)
+        }
+    }
+
+    var iOSHomePageSection: some View {
+        VStack(spacing: 0) {
+            iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects)
+        }
+        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+    }
+
+    var iOSPlaybackSection: some View {
+        VStack(spacing: 0) {
+            iOSToggleRowsJoined(playbackToggleRows, accent: themeManager.accent, animated: motionEffects)
+            iOSSettingsDivider
+            iOSSleepTimerRow
+        }
+        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+    }
+
+    var iOSDetailPageSection: some View {
+        VStack(spacing: 0) {
+            iOSToggleRowsJoined(detailPageToggleRows, accent: themeManager.accent, animated: motionEffects)
+        }
+        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+    }
+
+    var iOSDebugSection: some View {
+        VStack(spacing: 0) {
+            iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects)
+        }
+        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
     // MARK: - iOS Reusable Components

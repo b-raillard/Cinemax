@@ -30,7 +30,16 @@ struct LibrarySortFilterState: Equatable {
 
 @MainActor @Observable
 final class MediaLibraryViewModel {
-    let itemType: BaseItemKind
+    /// `nil` means "no `includeItemTypes` filter" — used for library tabs of
+    /// Other / Mixed kind where items aren't reliably typed as movies or
+    /// series. Concrete kinds (`.movie` / `.series`) keep the legacy
+    /// behaviour: hero + genre rows + filtered grid scoped to that kind.
+    let itemType: BaseItemKind?
+    /// When set, all `getItems` calls scope to a specific Jellyfin library
+    /// (a.k.a. user view) by passing this id as `parentId`. Used by the
+    /// custom-menu library mode so each tab shows only its own library
+    /// rather than the entire catalogue.
+    let parentId: String?
 
     // Hero
     var heroItem: BaseItemDto?
@@ -55,8 +64,9 @@ final class MediaLibraryViewModel {
     let genreLoadLimit = 8
     private var hasLoaded = false
 
-    init(itemType: BaseItemKind) {
+    init(itemType: BaseItemKind?, parentId: String? = nil) {
         self.itemType = itemType
+        self.parentId = parentId
     }
 
     func loadInitial(using appState: AppState, loc: LocalizationManager) async {
@@ -77,14 +87,17 @@ final class MediaLibraryViewModel {
         isLoading = true
         errorMessage = nil
 
+        let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
+
         do {
             async let genresResult = appState.apiClient.getGenres(
                 userId: userId,
-                includeItemTypes: [itemType]
+                includeItemTypes: typeFilter
             )
             async let countResult = appState.apiClient.getItems(
                 userId: userId,
-                includeItemTypes: [itemType],
+                parentId: parentId,
+                includeItemTypes: typeFilter,
                 sortBy: [.random],
                 sortOrder: [.ascending],
                 limit: 1
@@ -98,7 +111,8 @@ final class MediaLibraryViewModel {
 
             let heroResult = try await appState.apiClient.getItems(
                 userId: userId,
-                includeItemTypes: [itemType],
+                parentId: parentId,
+                includeItemTypes: typeFilter,
                 sortBy: [.random],
                 sortOrder: [.ascending],
                 limit: 20
@@ -124,14 +138,16 @@ final class MediaLibraryViewModel {
         // self.sortFilter/itemType inside addTask would race with sort/filter
         // UI mutations on the main actor (same pattern as loadMoreFiltered).
         let snapshot = sortFilter
-        let kind = itemType
+        let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
+        let parentScopeID = parentId
         let limit = genreItemLimit
         try await withThrowingTaskGroup(of: GenreResult.self) { group in
             for genre in genresToLoad {
                 group.addTask {
                     let result = try await appState.apiClient.getItems(
                         userId: userId,
-                        includeItemTypes: [kind],
+                        parentId: parentScopeID,
+                        includeItemTypes: typeFilter,
                         sortBy: [snapshot.sortBy],
                         sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
                         genres: [genre],
@@ -164,14 +180,16 @@ final class MediaLibraryViewModel {
 
     private func loadMoreFiltered(using appState: AppState, userId: String) async {
         let currentSortFilter = sortFilter
-        let currentItemType = itemType
+        let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
+        let parentScopeID = parentId
         await filteredLoader.loadMore { startIndex in
             let genres = currentSortFilter.selectedGenres.isEmpty ? nil : Array(currentSortFilter.selectedGenres)
             let filters: [ItemFilter]? = currentSortFilter.showUnwatchedOnly ? [.isUnplayed] : nil
             let years = currentSortFilter.expandedYears
             let result = try await appState.apiClient.getItems(
                 userId: userId,
-                includeItemTypes: [currentItemType],
+                parentId: parentScopeID,
+                includeItemTypes: typeFilter,
                 sortBy: [currentSortFilter.sortBy],
                 sortOrder: currentSortFilter.sortAscending ? [.ascending] : [.descending],
                 genres: genres,

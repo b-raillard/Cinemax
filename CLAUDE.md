@@ -25,6 +25,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 - `import SwiftVLC` works iOS + tvOS (`Player` is `@Observable @MainActor`; `VideoView`/iOS-only `PiPVideoView` are SwiftUI representables hosted in UIKit presenters via a child `UIHostingController`). Both `Cinemax` (iOS) and `CinemaxTV` (tvOS) targets link it — VLC is the default online playback engine on both.
 - **RULE — Never re-add `VLCKitSPM`** — libVLC 3.x + 4.0 in one binary collide on `libvlc_*` C symbols. SwiftVLC replaced it (native PiP, object-based `Track` API fixing the audio-switch silence bug, Swift-6-native).
 - **RULE — Adding a new file under `Shared/` requires re-running `xcodegen generate`** before it builds (the PostToolUse hook auto-regens only on `project.yml` edits, not new files; symptom of forgetting: "cannot find type X in scope" for a type that exists).
+- **RULE — `@Observable` properties must NOT carry `didSet`/`willSet`**: the macro instruments setters via `withMutation { ... }`; a property observer body runs *after* the observation commits, and on collection-of-`Codable`-value-types properties (e.g. `[MenuEntry]`) the combo intermittently fails to deliver SwiftUI re-renders (symptom: bottom tab bar doesn't update after a reorder until the user taps anywhere). Pattern: keep stored properties plain `var T`, expose explicit `set*(_:)` mutator methods that mutate + persist, and use custom `Binding(get:set:)` in Pickers/Toggles so writes go through the mutator. Reference: `MenuConfigStore.setMode`/`setCustomKind` and the `Binding` projections in `MenuSettingsScreen+iOS.swift`.
 
 ### API protocol split (`Packages/CinemaxKit/.../APIClientProtocol.swift`)
 
@@ -36,6 +37,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 2. A `@MainActor` class's `static func` returning non-Sendable into a `TaskGroup @Sendable` closure needs `nonisolated private static func`. See `HomeViewModel.fetchGenreItems`.
 3. A `nonisolated static func` reading a `static let` needs the constant `nonisolated` too (Sendable types only). See `SearchViewModel.sanitize` + `maxQueryLength`.
 4. When `nonisolated static func ==` reads a non-Sendable DTO stored property, wrap the body in `MainActor.assumeIsolated { ... }` (safe — SwiftUI diffs on main actor). See the `MediaDetail*Section` / `MediaDetailEpisodeCard/Row` extractions.
+5. **`@retroactive @unchecked Sendable` for SDK value enums**: the Jellyfin SDK doesn't annotate `BaseItemKind` (a `String`-raw enum). `@preconcurrency import` silences old warnings but Swift 6.1 region-based isolation still rejects `[BaseItemKind]?` crossing async/actor boundaries or being captured by `@Sendable` closures. Bridge in `Packages/CinemaxKit/.../Models/JellyfinSendable.swift`. Strictly scope these conformances to genuinely-safe value types (String-raw enum, no associated values).
 
 ## Project Structure
 
@@ -43,17 +45,17 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 Shared/
   DesignSystem/             CinemaGlassTheme, ThemeManager, AccentOption (+AccentEasterEgg), LocalizationManager, ToastCenter, GlassModifiers, FocusScaleModifier, AdaptiveLayout, TVButtonStyles, SettingsKeys, SleepTimerOption
   DesignSystem/Components/   CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges, UserAvatar
-  Navigation/               AppNavigation (auth routing), MainTabView
+  Navigation/               AppNavigation (auth routing), MainTabView, MenuConfig (MenuConfigStore + ResolvedTab)
   Screens/                  Home/Login/ServerSetup/Search/MovieLibrary/TVSeries/PrivacySecurity, MediaDetailScreen + MediaDetail* siblings, VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink
     VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController, NowPlayingInfoController, VLCStreamPresenter (covers online iOS+tvOS via stream init AND offline iOS via second init — same HUD class for both); shared extractions: PlayerTimeFormat (HH:MM:SS), PlayerEngineSurface (SwiftVLC host), PlayerTransportViews (TVScrubBar/ChapterChip/PassthroughView)
-    Settings/               SettingsScreen + iOS/tvOS extensions, SettingsAppearanceView+iOS, SettingsRowHelpers, SettingsTV{AccentPicker,LanguagePicker,ProfileSection,ActionRow}
+    Settings/               SettingsScreen + iOS/tvOS extensions, SettingsAppearanceView+iOS, SettingsRowHelpers, SettingsTV{AccentPicker,LanguagePicker,ProfileSection,ActionRow}, MenuSettingsScreen + iOS/tvOS extensions (custom-menu editor)
     Downloads/              (iOS-only) DownloadButton, DownloadsScreen, OfflineLibraryView, OfflineMediaDetailView, DownloadItem+BaseItemDto
     Admin/                  (iOS-only) Dashboard/Users/Devices/Activity/Tasks/Plugins/Catalog/Playback/Network/Logs/ApiKeys/Metadata/Identify
     Admin/Components/       AdminLoadStateContainer, AdminFormScreen, AdminTabBar, AdminSectionGroup, AdminItemMenu, DestructiveConfirmSheet
   ViewModels/               per-screen VMs + VideoPlayerCoordinator + DownloadManager (iOS) + NetworkMonitor
 iOS/ tvOS/                  app entry points
 Resources/{fr,en}.lproj/    Localization (fr default)
-Packages/CinemaxKit/        Models, Networking (JellyfinAPIClient, ImageURLBuilder, +Downloads), Persistence (KeychainService, DownloadStore, DownloadStorage)
+Packages/CinemaxKit/        Models (incl. JellyfinSendable retroactive conformances), Networking (JellyfinAPIClient, ImageURLBuilder, +Downloads), Persistence (KeychainService, DownloadStore, DownloadStorage)
 docs/design-system/         Canonical design system reference
 ```
 
@@ -76,10 +78,23 @@ docs/design-system/         Canonical design system reference
 
 ## Navigation
 
-- `AppNavigation` → Keychain session check → `apiClient.reconnect()` + `fetchServerInfo()`. Injects `ThemeManager`, `LocalizationManager`, `ToastCenter`; applies `.preferredColorScheme()` at root.
+- `AppNavigation` → Keychain session check → `apiClient.reconnect()` + `fetchServerInfo()`. Injects `ThemeManager`, `LocalizationManager`, `ToastCenter`, `MenuConfigStore`; applies `.preferredColorScheme()` at root.
 - Flow: no server → `ServerSetupScreen` → `LoginScreen` → `MainTabView` (top tabs tvOS, sidebar iPad, bottom tabs iPhone).
 - **RULE — All play buttons use `PlayLink<Label>`** (Button+coordinator on tvOS, `NavigationLink` on iOS) — never direct `NavigationLink` to `VideoPlayerView`.
 - **Session expiry / 401**: `JellyfinAPIClient.setOnUnauthorized` (`@Sendable () -> Void`) → posts `.cinemaxSessionExpired`; `AppNavigation` runs `appState.logout()` + toast. Lazy recovery (no eager validation); 6 hot paths instrumented (`getResumeItems`/`getLatestMedia`/`getItems`/`getItem`/`searchItems`/`getPlaybackInfo`). Detection is string-match on `(401)`/`NSURLErrorUserAuthenticationRequired`.
+
+### Custom menu / dynamic tabs (`MenuConfigStore`)
+
+`MainTabView` consumes `menuConfig.resolvedTabs` (computed from `mode` / `customKind` / persisted entry arrays / `availableViews` cache). Three modes:
+
+- **`.default`** — the canonical 5 tabs (Home, Movies, TV Shows, Search, Settings).
+- **`.custom + .contentType`** — user picks which of the canonical 5 are enabled and in what order.
+- **`.custom + .library`** — user surfaces individual Jellyfin libraries (returned by `getUserViews`) as tabs, filtered to video kinds only (`movies`/`tvshows`/`homevideos`/nil — see `LibraryView.nonVideoCollectionTypes` blacklist; `boxsets`/`music`/`photos` etc. excluded).
+
+- **RULE — `MenuConfigStore.maxEnabledTabs = 5` (hard cap)**: `TabView` on iPhone in compact width instantiates a `UIMoreNavigationController` when it has >5 tabs. Any list mutation that crosses the 5↔6 boundary tears that controller down and dumps the user back to the first tab — an UIKit lifecycle quirk we can't override from SwiftUI (visible in logs as `UIScrollView does not support multiple observers ... removing old observer <UIMoreNavigationController>`). Toggling-on a 6th entry is refused via `ToggleResult.refusedCapReached` → toast.
+- **RULE — Library-mode tabs accept `parentId: String?` + `overrideTitle: String?` on `MediaLibraryScreen`** so each library tab scopes its queries to that view id. `BaseItemKind?` is nilable on `MediaLibraryScreen`/`MediaLibraryViewModel`: `nil` means "no `includeItemTypes` filter" — needed for `Mixed`/`Other` libraries where Jellyfin items aren't reliably typed.
+- **RULE — Don't tag a tab with `role: .search`** on iPhone in this app: per Apple WWDC 2024, a search-role tab is force-placed at the trailing edge of the bar regardless of declaration order, which conflicts with user-reorderable menus and was the source of "redirected to Search" after a drag. Search is a regular `Tab` here.
+- Persistence is explicit (`SettingsKey.menu*`) via mutator methods on the store, **never** through property `didSet` (see Architecture RULE on `@Observable`). `refreshAvailableViews()` is idempotent (`if views != availableViews { ... }`) to avoid spurious Observation cycles during user interaction. Mandatory IDs: `[settingsID]` only — Home and Search are non-mandatory but default-on.
 
 ## Server Setup & Login
 
@@ -145,7 +160,10 @@ Both platforms `AVPlayerViewController` presented via UIKit modal. `@MainActor` 
 
 ## Settings Screen
 
-Two-level navigation. Landing — tvOS: split (left brand, right 4 nav pills, persistent accent bloom); iOS: vertical scroll + `NavigationStack`. Detail pages (Appearance/Account/Server/Interface) — tvOS `ScrollView` + back button (`onExitCommand`), iOS pushed.
+Three-level navigation. Landing — tvOS: split (left brand, right nav pills, persistent accent bloom); iOS: vertical scroll + `NavigationStack`. Detail pages (Appearance/Account/Server/Interface) — tvOS `ScrollView` + back button (`onExitCommand`), iOS pushed. **Interface is itself a hub** of sub-pages (Main Menu / Home page / Detail page / Playback / Debug — `InterfaceSubcategory` enum); iOS routes via a second `.navigationDestination(item: $selectedInterfaceSub)` on the landing scroll; tvOS uses the same state-machine pattern as the category level. Interface hub uses the same pill chrome as the Settings landing (`iOSInterfaceSubButton` mirrors `iOSCategoryButton`, with `accentContainer` fill on the first row).
+
+- **RULE — `MenuSettingsScreen+iOS` uses native `List` + `Picker(.segmented)` + `Stepper` + forced `editMode .active`**: these are deliberate exceptions to the "never system `Toggle` in settings" rule. The user explicitly requested native iOS chrome for the Mode/Kind selectors (Picker), font-size (Stepper), and always-visible drag handles (forced edit mode → native ≡ grip with no `EditButton` needed). Per-row enable/disable still uses `CinemaToggleIndicator` Button with `.buttonStyle(.borderless)` so the List cell doesn't intercept taps. Add new system controls in Settings only with the same explicit user mandate.
+- **RULE — Settings detail screens (`SettingsScreen.iOSLayout`) must NOT wrap their body in a nested `NavigationStack`**: `MainTabView`'s `Tab` block + the `MoreTabScreen`-style overflow path each already provide one, and a third nested stack silently breaks `.navigationDestination(item:)` routing for sub-page pushes (Interface → Main Menu was unreachable through the More overflow until this was fixed). Pushed destinations attach to whatever stack is closest above.
 
 - **RULE — tvOS focus**: each row is a single focusable unit (never individual sub-items). Accent/Language rows: left/right or select cycles (`onMoveCommand`).
 - **Settings row SSOT** (`Settings/SettingsRowHelpers.swift` + platform extensions): every boolean toggle declared once as `SettingsToggleRow`, rendered both platforms from same list. Catalogues: `interfaceToggleRows`/`homePageToggleRows`/`detailPageToggleRows`/`debugToggleRows`. Adding/renaming a toggle = one-line edit. Expanders: `iOSToggleRowsJoined(_:accent:animated:)`, `tvToggleList(_:)` (ignores `row.tint`; `tint:` is iOS-only debug-orange). `tvActionRow(...)`, iOS atoms (`iOSSettingsRow` etc.), tvOS `tvGlassToggle`.
@@ -173,6 +191,11 @@ Two-level navigation. Landing — tvOS: split (left brand, right 4 nav pills, pe
 | `detail.showQualityBadges` | `true` | Quality pill row on `MediaDetailScreen` |
 | `library.tvBrowseLayout` | `"browse"` | tvOS-only. `browse` = hero + genre rows; `grid` = flat grid. Filters force grid regardless |
 | `privacy.maxContentAge` | `0` | Rating ceiling (0=unrestricted; 10/12/14/16/18) via `apiClient.applyContentRatingLimit` |
+| `menu.mode` | `"default"` | `"default"` ⇒ canonical 5 tabs; `"custom"` ⇒ user-driven (see `MenuConfigStore`) |
+| `menu.customKind` | `"contentType"` | Custom mode source: `"contentType"` (movies/series toggles) or `"library"` (per Jellyfin view) |
+| `menu.contentTypeEntries` | — | JSON `[MenuEntry]` — order + enabled flags for content-type mode |
+| `menu.libraryEntries` | — | JSON `[MenuEntry]` — order + enabled flags for library mode |
+| `menu.cachedViews` | — | JSON `[LibraryView]` — last `getUserViews` snapshot (server-scoped, invalidated on server switch) |
 | `debug.fastSleepTimer` | `false` | Overrides sleep to 15s |
 | `debug.showSkipToEnd` | `false` | "End" button seeking to `duration−15s` |
 | `easterEgg.rainbowUnlocked` | `false` | Rainbow accent visibility — flipped by logo-tap easter egg |

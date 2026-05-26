@@ -86,11 +86,49 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Interface Subcategory
+//
+// The Interface detail page is itself a hub of sub-pages — keeps each surface
+// short and lets us add a "Menu" sub-page (custom main-tab layout) without
+// piling more toggles into a single scroll. Order = display order on both
+// platforms; rendering lives in `SettingsScreen+{iOS,tvOS}.swift`.
+
+enum InterfaceSubcategory: String, CaseIterable, Identifiable {
+    case menu
+    case homePage
+    case detailPage
+    case playback
+    case debug
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .menu:       "rectangle.grid.2x2"
+        case .homePage:   "house"
+        case .detailPage: "info.square"
+        case .playback:   "play.rectangle"
+        case .debug:      "ladybug"
+        }
+    }
+
+    @MainActor func localizedName(_ loc: LocalizationManager) -> String {
+        switch self {
+        case .menu:       loc.localized("settings.interface.menu")
+        case .homePage:   loc.localized("settings.homePage")
+        case .detailPage: loc.localized("settings.detailPage")
+        case .playback:   loc.localized("settings.interface.playback")
+        case .debug:      loc.localized("settings.debug")
+        }
+    }
+}
+
 // MARK: - tvOS Focus Tracking
 
 #if os(tvOS)
 enum SettingsFocus: Hashable {
     case category(String)
+    case interfaceSub(String)
     case back
     case profile(String)
     case switchAccount
@@ -113,6 +151,7 @@ struct SettingsScreen: View {
     @State var showUserSwitch = false
     @State var showPrivacySecurity = false
     @State var selectedCategory: SettingsCategory? = nil
+    @State var selectedInterfaceSub: InterfaceSubcategory? = nil
     @State var currentUser: UserDto? = nil
 
     // Shared stored properties — keys + defaults live in SettingsKey
@@ -187,9 +226,10 @@ struct SettingsScreen: View {
     // consume these arrays via `iOSToggleRowsJoined` / inline `ForEach`.
     // Adding or renaming a toggle is now a single-file change.
 
-    var interfaceToggleRows: [SettingsToggleRow] {
+    /// Playback toggles (4K rendering, auto-play next, native player). The
+    /// sleep timer picker is a non-boolean row appended per platform.
+    var playbackToggleRows: [SettingsToggleRow] {
         [
-            .init(id: "motion", icon: "sparkles", label: loc.localized("settings.motionEffects"), value: $motionEffects),
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
             .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer)

@@ -229,6 +229,32 @@
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
 "settings.debug.skipToEnd.subtitle" = "Afficher un bouton dans le lecteur qui saute aux 15 dernières secondes.";
 "settings.interface" = "Interface";
+"settings.interface.display" = "Affichage";
+"settings.interface.playback" = "Lecture";
+"settings.interface.menu" = "Menu principal";
+
+// MARK: - Menu customization
+
+"menu.mode" = "Mode du menu";
+"menu.mode.default" = "Par défaut";
+"menu.mode.custom" = "Personnalisé";
+"menu.mode.footer" = "Le mode personnalisé permet de choisir et de réordonner les onglets affichés dans la barre principale.";
+"menu.kind" = "Source des onglets";
+"menu.kind.contentType" = "Par type de contenu";
+"menu.kind.library" = "Par bibliothèque";
+"menu.entries.title" = "Onglets";
+"menu.entries.footer.contentType" = "Accueil, Recherche et Réglages sont toujours présents. Films et Séries peuvent être activés ou désactivés.";
+"menu.entries.footer.library" = "Accueil, Recherche et Réglages sont toujours présents. Choisissez les bibliothèques à exposer comme onglets.";
+"menu.entry.required" = "Requis";
+"menu.entry.reorder.up" = "Monter";
+"menu.entry.reorder.down" = "Descendre";
+"menu.refreshViews" = "Actualiser les bibliothèques";
+"menu.reset" = "Réinitialiser le menu";
+"menu.reset.confirm" = "Menu réinitialisé";
+"menu.maxReached" = "Maximum %d onglets actifs.";
+"menu.library.empty" = "Aucune bibliothèque vidéo disponible";
+"menu.library.empty.subtitle" = "Vérifiez votre connexion ou demandez à votre administrateur de partager une bibliothèque.";
+"menu.library.error" = "Impossible de charger les bibliothèques.";
 "settings.motionEffects" = "Effets de mouvement";
 "settings.fontSize" = "Taille du texte";
 "settings.4kRendering" = "Rendu 4K";

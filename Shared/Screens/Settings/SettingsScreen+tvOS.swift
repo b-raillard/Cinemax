@@ -17,7 +17,11 @@ extension SettingsScreen {
                 Color.clear.frame(height: 0).id("settings.top")
 
                 Group {
-                    if let category = selectedCategory {
+                    if let sub = selectedInterfaceSub {
+                        // Three-level state: pop sub → hub.
+                        tvInterfaceSubDetailView(for: sub)
+                            .onExitCommand { selectedInterfaceSub = nil }
+                    } else if let category = selectedCategory {
                         tvDetailView(for: category)
                             .onExitCommand { selectedCategory = nil }
                     } else {
@@ -32,6 +36,12 @@ extension SettingsScreen {
             .onChange(of: selectedCategory) { _, newValue in
                 // When a category is closed (newValue == nil), bring the page
                 // back to the top so the tab bar resurfaces naturally.
+                if newValue == nil {
+                    selectedInterfaceSub = nil
+                    proxy.scrollTo("settings.top", anchor: .top)
+                }
+            }
+            .onChange(of: selectedInterfaceSub) { _, newValue in
                 if newValue == nil {
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
@@ -271,6 +281,16 @@ extension SettingsScreen {
             tvAccentColorPicker
 
             tvLanguagePicker
+
+            tvGlassToggle(
+                icon: "sparkles",
+                label: loc.localized("settings.motionEffects"),
+                key: "motion",
+                value: $motionEffects
+            )
+
+            tvFontSizeRow
+            tvLibraryLayoutRow
         }
     }
 
@@ -368,35 +388,89 @@ extension SettingsScreen {
         )
     }
 
-    // MARK: Interface Detail (tvOS)
+    // MARK: Interface Detail (tvOS) — Hub of sub-pages
 
+    /// Renders a list of focusable rows, one per `InterfaceSubcategory`. Each
+    /// row sets `selectedInterfaceSub`, triggering the third-level page below.
     var tvInterfaceDetail: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                tvToggleList(interfaceToggleRows)
-
-                tvSleepTimerRow
-                tvFontSizeRow
-                tvLibraryLayoutRow
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            ForEach(InterfaceSubcategory.allCases) { sub in
+                tvActionRow(
+                    focus: .interfaceSub(sub.rawValue),
+                    icon: sub.icon,
+                    label: sub.localizedName(loc),
+                    showsChevron: true,
+                    action: { selectedInterfaceSub = sub }
+                )
             }
+        }
+    }
 
-            // Home Page section
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                tvSectionLabel(loc.localized("settings.homePage"))
-                tvToggleList(homePageToggleRows)
-            }
+    // MARK: tvOS Interface Sub-Detail
 
-            // Detail Page section
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                tvSectionLabel(loc.localized("settings.detailPage"))
-                tvToggleList(detailPageToggleRows)
-            }
+    @ViewBuilder
+    func tvInterfaceSubDetailView(for sub: InterfaceSubcategory) -> some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                let backFocused = focusedItem == .back
+                Button {
+                    selectedInterfaceSub = nil
+                } label: {
+                    HStack(spacing: CinemaSpacing.spacing2) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: CinemaScale.pt(20), weight: .semibold))
+                        Text(sub.localizedName(loc))
+                            .font(CinemaFont.headline(.medium))
+                    }
+                    .foregroundStyle(backFocused ? themeManager.accent : CinemaColor.onSurface)
+                }
+                .buttonStyle(.plain)
+                .focusEffectDisabled()
+                .hoverEffectDisabled()
+                .focused($focusedItem, equals: .back)
 
-            // Debug section
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                tvSectionLabel(loc.localized("settings.debug"))
-                tvToggleList(debugToggleRows)
+                switch sub {
+                case .menu:       tvMenuSection
+                case .homePage:   tvHomePageSection
+                case .detailPage: tvDetailPageSection
+                case .playback:   tvPlaybackSection
+                case .debug:      tvDebugSection
+                }
             }
+            .padding(.horizontal, CinemaSpacing.spacing20)
+            .padding(.vertical, CinemaSpacing.spacing8)
+        }
+    }
+
+    var tvHomePageSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvToggleList(homePageToggleRows)
+        }
+    }
+
+    var tvPlaybackSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvToggleList(playbackToggleRows)
+            tvSleepTimerRow
+        }
+    }
+
+    var tvDetailPageSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvToggleList(detailPageToggleRows)
+        }
+    }
+
+    /// Renders the shared `MenuSettingsScreen` body. The screen returns a
+    /// VStack that composes inside the parent `tvInterfaceSubDetailView`'s
+    /// ScrollView; no extra wrapping needed.
+    var tvMenuSection: some View {
+        MenuSettingsScreen()
+    }
+
+    var tvDebugSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvToggleList(debugToggleRows)
         }
     }
 

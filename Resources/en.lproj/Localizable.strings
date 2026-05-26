@@ -628,6 +628,32 @@
 "settings.debug.skipToEnd" = "Skip-to-end button";
 "settings.debug.skipToEnd.subtitle" = "Show a button in the player that jumps to the last 15 s of the current item.";
 "settings.interface" = "Interface";
+"settings.interface.display" = "Display";
+"settings.interface.playback" = "Playback";
+"settings.interface.menu" = "Main Menu";
+
+// MARK: - Menu customization
+
+"menu.mode" = "Menu mode";
+"menu.mode.default" = "Default";
+"menu.mode.custom" = "Custom";
+"menu.mode.footer" = "Custom mode lets you pick which tabs appear in the main bar and reorder them.";
+"menu.kind" = "Tab source";
+"menu.kind.contentType" = "By content type";
+"menu.kind.library" = "By library";
+"menu.entries.title" = "Tabs";
+"menu.entries.footer.contentType" = "Home, Search and Settings are always present. Movies and TV Shows can be toggled.";
+"menu.entries.footer.library" = "Home, Search and Settings are always present. Pick which libraries appear as tabs.";
+"menu.entry.required" = "Required";
+"menu.entry.reorder.up" = "Move up";
+"menu.entry.reorder.down" = "Move down";
+"menu.refreshViews" = "Refresh libraries";
+"menu.reset" = "Reset menu";
+"menu.reset.confirm" = "Menu reset";
+"menu.maxReached" = "Maximum %d enabled tabs.";
+"menu.library.empty" = "No video libraries available";
+"menu.library.empty.subtitle" = "Check your connection or ask your administrator to share a library.";
+"menu.library.error" = "Couldn't load libraries.";
 "settings.motionEffects" = "Motion Effects";
 "settings.fontSize" = "Text Size";
 "settings.4kRendering" = "4K UI Rendering";

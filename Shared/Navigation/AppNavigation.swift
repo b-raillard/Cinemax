@@ -148,6 +148,7 @@ struct AppNavigation: View {
     @State private var loc = LocalizationManager()
     @State private var toasts = ToastCenter()
     @State private var network = NetworkMonitor()
+    @State private var menuConfig = MenuConfigStore()
     #if os(iOS)
     @State private var downloads = DownloadManager()
     #endif
@@ -202,6 +203,7 @@ struct AppNavigation: View {
         .environment(loc)
         .environment(toasts)
         .environment(network)
+        .environment(menuConfig)
         #if os(iOS)
         .environment(downloads)
         #endif
@@ -214,18 +216,42 @@ struct AppNavigation: View {
         .task {
             await appState.restoreSession()
             hasCheckedSession = true
+            menuConfig.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
+            // Pre-load views if the user is in library mode so the tabs
+            // render with library names from first frame after launch.
+            if menuConfig.mode == .custom && menuConfig.customKind == .library {
+                await menuConfig.refreshAvailableViews()
+            }
             #if os(iOS)
             downloads.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
             #endif
         }
-        #if os(iOS)
-        .onChange(of: appState.currentUserId) { _, newId in
+        .onChange(of: appState.currentUserId) { oldId, newId in
+            menuConfig.attach(apiClient: appState.apiClient, userId: newId)
+            // Skip the cold-launch transition (`nil → some`) — `.task`
+            // already owns that case and would otherwise double-fire the
+            // refresh. Only refresh on a *genuine* user switch.
+            if let oldId, oldId != newId,
+               menuConfig.mode == .custom && menuConfig.customKind == .library {
+                Task { await menuConfig.refreshAvailableViews() }
+            }
+            #if os(iOS)
             // Re-attach when the active user changes (login, quick switch).
             // The manager caches `userId` for queued-task negotiation, so it
             // needs to know about the swap.
             downloads.attach(apiClient: appState.apiClient, userId: newId)
+            #endif
         }
-        #endif
+        .onChange(of: appState.serverURL) { old, new in
+            // Library view IDs are server-scoped. Invalidate the cached menu
+            // entries only when switching to a *different* concrete server
+            // (both sides non-nil and not equal). Plain logouts (URL → nil)
+            // keep the cache so re-logging into the same server preserves
+            // the user's custom tab arrangement.
+            if let old, let new, old != new {
+                menuConfig.invalidateViews()
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
