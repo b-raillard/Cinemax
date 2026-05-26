@@ -284,6 +284,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private var reporter: PlaybackReporter?
     private let remoteCommands: RemoteCommandController
+    private let nowPlaying: NowPlayingInfoController
     private var progressTimer: Timer?
     private var hideControlsWorkItem: DispatchWorkItem?
     private var didSeekToStart = false
@@ -352,6 +353,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             onNavigate: { ref in navTarget?(ref) },
             onTogglePlayPause: { playPauseTarget?() }
         )
+        self.nowPlaying = NowPlayingInfoController(
+            apiClient: apiClient, userId: userId,
+            imageBuilder: imageBuilder, authToken: info.authToken
+        )
         super.init(nibName: nil, bundle: nil)
         navTarget = { [weak self] ref in self?.navigateToEpisode(ref) }
         playPauseTarget = { [weak self] in self?.handleRemotePlayPause() }
@@ -382,6 +387,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.remoteCommands = RemoteCommandController(
             onNavigate: { _ in },
             onTogglePlayPause: { playPauseTarget?() }
+        )
+        self.nowPlaying = NowPlayingInfoController(
+            apiClient: nil, userId: nil, imageBuilder: nil, authToken: nil
         )
         super.init(nibName: nil, bundle: nil)
         playPauseTarget = { [weak self] in self?.handleRemotePlayPause() }
@@ -421,6 +429,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         progressTimer?.invalidate()
         progressTimer = nil
         remoteCommands.detach()
+        nowPlaying.detach()
         hideControlsWorkItem?.cancel()
         pendingTapWork?.cancel()
         segmentFetchTask?.cancel()
@@ -515,6 +524,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             next: nextEpisode,
             hasNavigator: episodeNavigator != nil
         )
+        // Title / artwork / S×E× on the Lock Screen widget. Offline mode passes
+        // nil apiClient + nil imageBuilder so artwork + enrichment are skipped
+        // (title + elapsed still publish — see NowPlayingInfoController).
+        nowPlaying.attach(itemId: itemId, title: titleText, durationSeconds: nil)
         // Offline: no PlaybackReporter (nothing to phone home to).
         guard let apiClient, let userId, let info else { return }
         reporter = PlaybackReporter(
@@ -544,6 +557,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func onSecondTick() {
         reporter?.onTick()
         let now = Double(currentMs) / 1000.0
+        let dur: Double? = lengthMs > 0 ? Double(lengthMs) / 1000 : nil
+        nowPlaying.update(elapsed: now, duration: dur, rate: enginePlaying ? 1.0 : 0.0)
         updateSkipButton(currentTime: now)
         if sleepActive {
             sleepRemaining -= 1
@@ -1564,6 +1579,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 previous: self.previousEpisode, next: self.nextEpisode,
                 hasNavigator: true
             )
+            self.nowPlaying.attach(itemId: ref.id, title: ref.title, durationSeconds: nil)
             self.showControls()
             self.scheduleHideControls()
         }
@@ -1722,12 +1738,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #if os(iOS)
             setPlayPauseIcon(playing: true)
             #endif
+            refreshNowPlayingRate(playing: true)
         case .paused:
             #if os(iOS)
             setPlayPauseIcon(playing: false)
             #endif
+            refreshNowPlayingRate(playing: false)
         default: break
         }
+    }
+
+    /// Sub-second sync of the Lock Screen widget's play/pause indicator on
+    /// engine state transitions — the 1 s tick alone would lag visibly here.
+    private func refreshNowPlayingRate(playing: Bool) {
+        let dur: Double? = lengthMs > 0 ? Double(lengthMs) / 1000 : nil
+        nowPlaying.update(
+            elapsed: Double(currentMs) / 1000,
+            duration: dur,
+            rate: playing ? 1.0 : 0.0
+        )
     }
 
     private func handlePlaybackEnded() {
