@@ -28,7 +28,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 
 ### API protocol split (`Packages/CinemaxKit/.../APIClientProtocol.swift`)
 
-`APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI`. View models needing multiple domains take `APIClientProtocol`; leaf controllers narrow to a slice (`PlaybackReporter`/`SkipSegmentController` → `any PlaybackAPI`; `DownloadManager` → `any DownloadAPI`). `AdminAPI` is a privilege boundary — gated on `AppState.isAdministrator`; server enforces authoritatively.
+`APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI`. View models needing multiple domains take `APIClientProtocol`; leaf controllers narrow to a slice (`PlaybackReporter`/`SkipSegmentController` → `any PlaybackAPI`; `NowPlayingInfoController` → `any LibraryAPI`; `DownloadManager` → `any DownloadAPI`). `AdminAPI` is a privilege boundary — gated on `AppState.isAdministrator`; server enforces authoritatively.
 
 ### Swift 6 `nonisolated` escape hatches (safe when body only reads parameters)
 
@@ -45,7 +45,7 @@ Shared/
   DesignSystem/Components/   CinemaButton, CinemaLazyImage, PosterCard, WideCard, CastCircle, ContentRow, ProgressBarView, RatingBadge, GlassTextField, FlowLayout, ToastOverlay, EmptyStateView, ErrorStateView, LoadingStateView, AlphabeticalJumpBar, CinemaToggleIndicator, RainbowAccentSwatch, MediaQualityBadges, UserAvatar
   Navigation/               AppNavigation (auth routing), MainTabView
   Screens/                  Home/Login/ServerSetup/Search/MovieLibrary/TVSeries/PrivacySecurity, MediaDetailScreen + MediaDetail* siblings, VideoPlayerView, NativeVideoPresenter, HLSManifestLoader, PlayLink
-    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController, VLCStreamPresenter (covers online iOS+tvOS via stream init AND offline iOS via second init — same HUD class for both); shared extractions: PlayerTimeFormat (HH:MM:SS), PlayerEngineSurface (SwiftVLC host), PlayerTransportViews (TVScrubBar/ChapterChip/PassthroughView)
+    VideoPlayer/            PlaybackReporter, SkipSegmentController, SleepTimerController, ChapterController, EndOfSeriesOverlayController, RemoteCommandController, NowPlayingInfoController, VLCStreamPresenter (covers online iOS+tvOS via stream init AND offline iOS via second init — same HUD class for both); shared extractions: PlayerTimeFormat (HH:MM:SS), PlayerEngineSurface (SwiftVLC host), PlayerTransportViews (TVScrubBar/ChapterChip/PassthroughView)
     Settings/               SettingsScreen + iOS/tvOS extensions, SettingsAppearanceView+iOS, SettingsRowHelpers, SettingsTV{AccentPicker,LanguagePicker,ProfileSection,ActionRow}
     Downloads/              (iOS-only) DownloadButton, DownloadsScreen, OfflineLibraryView, OfflineMediaDetailView, DownloadItem+BaseItemDto
     Admin/                  (iOS-only) Dashboard/Users/Devices/Activity/Tasks/Plugins/Catalog/Playback/Network/Logs/ApiKeys/Metadata/Identify
@@ -124,7 +124,7 @@ Online playback defaults to VLC on iOS + tvOS. Settings → Interface **"Use Nat
 
 ### Native Player (`NativeVideoPresenter.swift`)
 
-Both platforms `AVPlayerViewController` presented via UIKit modal. `@MainActor` sub-controllers in `Shared/Screens/VideoPlayer/`: `PlaybackReporter`, `SkipSegmentController`, `SleepTimerController`, `ChapterController`, `EndOfSeriesOverlayController`, `RemoteCommandController`. Presenter keeps **one** `addPeriodicTimeObserver` (1s) fanning ticks to sub-controllers — sub-controllers never add their own.
+Both platforms `AVPlayerViewController` presented via UIKit modal. `@MainActor` sub-controllers in `Shared/Screens/VideoPlayer/`: `PlaybackReporter`, `SkipSegmentController`, `SleepTimerController`, `ChapterController`, `EndOfSeriesOverlayController`, `RemoteCommandController`, `NowPlayingInfoController`. Presenter keeps **one** `addPeriodicTimeObserver` (1s) fanning ticks to sub-controllers — sub-controllers never add their own.
 
 - **RULE — MUST present via UIKit modal** — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss.
 - **RULE — Dismiss detection**: iOS `PlayerHostingVC.viewWillDisappear(isBeingDismissed:)`; tvOS `TVDismissDelegate.playerViewControllerDidEndDismissalTransition`. **Do NOT embed `AVPlayerViewController` as a child VC on tvOS** — internal constraint conflicts + `-12881`.
@@ -139,6 +139,9 @@ Both platforms `AVPlayerViewController` presented via UIKit modal. `@MainActor` 
 - **RULE — AirPlay (iOS)**: `UIBackgroundModes = [audio]` in `project.yml` (playback continues when iPhone locks during cast). **Do not add `airplay`** as a background mode — invalid key, App Store validator rejects upload (`Invalid value: 'airplay'`); `audio` covers AirPlay. `present` activates `.playback`/`.moviePlayback` + external playback; `cleanup()` deactivates `.notifyOthersOnDeactivation`. **Don't start voice search during active playback** (`SearchViewModel` flips category to `.record`).
 - **Error recovery**: `showPlaybackErrorAlert` — `-12881/-12886/-16170` → transcode guidance; `-12938/-1001/-1004/-1005/-1009` → network; else generic. iOS alert only after `retryWithDirectURL` fails. `isShowingErrorAlert` prevents stacking.
 - **Debug tooling** (Settings → Interface → Debug, always visible): `debug.fastSleepTimer` (→15s); `debug.showSkipToEnd` (seeks to `duration−15s`).
+- **Apple TV Remote widget metadata (`NowPlayingInfoController`)**: shared by Native and VLC paths. Owns `MPNowPlayingInfoCenter.default().nowPlayingInfo` (title / artwork / elapsed / duration / rate / `MPMediaItemPropertyAlbumTitle = seriesName` / `MPMediaItemPropertyArtist = "S{parentIndexNumber}E{indexNumber}"`). `attach` publishes a title-only placeholder immediately so the iPhone Lock Screen widget fills in <1s, then fans out `getItem` (enrich series + S×E×) and an authenticated `URLSession.shared.data(for:)` against `imageBuilder.imageURL(itemId:imageType:.primary, maxWidth:600)` for poster bytes. `update(elapsed:duration:rate:)` runs from each presenter's existing 1s tick (no second timer); both engines also call it from their play/pause state-change paths for sub-second widget sync. `RemoteCommandController` is the buttons; `NowPlayingInfoController` is the metadata — never merge them.
+- **RULE — `MPMediaItemArtwork` request handler MUST be `@Sendable`**: MediaPlayer invokes it on a background queue. Without explicit annotation the trailing closure inherits the enclosing `@MainActor` Task's isolation and tvOS 26 traps it with `dispatch_assert_queue` ("Block was expected to execute on queue …"). Always write `MPMediaItemArtwork(boundsSize: image.size) { @Sendable [image] _ in image }`.
+- **RULE — Episode-nav race guard on metadata fetch**: `NowPlayingInfoController` bumps an internal `generation: Int` at every `attach`/`detach` and re-checks it before writing back from the `getItem` enrich task and the artwork fetch task. A slow poster arriving after a next-track press must not overwrite the new episode's metadata — without the guard, the user sees the wrong artwork on the iPhone widget for several seconds.
 
 ## Settings Screen
 

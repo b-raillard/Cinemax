@@ -50,6 +50,7 @@ final class NativeVideoPresenter {
     private var chapters: ChapterController!
     private var endOfSeries: EndOfSeriesOverlayController!
     private var remoteCommands: RemoteCommandController!
+    private var nowPlaying: NowPlayingInfoController!
 
     // Track state
     private var audioTracks: [MediaTrackInfo] = []
@@ -147,6 +148,10 @@ final class NativeVideoPresenter {
             onNavigate: { [weak self] ref in self?.navigateToEpisode(ref) },
             onTogglePlayPause: { [weak self] in self?.toggleAVPlayerPlayback() }
         )
+        self.nowPlaying = NowPlayingInfoController(
+            apiClient: apiClient, userId: userId,
+            imageBuilder: imageBuilder, authToken: nil
+        )
     }
 
     /// Called by `RemoteCommandController` when the system play/pause command
@@ -161,6 +166,20 @@ final class NativeVideoPresenter {
         } else {
             player.play()
         }
+        nowPlaying.update(
+            elapsed: player.currentTime().seconds,
+            duration: currentItemDurationSeconds(),
+            rate: player.rate > 0 ? 1.0 : 0.0
+        )
+    }
+
+    /// Finite duration of the current `AVPlayerItem` in seconds, or nil for
+    /// live / not-yet-loaded items. Helper shared by the now-playing update
+    /// callers so we don't repeat the `isFinite` guard at every site.
+    private func currentItemDurationSeconds() -> Double? {
+        guard let d = playerVC?.player?.currentItem?.duration.seconds,
+              d.isFinite, d > 0 else { return nil }
+        return d
     }
 
     func present(info: PlaybackInfo) {
@@ -210,6 +229,8 @@ final class NativeVideoPresenter {
         #endif
         self.playerVC = vc
         remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
+        nowPlaying.setAuthToken(playbackInfo?.authToken)
+        nowPlaying.attach(itemId: itemId, title: title, durationSeconds: nil)
         setupTrackMenus()
         setupBackgroundObserver()
 
@@ -496,6 +517,8 @@ final class NativeVideoPresenter {
             avPlayer.automaticallyWaitsToMinimizeStalling = true
             vc.player = avPlayer
             remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
+            nowPlaying.setAuthToken(playbackInfo?.authToken)
+            nowPlaying.attach(itemId: ep.id, title: ep.title, durationSeconds: nil)
             setupTrackMenus()              // refreshes native "..." menu for new episode
 
             playerObservation?.invalidate()
@@ -551,6 +574,12 @@ final class NativeVideoPresenter {
                 guard let self else { return }
                 self.skipSegments.onTick(currentTime: time.seconds)
                 self.playbackReporter.onTick()
+                let rate = (self.playerVC?.player?.rate ?? 0) > 0 ? 1.0 : 0.0
+                self.nowPlaying.update(
+                    elapsed: time.seconds,
+                    duration: self.currentItemDurationSeconds(),
+                    rate: rate
+                )
             }
         }
     }
@@ -807,6 +836,7 @@ final class NativeVideoPresenter {
 
     private func cleanup() {
         remoteCommands.detach()
+        nowPlaying.detach()
         if let vc = playerVC { applyTransportBarItems([], to: vc) }
         #if os(tvOS)
         dismissDelegate = nil
