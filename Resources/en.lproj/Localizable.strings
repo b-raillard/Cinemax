@@ -648,6 +648,7 @@
 "menu.entry.reorder.up" = "Move up";
 "menu.entry.reorder.down" = "Move down";
 "menu.refreshViews" = "Refresh libraries";
+"menu.refresh.confirm" = "Menu updated";
 "menu.reset" = "Reset menu";
 "menu.reset.confirm" = "Menu reset";
 "menu.maxReached" = "Maximum %d enabled tabs.";

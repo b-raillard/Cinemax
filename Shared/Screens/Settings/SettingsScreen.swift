@@ -12,10 +12,14 @@ import Network
 // MARK: - Settings Category
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
+    // Declaration order = display order on both platforms (consumed by
+    // `visibleCases` which preserves `allCases` order). Interface sits
+    // second because it's the most-used category after Apparence — the
+    // main-menu / playback / debug toggles all live there.
     case appearance
+    case interface
     case account
     case server
-    case interface
     /// Offline downloads — iOS only. Hidden on tvOS (no offline use case).
     case downloads
     // Admin-only categories — gated by `AppState.isAdministrator` at the

@@ -249,6 +249,7 @@
 "menu.entry.reorder.up" = "Monter";
 "menu.entry.reorder.down" = "Descendre";
 "menu.refreshViews" = "Actualiser les bibliothèques";
+"menu.refresh.confirm" = "Menu mis à jour";
 "menu.reset" = "Réinitialiser le menu";
 "menu.reset.confirm" = "Menu réinitialisé";
 "menu.maxReached" = "Maximum %d onglets actifs.";

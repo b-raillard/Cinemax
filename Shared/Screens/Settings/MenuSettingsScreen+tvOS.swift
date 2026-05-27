@@ -22,77 +22,93 @@ extension MenuSettingsScreen {
         }
     }
 
-    // MARK: - Mode + kind pickers
+    // MARK: - Mode + kind toggles
+    //
+    // Single `CinemaToggleIndicator` row per section (mirrors the
+    // "Effets de mouvement" / Dark Mode rows in Settings → Apparence —
+    // see `SettingsScreen+tvOS.tvGlassToggle`). Two pills per section
+    // are collapsed to one toggle: ON encodes the secondary value
+    // (`.custom` for Mode, `.library` for Kind), OFF the default.
 
     private var modeRow: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+        let isCustom = store.mode == .custom
+        return VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             Text(loc.localized("menu.mode").uppercased())
                 .font(.system(size: CinemaScale.pt(17), weight: .bold))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .tracking(1.5)
 
-            tvModePill(.default, label: loc.localized("menu.mode.default"))
-            tvModePill(.custom, label: loc.localized("menu.mode.custom"))
+            // Icon + label flip with state — mirrors the Dark/Light Mode
+            // row in Apparence (moon/sun + "Mode sombre"/"Mode clair").
+            // The success toast on toggle is the same one shown after a
+            // library refresh — both events rebuild the tab bar, so the
+            // pill confirms why the page just re-laid out and the focus
+            // jumped.
+            tvMenuToggleRow(
+                id: "menu.mode.toggle",
+                icon: isCustom ? "slider.horizontal.3" : "rectangle.stack.fill",
+                label: loc.localized(isCustom ? "menu.mode.custom" : "menu.mode.default"),
+                isOn: isCustom,
+                onToggle: {
+                    store.setMode(isCustom ? .default : .custom)
+                    toasts.success(loc.localized("menu.refresh.confirm"))
+                }
+            )
         }
-    }
-
-    @ViewBuilder
-    private func tvModePill(_ value: MenuConfigStore.Mode, label: String) -> some View {
-        let key = "menu.mode.\(value.rawValue)"
-        let isFocused = focusedItem == .toggle(key)
-        let isSelected = store.mode == value
-        Button {
-            store.setMode(value)
-        } label: {
-            HStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(isSelected ? themeManager.accent : CinemaColor.onSurfaceVariant)
-                    .frame(width: 24)
-                Text(label)
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-            }
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
-        }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .hoverEffectDisabled()
-        .focused($focusedItem, equals: .toggle(key))
     }
 
     private var kindRow: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+        let isLibrary = store.customKind == .library
+        return VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             Text(loc.localized("menu.kind").uppercased())
                 .font(.system(size: CinemaScale.pt(17), weight: .bold))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .tracking(1.5)
 
-            tvKindPill(.contentType, label: loc.localized("menu.kind.contentType"))
-            tvKindPill(.library, label: loc.localized("menu.kind.library"))
+            tvMenuToggleRow(
+                id: "menu.kind.toggle",
+                icon: isLibrary ? "books.vertical.fill" : "film.stack",
+                label: loc.localized(isLibrary ? "menu.kind.library" : "menu.kind.contentType"),
+                isOn: isLibrary,
+                onToggle: {
+                    store.setCustomKind(isLibrary ? .contentType : .library)
+                    toasts.success(loc.localized("menu.refresh.confirm"))
+                }
+            )
         }
     }
 
+    /// Local equivalent of `SettingsScreen.tvGlassToggle` — the latter is an
+    /// extension on `SettingsScreen` and reads its `@FocusState`, so it can't
+    /// be invoked from another view. Same visual contract: focusable row with
+    /// icon + label + `CinemaToggleIndicator` + `tvSettingsFocusable` styling.
+    /// Uses a `(value, action)` pair rather than a `Binding` so the action
+    /// routes through `store.setMode` / `store.setCustomKind`, which carry
+    /// the persistence + `ensureLibraryEntriesPopulated` side effects that a
+    /// raw `Bindable` projection would skip.
     @ViewBuilder
-    private func tvKindPill(_ value: MenuConfigStore.CustomKind, label: String) -> some View {
-        let key = "menu.kind.\(value.rawValue)"
-        let isFocused = focusedItem == .toggle(key)
-        let isSelected = store.customKind == value
-        Button {
-            store.setCustomKind(value)
-        } label: {
+    private func tvMenuToggleRow(
+        id: String,
+        icon: String,
+        label: String,
+        isOn: Bool,
+        onToggle: @escaping () -> Void
+    ) -> some View {
+        let isFocused = focusedItem == .toggle(id)
+        Button(action: onToggle) {
             HStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                Image(systemName: icon)
                     .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(isSelected ? themeManager.accent : CinemaColor.onSurfaceVariant)
+                    .foregroundStyle(themeManager.accent)
                     .frame(width: 24)
+
                 Text(label)
                     .font(.system(size: CinemaScale.pt(20), weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
+
                 Spacer()
+
+                CinemaToggleIndicator(isOn: isOn, accent: themeManager.accent, animated: true)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
@@ -101,12 +117,16 @@ extension MenuSettingsScreen {
         .buttonStyle(.plain)
         .focusEffectDisabled()
         .hoverEffectDisabled()
-        .focused($focusedItem, equals: .toggle(key))
+        .focused($focusedItem, equals: .toggle(id))
     }
 
     // MARK: - Refresh
 
     private var refreshRow: some View {
+        // No toast on success here — the user explicitly triggered the
+        // refresh, the row's loading spinner + subtitle already convey
+        // status, and a confirmation pill on every tap would be noisy.
+        // Errors still surface in the row's subtitle via `lastFetchError`.
         tvMenuActionRow(
             id: "menu.refreshViews",
             icon: store.isLoadingViews ? "arrow.triangle.2.circlepath" : "arrow.clockwise",
