@@ -84,28 +84,48 @@ struct HomeScreen: View {
         // scrolled content and the user can't reach it with the remote.
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                    // Sentinel for `proxy.scrollTo(_:anchor:)`
-                    Color.clear.frame(height: 0).id(scrollTopID)
-
-                    // Hero
+                // `spacing: 0` so the first row (hero) touches the scroll
+                // view's top edge (= the safe-area top under the tvOS tab
+                // bar). tvOS 26's Liquid Glass tab bar uses the gap above
+                // the first row as a heuristic to switch between its
+                // "expanded" (pill bottom-aligned) and "compact" (pill
+                // top-aligned) modes — a non-zero leading gap pulls the
+                // pill upward, making the menu appear higher than on
+                // Films/Recherche/Réglages whose first row sits flush
+                // against the safe-area top. Inter-row spacing is restored
+                // via `.padding(.bottom)` on each row below.
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    // Hero — also carries the scroll-anchor `id` so
+                    // `proxy.scrollTo(scrollTopID)` aligns the hero's top
+                    // with the safe-area top (no separate 0-height
+                    // sentinel, which would add an unwanted spacing-gap
+                    // above the hero — see tab bar heuristic above).
                     if let hero = viewModel.heroItem {
                         heroSection(hero)
+                            .id(scrollTopID)
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    } else {
+                        // Keep a sentinel when there is no hero so the
+                        // scroll proxy still has something to target.
+                        Color.clear.frame(height: 0).id(scrollTopID)
                     }
 
                     // Watching Now (other users on the server)
                     if showWatchingNow, !viewModel.activeSessions.isEmpty {
                         watchingNowRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
                     // Continue Watching
                     if showContinueWatching, !viewModel.resumeItems.isEmpty {
                         continueWatchingRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
                     // Recently Added
                     if showRecentlyAdded, !viewModel.latestItems.isEmpty {
                         recentlyAddedRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
                     // Genre rows
@@ -114,8 +134,10 @@ struct HomeScreen: View {
                             switch row.state {
                             case .items(let items):
                                 genreRow(genre: row.genre, items: items)
+                                    .padding(.bottom, CinemaSpacing.spacing6)
                             case .failed:
                                 genreRowFailed(genre: row.genre)
+                                    .padding(.bottom, CinemaSpacing.spacing6)
                             }
                         }
                     }
