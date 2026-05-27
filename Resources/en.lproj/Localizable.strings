@@ -165,7 +165,6 @@
 "settings.infrastructure" = "Infrastructure";
 "settings.live" = "LIVE";
 "settings.account" = "Account";
-"settings.profileSettings" = "Profile Settings";
 "settings.privacySecurity" = "Privacy & Security";
 "settings.premiumMember" = "Premium Member \U2022 Managed Profile";
 "settings.logOutConfirm" = "You will be returned to the server setup screen.";
@@ -182,6 +181,11 @@
 "switchAccount.signIn" = "Sign In";
 "switchAccount.authFailed" = "Sign-in failed";
 "switchAccount.success" = "Signed in as %@";
+"switchAccount.noPublicUsers.title" = "No users available";
+"switchAccount.noPublicUsers.subtitle" = "Your server doesn't expose its user list. Sign in manually with your credentials.";
+"switchAccount.signInManually" = "Sign in manually";
+"switchAccount.username" = "Username";
+"switchAccount.useDifferentAccount" = "Use a different account";
 "settings.server" = "Server";
 "settings.connected" = "Connected";
 "settings.refreshConnection" = "Refresh Connection";

@@ -27,20 +27,27 @@ struct UserSwitchSheet: View {
     @State private var password: String = ""
     @State private var isAuthenticating = false
     @State private var authError: String?
+    @State private var showManualEntry = false
+    @State private var manualUsername: String = ""
 
     var body: some View {
         NavigationStack {
             ZStack {
                 CinemaColor.surface.ignoresSafeArea()
 
-                if let user = selectedUser {
+                if showManualEntry {
+                    manualEntryStep
+                } else if let user = selectedUser {
                     passwordStep(for: user)
                 } else if isLoading {
                     LoadingStateView()
                 } else if users.isEmpty {
                     EmptyStateView(
-                        systemImage: "person.slash",
-                        title: loc.localized("switchAccount.pickUser")
+                        systemImage: "person.crop.circle.badge.questionmark",
+                        title: loc.localized("switchAccount.noPublicUsers.title"),
+                        subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
+                        actionTitle: loc.localized("switchAccount.signInManually"),
+                        onAction: { enterManualMode() }
                     )
                 } else {
                     userGrid
@@ -72,6 +79,16 @@ struct UserSwitchSheet: View {
                 }
             }
             .padding(CinemaSpacing.spacing4)
+
+            Button {
+                enterManualMode()
+            } label: {
+                Text(loc.localized("switchAccount.useDifferentAccount"))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(themeManager.accent)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, CinemaSpacing.spacing4)
         }
     }
 
@@ -148,7 +165,7 @@ struct UserSwitchSheet: View {
 
             CinemaButton(
                 title: isAuthenticating ? "…" : loc.localized("switchAccount.signIn"),
-                style: .primary
+                style: .accent
             ) {
                 Task { await performAuth(user: user) }
             }
@@ -172,7 +189,98 @@ struct UserSwitchSheet: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: - Step 3: Manual entry (server hides user list or hidden account)
+
+    private var manualEntryStep: some View {
+        VStack(spacing: CinemaSpacing.spacing5) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(themeManager.accent.opacity(0.15))
+                    .frame(width: avatarSize, height: avatarSize)
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: CinemaScale.pt(avatarSize * 0.55), weight: .regular))
+                    .foregroundStyle(themeManager.accent)
+            }
+
+            Text(loc.localized("switchAccount.signInManually"))
+                .font(CinemaFont.headline(.small))
+                .foregroundStyle(CinemaColor.onSurface)
+                .multilineTextAlignment(.center)
+
+            TextField(loc.localized("switchAccount.username"), text: $manualUsername)
+                #if os(iOS)
+                .textContentType(.username)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .submitLabel(.next)
+                #endif
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.vertical, CinemaSpacing.spacing3)
+                .background(CinemaColor.surfaceContainerHigh)
+                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                .padding(.horizontal, CinemaSpacing.spacing4)
+
+            SecureField(loc.localized("login.password"), text: $password)
+                .textContentType(.password)
+                #if os(iOS)
+                .submitLabel(.go)
+                #endif
+                .onSubmit { Task { await performAuth(username: manualUsername) } }
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.vertical, CinemaSpacing.spacing3)
+                .background(CinemaColor.surfaceContainerHigh)
+                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                .padding(.horizontal, CinemaSpacing.spacing4)
+
+            if let authError {
+                Text(authError)
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.error)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, CinemaSpacing.spacing4)
+            }
+
+            CinemaButton(
+                title: isAuthenticating ? "…" : loc.localized("switchAccount.signIn"),
+                style: .accent
+            ) {
+                Task { await performAuth(username: manualUsername) }
+            }
+            .disabled(isAuthenticating || manualUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+
+            Button {
+                exitManualMode()
+            } label: {
+                Text(loc.localized("action.cancel"))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+        }
+        .frame(maxWidth: 480)
+        .frame(maxWidth: .infinity)
+    }
+
     // MARK: - Actions
+
+    private func enterManualMode() {
+        showManualEntry = true
+        authError = nil
+        password = ""
+        manualUsername = ""
+    }
+
+    private func exitManualMode() {
+        showManualEntry = false
+        manualUsername = ""
+        password = ""
+        authError = nil
+    }
 
     private func loadUsers() async {
         isLoading = true
@@ -189,12 +297,18 @@ struct UserSwitchSheet: View {
 
     private func performAuth(user: UserDto) async {
         guard let username = user.name else { return }
+        await performAuth(username: username)
+    }
+
+    private func performAuth(username: String) async {
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         isAuthenticating = true
         authError = nil
         defer { isAuthenticating = false }
         do {
             let session = try await appState.apiClient.authenticate(
-                username: username, password: password
+                username: trimmed, password: password
             )
             try appState.keychain.saveAccessToken(session.accessToken)
             try appState.keychain.saveUserSession(session)
@@ -214,8 +328,9 @@ struct UserSwitchSheet: View {
             // right categories for the switched-to user.
             await appState.refreshCurrentUser()
 
-            toasts.success(String(format: loc.localized("switchAccount.success"), username))
+            toasts.success(String(format: loc.localized("switchAccount.success"), trimmed))
             password = ""
+            manualUsername = ""
             dismiss()
         } catch {
             authError = loc.localized("switchAccount.authFailed")

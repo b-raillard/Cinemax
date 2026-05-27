@@ -165,7 +165,6 @@
 "settings.infrastructure" = "Infrastructure";
 "settings.live" = "EN LIGNE";
 "settings.account" = "Compte";
-"settings.profileSettings" = "Réglages du profil";
 "settings.privacySecurity" = "Confidentialité et sécurité";
 "settings.premiumMember" = "Membre Premium \U2022 Profil géré";
 "settings.logOutConfirm" = "Vous serez redirigé vers l'écran de configuration du serveur.";
@@ -182,6 +181,11 @@
 "switchAccount.signIn" = "Connexion";
 "switchAccount.authFailed" = "Échec de la connexion";
 "switchAccount.success" = "Connecté en tant que %@";
+"switchAccount.noPublicUsers.title" = "Aucun utilisateur disponible";
+"switchAccount.noPublicUsers.subtitle" = "Votre serveur ne diffuse pas la liste des utilisateurs. Connectez-vous manuellement avec votre identifiant.";
+"switchAccount.signInManually" = "Connexion manuelle";
+"switchAccount.username" = "Nom d'utilisateur";
+"switchAccount.useDifferentAccount" = "Utiliser un autre compte";
 "settings.server" = "Serveur";
 "settings.connected" = "Connecté";
 "settings.refreshConnection" = "Actualiser la connexion";
