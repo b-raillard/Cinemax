@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import OSLog
+import UIKit
 import CinemaxKit
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Playback")
@@ -106,9 +107,38 @@ final class VideoPlayerCoordinator {
                 self.presenter = p
                 p.present(info: info)
             } catch {
+                // Surface the failure to the user. Without this, a thrown
+                // getPlaybackInfo (no playable media, server 500, network drop,
+                // or a Series/Season that never resolves to an Episode) left the
+                // Play button looking dead — the #1 "some videos can't be
+                // launched" report on tvOS. tvOS never mounts VideoPlayerView, so
+                // there's no SwiftUI error surface here; present a native alert.
                 logger.error("tvOS playback error: \(error.localizedDescription)")
+                guard self.currentGeneration == generation else { return }
+                self.presentPlaybackError(loc.userFacingMessage(for: error))
             }
         }
+    }
+
+    /// Presents a native error alert from the top-most view controller. Used by
+    /// the play `Task`'s catch — the only user-facing failure surface on tvOS,
+    /// where playback is driven by this coordinator rather than `VideoPlayerView`.
+    private func presentPlaybackError(_ message: String) {
+        guard let loc = localizationManager else { return }
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first,
+              let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
+            return
+        }
+        var top: UIViewController = root
+        while let presented = top.presentedViewController { top = presented }
+        let alert = UIAlertController(
+            title: loc.localized("playback.error.title"),
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default))
+        top.present(alert, animated: true)
     }
 }
 #endif

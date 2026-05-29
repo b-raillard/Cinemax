@@ -120,13 +120,20 @@ struct AdminUsersScreen: View {
             .background(Capsule().fill(themeManager.accent))
     }
 
+    // Hoisted out of the per-row helper to avoid allocating a
+    // `RelativeDateTimeFormatter` on every list row render. Only touched during
+    // main-actor view rendering, so `nonisolated(unsafe)` is safe.
+    nonisolated(unsafe) private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
     private func lastActivityText(for user: UserDto) -> String {
         guard let date = user.lastActivityDate ?? user.lastLoginDate else {
             return loc.localized("admin.users.neverActive")
         }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 
     // MARK: - Create user sheet

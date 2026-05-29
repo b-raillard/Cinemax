@@ -290,11 +290,17 @@ struct DownloadsScreen: View {
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useMB, .useGB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
+        return Self.byteFormatter.string(fromByteCount: bytes)
     }
+
+    // Hoisted to avoid allocating a `ByteCountFormatter` on every row render.
+    // Main-actor render only, so `nonisolated(unsafe)` is safe.
+    nonisolated(unsafe) private static let byteFormatter: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.allowedUnits = [.useMB, .useGB]
+        f.countStyle = .file
+        return f
+    }()
 
     // MARK: - Grouping
 

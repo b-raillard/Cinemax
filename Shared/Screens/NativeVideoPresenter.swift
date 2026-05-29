@@ -273,8 +273,8 @@ final class NativeVideoPresenter {
                 Task { @MainActor in
                     switch item.status {
                     case .readyToPlay:
-                        if let st, st > 0 {
-                            avPlayer?.seek(to: CMTime(seconds: st, preferredTimescale: 600),
+                        if let st, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
+                            avPlayer?.seek(to: CMTime(seconds: target, preferredTimescale: 600),
                                           toleranceBefore: .zero, toleranceAfter: .zero)
                         }
                     case .failed:
@@ -336,8 +336,8 @@ final class NativeVideoPresenter {
             Task { @MainActor in
                 switch item.status {
                 case .readyToPlay:
-                    if let st = startTime, st > 0 {
-                        player.seek(to: CMTime(seconds: st, preferredTimescale: 600),
+                    if let st = startTime, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
+                        player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
                                     toleranceBefore: .zero, toleranceAfter: .zero)
                     }
                 case .failed:
@@ -554,6 +554,19 @@ final class NativeVideoPresenter {
         meta.identifier = .commonIdentifierTitle
         meta.value = title as NSString
         item.externalMetadata = [meta]
+    }
+
+    /// Validates a resume position before seeking. Guards against a non-finite
+    /// position (corrupt `playbackPositionTicks` → NaN/∞ would make an invalid
+    /// `CMTime` and stall AVPlayer on a black screen) and clamps a stale tick
+    /// that points past the end of a re-transcoded/shorter item back to just
+    /// before the end. Returns `nil` when there's nothing meaningful to seek to.
+    nonisolated static func safeResumeSeconds(_ position: Double, duration: Double) -> Double? {
+        guard position.isFinite, position > 0 else { return nil }
+        if duration.isFinite, duration > 1 {
+            return min(position, duration - 1)
+        }
+        return position
     }
 
     // MARK: - Shared Time Observer

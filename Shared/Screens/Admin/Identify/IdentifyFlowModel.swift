@@ -109,8 +109,10 @@ final class IdentifyFlowModel {
                 let query = SeriesInfoRemoteSearchQuery(itemID: itemId, searchInfo: info)
                 results = try await apiClient.searchRemoteSeries(query: query)
             default:
+                // Defensive only — the UI gates search behind `isSupportedKind`,
+                // so this branch isn't reachable in practice. Avoid surfacing a
+                // hardcoded (unlocalized) string; just clear results.
                 results = []
-                errorMessage = "Identify isn't supported for this item kind"
             }
         } catch {
             errorMessage = error.localizedDescription

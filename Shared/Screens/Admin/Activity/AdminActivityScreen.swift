@@ -145,10 +145,18 @@ struct AdminActivityScreen: View {
             .frame(width: 8, height: 8)
     }
 
+    // Hoisted out of the per-row helper — `RelativeDateTimeFormatter()` init is
+    // non-trivial and was previously allocated on every list row render. Only
+    // ever touched during main-actor view rendering, so `nonisolated(unsafe)`
+    // is safe.
+    nonisolated(unsafe) private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
     private func relativeTimeLabel(for date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: Date())
+        Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }
 #endif
