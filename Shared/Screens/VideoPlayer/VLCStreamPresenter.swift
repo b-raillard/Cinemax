@@ -323,6 +323,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var isTearingDown = false
     private var lastPlayStart = Date.distantPast
 
+    // "Media never opened" watchdog. libVLC 4.0 can fail to open a stream
+    // (server 404/416 on the static URL, codec the demuxer rejects) by going
+    // straight to `.stopped` with `lengthMs == 0` and emitting no
+    // `.encounteredError` — none of the end/error guards match, so the user
+    // is stranded on a frozen black screen. This fires if no valid time AND no
+    // length has arrived within the timeout, routing to the normal error path.
+    private var openWatchdog: Timer?
+    private static let openTimeout: TimeInterval = 30
+
     // Polish: a track/chapter picker is up — freeze the HUD behind it.
     private var pickerPresented = false
 
@@ -426,6 +435,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func teardown() {
         isTearingDown = true
+        cancelOpenWatchdog()
         progressTimer?.invalidate()
         progressTimer = nil
         remoteCommands.detach()
@@ -496,6 +506,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     let c = d.components
                     self.mediaLengthMs = Int32(clamping: Int(c.seconds) * 1000
                         + Int(c.attoseconds / 1_000_000_000_000_000))
+                    if self.mediaLengthMs > 0 { self.cancelOpenWatchdog() }
                 case .timeChanged:
                     self.onEngineTimeChanged()
                 case .stateChanged(let state):
@@ -1506,11 +1517,32 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         startEventLoop()
         lastPlayStart = Date()
         try? player.play(media)
+        scheduleOpenWatchdog()
         reporter?.reportStart(startTime: startTime)
         startProgressTimer()
         fetchSegments()
         startSleepTimerIfNeeded()
         fetchChapters()
+    }
+
+    /// Arms (or re-arms) the open watchdog. Cancelled the moment playback
+    /// produces a length or a valid time, or on teardown / error / end.
+    private func scheduleOpenWatchdog() {
+        openWatchdog?.invalidate()
+        let t = Timer(timeInterval: Self.openTimeout, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.isTearingDown, !self.hasValidTime, self.lengthMs <= 0 else { return }
+                logger.error("VLC open watchdog: media never became ready — surfacing error")
+                self.handlePlaybackError()
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        openWatchdog = t
+    }
+
+    private func cancelOpenWatchdog() {
+        openWatchdog?.invalidate()
+        openWatchdog = nil
     }
 
     /// Called by `RemoteCommandController` when the Siri Remote / Lock Screen /
@@ -1568,6 +1600,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.lastPlayStart = Date()
             try? self.player.play(media)
+            self.scheduleOpenWatchdog()
             self.refreshTimeUISoon()
             self.reporter?.resetTicking()
             self.reporter?.reportStart(startTime: nil)
@@ -1762,6 +1795,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackEnded() {
         guard !didReportEnd else { return }
         didReportEnd = true
+        cancelOpenWatchdog()
         if autoPlayNext, let next = nextEpisode, episodeNavigator != nil {
             didReportEnd = false
             navigateToEpisode(next)
@@ -1796,6 +1830,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func handlePlaybackError() {
+        cancelOpenWatchdog()
         if !didRetry {
             didRetry = true
             let target = isOffline ? "offline:\(offlineLocalURL?.lastPathComponent ?? "?")" : itemId
@@ -1814,6 +1849,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 media.addOption(isOffline ? ":file-caching=3000" : ":network-caching=5000")
                 lastPlayStart = Date()
                 try? player.play(media)
+                scheduleOpenWatchdog()
             }
             return
         }
@@ -1832,10 +1868,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func onEngineTimeChanged() {
         refreshTimeUI()
-        if currentMs > 0 { hasValidTime = true }
-        if !didSeekToStart, let start = startTime, start > 0, lengthMs > 0 {
+        if currentMs > 0 { hasValidTime = true; cancelOpenWatchdog() }
+        if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
             didSeekToStart = true
-            engineSeek(ms: Int32(start * 1000))
+            // `Int32(start * 1000)` traps on overflow if a corrupt resume tick
+            // yields a huge position — clamp the conversion, then cap to just
+            // before the end so a stale tick past EOF doesn't seek into nothing.
+            let targetMs = min(Int32(clamping: Int(start * 1000)), max(0, lengthMs - 5000))
+            if targetMs > 0 { engineSeek(ms: targetMs) }
         }
     }
 
