@@ -101,6 +101,15 @@ extension JellyfinAPIClient {
         }()
 
         guard let mediaSource else {
+            // The POST succeeded but matched no source. If `getItem` ALSO had no
+            // media source, the item has no playable file (missing / unmounted on
+            // the server) — surface a clear error rather than falling through to a
+            // direct-stream URL that resolves to a 404/empty mux and leaves the
+            // user on a frozen black screen. When getItem *did* have a source, the
+            // mismatch is benign and the direct-stream fallback can still work.
+            guard initialMediaSource != nil else {
+                throw JellyfinError.playbackFailed("No playable media source")
+            }
             #if DEBUG
             debugLog("No media source in PlaybackInfo response — using direct stream fallback")
             #endif

@@ -17,6 +17,10 @@ struct AdminLogsScreen: View {
 
     @State private var viewModel = AdminLogsViewModel()
 
+    // Hoisted to avoid allocating a `RelativeDateTimeFormatter` per log-file
+    // row render. Main-actor render only, so `nonisolated(unsafe)` is safe.
+    nonisolated(unsafe) private static let relativeFormatter = RelativeDateTimeFormatter()
+
     var body: some View {
         AdminLoadStateContainer(
             isLoading: viewModel.isLoading && viewModel.files.isEmpty,
@@ -79,8 +83,7 @@ struct AdminLogsScreen: View {
                             Text("•")
                                 .font(CinemaFont.label(.small))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            let formatter = RelativeDateTimeFormatter()
-                            Text(formatter.localizedString(for: date, relativeTo: Date()))
+                            Text(Self.relativeFormatter.localizedString(for: date, relativeTo: Date()))
                                 .font(CinemaFont.label(.small))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }
