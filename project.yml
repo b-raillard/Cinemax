@@ -36,8 +36,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: "1.0.1"
+    CURRENT_PROJECT_VERSION: "1.0.1"
     # Distribution signing: Xcode auto-creates an "iOS App Store" / "tvOS App
     # Store" provisioning profile on first archive when DEVELOPMENT_TEAM is set
     # below. Override DEVELOPMENT_TEAM per-machine in Xcode (Signing & Capabilities)
