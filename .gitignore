@@ -16,3 +16,6 @@ xcuserdata/
 # Claude Code (per-developer overrides only — shared config is checked in)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Local submission notes (not shared)
+TODO_APP_SUBMISSION.md
