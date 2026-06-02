@@ -182,7 +182,7 @@
 "switchAccount.authFailed" = "Échec de la connexion";
 "switchAccount.success" = "Connecté en tant que %@";
 "switchAccount.noPublicUsers.title" = "Aucun utilisateur disponible";
-"switchAccount.noPublicUsers.subtitle" = "Votre serveur ne diffuse pas la liste des utilisateurs. Connectez-vous manuellement avec votre identifiant.";
+"switchAccount.noPublicUsers.subtitle" = "Aucun compte à afficher. Connectez-vous avec votre nom d'utilisateur et votre mot de passe.";
 "switchAccount.signInManually" = "Connexion manuelle";
 "switchAccount.username" = "Nom d'utilisateur";
 "switchAccount.useDifferentAccount" = "Utiliser un autre compte";

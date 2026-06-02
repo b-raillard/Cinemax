@@ -288,13 +288,7 @@ extension SettingsScreen {
 
                     Spacer()
 
-                    HStack(spacing: CinemaSpacing.spacing2) {
-                        liveBadge
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: CinemaScale.pt(15), weight: .semibold))
-                            .foregroundStyle(CinemaColor.outlineVariant)
-                    }
+                    liveBadge
                 }
                 .padding(CinemaSpacing.spacing4)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)

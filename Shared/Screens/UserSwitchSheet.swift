@@ -148,7 +148,10 @@ struct UserSwitchSheet: View {
                 #if os(iOS)
                 .submitLabel(.go)
                 #endif
-                .onSubmit { Task { await performAuth(user: user) } }
+                .onSubmit {
+                    guard !isAuthenticating else { return }
+                    Task { await performAuth(user: user) }
+                }
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.vertical, CinemaSpacing.spacing3)
                 .background(CinemaColor.surfaceContainerHigh)
@@ -200,7 +203,7 @@ struct UserSwitchSheet: View {
                     .fill(themeManager.accent.opacity(0.15))
                     .frame(width: avatarSize, height: avatarSize)
                 Image(systemName: "person.crop.circle")
-                    .font(.system(size: CinemaScale.pt(avatarSize * 0.55), weight: .regular))
+                    .font(.system(size: avatarSize * 0.55, weight: .regular))
                     .foregroundStyle(themeManager.accent)
             }
 
@@ -209,11 +212,14 @@ struct UserSwitchSheet: View {
                 .foregroundStyle(CinemaColor.onSurface)
                 .multilineTextAlignment(.center)
 
+            // Autocap/autocorrect must apply on tvOS too — Jellyfin usernames
+            // are case-sensitive server-side, and the tvOS on-screen keyboard
+            // otherwise sentence-caps the first character.
             TextField(loc.localized("switchAccount.username"), text: $manualUsername)
-                #if os(iOS)
-                .textContentType(.username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
+                #if os(iOS)
+                .textContentType(.username)
                 .submitLabel(.next)
                 #endif
                 .padding(.horizontal, CinemaSpacing.spacing4)
@@ -227,7 +233,12 @@ struct UserSwitchSheet: View {
                 #if os(iOS)
                 .submitLabel(.go)
                 #endif
-                .onSubmit { Task { await performAuth(username: manualUsername) } }
+                .onSubmit {
+                    guard !isAuthenticating,
+                          !manualUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          !password.isEmpty else { return }
+                    Task { await performAuth(username: manualUsername) }
+                }
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.vertical, CinemaSpacing.spacing3)
                 .background(CinemaColor.surfaceContainerHigh)
@@ -248,7 +259,9 @@ struct UserSwitchSheet: View {
             ) {
                 Task { await performAuth(username: manualUsername) }
             }
-            .disabled(isAuthenticating || manualUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(isAuthenticating
+                      || manualUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      || password.isEmpty)
             .padding(.horizontal, CinemaSpacing.spacing4)
 
             Button {
@@ -285,12 +298,18 @@ struct UserSwitchSheet: View {
     private func loadUsers() async {
         isLoading = true
         defer { isLoading = false }
-        // Prefer authenticated list when available (richer); fall back to public users.
-        // Admin's getUsers() returns hidden users too — filter them out so the
+        // getUsers() is admin-only — skip the guaranteed 401 for regular users.
+        // Admin's getUsers() also returns hidden users; filter them out so the
         // switcher honors the per-user "Hide from login screens" policy.
-        if let fetched = try? await appState.apiClient.getUsers(), !fetched.isEmpty {
-            users = fetched.filter { $0.policy?.isHidden != true }
-            return
+        // If the admin list filters to empty (every user is hidden), fall
+        // through to getPublicUsers() rather than showing a misleading empty.
+        if appState.isAdministrator,
+           let fetched = try? await appState.apiClient.getUsers() {
+            let visible = fetched.filter { $0.policy?.isHidden != true }
+            if !visible.isEmpty {
+                users = visible
+                return
+            }
         }
         users = (try? await appState.apiClient.getPublicUsers()) ?? []
     }
@@ -301,6 +320,12 @@ struct UserSwitchSheet: View {
     }
 
     private func performAuth(username: String) async {
+        // Username is trimmed because tvOS on-screen keyboards and iOS paste
+        // commonly inject a trailing space — Jellyfin matches usernames
+        // exactly so the un-trimmed value would silently 401. Password is
+        // intentionally NOT trimmed: legitimate passwords can contain
+        // leading/trailing spaces (Jellyfin does not validate this), and
+        // silently stripping them would break those accounts.
         let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         isAuthenticating = true
@@ -314,15 +339,13 @@ struct UserSwitchSheet: View {
             try appState.keychain.saveUserSession(session)
             appState.accessToken = session.accessToken
             appState.currentUserId = session.userID
+            // reconnect() clears the cache as its first action — needed so
+            // personalised DTOs (resume, next-up, rating-filtered lists)
+            // from the previous user's session don't bleed across accounts.
             appState.apiClient.reconnect(
                 url: appState.serverURL ?? AppState.placeholderServerURL,
                 accessToken: session.accessToken
             )
-            // Drop cached DTOs from the previous user's session — APICache is
-            // keyed by query params only, so personalised views (resume, next-up,
-            // rating-filtered lists) would otherwise bleed across accounts
-            // until each screen refreshed on its own.
-            appState.apiClient.clearCache()
             appState.isAuthenticated = true
             // Refresh admin flag + full user so Settings rerenders with the
             // right categories for the switched-to user.

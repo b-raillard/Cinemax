@@ -182,7 +182,7 @@
 "switchAccount.authFailed" = "Sign-in failed";
 "switchAccount.success" = "Signed in as %@";
 "switchAccount.noPublicUsers.title" = "No users available";
-"switchAccount.noPublicUsers.subtitle" = "Your server doesn't expose its user list. Sign in manually with your credentials.";
+"switchAccount.noPublicUsers.subtitle" = "No accounts to choose from. Sign in with your username and password.";
 "switchAccount.signInManually" = "Sign in manually";
 "switchAccount.username" = "Username";
 "switchAccount.useDifferentAccount" = "Use a different account";
