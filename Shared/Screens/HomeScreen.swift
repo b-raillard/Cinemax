@@ -110,8 +110,10 @@ struct HomeScreen: View {
                         Color.clear.frame(height: 0).id(scrollTopID)
                     }
 
-                    // Watching Now (other users on the server)
-                    if showWatchingNow, !viewModel.activeSessions.isEmpty {
+                    // Watching Now (other users on the server) — admin-only:
+                    // surfaces who else is streaming, which is elevated data
+                    // (see HomeViewModel.loadActiveSessions / jellyfin#5210).
+                    if appState.isAdministrator, showWatchingNow, !viewModel.activeSessions.isEmpty {
                         watchingNowRow
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
@@ -227,7 +229,7 @@ struct HomeScreen: View {
             .overlay {
                 if item.hasBackdropImage, let backdropId = item.backdropItemID {
                     CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
+                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
@@ -373,7 +375,7 @@ struct HomeScreen: View {
             } label: {
                 WideCard(
                     title: title,
-                    imageURL: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 600),
+                    imageURL: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue),
                     progress: sessionProgress(session),
                     subtitle: subtitle
                 )
@@ -479,7 +481,7 @@ struct HomeScreen: View {
 
         WideCard(
             title: cardTitle,
-            imageURL: item.backdropItemID.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600) },
+            imageURL: item.backdropItemID.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue) },
             progress: progress,
             subtitle: cardSubtitle
         )
@@ -514,7 +516,7 @@ struct HomeScreen: View {
         } label: {
             PosterCard(
                 title: item.name ?? "",
-                imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
+                imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
                 subtitle: subtitle
             )
         }
