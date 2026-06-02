@@ -151,11 +151,17 @@ struct AdminDevicesScreen: View {
             }
         }
         if let date = device.dateLastActivity {
-            let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .full
-            parts.append(formatter.localizedString(for: date, relativeTo: Date()))
+            parts.append(Self.relativeFormatter.localizedString(for: date, relativeTo: Date()))
         }
         return parts.joined(separator: " • ")
     }
+
+    // Hoisted to avoid allocating a `RelativeDateTimeFormatter` on every row
+    // render. Main-actor render only, so `nonisolated(unsafe)` is safe.
+    nonisolated(unsafe) private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
 }
 #endif
