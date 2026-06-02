@@ -18,15 +18,19 @@ public struct ImageURLBuilder: Sendable {
         self.serverURL = serverURL
     }
 
-    public func imageURL(itemId: String, imageType: ImageType, maxWidth: Int? = nil) -> URL {
-        imageURLRaw(itemId: itemId, imageTypeRaw: imageType.rawValue, maxWidth: maxWidth)
+    /// - Parameter tag: the server's image tag (e.g. `item.imageTags["Primary"]`).
+    ///   Passing it appends `&tag=` so the URL changes whenever the underlying
+    ///   image does — without it the URL is identical across edits and Nuke
+    ///   serves a stale poster/backdrop until the app is reinstalled.
+    public func imageURL(itemId: String, imageType: ImageType, maxWidth: Int? = nil, tag: String? = nil) -> URL {
+        imageURLRaw(itemId: itemId, imageTypeRaw: imageType.rawValue, maxWidth: maxWidth, tag: tag)
     }
 
     /// Raw-string overload for admin-only image types (Disc, Art, BoxRear,
     /// Screenshot, Menu, Chapter, Profile) that fall outside the narrower
     /// `CinemaxKit.ImageType`. Admin screens build URLs directly via this;
     /// standard media surfaces keep using the typed overload.
-    public func imageURLRaw(itemId: String, imageTypeRaw: String, maxWidth: Int? = nil) -> URL {
+    public func imageURLRaw(itemId: String, imageTypeRaw: String, maxWidth: Int? = nil, tag: String? = nil) -> URL {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL
         }
@@ -35,6 +39,9 @@ public struct ImageURLBuilder: Sendable {
         var queryItems: [URLQueryItem] = []
         if let maxWidth {
             queryItems.append(URLQueryItem(name: "maxWidth", value: String(maxWidth)))
+        }
+        if let tag, !tag.isEmpty {
+            queryItems.append(URLQueryItem(name: "tag", value: tag))
         }
         queryItems.append(URLQueryItem(name: "quality", value: "90"))
         components.queryItems = queryItems.isEmpty ? nil : queryItems

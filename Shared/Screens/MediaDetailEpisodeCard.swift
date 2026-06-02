@@ -68,7 +68,7 @@ struct MediaDetailEpisodeCard: View, Equatable {
                         .frame(maxWidth: .infinity)
                         .overlay {
                             CinemaLazyImage(
-                                url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 600),
+                                url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 600, tag: episode.primaryImageTagValue),
                                 fallbackIcon: "play.circle"
                             )
                         }

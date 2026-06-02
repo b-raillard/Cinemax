@@ -71,7 +71,7 @@ struct MediaDetailEpisodeRow: View, Equatable {
                     episodeNavigator: epNavigator
                 ) {
                     HStack(spacing: 12) {
-                        CinemaLazyImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 300), fallbackIcon: "play.circle")
+                        CinemaLazyImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .primary, maxWidth: 300, tag: episode.primaryImageTagValue), fallbackIcon: "play.circle")
                             .frame(width: episodeThumbnailWidth, height: episodeThumbnailWidth * 9 / 16)
                             .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
                             .overlay(alignment: .bottom) {

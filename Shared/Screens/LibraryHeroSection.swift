@@ -30,7 +30,7 @@ struct LibraryHeroSection: View {
             .overlay {
                 if item.hasBackdropImage, let id = item.id {
                     CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth),
+                        url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
