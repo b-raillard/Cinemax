@@ -34,7 +34,7 @@ struct LibraryPosterCard: View {
     var body: some View {
         let subtitle = subtitleText
         let destination: URL? = item.id.map {
-            appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300)
+            appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
         }
 
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {

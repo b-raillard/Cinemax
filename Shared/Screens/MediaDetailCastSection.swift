@@ -37,7 +37,7 @@ struct MediaDetailCastSection: View, Equatable {
                 name: person.name ?? "",
                 role: person.role,
                 imageURL: person.id.map {
-                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200)
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200, tag: person.primaryImageTag)
                 }
             )
         }

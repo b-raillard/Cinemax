@@ -15,6 +15,18 @@ extension BaseItemDto {
         parentBackdropItemID ?? seriesID ?? id
     }
 
+    /// Cache-busting tag for the primary (poster) image. The poster URL is
+    /// otherwise identical across metadata/poster edits, so Nuke serves a stale
+    /// image forever (until reinstall). Pass this as `ImageURLBuilder`'s `tag:`.
+    var primaryImageTagValue: String? { imageTags?["Primary"] }
+
+    /// Cache-busting tag for the backdrop, mirroring `backdropItemID`'s
+    /// parent-first resolution (parent backdrop wins, then the item's own).
+    var backdropImageTagValue: String? {
+        if parentBackdropItemID != nil { return parentBackdropImageTags?.first }
+        return backdropImageTags?.first
+    }
+
     /// True only when Jellyfin reports an actual backdrop tag (own or parent's).
     /// Use this to decide between rendering a `CinemaLazyImage` backdrop vs the
     /// `BackdropFallbackView`. `backdropItemID` always returns non-nil for items

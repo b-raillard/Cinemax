@@ -14,6 +14,9 @@ struct IOSAppearanceDetailView: View {
     @Environment(LocalizationManager.self) var loc
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
+    @AppStorage(SettingsKey.motionEffects) private var motionEffectsStorage: Bool = SettingsKey.Default.motionEffects
+    @State private var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
+    private let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -73,6 +76,55 @@ struct IOSAppearanceDetailView: View {
                         Spacer()
 
                         languagePicker
+                    }
+                }
+
+                iOSSettingsDivider
+
+                iOSSettingsRow {
+                    HStack {
+                        iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
+
+                        Text(loc.localized("settings.motionEffects"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+
+                        Spacer()
+
+                        Button { motionEffectsStorage.toggle() } label: {
+                            CinemaToggleIndicator(isOn: motionEffectsStorage, accent: themeManager.accent, animated: motionEffectsStorage)
+                        }
+                        .buttonStyle(.plain)
+                        .sensoryFeedback(.selection, trigger: motionEffectsStorage)
+                    }
+                }
+
+                iOSSettingsDivider
+
+                iOSSettingsRow {
+                    HStack {
+                        iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
+                        Text(loc.localized("settings.fontSize"))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Stepper(
+                            "\(Int(fontScale * 100))%",
+                            onIncrement: {
+                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx < fontScaleOptions.count - 1 {
+                                    fontScale = fontScaleOptions[idx + 1]
+                                    themeManager.uiScale = fontScale
+                                }
+                            },
+                            onDecrement: {
+                                if let idx = fontScaleOptions.firstIndex(of: fontScale), idx > 0 {
+                                    fontScale = fontScaleOptions[idx - 1]
+                                    themeManager.uiScale = fontScale
+                                }
+                            }
+                        )
+                        .fixedSize()
+                        .tint(themeManager.accent)
                     }
                 }
             }

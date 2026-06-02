@@ -27,15 +27,35 @@ struct MediaLibraryScreen: View {
     @AppStorage(SettingsKey.libraryTVBrowseLayout) private var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
     #endif
 
-    let itemType: BaseItemKind
+    /// `nil` for library tabs of Other / Mixed kind — disables the
+    /// `includeItemTypes` filter at query time so every item in the parent
+    /// folder surfaces. The screen still needs a concrete kind for layout
+    /// decisions in sub-components; those default to `.movie` via the
+    /// `displayKind` helper.
+    let itemType: BaseItemKind?
+    /// When non-nil, all queries scope to a specific Jellyfin library
+    /// (a.k.a. user view) — used by the custom-menu library mode so each
+    /// library tab fetches only its own contents. The override title
+    /// surfaces the library name in place of the generic "Movies" / "TV Shows".
+    let parentId: String?
+    let overrideTitle: String?
 
-    init(itemType: BaseItemKind) {
+    init(itemType: BaseItemKind?, parentId: String? = nil, overrideTitle: String? = nil) {
         self.itemType = itemType
-        _viewModel = State(initialValue: MediaLibraryViewModel(itemType: itemType))
+        self.parentId = parentId
+        self.overrideTitle = overrideTitle
+        _viewModel = State(initialValue: MediaLibraryViewModel(itemType: itemType, parentId: parentId))
     }
 
+    /// Concrete kind used for layout fall-back (hero aspect ratios, poster
+    /// styles, sub-component APIs that require a `BaseItemKind`). Defaults
+    /// to `.movie` for mixed / Other libraries — same poster ratio as
+    /// series, so the visual cost of being wrong is small.
+    private var displayKind: BaseItemKind { itemType ?? .movie }
+
     private var screenTitle: String {
-        itemType == .series ? loc.localized("tvShows.title") : loc.localized("movies.title")
+        if let overrideTitle { return overrideTitle }
+        return itemType == .series ? loc.localized("tvShows.title") : loc.localized("movies.title")
     }
 
     var body: some View {
@@ -172,7 +192,7 @@ struct MediaLibraryScreen: View {
             #endif
 
             if let hero = viewModel.heroItem {
-                LibraryHeroSection(item: hero, itemType: itemType)
+                LibraryHeroSection(item: hero, itemType: displayKind)
                     .padding(.bottom, CinemaSpacing.spacing6)
             }
 
@@ -182,7 +202,7 @@ struct MediaLibraryScreen: View {
                     LibraryGenreRow(
                         genre: genre,
                         items: items,
-                        itemType: itemType,
+                        itemType: displayKind,
                         onViewAll: {
                             viewModel.sortFilter.selectedGenres = [genre]
                         },
@@ -192,7 +212,7 @@ struct MediaLibraryScreen: View {
                     )
                     .padding(.bottom, CinemaSpacing.spacing6)
                     #else
-                    LibraryGenreRow(genre: genre, items: items, itemType: itemType) {
+                    LibraryGenreRow(genre: genre, items: items, itemType: displayKind) {
                         viewModel.sortFilter.selectedGenres = [genre]
                     }
                     .padding(.bottom, CinemaSpacing.spacing6)
@@ -243,7 +263,7 @@ struct MediaLibraryScreen: View {
                                 #if os(iOS)
                                 LibraryPosterCard(
                                     item: item,
-                                    itemType: itemType,
+                                    itemType: displayKind,
                                     onAdminAction: { item, dest in
                                         adminPushIntent = AdminMenuPushIntent(item: item, destination: dest)
                                     }
@@ -251,7 +271,7 @@ struct MediaLibraryScreen: View {
                                 .id(item.id)
                                 .onAppear { maybeLoadMore(triggerId: item.id) }
                                 #else
-                                LibraryPosterCard(item: item, itemType: itemType)
+                                LibraryPosterCard(item: item, itemType: displayKind)
                                     .id(item.id)
                                     .onAppear { maybeLoadMore(triggerId: item.id) }
                                 #endif

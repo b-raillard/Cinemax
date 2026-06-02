@@ -12,10 +12,14 @@ import Network
 // MARK: - Settings Category
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
+    // Declaration order = display order on both platforms (consumed by
+    // `visibleCases` which preserves `allCases` order). Interface sits
+    // second because it's the most-used category after Apparence — the
+    // main-menu / playback / debug toggles all live there.
     case appearance
+    case interface
     case account
     case server
-    case interface
     /// Offline downloads — iOS only. Hidden on tvOS (no offline use case).
     case downloads
     // Admin-only categories — gated by `AppState.isAdministrator` at the
@@ -86,11 +90,49 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Interface Subcategory
+//
+// The Interface detail page is itself a hub of sub-pages — keeps each surface
+// short and lets us add a "Menu" sub-page (custom main-tab layout) without
+// piling more toggles into a single scroll. Order = display order on both
+// platforms; rendering lives in `SettingsScreen+{iOS,tvOS}.swift`.
+
+enum InterfaceSubcategory: String, CaseIterable, Identifiable {
+    case menu
+    case homePage
+    case detailPage
+    case playback
+    case debug
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .menu:       "rectangle.grid.2x2"
+        case .homePage:   "house"
+        case .detailPage: "info.square"
+        case .playback:   "play.rectangle"
+        case .debug:      "ladybug"
+        }
+    }
+
+    @MainActor func localizedName(_ loc: LocalizationManager) -> String {
+        switch self {
+        case .menu:       loc.localized("settings.interface.menu")
+        case .homePage:   loc.localized("settings.homePage")
+        case .detailPage: loc.localized("settings.detailPage")
+        case .playback:   loc.localized("settings.interface.playback")
+        case .debug:      loc.localized("settings.debug")
+        }
+    }
+}
+
 // MARK: - tvOS Focus Tracking
 
 #if os(tvOS)
 enum SettingsFocus: Hashable {
     case category(String)
+    case interfaceSub(String)
     case back
     case profile(String)
     case switchAccount
@@ -108,12 +150,30 @@ struct SettingsScreen: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) var toasts
+    /// Hoisted out of this view's `@State` because tvOS's `UITabBarController`-
+    /// backed `TabView` recreates the hosting controller (and resets `@State`)
+    /// whenever the Settings tab's position-index in the bar shifts — toggle
+    /// off / reorder / change tab source. The coordinator lives on
+    /// `AppNavigation`, which never remounts during normal usage, so the
+    /// sub-navigation depth survives the Settings remount.
+    @Environment(SettingsNavCoordinator.self) var settingsNav
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
     @State var showPrivacySecurity = false
-    @State var selectedCategory: SettingsCategory? = nil
     @State var currentUser: UserDto? = nil
+
+    /// Convenience pass-throughs so the rest of the code keeps using
+    /// `selectedCategory` / `selectedInterfaceSub` and the `$`-projection
+    /// bindings without churn. The actual storage is on `settingsNav`.
+    var selectedCategory: SettingsCategory? {
+        get { settingsNav.selectedCategory }
+        nonmutating set { settingsNav.selectedCategory = newValue }
+    }
+    var selectedInterfaceSub: InterfaceSubcategory? {
+        get { settingsNav.selectedInterfaceSub }
+        nonmutating set { settingsNav.selectedInterfaceSub = newValue }
+    }
 
     // Shared stored properties — keys + defaults live in SettingsKey
     @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects
@@ -139,6 +199,12 @@ struct SettingsScreen: View {
     #if os(tvOS)
     @FocusState var focusedItem: SettingsFocus?
     @State var serverUsers: [UserDto] = []
+    /// Idempotency guard for `loadServerUsers`. tvOS `.task` re-fires every
+    /// time SwiftUI re-enters the view hierarchy (which happens whenever
+    /// `MenuConfigStore` mutates — refresh libraries, change tab source,
+    /// reorder), and we don't want to spam `getUsers`/`getPublicUsers`
+    /// requests (and any toast on failure) on every menu interaction.
+    @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
     @State var showLibraryLayoutPicker = false
     #endif
@@ -187,9 +253,10 @@ struct SettingsScreen: View {
     // consume these arrays via `iOSToggleRowsJoined` / inline `ForEach`.
     // Adding or renaming a toggle is now a single-file change.
 
-    var interfaceToggleRows: [SettingsToggleRow] {
+    /// Playback toggles (4K rendering, auto-play next, native player). The
+    /// sleep timer picker is a non-boolean row appended per platform.
+    var playbackToggleRows: [SettingsToggleRow] {
         [
-            .init(id: "motion", icon: "sparkles", label: loc.localized("settings.motionEffects"), value: $motionEffects),
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
             .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer)
@@ -197,12 +264,19 @@ struct SettingsScreen: View {
     }
 
     var homePageToggleRows: [SettingsToggleRow] {
-        [
+        var rows: [SettingsToggleRow] = [
             .init(id: "homeContinueWatching", icon: "play.circle", label: loc.localized("settings.homePage.continueWatching"), value: $showContinueWatching),
             .init(id: "homeRecentlyAdded", icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"), value: $showRecentlyAdded),
-            .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows),
-            .init(id: "homeWatchingNow", icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"), value: $showWatchingNow)
+            .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows)
         ]
+        // "Watching Now" ("En direct") exposes other users' active sessions —
+        // admin-only data (Jellyfin's /Sessions is meant to be elevated, and
+        // even leaks to non-admins on some servers, see jellyfin#5210). Hide
+        // the toggle entirely for non-admins so the feature is unreachable.
+        if appState.isAdministrator {
+            rows.append(.init(id: "homeWatchingNow", icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"), value: $showWatchingNow))
+        }
+        return rows
     }
 
     var detailPageToggleRows: [SettingsToggleRow] {

@@ -486,7 +486,7 @@ private struct SearchResultCard: View {
             PosterCard(
                 title: item.name ?? "",
                 imageURL: item.id.map {
-                    imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300)
+                    imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
                 },
                 subtitle: subtitle
             )

@@ -49,6 +49,13 @@ enum SettingsKey {
     static let debugFastSleepTimer = "debug.fastSleepTimer"
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
 
+    // Main menu customization
+    static let menuMode = "menu.mode"                          // "default" | "custom"
+    static let menuCustomKind = "menu.customKind"              // "contentType" | "library"
+    static let menuContentTypeEntries = "menu.contentTypeEntries" // JSON [MenuEntry]
+    static let menuLibraryEntries = "menu.libraryEntries"   // JSON [MenuEntry]
+    static let menuCachedViews = "menu.cachedViews"               // JSON [LibraryView]
+
     // Easter eggs
     static let rainbowUnlocked = "easterEgg.rainbowUnlocked"
 

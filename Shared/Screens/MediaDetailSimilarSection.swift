@@ -42,7 +42,7 @@ struct MediaDetailSimilarSection: View, Equatable {
             } label: {
                 PosterCard(
                     title: item.name ?? "",
-                    imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300) },
+                    imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
                     subtitle: item.productionYear.map(String.init)
                 )
                 .frame(width: cardWidth)

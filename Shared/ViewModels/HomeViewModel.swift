@@ -135,6 +135,14 @@ final class HomeViewModel {
     /// Fetches active sessions and filters down to ones with a currently-playing item,
     /// excluding the logged-in user (their own "resume" already covers that).
     private func loadActiveSessions(userId: String, appState: AppState) async {
+        // "Watching Now" is admin-only. /Sessions is meant to be elevated and
+        // even leaks every user's session to non-admins on some servers
+        // (jellyfin#5210), so don't fetch it at all unless the caller is an
+        // admin — the Home row and Settings toggle are likewise admin-gated.
+        guard appState.isAdministrator else {
+            activeSessions = []
+            return
+        }
         do {
             let all = try await appState.apiClient.getActiveSessions(activeWithinSeconds: 60)
             activeSessions = all.filter { session in
