@@ -669,7 +669,7 @@
 
 // MARK: - Login
 
-"login.header" = "JELLYFIN";
+"login.header" = "CINEMAX";
 "login.title" = "SIGN IN";
 "login.subtitle" = "Enter your credentials to access your library";
 "login.mobileTitle" = "Sign In";
@@ -689,7 +689,7 @@
 
 // MARK: - Server Setup
 
-"server.header" = "JELLYFIN";
+"server.header" = "CINEMAX";
 "server.title" = "Connect to Server";
 "server.subtitle" = "Enter the address of your Jellyfin media server to start streaming your collection.";
 "server.mobileTitle" = "Setup Server";
