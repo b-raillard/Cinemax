@@ -301,7 +301,7 @@
 
 // MARK: - Login
 
-"login.header" = "JELLYFIN";
+"login.header" = "CINEMAX";
 "login.title" = "CONNEXION";
 "login.subtitle" = "Entrez vos identifiants pour accéder à votre bibliothèque";
 "login.mobileTitle" = "Connexion";
@@ -321,7 +321,7 @@
 
 // MARK: - Server Setup
 
-"server.header" = "JELLYFIN";
+"server.header" = "CINEMAX";
 "server.title" = "Connexion au serveur";
 "server.subtitle" = "Entrez l'adresse de votre serveur Jellyfin pour commencer à diffuser votre collection.";
 "server.mobileTitle" = "Configuration du serveur";
