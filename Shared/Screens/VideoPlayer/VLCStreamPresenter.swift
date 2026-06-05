@@ -315,6 +315,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // P3: end-of-series / error
     private var didReportEnd = false
     private var didRetry = false
+    // Held weakly so a late-arriving successful open can tear down the failure
+    // alert (libVLC's connection can complete after the watchdog gave up).
+    private weak var errorAlert: UIAlertController?
+    // Wall-clock of the first play() of this session, so the watchdog/error
+    // logs can report the user-perceived open delay.
+    private var firstPlayStart = Date.distantPast
+    // Whether the current media is being fetched through the in-app loopback
+    // proxy (broken-IPv6 servers). Lets the error fallback avoid re-proxying.
+    private var usingProxy = false
 
     // SwiftVLC end-of-media disambiguation: `.stopped` fires for natural end,
     // teardown, AND media swap. `isTearingDown` suppresses end handling during
@@ -330,7 +339,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // is stranded on a frozen black screen. This fires if no valid time AND no
     // length has arrived within the timeout, routing to the normal error path.
     private var openWatchdog: Timer?
-    private static let openTimeout: TimeInterval = 30
+    // First attempt gets a short leash: if libVLC's TLS/connection handshake
+    // stalls (typically a degraded IPv6 path it can't fail over from — libVLC
+    // has no Happy-Eyeballs, unlike URLSession), fall back to the IPv4-forced
+    // retry quickly instead of making the user wait out a ~75 s socket timeout.
+    // The retry gets a longer leash since it's the one expected to succeed.
+    private static let firstOpenTimeout: TimeInterval = 15
+    private static let retryOpenTimeout: TimeInterval = 30
 
     // Polish: a track/chapter picker is up — freeze the HUD behind it.
     private var pickerPresented = false
@@ -506,7 +521,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     let c = d.components
                     self.mediaLengthMs = Int32(clamping: Int(c.seconds) * 1000
                         + Int(c.attoseconds / 1_000_000_000_000_000))
-                    if self.mediaLengthMs > 0 { self.cancelOpenWatchdog() }
+                    if self.mediaLengthMs > 0 {
+                        self.cancelOpenWatchdog()
+                        self.recoverFromErrorIfNeeded()
+                    }
                 case .timeChanged:
                     self.onEngineTimeChanged()
                 case .stateChanged(let state):
@@ -1186,7 +1204,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
             chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
             chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
-            chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor)
+            // Pin the stack to the chip's intrinsic height (150), NOT the scroll's
+            // frame height. The frame height animates 40pt (peek) ↔ 178pt (focus);
+            // tying the 150pt-tall chips to a 40pt frame makes every chip's
+            // height==150 / thumbnail height==100 unsatisfiable, flooding the log
+            // with broken constraints and stalling the main thread so playback
+            // never renders. The 150pt content clips/scrolls inside the window.
+            chapterStack.heightAnchor.constraint(equalToConstant: 150)
         ])
         let ch = chapterScroll.heightAnchor.constraint(equalToConstant: 0)
         ch.isActive = true
@@ -1505,11 +1529,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hasValidTime = false
         didApplyServerTrackDefaults = false
         mediaLengthMs = 0
+        firstPlayStart = Date()
+        usingProxy = false
         let url: URL
         if let local = offlineLocalURL {
             url = local
         } else if let info {
-            url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+            let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+            // Known broken-IPv6 server (decided in the background at launch):
+            // go straight through the loopback proxy so VLC uses Apple's
+            // networking (IPv4). Falls back to the direct URL if the proxy
+            // can't start. Healthy servers keep the byte-identical direct path.
+            if StreamTransportPolicy.shared.preferProxy,
+               let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
+                url = proxied
+                usingProxy = true
+                logger.log("VLC stream via loopback proxy (server IPv6 unreachable)")
+            } else {
+                url = authed
+            }
         } else {
             handlePlaybackError(); return
         }
@@ -1529,10 +1567,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// produces a length or a valid time, or on teardown / error / end.
     private func scheduleOpenWatchdog() {
         openWatchdog?.invalidate()
-        let t = Timer(timeInterval: Self.openTimeout, repeats: false) { [weak self] _ in
+        let timeout = didRetry ? Self.retryOpenTimeout : Self.firstOpenTimeout
+        let t = Timer(timeInterval: timeout, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, !self.isTearingDown, !self.hasValidTime, self.lengthMs <= 0 else { return }
-                logger.error("VLC open watchdog: media never became ready — surfacing error")
+                logger.error("VLC open watchdog: media never became ready after \(self.elapsedSincePlay(), privacy: .public) — surfacing error")
                 self.handlePlaybackError()
             }
         }
@@ -1596,7 +1635,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.previousEpisode = nav?.1
             self.nextEpisode = nav?.2
             self.titleLabel.text = ref.title
-            let url = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
+            let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
+            let url: URL
+            // Carry the proxy across episodes when the server needs it.
+            if (self.usingProxy || StreamTransportPolicy.shared.preferProxy),
+               let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: vlcInfo.authToken) {
+                url = proxied
+                self.usingProxy = true
+            } else {
+                url = authed
+                self.usingProxy = false
+            }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.lastPlayStart = Date()
             try? self.player.play(media)
@@ -1834,12 +1883,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if !didRetry {
             didRetry = true
             let target = isOffline ? "offline:\(offlineLocalURL?.lastPathComponent ?? "?")" : itemId
-            logger.error("VLC error for \(target, privacy: .public) — retrying once")
-            let url: URL?
+            logger.error("VLC error for \(target, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
+            var url: URL?
             if let local = offlineLocalURL {
                 url = local
             } else if let info {
-                url = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+                let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+                // Retry THROUGH the loopback proxy (a fresh registration), no
+                // matter whether the first attempt was direct or proxied. Direct
+                // is the problematic path (libVLC stalls on a black-holed IPv6
+                // and its HTTPS access hardcodes AF_UNSPEC, so no media flag can
+                // force IPv4); the proxy fetches via Apple's networking instead.
+                // Falling back to the direct URL only if the proxy can't start.
+                if let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
+                    url = proxied
+                    usingProxy = true
+                    logger.error("VLC retry via loopback proxy")
+                } else {
+                    url = authed
+                }
             } else {
                 url = nil
             }
@@ -1854,7 +1916,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
         let target = isOffline ? "offline:\(offlineLocalURL?.lastPathComponent ?? "?")" : itemId
-        logger.error("VLC error for \(target, privacy: .public) — giving up")
+        logger.error("VLC error for \(target, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
         let alert = UIAlertController(
             title: loc.localized("playback.error.title"),
             message: loc.localized("playback.error.generic"),
@@ -1864,11 +1926,29 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self?.dismiss(animated: true)
         })
         present(alert, animated: true)
+        errorAlert = alert
+    }
+
+    /// The open watchdog already surfaced the failure alert, but libVLC then
+    /// finished connecting (a stalled handshake recovered, or the IPv4 retry
+    /// landed). Tear the alert down and let the video play rather than leaving
+    /// the user stranded behind a "playback failed" dialog over a live stream.
+    private func recoverFromErrorIfNeeded() {
+        guard let alert = errorAlert else { return }
+        errorAlert = nil
+        didRetry = false
+        alert.dismiss(animated: true)
+    }
+
+    /// Seconds elapsed since the first play() of this session — the
+    /// user-perceived "time to open". Surfaced in the watchdog/error logs.
+    private func elapsedSincePlay() -> String {
+        String(format: "%.1fs", Date().timeIntervalSince(firstPlayStart))
     }
 
     private func onEngineTimeChanged() {
         refreshTimeUI()
-        if currentMs > 0 { hasValidTime = true; cancelOpenWatchdog() }
+        if currentMs > 0 { hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded() }
         if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
             didSeekToStart = true
             // `Int32(start * 1000)` traps on overflow if a corrupt resume tick

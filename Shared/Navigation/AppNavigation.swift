@@ -227,6 +227,10 @@ struct AppNavigation: View {
             #if os(iOS)
             downloads.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
             #endif
+            // Decide once, in the background, whether this server needs the
+            // loopback stream proxy (dual-stack host with a black-holed IPv6
+            // that libVLC would stall on). Non-blocking; cached for the session.
+            StreamTransportPolicy.shared.configure(serverURL: appState.serverURL)
         }
         .onChange(of: appState.currentUserId) { oldId, newId in
             menuConfig.attach(apiClient: appState.apiClient, userId: newId)
@@ -253,11 +257,22 @@ struct AppNavigation: View {
             if let old, let new, old != new {
                 menuConfig.invalidateViews()
             }
+            // Re-decide stream transport for the new server (or clear on logout).
+            StreamTransportPolicy.shared.configure(serverURL: new)
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
+            } else if newPhase == .active {
+                // Network conditions may have changed while backgrounded —
+                // re-evaluate whether the proxy is needed for this server.
+                StreamTransportPolicy.shared.refresh()
             }
+        }
+        .onChange(of: network.isOnline) { _, online in
+            // Connectivity flipped (e.g. Wi-Fi ⇄ cellular) — IPv6 reachability
+            // is per-network, so re-run the transport probe.
+            if online { StreamTransportPolicy.shared.refresh() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in
             // Lazy 401 recovery — fired by any API call that surfaces an HTTP
