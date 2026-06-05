@@ -13,7 +13,8 @@ struct MainTabView: View {
     @Environment(SettingsNavCoordinator.self) private var settingsNav
     @State private var selectedTabID: String = "home"
 
-    /// Snapshot of `menuConfig.resolvedTabs` used to render the tab bar.
+    #if os(tvOS)
+    /// Snapshot of `menuConfig.resolvedTabs` used to render the tvOS tab bar.
     /// Decoupling from the live `@Observable` reads stops the `TabView`
     /// from reconfiguring its UIKit-backed bar on every mutation while the
     /// user is actively editing in the Main Menu sub-page — that reconfig
@@ -21,11 +22,16 @@ struct MainTabView: View {
     /// the inner page and snap focus onto the top-bar `Réglages` pill, so
     /// every toggle felt like a full page reload. Snapshot only refreshes
     /// when the user is *not* on the menu editor.
+    ///
+    /// iOS does **not** use this snapshot — its tab bar has no focus engine
+    /// to disturb, so it renders `menuConfig.resolvedTabs` live and a
+    /// toggle/reorder is reflected in the bar immediately. Freezing iOS too
+    /// was the source of "toggles don't change the menu": the bar stayed
+    /// frozen the entire time the editor was open and only caught up on a
+    /// clean back-out, which the user reads as the control doing nothing.
     @State private var displayedTabs: [ResolvedTab] = []
 
-    #if os(tvOS)
     @State private var playerCoordinator = VideoPlayerCoordinator()
-    #endif
 
     /// True only while the user is editing the menu on the Main Menu
     /// sub-page. Drives whether the bar snapshot keeps pace with the live
@@ -33,6 +39,7 @@ struct MainTabView: View {
     private var isEditingMenu: Bool {
         settingsNav.selectedInterfaceSub == .menu
     }
+    #endif
 
     var body: some View {
         Group {
@@ -41,9 +48,14 @@ struct MainTabView: View {
                 .environment(playerCoordinator)
                 .task { playerCoordinator.localizationManager = loc }
             #else
-            iOSTabLayout(tabs: displayedTabs)
+            // iOS / iPadOS render the live resolved list directly — no
+            // snapshot, no freeze. The 5-tab cap (`maxEnabledTabs`) keeps
+            // every live mutation inside `TabView`'s happy path, so a
+            // toggle / reorder updates the bar the instant it happens.
+            iOSTabLayout(tabs: menuConfig.resolvedTabs)
             #endif
         }
+        #if os(tvOS)
         .onAppear {
             // Initial seed — without this the bar is empty for one frame.
             if displayedTabs.isEmpty {
@@ -78,6 +90,7 @@ struct MainTabView: View {
             // user sees what they're configuring.
             displayedTabs = menuConfig.resolvedTabs
         }
+        #endif
     }
 
     // MARK: - tvOS Tab Bar (native top tab bar)
