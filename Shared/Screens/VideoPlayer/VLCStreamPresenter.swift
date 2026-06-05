@@ -339,11 +339,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // is stranded on a frozen black screen. This fires if no valid time AND no
     // length has arrived within the timeout, routing to the normal error path.
     private var openWatchdog: Timer?
-    // First attempt gets a short leash: if libVLC's TLS/connection handshake
-    // stalls (typically a degraded IPv6 path it can't fail over from — libVLC
-    // has no Happy-Eyeballs, unlike URLSession), fall back to the IPv4-forced
-    // retry quickly instead of making the user wait out a ~75 s socket timeout.
-    // The retry gets a longer leash since it's the one expected to succeed.
+    // Short leash on the first attempt so a stalled open (e.g. degraded IPv6)
+    // falls back to the proxy retry fast; the retry gets the longer leash.
     private static let firstOpenTimeout: TimeInterval = 15
     private static let retryOpenTimeout: TimeInterval = 30
 
@@ -1204,12 +1201,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
             chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
             chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
-            // Pin the stack to the chip's intrinsic height (150), NOT the scroll's
-            // frame height. The frame height animates 40pt (peek) ↔ 178pt (focus);
-            // tying the 150pt-tall chips to a 40pt frame makes every chip's
-            // height==150 / thumbnail height==100 unsatisfiable, flooding the log
-            // with broken constraints and stalling the main thread so playback
-            // never renders. The 150pt content clips/scrolls inside the window.
+            // Pin to the chip's intrinsic 150pt, NOT the animating frame height
+            // (40↔178) — tying 150pt chips to a 40pt frame floods Auto Layout.
             chapterStack.heightAnchor.constraint(equalToConstant: 150)
         ])
         let ch = chapterScroll.heightAnchor.constraint(equalToConstant: 0)
@@ -1536,15 +1529,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             url = local
         } else if let info {
             let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-            // Known broken-IPv6 server (decided in the background at launch):
-            // go straight through the loopback proxy so VLC uses Apple's
-            // networking (IPv4). Falls back to the direct URL if the proxy
-            // can't start. Healthy servers keep the byte-identical direct path.
+            // Broken-IPv6 server (decided in the background): route via the
+            // loopback proxy; fall back to the direct URL if it can't start.
             if StreamTransportPolicy.shared.preferProxy,
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
                 url = proxied
                 usingProxy = true
-                logger.log("VLC stream via loopback proxy (server IPv6 unreachable)")
             } else {
                 url = authed
             }
@@ -1889,16 +1879,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 url = local
             } else if let info {
                 let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-                // Retry THROUGH the loopback proxy (a fresh registration), no
-                // matter whether the first attempt was direct or proxied. Direct
-                // is the problematic path (libVLC stalls on a black-holed IPv6
-                // and its HTTPS access hardcodes AF_UNSPEC, so no media flag can
-                // force IPv4); the proxy fetches via Apple's networking instead.
-                // Falling back to the direct URL only if the proxy can't start.
+                // Always retry via the proxy (direct is the path that stalls on
+                // broken IPv6); fall back to direct only if it can't start.
                 if let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
                     url = proxied
                     usingProxy = true
-                    logger.error("VLC retry via loopback proxy")
                 } else {
                     url = authed
                 }

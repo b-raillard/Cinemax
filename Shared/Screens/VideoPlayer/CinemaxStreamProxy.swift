@@ -15,16 +15,10 @@ private final class ResumeOnce: @unchecked Sendable {
 
 // MARK: - Transport policy (app-session decision)
 
-/// Decides, per server + per network, whether libVLC's direct network path is
-/// viable or whether stream bytes must be routed through the in-app loopback
-/// proxy (which fetches via `URLSession` → Apple Happy-Eyeballs → working IP).
-///
-/// The problem it solves: a dual-stack server whose **IPv6 is black-holed**.
-/// libVLC has no Happy-Eyeballs, tries the AAAA first, and stalls ~75 s on the
-/// dead route before falling back to IPv4. `URLSession` instantly uses IPv4.
-///
-/// The verdict is computed once in the background (launch / network change) so
-/// playback never pays a detection cost; the answer is cached for the session.
+/// Decides whether libVLC's direct network path is viable or whether streams
+/// must go through the loopback proxy — for dual-stack servers whose IPv6 is
+/// black-holed (libVLC has no Happy-Eyeballs, so it stalls on the dead AAAA).
+/// Computed once in the background and cached per session. See CLAUDE.md.
 @MainActor
 final class StreamTransportPolicy {
     static let shared = StreamTransportPolicy()
@@ -74,12 +68,9 @@ final class StreamTransportPolicy {
 
     // MARK: Probe
 
-    /// Prefer the proxy only for the genuine black-hole case: the host is
-    /// dual-stack (has a AAAA) AND a TLS session to that IPv6 neither completes
-    /// nor fails within the budget — i.e. it hangs, exactly as it will for
-    /// libVLC. A `.ready` (works) or a fast `.failed` (no route, e.g. an
-    /// IPv4-only network where libVLC also fails fast) means the direct path is
-    /// fine, so we leave it alone.
+    /// Proxy only for the genuine black-hole: dual-stack host AND a TLS session
+    /// to its IPv6 that *hangs* (neither `.ready` nor a fast `.failed` within the
+    /// budget). A fast fail (IPv4-only network) means libVLC falls back fine too.
     nonisolated private static func shouldPreferProxy(host: String, port: UInt16, useTLS: Bool) async -> Bool {
         guard let v6 = firstIPv6(host: host) else { return false } // not dual-stack
         let resolvedQuickly = await ipv6ResolvesQuickly(address: v6, serverName: host, port: port, useTLS: useTLS)
@@ -165,9 +156,9 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     private var listenerPort: UInt16?
     private var listenerStarting = false
     private var pathCounter: UInt64 = 0
-    // Each loopback URL carries a unique id resolving to its own target, so an
-    // in-flight request for a previous media (retry / episode swap) can never
-    // read the new target. Bounded — old media is gone within a couple swaps.
+    // Each loopback URL carries a unique id → its own target, so an in-flight
+    // request for a previous media (retry / episode swap) can't read the new
+    // one. Bounded (see localURL).
     private var targets: [UInt64: (url: URL, token: String?)] = [:]
     private let session: URLSession
 
@@ -177,14 +168,10 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         cfg.timeoutIntervalForRequest = 30
         cfg.timeoutIntervalForResource = .infinity // long media streams
         cfg.waitsForConnectivity = false
-        // CRITICAL: a CONCURRENT delegate queue. The default serial queue would
-        // head-of-line block — our per-task `didReceive` blocks (backpressure)
-        // until the loopback send lands, and MKV demuxing fires several
-        // simultaneous Range/seek requests (read the SeekHead/Cues near EOF
-        // while the bytes=0- stream is still open). On a serial queue the seek
-        // request's callbacks can't run while the main stream is mid-send, so
-        // VLC times the seek out and reports "cannot seek / damaged file".
-        // URLSession still serializes callbacks *per task*, so this is safe.
+        // CRITICAL: a CONCURRENT delegate queue. didReceive blocks (backpressure)
+        // until each loopback send lands; MKV fires simultaneous seek requests, so
+        // a serial queue would head-of-line block them → "cannot seek". URLSession
+        // still serializes callbacks per-task, so this is safe. See CLAUDE.md.
         let dq = OperationQueue()
         dq.maxConcurrentOperationCount = 8
         dq.name = "com.cinemax.streamproxy.delegate"
