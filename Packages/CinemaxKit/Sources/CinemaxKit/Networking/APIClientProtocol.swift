@@ -176,8 +176,6 @@ public protocol AdminAPI: Sendable {
     func startTask(id: String) async throws
     /// Cancels a running task.
     func stopTask(id: String) async throws
-    /// Replaces a task's trigger list.
-    func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws
 
     // MARK: Server config (named)
 

@@ -138,11 +138,6 @@ extension JellyfinAPIClient {
         _ = try await client.send(Paths.stopTask(taskID: id))
     }
 
-    public func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws {
-        guard let client = getClient() else { throw JellyfinError.notConnected }
-        _ = try await client.send(Paths.updateTask(taskID: id, triggers))
-    }
-
     // MARK: - Encoding options (named configuration)
 
     public func getEncodingOptions() async throws -> EncodingOptions {

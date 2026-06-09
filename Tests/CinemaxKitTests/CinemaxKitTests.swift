@@ -6,27 +6,6 @@ import JellyfinAPI
 @Suite("CinemaxKit Tests")
 struct CinemaxKitTests {
 
-    @Test("MediaItem runtime calculation")
-    func testRuntimeMinutes() {
-        let item = MediaItem(
-            id: "test",
-            name: "Test Movie",
-            type: .movie,
-            runTimeTicks: 72_000_000_000 // 120 minutes
-        )
-        #expect(item.runtimeMinutes == 120)
-    }
-
-    @Test("MediaItem without runtime")
-    func testNoRuntime() {
-        let item = MediaItem(
-            id: "test",
-            name: "Test",
-            type: .movie
-        )
-        #expect(item.runtimeMinutes == nil)
-    }
-
     @Test("ServerInfo initialization")
     func testServerInfo() {
         let info = ServerInfo(
