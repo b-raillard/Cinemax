@@ -54,7 +54,9 @@ final class HomeViewModel {
         await load(using: appState)
     }
 
-    private func load(using appState: AppState) async {
+    /// Internal (not private) so `HomeViewModelTests` can drive it directly
+    /// via `@testable` — app code goes through `loadInitial`/`reload`.
+    func load(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         hasLoaded = true
         isLoading = true

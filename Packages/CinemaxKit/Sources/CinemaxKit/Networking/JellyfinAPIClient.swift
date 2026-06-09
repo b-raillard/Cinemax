@@ -18,6 +18,10 @@ func debugLog(_ message: String) {
 /// the access token. Keeps path + non-secret query items for debuggability.
 /// Accepts `String?` because Jellyfin's `transcodingURL` is a string path we
 /// log before resolving to a `URL`.
+///
+/// KEEP THE PREDICATE IN SYNC with `DownloadItem.sanitizedRemoteURL`
+/// (Shared/Screens/Downloads/DownloadItem+BaseItemDto.swift), which uses the
+/// same rule to strip credentials before persisting download URLs to disk.
 public func redactedURL(_ raw: String?) -> String {
     guard let raw, !raw.isEmpty else { return "nil" }
     guard var components = URLComponents(string: raw) else { return raw }

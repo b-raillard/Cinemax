@@ -108,7 +108,7 @@ final class ChapterController {
 
             let titleItem = AVMutableMetadataItem()
             titleItem.identifier = .commonIdentifierTitle
-            titleItem.value = (chapter.name ?? "\(loc.localized("player.chapters")) \(index + 1)") as NSString
+            titleItem.value = (chapter.name ?? "\(loc.localized("player.chapter")) \(index + 1)") as NSString
             titleItem.extendedLanguageTag = "und"
             items.append(titleItem)
 

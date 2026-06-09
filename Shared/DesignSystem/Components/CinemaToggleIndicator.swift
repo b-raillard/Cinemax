@@ -7,7 +7,13 @@ import SwiftUI
 struct CinemaToggleIndicator: View {
     let isOn: Bool
     let accent: Color
+    /// Extra opt-out for call sites that never want the slide (the global
+    /// Motion Effects setting is enforced here regardless, so callers don't
+    /// need to thread `motionEffectsEnabled` through — same pattern as
+    /// `TVButtonStyles` / `CinemaFocusModifier`).
     var animated: Bool = true
+
+    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     var body: some View {
         Capsule()
@@ -19,7 +25,7 @@ struct CinemaToggleIndicator: View {
                     .frame(width: 26, height: 26)
                     .padding(3)
             }
-            .animation(animated ? .easeInOut(duration: 0.15) : nil, value: isOn)
+            .animation(animated && motionEffects ? .easeInOut(duration: 0.15) : nil, value: isOn)
     }
 }
 

@@ -124,6 +124,24 @@ final class AppState {
         }
     }
 
+    /// Users eligible for the quick-switch surfaces (`UserSwitchSheet` grid +
+    /// tvOS Settings profile section). Single source of the visibility rule:
+    /// `getUsers()` is admin-only (guaranteed 401 for regular accounts — skip
+    /// it), accounts flagged "Hide from login screens" are filtered out, and
+    /// when the filtered admin list is empty we fall through to
+    /// `getPublicUsers()` rather than showing a misleading empty state.
+    func fetchSwitchableUsers() async -> [UserDto] {
+        if isAdministrator,
+           let fetched = try? await apiClient.getUsers() {
+            // The signed-in user stays visible even when their own account is
+            // flagged hidden (admins commonly hide their account from login
+            // screens — their profile tile must not vanish from Settings).
+            let visible = fetched.filter { $0.policy?.isHidden != true || $0.id == currentUserId }
+            if !visible.isEmpty { return visible }
+        }
+        return (try? await apiClient.getPublicUsers()) ?? []
+    }
+
     /// Returns the user from `LoginScreen` to `ServerSetupScreen` so they can pick a different
     /// server. Only clears server-side state — auth state is already empty at that point in
     /// the flow, so there's nothing user-related to wipe.

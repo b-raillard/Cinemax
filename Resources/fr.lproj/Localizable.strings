@@ -32,6 +32,7 @@
 "player.previousEpisode" = "Épisode précédent";
 "player.nextEpisode" = "Épisode suivant";
 "player.chapters" = "Chapitres";
+"player.chapter" = "Chapitre";
 "action.logOut" = "Déconnexion";
 "action.viewAll" = "Tout voir";
 "action.refresh" = "Actualiser";

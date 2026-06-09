@@ -691,11 +691,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         sleepActive = false
         enginePause()
         #if os(iOS)
-        // PiP gating (same rule as SleepTimerController's
-        // isInPictureInPictureProvider): when the user watches from the PiP
-        // window the app is backgrounded, and an alert presented here is
-        // unreachable — pause silently instead of stacking an invisible prompt.
-        guard UIApplication.shared.applicationState == .active else { return }
+        // Approximation of SleepTimerController's PiP gating (SwiftVLC's
+        // PiPController exposes no reliable "is active" signal to mirror the
+        // native delegate seam): when the app is .background — the PiP-window
+        // viewing case — an alert presented here is unreachable, so pause
+        // silently. `.inactive` (Control Center, notification shade, call
+        // banner) still presents: the prompt is simply revealed when the
+        // overlay drops, matching the native path.
+        guard UIApplication.shared.applicationState != .background else { return }
         #endif
         let alert = UIAlertController(
             title: loc.localized("sleep.prompt.title"),
@@ -1266,7 +1269,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             for (i, ch) in chapters.enumerated() {
                 let startSec = Double(ch.startPositionTicks ?? 0) / 10_000_000
                 let title = (ch.name?.isEmpty == false ? ch.name : nil)
-                    ?? "\(self.loc.localized("player.chapters")) \(i + 1)"
+                    ?? "\(self.loc.localized("player.chapter")) \(i + 1)"
                 let chip = self.makeChapterChip(index: i, title: title, time: PlayerTimeFormat.ms(Int32(startSec * 1000)))
                 self.chapterStack.addArrangedSubview(chip)
             }

@@ -501,22 +501,12 @@ extension SettingsScreen {
         guard !serverUsersLoadAttempted else { return }
         serverUsersLoadAttempted = true
 
-        do {
-            // Same visibility rule as UserSwitchSheet: getUsers() (admin-only)
-            // returns accounts flagged "Hide from login screens" — keep them
-            // out of the quick-switch grid too.
-            serverUsers = try await appState.apiClient.getUsers()
-                .filter { $0.policy?.isHidden != true }
-            return
-        } catch {
-            // Authenticated list failed (permissions or network). Fall
-            // through to the public list so a signed-out user can still pick
-            // an account.
-        }
-        // Silent fallback — `UserSwitchSheet` handles a deeper retry path
-        // when the user actually tries to switch users; surfacing a toast
-        // here would just spam them every time they edit the menu.
-        serverUsers = (try? await appState.apiClient.getPublicUsers()) ?? []
+        // Visibility rule (admin-only getUsers, hidden filter with a
+        // current-user exemption, public fallback) is shared with
+        // UserSwitchSheet — see AppState.fetchSwitchableUsers. Failures stay
+        // silent: the profile section renders nothing on empty, and the
+        // sheet does its own deeper retry when actually opened.
+        serverUsers = await appState.fetchSwitchableUsers()
     }
 
     // MARK: - Server Connection

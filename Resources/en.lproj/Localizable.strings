@@ -32,6 +32,7 @@
 "player.previousEpisode" = "Previous Episode";
 "player.nextEpisode" = "Next Episode";
 "player.chapters" = "Chapters";
+"player.chapter" = "Chapter";
 "action.logOut" = "Log Out";
 "action.viewAll" = "View All";
 "action.refresh" = "Refresh";
