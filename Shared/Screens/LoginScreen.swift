@@ -9,6 +9,7 @@ struct LoginScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.motionEffectsEnabled) private var motionEffects
     @State private var viewModel = LoginViewModel()
     @State private var easterEggTaps: Int = 0
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
@@ -166,7 +167,7 @@ struct LoginScreen: View {
                     Text(loc.localized("login.mobileTitle"))
                         .font(.system(size: CinemaScale.pt(28), weight: .black))
                         .tracking(-0.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CinemaColor.onSurface)
 
                     Text(loc.localized("login.mobileSubtitle"))
                         .font(CinemaFont.label(.small))
@@ -350,6 +351,6 @@ struct LoginScreen: View {
             Spacer()
         }
         .transition(.move(edge: .top).combined(with: .opacity))
-        .animation(.spring(duration: 0.5), value: viewModel.showSuccess)
+        .animation(motionEffects ? .spring(duration: 0.5) : nil, value: viewModel.showSuccess)
     }
 }

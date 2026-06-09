@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GlassTextField: View {
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.motionEffectsEnabled) private var motionEffects
     let label: String
     @Binding var text: String
     var placeholder: String = ""
@@ -80,7 +81,7 @@ struct GlassTextField: View {
                     .foregroundStyle(
                         isFocused ? themeManager.accent : CinemaColor.outline
                     )
-                    .animation(.easeInOut(duration: 0.2), value: isFocused)
+                    .animation(motionEffects ? .easeInOut(duration: 0.2) : nil, value: isFocused)
             }
 
             if isSecure {
@@ -115,15 +116,15 @@ struct GlassTextField: View {
                     lineWidth: 2
                 )
         )
-        .animation(.easeInOut(duration: 0.2), value: isFocused)
+        .animation(motionEffects ? .easeInOut(duration: 0.2) : nil, value: isFocused)
     }
     #endif
 
     private var labelFontSize: CGFloat {
         #if os(tvOS)
-        18
+        CinemaScale.pt(18)
         #else
-        12
+        CinemaScale.pt(12)
         #endif
     }
 }

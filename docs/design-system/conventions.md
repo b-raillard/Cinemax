@@ -35,6 +35,7 @@ In `AppNavigation`. Setting it on a child view breaks `UITraitCollection` propag
 Allowed only:
 - Inside the video player (chrome is always dark).
 - On elements sitting directly on a saturated `accentContainer` fill (e.g. the `.accent` style's label, `RatingBadge` text).
+- Hero/display titles rendered over backdrop imagery + `CinemaGradient.heroOverlay` — the underlay is always dark regardless of mode (`HomeScreen`, `LibraryHeroSection`, `MediaDetailScreen`, `OfflineMediaDetailView`).
 
 Everywhere else: `CinemaColor.onSurface` / `.onSurfaceVariant`.
 
@@ -59,10 +60,11 @@ Always `CinemaFont.*`. The one documented exception is `CinemaButton.fontSize` (
 
 Hierarchy comes from `surface` → `surfaceContainer` → `surfaceContainerHigh`, not strokes. The exceptions (all explicit and small):
 
-- Ghost `CinemaButton` — 1 pt `outline.opacity(0.2)` stroke.
+- Ghost `CinemaButton` — 1 pt `outline.opacity(0.3)` stroke.
 - tvOS focus ring — 2 pt accent stroke (inside `.cinemaFocus()` and button styles).
 - tvOS settings-row focus — 1.5 pt accent stroke (`tvSettingsFocusable`).
 - `GlassTextField` focus — accent stroke on the focused state.
+- `ToastOverlay` — 1 pt level-tint ring (`toast.level.tint.opacity(0.35)`). Semantic, not decorative: it colour-codes success/error/info on the glass pill, and ships inside the DS component itself.
 
 That's the full list. Reject code review of anything that adds a new border.
 
@@ -199,7 +201,7 @@ When reviewing a PR that touches UI, block on any of these:
 - [ ] Uses a hex literal via `Color(hex:)` inside a view
 - [ ] Uses `CinemaColor.tertiary*`
 - [ ] Sets `.preferredColorScheme` outside `AppNavigation`
-- [ ] Adds a 1 px `.stroke` / `.border` that isn't one of the three allowed exceptions
+- [ ] Adds a 1 px `.stroke` / `.border` that isn't one of the allowed exceptions listed above
 - [ ] Uses a literal `.font(.system(size:))` or `Font.body` / `.title` in a view
 - [ ] Uses system `Toggle` in a settings surface
 - [ ] Adds `.buttonStyle(.glass)` / `.glassProminent` on a toolbar item

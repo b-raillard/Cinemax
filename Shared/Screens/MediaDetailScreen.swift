@@ -598,7 +598,7 @@ struct MediaDetailScreen: View {
         #if os(tvOS)
         CinemaScale.pt(64)
         #else
-        26
+        CinemaScale.pt(26)
         #endif
     }
 

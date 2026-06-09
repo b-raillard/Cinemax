@@ -35,14 +35,28 @@ final class HomeViewModel {
     var isLoading = true
     var errorMessage: String?
 
-    /// Re-runs the full home load (equivalent to calling `load` again). Exposed for pull-to-refresh.
+    /// Guards `loadInitial` so tab remounts (tvOS recreates hosting controllers
+    /// when the bar layout shifts) don't re-hit the API and re-shuffle the
+    /// genre rows. Same pattern as `MediaLibraryViewModel.hasLoaded`.
+    private var hasLoaded = false
+
+    /// First load — no-op if content is already loaded (screen remount).
+    func loadInitial(using appState: AppState) async {
+        guard !hasLoaded else { return }
+        await load(using: appState)
+    }
+
+    /// Re-runs the full home load (equivalent to calling `load` again). Exposed
+    /// for pull-to-refresh and `.cinemaxShouldRefreshCatalogue` — bypasses the
+    /// `hasLoaded` guard.
     func reload(using appState: AppState) async {
         activeSessions = []
         await load(using: appState)
     }
 
-    func load(using appState: AppState) async {
+    private func load(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
+        hasLoaded = true
         isLoading = true
         errorMessage = nil
 
@@ -75,6 +89,12 @@ final class HomeViewModel {
         }
 
         heroItem = resumeItems.first ?? latestItems.first
+
+        // Genre rows + active sessions depend on nothing from the episode-nav
+        // phase below — run all three concurrently (each method only mutates
+        // its own state slice, serialized on the main actor).
+        async let genreRowsDone: Void = loadGenreRows(userId: userId, appState: appState)
+        async let sessionsDone: Void = loadActiveSessions(userId: userId, appState: appState)
 
         // For each unique season referenced by resume episodes, fetch the episode list once
         // so we can compute prev/next refs and build a navigator for the player.
@@ -122,12 +142,7 @@ final class HomeViewModel {
             resumeNavigation.removeAll()
         }
 
-        // Genre rows: pick up to 4 random genres from the server and fetch 10 random
-        // items per genre in parallel. Genres with no items are skipped.
-        await loadGenreRows(userId: userId, appState: appState)
-
-        // Active sessions ("Watching Now" row). Non-blocking — quietly drops on error.
-        await loadActiveSessions(userId: userId, appState: appState)
+        _ = await (genreRowsDone, sessionsDone)
 
         isLoading = false
     }

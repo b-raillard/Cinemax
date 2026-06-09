@@ -29,6 +29,7 @@ struct SeasonTabButtonStyle: ButtonStyle {
     let isSelected: Bool
     let accent: Color
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -36,7 +37,7 @@ struct SeasonTabButtonStyle: ButtonStyle {
                 Capsule()
                     .strokeBorder(accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
             )
-            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .animation(motionEnabled ? .easeOut(duration: 0.15) : nil, value: isFocused)
     }
 }
 

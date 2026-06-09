@@ -336,6 +336,10 @@ final class MenuConfigStore {
     /// throwing (callers show a toast).
     func refreshAvailableViews() async {
         guard let api = apiClient, let userId else { return }
+        // Re-entrancy guard: a double-tap on "Refresh libraries" (or a kind
+        // switch racing a `.task` refresh) would interleave two fetches at the
+        // await and run mergeLibraryEntries against each other's results.
+        guard !isLoadingViews else { return }
         isLoadingViews = true
         lastFetchError = nil
         defer { isLoadingViews = false }

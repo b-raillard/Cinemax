@@ -405,6 +405,7 @@ private struct VoiceSearchButton: View {
 
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(\.motionEffectsEnabled) private var motionEffects
     @State private var isPulsing = false
 
     var body: some View {
@@ -415,7 +416,9 @@ private struct VoiceSearchButton: View {
                         .fill(themeManager.accent.opacity(0.25))
                         .frame(width: isPulsing ? 36 : 28, height: isPulsing ? 36 : 28)
                         .animation(
-                            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                            motionEffects
+                                ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+                                : nil,
                             value: isPulsing
                         )
                 }
