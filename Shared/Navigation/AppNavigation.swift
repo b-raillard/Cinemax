@@ -17,6 +17,11 @@ final class AppState {
 
     var isAuthenticated = false
     var hasServer = false
+    // Documented exemption from the "@Observable properties must NOT carry
+    // didSet" RULE: that rule targets persistence side effects on collections
+    // of Codable value types (lost re-renders). This didSet only re-derives a
+    // sibling stored property from a scalar URL — no persistence, no
+    // observation-delivery dependency.
     var serverURL: URL? {
         didSet { imageBuilder = ImageURLBuilder(serverURL: serverURL ?? Self.placeholderServerURL) }
     }

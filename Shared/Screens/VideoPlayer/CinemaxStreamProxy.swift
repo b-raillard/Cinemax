@@ -36,6 +36,8 @@ final class StreamTransportPolicy {
         let changed = self.serverURL != serverURL
         self.serverURL = serverURL
         if serverURL == nil {
+            probeTask?.cancel()
+            probeTask = nil
             preferProxy = false
             proxy.stop()
             return
@@ -72,9 +74,19 @@ final class StreamTransportPolicy {
     /// to its IPv6 that *hangs* (neither `.ready` nor a fast `.failed` within the
     /// budget). A fast fail (IPv4-only network) means libVLC falls back fine too.
     nonisolated private static func shouldPreferProxy(host: String, port: UInt16, useTLS: Bool) async -> Bool {
-        guard let v6 = firstIPv6(host: host) else { return false } // not dual-stack
+        guard let v6 = await resolveFirstIPv6(host: host) else { return false } // not dual-stack
         let resolvedQuickly = await ipv6ResolvesQuickly(address: v6, serverName: host, port: port, useTLS: useTLS)
         return !resolvedQuickly
+    }
+
+    /// `getaddrinfo` is synchronous and can block for the full resolver timeout
+    /// on a broken DNS path — keep it off the Swift-concurrency cooperative pool.
+    nonisolated private static func resolveFirstIPv6(host: String) async -> String? {
+        await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .utility).async {
+                cont.resume(returning: firstIPv6(host: host))
+            }
+        }
     }
 
     nonisolated private static func firstIPv6(host: String) -> String? {
@@ -120,21 +132,27 @@ final class StreamTransportPolicy {
         let queue = DispatchQueue(label: "com.cinemax.ipv6probe")
         let once = ResumeOnce()
 
-        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            @Sendable func finish(_ value: Bool) {
-                guard once.claim() else { return }
-                conn.cancel()
-                cont.resume(returning: value)
-            }
-            conn.stateUpdateHandler = { state in
-                switch state {
-                case .ready: finish(true)        // IPv6 works
-                case .failed, .cancelled: finish(true) // fast fail → libVLC falls back fast too
-                default: break
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                @Sendable func finish(_ value: Bool) {
+                    guard once.claim() else { return }
+                    conn.cancel()
+                    cont.resume(returning: value)
                 }
+                conn.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready: finish(true)        // IPv6 works
+                    case .failed, .cancelled: finish(true) // fast fail → libVLC falls back fast too
+                    default: break
+                    }
+                }
+                queue.asyncAfter(deadline: .now() + timeout) { finish(false) } // hung → black-hole
+                conn.start(queue: queue)
             }
-            queue.asyncAfter(deadline: .now() + timeout) { finish(false) } // hung → black-hole
-            conn.start(queue: queue)
+        } onCancel: {
+            // Result is discarded by the caller; just free the socket early
+            // (the timeout closure still guarantees the continuation resumes).
+            conn.cancel()
         }
     }
 }
@@ -155,11 +173,16 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     private var listener: NWListener?
     private var listenerPort: UInt16?
     private var listenerStarting = false
-    private var pathCounter: UInt64 = 0
-    // Each loopback URL carries a unique id → its own target, so an in-flight
-    // request for a previous media (retry / episode swap) can't read the new
-    // one. Bounded (see localURL).
-    private var targets: [UInt64: (url: URL, token: String?)] = [:]
+    // Each loopback URL carries a unique UNGUESSABLE id → its own target, so an
+    // in-flight request for a previous media (retry / episode swap) can't read
+    // the wrong stream, and a co-resident app port-scanning loopback can't
+    // enumerate `/s/<id>` paths to read the active stream. Bounded (see
+    // localURL); `targetOrder` preserves insertion order for eviction.
+    private var targets: [String: (url: URL, token: String?)] = [:]
+    private var targetOrder: [String] = []
+    // Live per-request bridges, cancelled deterministically in stop() so a
+    // server switch mid-stream doesn't keep pulling origin bytes.
+    private let liveHandlers = NSHashTable<UpstreamHandler>.weakObjects()
     private let session: URLSession
 
     init() {
@@ -193,23 +216,28 @@ final class CinemaxStreamProxy: @unchecked Sendable {
             startListenerIfNeeded()
             return nil
         }
-        let id: UInt64 = stateLock.withLock {
-            pathCounter &+= 1
-            targets[pathCounter] = (target, token)
-            if targets.count > 6, let oldest = targets.keys.min() { targets[oldest] = nil }
-            return pathCounter
+        let id = UUID().uuidString
+        stateLock.withLock {
+            targets[id] = (target, token)
+            targetOrder.append(id)
+            if targetOrder.count > 6 { targets[targetOrder.removeFirst()] = nil }
         }
         return URL(string: "http://127.0.0.1:\(port)/s/\(id)")
     }
 
     func stop() {
-        stateLock.withLock {
+        let handlers: [UpstreamHandler] = stateLock.withLock {
             listener?.cancel()
             listener = nil
             listenerPort = nil
             listenerStarting = false
             targets.removeAll()
+            targetOrder.removeAll()
+            let live = liveHandlers.allObjects
+            liveHandlers.removeAllObjects()
+            return live
         }
+        handlers.forEach { $0.cancel() }
     }
 
     // MARK: Listener
@@ -290,7 +318,7 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         // Resolve THIS connection's target by the id baked into the path
         // (/s/<id>) — never a shared "current target", so a retry/episode swap
         // can't make an in-flight request read the wrong stream.
-        let id = UInt64(path.split(separator: "/").last ?? "")
+        let id = path.split(separator: "/").last.map(String.init)
         let entry = stateLock.withLock { id.flatMap { targets[$0] } }
         guard let entry else {
             conn.send(content: Data("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n".utf8),
@@ -306,6 +334,17 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         let task = session.dataTask(with: req)
         handler.task = task
         task.delegate = handler
+        stateLock.withLock { liveHandlers.add(handler) }
+        // The handler's stateUpdateHandler only sees transitions that happen
+        // after install — if VLC already dropped the connection (we run on
+        // netQueue, same as the connection's state changes), skip the fetch.
+        switch conn.state {
+        case .failed, .cancelled:
+            task.cancel()
+            return
+        default:
+            break
+        }
         task.resume()
     }
 }
@@ -334,6 +373,12 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
             default: break
             }
         }
+    }
+
+    /// Deterministic teardown (proxy.stop on server switch): abort both sides.
+    func cancel() {
+        task?.cancel()
+        conn.cancel()
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,

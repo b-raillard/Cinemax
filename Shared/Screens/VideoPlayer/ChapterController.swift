@@ -17,12 +17,14 @@ final class ChapterController {
     private let apiClient: any LibraryAPI
     private let userId: String
     private let imageBuilder: ImageURLBuilder
+    private let loc: LocalizationManager
     private var fetchTask: Task<Void, Never>?
 
-    init(apiClient: any LibraryAPI, userId: String, imageBuilder: ImageURLBuilder) {
+    init(apiClient: any LibraryAPI, userId: String, imageBuilder: ImageURLBuilder, loc: LocalizationManager) {
         self.apiClient = apiClient
         self.userId = userId
         self.imageBuilder = imageBuilder
+        self.loc = loc
     }
 
     /// - Parameters:
@@ -106,7 +108,7 @@ final class ChapterController {
 
             let titleItem = AVMutableMetadataItem()
             titleItem.identifier = .commonIdentifierTitle
-            titleItem.value = (chapter.name ?? "Chapter \(index + 1)") as NSString
+            titleItem.value = (chapter.name ?? "\(loc.localized("player.chapters")) \(index + 1)") as NSString
             titleItem.extendedLanguageTag = "und"
             items.append(titleItem)
 
@@ -122,7 +124,7 @@ final class ChapterController {
             markers.append(AVTimedMetadataGroup(items: items, timeRange: range))
         }
 
-        let group = AVNavigationMarkersGroup(title: "Chapters", timedNavigationMarkers: markers)
+        let group = AVNavigationMarkersGroup(title: loc.localized("player.chapters"), timedNavigationMarkers: markers)
         playerItem.navigationMarkerGroups = [group]
         #endif
     }
