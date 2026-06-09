@@ -161,7 +161,6 @@ struct SettingsScreen: View {
     @State var showLicenses = false
     @State var showUserSwitch = false
     @State var showPrivacySecurity = false
-    @State var currentUser: UserDto? = nil
 
     /// Convenience pass-throughs so the rest of the code keeps using
     /// `selectedCategory` / `selectedInterfaceSub` and the `$`-projection
@@ -180,7 +179,6 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
-    @AppStorage(SettingsKey.darkMode) var darkModeStorage: Bool = SettingsKey.Default.darkMode
     @AppStorage(SettingsKey.homeShowContinueWatching) var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
@@ -303,16 +301,6 @@ struct SettingsScreen: View {
         appState.apiClient.clearCache()
         NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
         toasts.success(loc.localized("toast.catalogueRefreshed"))
-    }
-
-    /// Fetches the signed-in user's `UserDto` so the Account header can render
-    /// the primary image (with `primaryImageTag` for cache-busting) and fall
-    /// back to initials when no image exists.
-    func fetchCurrentUser() async {
-        guard let id = appState.currentUserId else { return }
-        if let users = try? await appState.apiClient.getUsers() {
-            currentUser = users.first { $0.id == id }
-        }
     }
 
     var body: some View {

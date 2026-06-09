@@ -502,7 +502,11 @@ extension SettingsScreen {
         serverUsersLoadAttempted = true
 
         do {
+            // Same visibility rule as UserSwitchSheet: getUsers() (admin-only)
+            // returns accounts flagged "Hide from login screens" — keep them
+            // out of the quick-switch grid too.
             serverUsers = try await appState.apiClient.getUsers()
+                .filter { $0.policy?.isHidden != true }
             return
         } catch {
             // Authenticated list failed (permissions or network). Fall

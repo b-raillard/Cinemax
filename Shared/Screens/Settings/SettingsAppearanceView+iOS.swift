@@ -192,7 +192,7 @@ struct IOSAppearanceDetailView: View {
         .buttonStyle(.plain)
         .hoverEffectDisabled()
         .scaleEffect(isSelected ? 1.1 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
+        .animation(motionEffects ? .spring(response: 0.25, dampingFraction: 0.7) : nil, value: isSelected)
     }
 }
 #endif

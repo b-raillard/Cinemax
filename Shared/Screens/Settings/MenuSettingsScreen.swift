@@ -12,6 +12,7 @@ struct MenuSettingsScreen: View {
     @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) var toasts
     @Environment(MenuConfigStore.self) var store
+    @Environment(\.motionEffectsEnabled) var motionEffects
 
     #if os(tvOS)
     /// Focus lane for tvOS rows. iOS doesn't render any of the tvOS-specific

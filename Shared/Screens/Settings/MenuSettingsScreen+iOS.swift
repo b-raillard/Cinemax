@@ -189,7 +189,7 @@ extension MenuSettingsScreen {
                         toasts.info(String(format: loc.localized("menu.maxReached"), MenuConfigStore.maxEnabledTabs))
                     }
                 } label: {
-                    CinemaToggleIndicator(isOn: entry.enabled, accent: themeManager.accent, animated: true)
+                    CinemaToggleIndicator(isOn: entry.enabled, accent: themeManager.accent, animated: motionEffects)
                 }
                 // `.borderless` keeps the inner Button reachable inside the
                 // List row — `.plain` lets the row's tap-handler swallow it.

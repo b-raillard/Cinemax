@@ -158,10 +158,6 @@ struct DownloadsScreen: View {
                     thumbnail(for: entry)
                         .frame(width: 72, height: 48)
                         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.small))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: CinemaRadius.small)
-                                .strokeBorder(CinemaColor.onSurface.opacity(0.08), lineWidth: 1)
-                        )
                         .overlay {
                             if entry.status == .completed {
                                 Image(systemName: "play.fill")
@@ -277,7 +273,10 @@ struct DownloadsScreen: View {
         case .completed:
             return "\(loc.localized("downloads.status.completed")) · \(formatBytes(entry.totalBytes > 0 ? entry.totalBytes : entry.bytesReceived))"
         case .failed:
-            return entry.errorMessage ?? loc.localized("downloads.status.failed")
+            // `entry.errorMessage` keeps the raw NSURLError text for
+            // diagnostics — never surface it (RULE: no raw
+            // error.localizedDescription shown to users).
+            return loc.localized("downloads.status.failed")
         }
     }
 
