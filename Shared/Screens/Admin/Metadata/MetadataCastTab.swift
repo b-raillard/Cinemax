@@ -122,7 +122,8 @@ struct MetadataCastTab: View {
                 url: appState.imageBuilder.imageURL(
                     itemId: id,
                     imageType: .primary,
-                    maxWidth: 160
+                    maxWidth: 160,
+                    tag: person.primaryImageTag
                 ),
                 fallbackIcon: "person.fill"
             )

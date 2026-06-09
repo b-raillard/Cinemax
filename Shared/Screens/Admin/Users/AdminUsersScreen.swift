@@ -29,7 +29,7 @@ struct AdminUsersScreen: View {
             emptyTitle: loc.localized("admin.users.empty.title"),
             emptySubtitle: loc.localized("admin.users.empty.subtitle"),
             emptyActionTitle: loc.localized("admin.users.add"),
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } },
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } },
             onEmptyAction: { viewModel.showCreateUser = true }
         ) {
             ScrollView {
@@ -61,10 +61,10 @@ struct AdminUsersScreen: View {
                 .tint(themeManager.accent)
             }
         }
-        .refreshable { await viewModel.load(using: appState.apiClient) }
+        .refreshable { await viewModel.load(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.users.isEmpty {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
         .sheet(isPresented: $viewModel.showCreateUser) {
@@ -170,7 +170,7 @@ struct AdminUsersScreen: View {
                         isLoading: viewModel.isCreating
                     ) {
                         Task {
-                            let ok = await viewModel.createUser(using: appState.apiClient)
+                            let ok = await viewModel.createUser(using: appState.apiClient, loc: loc)
                             if ok {
                                 viewModel.showCreateUser = false
                                 toasts.success(loc.localized("admin.users.create.success"))

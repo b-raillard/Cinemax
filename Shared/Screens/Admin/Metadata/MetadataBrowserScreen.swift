@@ -86,7 +86,7 @@ struct MetadataBrowserScreen: View {
             libraries = try await appState.apiClient.getMediaFolders()
                 .sorted { ($0.name ?? "") < ($1.name ?? "") }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 }
@@ -161,7 +161,8 @@ struct MetadataLibraryItemsScreen: View {
                         url: appState.imageBuilder.imageURL(
                             itemId: item.id ?? "",
                             imageType: .primary,
-                            maxWidth: 300
+                            maxWidth: 300,
+                            tag: item.primaryImageTagValue
                         ),
                         fallbackIcon: "film"
                     )
@@ -203,7 +204,7 @@ struct MetadataLibraryItemsScreen: View {
             )
             items = fetched
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 }

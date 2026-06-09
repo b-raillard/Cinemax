@@ -15,7 +15,7 @@ final class AdminDevicesViewModel {
         !isLoading && errorMessage == nil && devices.isEmpty
     }
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
         do {
@@ -23,19 +23,19 @@ final class AdminDevicesViewModel {
                 ($0.dateLastActivity ?? .distantPast) > ($1.dateLastActivity ?? .distantPast)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
         isLoading = false
     }
 
-    func revoke(_ device: DeviceInfoDto, using apiClient: any APIClientProtocol) async -> Bool {
+    func revoke(_ device: DeviceInfoDto, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = device.id else { return false }
         do {
             try await apiClient.deleteDevice(id: id)
             devices.removeAll { $0.id == id }
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

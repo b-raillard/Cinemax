@@ -22,7 +22,7 @@ struct AdminActivityScreen: View {
             emptyIcon: "clock.badge.questionmark",
             emptyTitle: loc.localized("admin.activity.empty.title"),
             emptySubtitle: loc.localized("admin.activity.empty.subtitle"),
-            onRetry: { Task { await viewModel.reload(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.reload(using: appState.apiClient, loc: loc) } }
         ) {
             List {
                 ForEach(viewModel.entries, id: \.id) { entry in
@@ -33,7 +33,8 @@ struct AdminActivityScreen: View {
                             Task {
                                 await viewModel.loadMoreIfNeeded(
                                     currentItem: entry,
-                                    using: appState.apiClient
+                                    using: appState.apiClient,
+                                    loc: loc
                                 )
                             }
                         }
@@ -57,10 +58,10 @@ struct AdminActivityScreen: View {
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(loc.localized("admin.activity.title"))
         .navigationBarTitleDisplayMode(.large)
-        .refreshable { await viewModel.reload(using: appState.apiClient) }
+        .refreshable { await viewModel.reload(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.entries.isEmpty {
-                await viewModel.loadInitial(using: appState.apiClient)
+                await viewModel.loadInitial(using: appState.apiClient, loc: loc)
             }
         }
     }

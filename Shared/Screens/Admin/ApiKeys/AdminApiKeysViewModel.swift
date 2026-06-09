@@ -37,7 +37,7 @@ final class AdminApiKeysViewModel {
 
     // MARK: - Load
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = keys.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -49,7 +49,7 @@ final class AdminApiKeysViewModel {
                 .filter { $0.dateRevoked == nil && ($0.isActive ?? true) }
                 .sorted { ($0.dateCreated ?? .distantPast) > ($1.dateCreated ?? .distantPast) }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
@@ -58,7 +58,7 @@ final class AdminApiKeysViewModel {
     /// Creates a key, refetches, and identifies the new one by subtracting
     /// the previous id set — avoids relying on dateCreated ordering in case
     /// two keys share a timestamp (unlikely but easy to defend against).
-    func createKey(using apiClient: any APIClientProtocol) async -> Bool {
+    func createKey(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         let name = newAppName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return false }
         isCreating = true
@@ -68,7 +68,7 @@ final class AdminApiKeysViewModel {
         let previousIds = Set(keys.compactMap { $0.id })
         do {
             try await apiClient.createApiKey(app: name)
-            await load(using: apiClient)
+            await load(using: apiClient, loc: loc)
             freshlyCreatedKey = keys.first { id in
                 guard let newId = id.id else { return false }
                 return !previousIds.contains(newId)
@@ -76,7 +76,7 @@ final class AdminApiKeysViewModel {
             newAppName = ""
             return true
         } catch {
-            createErrorMessage = error.localizedDescription
+            createErrorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
@@ -105,7 +105,7 @@ final class AdminApiKeysViewModel {
 
     // MARK: - Revoke
 
-    func revoke(_ key: AuthenticationInfo, using apiClient: any APIClientProtocol) async -> Bool {
+    func revoke(_ key: AuthenticationInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let token = key.accessToken else { return false }
         do {
             try await apiClient.revokeApiKey(key: token)
@@ -114,7 +114,7 @@ final class AdminApiKeysViewModel {
             if let id = key.id { revealedKeyIds.remove(id) }
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

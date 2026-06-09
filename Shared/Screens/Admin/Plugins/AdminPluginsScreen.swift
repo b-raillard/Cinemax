@@ -12,6 +12,7 @@ struct AdminPluginsScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     @State private var viewModel = AdminPluginsViewModel()
 
@@ -23,7 +24,7 @@ struct AdminPluginsScreen: View {
             emptyIcon: "puzzlepiece.extension",
             emptyTitle: loc.localized("admin.plugins.empty.title"),
             emptySubtitle: loc.localized("admin.plugins.empty.subtitle"),
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
             ScrollView(showsIndicators: false) {
                 AdminSectionGroup {
@@ -42,10 +43,10 @@ struct AdminPluginsScreen: View {
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(loc.localized("admin.plugins.title"))
         .navigationBarTitleDisplayMode(.large)
-        .refreshable { await viewModel.load(using: appState.apiClient) }
+        .refreshable { await viewModel.load(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.plugins.isEmpty {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
         .confirmationDialog(
@@ -59,7 +60,7 @@ struct AdminPluginsScreen: View {
         ) { plugin in
             Button(loc.localized("admin.plugins.uninstall.confirm"), role: .destructive) {
                 Task {
-                    let ok = await viewModel.uninstall(plugin, using: appState.apiClient)
+                    let ok = await viewModel.uninstall(plugin, using: appState.apiClient, loc: loc)
                     if ok {
                         toasts.success(loc.localized("admin.plugins.uninstall.success"))
                     } else if let err = viewModel.errorMessage {
@@ -122,7 +123,7 @@ struct AdminPluginsScreen: View {
                     } else {
                         Button {
                             Task {
-                                let ok = await viewModel.setEnabled(plugin, enabled: !isEnabled, using: appState.apiClient)
+                                let ok = await viewModel.setEnabled(plugin, enabled: !isEnabled, using: appState.apiClient, loc: loc)
                                 if ok {
                                     toasts.info(loc.localized(isEnabled ? "admin.plugins.disabled" : "admin.plugins.enabled"))
                                 } else if let err = viewModel.errorMessage {
@@ -130,7 +131,7 @@ struct AdminPluginsScreen: View {
                                 }
                             }
                         } label: {
-                            CinemaToggleIndicator(isOn: isEnabled, accent: themeManager.accent, animated: true)
+                            CinemaToggleIndicator(isOn: isEnabled, accent: themeManager.accent, animated: motionEffects)
                         }
                         .buttonStyle(.plain)
                     }

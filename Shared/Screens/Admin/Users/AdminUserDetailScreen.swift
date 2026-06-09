@@ -15,6 +15,7 @@ struct AdminUserDetailScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.motionEffectsEnabled) private var motionEffects
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: AdminUserDetailViewModel
@@ -74,7 +75,7 @@ struct AdminUserDetailScreen: View {
                 }
             }
         }
-        .task { await viewModel.loadMediaFolders(using: appState.apiClient) }
+        .task { await viewModel.loadMediaFolders(using: appState.apiClient, loc: loc) }
         .sheet(isPresented: $viewModel.showDeleteConfirm) {
             DestructiveConfirmSheet(
                 title: loc.localized("admin.user.delete.title"),
@@ -85,7 +86,7 @@ struct AdminUserDetailScreen: View {
                 requiredPhrase: viewModel.editedUser.name ?? "",
                 confirmLabel: loc.localized("admin.user.delete.confirm"),
                 onConfirm: {
-                    let ok = await viewModel.deleteUser(using: appState.apiClient)
+                    let ok = await viewModel.deleteUser(using: appState.apiClient, loc: loc)
                     if ok {
                         if let id = viewModel.userId {
                             parent.removeLocally(userId: id)
@@ -107,7 +108,7 @@ struct AdminUserDetailScreen: View {
             isDirty: viewModel.isDirty,
             isSaving: viewModel.isSaving,
             onSave: {
-                let ok = await viewModel.save(using: appState.apiClient)
+                let ok = await viewModel.save(using: appState.apiClient, loc: loc)
                 if ok {
                     toasts.success(loc.localized("admin.user.save.success"))
                 } else if let err = viewModel.errorMessage {
@@ -307,7 +308,7 @@ struct AdminUserDetailScreen: View {
     private var currentParentalRatingLabel: String {
         let rating = viewModel.editedUser.policy?.maxParentalRating ?? 0
         return parentalRatingOptions.first { $0.age == rating }?.label
-            ?? parentalRatingOptions.first!.label
+            ?? loc.localized("privacy.age.all")
     }
 
     // MARK: - Password tab
@@ -345,7 +346,7 @@ struct AdminUserDetailScreen: View {
                             isLoading: viewModel.isChangingPassword
                         ) {
                             Task {
-                                let ok = await viewModel.changePassword(using: appState.apiClient)
+                                let ok = await viewModel.changePassword(using: appState.apiClient, loc: loc)
                                 if ok {
                                     toasts.success(loc.localized("admin.user.password.success"))
                                 } else if let err = viewModel.errorMessage {
@@ -390,7 +391,7 @@ struct AdminUserDetailScreen: View {
         ) {
             Button(loc.localized("admin.user.password.resetAction"), role: .destructive) {
                 Task {
-                    let ok = await viewModel.resetPassword(using: appState.apiClient)
+                    let ok = await viewModel.resetPassword(using: appState.apiClient, loc: loc)
                     if ok {
                         toasts.success(loc.localized("admin.user.password.resetSuccess"))
                     } else if let err = viewModel.errorMessage {
@@ -458,7 +459,7 @@ struct AdminUserDetailScreen: View {
                 }
                 Spacer()
                 Button { isOn.wrappedValue.toggle() } label: {
-                    CinemaToggleIndicator(isOn: isOn.wrappedValue, accent: themeManager.accent, animated: true)
+                    CinemaToggleIndicator(isOn: isOn.wrappedValue, accent: themeManager.accent, animated: motionEffects)
                 }
                 .buttonStyle(.plain)
                 .disabled(disabled)

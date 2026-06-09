@@ -19,7 +19,7 @@ final class AdminActivityViewModel {
         !isLoading && errorMessage == nil && entries.isEmpty
     }
 
-    func loadInitial(using apiClient: any APIClientProtocol) async {
+    func loadInitial(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -31,13 +31,13 @@ final class AdminActivityViewModel {
             totalCount = result.total
             hasMore = entries.count < totalCount
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
     /// Fires when the last visible row appears — infinite-scroll trigger.
     /// Guards against re-entry and no-op when we've already loaded everything.
-    func loadMoreIfNeeded(currentItem entry: ActivityLogEntry, using apiClient: any APIClientProtocol) async {
+    func loadMoreIfNeeded(currentItem entry: ActivityLogEntry, using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         guard hasMore, !isLoading, !isLoadingMore else { return }
         guard entries.last?.id == entry.id else { return }
 
@@ -51,12 +51,12 @@ final class AdminActivityViewModel {
             totalCount = result.total
             hasMore = entries.count < result.total
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
-    func reload(using apiClient: any APIClientProtocol) async {
-        await loadInitial(using: apiClient)
+    func reload(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+        await loadInitial(using: apiClient, loc: loc)
     }
 }
 #endif

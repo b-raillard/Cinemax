@@ -60,7 +60,7 @@ struct MetadataEditorScreen: View {
                         isDirty: viewModel.isDirty,
                         isSaving: viewModel.isSaving,
                         onSave: {
-                            let ok = await viewModel.save(using: appState.apiClient)
+                            let ok = await viewModel.save(using: appState.apiClient, loc: loc)
                             if ok {
                                 toasts.success(loc.localized("admin.metadata.save.success"))
                             } else if let err = viewModel.errorMessage {

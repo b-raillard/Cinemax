@@ -51,7 +51,8 @@ struct MetadataImagesTab: View {
                 Task {
                     let ok = await viewModel.deletePendingImage(
                         using: appState.apiClient,
-                        userId: appState.currentUserId ?? ""
+                        userId: appState.currentUserId ?? "",
+                        loc: loc
                     )
                     if ok {
                         toasts.success(loc.localized("admin.metadata.images.delete.success"))
@@ -140,7 +141,8 @@ struct MetadataImagesTab: View {
                         url: appState.imageBuilder.imageURLRaw(
                             itemId: viewModel.item.id ?? "",
                             imageTypeRaw: type.rawValue,
-                            maxWidth: 360
+                            maxWidth: 360,
+                            tag: imageTag(type: type, index: index)
                         ),
                         fallbackIcon: "photo"
                     )
@@ -228,7 +230,8 @@ struct MetadataImagesTab: View {
                         Task {
                             let ok = await viewModel.addImageFromURL(
                                 using: appState.apiClient,
-                                userId: appState.currentUserId ?? ""
+                                userId: appState.currentUserId ?? "",
+                                loc: loc
                             )
                             if ok {
                                 toasts.success(loc.localized("admin.metadata.images.add.success"))
@@ -260,6 +263,18 @@ struct MetadataImagesTab: View {
 
     private func hasImage(_ type: JellyfinAPI.ImageType) -> Bool {
         viewModel.item.imageTags?[type.rawValue] != nil
+    }
+
+    /// Cache-busting tag for a given slot. Backdrops are indexed into
+    /// `backdropImageTags`; every other type lives in the `imageTags`
+    /// dictionary keyed by raw type name.
+    private func imageTag(type: JellyfinAPI.ImageType, index: Int?) -> String? {
+        if type == .backdrop, let index {
+            guard let tags = viewModel.item.backdropImageTags,
+                  tags.indices.contains(index) else { return nil }
+            return tags[index]
+        }
+        return viewModel.item.imageTags?[type.rawValue]
     }
 
     private func typeLabel(for type: JellyfinAPI.ImageType) -> String {

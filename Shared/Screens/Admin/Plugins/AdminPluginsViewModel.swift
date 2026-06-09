@@ -18,7 +18,7 @@ final class AdminPluginsViewModel {
         !isLoading && errorMessage == nil && plugins.isEmpty
     }
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = plugins.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -26,11 +26,11 @@ final class AdminPluginsViewModel {
             plugins = try await apiClient.getInstalledPlugins()
                 .sorted { ($0.name ?? "") < ($1.name ?? "") }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
-    func setEnabled(_ plugin: PluginInfo, enabled: Bool, using apiClient: any APIClientProtocol) async -> Bool {
+    func setEnabled(_ plugin: PluginInfo, enabled: Bool, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = plugin.id, let version = plugin.version else { return false }
         pendingActionPluginId = id
         defer { pendingActionPluginId = nil }
@@ -42,15 +42,15 @@ final class AdminPluginsViewModel {
             }
             // Reload so the server-reported status reflects whether a restart
             // is now pending — the badge on the row should flip accordingly.
-            await load(using: apiClient)
+            await load(using: apiClient, loc: loc)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
 
-    func uninstall(_ plugin: PluginInfo, using apiClient: any APIClientProtocol) async -> Bool {
+    func uninstall(_ plugin: PluginInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = plugin.id, let version = plugin.version else { return false }
         pendingActionPluginId = id
         defer { pendingActionPluginId = nil }
@@ -59,7 +59,7 @@ final class AdminPluginsViewModel {
             plugins.removeAll { $0.id == plugin.id }
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

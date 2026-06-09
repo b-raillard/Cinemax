@@ -27,7 +27,7 @@ struct AdminDevicesScreen: View {
             emptyIcon: "laptopcomputer.slash",
             emptyTitle: loc.localized("admin.devices.empty.title"),
             emptySubtitle: loc.localized("admin.devices.empty.subtitle"),
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
             List {
                 ForEach(viewModel.devices, id: \.id) { device in
@@ -52,10 +52,10 @@ struct AdminDevicesScreen: View {
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(loc.localized("admin.devices.title"))
         .navigationBarTitleDisplayMode(.large)
-        .refreshable { await viewModel.load(using: appState.apiClient) }
+        .refreshable { await viewModel.load(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.devices.isEmpty {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
         .confirmationDialog(
@@ -69,7 +69,7 @@ struct AdminDevicesScreen: View {
         ) { device in
             Button(loc.localized("admin.devices.revoke"), role: .destructive) {
                 Task {
-                    let ok = await viewModel.revoke(device, using: appState.apiClient)
+                    let ok = await viewModel.revoke(device, using: appState.apiClient, loc: loc)
                     if ok {
                         toasts.success(loc.localized("admin.devices.revoke.success"))
                     } else if let err = viewModel.errorMessage {

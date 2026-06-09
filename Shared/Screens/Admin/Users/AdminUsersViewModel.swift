@@ -19,13 +19,13 @@ final class AdminUsersViewModel {
         !isLoading && errorMessage == nil && users.isEmpty
     }
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
         do {
             users = try await apiClient.getUsers().sorted { ($0.name ?? "") < ($1.name ?? "") }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
         isLoading = false
     }
@@ -33,7 +33,7 @@ final class AdminUsersViewModel {
     /// Creates a user and appends to the local list optimistically — avoids a
     /// second round-trip just to see the new row. Callers still tap into the
     /// detail screen for policy/library configuration.
-    func createUser(using apiClient: any APIClientProtocol) async -> Bool {
+    func createUser(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         let name = newUserName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return false }
         isCreating = true
@@ -50,7 +50,7 @@ final class AdminUsersViewModel {
             newUserPassword = ""
             return true
         } catch {
-            createErrorMessage = error.localizedDescription
+            createErrorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

@@ -25,7 +25,7 @@ struct AdminCatalogScreen: View {
             emptyIcon: "globe.badge.chevron.backward",
             emptyTitle: loc.localized("admin.catalog.empty.title"),
             emptySubtitle: loc.localized("admin.catalog.empty.subtitle"),
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -52,10 +52,10 @@ struct AdminCatalogScreen: View {
         .navigationTitle(loc.localized("admin.catalog.title"))
         .navigationBarTitleDisplayMode(.large)
         .searchable(text: $viewModel.searchText, prompt: loc.localized("admin.catalog.searchPrompt"))
-        .refreshable { await viewModel.load(using: appState.apiClient) }
+        .refreshable { await viewModel.load(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.packages.isEmpty {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
         .sheet(item: Binding(
@@ -136,7 +136,7 @@ struct AdminCatalogScreen: View {
                         isLoading: viewModel.isInstalling
                     ) {
                         Task {
-                            let ok = await viewModel.installSelected(using: appState.apiClient)
+                            let ok = await viewModel.installSelected(using: appState.apiClient, loc: loc)
                             if ok {
                                 toasts.success(loc.localized("admin.catalog.install.success"))
                                 viewModel.selectedPackage = nil

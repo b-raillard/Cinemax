@@ -14,7 +14,7 @@ final class AdminLogsViewModel {
         !isLoading && errorMessage == nil && files.isEmpty
     }
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = files.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -22,7 +22,7 @@ final class AdminLogsViewModel {
             files = try await apiClient.getServerLogs()
                 .sorted { ($0.dateModified ?? .distantPast) > ($1.dateModified ?? .distantPast) }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 }
@@ -45,7 +45,7 @@ final class AdminLogViewerViewModel {
         self.fileName = fileName
     }
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -69,7 +69,7 @@ final class AdminLogViewerViewModel {
                 isTruncated = false
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 }
