@@ -25,7 +25,7 @@ struct MetadataIdentifyTab: View {
         } else {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                 IdentifyFormView(model: viewModel.identify) {
-                    Task { await viewModel.runIdentifySearch(using: appState.apiClient) }
+                    Task { await viewModel.runIdentifySearch(using: appState.apiClient, loc: loc) }
                 }
 
                 if !viewModel.identify.results.isEmpty {
@@ -91,7 +91,8 @@ struct MetadataIdentifyTab: View {
                     Task {
                         let ok = await viewModel.applyIdentifyResult(
                             using: appState.apiClient,
-                            userId: appState.currentUserId ?? ""
+                            userId: appState.currentUserId ?? "",
+                            loc: loc
                         )
                         if ok {
                             toasts.success(loc.localized("admin.identify.apply.success"))

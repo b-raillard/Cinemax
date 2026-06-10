@@ -22,7 +22,7 @@ final class AdminPlaybackViewModel {
         return edited != original
     }
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = edited == nil
         errorMessage = nil
         defer { isLoading = false }
@@ -31,11 +31,11 @@ final class AdminPlaybackViewModel {
             edited = options
             original = options
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
-    func save(using apiClient: any APIClientProtocol) async -> Bool {
+    func save(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let edited else { return false }
         isSaving = true
         errorMessage = nil
@@ -45,7 +45,7 @@ final class AdminPlaybackViewModel {
             original = edited
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

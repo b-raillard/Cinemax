@@ -6,6 +6,7 @@ struct LibrarySortFilterSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(\.motionEffectsEnabled) private var motionEffects
     let onApply: () -> Void
     var availableGenres: [String] = []
 
@@ -247,7 +248,8 @@ struct LibrarySortFilterSheet: View {
                     Spacer()
                     CinemaToggleIndicator(
                         isOn: sortFilter.showUnwatchedOnly,
-                        accent: themeManager.accent
+                        accent: themeManager.accent,
+                        animated: motionEffects
                     )
                 }
                 .padding(.horizontal, CinemaSpacing.spacing4)

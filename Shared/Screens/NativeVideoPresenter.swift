@@ -137,7 +137,7 @@ final class NativeVideoPresenter {
         )
         #endif
         self.chapters = ChapterController(
-            apiClient: apiClient, userId: userId, imageBuilder: imageBuilder
+            apiClient: apiClient, userId: userId, imageBuilder: imageBuilder, loc: loc
         )
         self.endOfSeries = EndOfSeriesOverlayController(
             loc: loc,

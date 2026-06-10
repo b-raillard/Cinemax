@@ -61,7 +61,7 @@ final class MetadataEditorViewModel {
 
     // MARK: - Save
 
-    func save(using apiClient: any APIClientProtocol) async -> Bool {
+    func save(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         isSaving = true
         errorMessage = nil
@@ -72,18 +72,18 @@ final class MetadataEditorViewModel {
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
 
     // MARK: - Images
 
-    func addImageFromURL(using apiClient: any APIClientProtocol, userId: String) async -> Bool {
+    func addImageFromURL(using apiClient: any APIClientProtocol, userId: String, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         let url = newImageURL.trimmingCharacters(in: .whitespaces)
         guard !url.isEmpty, URL(string: url) != nil else {
-            errorMessage = "Invalid URL"
+            errorMessage = loc.localized("admin.metadata.images.invalidURL")
             return false
         }
         errorMessage = nil
@@ -93,12 +93,12 @@ final class MetadataEditorViewModel {
             await reloadItem(using: apiClient, userId: userId)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
 
-    func deletePendingImage(using apiClient: any APIClientProtocol, userId: String) async -> Bool {
+    func deletePendingImage(using apiClient: any APIClientProtocol, userId: String, loc: LocalizationManager) async -> Bool {
         guard let id = item.id, let pending = pendingImageDelete else { return false }
         errorMessage = nil
         do {
@@ -107,7 +107,7 @@ final class MetadataEditorViewModel {
             await reloadItem(using: apiClient, userId: userId)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
@@ -134,16 +134,16 @@ final class MetadataEditorViewModel {
 
     /// Delegates to the shared `IdentifyFlowModel`. Kept as a pass-through
     /// so existing tab callers don't have to know about the nested model.
-    func runIdentifySearch(using apiClient: any APIClientProtocol) async {
-        await identify.runSearch(using: apiClient)
+    func runIdentifySearch(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+        await identify.runSearch(using: apiClient, loc: loc)
         // Mirror the flow model's error into the editor so it surfaces in
         // the same "error band" the other tabs use.
         errorMessage = identify.errorMessage
     }
 
-    func applyIdentifyResult(using apiClient: any APIClientProtocol, userId: String) async -> Bool {
+    func applyIdentifyResult(using apiClient: any APIClientProtocol, userId: String, loc: LocalizationManager) async -> Bool {
         guard let result = pendingIdentifyApply else { return false }
-        let ok = await identify.apply(result, using: apiClient)
+        let ok = await identify.apply(result, using: apiClient, loc: loc)
         if ok {
             pendingIdentifyApply = nil
             await reloadItem(using: apiClient, userId: userId)
@@ -155,7 +155,7 @@ final class MetadataEditorViewModel {
 
     // MARK: - Actions
 
-    func refreshMetadata(using apiClient: any APIClientProtocol) async -> Bool {
+    func refreshMetadata(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         isRefreshing = true
         errorMessage = nil
@@ -171,12 +171,12 @@ final class MetadataEditorViewModel {
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
 
-    func deleteItem(using apiClient: any APIClientProtocol) async -> Bool {
+    func deleteItem(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         isDeleting = true
         errorMessage = nil
@@ -186,7 +186,7 @@ final class MetadataEditorViewModel {
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

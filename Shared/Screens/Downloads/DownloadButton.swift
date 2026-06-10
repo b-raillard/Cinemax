@@ -186,22 +186,32 @@ struct DownloadButton: View {
         guard let userId = appState.currentUserId else { return }
         Task {
             var queued = 0
+            var failed = 0
             for ep in episodes {
                 guard let epId = ep.id else { continue }
                 if downloads.item(for: epId) != nil { continue }
                 guard let req = try? await appState.apiClient.buildDownloadRequest(itemId: epId, userId: userId),
-                      let dl = DownloadItem.from(item: ep, request: req) else { continue }
+                      let dl = DownloadItem.from(item: ep, request: req) else {
+                    failed += 1
+                    continue
+                }
                 let (poster, backdrop) = artworkURLs(for: ep)
                 downloads.enqueue(dl, posterURL: poster, backdropURL: backdrop)
                 queued += 1
             }
-            emitBulkToast(queued: queued)
+            emitBulkToast(queued: queued, failed: failed)
         }
     }
 
     @MainActor
-    private func emitBulkToast(queued: Int) {
+    private func emitBulkToast(queued: Int, failed: Int) {
         if queued == 0 {
+            if failed > 0 {
+                // Nothing queued because negotiation failed for every episode —
+                // a "download queued" pill here would be a lie.
+                toasts.error(loc.localized("toast.download.error"))
+                return
+            }
             toasts.info(loc.localized("toast.download.queued"))
         } else if queued == 1 {
             toasts.success(loc.localized("toast.download.queued"))

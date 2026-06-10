@@ -29,7 +29,7 @@ struct AdminLogsScreen: View {
             emptyIcon: "doc.text",
             emptyTitle: loc.localized("admin.logs.empty.title"),
             emptySubtitle: loc.localized("admin.logs.empty.subtitle"),
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
             ScrollView(showsIndicators: false) {
                 AdminSectionGroup {
@@ -53,10 +53,10 @@ struct AdminLogsScreen: View {
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(loc.localized("admin.logs.title"))
         .navigationBarTitleDisplayMode(.large)
-        .refreshable { await viewModel.load(using: appState.apiClient) }
+        .refreshable { await viewModel.load(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.files.isEmpty {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
     }
@@ -125,7 +125,7 @@ struct AdminLogViewerScreen: View {
                 ErrorStateView(
                     message: err,
                     retryTitle: loc.localized("action.retry"),
-                    onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+                    onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
                 )
             } else {
                 ScrollView {
@@ -147,7 +147,7 @@ struct AdminLogViewerScreen: View {
         }
         .navigationTitle(fileName)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await viewModel.load(using: appState.apiClient) }
+        .task { await viewModel.load(using: appState.apiClient, loc: loc) }
     }
 
     private var truncationBanner: some View {

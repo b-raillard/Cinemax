@@ -24,23 +24,18 @@
 "error.sessionExpired" = "Your session has expired. Please sign in again.";
 "error.generic" = "Something went wrong. Please try again.";
 "login.usernameRequired" = "Please enter your username.";
-"login.failed" = "Sign-in failed. Check your username and password.";
 "server.addressRequired" = "Please enter a server address.";
 "server.invalidURL" = "That doesn't look like a valid server address.";
 "server.connectFailed" = "Couldn't connect to that server. Check the address and that it's reachable.";
 "action.clear" = "Clear";
 "action.done" = "Done";
-"player.tracks.title" = "Audio & Subtitles";
-"player.chapter.previous" = "Previous Chapter";
-"player.chapter.next" = "Next Chapter";
 "player.previousEpisode" = "Previous Episode";
 "player.nextEpisode" = "Next Episode";
-"player.playPause" = "Play / Pause";
 "player.chapters" = "Chapters";
+"player.chapter" = "Chapter";
 "action.logOut" = "Log Out";
 "action.viewAll" = "View All";
 "action.refresh" = "Refresh";
-"action.surpriseMe" = "Surprise Me";
 "action.ok" = "OK";
 "action.back" = "Back";
 
@@ -83,8 +78,6 @@
 "tvShows.title" = "TV Shows";
 "tvShows.browseGenres" = "Browse Genres";
 "tvShows.count" = "%d Series";
-"tvShows.all" = "All";
-"tvShows.seasons" = "%d Season(s)";
 "tvShows.season" = "%d Season";
 "tvShows.seasonsPlural" = "%d Seasons";
 
@@ -99,11 +92,8 @@
 "empty.library.filtered.action" = "Clear filters";
 "library.loading.movies" = "Loading movies…";
 "library.loading.series" = "Loading series…";
-"empty.library.title" = "No titles here yet";
-"empty.library.subtitle" = "Add content to your Jellyfin server to get started.";
 "empty.home.title" = "Your library is empty";
 "empty.home.subtitle" = "Add movies or TV shows to your Jellyfin server and pull down to refresh.";
-"empty.series.title" = "No episodes yet";
 
 // MARK: - Sleep Timer
 
@@ -126,7 +116,6 @@
 "playback.error.generic" = "Something went wrong while loading the stream. Try again or check your Jellyfin server.";
 "playback.error.network" = "The connection to your server was lost. Check your network and retry.";
 "playback.error.transcode" = "The server couldn't transcode this file. Check your server's transcoding settings.";
-"playback.error.retry" = "Retry";
 "playback.error.close" = "Close";
 
 // MARK: - End of Series
@@ -139,7 +128,7 @@
 
 "toast.surprise.failed" = "Couldn't pick something";
 "toast.surprise.emptyLibrary" = "Your library is empty.";
-"toast.loadFailed" = "Couldn't load content";
+"toast.dismiss" = "Dismiss";
 "search.searchLibrary" = "Search your library";
 "search.topMatches" = "Top Matches";
 "search.permissionRequired" = "Permission Required";
@@ -153,7 +142,6 @@
 
 // MARK: - Settings
 
-"settings.title" = "Settings";
 "settings.appearance" = "Appearance";
 "settings.darkMode" = "Dark Mode";
 "settings.lightMode" = "Light Mode";
@@ -176,7 +164,6 @@
 "settings.admin" = "Admin";
 "settings.user" = "User";
 "settings.switchAccount" = "Switch Account";
-"switchAccount.pickUser" = "Pick a user";
 "switchAccount.enterPasswordFor" = "Enter password for %@";
 "switchAccount.signIn" = "Sign In";
 "switchAccount.authFailed" = "Sign-in failed";
@@ -223,13 +210,10 @@
 "toast.deviceSignedOut" = "Device signed out";
 "toast.deviceSignOutFailed" = "Couldn't sign out that device";
 "toast.deviceListFailed" = "Couldn't load the device list";
-"toast.userListFailed" = "Couldn't load the user list";
 
 // MARK: - Admin — Shared
 
 "action.save" = "Save";
-"admin.comingSoon.title" = "Coming soon";
-"admin.comingSoon.subtitle" = "This section will be available in a future update.";
 "admin.form.discardChanges.title" = "Discard changes?";
 "admin.form.discardChanges.message" = "Unsaved changes will be lost.";
 "admin.form.discard" = "Discard";
@@ -548,6 +532,7 @@
 "admin.metadata.images.add.title" = "Add image";
 "admin.metadata.images.add.description" = "The server will download the image from this URL and attach it as \"%@\".";
 "admin.metadata.images.add.urlLabel" = "Image URL";
+"admin.metadata.images.invalidURL" = "That doesn't look like a valid image URL.";
 "admin.metadata.images.add.submit" = "Download image";
 "admin.metadata.images.add.success" = "Image downloaded";
 
@@ -628,11 +613,8 @@
 
 "settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Fast sleep timer (15 s)";
-"settings.debug.fastSleepTimer.subtitle" = "Override the sleep duration to 15 seconds for testing the prompt.";
 "settings.debug.skipToEnd" = "Skip-to-end button";
-"settings.debug.skipToEnd.subtitle" = "Show a button in the player that jumps to the last 15 s of the current item.";
 "settings.interface" = "Interface";
-"settings.interface.display" = "Display";
 "settings.interface.playback" = "Playback";
 "settings.interface.menu" = "Main Menu";
 
@@ -666,7 +648,6 @@
 "settings.forceNativeAVPlayer" = "Use Native Player";
 "settings.systemSettings" = "System Settings";
 "settings.version" = "Version %@";
-"settings.systemInformation" = "System Information";
 "settings.deviceName" = "Device Name";
 "settings.network" = "Network";
 "settings.authenticatedDevice" = "Authenticated Device";
@@ -706,7 +687,6 @@
 "login.mobileTitle" = "Sign In";
 "login.mobileSubtitle" = "Sign in with your Jellyfin account to start streaming.";
 "login.changeServer" = "Change server";
-"login.tagline" = "Your Media, Simplified";
 "login.username" = "Username";
 "login.usernamePlaceholder" = "Your Username";
 "login.password" = "Password";
@@ -759,7 +739,6 @@
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
 "player.pip" = "Picture in Picture";
-"player.trackPicker.title" = "Playback Tracks";
 "player.skipIntro" = "Skip Intro";
 "player.skipCredits" = "Skip Credits";
 
@@ -803,7 +782,6 @@
 // MARK: - Downloads (offline)
 
 "settings.downloads" = "Downloads";
-"settings.downloads.subtitle" = "Your offline movies & shows";
 "downloads.title" = "Downloads";
 "downloads.empty.title" = "No downloads yet";
 "downloads.empty.subtitle" = "Download a movie or episode to watch it offline.";
@@ -815,11 +793,9 @@
 "downloads.status.paused" = "Paused";
 "downloads.status.completed" = "Downloaded";
 "downloads.status.failed" = "Failed";
-"downloads.progress" = "%d %%";
 "downloads.action.pause" = "Pause";
 "downloads.action.resume" = "Resume";
 "downloads.action.retry" = "Retry";
-"downloads.action.cancel" = "Cancel";
 "downloads.action.remove" = "Remove";
 "downloads.action.removeAll" = "Remove all";
 "downloads.confirmRemove.title" = "Remove this download?";
@@ -830,8 +806,6 @@
 "detail.download" = "Download";
 "detail.downloading" = "Downloading…";
 "detail.downloaded" = "Downloaded";
-"detail.download.cancel" = "Cancel download";
-"detail.download.removeFromDevice" = "Remove from device";
 "detail.download.queueSeason" = "Download season";
 "detail.download.queueSeries" = "Download series";
 
@@ -839,8 +813,6 @@
 "toast.download.queuedMany" = "%d episodes queued";
 "toast.download.removed" = "Download removed";
 "toast.download.error" = "Download failed";
-"toast.download.unsupportedContainer" = "Download started — but this format isn't playable offline on iOS.";
-"player.error.unsupportedOfflineContainer" = "This file (%@) can't be played offline on iOS. Re-encode it to MP4 on your Jellyfin server to enjoy it without a network.";
 
 // MARK: - Offline mode
 

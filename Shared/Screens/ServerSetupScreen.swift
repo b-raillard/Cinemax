@@ -178,7 +178,7 @@ struct ServerSetupScreen: View {
                     Text(loc.localized("server.mobileTitle"))
                         .font(.system(size: CinemaScale.pt(28), weight: .black))
                         .tracking(-0.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CinemaColor.onSurface)
 
                     Text(loc.localized("server.mobileSubtitle"))
                         .font(CinemaFont.label(.small))

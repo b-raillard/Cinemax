@@ -71,13 +71,13 @@ final class AdminUserDetailViewModel {
 
     // MARK: - Load
 
-    func loadMediaFolders(using apiClient: any APIClientProtocol) async {
+    func loadMediaFolders(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         do {
             let folders = try await apiClient.getMediaFolders()
             allMediaFolders = folders
             mediaFoldersError = nil
         } catch {
-            mediaFoldersError = error.localizedDescription
+            mediaFoldersError = loc.userFacingMessage(for: error)
         }
         mediaFoldersLoaded = true
     }
@@ -87,9 +87,11 @@ final class AdminUserDetailViewModel {
     /// Saves profile + policy atomically. If either half fails the UI surfaces
     /// the error but we don't roll back the server — `reload()` will re-sync
     /// if the caller triggers it. This matches Jellyfin web's behavior.
-    func save(using apiClient: any APIClientProtocol) async -> Bool {
+    func save(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = editedUser.id else {
-            errorMessage = "Missing user id"
+            // Internal invariant (the editor always opens with an id) — a
+            // generic localized message is all the user can act on.
+            errorMessage = loc.localized("error.generic")
             return false
         }
         isSaving = true
@@ -103,14 +105,14 @@ final class AdminUserDetailViewModel {
             originalUser = editedUser
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
 
     // MARK: - Password
 
-    func changePassword(using apiClient: any APIClientProtocol) async -> Bool {
+    func changePassword(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = editedUser.id, passwordsMatch else { return false }
         isChangingPassword = true
         errorMessage = nil
@@ -125,7 +127,7 @@ final class AdminUserDetailViewModel {
             confirmPassword = ""
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
@@ -133,7 +135,7 @@ final class AdminUserDetailViewModel {
     /// Clears the user's password outright. They'll be prompted to set a new
     /// one on their next login. Distinct from `changePassword` since the
     /// server uses the `resetPassword: true` flag to signal intent.
-    func resetPassword(using apiClient: any APIClientProtocol) async -> Bool {
+    func resetPassword(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = editedUser.id else { return false }
         isChangingPassword = true
         errorMessage = nil
@@ -146,14 +148,14 @@ final class AdminUserDetailViewModel {
             )
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
 
     // MARK: - Delete
 
-    func deleteUser(using apiClient: any APIClientProtocol) async -> Bool {
+    func deleteUser(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = editedUser.id else { return false }
         isDeleting = true
         errorMessage = nil
@@ -162,7 +164,7 @@ final class AdminUserDetailViewModel {
             try await apiClient.deleteUser(id: id)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

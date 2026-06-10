@@ -23,6 +23,7 @@ struct AdminNetworkScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     @State private var viewModel = AdminNetworkViewModel()
 
@@ -31,7 +32,7 @@ struct AdminNetworkScreen: View {
             isLoading: viewModel.isLoading && viewModel.edited == nil,
             errorMessage: viewModel.errorMessage,
             isEmpty: false,
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
             if viewModel.edited != nil {
                 AdminFormScreen(
@@ -58,7 +59,7 @@ struct AdminNetworkScreen: View {
         .navigationBarTitleDisplayMode(.large)
         .task {
             if viewModel.edited == nil {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
         .confirmationDialog(
@@ -68,7 +69,7 @@ struct AdminNetworkScreen: View {
         ) {
             Button(loc.localized("admin.network.saveWarning.confirm"), role: .destructive) {
                 Task {
-                    let ok = await viewModel.save(using: appState.apiClient)
+                    let ok = await viewModel.save(using: appState.apiClient, loc: loc)
                     if ok {
                         toasts.success(loc.localized("admin.network.save.success"))
                     } else if let err = viewModel.errorMessage {
@@ -269,7 +270,7 @@ struct AdminNetworkScreen: View {
                     .foregroundStyle(CinemaColor.onSurface)
                 Spacer()
                 Button { binding.wrappedValue.toggle() } label: {
-                    CinemaToggleIndicator(isOn: binding.wrappedValue, accent: themeManager.accent, animated: true)
+                    CinemaToggleIndicator(isOn: binding.wrappedValue, accent: themeManager.accent, animated: motionEffects)
                 }
                 .buttonStyle(.plain)
             }

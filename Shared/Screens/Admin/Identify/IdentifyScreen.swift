@@ -41,7 +41,7 @@ struct IdentifyScreen: View {
                     ScrollView {
                         IdentifyFormView(model: model) {
                             Task {
-                                await model.runSearch(using: appState.apiClient)
+                                await model.runSearch(using: appState.apiClient, loc: loc)
                                 // Always transition — empty results render a
                                 // "no match" state rather than trapping the
                                 // user on the form with no visible feedback.
@@ -137,7 +137,7 @@ struct IdentifyScreen: View {
     }
 
     private func applyAndDismiss(_ result: RemoteSearchResult) async {
-        let ok = await model.apply(result, using: appState.apiClient)
+        let ok = await model.apply(result, using: appState.apiClient, loc: loc)
         if ok {
             toasts.success(loc.localized("admin.identify.apply.success"))
             dismiss()

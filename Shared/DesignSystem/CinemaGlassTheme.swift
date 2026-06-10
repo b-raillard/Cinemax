@@ -30,6 +30,10 @@ private extension UIColor {
 
 // MARK: - Color Tokens
 
+// NB: a few tokens (`surfaceBright`, `onBackground`, `primaryDim`,
+// `secondaryContainer`, `onErrorContainer`) currently have no call sites —
+// they are kept deliberately for palette completeness (Material-style roles)
+// so new surfaces don't mint ad-hoc colors.
 enum CinemaColor {
     // Surface hierarchy
     static let surface                 = Color.dynamic(light: 0xF7F7F8, dark: 0x0E0E0E)
@@ -79,18 +83,32 @@ enum CinemaColor {
 /// so bumping ThemeManager._accentRevision (which happens on uiScale write) re-renders
 /// all views and they pick up the new factor automatically.
 enum CinemaScale {
+    /// Cached factor — `factor` sits on the hot path of every CinemaFont token
+    /// and `pt()` call (dozens-to-hundreds of reads per body evaluation during
+    /// scrolls), so don't pay a CFPreferences lookup each time. Invalidated by
+    /// `ThemeManager.uiScale`'s setter (the single writer, which also bumps
+    /// `_accentRevision` to re-render). Main-actor-render-only access.
+    nonisolated(unsafe) private static var cachedFactor: CGFloat?
+
     /// Reads the persisted scale factor. Default 1.0 (= 100%).
     /// On tvOS a 1.4× base multiplier is applied on top, since base sizes
     /// are defined for iOS (~10 pt/m) but tvOS is viewed from ~3 m away.
     static var factor: CGFloat {
+        if let cachedFactor { return cachedFactor }
         let stored = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double
             ?? SettingsKey.Default.uiScale
         #if os(tvOS)
-        return CGFloat(stored) * 1.4
+        let resolved = CGFloat(stored) * 1.4
         #else
-        return CGFloat(stored)
+        let resolved = CGFloat(stored)
         #endif
+        cachedFactor = resolved
+        return resolved
     }
+
+    /// Must be called after every `SettingsKey.uiScale` write
+    /// (`ThemeManager.uiScale` is the only writer).
+    static func invalidateFactorCache() { cachedFactor = nil }
 
     /// Returns a point size multiplied by the global scale factor.
     static func pt(_ size: CGFloat) -> CGFloat { (size * factor).rounded() }

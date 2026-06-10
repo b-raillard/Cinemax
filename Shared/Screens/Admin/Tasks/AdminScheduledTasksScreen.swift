@@ -23,7 +23,7 @@ struct AdminScheduledTasksScreen: View {
             emptyIcon: "calendar.badge.exclamationmark",
             emptyTitle: loc.localized("admin.tasks.empty.title"),
             emptySubtitle: loc.localized("admin.tasks.empty.subtitle"),
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -39,10 +39,10 @@ struct AdminScheduledTasksScreen: View {
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(loc.localized("admin.tasks.title"))
         .navigationBarTitleDisplayMode(.large)
-        .refreshable { await viewModel.load(using: appState.apiClient) }
+        .refreshable { await viewModel.load(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.tasks.isEmpty {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
             if viewModel.hasRunningTask {
                 viewModel.startPolling(using: appState.apiClient)
@@ -165,7 +165,7 @@ struct AdminScheduledTasksScreen: View {
         } else if isRunning {
             Button {
                 Task {
-                    let ok = await viewModel.stopTask(task, using: appState.apiClient)
+                    let ok = await viewModel.stopTask(task, using: appState.apiClient, loc: loc)
                     if ok {
                         toasts.info(loc.localized("admin.tasks.stopped"))
                     } else if let err = viewModel.errorMessage {
@@ -188,7 +188,7 @@ struct AdminScheduledTasksScreen: View {
         } else {
             Button {
                 Task {
-                    let ok = await viewModel.startTask(task, using: appState.apiClient)
+                    let ok = await viewModel.startTask(task, using: appState.apiClient, loc: loc)
                     if ok {
                         toasts.success(loc.localized("admin.tasks.started"))
                     } else if let err = viewModel.errorMessage {

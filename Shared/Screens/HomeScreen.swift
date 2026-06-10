@@ -46,7 +46,7 @@ struct HomeScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
-            await viewModel.load(using: appState)
+            await viewModel.loadInitial(using: appState)
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             Task { await viewModel.reload(using: appState) }
@@ -282,9 +282,9 @@ struct HomeScreen: View {
                             ) {
                                 HStack(spacing: CinemaSpacing.spacing2) {
                                     Text(loc.localized("action.play"))
-                                        .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
+                                        .font(.system(size: heroButtonFontSize, weight: .bold))
                                     Image(systemName: "play.fill")
-                                        .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
+                                        .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                                 }
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
@@ -308,10 +308,10 @@ struct HomeScreen: View {
                             } label: {
                                 HStack(spacing: CinemaSpacing.spacing2) {
                                     Text(loc.localized("action.moreInfo"))
-                                        .font(.system(size: heroPadding > 60 ? 28 : 18, weight: .bold))
+                                        .font(.system(size: heroButtonFontSize, weight: .bold))
                                         .lineLimit(1)
                                     Image(systemName: "info.circle")
-                                        .font(.system(size: heroPadding > 60 ? 26 : 16, weight: .bold))
+                                        .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                                 }
                                 .foregroundStyle(CinemaColor.onSurface)
                                 .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
@@ -553,17 +553,17 @@ struct HomeScreen: View {
 
     private var heroTitleSize: CGFloat {
         #if os(tvOS)
-        72
+        CinemaScale.pt(72)
         #else
-        20
+        CinemaScale.pt(20)
         #endif
     }
 
     private var overviewFontSize: CGFloat {
         #if os(tvOS)
-        18
+        CinemaScale.pt(18)
         #else
-        14
+        CinemaScale.pt(14)
         #endif
     }
 
@@ -575,6 +575,16 @@ struct HomeScreen: View {
         AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular
             ? CinemaSpacing.spacing6
             : CinemaSpacing.spacing4
+        #endif
+    }
+
+    /// Mirrors `LibraryHeroSection.heroButtonFontSize` / `MediaDetailScreen.buttonFontSize`.
+    /// tvOS 28 is the documented Play-label exception (bare literal inside a computed var).
+    private var heroButtonFontSize: CGFloat {
+        #if os(tvOS)
+        28
+        #else
+        CinemaScale.pt(18)
         #endif
     }
 

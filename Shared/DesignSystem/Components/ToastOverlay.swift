@@ -41,6 +41,8 @@ private struct ToastView: View {
     let toast: Toast
     let onDismiss: () -> Void
 
+    @Environment(LocalizationManager.self) private var loc
+
     var body: some View {
         HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
             Image(systemName: toast.level.systemImage)
@@ -70,7 +72,7 @@ private struct ToastView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss")
+            .accessibilityLabel(loc.localized("toast.dismiss"))
         }
         .padding(.horizontal, CinemaSpacing.spacing4)
         .padding(.vertical, CinemaSpacing.spacing3)

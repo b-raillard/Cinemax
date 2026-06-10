@@ -695,11 +695,3 @@ struct MediaLibraryScreen: View {
     }
 }
 
-// MARK: - Convenience Wrappers
-
-struct MovieLibraryScreen: View {
-    var body: some View {
-        MediaLibraryScreen(itemType: .movie)
-    }
-}
-

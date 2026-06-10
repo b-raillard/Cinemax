@@ -32,7 +32,7 @@ extension DownloadItem {
             seasonName: item.seasonName,
             seasonIndex: item.parentIndexNumber,
             episodeIndex: item.indexNumber,
-            remoteURL: request.url,
+            remoteURL: sanitizedRemoteURL(request.url),
             containerExt: ext,
             runtimeTicks: item.runTimeTicks,
             overview: item.overview,
@@ -43,6 +43,27 @@ extension DownloadItem {
             premiereDate: item.premiereDate,
             backdropItemID: item.backdropItemID
         )
+    }
+
+    /// Jellyfin's negotiated download URLs can embed `api_key=<token>` as a
+    /// query param (transcoding URLs do). `remoteURL` is persisted in plain
+    /// JSON (`index.json`) and never re-used to launch a task — `startTask`
+    /// always re-negotiates a fresh PlaybackInfo and auth travels in the
+    /// `Authorization` header — so strip credentials before they hit disk.
+    ///
+    /// KEEP THE PREDICATE IN SYNC with `redactedURL` (CinemaxKit,
+    /// JellyfinAPIClient.swift) — a new secret query param added to one but
+    /// not the other means clean logs while the token leaks to disk.
+    private static func sanitizedRemoteURL(_ url: URL) -> URL {
+        guard var comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = comps.queryItems, !items.isEmpty else { return url }
+        let filtered = items.filter {
+            let name = $0.name.lowercased()
+            return name != "api_key" && name != "apikey" && !name.contains("token")
+        }
+        guard filtered.count != items.count else { return url }
+        comps.queryItems = filtered.isEmpty ? nil : filtered
+        return comps.url ?? url
     }
 }
 #endif

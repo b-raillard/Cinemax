@@ -46,6 +46,7 @@ final class ThemeManager {
         get { _uiScale }
         set {
             _uiScale = min(1.4, max(0.8, newValue))
+            CinemaScale.invalidateFactorCache()
             _accentRevision += 1
         }
     }

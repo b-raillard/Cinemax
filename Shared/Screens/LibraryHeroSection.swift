@@ -170,7 +170,7 @@ struct LibraryHeroSection: View {
         #if os(tvOS)
         CinemaScale.pt(72)
         #else
-        20
+        CinemaScale.pt(20)
         #endif
     }
 
@@ -178,7 +178,7 @@ struct LibraryHeroSection: View {
         #if os(tvOS)
         CinemaScale.pt(18)
         #else
-        14
+        CinemaScale.pt(14)
         #endif
     }
 
@@ -218,7 +218,7 @@ struct LibraryHeroSection: View {
         #if os(tvOS)
         28
         #else
-        16
+        CinemaScale.pt(16)
         #endif
     }
 

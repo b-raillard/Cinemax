@@ -36,7 +36,7 @@ struct AdminApiKeysScreen: View {
             emptyTitle: loc.localized("admin.apiKeys.empty.title"),
             emptySubtitle: loc.localized("admin.apiKeys.empty.subtitle"),
             emptyActionTitle: loc.localized("admin.apiKeys.create"),
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } },
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } },
             onEmptyAction: { viewModel.showCreateSheet = true }
         ) {
             ScrollView(showsIndicators: false) {
@@ -70,10 +70,10 @@ struct AdminApiKeysScreen: View {
                 .tint(themeManager.accent)
             }
         }
-        .refreshable { await viewModel.load(using: appState.apiClient) }
+        .refreshable { await viewModel.load(using: appState.apiClient, loc: loc) }
         .task {
             if viewModel.keys.isEmpty {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
         .onDisappear { viewModel.hideAll() }
@@ -92,7 +92,7 @@ struct AdminApiKeysScreen: View {
         ) { key in
             Button(loc.localized("admin.apiKeys.revoke.confirm"), role: .destructive) {
                 Task {
-                    let ok = await viewModel.revoke(key, using: appState.apiClient)
+                    let ok = await viewModel.revoke(key, using: appState.apiClient, loc: loc)
                     if ok {
                         toasts.success(loc.localized("admin.apiKeys.revoke.success"))
                     } else if let err = viewModel.errorMessage {
@@ -261,7 +261,7 @@ struct AdminApiKeysScreen: View {
                         isLoading: viewModel.isCreating
                     ) {
                         Task {
-                            let ok = await viewModel.createKey(using: appState.apiClient)
+                            let ok = await viewModel.createKey(using: appState.apiClient, loc: loc)
                             if ok {
                                 viewModel.showCreateSheet = false
                             }

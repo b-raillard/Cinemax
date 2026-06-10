@@ -598,7 +598,7 @@ struct MediaDetailScreen: View {
         #if os(tvOS)
         CinemaScale.pt(64)
         #else
-        26
+        CinemaScale.pt(26)
         #endif
     }
 
@@ -654,9 +654,9 @@ struct MediaDetailScreen: View {
 
     private var buttonFontSize: CGFloat {
         #if os(tvOS)
-        28
+        28 // documented Play-label exception — fixed on tvOS
         #else
-        18
+        CinemaScale.pt(18)
         #endif
     }
 

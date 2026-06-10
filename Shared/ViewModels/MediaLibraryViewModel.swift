@@ -103,13 +103,7 @@ final class MediaLibraryViewModel {
                 limit: 1
             )
 
-            let fetchedGenres = try await genresResult
-            let countData = try await countResult
-
-            genres = fetchedGenres
-            totalCount = countData.totalCount
-
-            let heroResult = try await appState.apiClient.getItems(
+            async let heroResult = appState.apiClient.getItems(
                 userId: userId,
                 parentId: parentId,
                 includeItemTypes: typeFilter,
@@ -117,7 +111,15 @@ final class MediaLibraryViewModel {
                 sortOrder: [.ascending],
                 limit: 20
             )
-            heroItem = heroResult.items.randomElement()
+
+            let fetchedGenres = try await genresResult
+            let countData = try await countResult
+
+            genres = fetchedGenres
+            totalCount = countData.totalCount
+
+            let heroData = try await heroResult
+            heroItem = heroData.items.randomElement()
 
             try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
         } catch {

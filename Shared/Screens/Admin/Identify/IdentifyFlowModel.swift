@@ -82,7 +82,7 @@ final class IdentifyFlowModel {
 
     /// Dispatches to the right remote-search endpoint based on the item's
     /// kind. Only movies and series are supported.
-    func runSearch(using apiClient: any APIClientProtocol) async {
+    func runSearch(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         guard !itemId.isEmpty else { return }
         isSearching = true
         errorMessage = nil
@@ -115,14 +115,14 @@ final class IdentifyFlowModel {
                 results = []
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
     /// Applies a chosen result. Returns `true` on success so the hosting
     /// screen can toast + dismiss/pop. Posts `.cinemaxShouldRefreshCatalogue`
     /// on success so Home and Library re-fetch with the new artwork.
-    func apply(_ result: RemoteSearchResult, using apiClient: any APIClientProtocol) async -> Bool {
+    func apply(_ result: RemoteSearchResult, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard !itemId.isEmpty else { return false }
         isApplying = true
         errorMessage = nil
@@ -136,7 +136,7 @@ final class IdentifyFlowModel {
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

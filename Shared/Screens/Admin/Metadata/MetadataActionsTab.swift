@@ -19,6 +19,7 @@ struct MetadataActionsTab: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     var body: some View {
         Group {
@@ -35,7 +36,7 @@ struct MetadataActionsTab: View {
                 requiredPhrase: viewModel.item.name ?? "",
                 confirmLabel: loc.localized("admin.metadata.delete.confirm"),
                 onConfirm: {
-                    let ok = await viewModel.deleteItem(using: appState.apiClient)
+                    let ok = await viewModel.deleteItem(using: appState.apiClient, loc: loc)
                     if ok {
                         onDeleted()
                     } else if let err = viewModel.errorMessage {
@@ -80,7 +81,7 @@ struct MetadataActionsTab: View {
                     isLoading: viewModel.isRefreshing
                 ) {
                     Task {
-                        let ok = await viewModel.refreshMetadata(using: appState.apiClient)
+                        let ok = await viewModel.refreshMetadata(using: appState.apiClient, loc: loc)
                         if ok {
                             toasts.success(loc.localized("admin.metadata.actions.refresh.success"))
                         } else if let err = viewModel.errorMessage {
@@ -165,7 +166,7 @@ struct MetadataActionsTab: View {
                     CinemaToggleIndicator(
                         isOn: isOn.wrappedValue,
                         accent: themeManager.accent,
-                        animated: true
+                        animated: motionEffects
                     )
                 }
                 .buttonStyle(.plain)

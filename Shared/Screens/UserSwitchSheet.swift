@@ -298,20 +298,10 @@ struct UserSwitchSheet: View {
     private func loadUsers() async {
         isLoading = true
         defer { isLoading = false }
-        // getUsers() is admin-only — skip the guaranteed 401 for regular users.
-        // Admin's getUsers() also returns hidden users; filter them out so the
-        // switcher honors the per-user "Hide from login screens" policy.
-        // If the admin list filters to empty (every user is hidden), fall
-        // through to getPublicUsers() rather than showing a misleading empty.
-        if appState.isAdministrator,
-           let fetched = try? await appState.apiClient.getUsers() {
-            let visible = fetched.filter { $0.policy?.isHidden != true }
-            if !visible.isEmpty {
-                users = visible
-                return
-            }
-        }
-        users = (try? await appState.apiClient.getPublicUsers()) ?? []
+        // Visibility rule (admin-only getUsers, hidden filter, public
+        // fallback) is shared with the tvOS quick-switch grid — see
+        // AppState.fetchSwitchableUsers.
+        users = await appState.fetchSwitchableUsers()
     }
 
     private func performAuth(user: UserDto) async {

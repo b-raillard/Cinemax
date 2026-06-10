@@ -82,10 +82,6 @@ struct OfflineLibraryView: View {
         .padding(.horizontal, CinemaSpacing.spacing3)
         .padding(.vertical, CinemaSpacing.spacing2)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: CinemaRadius.large))
-        .overlay(
-            RoundedRectangle(cornerRadius: CinemaRadius.large)
-                .strokeBorder(themeManager.accent.opacity(0.25), lineWidth: 1)
-        )
         .padding(.horizontal, CinemaSpacing.spacing2)
     }
 

@@ -108,7 +108,7 @@ extension MenuSettingsScreen {
 
                 Spacer()
 
-                CinemaToggleIndicator(isOn: isOn, accent: themeManager.accent, animated: true)
+                CinemaToggleIndicator(isOn: isOn, accent: themeManager.accent, animated: motionEffects)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
@@ -248,7 +248,7 @@ extension MenuSettingsScreen {
                         toasts.info(String(format: loc.localized("menu.maxReached"), MenuConfigStore.maxEnabledTabs))
                     }
                 } label: {
-                    CinemaToggleIndicator(isOn: entry.enabled, accent: themeManager.accent, animated: true)
+                    CinemaToggleIndicator(isOn: entry.enabled, accent: themeManager.accent, animated: motionEffects)
                         .padding(.horizontal, CinemaSpacing.spacing3)
                         .padding(.vertical, CinemaSpacing.spacing2)
                         .background(

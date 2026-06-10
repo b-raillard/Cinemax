@@ -140,6 +140,8 @@ final class MenuConfigStore {
 
     private var apiClient: (any APIClientProtocol)?
     private var userId: String?
+    /// Monotonic id for refreshAvailableViews — newest call wins (see method).
+    private var refreshGeneration = 0
 
     init() {
         let defaults = UserDefaults.standard
@@ -334,14 +336,24 @@ final class MenuConfigStore {
     /// reconciles the persisted library-mode list. Safe to call from any
     /// MainActor context — sets `lastFetchError` on failure rather than
     /// throwing (callers show a toast).
+    ///
+    /// Overlap rule: the NEWEST call wins. Every caller runs its own fetch,
+    /// but only the latest generation writes back / clears the spinner — so a
+    /// double-tap can't interleave two `mergeLibraryEntries` passes, a retry
+    /// during an in-flight fetch isn't silently dropped, and an account
+    /// switch mid-flight can't persist the previous user's libraries (the
+    /// stale fetch fails both the generation and the `userId` re-check).
     func refreshAvailableViews() async {
         guard let api = apiClient, let userId else { return }
+        refreshGeneration += 1
+        let gen = refreshGeneration
         isLoadingViews = true
         lastFetchError = nil
-        defer { isLoadingViews = false }
+        defer { if gen == refreshGeneration { isLoadingViews = false } }
 
         do {
             let dtos = try await api.getUserViews(userId: userId)
+            guard gen == refreshGeneration, userId == self.userId else { return }
             let views: [LibraryView] = dtos.compactMap { dto -> LibraryView? in
                 guard let id = dto.id, let name = dto.name else { return nil }
                 return LibraryView(id: id, name: name, collectionType: dto.collectionType?.rawValue)
@@ -361,6 +373,7 @@ final class MenuConfigStore {
                 persistLibraryEntries()
             }
         } catch {
+            guard gen == refreshGeneration else { return }
             lastFetchError = "\(error)"
         }
     }

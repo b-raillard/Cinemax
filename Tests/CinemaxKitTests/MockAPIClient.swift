@@ -22,6 +22,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedItems: [BaseItemDto] = []
     var stubbedTotalCount = 0
     var stubbedGenres: [String] = []
+    var stubbedUserViews: [BaseItemDto] = []
 
     /// Called by `getEpisodes(seriesId:seasonId:userId:)` when set, so tests can
     /// inject per-season delays or cancellation-sensitive behavior. Falls back to
@@ -145,9 +146,6 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func stopTask(id: String) async throws {
         if shouldThrow { throw stubbedError }
     }
-    func updateTaskTriggers(id: String, triggers: [TaskTriggerInfo]) async throws {
-        if shouldThrow { throw stubbedError }
-    }
     func getEncodingOptions() async throws -> EncodingOptions {
         if shouldThrow { throw stubbedError }
         return stubbedEncodingOptions
@@ -250,7 +248,10 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedGenres
     }
 
-    func getUserViews(userId: String) async throws -> [BaseItemDto] { [] }
+    func getUserViews(userId: String) async throws -> [BaseItemDto] {
+        if shouldThrow { throw stubbedError }
+        return stubbedUserViews
+    }
 
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto {
         if shouldThrow { throw stubbedError }

@@ -130,10 +130,6 @@ extension SettingsScreen {
                 }
             }
             .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
-            .overlay(
-                RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                    .strokeBorder(CinemaColor.onSurface.opacity(isFirst ? 0.12 : 0.06), lineWidth: 1)
-            )
         }
         .buttonStyle(.plain)
     }
@@ -245,7 +241,6 @@ extension SettingsScreen {
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
         }
-        .task { await fetchCurrentUser() }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
                 appState.logout()
@@ -387,10 +382,6 @@ extension SettingsScreen {
                 }
             }
             .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
-            .overlay(
-                RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                    .strokeBorder(CinemaColor.onSurface.opacity(isFirst ? 0.12 : 0.06), lineWidth: 1)
-            )
         }
         .buttonStyle(.plain)
     }
@@ -481,10 +472,14 @@ extension SettingsScreen {
     /// the fallback (covers "no image set" and offline cases uniformly).
     @ViewBuilder
     var profileAvatar: some View {
+        // `appState.currentUser` is hydrated by `refreshCurrentUser()` via
+        // `getUserByID` for every account — unlike `getUsers()` which is
+        // admin-only and 401s for regular users (the avatar silently never
+        // rendered for them when this fetched its own copy).
         UserAvatar(
             userId: appState.currentUserId,
             name: username,
-            primaryImageTag: currentUser?.primaryImageTag,
+            primaryImageTag: appState.currentUser?.primaryImageTag,
             size: 56
         )
     }

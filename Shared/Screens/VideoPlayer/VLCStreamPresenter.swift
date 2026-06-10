@@ -243,6 +243,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let chapterScroll = UIScrollView()
     private let chapterStack = UIStackView()
     private var chapterFetchTask: Task<Void, Never>?
+    // Lazy thumbnail loads spawned by fetchChapters — tracked so an episode
+    // swap / dismiss cancels the previous episode's in-flight image downloads
+    // instead of letting them race the new stream's open on slow links.
+    private var chapterThumbTasks: [Task<Void, Never>] = []
     private var chapterStartTicks: [Int] = []
     private var chapterHeightConstraint: NSLayoutConstraint?
     private let centerGlyph = UIImageView()
@@ -331,6 +335,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // fresh `play(media)` (old media winding down).
     private var isTearingDown = false
     private var lastPlayStart = Date.distantPast
+
+    // Episode-nav race guard (same pattern as NowPlayingInfoController):
+    // bumped at every navigateToEpisode call and re-checked after its awaits so
+    // a slow PlaybackInfo can't apply stale state over a newer navigation —
+    // and never after teardown (which would restart the engine and re-arm a
+    // progress timer nothing will ever invalidate).
+    private var navGeneration = 0
 
     // "Media never opened" watchdog. libVLC 4.0 can fail to open a stream
     // (server 404/416 on the static URL, codec the demuxer rejects) by going
@@ -456,6 +467,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingTapWork?.cancel()
         segmentFetchTask?.cancel()
         chapterFetchTask?.cancel()
+        chapterThumbTasks.forEach { $0.cancel() }
+        chapterThumbTasks = []
         eventsTask?.cancel()
         eventsTask = nil
         #if os(iOS)
@@ -677,6 +690,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func fireSleepTimer() {
         sleepActive = false
         enginePause()
+        #if os(iOS)
+        // Approximation of SleepTimerController's PiP gating (SwiftVLC's
+        // PiPController exposes no reliable "is active" signal to mirror the
+        // native delegate seam): when the app is .background — the PiP-window
+        // viewing case — an alert presented here is unreachable, so pause
+        // silently. `.inactive` (Control Center, notification shade, call
+        // banner) still presents: the prompt is simply revealed when the
+        // overlay drops, matching the native path.
+        guard UIApplication.shared.applicationState != .background else { return }
+        #endif
         let alert = UIAlertController(
             title: loc.localized("sleep.prompt.title"),
             message: loc.localized("sleep.prompt.subtitle"),
@@ -1228,6 +1251,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// than VLC's embedded titles and exposes thumbnails.
     private func fetchChapters() {
         chapterFetchTask?.cancel()
+        chapterThumbTasks.forEach { $0.cancel() }
+        chapterThumbTasks = []
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
         chapterScroll.isHidden = true
@@ -1244,7 +1269,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             for (i, ch) in chapters.enumerated() {
                 let startSec = Double(ch.startPositionTicks ?? 0) / 10_000_000
                 let title = (ch.name?.isEmpty == false ? ch.name : nil)
-                    ?? "\(self.loc.localized("player.chapters")) \(i + 1)"
+                    ?? "\(self.loc.localized("player.chapter")) \(i + 1)"
                 let chip = self.makeChapterChip(index: i, title: title, time: PlayerTimeFormat.ms(Int32(startSec * 1000)))
                 self.chapterStack.addArrangedSubview(chip)
             }
@@ -1261,8 +1286,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             for (i, ch) in chapters.enumerated() {
                 guard let tag = ch.imageTag, !tag.isEmpty else { continue }
                 let url = builder.chapterImageURL(itemId: id, imageIndex: i, tag: tag, maxWidth: 320)
-                Task { @MainActor [weak self] in
+                let thumbTask = Task { @MainActor [weak self] in
                     guard let data = await Self.loadImage(url: url, token: token),
+                          !Task.isCancelled,
                           let img = UIImage(data: data), let self,
                           i < self.chapterStack.arrangedSubviews.count,
                           let chip = self.chapterStack.arrangedSubviews[i] as? UIButton,
@@ -1270,6 +1296,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     iv.image = img
                     iv.contentMode = .scaleAspectFill
                 }
+                self.chapterThumbTasks.append(thumbTask)
             }
         }
     }
@@ -1333,8 +1360,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func chapterChipTapped(_ sender: UIButton) {
         let i = sender.tag
         guard i < chapterStartTicks.count else { return }
-        engineSeek(ms: Int32(chapterStartTicks[i] / 10_000))
-        showSkipHUD(PlayerTimeFormat.ms(Int32(chapterStartTicks[i] / 10_000)))
+        engineSeek(ms: Int32(clamping: chapterStartTicks[i] / 10_000))
+        showSkipHUD(PlayerTimeFormat.ms(Int32(clamping: chapterStartTicks[i] / 10_000)))
         refreshTimeUISoon()
         scheduleHideControls()
     }
@@ -1600,6 +1627,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func navigateToEpisode(_ ref: EpisodeRef) {
         // Episode nav is stream-only — offline has no nav graph and no apiClient.
         guard let navigator = episodeNavigator, let apiClient, let userId else { return }
+        navGeneration += 1
+        let gen = navGeneration
         reporter?.reportStop()
         progressTimer?.invalidate()
         Task { [weak self] in
@@ -1613,6 +1642,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
                 return
             }
+            // Dismissed mid-nav, or a newer nav superseded this one: applying
+            // would resurrect playback / interleave two episodes' state.
+            guard !self.isTearingDown, gen == self.navGeneration else { return }
             self.itemId = ref.id
             self.info = vlcInfo
             self.startTime = nil

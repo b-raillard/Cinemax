@@ -42,7 +42,7 @@ final class AdminScheduledTasksViewModel {
 
     // MARK: - Load / poll
 
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = tasks.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -50,7 +50,7 @@ final class AdminScheduledTasksViewModel {
             tasks = try await apiClient.getScheduledTasks(includeHidden: false)
                 .sorted { ($0.category ?? "") < ($1.category ?? "") }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
@@ -84,7 +84,7 @@ final class AdminScheduledTasksViewModel {
 
     // MARK: - Actions
 
-    func startTask(_ task: TaskInfo, using apiClient: any APIClientProtocol) async -> Bool {
+    func startTask(_ task: TaskInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = task.id else { return false }
         pendingActionTaskId = id
         defer { pendingActionTaskId = nil }
@@ -94,12 +94,12 @@ final class AdminScheduledTasksViewModel {
             startPolling(using: apiClient)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }
 
-    func stopTask(_ task: TaskInfo, using apiClient: any APIClientProtocol) async -> Bool {
+    func stopTask(_ task: TaskInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         guard let id = task.id else { return false }
         pendingActionTaskId = id
         defer { pendingActionTaskId = nil }
@@ -108,7 +108,7 @@ final class AdminScheduledTasksViewModel {
             await silentRefresh(using: apiClient)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = loc.userFacingMessage(for: error)
             return false
         }
     }

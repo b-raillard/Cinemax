@@ -112,7 +112,7 @@ struct AdminItemMenu: View {
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             toasts.success(loc.localized("admin.metadata.actions.refresh.success"))
         } catch {
-            toasts.error(error.localizedDescription)
+            toasts.error(loc.userFacingMessage(for: error))
         }
     }
 
@@ -124,7 +124,7 @@ struct AdminItemMenu: View {
             toasts.success(loc.localized("admin.metadata.delete.success"))
             onItemDeleted?()
         } catch {
-            toasts.error(error.localizedDescription)
+            toasts.error(loc.userFacingMessage(for: error))
         }
     }
 }

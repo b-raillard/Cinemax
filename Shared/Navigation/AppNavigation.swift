@@ -17,6 +17,11 @@ final class AppState {
 
     var isAuthenticated = false
     var hasServer = false
+    // Documented exemption from the "@Observable properties must NOT carry
+    // didSet" RULE: that rule targets persistence side effects on collections
+    // of Codable value types (lost re-renders). This didSet only re-derives a
+    // sibling stored property from a scalar URL — no persistence, no
+    // observation-delivery dependency.
     var serverURL: URL? {
         didSet { imageBuilder = ImageURLBuilder(serverURL: serverURL ?? Self.placeholderServerURL) }
     }
@@ -117,6 +122,24 @@ final class AppState {
         } catch {
             // Network blip — keep last-known values.
         }
+    }
+
+    /// Users eligible for the quick-switch surfaces (`UserSwitchSheet` grid +
+    /// tvOS Settings profile section). Single source of the visibility rule:
+    /// `getUsers()` is admin-only (guaranteed 401 for regular accounts — skip
+    /// it), accounts flagged "Hide from login screens" are filtered out, and
+    /// when the filtered admin list is empty we fall through to
+    /// `getPublicUsers()` rather than showing a misleading empty state.
+    func fetchSwitchableUsers() async -> [UserDto] {
+        if isAdministrator,
+           let fetched = try? await apiClient.getUsers() {
+            // The signed-in user stays visible even when their own account is
+            // flagged hidden (admins commonly hide their account from login
+            // screens — their profile tile must not vanish from Settings).
+            let visible = fetched.filter { $0.policy?.isHidden != true || $0.id == currentUserId }
+            if !visible.isEmpty { return visible }
+        }
+        return (try? await apiClient.getPublicUsers()) ?? []
     }
 
     /// Returns the user from `LoginScreen` to `ServerSetupScreen` so they can pick a different

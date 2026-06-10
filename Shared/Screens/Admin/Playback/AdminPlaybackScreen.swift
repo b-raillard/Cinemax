@@ -13,6 +13,7 @@ struct AdminPlaybackScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     @State private var viewModel = AdminPlaybackViewModel()
 
@@ -21,14 +22,14 @@ struct AdminPlaybackScreen: View {
             isLoading: viewModel.isLoading && viewModel.edited == nil,
             errorMessage: viewModel.errorMessage,
             isEmpty: false,
-            onRetry: { Task { await viewModel.load(using: appState.apiClient) } }
+            onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
             if viewModel.edited != nil {
                 AdminFormScreen(
                     isDirty: viewModel.isDirty,
                     isSaving: viewModel.isSaving,
                     onSave: {
-                        let ok = await viewModel.save(using: appState.apiClient)
+                        let ok = await viewModel.save(using: appState.apiClient, loc: loc)
                         if ok {
                             toasts.success(loc.localized("admin.playback.save.success"))
                         } else if let err = viewModel.errorMessage {
@@ -48,7 +49,7 @@ struct AdminPlaybackScreen: View {
         .navigationBarTitleDisplayMode(.large)
         .task {
             if viewModel.edited == nil {
-                await viewModel.load(using: appState.apiClient)
+                await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }
     }
@@ -188,7 +189,7 @@ struct AdminPlaybackScreen: View {
                     .foregroundStyle(CinemaColor.onSurface)
                 Spacer()
                 Button { binding.wrappedValue.toggle() } label: {
-                    CinemaToggleIndicator(isOn: binding.wrappedValue, accent: themeManager.accent, animated: true)
+                    CinemaToggleIndicator(isOn: binding.wrappedValue, accent: themeManager.accent, animated: motionEffects)
                 }
                 .buttonStyle(.plain)
             }
