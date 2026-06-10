@@ -74,19 +74,9 @@ final class StreamTransportPolicy {
     /// to its IPv6 that *hangs* (neither `.ready` nor a fast `.failed` within the
     /// budget). A fast fail (IPv4-only network) means libVLC falls back fine too.
     nonisolated private static func shouldPreferProxy(host: String, port: UInt16, useTLS: Bool) async -> Bool {
-        guard let v6 = await resolveFirstIPv6(host: host) else { return false } // not dual-stack
+        guard let v6 = firstIPv6(host: host) else { return false } // not dual-stack
         let resolvedQuickly = await ipv6ResolvesQuickly(address: v6, serverName: host, port: port, useTLS: useTLS)
         return !resolvedQuickly
-    }
-
-    /// `getaddrinfo` is synchronous and can block for the full resolver timeout
-    /// on a broken DNS path — keep it off the Swift-concurrency cooperative pool.
-    nonisolated private static func resolveFirstIPv6(host: String) async -> String? {
-        await withCheckedContinuation { cont in
-            DispatchQueue.global(qos: .utility).async {
-                cont.resume(returning: firstIPv6(host: host))
-            }
-        }
     }
 
     nonisolated private static func firstIPv6(host: String) -> String? {
@@ -132,27 +122,21 @@ final class StreamTransportPolicy {
         let queue = DispatchQueue(label: "com.cinemax.ipv6probe")
         let once = ResumeOnce()
 
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-                @Sendable func finish(_ value: Bool) {
-                    guard once.claim() else { return }
-                    conn.cancel()
-                    cont.resume(returning: value)
-                }
-                conn.stateUpdateHandler = { state in
-                    switch state {
-                    case .ready: finish(true)        // IPv6 works
-                    case .failed, .cancelled: finish(true) // fast fail → libVLC falls back fast too
-                    default: break
-                    }
-                }
-                queue.asyncAfter(deadline: .now() + timeout) { finish(false) } // hung → black-hole
-                conn.start(queue: queue)
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            @Sendable func finish(_ value: Bool) {
+                guard once.claim() else { return }
+                conn.cancel()
+                cont.resume(returning: value)
             }
-        } onCancel: {
-            // Result is discarded by the caller; just free the socket early
-            // (the timeout closure still guarantees the continuation resumes).
-            conn.cancel()
+            conn.stateUpdateHandler = { state in
+                switch state {
+                case .ready: finish(true)        // IPv6 works
+                case .failed, .cancelled: finish(true) // fast fail → libVLC falls back fast too
+                default: break
+                }
+            }
+            queue.asyncAfter(deadline: .now() + timeout) { finish(false) } // hung → black-hole
+            conn.start(queue: queue)
         }
     }
 }
