@@ -1,0 +1,17 @@
+# Admin (iOS-only — product decision)
+
+> Deep reference. The critical override-rules also appear in `CLAUDE.md` under "Admin"; this file carries the full context.
+
+`SettingsCategory.visibleCases(isAdmin:isTVOS:)` short-circuits when `isTVOS`; every `Shared/Screens/Admin/` file `#if os(iOS)`.
+
+- **Gating**: `AppState.isAdministrator` (cached; refreshed on login/reconnect/user switch via `AppState.refreshCurrentUser()`). Server authoritative; client gating is UX. `AppState.currentUser: UserDto?` populated alongside.
+- **API surface**: `AdminAPI` slice. Device listing/revocation stays on `AuthAPI` (server returns full fleet to admins by caller identity).
+- **Settings routing**: `.administration` (Dashboard + Metadata Manager) and `.advancedAdmin` (Users/Devices/Activity/Playback/Plugins/Catalog/Tasks/Network/Logs/API Keys). Hidden when `!isAdministrator`.
+- **Scaffolds** (`Admin/Components/`): `AdminLoadStateContainer`; **RULE — `AdminFormScreen` every admin editor uses explicit save (never auto-save)** — admin changes have blast radius (policy revocations, password resets); sticky footer + `interactiveDismissDisabled(isDirty)` + discard confirmation. `AdminTabBar`, `AdminSectionGroup`. `AdminItemMenu` — shared `Menu` for one `BaseItemDto` (Identifier/Edit/Refresh/Delete); **does NOT host its own `.navigationDestination`** (lazy-container rule), fires `onSelectDestination(_:)`. `DestructiveConfirmSheet` (type-to-confirm) reserved for irreversible ops; reversible destructives use `.confirmationDialog` `.destructive`.
+- **Self-protection** (client-side; server enforces too): can't delete/demote/disable yourself; can't revoke current device (`KeychainService.getOrCreateDeviceID()` vs `DeviceInfoDto.id`, "THIS DEVICE" pill).
+- **Performance**: Dashboard `async let` fan-out (partial render on single failure). Activity log infinite-scroll (50/page). Tasks live-poll 2s while running, self-cancels.
+- **Identify flow** (`Admin/Identify/`): `IdentifyFlowModel` (`@Observable`) — standalone `IdentifyScreen` (form → grid → confirm) + composed in `MetadataEditorViewModel.identify`. Kind-aware (movies: IMDb/TMDb Film/TMDb Coffret; series: IMDb/TMDb/TVDb). Provider IDs under `"Imdb"`/`"Tmdb"`/`"TmdbCollection"`/`"Tvdb"`.
+- **Metadata Manager**: five-tab editor (General/Images/Cast/Identify/Actions). Images use `downloadRemoteImage` (server fetches URL, no phone proxy). Delete via `DestructiveConfirmSheet` (title as confirm phrase).
+- **ImageType quirk**: CinemaxKit's `ImageType` narrower than `JellyfinAPI.ImageType`. Admin code uses `JellyfinAPI.ImageType` explicitly-qualified; `ImageURLBuilder.imageURLRaw(itemId:imageTypeRaw:)` string-keyed overload renders the wider set without widening `CinemaxKit.ImageType`.
+- **RULE — API key security** (`Admin/ApiKeys/`, keys = passwords): masked by default (first 4 + last 4); `.privacySensitive()`; per-row Copy is the only export path (no share sheet); `appState.accessToken` match → `CURRENT SESSION`, revoke hidden; `revokedKeyIds`/`revealedKeyIds` dropped on disappear. **Never log key values or send to analytics.** `revokeApiKey` takes the token itself as identifier (Jellyfin quirk); forget value on return.
+- **Poster-card admin overlay**: `LibraryPosterCard` paints ellipsis `AdminItemMenu` bottom-right when `isAdministrator`. Menu and detail-push `NavigationLink` are `ZStack` siblings (not nested).
