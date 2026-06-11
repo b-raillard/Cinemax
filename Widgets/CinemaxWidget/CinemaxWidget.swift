@@ -27,32 +27,53 @@ struct ContinueWatchingEntry: TimelineEntry {
 }
 
 struct ContinueWatchingProvider: TimelineProvider {
+    /// Carries the framework's completion into the fetch Task. Same pattern as
+    /// the Top Shelf provider: WidgetKit's completion annotations differ
+    /// across SDK versions (Xcode 26.2 vs 26.5 disagree), so an
+    /// `@unchecked Sendable` box + a minimal Task body is the only shape that
+    /// satisfies every toolchain's region-isolation checker. Safe: invoked
+    /// exactly once, WidgetKit documents no queue affinity.
+    private final class HandlerBox<Value>: @unchecked Sendable {
+        let call: (Value) -> Void
+        init(_ call: @escaping (Value) -> Void) { self.call = call }
+    }
+
     func placeholder(in context: Context) -> ContinueWatchingEntry { .placeholder }
 
-    func getSnapshot(in context: Context, completion: @escaping @Sendable (ContinueWatchingEntry) -> Void) {
+    func getSnapshot(in context: Context, completion: @escaping (ContinueWatchingEntry) -> Void) {
         if context.isPreview {
             completion(.placeholder)
             return
         }
-        Task { completion(await loadEntry(maxPosters: maxPosters(for: context.family))) }
+        let handler = HandlerBox(completion)
+        let posterCap = Self.maxPosters(for: context.family)
+        Task { await Self.deliverSnapshot(maxPosters: posterCap, handler: handler) }
     }
 
-    func getTimeline(in context: Context, completion: @escaping @Sendable (Timeline<ContinueWatchingEntry>) -> Void) {
-        Task {
-            let entry = await loadEntry(maxPosters: maxPosters(for: context.family))
-            // Resume positions only change when the user watches something —
-            // a half-hour cadence keeps the widget fresh without burning the
-            // extension's refresh budget.
-            let next = Calendar.current.date(byAdding: .minute, value: 30, to: entry.date) ?? entry.date
-            completion(Timeline(entries: [entry], policy: .after(next)))
-        }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<ContinueWatchingEntry>) -> Void) {
+        let handler = HandlerBox(completion)
+        let posterCap = Self.maxPosters(for: context.family)
+        Task { await Self.deliverTimeline(maxPosters: posterCap, handler: handler) }
     }
 
-    private func maxPosters(for family: WidgetFamily) -> Int {
+    private static func deliverSnapshot(maxPosters: Int, handler: HandlerBox<ContinueWatchingEntry>) async {
+        handler.call(await loadEntry(maxPosters: maxPosters))
+    }
+
+    private static func deliverTimeline(maxPosters: Int, handler: HandlerBox<Timeline<ContinueWatchingEntry>>) async {
+        let entry = await loadEntry(maxPosters: maxPosters)
+        // Resume positions only change when the user watches something — a
+        // half-hour cadence keeps the widget fresh without burning the
+        // extension's refresh budget.
+        let next = Calendar.current.date(byAdding: .minute, value: 30, to: entry.date) ?? entry.date
+        handler.call(Timeline(entries: [entry], policy: .after(next)))
+    }
+
+    private static func maxPosters(for family: WidgetFamily) -> Int {
         family == .systemLarge ? 6 : 3
     }
 
-    private func loadEntry(maxPosters: Int) async -> ContinueWatchingEntry {
+    private static func loadEntry(maxPosters: Int) async -> ContinueWatchingEntry {
         guard let session = JellyfinLite.readSession() else {
             return ContinueWatchingEntry(date: .now, posters: [], isConnected: false)
         }
