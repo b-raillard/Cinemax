@@ -235,13 +235,23 @@ targets:
           NSAllowsArbitraryLoadsForMedia: true
         NSExtension:
           NSExtensionPointIdentifier: com.apple.tv-top-shelf
-          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ContentProvider"
+          # Plain ObjC name (class is @objc(ContentProvider)) — the
+          # module-qualified Swift form resolved to a silent instant exit of
+          # the extension process on tvOS 26.
+          NSExtensionPrincipalClass: ContentProvider
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.tvos.topshelf
         PRODUCT_NAME: CinemaxTopShelf
         SWIFT_STRICT_CONCURRENCY: complete
         SKIP_INSTALL: YES
+        # Entry-point override: the tv-app-extension product type links
+        # `-e _TVExtensionMain`, but that symbol is an empty `ret` stub in the
+        # tvOS 26 SIMULATOR runtime — main returns instantly and dyld exits
+        # the extension (code 3) before the provider is ever instantiated
+        # (verified in lldb). Foundation's generic NSExtensionMain drives the
+        # NSExtension lifecycle correctly on both simulator and device.
+        OTHER_LDFLAGS: "-e _NSExtensionMain"
 
   # Both CinemaxKit-internal tests (APICacheTests, PlayMethodTests) and app-layer
   # VM tests live under Tests/CinemaxKitTests/. The natural home for package-

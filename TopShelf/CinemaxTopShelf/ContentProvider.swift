@@ -11,7 +11,18 @@ private let logger = Logger(subsystem: "com.cinemax", category: "TopShelf")
 // then queries the resume list. Item artwork is served straight off the
 // Jellyfin image endpoints (the system fetches the URLs itself), and
 // selecting an item deep-links via cinemax://item/{id}.
+/// Stable ObjC name: `NSExtensionPrincipalClass` resolution of Swift
+/// module-qualified names ("CinemaxTopShelf.ContentProvider") proved flaky
+/// here — the extension process launched and exited within ~60ms without
+/// ever instantiating the provider. `@objc(ContentProvider)` + the plain
+/// class name in Info.plist removes the demangling dependency entirely.
+@objc(ContentProvider)
 final class ContentProvider: TVTopShelfContentProvider {
+    override init() {
+        super.init()
+        logger.info("TopShelf ▸ ContentProvider instantiated")
+    }
+
     private struct Session: Codable, Sendable {
         let serverURL: URL
         let accessToken: String
