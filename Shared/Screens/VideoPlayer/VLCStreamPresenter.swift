@@ -190,7 +190,7 @@ final class VLCStreamPresenter: NSObject {
 
 // MARK: - View controller
 
-private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate {
+private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     // Mutable across episode navigation. Empty / nil in offline mode.
     private var itemId: String
     private var info: PlaybackInfo?
@@ -266,6 +266,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let transportRow = UIStackView()
     private let slider = UISlider()
     private var isScrubbing = false
+    /// Interactive swipe-down-to-dismiss: the whole player surface follows the
+    /// finger; releasing past the threshold (or flicking down) closes the
+    /// player, otherwise it springs back.
+    private var dismissPan: UIPanGestureRecognizer?
     #else
     // tvOS custom transport: a focusable scrub bar + a focusable control row.
     // No on-screen Play/Pause button — the Siri Remote has a physical one;
@@ -1055,6 +1059,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tap.numberOfTapsRequired = 1
         videoView.addGestureRecognizer(tap)
+
+        // Swipe-down-to-dismiss. Lives on `videoView` like the tap (touches on
+        // HUD controls / the chapter strip never reach it) and only begins on a
+        // predominantly-downward drag, so horizontal chapter scrolls and the
+        // slider stay untouched.
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
+        pan.delegate = self
+        videoView.addGestureRecognizer(pan)
+        dismissPan = pan
         #else
         // No global press gestures: presses flow through the responder chain to
         // `pressesBegan` below. The focus engine drives navigation; TVScrubBar
@@ -1065,10 +1078,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     #if os(tvOS)
     /// Any remote press while the HUD is hidden just brings the controls back
     /// (and is consumed). While visible, focus/seek work normally and every
-    /// press keeps the HUD alive. Menu always exits; Play/Pause always toggles.
+    /// press keeps the HUD alive. Menu peels one layer at a time — visible HUD
+    /// → hide it, bare video → exit the player (matches the system
+    /// AVPlayerViewController). Play/Pause always toggles.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses {
-            if press.type == .menu { dismiss(animated: true); return }
+            if press.type == .menu {
+                if controlsVisible {
+                    hideControlsWorkItem?.cancel()
+                    hideControlsImmediately()
+                } else {
+                    dismiss(animated: true)
+                }
+                return
+            }
             if press.type == .playPause {
                 playPauseTapped()
                 revealControls()
@@ -1735,6 +1758,64 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         pendingTapWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
+    }
+
+    /// Interactive swipe-down dismissal. The presented view tracks the finger
+    /// (translation + slight fade + corner rounding); past 25% of the screen
+    /// height or on a downward flick the player slides off and dismisses —
+    /// `.overFullScreen` keeps the underlying screen in the hierarchy, so the
+    /// app is revealed live behind the drag. Otherwise it springs back.
+    @objc private func handleDismissPan(_ g: UIPanGestureRecognizer) {
+        let height = max(view.bounds.height, 1)
+        let ty = max(0, g.translation(in: view).y)
+        switch g.state {
+        case .began:
+            view.clipsToBounds = true
+        case .changed:
+            view.transform = CGAffineTransform(translationX: 0, y: ty)
+            view.alpha = 1 - 0.35 * min(1, ty / height)
+            view.layer.cornerRadius = min(24, ty * 0.2)
+        case .ended, .cancelled:
+            let flick = g.velocity(in: view).y > 900
+            if g.state == .ended, ty > height * 0.25 || flick {
+                UIView.animate(withDuration: 0.22, delay: 0, options: .curveEaseIn) {
+                    self.view.transform = CGAffineTransform(translationX: 0, y: height)
+                    self.view.alpha = 0
+                } completion: { _ in
+                    // The slide already played the exit; a second animated
+                    // cross-dissolve here would double-animate.
+                    self.dismiss(animated: false)
+                }
+            } else {
+                UIView.animate(withDuration: 0.3, delay: 0,
+                               usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+                    self.view.transform = .identity
+                    self.view.alpha = 1
+                    self.view.layer.cornerRadius = 0
+                }
+            }
+        default:
+            break
+        }
+    }
+
+    /// Only begin the dismiss pan on a predominantly-downward drag — sideways
+    /// motion belongs to the chapter strip / double-tap zones, and a slider
+    /// scrub in progress must never tug the whole surface.
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === dismissPan,
+              let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+        guard !isScrubbing else { return false }
+        let v = pan.velocity(in: view)
+        return v.y > 0 && abs(v.y) > abs(v.x)
+    }
+
+    /// The dismiss pan only tracks touches landing on the bare video surface —
+    /// HUD buttons, the slider, and the chapter strip keep their own touches.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldReceive touch: UITouch) -> Bool {
+        guard gestureRecognizer === dismissPan else { return true }
+        return touch.view === videoView
     }
 
     @objc private func iosSkipBack() {
