@@ -1,4 +1,5 @@
 import Foundation
+import Get
 import JellyfinAPI
 
 extension JellyfinAPIClient {
@@ -89,7 +90,7 @@ extension JellyfinAPIClient {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
-            let params = Paths.GetItemsParameters(
+            var params = Paths.GetItemsParameters(
                 userID: userId,
                 maxOfficialRating: maxOfficialRating,
                 startIndex: startIndex,
@@ -103,6 +104,7 @@ extension JellyfinAPIClient {
                 genres: genres,
                 years: years
             )
+            params.isFavorite = isFavorite
             let response = try await client.send(Paths.getItems(parameters: params))
             let result = response.value
             return (result.items ?? [], result.totalRecordCount ?? 0)
@@ -211,6 +213,82 @@ extension JellyfinAPIClient {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         _ = try await client.send(Paths.markUnplayedItem(itemID: itemId, userID: userId))
         cache.clear()
+    }
+
+    public func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            if favorite {
+                _ = try await client.send(Paths.markFavoriteItem(itemID: itemId, userID: userId))
+            } else {
+                _ = try await client.send(Paths.unmarkFavoriteItem(itemID: itemId, userID: userId))
+            }
+            cache.clear()
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    // MARK: - Persons
+
+    public func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
+            var params = Paths.GetItemsParameters(
+                userID: userId,
+                maxOfficialRating: maxOfficialRating,
+                limit: limit,
+                isRecursive: true,
+                sortOrder: [.descending],
+                includeItemTypes: [.movie, .series],
+                sortBy: [.premiereDate]
+            )
+            params.personIDs = [personId]
+            let response = try await client.send(Paths.getItems(parameters: params))
+            return applyRatingFilter(response.value.items ?? [])
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    // MARK: - Collections
+
+    public func getCollections(containingItemId itemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        // Newer servers (post-10.11) have a direct reverse lookup. Hand-built
+        // request — jellyfin-sdk-swift 0.6.0 predates the endpoint.
+        let direct = Request<BaseItemDtoQueryResult>(
+            path: "/Items/\(itemId)/Collections",
+            method: "GET",
+            query: [("userId", userId)]
+        )
+        if let response = try? await client.send(direct), let items = response.value.items {
+            return applyRatingFilter(items)
+        }
+        // Fallback: auto-created collections carry the same TMDb collection
+        // provider id as their member movies — match against the boxset list.
+        guard let tmdbCollectionId, !tmdbCollectionId.isEmpty else { return [] }
+        do {
+            var params = Paths.GetItemsParameters(
+                userID: userId,
+                isRecursive: true,
+                includeItemTypes: [.boxSet]
+            )
+            params.fields = [.providerIDs]
+            let response = try await client.send(Paths.getItems(parameters: params))
+            let matching = (response.value.items ?? []).filter { boxset in
+                boxset.providerIDs?.contains { key, value in
+                    key.caseInsensitiveCompare("TmdbCollection") == .orderedSame && value == tmdbCollectionId
+                } ?? false
+            }
+            return applyRatingFilter(matching)
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
     }
 
     // MARK: - Media Segments

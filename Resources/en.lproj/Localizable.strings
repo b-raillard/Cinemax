@@ -655,6 +655,7 @@
 "settings.homePage.continueWatching" = "Continue Watching";
 "settings.homePage.recentlyAdded" = "Recently Added";
 "settings.homePage.genreRows" = "Genre Rows";
+"settings.homePage.favorites" = "Favorites";
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
 "settings.libraryLayout" = "Library landing";
@@ -833,3 +834,13 @@
 "offline.banner" = "Offline mode · downloaded content only";
 "offline.empty.title" = "You're offline";
 "offline.empty.subtitle" = "Download movies or episodes while you have a connection to find them here.";
+
+"home.favorites" = "Favorites";
+"detail.partOf" = "Part of: %@";
+"detail.favorite.add" = "Add to favorites";
+"detail.favorite.remove" = "Remove from favorites";
+"person.movies" = "Movies";
+"person.series" = "TV Shows";
+"person.born" = "Born %@";
+"person.titleCount" = "%d titles";
+"person.empty" = "No titles in your library";

@@ -257,6 +257,7 @@
 "settings.homePage.continueWatching" = "Reprendre";
 "settings.homePage.recentlyAdded" = "Ajouts récents";
 "settings.homePage.genreRows" = "Rangées par genre";
+"settings.homePage.favorites" = "Favoris";
 "settings.detailPage" = "Page de détail";
 "settings.detailPage.qualityBadges" = "Badges de qualité";
 "settings.libraryLayout" = "Page d'accueil bibliothèque";
@@ -834,3 +835,13 @@
 "offline.empty.title" = "Vous êtes hors-ligne";
 "offline.empty.subtitle" = "Téléchargez des films ou des épisodes lorsque vous avez du réseau pour les retrouver ici.";
 "admin.metadata.ratingDenominator" = "/ 10";
+
+"home.favorites" = "Favoris";
+"detail.partOf" = "Fait partie de : %@";
+"detail.favorite.add" = "Ajouter aux favoris";
+"detail.favorite.remove" = "Retirer des favoris";
+"person.movies" = "Films";
+"person.series" = "Séries";
+"person.born" = "Né(e) le %@";
+"person.titleCount" = "%d titres";
+"person.empty" = "Aucun titre dans votre médiathèque";

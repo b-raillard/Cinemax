@@ -150,6 +150,18 @@ struct MediaDetailScreen: View {
                         seasonsSection(item)
                     }
 
+                    // Collection ("Part of: …") — movies that share a BoxSet
+                    if !viewModel.collectionItems.isEmpty {
+                        MediaDetailSimilarSection(
+                            items: viewModel.collectionItems,
+                            cardWidth: similarCardWidth,
+                            titleOverride: String(
+                                format: loc.localized("detail.partOf"),
+                                viewModel.collectionName ?? ""
+                            )
+                        ).equatable()
+                    }
+
                     // Similar items
                     if !viewModel.similarItems.isEmpty {
                         MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
@@ -382,6 +394,8 @@ struct MediaDetailScreen: View {
                 contentPadding: 0
             )
             .equatable()
+            favoriteButton
+                .padding(.top, nextEpisodeLabel != nil ? 18 : 0)
             #if os(iOS)
             downloadAffordance(for: item, resolvedNextEpisode: nextEp)
                 .padding(.top, nextEpisodeLabel != nil ? 18 : 0)
@@ -389,6 +403,30 @@ struct MediaDetailScreen: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, contentPadding)
+    }
+
+    /// Heart toggle next to the play actions. Optimistic flip on the view
+    /// model; accent fill when active.
+    private var favoriteButton: some View {
+        Button {
+            Task { await viewModel.toggleFavorite(using: appState) }
+        } label: {
+            Image(systemName: viewModel.isFavorite ? "heart.fill" : "heart")
+                .font(.system(size: buttonFontSize, weight: .bold))
+                .foregroundStyle(viewModel.isFavorite ? themeManager.accent : CinemaColor.onSurface)
+                .padding(.vertical, buttonVerticalPadding)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                #if os(iOS)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityLabel(loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"))
     }
 
     // MARK: - Download affordance (iOS)

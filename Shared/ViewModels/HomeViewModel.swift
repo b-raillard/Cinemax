@@ -25,6 +25,8 @@ final class HomeViewModel {
     var heroItem: BaseItemDto?
     var resumeItems: [BaseItemDto] = []
     var latestItems: [BaseItemDto] = []
+    /// User-hearted movies/series, most recently favorited first.
+    var favoriteItems: [BaseItemDto] = []
     /// Ordered genre rows. `.failed` rows render a retry chip; rows that
     /// succeed but return zero items are dropped.
     var genreRows: [GenreRow] = []
@@ -62,7 +64,7 @@ final class HomeViewModel {
         isLoading = true
         errorMessage = nil
 
-        enum Section { case resume([BaseItemDto]); case latest([BaseItemDto]) }
+        enum Section { case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto]) }
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
@@ -81,10 +83,26 @@ final class HomeViewModel {
                     return nil
                 }
             }
+            group.addTask {
+                do {
+                    return .favorites(try await appState.apiClient.getItems(
+                        userId: userId,
+                        includeItemTypes: [.movie, .series],
+                        sortBy: [.dateCreated],
+                        sortOrder: [.descending],
+                        isFavorite: true,
+                        limit: 20
+                    ).items)
+                } catch {
+                    logger.warning("Home favorites fetch failed: \(error.localizedDescription, privacy: .public)")
+                    return nil
+                }
+            }
             for await result in group {
                 switch result {
                 case .resume(let items): resumeItems = items
                 case .latest(let items): latestItems = items
+                case .favorites(let items): favoriteItems = items
                 case nil: break
                 }
             }

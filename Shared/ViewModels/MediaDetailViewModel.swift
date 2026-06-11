@@ -26,6 +26,16 @@ final class MediaDetailViewModel {
     // The resolved type after loading (episode/season → series)
     var resolvedType: BaseItemKind = .movie
 
+    /// User favorite state (heart). Mirrors `item.userData.isFavorite`,
+    /// flipped optimistically by `toggleFavorite`.
+    var isFavorite = false
+
+    /// BoxSet collection containing this movie ("Part of: …") and its other
+    /// members. Empty when the item belongs to no collection (or the server
+    /// can't resolve one — see `LibraryAPI.getCollections`).
+    var collectionName: String?
+    var collectionItems: [BaseItemDto] = []
+
     /// Generation counter to discard stale season results on rapid selection.
     private var seasonGeneration: Int = 0
 
@@ -69,7 +79,48 @@ final class MediaDetailViewModel {
             errorMessage = loc.userFacingMessage(for: error)
         }
 
+        isFavorite = item?.userData?.isFavorite ?? false
+        // Collections are a movie-only garnish — resolved after the main load
+        // so a slow boxset lookup never delays the detail render.
+        if resolvedType == .movie, item != nil {
+            Task { await loadCollection(using: appState) }
+        }
+
         isLoading = false
+    }
+
+    /// Optimistic heart toggle — reverted if the server call fails.
+    func toggleFavorite(using appState: AppState) async {
+        guard let userId = appState.currentUserId, let id = item?.id else { return }
+        let target = !isFavorite
+        isFavorite = target
+        do {
+            try await appState.apiClient.setFavorite(itemId: id, userId: userId, favorite: target)
+        } catch {
+            logger.error("Favorite toggle failed: \(error.localizedDescription, privacy: .public)")
+            isFavorite = !target
+        }
+    }
+
+    private func loadCollection(using appState: AppState) async {
+        guard let userId = appState.currentUserId, let id = item?.id else { return }
+        let tmdbCollectionId = item?.providerIDs?
+            .first { $0.key.caseInsensitiveCompare("TmdbCollection") == .orderedSame }?
+            .value
+        guard let boxset = (try? await appState.apiClient.getCollections(
+            containingItemId: id, tmdbCollectionId: tmdbCollectionId, userId: userId
+        ))?.first, let boxsetId = boxset.id else { return }
+        let members = (try? await appState.apiClient.getItems(
+            userId: userId,
+            parentId: boxsetId,
+            sortBy: [.premiereDate],
+            sortOrder: [.ascending],
+            limit: 20
+        ).items) ?? []
+        let others = members.filter { $0.id != id }
+        guard !others.isEmpty else { return }
+        collectionName = boxset.name
+        collectionItems = others
     }
 
     /// Fans out the series-level fetches in parallel — similar, seasons, and next-up

@@ -33,13 +33,27 @@ struct MediaDetailCastSection: View, Equatable {
             data: Array(people.prefix(20)),
             id: \.id
         ) { person in
-            CastCircle(
-                name: person.name ?? "",
-                role: person.role,
-                imageURL: person.id.map {
-                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200, tag: person.primaryImageTag)
+            // Plain `NavigationLink` (not `navigationDestination(item:)`) —
+            // ContentRow's lazy stack silently ignores the modifier form.
+            NavigationLink {
+                if let id = person.id {
+                    PersonDetailScreen(personId: id, personName: person.name ?? "")
                 }
-            )
+            } label: {
+                CastCircle(
+                    name: person.name ?? "",
+                    role: person.role,
+                    imageURL: person.id.map {
+                        appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 200, tag: person.primaryImageTag)
+                    }
+                )
+            }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityLabel([person.name, person.role].compactMap { $0 }.joined(separator: ", "))
         }
     }
 }

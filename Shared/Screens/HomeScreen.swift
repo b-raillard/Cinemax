@@ -14,6 +14,7 @@ struct HomeScreen: View {
 
     @AppStorage(SettingsKey.homeShowContinueWatching) private var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
+    @AppStorage(SettingsKey.homeShowFavorites) private var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
 
@@ -127,6 +128,12 @@ struct HomeScreen: View {
                     // Recently Added
                     if showRecentlyAdded, !viewModel.latestItems.isEmpty {
                         recentlyAddedRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
+                    // Favorites
+                    if showFavorites, !viewModel.favoriteItems.isEmpty {
+                        favoritesRow
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
@@ -493,6 +500,20 @@ struct HomeScreen: View {
         ContentRow(
             title: loc.localized("home.recentlyAdded"),
             data: viewModel.latestItems,
+            id: \.id
+        ) { item in
+            recentlyAddedCard(item)
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    // MARK: - Favorites
+
+    /// Hearted movies/series — same card chrome as Recently Added.
+    private var favoritesRow: some View {
+        ContentRow(
+            title: loc.localized("home.favorites"),
+            data: viewModel.favoriteItems,
             id: \.id
         ) { item in
             recentlyAddedCard(item)
