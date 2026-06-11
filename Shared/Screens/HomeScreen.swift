@@ -15,6 +15,7 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowContinueWatching) private var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) private var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
+    @State private var deepLinkTarget: DeepLinkTarget?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
 
@@ -52,6 +53,31 @@ struct HomeScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             Task { await viewModel.reload(using: appState) }
         }
+        // Widget / Top Shelf deep link: push the item's detail. Attached at
+        // the screen root (NOT inside the lazy scroll content — see the
+        // lazy-container navigation RULE).
+        .navigationDestination(item: $deepLinkTarget) { target in
+            MediaDetailScreen(itemId: target.id, itemType: .movie)
+        }
+        .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
+            consumeDeepLink(newValue)
+        }
+        .onAppear {
+            consumeDeepLink(appState.pendingDeepLinkItemId)
+        }
+    }
+
+    /// Moves the pending deep link into the local push binding. `itemType`
+    /// is nominal — `MediaDetailViewModel` resolves the real kind from the
+    /// fetched item.
+    private func consumeDeepLink(_ itemId: String?) {
+        guard let itemId else { return }
+        appState.pendingDeepLinkItemId = nil
+        deepLinkTarget = DeepLinkTarget(id: itemId)
+    }
+
+    private struct DeepLinkTarget: Identifiable, Hashable {
+        let id: String
     }
 
     /// True when there's no hero, no resume items, no recently added items, and no genre rows.

@@ -61,6 +61,7 @@
 		2BC23AB09D961A04A91415F7 /* AppNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78377E8E832D65F7226A2A06 /* AppNavigation.swift */; };
 		2C598521E34C029BD36C4A3C /* AdminActivityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */; };
 		2E1A085843FA335D04A9B52B /* ToastCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5610FD34CD71B2F9E4D65FC6 /* ToastCenter.swift */; };
+		2E41DA320C3BAD16BED4FBFD /* JellyfinLite.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8757BE6612821942C5A36AB /* JellyfinLite.swift */; };
 		2F4C51078FC6EFB427650A5F /* AccentOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6972E29F4227F16D517B124A /* AccentOption.swift */; };
 		2F59062A0754C46430071661 /* MetadataImagesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9405DE38F64738B12862F6B5 /* MetadataImagesTab.swift */; };
 		2FA1FE57761F94C1764861F9 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */; };
@@ -84,6 +85,7 @@
 		390666CDBDB35103BE1D0246 /* ToastOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E5C1E6AA06EF0B35E4B4CD2 /* ToastOverlay.swift */; };
 		3938ED16A1F48ED88B8B716C /* PlayerTimeFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEE8ECEE461A97A3A4667563 /* PlayerTimeFormat.swift */; };
 		3A1B0A7811DD9CF81234A706 /* SettingsTVProfileSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1720DF5B530CD8E0201442FE /* SettingsTVProfileSection.swift */; };
+		3AC73EB2576C14254A294AD8 /* CinemaxTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 82450169A96719815C44F205 /* CinemaxTopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3B587F7E3960823F29F25C26 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB88BD157A83540E8C49B329 /* FlowLayout.swift */; };
 		3D5515368F95047F54F0B2C8 /* AdminActivityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C731784E29632A4E153A2CE /* AdminActivityViewModel.swift */; };
 		3F6DB053F2E36DC1CA4F46A7 /* MediaDetailCastSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A51D73542F8E7874313164 /* MediaDetailCastSection.swift */; };
@@ -93,6 +95,7 @@
 		44929C0B213F8238949E0721 /* AdminLandingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25DBC840D04F02A6587A96D6 /* AdminLandingScreen.swift */; };
 		44BE323B7818EFDC38BBBF64 /* SettingsTVAccentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF45837A14E93AA0A9739F5 /* SettingsTVAccentPicker.swift */; };
 		456D3029E556DF1761B9CCAC /* HLSManifestLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25B07319865E0C6A31D44ED /* HLSManifestLoader.swift */; };
+		46DE7DE3EA918C65B2CB2920 /* CinemaxWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC195F26167266BFFE287F1 /* CinemaxWidget.swift */; };
 		46E0FC9041E6B386190D5B6C /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C346F0B7AFF504DA6593370E /* HomeViewModel.swift */; };
 		47242004DB5BA9497108DE62 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */; };
 		477719DD3B599CC529C72C89 /* PrivacySecurityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B000BF38B945DD465445ED /* PrivacySecurityScreen.swift */; };
@@ -173,6 +176,7 @@
 		7885F6C774A599528CADE04B /* AdminNetworkScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55122A5776984A5A63808F80 /* AdminNetworkScreen.swift */; };
 		79D5D2069D273B8F869EAB67 /* VideoResumeSeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EF0DA1A754825C8A1CE6C2 /* VideoResumeSeekTests.swift */; };
 		7A87DBDBFBB8645F373C66EB /* AdvancedAdminLandingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13082AD25DB233BD0E63DB1C /* AdvancedAdminLandingScreen.swift */; };
+		7AE0754EFCA26F6B9EF3E3A5 /* CinemaxWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7B3711E0E923428328978A20 /* DownloadItem+BaseItemDto.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3396BFED41A0A75342D7795 /* DownloadItem+BaseItemDto.swift */; };
 		7CF24A796713A4992BC74C3B /* RatingBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C632FC97E86299EBCAA2CA /* RatingBadge.swift */; };
 		7D2D1CAAA138FF339ED93EFF /* SleepTimerOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */; };
@@ -243,6 +247,7 @@
 		B17B6055000707C83658C8DF /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */; };
 		B20795EA1819C55B049E4DD0 /* DownloadsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C318571F3DB0BCA88B80EE5 /* DownloadsScreen.swift */; };
 		B3364EC84FB825B78C977F06 /* AdminLogsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C9143719533910733C49F4 /* AdminLogsViewModel.swift */; };
+		B3F77C183B0DAC3942EEFE9A /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15F2D44D68F8FD79A6A7488 /* ContentProvider.swift */; };
 		B51B03597E31E0C20548439F /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */; };
 		B54B725BA68563ACADEC4B8C /* RemoteCommandController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2704DEBD38156198513A11C4 /* RemoteCommandController.swift */; };
 		B5C956B67897689F7B9157EF /* AdminCatalogScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B4D9D3C1CDC4B248270077 /* AdminCatalogScreen.swift */; };
@@ -335,6 +340,20 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		7B46E2387D594B51C339A41A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FD3296B797A3118C5A24F24F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD52143E3B835E6EDCD2A22A;
+			remoteInfo = CinemaxWidget;
+		};
+		D3F80BE20051904EC932C487 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FD3296B797A3118C5A24F24F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 39470DC3A27C7E6F2A1C838C;
+			remoteInfo = CinemaxTopShelf;
+		};
 		F32A71850E5CE7631CDB4313 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = FD3296B797A3118C5A24F24F /* Project object */;
@@ -343,6 +362,31 @@
 			remoteInfo = Cinemax;
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2B8DF8B1BD0FCA751F5A4D99 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7AE0754EFCA26F6B9EF3E3A5 /* CinemaxWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F2BAB623FBE1ACE2A680490F /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3AC73EB2576C14254A294AD8 /* CinemaxTopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		017C266BB19FE6F0097A03A7 /* PlaybackReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackReporter.swift; sourceTree = "<group>"; };
@@ -391,9 +435,11 @@
 		43B577BCED94F9831A8C8171 /* IdentifyScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifyScreen.swift; sourceTree = "<group>"; };
 		461BC0222941D069E3A1AE4B /* AdminLogsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLogsScreen.swift; sourceTree = "<group>"; };
 		48BB9B833D705FD5AFFFB56B /* LibrarySortFilterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySortFilterSheet.swift; sourceTree = "<group>"; };
+		4AC195F26167266BFFE287F1 /* CinemaxWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxWidget.swift; sourceTree = "<group>"; };
 		4D0C0F047D7CB697E80F4CA5 /* SkipSegmentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkipSegmentController.swift; sourceTree = "<group>"; };
 		4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewModel.swift; sourceTree = "<group>"; };
 		520518BCFA8AF149838E5906 /* MediaDetailEpisodeOverviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailEpisodeOverviewSheet.swift; sourceTree = "<group>"; };
+		5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CinemaxWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5392E5D6360E4430456477E9 /* ServerDiscoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerDiscoverySheet.swift; sourceTree = "<group>"; };
 		54C56CCEB123ABB29AC4D2A8 /* AdminPlaybackScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPlaybackScreen.swift; sourceTree = "<group>"; };
 		55122A5776984A5A63808F80 /* AdminNetworkScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminNetworkScreen.swift; sourceTree = "<group>"; };
@@ -431,6 +477,7 @@
 		7ECE57A7C26153CDFAB148F7 /* SettingsRowHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRowHelpers.swift; sourceTree = "<group>"; };
 		7F1A9840C693FD9D46644B69 /* AdminDashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminDashboardViewModel.swift; sourceTree = "<group>"; };
 		7F79C18163C57966CF114BD2 /* SearchViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModelTests.swift; sourceTree = "<group>"; };
+		82450169A96719815C44F205 /* CinemaxTopShelf.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CinemaxTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailScreen.swift; sourceTree = "<group>"; };
 		8A3347166C6081B2040BB706 /* AdminScheduledTasksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminScheduledTasksViewModel.swift; sourceTree = "<group>"; };
 		8AE5FB096BB1BE0581798DFD /* PosterCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PosterCard.swift; sourceTree = "<group>"; };
@@ -448,8 +495,10 @@
 		952BA3312C0EC62F0CF9ACBE /* AdminNetworkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminNetworkViewModel.swift; sourceTree = "<group>"; };
 		96FE07986012B06BD4B2E9DD /* SettingsTVActionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTVActionRow.swift; sourceTree = "<group>"; };
 		9D7E5BE51E8EE09284F9A505 /* MenuConfigStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuConfigStoreTests.swift; sourceTree = "<group>"; };
+		9FC7F0DE1FE1DDA6570245F0 /* Cinemax.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Cinemax.entitlements; sourceTree = "<group>"; };
 		A0F3D66A0647688B34958DEF /* CinemaLazyImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaLazyImage.swift; sourceTree = "<group>"; };
 		A25B07319865E0C6A31D44ED /* HLSManifestLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HLSManifestLoader.swift; sourceTree = "<group>"; };
+		A39CFEB21A7A6E968468DF9A /* CinemaxTV.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CinemaxTV.entitlements; sourceTree = "<group>"; };
 		A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTransportViews.swift; sourceTree = "<group>"; };
 		A548CB9FD413FC2170099AEF /* MediaDetailEpisodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailEpisodeRow.swift; sourceTree = "<group>"; };
 		A5E3375B86131BF66AFD5CAC /* LibraryGenreRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryGenreRow.swift; sourceTree = "<group>"; };
@@ -461,6 +510,7 @@
 		A855157B1CDF9464CA308220 /* BackdropFallbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackdropFallbackView.swift; sourceTree = "<group>"; };
 		A862B86E04553CE19E85DEA1 /* RainbowAccentSwatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RainbowAccentSwatch.swift; sourceTree = "<group>"; };
 		A863021FF6B842EE2A0E27CA /* LoadingStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingStateView.swift; sourceTree = "<group>"; };
+		A8757BE6612821942C5A36AB /* JellyfinLite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JellyfinLite.swift; sourceTree = "<group>"; };
 		A97FFFD02B7FDCCDF546C872 /* PlaybackReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackReporterTests.swift; sourceTree = "<group>"; };
 		A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		AA375893B142E24F3FA77C9E /* ChapterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterController.swift; sourceTree = "<group>"; };
@@ -506,6 +556,7 @@
 		DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailViewModel.swift; sourceTree = "<group>"; };
 		DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
 		DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryViewModel.swift; sourceTree = "<group>"; };
+		E15F2D44D68F8FD79A6A7488 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentProvider.swift; sourceTree = "<group>"; };
 		E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		E5BE8C3505764A69391252DD /* MediaDetailSimilarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailSimilarSection.swift; sourceTree = "<group>"; };
 		E61944A0EB692FE3706F500B /* ThemeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeManager.swift; sourceTree = "<group>"; };
@@ -554,6 +605,14 @@
 			path = Catalog;
 			sourceTree = "<group>";
 		};
+		06C0D1A64CB8DCCAD7562F0E /* CinemaxTopShelf */ = {
+			isa = PBXGroup;
+			children = (
+				E15F2D44D68F8FD79A6A7488 /* ContentProvider.swift */,
+			);
+			path = CinemaxTopShelf;
+			sourceTree = "<group>";
+		};
 		070010C03200426678989065 /* Activity */ = {
 			isa = PBXGroup;
 			children = (
@@ -600,7 +659,9 @@
 				943FF0F751C21904343B7FB3 /* Resources */,
 				8ED5170013402EDD4A0E1704 /* Shared */,
 				0A12FEEB77C65B7EE5599855 /* Tests */,
+				6938BF3A997157E88EFD56E4 /* TopShelf */,
 				5E07A87395FCD720C2D031F2 /* tvOS */,
+				6356875B6105B5D73FAFDA45 /* Widgets */,
 				6B5F21E5379F486F6AD9D90C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -645,6 +706,7 @@
 		5A22BB80C997420B7F6D23D5 /* iOS */ = {
 			isa = PBXGroup;
 			children = (
+				9FC7F0DE1FE1DDA6570245F0 /* Cinemax.entitlements */,
 				3A70C2603459BCEE70535BB4 /* CinemaxApp.swift */,
 				0F5616DF4D32335730006F23 /* Info.plist */,
 			);
@@ -654,6 +716,7 @@
 		5E07A87395FCD720C2D031F2 /* tvOS */ = {
 			isa = PBXGroup;
 			children = (
+				A39CFEB21A7A6E968468DF9A /* CinemaxTV.entitlements */,
 				A7C6E1A74D6EE64FD563385D /* CinemaxTVApp.swift */,
 				D411739B23A852BEEFC0B087 /* Info.plist */,
 			);
@@ -680,6 +743,22 @@
 			path = Settings;
 			sourceTree = "<group>";
 		};
+		6356875B6105B5D73FAFDA45 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				C70987E95FC6274490A70D84 /* CinemaxWidget */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
+		6938BF3A997157E88EFD56E4 /* TopShelf */ = {
+			isa = PBXGroup;
+			children = (
+				06C0D1A64CB8DCCAD7562F0E /* CinemaxTopShelf */,
+			);
+			path = TopShelf;
+			sourceTree = "<group>";
+		};
 		693D3C2BDF30B583A459EE24 /* Components */ = {
 			isa = PBXGroup;
 			children = (
@@ -693,7 +772,9 @@
 			children = (
 				7D88DF3FEF51CF7E5E1C948A /* Cinemax.app */,
 				2C408AFB766D464538419F25 /* CinemaxTests.xctest */,
+				82450169A96719815C44F205 /* CinemaxTopShelf.appex */,
 				BCC43AE61EC4C83ED88C63C1 /* CinemaxTV.app */,
+				5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -904,6 +985,15 @@
 			path = Extensions;
 			sourceTree = "<group>";
 		};
+		C70987E95FC6274490A70D84 /* CinemaxWidget */ = {
+			isa = PBXGroup;
+			children = (
+				4AC195F26167266BFFE287F1 /* CinemaxWidget.swift */,
+				A8757BE6612821942C5A36AB /* JellyfinLite.swift */,
+			);
+			path = CinemaxWidget;
+			sourceTree = "<group>";
+		};
 		D841EB47DC5A7DD0FE503751 /* Dashboard */ = {
 			isa = PBXGroup;
 			children = (
@@ -1018,10 +1108,12 @@
 				D0AA17A40F4AED9C8112E576 /* Sources */,
 				FD2FDE40B84FB4E1CA0E6A36 /* Resources */,
 				81916552939BB20684F3B232 /* Frameworks */,
+				2B8DF8B1BD0FCA751F5A4D99 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				4965E2EA0859D4832E91FCBA /* PBXTargetDependency */,
 			);
 			name = Cinemax;
 			packageProductDependencies = (
@@ -1032,6 +1124,23 @@
 			productReference = 7D88DF3FEF51CF7E5E1C948A /* Cinemax.app */;
 			productType = "com.apple.product-type.application";
 		};
+		39470DC3A27C7E6F2A1C838C /* CinemaxTopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1C5EC60B3C8171551A7217A5 /* Build configuration list for PBXNativeTarget "CinemaxTopShelf" */;
+			buildPhases = (
+				479441B57A4DE2639E06DD68 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CinemaxTopShelf;
+			packageProductDependencies = (
+			);
+			productName = CinemaxTopShelf;
+			productReference = 82450169A96719815C44F205 /* CinemaxTopShelf.appex */;
+			productType = "com.apple.product-type.tv-app-extension";
+		};
 		3F568A1C4BE9976375703E61 /* CinemaxTV */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 9A10C4598168A593F53B2B7B /* Build configuration list for PBXNativeTarget "CinemaxTV" */;
@@ -1039,10 +1148,12 @@
 				44068C42702DB0CC2C603932 /* Sources */,
 				D978BCFFED2E6EB8C778E89D /* Resources */,
 				24A5CC0AA1E6EAA92E57259D /* Frameworks */,
+				F2BAB623FBE1ACE2A680490F /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				270FA292431706286D3DB95B /* PBXTargetDependency */,
 			);
 			name = CinemaxTV;
 			packageProductDependencies = (
@@ -1052,6 +1163,23 @@
 			productName = CinemaxTV;
 			productReference = BCC43AE61EC4C83ED88C63C1 /* CinemaxTV.app */;
 			productType = "com.apple.product-type.application";
+		};
+		DD52143E3B835E6EDCD2A22A /* CinemaxWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9D0E4D2EE14DFACFF5340EED /* Build configuration list for PBXNativeTarget "CinemaxWidget" */;
+			buildPhases = (
+				0ADF0A8C258C44D97EB9DFFD /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CinemaxWidget;
+			packageProductDependencies = (
+			);
+			productName = CinemaxWidget;
+			productReference = 5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -1068,7 +1196,13 @@
 					33B5F934E645045C8C030A82 = {
 						ProvisioningStyle = Automatic;
 					};
+					39470DC3A27C7E6F2A1C838C = {
+						ProvisioningStyle = Automatic;
+					};
 					3F568A1C4BE9976375703E61 = {
+						ProvisioningStyle = Automatic;
+					};
+					DD52143E3B835E6EDCD2A22A = {
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -1095,6 +1229,8 @@
 				33B5F934E645045C8C030A82 /* Cinemax */,
 				3F568A1C4BE9976375703E61 /* CinemaxTV */,
 				148D1FF36DA64F2D2D56B082 /* CinemaxTests */,
+				39470DC3A27C7E6F2A1C838C /* CinemaxTopShelf */,
+				DD52143E3B835E6EDCD2A22A /* CinemaxWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -1123,6 +1259,15 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0ADF0A8C258C44D97EB9DFFD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				46DE7DE3EA918C65B2CB2920 /* CinemaxWidget.swift in Sources */,
+				2E41DA320C3BAD16BED4FBFD /* JellyfinLite.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		35640CFF2FF92B762E1FC6C6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1302,6 +1447,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		479441B57A4DE2639E06DD68 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B3F77C183B0DAC3942EEFE9A /* ContentProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D0AA17A40F4AED9C8112E576 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1462,6 +1615,16 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		270FA292431706286D3DB95B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 39470DC3A27C7E6F2A1C838C /* CinemaxTopShelf */;
+			targetProxy = D3F80BE20051904EC932C487 /* PBXContainerItemProxy */;
+		};
+		4965E2EA0859D4832E91FCBA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD52143E3B835E6EDCD2A22A /* CinemaxWidget */;
+			targetProxy = 7B46E2387D594B51C339A41A /* PBXContainerItemProxy */;
+		};
 		9CAE53556B095E0A18915974 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 33B5F934E645045C8C030A82 /* Cinemax */;
@@ -1548,10 +1711,49 @@
 			};
 			name = Debug;
 		};
+		191D1C802A663D34025DBA06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TopShelf/CinemaxTopShelf.entitlements;
+				INFOPLIST_FILE = TopShelf/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.tvos.topshelf;
+				PRODUCT_NAME = CinemaxTopShelf;
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Release;
+		};
+		1D6F506B5738DA34722FE07F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widgets/CinemaxWidget.entitlements;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.ios.widget;
+				PRODUCT_NAME = CinemaxWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		2EBCF92CD7DBCE2ED2C2F696 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = iOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1602,12 +1804,32 @@
 			};
 			name = Debug;
 		};
+		5F51E7A3C57B3EEBF60A2A6E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widgets/CinemaxWidget.entitlements;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.ios.widget;
+				PRODUCT_NAME = CinemaxWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		682D374ADED21B3326C144F6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = tvOS/CinemaxTV.entitlements;
 				INFOPLIST_FILE = tvOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1622,10 +1844,30 @@
 			};
 			name = Debug;
 		};
+		8243C91A8C7DC1304AD2769E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TopShelf/CinemaxTopShelf.entitlements;
+				INFOPLIST_FILE = TopShelf/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.tvos.topshelf;
+				PRODUCT_NAME = CinemaxTopShelf;
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Debug;
+		};
 		A84B37A070A3AF6998724158 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = iOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1707,6 +1949,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = tvOS/CinemaxTV.entitlements;
 				INFOPLIST_FILE = tvOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1724,6 +1967,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1C5EC60B3C8171551A7217A5 /* Build configuration list for PBXNativeTarget "CinemaxTopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8243C91A8C7DC1304AD2769E /* Debug */,
+				191D1C802A663D34025DBA06 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		20B1C2E6B354E5865A8CA065 /* Build configuration list for PBXNativeTarget "CinemaxTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1747,6 +1999,15 @@
 			buildConfigurations = (
 				682D374ADED21B3326C144F6 /* Debug */,
 				EBEE020B7667D66022B93C7B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9D0E4D2EE14DFACFF5340EED /* Build configuration list for PBXNativeTarget "CinemaxWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F51E7A3C57B3EEBF60A2A6E /* Debug */,
+				1D6F506B5738DA34722FE07F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

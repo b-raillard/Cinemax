@@ -110,6 +110,10 @@ final class AppState {
     /// flips to `false` on an explicit successful fetch that says so, or on
     /// logout.
     func refreshCurrentUser() async {
+        // Single hook covering all three session-establishing paths (login,
+        // user switch, restore): hand the session to the widget / Top Shelf
+        // extensions via the App Group.
+        ExtensionSessionBridge.publish(serverURL: serverURL, accessToken: accessToken, userId: currentUserId)
         guard let id = currentUserId else {
             currentUser = nil
             isAdministrator = false
@@ -142,6 +146,18 @@ final class AppState {
         return (try? await apiClient.getPublicUsers()) ?? []
     }
 
+    /// Item id from a `cinemax://item/{id}` deep link (widget tap / Top Shelf
+    /// selection). Consumed by `HomeScreen`, which pushes the detail screen
+    /// and clears it; `MainTabView` switches to the Home tab when it appears.
+    var pendingDeepLinkItemId: String?
+
+    func handleDeepLink(_ url: URL) {
+        guard url.scheme == "cinemax", url.host() == "item" else { return }
+        let id = url.lastPathComponent
+        guard !id.isEmpty, id != "/" else { return }
+        pendingDeepLinkItemId = id
+    }
+
     /// Returns the user from `LoginScreen` to `ServerSetupScreen` so they can pick a different
     /// server. Only clears server-side state — auth state is already empty at that point in
     /// the flow, so there's nothing user-related to wipe.
@@ -154,6 +170,7 @@ final class AppState {
 
     func logout() {
         keychain.clearAll()
+        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil)
         isAuthenticated = false
         hasServer = false
         serverURL = nil
@@ -238,6 +255,11 @@ struct AppNavigation: View {
         // its own `uiScale` in Settings > Interface > Font Size for finer control.
         .dynamicTypeSize(.xSmall ... .accessibility2)
         .preferredColorScheme(themeManager.colorScheme)
+        // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
+        // AppState — MainTabView switches to Home, HomeScreen pushes detail.
+        .onOpenURL { url in
+            appState.handleDeepLink(url)
+        }
         .task {
             await appState.restoreSession()
             hasCheckedSession = true

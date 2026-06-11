@@ -56,9 +56,20 @@ targets:
       - package: CinemaxKit
       - package: SwiftVLC
         product: SwiftVLC
+      - target: CinemaxWidget
+    entitlements:
+      path: iOS/Cinemax.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.cinemax.shared
     info:
       path: iOS/Info.plist
       properties:
+        # Deep links from the Continue-Watching widget (cinemax://item/{id}).
+        CFBundleURLTypes:
+          - CFBundleURLName: com.cinemax.deeplink
+            CFBundleURLSchemes:
+              - cinemax
         # Single-source the version from settings.base (MARKETING_VERSION /
         # CURRENT_PROJECT_VERSION) so a bump is one edit and xcodegen can't
         # clobber it back to its literal defaults on regen.
@@ -124,9 +135,20 @@ targets:
       - package: CinemaxKit
       - package: SwiftVLC
         product: SwiftVLC
+      - target: CinemaxTopShelf
+    entitlements:
+      path: tvOS/CinemaxTV.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.cinemax.shared
     info:
       path: tvOS/Info.plist
       properties:
+        # Deep links from the Top Shelf (cinemax://item/{id}).
+        CFBundleURLTypes:
+          - CFBundleURLName: com.cinemax.deeplink
+            CFBundleURLSchemes:
+              - cinemax
         # Single-source the version from settings.base (see iOS note).
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
@@ -150,6 +172,63 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
     scheme:
       testTargets: []
+
+  # Continue-Watching home-screen widget. Dependency-free by design (no
+  # CinemaxKit — widget memory budgets are tight): reads the session snapshot
+  # the app publishes via ExtensionSessionBridge and talks to Jellyfin
+  # directly (JellyfinLite). Embedded into Cinemax via the target dependency.
+  CinemaxWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets/CinemaxWidget
+    entitlements:
+      path: Widgets/CinemaxWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.cinemax.shared
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Cinemax
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.ios.widget
+        PRODUCT_NAME: CinemaxWidget
+        SWIFT_STRICT_CONCURRENCY: complete
+        SKIP_INSTALL: YES
+
+  # Apple TV Top Shelf ("Continue Watching" row above the dock icon). Same
+  # dependency-free pattern as the widget.
+  CinemaxTopShelf:
+    type: tv-app-extension
+    platform: tvOS
+    sources:
+      - path: TopShelf/CinemaxTopShelf
+    entitlements:
+      path: TopShelf/CinemaxTopShelf.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.cinemax.shared
+    info:
+      path: TopShelf/Info.plist
+      properties:
+        CFBundleDisplayName: Cinemax
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.tv-top-shelf
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ContentProvider"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.tvos.topshelf
+        PRODUCT_NAME: CinemaxTopShelf
+        SWIFT_STRICT_CONCURRENCY: complete
+        SKIP_INSTALL: YES
 
   # Both CinemaxKit-internal tests (APICacheTests, PlayMethodTests) and app-layer
   # VM tests live under Tests/CinemaxKitTests/. The natural home for package-

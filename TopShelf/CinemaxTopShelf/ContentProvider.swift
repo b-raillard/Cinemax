@@ -1,0 +1,129 @@
+import TVServices
+import Foundation
+
+// Apple TV Top Shelf: a "Continue Watching" row above the app icon when
+// Cinemax sits in the dock's top row. Reads the session snapshot the app
+// publishes to the App Group (`ExtensionSessionBridge` in CinemaxKit — keep
+// the suite / key / JSON shape in sync; the extension stays dependency-free),
+// then queries the resume list. Item artwork is served straight off the
+// Jellyfin image endpoints (the system fetches the URLs itself), and
+// selecting an item deep-links via cinemax://item/{id}.
+final class ContentProvider: TVTopShelfContentProvider {
+    private struct Session: Codable, Sendable {
+        let serverURL: URL
+        let accessToken: String
+        let userId: String
+    }
+
+    private struct ItemsResponse: Decodable, Sendable {
+        let items: [Item]
+        enum CodingKeys: String, CodingKey { case items = "Items" }
+    }
+
+    private struct Item: Decodable, Sendable {
+        let id: String
+        let name: String?
+        let seriesName: String?
+        let seriesId: String?
+        let parentBackdropItemId: String?
+        enum CodingKeys: String, CodingKey {
+            case id = "Id", name = "Name", seriesName = "SeriesName"
+            case seriesId = "SeriesId", parentBackdropItemId = "ParentBackdropItemId"
+        }
+    }
+
+    /// Wraps the framework's non-Sendable completion so it can cross into the
+    /// fetch Task (same pattern as the app's `PiPRestoreHandlerBox`). Safe:
+    /// the handler is invoked exactly once, and TVServices documents no queue
+    /// affinity for it.
+    private final class HandlerBox: @unchecked Sendable {
+        let call: ((any TVTopShelfContent)?) -> Void
+        init(call: @escaping ((any TVTopShelfContent)?) -> Void) {
+            self.call = call
+        }
+    }
+
+    // Completion-based override (not the async variant): `TVTopShelfContent`
+    // isn't Sendable, so returning it from a nonisolated async override trips
+    // strict concurrency. Content is built and handed off inside one Task region.
+    override func loadTopShelfContent(completionHandler: @escaping ((any TVTopShelfContent)?) -> Void) {
+        let handler = HandlerBox(call: completionHandler)
+        Task { await ContentProvider.run(handler: handler) }
+    }
+
+    private static func run(handler: HandlerBox) async {
+        guard let session = readSession() else {
+            handler.call(nil)
+            return
+        }
+        let items = await fetchResumeItems(session: session, limit: 8)
+        deliver(items: items, session: session, handler: handler)
+    }
+
+    /// Synchronous tail: builds the (non-Sendable) shelf content and hands it
+    /// to the framework callback in one region the isolation checker accepts.
+    private static func deliver(items: [Item], session: Session, handler: HandlerBox) {
+        guard !items.isEmpty else {
+            handler.call(nil)
+            return
+        }
+        handler.call(makeContent(items: items, session: session))
+    }
+
+    private static func makeContent(items: [Item], session: Session) -> any TVTopShelfContent {
+        let isFrench = Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
+        let shelfItems = items.map { item -> TVTopShelfSectionedItem in
+            let shelf = TVTopShelfSectionedItem(identifier: item.id)
+            shelf.title = item.seriesName ?? item.name ?? ""
+            shelf.imageShape = .poster
+            let posterId = item.seriesId ?? item.id
+            if let url = imageURL(session: session, itemId: posterId, type: "Primary", maxWidth: 600) {
+                shelf.setImageURL(url, for: [.screenScale1x, .screenScale2x])
+            }
+            if let deepLink = URL(string: "cinemax://item/\(item.id)") {
+                shelf.displayAction = TVTopShelfAction(url: deepLink)
+                shelf.playAction = TVTopShelfAction(url: deepLink)
+            }
+            return shelf
+        }
+
+        let section = TVTopShelfItemCollection(items: shelfItems)
+        section.title = isFrench ? "Reprendre la lecture" : "Continue Watching"
+        return TVTopShelfSectionedContent(sections: [section])
+    }
+
+    private static func readSession() -> Session? {
+        guard let defaults = UserDefaults(suiteName: "group.com.cinemax.shared"),
+              let data = defaults.data(forKey: "extension.session") else { return nil }
+        return try? JSONDecoder().decode(Session.self, from: data)
+    }
+
+    private static func fetchResumeItems(session: Session, limit: Int) async -> [Item] {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return [] }
+        comps.path = "/UserItems/Resume"
+        comps.queryItems = [
+            URLQueryItem(name: "userId", value: session.userId),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "mediaTypes", value: "Video"),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        guard let url = comps.url else { return [] }
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+              (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
+              let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return [] }
+        return decoded.items
+    }
+
+    private static func imageURL(session: Session, itemId: String, type: String, maxWidth: Int) -> URL? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = "/Items/\(itemId)/Images/\(type)"
+        comps.queryItems = [
+            URLQueryItem(name: "maxWidth", value: String(maxWidth)),
+            URLQueryItem(name: "quality", value: "90"),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        return comps.url
+    }
+}

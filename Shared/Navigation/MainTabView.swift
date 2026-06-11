@@ -7,6 +7,7 @@ import CinemaxKit
 /// default 5 tabs, a curated set by content type, or a per-library tab list
 /// in Settings → Interface → Main Menu.
 struct MainTabView: View {
+    @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(MenuConfigStore.self) private var menuConfig
@@ -54,6 +55,17 @@ struct MainTabView: View {
             // toggle / reorder updates the bar the instant it happens.
             iOSTabLayout(tabs: menuConfig.resolvedTabs)
             #endif
+        }
+        // Widget / Top Shelf deep link → land on Home, whose
+        // `navigationDestination` pushes the item detail. If the user's
+        // custom menu has no Home tab the link is unroutable — drop it.
+        .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
+            guard newValue != nil else { return }
+            if menuConfig.resolvedTabs.contains(where: { $0.id == "home" }) {
+                selectedTabID = "home"
+            } else {
+                appState.pendingDeepLinkItemId = nil
+            }
         }
         #if os(tvOS)
         .onAppear {
