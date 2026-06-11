@@ -258,7 +258,18 @@ Every download file `#if os(iOS)`; `SettingsCategory.downloads.isIOSOnly = true`
 
 ## SearchScreen
 
-`SearchViewModel.search(using:)` debounces 400ms → `searchItems(... limit:30)`. Decomposition: shell + file-private `VoiceSearchButton` (iOS), `SearchResultsGrid`, `SearchResultCard`. iOS mic → `SpeechRecognitionHelper`. **Surprise Me**: `fetchRandomMovie`/`fetchRandomSeries` are separate methods (Swift 6 flags `[BaseItemKind]` built from a parameter as non-Sendable crossing the API actor; literal arrays work).
+`SearchViewModel.search(using:)` debounces 400ms → `fetchRanked(...)`. Decomposition: shell + file-private `VoiceSearchButton` (iOS), `SearchResultsGrid`, `SearchResultCard`. iOS mic → `SpeechRecognitionHelper`. **Surprise Me**: `fetchRandomMovie`/`fetchRandomSeries` are separate methods (Swift 6 flags `[BaseItemKind]` built from a parameter as non-Sendable crossing the API actor; literal arrays work).
+
+### Permissive weighted search (`fetchRanked`)
+
+Jellyfin's `searchTerm` is contiguous + punctuation-sensitive — "Mission Impossible" misses "Mission : Impossible". `fetchRanked` (`nonisolated static`, takes `any LibraryAPI` which is `Sendable`) fans out **concurrent** `searchItems` calls for the full phrase **AND each significant word** (`TaskGroup`), unions/dedups by id, then ranks locally. **Stop words** (FR/EN articles/conjunctions, `searchStopWords`) are dropped from per-word fetches + scoring so "the"/"le"/"de" don't match everything. `relevanceScore` tiers (score 0 ⇒ filtered out): **(1)** full normalized query is a contiguous run in title (+bonus exact / prefix) **(2)** every query word present but separated **(3)** only some words present (× fraction). Scored against `name` **and** `originalTitle` (max). `normalizeForMatch` folds diacritics + lowercases + collapses any non-alphanumeric run to a single space.
+
+### Voice search (`SpeechRecognitionHelper`, iOS only) — RULES
+
+- **RULE — every off-main framework callback must be `@Sendable` (nonisolated).** TCC permission callbacks, the `AVAudioEngine` `installTap` block (audio render thread), and the `recognitionTask` result handler all fire off the main actor; a `@MainActor`-isolated closure there traps with `dispatch_assert_queue_fail` / `_swift_task_checkIsolatedSwift`. Fixing only the one in the stack trace leaves the others crashing identically. Permission requests bridge through `nonisolated static func ... async` + `withCheckedContinuation`; the tap captures the request via `nonisolated(unsafe) let` (its `append` is thread-safe); the result handler is `{ @Sendable [weak self] … }` (a `@MainActor` class IS `Sendable`, so weak-self capture is legal) that extracts Sendable values then hops via `Task { @MainActor }`.
+- **RULE — empty-transcript guard**: forward a transcript only when non-empty. On `stop()`, `endAudio()` finalizes and can emit a final result with an EMPTY `formattedString`; propagating it wipes `searchText` (and the results) the instant the mic turns off.
+- **Silence auto-stop**: buffer recognition never self-reports `isFinal`. A `silenceTimer` (Task) armed at start with a longer `initialTimeout` (5s — server recognition has first-result latency, a short timeout would kill the session before any word lands) then re-armed at `silenceTimeout` (1.5s) on every partial transcript; firing calls `stop()`. `stop()` is idempotent (guards on `audioEngine.isRunning || recognitionRequest != nil`) since it arrives from timer / final result / manual tap.
+- **Listening UI**: the trailing toolbar mic button expands into a Liquid-Glass pill (`mic.fill` + `search.listening`, pulsing via `symbolEffect(.pulse, isActive: motionEffects)`) while `isListening` — no separate label, no `.glass` style (iOS 26 auto-wraps toolbar buttons; an explicit capsule would nest).
 
 ## Localization
 
