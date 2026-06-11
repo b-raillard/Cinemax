@@ -36,33 +36,62 @@ final class SpeechRecognitionHelper {
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
 
+    /// Auto-stops capture once the user goes quiet. Buffer-based recognition
+    /// never reports `isFinal` on its own (that only happens after `endAudio()`),
+    /// so we restart this timer on every partial transcript and stop when it fires.
+    /// `silenceTimeout` is the gap-between-words cutoff; `initialTimeout` is the
+    /// longer grace before the FIRST word — server-side recognition
+    /// (`requiresOnDeviceRecognition = false`) has network latency, and the short
+    /// timeout armed up front would kill the session before any transcript landed.
+    private var silenceTimer: Task<Void, Never>?
+    private let silenceTimeout: Duration = .milliseconds(1500)
+    private let initialTimeout: Duration = .seconds(5)
+
     var onTranscript: ((String) -> Void)?
     var onStopped: (() -> Void)?
     var onPermissionError: ((VoiceSearchPermissionError) -> Void)?
 
     func requestPermissionsAndStart() {
-        SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                switch authStatus {
-                case .authorized:
-                    AVAudioApplication.requestRecordPermission { granted in
-                        Task { @MainActor [weak self] in
-                            guard let self else { return }
-                            if granted {
-                                self.startListening()
-                            } else {
-                                self.onPermissionError?(.microphoneDenied)
-                            }
-                        }
-                    }
-                case .denied, .restricted:
-                    self.onPermissionError?(.speechRecognitionDenied)
-                case .notDetermined:
-                    break
-                @unknown default:
-                    break
-                }
+        Task { @MainActor [weak self] in
+            // RULE — the TCC permission callbacks (SFSpeechRecognizer /
+            // AVAudioApplication) fire on TCC's own background dispatch queue. If
+            // the completion closure lives in a `@MainActor` context it inherits
+            // that isolation, and Swift 6 inserts an executor assertion at the
+            // block's entry (`_swift_task_checkIsolatedSwift`) which traps with
+            // `dispatch_assert_queue_fail` ("Block was expected to execute on
+            // queue"). Bridging through `nonisolated static` continuation helpers
+            // means the callback runs with NO actor isolation to assert — we only
+            // hop back to the MainActor here, after `await`. Same root cause as the
+            // `MPMediaItemArtwork` rule in CLAUDE.md.
+            let speechStatus = await SpeechRecognitionHelper.requestSpeechAuthorization()
+            guard let self else { return }
+            guard speechStatus == .authorized else {
+                self.onPermissionError?(.speechRecognitionDenied)
+                return
+            }
+            let micGranted = await SpeechRecognitionHelper.requestRecordPermission()
+            guard micGranted else {
+                self.onPermissionError?(.microphoneDenied)
+                return
+            }
+            self.startListening()
+        }
+    }
+
+    /// `nonisolated` so the underlying TCC completion handler executes outside any
+    /// actor — see the isolation RULE in `requestPermissionsAndStart`.
+    private nonisolated static func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status)
+            }
+        }
+    }
+
+    private nonisolated static func requestRecordPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            AVAudioApplication.requestRecordPermission { granted in
+                continuation.resume(returning: granted)
             }
         }
     }
@@ -71,11 +100,20 @@ final class SpeechRecognitionHelper {
         recognitionTask?.cancel()
         recognitionTask = nil
 
+        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+            onPermissionError?(.recognizerUnavailable)
+            return
+        }
+
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            // `.duckOthers` is invalid on the `.record` category and makes
+            // `setCategory` throw on some routes; the recommended speech-capture
+            // setup is `.record` + `.measurement` with no mix options.
+            try audioSession.setCategory(.record, mode: .measurement, options: [])
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
+            onPermissionError?(.recognizerUnavailable)
             return
         }
 
@@ -84,15 +122,29 @@ final class SpeechRecognitionHelper {
         request.requiresOnDeviceRecognition = false
         recognitionRequest = request
 
-        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+        // `installTap` raises an uncatchable Obj-C `NSException`
+        // (`IsFormatSampleRateAndChannelCountValid`) when the input format has a
+        // zero sample rate / channel count — which happens if the audio route
+        // hasn't settled after activating the session. Validate first and bail
+        // gracefully instead of crashing the app.
+        let inputNode = audioEngine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
+            recognitionRequest = nil
+            try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
             onPermissionError?(.recognizerUnavailable)
             return
         }
 
-        let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        // The tap fires on libAudio's real-time render thread. Capture the request
+        // directly (NOT `self`, whose stored properties are @MainActor-isolated) and
+        // mark the closure `@Sendable` so it stays nonisolated — otherwise it
+        // inherits @MainActor and traps with `dispatch_assert_queue_fail` off-main.
+        // `append(_:)` is thread-safe; `nonisolated(unsafe)` lets the non-Sendable
+        // request cross into the @Sendable closure.
+        nonisolated(unsafe) let tapRequest = request
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { @Sendable buffer, _ in
+            tapRequest.append(buffer)
         }
 
         audioEngine.prepare()
@@ -103,21 +155,51 @@ final class SpeechRecognitionHelper {
             return
         }
 
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-            var isFinal = false
-            if let result {
-                let transcript = result.bestTranscription.formattedString
-                Task { @MainActor [weak self] in self?.onTranscript?(transcript) }
-                isFinal = result.isFinal
+        // Same isolation rule: the result handler is invoked on a background queue.
+        // `@Sendable` keeps it nonisolated; pull out the Sendable values here, then
+        // hop to the MainActor to touch UI state. (`@MainActor` classes are Sendable,
+        // so `[weak self]` is a legal capture in a @Sendable closure.)
+        recognitionTask = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
+            let transcript = result?.bestTranscription.formattedString
+            let isFinal = result?.isFinal ?? false
+            let failed = error != nil
+            Task { @MainActor in
+                guard let self else { return }
+                // Ignore empty transcripts: when `endAudio()` finalizes on stop, the
+                // recognizer can emit a final result with an EMPTY formatted string —
+                // forwarding it would wipe `searchText` (and the results) the instant
+                // the mic turns off.
+                if let transcript, !transcript.isEmpty {
+                    self.onTranscript?(transcript)
+                    self.bumpSilenceTimer(after: self.silenceTimeout)   // gap between words
+                }
+                if failed || isFinal { self.stop() }
             }
-            if error != nil || isFinal {
-                Task { @MainActor [weak self] in self?.stop() }
-            }
+        }
+
+        // Longer grace before the first transcript so server-recognition latency
+        // doesn't trip the cutoff; an empty session still auto-stops after this.
+        bumpSilenceTimer(after: initialTimeout)
+    }
+
+    /// (Re)starts the silence countdown. Each new transcript pushes it back; when
+    /// it elapses with no further speech we stop and the field keeps the result.
+    private func bumpSilenceTimer(after timeout: Duration) {
+        silenceTimer?.cancel()
+        silenceTimer = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            self?.stop()
         }
     }
 
     func stop() {
+        silenceTimer?.cancel()
+        silenceTimer = nil
+        // `stop()` can arrive from three sources (silence timer, final result, or a
+        // manual tap). Bail if we've already torn down so `onStopped` fires once and
+        // we don't `removeTap` a bus that no longer has one.
+        guard audioEngine.isRunning || recognitionRequest != nil else { return }
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
@@ -218,6 +300,14 @@ final class SearchViewModel {
     /// can read it; `Int` is Sendable so this is safe.
     nonisolated private static let maxQueryLength = 200
 
+    /// FR/EN articles & conjunctions excluded from per-word search fetches and
+    /// word-presence scoring (they'd match nearly everything). `nonisolated` +
+    /// `Set<String>` (Sendable) so the ranking helpers can read it.
+    nonisolated private static let searchStopWords: Set<String> = [
+        "the", "a", "an", "of", "and", "or", "to", "in", "on",
+        "le", "la", "les", "un", "une", "des", "du", "de", "et", "ou", "au", "aux"
+    ]
+
     func search(using appState: AppState) {
         searchTask?.cancel()
         let query = Self.sanitize(searchText)
@@ -228,6 +318,7 @@ final class SearchViewModel {
             return
         }
 
+        let api = appState.apiClient
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
@@ -239,17 +330,108 @@ final class SearchViewModel {
             // UI can remain stuck on the spinner after a quick text change.
             defer { self?.isSearching = false }
 
-            do {
-                let items = try await appState.apiClient.searchItems(userId: userId, searchTerm: query, limit: 30)
-                guard !Task.isCancelled else { return }
-                self?.results = items
-            } catch {
-                guard !Task.isCancelled else { return }
-                self?.results = []
-            }
-
+            let ranked = await Self.fetchRanked(query: query, userId: userId, api: api)
+            guard !Task.isCancelled else { return }
+            self?.results = ranked
             self?.hasSearched = true
         }
+    }
+
+    /// Fetches a permissive candidate set and ranks it locally so punctuation and
+    /// word order don't drop relevant items. Jellyfin's `searchTerm` is contiguous
+    /// and punctuation-sensitive — e.g. "Mission Impossible" misses
+    /// "Mission : Impossible". We query the full phrase AND each significant word,
+    /// union the candidates, then score by the weighting the user asked for:
+    ///   • full query as a contiguous run in the title  (strongest)
+    ///   • every query word present but separated / reordered
+    ///   • only some query words present                (weakest)
+    /// `nonisolated` (pure inputs, Sendable `any LibraryAPI`) so the per-word
+    /// fetches can run concurrently off the main actor.
+    nonisolated private static func fetchRanked(
+        query: String,
+        userId: String,
+        api: any LibraryAPI
+    ) async -> [BaseItemDto] {
+        let normalizedQuery = normalizeForMatch(query)
+        // Drop stop words so per-word fetches and the word-presence tiers stay
+        // meaningful — otherwise "the"/"le"/"de" alone match hundreds of titles.
+        let words = normalizedQuery
+            .split(separator: " ")
+            .map(String.init)
+            .filter { $0.count >= 2 && !searchStopWords.contains($0) }
+
+        var terms: [String] = [query]
+        if words.count > 1 { terms.append(contentsOf: words) }
+        let uniqueTerms = Array(Set(terms))
+
+        var candidates: [String: BaseItemDto] = [:]
+        await withTaskGroup(of: [BaseItemDto].self) { group in
+            for term in uniqueTerms {
+                group.addTask {
+                    (try? await api.searchItems(userId: userId, searchTerm: term, limit: 30)) ?? []
+                }
+            }
+            for await items in group {
+                for item in items where item.id != nil {
+                    candidates[item.id!] = item
+                }
+            }
+        }
+
+        let scored = candidates.values.compactMap { item -> (item: BaseItemDto, score: Double)? in
+            let score = max(
+                relevanceScore(title: item.name ?? "", fullQuery: normalizedQuery, queryWords: words),
+                relevanceScore(title: item.originalTitle ?? "", fullQuery: normalizedQuery, queryWords: words)
+            )
+            return score > 0 ? (item, score) : nil
+        }
+        return scored.sorted { $0.score > $1.score }.map(\.item)
+    }
+
+    /// Weighted relevance of one title against the query. 0 = no match (filtered out).
+    nonisolated private static func relevanceScore(title: String, fullQuery: String, queryWords: [String]) -> Double {
+        let normalized = normalizeForMatch(title)
+        guard !normalized.isEmpty, !fullQuery.isEmpty else { return 0 }
+
+        // Tier 1 — full query appears as a contiguous run.
+        if normalized.contains(fullQuery) {
+            var score = 1000.0
+            if normalized == fullQuery { score += 500 }                 // exact title
+            else if normalized.hasPrefix(fullQuery) { score += 250 }     // title starts with query
+            return score - Double(normalized.count) * 0.5               // prefer tighter titles
+        }
+
+        guard !queryWords.isEmpty else { return 0 }
+        let titleWords = Set(normalized.split(separator: " ").map(String.init))
+        let present = queryWords.filter { titleWords.contains($0) || normalized.contains($0) }
+        guard !present.isEmpty else { return 0 }
+
+        // Tier 2 — every query word present but separated; Tier 3 — only some.
+        if present.count == queryWords.count {
+            return 500 - Double(normalized.count) * 0.5
+        }
+        return 100 * (Double(present.count) / Double(queryWords.count))
+    }
+
+    /// Lowercases, strips diacritics, and collapses any run of non-alphanumerics to
+    /// a single space so punctuation can't block matches: "Mission : Impossible"
+    /// and "mission impossible" normalize to the same string.
+    nonisolated private static func normalizeForMatch(_ raw: String) -> String {
+        let folded = raw.folding(options: .diacriticInsensitive, locale: nil).lowercased()
+        var out = ""
+        out.reserveCapacity(folded.count)
+        var lastWasSpace = true   // seeded true so leading separators are trimmed
+        for ch in folded {
+            if ch.isLetter || ch.isNumber {
+                out.append(ch)
+                lastWasSpace = false
+            } else if !lastWasSpace {
+                out.append(" ")
+                lastWasSpace = true
+            }
+        }
+        if out.hasSuffix(" ") { out.removeLast() }
+        return out
     }
 
     // MARK: Voice search (iOS only)

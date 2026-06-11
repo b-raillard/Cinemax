@@ -12,6 +12,7 @@ struct SearchScreen: View {
     @Environment(NetworkMonitor.self) private var network
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.motionEffectsEnabled) private var motionEffects
     @FocusState private var searchFieldFocused: Bool
     #endif
     @State private var viewModel = SearchViewModel()
@@ -69,7 +70,6 @@ struct SearchScreen: View {
                 OfflineLibraryView(scope: .all)
             } else {
                 VStack(spacing: 0) {
-                    listeningLabel
                     resultContent
                 }
             }
@@ -100,10 +100,24 @@ struct SearchScreen: View {
                 Button {
                     viewModel.toggleListening(using: appState)
                 } label: {
-                    Image(systemName: viewModel.isListening ? "mic.fill" : "mic")
-                        .foregroundStyle(viewModel.isListening
-                                         ? themeManager.accent
-                                         : CinemaColor.onSurface)
+                    if viewModel.isListening {
+                        // Expand into a labelled pill so the listening state is
+                        // self-explanatory. iOS 26 wraps toolbar buttons in Liquid
+                        // Glass automatically — no explicit capsule/`.glass` style
+                        // (that would nest a second capsule). The pulsing mic doubles
+                        // as a "we're capturing sound" cue.
+                        HStack(spacing: 6) {
+                            Image(systemName: "mic.fill")
+                                .symbolEffect(.pulse, options: .repeating, isActive: motionEffects)
+                            Text(loc.localized("search.listening"))
+                                .font(CinemaFont.label(.medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(themeManager.accent)
+                    } else {
+                        Image(systemName: "mic")
+                            .foregroundStyle(CinemaColor.onSurface)
+                    }
                 }
                 .accessibilityLabel(viewModel.isListening
                     ? loc.localized("accessibility.stopVoiceSearch")
@@ -195,21 +209,6 @@ struct SearchScreen: View {
         .padding(.horizontal, gridPadding)
         .padding(.vertical, CinemaSpacing.spacing3)
     }
-
-    // MARK: - Listening Label (iOS only)
-
-    #if os(iOS)
-    @ViewBuilder
-    private var listeningLabel: some View {
-        if viewModel.isListening {
-            Text(loc.localized("search.listening"))
-                .font(CinemaFont.label(.large))
-                .foregroundStyle(themeManager.accent)
-                .padding(.bottom, CinemaSpacing.spacing1)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        }
-    }
-    #endif
 
     // MARK: - Results
 
