@@ -167,6 +167,26 @@ final class HomeViewModel {
         isLoading = false
     }
 
+    /// Lightweight refresh of just the Favorites row — fired by
+    /// `.cinemaxFavoritesChanged` after a heart toggle, so the row reflects
+    /// the change without re-running the whole Home load (which would
+    /// re-shuffle genre rows).
+    func refreshFavorites(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        do {
+            favoriteItems = try await appState.apiClient.getItems(
+                userId: userId,
+                includeItemTypes: [.movie, .series],
+                sortBy: [.dateCreated],
+                sortOrder: [.descending],
+                isFavorite: true,
+                limit: 20
+            ).items
+        } catch {
+            logger.warning("Favorites refresh failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// Fetches active sessions and filters down to ones with a currently-playing item,
     /// excluding the logged-in user (their own "resume" already covers that).
     private func loadActiveSessions(userId: String, appState: AppState) async {

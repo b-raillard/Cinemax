@@ -96,6 +96,7 @@ final class MediaDetailViewModel {
         isFavorite = target
         do {
             try await appState.apiClient.setFavorite(itemId: id, userId: userId, favorite: target)
+            NotificationCenter.default.post(name: .cinemaxFavoritesChanged, object: nil)
         } catch {
             logger.error("Favorite toggle failed: \(error.localizedDescription, privacy: .public)")
             isFavorite = !target

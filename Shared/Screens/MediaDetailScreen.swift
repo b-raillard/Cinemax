@@ -374,7 +374,11 @@ struct MediaDetailScreen: View {
             return episodeNavigation(for: id)
         }
 
-        return HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+        // `.playActionRow` centers the heart / download buttons on the
+        // Lecture button itself — the section's height above it varies
+        // (episode label, progress bar, remaining text), so a `.top`
+        // alignment + padding hack drifts as soon as resume state changes.
+        return HStack(alignment: .playActionRow, spacing: CinemaSpacing.spacing3) {
             PlayActionButtonsSection(
                 playItemId: playItemId,
                 playTitle: playTitle,
@@ -395,10 +399,8 @@ struct MediaDetailScreen: View {
             )
             .equatable()
             favoriteButton
-                .padding(.top, nextEpisodeLabel != nil ? 18 : 0)
             #if os(iOS)
             downloadAffordance(for: item, resolvedNextEpisode: nextEp)
-                .padding(.top, nextEpisodeLabel != nil ? 18 : 0)
             #endif
             Spacer(minLength: 0)
         }
@@ -854,6 +856,10 @@ private struct PlayActionButtonsSection: View, Equatable {
                 .buttonStyle(.plain)
                 #endif
                 .frame(width: playButtonWidth)
+                // Exposes this row's center to the parent HStack so the
+                // heart / download accessories center on the Play button
+                // (custom alignment IDs propagate through nested stacks).
+                .alignmentGuide(.playActionRow) { $0[VerticalAlignment.center] }
 
                 if showResume {
                     PlayLink(
@@ -891,3 +897,17 @@ private struct PlayActionButtonsSection: View, Equatable {
     }
 }
 
+
+/// Vertical alignment carried by the Play ("Lecture") button's center, so
+/// the heart / download accessories in the action row line up with it no
+/// matter how much resume chrome (episode label, progress bar, remaining
+/// text) sits above it. Children that don't set an explicit guide fall back
+/// to their own center — exactly the accessory behavior wanted.
+extension VerticalAlignment {
+    private enum PlayActionRow: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[VerticalAlignment.center]
+        }
+    }
+    static let playActionRow = VerticalAlignment(PlayActionRow.self)
+}

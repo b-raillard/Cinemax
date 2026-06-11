@@ -193,6 +193,12 @@ targets:
         CFBundleDisplayName: Cinemax
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Mirror the app's ATS posture — without it the extension's fetches
+        # against a plain-HTTP LAN Jellyfin server are silently blocked and
+        # the widget renders empty.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoadsForMedia: true
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
@@ -220,6 +226,13 @@ targets:
         CFBundleDisplayName: Cinemax
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Mirror the app's ATS posture — without it the shelf's resume fetch
+        # (and the system's poster loads) against a plain-HTTP LAN Jellyfin
+        # server are silently blocked and the Top Shelf falls back to the
+        # static image.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoadsForMedia: true
         NSExtension:
           NSExtensionPointIdentifier: com.apple.tv-top-shelf
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ContentProvider"

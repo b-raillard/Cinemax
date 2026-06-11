@@ -344,6 +344,10 @@ extension Notification.Name {
     /// Posted when the user taps "Refresh Catalogue" in Settings → Server.
     /// Home and Library observe this and reload their content (cache-busted).
     static let cinemaxShouldRefreshCatalogue = Notification.Name("cinemaxShouldRefreshCatalogue")
+    /// Posted after a favorite heart toggle succeeds. Home observes it and
+    /// refreshes just its Favorites row (the full-reload notification above
+    /// would re-shuffle genre rows and clear caches — overkill for a heart).
+    static let cinemaxFavoritesChanged = Notification.Name("cinemaxFavoritesChanged")
     /// Posted by the API client when any session-scoped call returns HTTP 401.
     /// `AppNavigation` observes this on MainActor and runs the logout + toast.
     /// Cross-actor bridge: the API callback runs from a non-MainActor context

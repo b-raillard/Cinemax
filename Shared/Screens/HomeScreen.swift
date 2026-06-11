@@ -53,6 +53,9 @@ struct HomeScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             Task { await viewModel.reload(using: appState) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxFavoritesChanged)) { _ in
+            Task { await viewModel.refreshFavorites(using: appState) }
+        }
         // Widget / Top Shelf deep link: push the item's detail. Attached at
         // the screen root (NOT inside the lazy scroll content — see the
         // lazy-container navigation RULE).
