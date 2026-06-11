@@ -1,4 +1,10 @@
 import Foundation
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
+#if canImport(TVServices)
+import TVServices
+#endif
 
 /// Hands the Jellyfin session to the app extensions (iOS widget, tvOS Top
 /// Shelf) through the shared App Group. Extensions can't read the app's
@@ -37,6 +43,17 @@ public enum ExtensionSessionBridge {
         } else {
             defaults.removeObject(forKey: sessionKey)
         }
+        // Writing the snapshot is not enough — the extensions render from
+        // their own cached timelines/content. Without an explicit poke the
+        // widget keeps its pre-login "sign in" entry for up to its 30-min
+        // refresh window after the user logs in (and a stale shelf lingers
+        // after logout).
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+        #if canImport(TVServices)
+        TVTopShelfContentProvider.topShelfContentDidChange()
+        #endif
     }
 
     public static func read() -> Session? {
