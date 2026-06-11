@@ -2,6 +2,9 @@ import SwiftUI
 import OSLog
 import CinemaxKit
 import JellyfinAPI
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 private let logger = Logger(subsystem: "com.cinemax", category: "MediaDetail")
 
@@ -97,6 +100,9 @@ final class MediaDetailViewModel {
         do {
             try await appState.apiClient.setFavorite(itemId: id, userId: userId, favorite: target)
             NotificationCenter.default.post(name: .cinemaxFavoritesChanged, object: nil)
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadTimelines(ofKind: "CinemaxFavorites")
+            #endif
         } catch {
             logger.error("Favorite toggle failed: \(error.localizedDescription, privacy: .public)")
             isFavorite = !target

@@ -150,12 +150,22 @@ final class AppState {
     /// selection). Consumed by `HomeScreen`, which pushes the detail screen
     /// and clears it; `MainTabView` switches to the Home tab when it appears.
     var pendingDeepLinkItemId: String?
+    /// Tab id from a `cinemax://home` deep link (widget "See all" tile).
+    /// Consumed by `MainTabView`, which switches tabs and clears it.
+    var pendingDeepLinkTabId: String?
 
     func handleDeepLink(_ url: URL) {
-        guard url.scheme == "cinemax", url.host() == "item" else { return }
-        let id = url.lastPathComponent
-        guard !id.isEmpty, id != "/" else { return }
-        pendingDeepLinkItemId = id
+        guard url.scheme == "cinemax" else { return }
+        switch url.host() {
+        case "item":
+            let id = url.lastPathComponent
+            guard !id.isEmpty, id != "/" else { return }
+            pendingDeepLinkItemId = id
+        case "home":
+            pendingDeepLinkTabId = "home"
+        default:
+            break
+        }
     }
 
     /// Returns the user from `LoginScreen` to `ServerSetupScreen` so they can pick a different

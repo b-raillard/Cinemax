@@ -67,6 +67,14 @@ struct MainTabView: View {
                 appState.pendingDeepLinkItemId = nil
             }
         }
+        // "See all" widget tile → just land on the tab, no push.
+        .onChange(of: appState.pendingDeepLinkTabId) { _, newValue in
+            guard let newValue else { return }
+            appState.pendingDeepLinkTabId = nil
+            if menuConfig.resolvedTabs.contains(where: { $0.id == newValue }) {
+                selectedTabID = newValue
+            }
+        }
         #if os(tvOS)
         .onAppear {
             // Initial seed — without this the bar is empty for one frame.

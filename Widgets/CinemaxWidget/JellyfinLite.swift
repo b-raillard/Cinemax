@@ -48,8 +48,10 @@ enum JellyfinLite {
         }
     }
 
-    static func fetchResumeItems(session: Session, limit: Int) async -> [ResumeItem] {
-        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return [] }
+    /// nil = the request failed (offline / server unreachable / auth);
+    /// empty = the server answered with nothing to resume.
+    static func fetchResumeItems(session: Session, limit: Int) async -> [ResumeItem]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = "/UserItems/Resume"
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
@@ -57,12 +59,34 @@ enum JellyfinLite {
             URLQueryItem(name: "mediaTypes", value: "Video"),
             URLQueryItem(name: "api_key", value: session.accessToken)
         ]
-        guard let url = comps.url else { return [] }
+        return await fetchItems(comps: comps, token: session.accessToken)
+    }
+
+    /// User-hearted movies/series, most recently favorited first. Same
+    /// nil/empty semantics as `fetchResumeItems`.
+    static func fetchFavorites(session: Session, limit: Int) async -> [ResumeItem]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = "/Items"
+        comps.queryItems = [
+            URLQueryItem(name: "userId", value: session.userId),
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "isFavorite", value: "true"),
+            URLQueryItem(name: "sortBy", value: "DateCreated"),
+            URLQueryItem(name: "sortOrder", value: "Descending"),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        return await fetchItems(comps: comps, token: session.accessToken)
+    }
+
+    private static func fetchItems(comps: URLComponents, token: String) async -> [ResumeItem]? {
+        guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
-        request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization")
         guard let (data, resp) = try? await URLSession.shared.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
-              let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return [] }
+              let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
         return decoded.items.map { item in
             let isEpisode = item.seriesName != nil
             let title = isEpisode ? (item.seriesName ?? "") : (item.name ?? "")

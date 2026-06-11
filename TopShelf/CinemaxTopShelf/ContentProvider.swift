@@ -53,7 +53,14 @@ final class ContentProvider: TVTopShelfContentProvider {
 
     private static func run(handler: HandlerBox) async {
         guard let session = readSession() else {
-            handler.call(nil)
+            // No session snapshot visible from the extension. Either the app
+            // hasn't been opened since install, or the App Group entitlement
+            // isn't provisioned (each side then writes/reads its own private
+            // container). A diagnostic tile beats a silent static image.
+            handler.call(diagnosticContent(
+                fr: "Ouvrez Cinemax pour activer cette rangée",
+                en: "Open Cinemax to enable this row"
+            ))
             return
         }
         let items = await fetchResumeItems(session: session, limit: 8)
@@ -62,12 +69,36 @@ final class ContentProvider: TVTopShelfContentProvider {
 
     /// Synchronous tail: builds the (non-Sendable) shelf content and hands it
     /// to the framework callback in one region the isolation checker accepts.
-    private static func deliver(items: [Item], session: Session, handler: HandlerBox) {
+    private static func deliver(items: [Item]?, session: Session, handler: HandlerBox) {
+        guard let items else {
+            // Session OK but the server didn't answer (network / auth / TLS).
+            handler.call(diagnosticContent(
+                fr: "Serveur Jellyfin inaccessible",
+                en: "Jellyfin server unreachable"
+            ))
+            return
+        }
         guard !items.isEmpty else {
+            // Genuinely nothing in progress — the static image is correct.
             handler.call(nil)
             return
         }
         handler.call(makeContent(items: items, session: session))
+    }
+
+    /// Single text-only tile naming the failing branch — selecting it opens
+    /// the app. Visible only while the shelf is broken/un-activated.
+    private static func diagnosticContent(fr: String, en: String) -> any TVTopShelfContent {
+        let isFrench = Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
+        let item = TVTopShelfSectionedItem(identifier: "cinemax.diagnostic")
+        item.title = isFrench ? fr : en
+        item.imageShape = .square
+        if let url = URL(string: "cinemax://home") {
+            item.displayAction = TVTopShelfAction(url: url)
+        }
+        let section = TVTopShelfItemCollection(items: [item])
+        section.title = "Cinemax"
+        return TVTopShelfSectionedContent(sections: [section])
     }
 
     private static func makeContent(items: [Item], session: Session) -> any TVTopShelfContent {
@@ -98,8 +129,9 @@ final class ContentProvider: TVTopShelfContentProvider {
         return try? JSONDecoder().decode(Session.self, from: data)
     }
 
-    private static func fetchResumeItems(session: Session, limit: Int) async -> [Item] {
-        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return [] }
+    /// nil = the request failed (network / auth); empty = nothing in progress.
+    private static func fetchResumeItems(session: Session, limit: Int) async -> [Item]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = "/UserItems/Resume"
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
@@ -107,12 +139,12 @@ final class ContentProvider: TVTopShelfContentProvider {
             URLQueryItem(name: "mediaTypes", value: "Video"),
             URLQueryItem(name: "api_key", value: session.accessToken)
         ]
-        guard let url = comps.url else { return [] }
+        guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
         guard let (data, resp) = try? await URLSession.shared.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
-              let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return [] }
+              let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
         return decoded.items
     }
 
