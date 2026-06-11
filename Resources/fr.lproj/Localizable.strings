@@ -343,6 +343,20 @@
 "player.pip" = "Image dans l'image";
 "player.skipIntro" = "Passer l'intro";
 "player.skipCredits" = "Passer le générique";
+"player.speed" = "Vitesse";
+"player.audioDelay" = "Délai audio";
+"player.subtitleDelay" = "Délai des sous-titres";
+"player.delay.reset" = "Réinitialiser (0 ms)";
+"player.stats" = "Statistiques";
+"player.stats.video" = "Vidéo";
+"player.stats.audio" = "Audio";
+"player.stats.bitrate" = "Débit";
+"player.stats.dropped" = "Images perdues";
+"player.stats.direct" = "Lecture directe";
+"player.stats.proxy" = "Via proxy";
+"player.stats.offline" = "Hors ligne";
+"player.nextUp.countdown" = "Épisode suivant dans %d s";
+"player.nextUp.play" = "Lire maintenant";
 
 // MARK: - Licenses
 

@@ -741,6 +741,20 @@
 "player.pip" = "Picture in Picture";
 "player.skipIntro" = "Skip Intro";
 "player.skipCredits" = "Skip Credits";
+"player.speed" = "Speed";
+"player.audioDelay" = "Audio delay";
+"player.subtitleDelay" = "Subtitle delay";
+"player.delay.reset" = "Reset (0 ms)";
+"player.stats" = "Statistics";
+"player.stats.video" = "Video";
+"player.stats.audio" = "Audio";
+"player.stats.bitrate" = "Bitrate";
+"player.stats.dropped" = "Dropped frames";
+"player.stats.direct" = "Direct play";
+"player.stats.proxy" = "Via proxy";
+"player.stats.offline" = "Offline";
+"player.nextUp.countdown" = "Next episode in %ds";
+"player.nextUp.play" = "Play now";
 
 // MARK: - Licenses
 
