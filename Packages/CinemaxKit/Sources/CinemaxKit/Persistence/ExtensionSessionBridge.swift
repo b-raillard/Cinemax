@@ -1,10 +1,13 @@
 import Foundation
+import OSLog
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
 #if canImport(TVServices)
 import TVServices
 #endif
+
+private let logger = Logger(subsystem: "com.cinemax", category: "ExtensionBridge")
 
 /// Hands the Jellyfin session to the app extensions (iOS widget, tvOS Top
 /// Shelf) through the shared App Group. Extensions can't read the app's
@@ -36,12 +39,17 @@ public enum ExtensionSessionBridge {
     /// Publishes the current session, or clears it when any part is nil
     /// (logout / disconnect).
     public static func publish(serverURL: URL?, accessToken: String?, userId: String?) {
-        guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+        guard let defaults = UserDefaults(suiteName: appGroupId) else {
+            logger.error("ExtensionBridge ▸ App Group suite unavailable — entitlement missing?")
+            return
+        }
         if let serverURL, let accessToken, !accessToken.isEmpty, let userId, !userId.isEmpty {
             let session = Session(serverURL: serverURL, accessToken: accessToken, userId: userId)
             defaults.set(try? JSONEncoder().encode(session), forKey: sessionKey)
+            logger.info("ExtensionBridge ▸ session published host=\(serverURL.host() ?? "?", privacy: .public)")
         } else {
             defaults.removeObject(forKey: sessionKey)
+            logger.info("ExtensionBridge ▸ session cleared")
         }
         // Writing the snapshot is not enough — the extensions render from
         // their own cached timelines/content. Without an explicit poke the

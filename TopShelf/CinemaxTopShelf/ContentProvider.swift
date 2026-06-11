@@ -1,5 +1,8 @@
 import TVServices
 import Foundation
+import OSLog
+
+private let logger = Logger(subsystem: "com.cinemax", category: "TopShelf")
 
 // Apple TV Top Shelf: a "Continue Watching" row above the app icon when
 // Cinemax sits in the dock's top row. Reads the session snapshot the app
@@ -52,7 +55,9 @@ final class ContentProvider: TVTopShelfContentProvider {
     }
 
     private static func run(handler: HandlerBox) async {
+        logger.info("TopShelf ▸ loadTopShelfContent invoked")
         guard let session = readSession() else {
+            logger.error("TopShelf ▸ no session snapshot in App Group (app not opened since install, or App Group not shared)")
             // No session snapshot visible from the extension. Either the app
             // hasn't been opened since install, or the App Group entitlement
             // isn't provisioned (each side then writes/reads its own private
@@ -63,7 +68,9 @@ final class ContentProvider: TVTopShelfContentProvider {
             ))
             return
         }
+        logger.info("TopShelf ▸ session ok host=\(session.serverURL.host() ?? "?", privacy: .public)")
         let items = await fetchResumeItems(session: session, limit: 8)
+        logger.info("TopShelf ▸ resume fetch → \(items.map { String($0.count) } ?? "FAILED", privacy: .public)")
         deliver(items: items, session: session, handler: handler)
     }
 
