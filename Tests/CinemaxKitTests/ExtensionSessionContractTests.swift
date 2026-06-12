@@ -25,6 +25,18 @@ struct ExtensionSessionContractTests {
         #expect(ExtensionSessionBridge.sessionKey == "extension.session")
     }
 
+    @Test("Keychain item identifiers match the extension copies")
+    func keychainContractMatches() {
+        // The shared-Keychain read in JellyfinLite.swift / ContentProvider.swift
+        // hardcodes these three literals (the extensions can't link CinemaxKit).
+        // Locking the CinemaxKit side fails the build if the contract drifts —
+        // the only guard, since the round-trip test is skipped on unsigned CI.
+        // Mirror of `kSecAttrService` / `kSecAttrAccount` / access-group suffix.
+        #expect(KeychainService.serviceName == "com.cinemax.jellyfin")
+        #expect(KeychainService.sharedSessionAccount == "extension_session")
+        #expect(KeychainService.sharedAccessGroupSuffix == "com.cinemax.shared")
+    }
+
     @Test("Session encodes to exactly the keys the extensions decode")
     func jsonKeysMatch() throws {
         let session = ExtensionSessionBridge.Session(

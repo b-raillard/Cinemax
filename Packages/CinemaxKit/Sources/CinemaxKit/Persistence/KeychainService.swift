@@ -2,7 +2,11 @@ import Foundation
 import Security
 
 public struct KeychainService: Sendable {
-    private static let serviceName = "com.cinemax.jellyfin"
+    /// Keychain service name for every stored item. `internal` (not `private`)
+    /// so the extension-contract test can lock it — the extensions
+    /// (`JellyfinLite` / `ContentProvider`) re-declare this literal and can't
+    /// link CinemaxKit, so the test is the only guard against drift.
+    static let serviceName = "com.cinemax.jellyfin"
 
     /// Accessibility class for every item we store.
     ///
@@ -80,8 +84,15 @@ public struct KeychainService: Sendable {
 
     /// Account name of the single shared item the extensions read. Mirrors the
     /// literal hardcoded in the widget (`JellyfinLite`) and Top Shelf
-    /// (`ContentProvider`), which can't link CinemaxKit — keep all three in sync.
-    private static let sharedSessionAccount = "extension_session"
+    /// (`ContentProvider`), which can't link CinemaxKit — kept in sync via the
+    /// extension-contract test. `internal` for the same test-locking reason.
+    static let sharedSessionAccount = "extension_session"
+
+    /// Suffix of the shared Keychain access group (the part after the team
+    /// prefix). Mirrors the `keychain-access-groups` entitlement value
+    /// (`$(AppIdentifierPrefix)com.cinemax.shared`) and the suffix the
+    /// extensions re-declare — locked by the extension-contract test.
+    static let sharedAccessGroupSuffix = "com.cinemax.shared"
 
     /// Full identifier of the shared Keychain access group
     /// (`<TeamPrefix>com.cinemax.shared`), resolved from the `AppIdentifierPrefix`
@@ -91,7 +102,7 @@ public struct KeychainService: Sendable {
     public static var sharedAccessGroup: String? {
         guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
               !prefix.isEmpty else { return nil }
-        return prefix + "com.cinemax.shared"
+        return prefix + sharedAccessGroupSuffix
     }
 
     /// Writes the extension session blob into the shared, device-only Keychain
