@@ -64,6 +64,24 @@ struct APICacheTests {
         #expect(b == nil)
     }
 
+    @Test("set sweeps already-expired entries so the store stays bounded")
+    func setSweepsExpiredEntries() async {
+        let cache = APICache()
+        cache.set("stale.a", value: 1, ttl: 0.02) // 20 ms
+        cache.set("stale.b", value: 2, ttl: 0.02)
+        #expect(cache.storedKeyCount == 2)
+
+        try? await Task.sleep(for: .milliseconds(60))
+
+        // Both keys are now expired; the next write must physically drop them,
+        // leaving only the fresh entry — not merely hide them on read.
+        cache.set("fresh", value: 3, ttl: 60)
+        #expect(cache.storedKeyCount == 1)
+
+        let fresh: Int? = cache.get("fresh")
+        #expect(fresh == 3)
+    }
+
     @Test("Set overwrites an existing entry with the newer TTL")
     func setOverwritesExisting() async {
         let cache = APICache()

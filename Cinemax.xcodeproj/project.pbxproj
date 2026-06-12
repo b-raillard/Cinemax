@@ -194,6 +194,7 @@
 		84668E94D3ACB7EA30769308 /* ToastOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E5C1E6AA06EF0B35E4B4CD2 /* ToastOverlay.swift */; };
 		84B9BC2BB5DDA6C6C179C151 /* MetadataEditorScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D083F5B426B3BAA9F95AB35F /* MetadataEditorScreen.swift */; };
 		850FA2A4714148E59074CC92 /* PosterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE5FB096BB1BE0581798DFD /* PosterCard.swift */; };
+		86280CCCB1F5B8F2F64E0DF2 /* ExtensionSessionContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */; };
 		86AC24861A35CA8EDFE28605 /* AdminPluginsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762983CA570B7EB3C9E1F65 /* AdminPluginsScreen.swift */; };
 		88F9D715BA01E84DCB310C87 /* PlayerTimeFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C78DE5E6487FF7D0204D485 /* PlayerTimeFormatTests.swift */; };
 		89E70B6249FE96008E832974 /* SleepTimerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74EFA596296688A96C374135 /* SleepTimerController.swift */; };
@@ -414,6 +415,7 @@
 		0F5616DF4D32335730006F23 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		11C9143719533910733C49F4 /* AdminLogsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLogsViewModel.swift; sourceTree = "<group>"; };
 		13082AD25DB233BD0E63DB1C /* AdvancedAdminLandingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedAdminLandingScreen.swift; sourceTree = "<group>"; };
+		150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionSessionContractTests.swift; sourceTree = "<group>"; };
 		15453ED6A1F2D12B3E0F09DE /* PlayerEngineSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerEngineSurface.swift; sourceTree = "<group>"; };
 		15EF0DA1A754825C8A1CE6C2 /* VideoResumeSeekTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoResumeSeekTests.swift; sourceTree = "<group>"; };
 		16B604F5FE24467521C25021 /* CinemaxStreamProxy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxStreamProxy.swift; sourceTree = "<group>"; };
@@ -822,6 +824,7 @@
 				223258AFA0F2668369423520 /* CinemaxKitTests.swift */,
 				0E8781EB49CEE6EFE3A6560A /* ContentRatingClassifierTests.swift */,
 				611F5F5E09D2E5E70B4D921D /* DownloadItemTests.swift */,
+				150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */,
 				69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */,
 				FCB36F2BA2BA2F32157D2B57 /* LibraryLogicTests.swift */,
 				31D07FDBA8B067335CB393D9 /* LoginViewModelTests.swift */,
@@ -1302,6 +1305,7 @@
 				649F44415009AA3AFB1D1FE3 /* CinemaxKitTests.swift in Sources */,
 				159B117FA5F3216DC9B21917 /* ContentRatingClassifierTests.swift in Sources */,
 				C90F8CB508076E72254A82AA /* DownloadItemTests.swift in Sources */,
+				86280CCCB1F5B8F2F64E0DF2 /* ExtensionSessionContractTests.swift in Sources */,
 				CECD6F0550D4470ABD17BD82 /* HomeViewModelTests.swift in Sources */,
 				3458D505038C4D7E28EADAD1 /* LibraryLogicTests.swift in Sources */,
 				8B0BC8C9E0D75F440ACBD95A /* LoginViewModelTests.swift in Sources */,

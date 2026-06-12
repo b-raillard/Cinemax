@@ -212,7 +212,9 @@ extension JellyfinAPIClient {
     public func markItemUnplayed(itemId: String, userId: String) async throws {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         _ = try await client.send(Paths.markUnplayedItem(itemID: itemId, userID: userId))
-        cache.clear()
+        // Only the resume list depends on play state — leave genres / latest /
+        // serverInfo caches intact so the next navigation doesn't refetch them.
+        cache.invalidate(prefix: "resume-")
     }
 
     public func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {
@@ -223,7 +225,10 @@ extension JellyfinAPIClient {
             } else {
                 _ = try await client.send(Paths.unmarkFavoriteItem(itemID: itemId, userID: userId))
             }
-            cache.clear()
+            // The Favorites row refetches uncached; the only cached surface
+            // carrying favorite state is the resume list's userData. Scope the
+            // invalidation to it rather than nuking genres / latest / serverInfo.
+            cache.invalidate(prefix: "resume-")
         } catch {
             notifyIfUnauthorized(error)
             throw error
