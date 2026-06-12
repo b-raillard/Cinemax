@@ -192,7 +192,8 @@ extension JellyfinAPIClient {
             subtitleTracks: subtitleTracks,
             selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
             selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
-            authToken: token
+            authToken: token,
+            sourceContainer: mediaSource.container
         )
     }
 
@@ -282,7 +283,10 @@ extension JellyfinAPIClient {
         }
         #endif
 
-        request.timeoutInterval = 8
+        // Generous enough for a loaded/transcoding server to negotiate without
+        // a spurious timeout, but still bounded so a dead server fails the Play
+        // tap in reasonable time. (Was 8s — too tight for slow self-hosts.)
+        request.timeoutInterval = 20
         let (data, urlResponse) = try await URLSession.shared.data(for: request)
         let httpResponse = urlResponse as? HTTPURLResponse
 

@@ -345,6 +345,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// intro/outro button stays hidden until then — otherwise a segment that
     /// starts at 0 flashes the button during the loading spinner.
     private var hasValidTime = false
+    /// Last real (non-zero) playhead position, in ms. Tracked every tick so a
+    /// mid-stream error retry can resume at the point it dropped instead of
+    /// restarting at 0 (the initial resume-seek has already fired by then, so
+    /// `startTime` alone wouldn't re-seek). See `handlePlaybackError`.
+    private var lastKnownPositionMs: Int32 = 0
     /// Explicit HUD state so single-tap toggling never depends on mid-animation
     /// `alpha` reads.
     private var controlsVisible = true
@@ -584,6 +589,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             media.addOption(":file-caching=3000")
         } else {
             media.addOption(":network-caching=3000")
+            // Reverse-proxied (HTTP/2) servers occasionally RST a streamed range
+            // mid-playback (`Stream closed (0x5)` / `Cancellation (0x8)` in the
+            // libVLC log). Ask libVLC to transparently reconnect a dropped HTTP
+            // stream rather than escalate to a fatal error. Unknown options are
+            // silently ignored by libVLC, so this is safe on any access module.
+            media.addOption(":http-reconnect")
         }
         return media
     }
@@ -2102,6 +2113,32 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     // MARK: - Playback
 
+    /// Containers whose layout forces libVLC into a storm of HTTP range
+    /// requests (index/metadata at EOF, not streaming-optimised). Over HTTP/2
+    /// that rapid stream open/cancel can trip a reverse proxy (`peer stream
+    /// error: Protocol error`) and cascade into app-wide timeouts. We route
+    /// these through the loopback proxy, which re-fetches via URLSession with
+    /// bounded concurrency — so the origin never sees the storm.
+    private static let seekHeavyContainers: Set<String> = [
+        "avi", "divx", "wmv", "asf", "flv", "vob", "mpg", "mpeg", "mpe", "m2v"
+    ]
+
+    /// The source container (server-reported, DirectPlay/DirectStream only) is
+    /// one libVLC tends to flood the server with range requests for.
+    private var sourceNeedsProxy: Bool {
+        guard let raw = info?.sourceContainer?.lowercased() else { return false }
+        // `container` can be comma/space-joined ("mov,mp4") — match any token.
+        return raw.split(whereSeparator: { $0 == "," || $0 == " " })
+            .contains { Self.seekHeavyContainers.contains(String($0)) }
+    }
+
+    /// Single decision point for opening a *fresh* stream through the proxy:
+    /// a probed black-hole, a prior direct failure this session, or a
+    /// seek-heavy container that would otherwise flood the server.
+    private var shouldRouteThroughProxy: Bool {
+        StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
+    }
+
     private func startPlayback() {
         hasValidTime = false
         didApplyServerTrackDefaults = false
@@ -2116,9 +2153,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             url = local
         } else if let info {
             let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-            // Broken-IPv6 server (decided in the background): route via the
-            // loopback proxy; fall back to the direct URL if it can't start.
-            if StreamTransportPolicy.shared.preferProxy,
+            // Broken-IPv6 server (decided in the background), direct already
+            // failed this session, or a seek-heavy container (AVI…): route via
+            // the loopback proxy; fall back to the direct URL if it can't start.
+            if shouldRouteThroughProxy,
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
                 url = proxied
                 usingProxy = true
@@ -2210,6 +2248,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.startTime = nil
             self.didSeekToStart = true // new episode starts at 0
             self.hasValidTime = false
+            self.lastKnownPositionMs = 0 // don't resume a retry at the old episode's position
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
@@ -2225,7 +2264,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
             let url: URL
             // Carry the proxy across episodes when the server needs it.
-            if (self.usingProxy || StreamTransportPolicy.shared.preferProxy),
+            if (self.usingProxy || self.shouldRouteThroughProxy),
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: vlcInfo.authToken) {
                 url = proxied
                 self.usingProxy = true
@@ -2592,6 +2631,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if let local = offlineLocalURL {
                 url = local
             } else if let info {
+                // A direct attempt failed: pin the rest of the session to the
+                // proxy so we stop re-rolling the dice on the flaky direct path.
+                if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
                 let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
                 // Always retry via the proxy (direct is the path that stalls on
                 // broken IPv6); fall back to direct only if it can't start.
@@ -2607,7 +2649,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if let url, let media = try? Media(url: url) {
                 // Stream retry bumps network-caching; offline retry just
                 // reuses the file-caching setting.
-                media.addOption(isOffline ? ":file-caching=3000" : ":network-caching=5000")
+                if isOffline {
+                    media.addOption(":file-caching=3000")
+                } else {
+                    media.addOption(":network-caching=5000")
+                    media.addOption(":http-reconnect")
+                    // A drop AFTER playback began (HTTP/2 RST on a proxied
+                    // server, transient blip): resume where it dropped instead
+                    // of restarting at 0. The initial resume-seek already fired,
+                    // so re-arm it and reset media state exactly like an episode
+                    // swap. A fresh-open failure (never played, position 0)
+                    // keeps its original `startTime` resume untouched.
+                    if lastKnownPositionMs > 1000 {
+                        startTime = Double(lastKnownPositionMs) / 1000
+                        didSeekToStart = false
+                        hasValidTime = false
+                        mediaLengthMs = 0
+                    }
+                }
                 lastPlayStart = Date()
                 try? player.play(media)
                 scheduleOpenWatchdog()
@@ -2720,7 +2779,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
             let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
             let url: URL
-            if (self.usingProxy || StreamTransportPolicy.shared.preferProxy),
+            if (self.usingProxy || self.shouldRouteThroughProxy),
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: fresh.authToken) {
                 url = proxied
                 self.usingProxy = true
@@ -2746,7 +2805,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func onEngineTimeChanged() {
         refreshTimeUI()
-        if currentMs > 0 { hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded() }
+        if currentMs > 0 {
+            hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded()
+            lastKnownPositionMs = currentMs
+        }
         if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
             didSeekToStart = true
             // `Int32(start * 1000)` traps on overflow if a corrupt resume tick

@@ -27,6 +27,18 @@ final class StreamTransportPolicy {
     /// `true` ⇒ start playback through the loopback proxy immediately.
     private(set) var preferProxy = false
 
+    /// Set once a *direct* playback attempt fails this session (e.g. an IPv4-only
+    /// server published behind a dual-stack DNS record that libVLC intermittently
+    /// stalls on — our connect-only probe can't see sustained-flow flakiness). The
+    /// loopback proxy (URLSession → Happy-Eyeballs → IPv4, robust HTTP/2) is the
+    /// reliable path, so once direct has failed we stop re-rolling the dice on it
+    /// for the rest of the session. Reset on server switch.
+    private(set) var directFailedThisSession = false
+
+    /// Whether a fresh playback should open through the proxy from the first
+    /// frame: either the probe flagged a black-hole, or direct already failed.
+    var shouldStartOnProxy: Bool { preferProxy || directFailedThisSession }
+
     private var serverURL: URL?
     private var probeTask: Task<Void, Never>?
     private let proxy = CinemaxStreamProxy()
@@ -35,6 +47,7 @@ final class StreamTransportPolicy {
     func configure(serverURL: URL?) {
         let changed = self.serverURL != serverURL
         self.serverURL = serverURL
+        if changed { directFailedThisSession = false } // re-evaluate per server
         if serverURL == nil {
             probeTask?.cancel()
             probeTask = nil
@@ -44,6 +57,14 @@ final class StreamTransportPolicy {
         }
         if changed { proxy.prestart() } // listener warm before first play
         refresh()
+    }
+
+    /// Called by the player when a *direct* online attempt fails and it falls
+    /// back to the proxy — pins subsequent plays this session to the proxy.
+    func noteDirectPlaybackFailed() {
+        guard !directFailedThisSession else { return }
+        directFailedThisSession = true
+        proxyLog.log("StreamTransport ▸ direct playback failed — proxy is now sticky for this session")
     }
 
     /// Re-run the probe (call on foreground / connectivity change).
