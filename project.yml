@@ -62,9 +62,20 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.cinemax.shared
+        # Shared Keychain group so the widget / Top Shelf read the session
+        # token from the device-only Keychain instead of plaintext App Group
+        # UserDefaults. $(AppIdentifierPrefix) expands to the team id at sign
+        # time. Requires "Keychain Sharing" enabled on the App IDs for App
+        # Store distribution.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.cinemax.shared
     info:
       path: iOS/Info.plist
       properties:
+        # Team prefix (e.g. "ABCDE12345.") injected at sign time. Read at
+        # runtime to build the shared Keychain access group string without
+        # hardcoding the team id. Keep in sync across all four targets.
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
         # Deep links from the Continue-Watching widget (cinemax://item/{id}).
         CFBundleURLTypes:
           - CFBundleURLName: com.cinemax.deeplink
@@ -141,9 +152,14 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.cinemax.shared
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.cinemax.shared
     info:
       path: tvOS/Info.plist
       properties:
+        # Team prefix injected at sign time — see iOS note. Used to build the
+        # shared Keychain access group at runtime.
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
         # Deep links from the Top Shelf (cinemax://item/{id}).
         CFBundleURLTypes:
           - CFBundleURLName: com.cinemax.deeplink
@@ -187,9 +203,14 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.cinemax.shared
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.cinemax.shared
     info:
       path: Widgets/Info.plist
       properties:
+        # Team prefix injected at sign time — see iOS note. Used to build the
+        # shared Keychain access group at runtime.
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
         CFBundleDisplayName: Cinemax
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
@@ -220,9 +241,14 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.cinemax.shared
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.cinemax.shared
     info:
       path: TopShelf/Info.plist
       properties:
+        # Team prefix injected at sign time — see iOS note. Used to build the
+        # shared Keychain access group at runtime.
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
         CFBundleDisplayName: Cinemax
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"

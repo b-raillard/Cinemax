@@ -76,6 +76,72 @@ public struct KeychainService: Sendable {
         delete(for: "user_session")
     }
 
+    // MARK: - Shared extension session (Keychain access group)
+
+    /// Account name of the single shared item the extensions read. Mirrors the
+    /// literal hardcoded in the widget (`JellyfinLite`) and Top Shelf
+    /// (`ContentProvider`), which can't link CinemaxKit — keep all three in sync.
+    private static let sharedSessionAccount = "extension_session"
+
+    /// Full identifier of the shared Keychain access group
+    /// (`<TeamPrefix>com.cinemax.shared`), resolved from the `AppIdentifierPrefix`
+    /// Info.plist key injected at sign time. `nil` in an unsigned / prefix-less
+    /// context — callers then skip the shared Keychain and the legacy App Group
+    /// UserDefaults copy still covers the extensions.
+    public static var sharedAccessGroup: String? {
+        guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
+              !prefix.isEmpty else { return nil }
+        return prefix + "com.cinemax.shared"
+    }
+
+    /// Writes the extension session blob into the shared, device-only Keychain
+    /// group so the widget / Top Shelf read it instead of plaintext App Group
+    /// UserDefaults. Scoped to the shared group via an explicit
+    /// `kSecAttrAccessGroup` so it never disturbs the app-private session items.
+    /// No-op when the shared group can't be resolved.
+    public func saveSharedSession(_ data: Data) {
+        guard let group = Self.sharedAccessGroup else { return }
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.serviceName,
+            kSecAttrAccount as String: Self.sharedSessionAccount,
+            kSecAttrAccessGroup as String: group
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = Self.itemAccessibility
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    /// Reads the shared session blob back (used by the round-trip test; the
+    /// extensions read it inline since they can't link this module).
+    public func readSharedSession() -> Data? {
+        guard let group = Self.sharedAccessGroup else { return nil }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.serviceName,
+            kSecAttrAccount as String: Self.sharedSessionAccount,
+            kSecAttrAccessGroup as String: group,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
+        return result as? Data
+    }
+
+    public func deleteSharedSession() {
+        guard let group = Self.sharedAccessGroup else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.serviceName,
+            kSecAttrAccount as String: Self.sharedSessionAccount,
+            kSecAttrAccessGroup as String: group
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
     // MARK: - Accessibility migration
 
     /// Re-saves already-stored items under the new `AfterFirstUnlock`

@@ -1,6 +1,7 @@
 import TVServices
 import Foundation
 import OSLog
+import Security
 
 private let logger = Logger(subsystem: "com.cinemax", category: "TopShelf")
 
@@ -142,8 +143,32 @@ final class ContentProvider: TVTopShelfContentProvider {
     }
 
     private static func readSession() -> Session? {
+        // Primary: the shared, device-only Keychain group the app publishes to.
+        if let session = readSessionFromKeychain() { return session }
+        // Fallback: the legacy plaintext App Group copy (dropped a release after
+        // the Keychain migration ships).
         guard let defaults = UserDefaults(suiteName: "group.com.cinemax.shared"),
               let data = defaults.data(forKey: "extension.session") else { return nil }
+        return try? JSONDecoder().decode(Session.self, from: data)
+    }
+
+    /// Reads the shared session from the Keychain group. Service + account are
+    /// hardcoded (the extension can't link CinemaxKit) — keep in sync with
+    /// `KeychainService.serviceName` / `sharedSessionAccount`.
+    private static func readSessionFromKeychain() -> Session? {
+        guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
+              !prefix.isEmpty else { return nil }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.cinemax.jellyfin",
+            kSecAttrAccount as String: "extension_session",
+            kSecAttrAccessGroup as String: prefix + "com.cinemax.shared",
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
         return try? JSONDecoder().decode(Session.self, from: data)
     }
 

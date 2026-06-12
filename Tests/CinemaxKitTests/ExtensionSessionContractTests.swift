@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import CinemaxKit
+@testable import CinemaxKit
 
 /// Locks the App Group session contract that three intentionally un-deduplicated
 /// copies of the shape must agree on:
@@ -49,5 +49,28 @@ struct ExtensionSessionContractTests {
         #expect(session.serverURL == URL(string: "https://jelly.example.com"))
         #expect(session.accessToken == "tok-123")
         #expect(session.userId == "user-abc")
+    }
+
+    @Test("Shared session round-trips through the Keychain access group")
+    func sharedSessionRoundTrips() throws {
+        // Skip cleanly when the shared access group can't be resolved in this
+        // signing context (the mechanism is still build-verified + the on-device
+        // upgrade test is the real gate). Hosted in the app target, so the
+        // host app's keychain-access-groups entitlement applies.
+        let group = try #require(
+            KeychainService.sharedAccessGroup,
+            "AppIdentifierPrefix unavailable — cannot resolve the shared Keychain group"
+        )
+        #expect(group.hasSuffix("com.cinemax.shared"))
+
+        let keychain = KeychainService()
+        let payload = Data("shared-session-payload".utf8)
+
+        keychain.deleteSharedSession()       // clean slate
+        keychain.saveSharedSession(payload)
+        #expect(keychain.readSharedSession() == payload)
+
+        keychain.deleteSharedSession()
+        #expect(keychain.readSharedSession() == nil)
     }
 }
