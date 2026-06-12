@@ -45,6 +45,10 @@ final class DownloadManager {
     /// Task pointers keyed by item id so we can pause / cancel them. URLSession
     /// owns the lifetime; we only keep weak-equivalent references.
     private var tasksByItemId: [String: URLSessionDownloadTask] = [:]
+    /// In-flight PlaybackInfo-negotiation `Task`s (one per `startTask`). Tracked
+    /// so they can be cancelled on `removeAll()` / teardown — otherwise a
+    /// detached prep task outlives the manager and writes to a dead instance.
+    private var prepTasksByItemId: [String: Task<Void, Never>] = [:]
 
     init(store: DownloadStore = DownloadStore()) {
         self.store = store
@@ -150,10 +154,17 @@ final class DownloadManager {
     private(set) var totalDiskBytes: Int64 = 0
 
     private func refreshDiskUsage() {
-        Task.detached(priority: .utility) {
+        Task.detached(priority: .utility) { [weak self] in
             let bytes = DownloadStorage.totalDiskUsage()
-            await MainActor.run { self.totalDiskBytes = bytes }
+            await self?.applyDiskUsage(bytes)
         }
+    }
+
+    /// Main-actor sink for the off-main disk walk. Going through a method (vs.
+    /// `MainActor.run { self?... }`) keeps `self` touched only on the main actor,
+    /// satisfying Swift 6 region isolation while staying weak.
+    private func applyDiskUsage(_ bytes: Int64) {
+        totalDiskBytes = bytes
     }
 
     /// Returns the on-disk poster file URL when we've already cached the
@@ -196,6 +207,10 @@ final class DownloadManager {
     /// every file under the downloads tree. Exposed to the user as
     /// "Remove all downloads" in Settings → Downloads.
     func removeAll() {
+        for (_, task) in prepTasksByItemId {
+            task.cancel()
+        }
+        prepTasksByItemId.removeAll()
         for (_, task) in tasksByItemId {
             task.cancel()
         }
@@ -272,6 +287,9 @@ final class DownloadManager {
     /// Cancels and removes the entry entirely. Deletes the partial / finished
     /// file from disk too.
     func remove(_ id: String) {
+        if let prep = prepTasksByItemId.removeValue(forKey: id) {
+            prep.cancel()
+        }
         if let task = tasksByItemId.removeValue(forKey: id) {
             task.cancel()
         }
@@ -328,15 +346,19 @@ final class DownloadManager {
         }
         items = store.all()
         let entryId = entry.id
-        Task { [weak self] in
+        let task = Task { [weak self] in
+            defer { self?.prepTasksByItemId[entryId] = nil }
             guard let self else { return }
             do {
                 let req = try await apiClient.buildDownloadRequest(itemId: entryId, userId: userId)
+                if Task.isCancelled { return }
                 self.launchTask(itemId: entryId, request: req)
             } catch {
+                if Task.isCancelled { return }
                 self.markFailed(itemId: entryId, error: error)
             }
         }
+        prepTasksByItemId[entryId] = task
     }
 
     private func launchTask(itemId: String, request: DownloadStreamRequest) {

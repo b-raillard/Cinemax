@@ -22,9 +22,12 @@ struct LibraryView: Codable, Equatable, Hashable {
     /// potentially video-bearing and surfaced in the picker. `nil` covers
     /// libraries created with type "Mixed Content" or "Other" — common for
     /// home setups that mix movies/series/recordings in one folder.
+    // `boxsets` and `playlists` are intentionally NOT excluded: they carry
+    // video content and are surfaced as folder-browse tabs (Collections /
+    // Playlists) via `libraryTab(for:)` → `.libraryFolders`.
     static let nonVideoCollectionTypes: Set<String> = [
         "music", "musicvideos", "books", "photos",
-        "livetv", "playlists", "boxsets", "folders", "trailers"
+        "livetv", "folders", "trailers"
     ]
 
     var isVideoLibrary: Bool {
@@ -76,6 +79,11 @@ struct ResolvedTab: Identifiable, Hashable {
         case settings
         case mediaLibrary(BaseItemKind)
         case libraryView(id: String, name: String, kind: BaseItemKind?)
+        /// A folder-of-folders library (Collections / Playlists). Items inside
+        /// are themselves folders, so this routes to `LibraryFolderBrowseScreen`
+        /// which lists the folders and drills into each one's contents — unlike
+        /// `libraryView`, whose cards open item detail directly.
+        case libraryFolders(id: String, name: String, isPlaylist: Bool)
     }
 
     let id: String
@@ -535,6 +543,19 @@ final class MenuConfigStore {
     }
 
     private func libraryTab(for view: LibraryView) -> ResolvedTab {
+        // Collections / Playlists are folders-of-folders — route them to the
+        // folder-browse screen instead of the flat-grid library screen.
+        if view.collectionType == "boxsets" || view.collectionType == "playlists" {
+            let isPlaylist = view.collectionType == "playlists"
+            return .init(
+                id: MenuEntry.libraryID(viewId: view.id),
+                icon: isPlaylist ? "music.note.list" : "rectangle.stack.fill",
+                titleKey: nil,
+                title: view.name,
+                destination: .libraryFolders(id: view.id, name: view.name, isPlaylist: isPlaylist)
+            )
+        }
+
         let kind: BaseItemKind?
         let icon: String
         // `kind == nil` tells `MediaLibraryScreen` to skip the

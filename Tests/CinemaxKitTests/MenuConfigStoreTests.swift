@@ -205,6 +205,10 @@ struct MenuConfigStoreTests {
         #expect(LibraryView(id: "1", name: "Films", collectionType: "movies").isVideoLibrary)
         #expect(LibraryView(id: "2", name: "Mixed", collectionType: nil).isVideoLibrary)
         #expect(!LibraryView(id: "3", name: "Musique", collectionType: "music").isVideoLibrary)
-        #expect(!LibraryView(id: "4", name: "Coffrets", collectionType: "boxsets").isVideoLibrary)
+        #expect(!LibraryView(id: "5", name: "Photos", collectionType: "photos").isVideoLibrary)
+        // Collections (boxsets) and playlists carry video content and ARE
+        // surfaced — they route to the folder-browse screen, not the flat grid.
+        #expect(LibraryView(id: "4", name: "Coffrets", collectionType: "boxsets").isVideoLibrary)
+        #expect(LibraryView(id: "6", name: "Listes", collectionType: "playlists").isVideoLibrary)
     }
 }

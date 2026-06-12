@@ -427,6 +427,7 @@ struct MediaDetailScreen: View {
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
         #else
         .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: viewModel.isFavorite)
         #endif
         .accessibilityLabel(loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"))
     }

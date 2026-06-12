@@ -31,17 +31,44 @@ public protocol ServerAPI: Sendable {
     /// it MUST be `@Sendable` and cannot capture MainActor state directly;
     /// bridge through `NotificationCenter` if it needs to mutate UI state.
     func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void)
+
+    /// Authoritatively re-checks whether the current access token is still
+    /// valid, by hitting an authenticated endpoint (`GET /Users/Me`). This is
+    /// the "confirm before logout" probe: a single ambiguous 401 from a hot
+    /// path no longer tears the session down — `AppState` calls this first and
+    /// only logs out on a confirmed `.invalid`. Never throws; a network error
+    /// maps to `.indeterminate` (keep the session).
+    func validateSession() async -> SessionValidity
 }
 
 public extension ServerAPI {
     /// Default no-op so test mocks that don't care about 401 flow keep
     /// compiling without an explicit override.
     func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void) {}
+
+    /// Default for conformers that don't model auth — `.indeterminate` keeps
+    /// the session (never a false logout).
+    func validateSession() async -> SessionValidity { .indeterminate }
 }
 
 /// Authentication, user listing, and active-session queries.
 public protocol AuthAPI: Sendable {
     func authenticate(username: String, password: String) async throws -> UserSession
+
+    /// Whether the server has Quick Connect enabled. The login UI hides the
+    /// Quick Connect affordance when this is `false` (or the call fails) so we
+    /// never offer a flow the server will reject.
+    func isQuickConnectEnabled() async throws -> Bool
+    /// Initiates a Quick Connect request, returning the user-facing `code` and
+    /// the polling `secret`.
+    func initiateQuickConnect() async throws -> QuickConnectRequest
+    /// Polls a Quick Connect request. Returns `true` once the user has approved
+    /// the code from another signed-in session.
+    func quickConnectAuthorized(secret: String) async throws -> Bool
+    /// Exchanges an approved Quick Connect `secret` for a full session, and
+    /// reconfigures the client with the new token (mirrors `authenticate`).
+    func authenticateWithQuickConnect(secret: String) async throws -> UserSession
+
     func getPublicUsers() async throws -> [UserDto]
     func getUsers() async throws -> [UserDto]
     func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto]

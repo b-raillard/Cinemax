@@ -41,6 +41,17 @@ final class AppState {
     /// still enforces authorization on every endpoint.
     private(set) var isAdministrator: Bool = false
 
+    /// Re-entrancy guard for the confirm-before-logout cycle. MainActor-confined
+    /// (no lock needed) — every trigger hops to MainActor before reading it, so
+    /// concurrent 401s / a foreground revalidation collapse into one probe.
+    private var sessionRevalidationInFlight = false
+
+    /// Reachability probe injected from the view layer (`NetworkMonitor.isOnline`).
+    /// Wired once in `AppNavigation.task`. Defaults to `true` so unit tests that
+    /// don't set it still exercise the validate path. Never log out while this
+    /// reports offline — turning the box off/on must not disconnect the user.
+    var isOnlineProvider: @MainActor () -> Bool = { true }
+
     let apiClient: any APIClientProtocol
     let keychain: any SecureStorageProtocol
 
@@ -82,6 +93,10 @@ final class AppState {
         self.accessToken = session.accessToken
         self.currentUserId = session.userID
         self.isAuthenticated = true
+
+        // The items just read back successfully, so it's safe to upgrade them
+        // to the cold-boot-readable accessibility class (idempotent, one-shot).
+        keychain.migrateAccessibilityIfNeeded()
 
         // Reconnect client with stored token
         apiClient.reconnect(url: serverURL, accessToken: session.accessToken)
@@ -190,6 +205,49 @@ final class AppState {
         currentUser = nil
         isAdministrator = false
     }
+
+    /// Confirm-before-logout. A single ambiguous 401 from a hot path (or a
+    /// cold-wake socket) no longer tears the session down: we silently re-check
+    /// the token against the server (`validateSession` → `GET /Users/Me`) with a
+    /// small bounded retry, and only `logout()` on a server-CONFIRMED `.invalid`.
+    /// This is a pure app↔server network check — no popup, no user question.
+    ///
+    /// Invoked from the lazy `.cinemaxSessionExpired` notification AND the
+    /// foreground re-validation (scenePhase `.active` after a long background).
+    /// Debounced so concurrent triggers collapse into one probe.
+    func handlePossibleSessionExpiry() async {
+        guard isAuthenticated else { return }
+        guard !sessionRevalidationInFlight else { return }
+        sessionRevalidationInFlight = true
+        defer { sessionRevalidationInFlight = false }
+
+        // Offline → never log out. We can't prove the token is bad, and the
+        // user has every right to turn their box/network off.
+        guard isOnlineProvider() else { return }
+
+        // A cold-wake network stack often needs a beat: retry briefly before
+        // trusting an `.indeterminate`. 3 attempts at 0 / 0.4s / 0.8s.
+        let backoffMs: [UInt64] = [0, 400, 800]
+        for (attempt, delay) in backoffMs.enumerated() {
+            if delay > 0 { try? await Task.sleep(nanoseconds: delay * 1_000_000) }
+            guard isAuthenticated, isOnlineProvider() else { return }
+            switch await apiClient.validateSession() {
+            case .valid:
+                // Token still good — the 401 was spurious (cold-wake socket,
+                // race). Opportunistically refresh the user + extension session.
+                await refreshCurrentUser()
+                return
+            case .invalid:
+                // Server-confirmed revocation — the one correct logout path.
+                logout()
+                NotificationCenter.default.post(name: .cinemaxSessionConfirmedInvalid, object: nil)
+                return
+            case .indeterminate:
+                if attempt == backoffMs.count - 1 { return }   // out of retries → keep session
+                continue
+            }
+        }
+    }
 }
 
 struct AppNavigation: View {
@@ -204,6 +262,9 @@ struct AppNavigation: View {
     @State private var downloads = DownloadManager()
     #endif
     @State private var hasCheckedSession = false
+    /// When the app last entered the background — drives Part E foreground
+    /// re-validation (only after a long gap, e.g. overnight standby).
+    @State private var lastBackgroundedAt: Date?
     @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
@@ -271,6 +332,9 @@ struct AppNavigation: View {
             appState.handleDeepLink(url)
         }
         .task {
+            // Let the confirm-before-logout coordinator see real connectivity
+            // (captured weakly so the closure can't extend NetworkMonitor's life).
+            appState.isOnlineProvider = { [weak network] in network?.isOnline ?? true }
             await appState.restoreSession()
             hasCheckedSession = true
             menuConfig.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
@@ -317,11 +381,23 @@ struct AppNavigation: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
+                lastBackgroundedAt = Date()
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
             } else if newPhase == .active {
                 // Network conditions may have changed while backgrounded —
                 // re-evaluate whether the proxy is needed for this server.
                 StreamTransportPolicy.shared.refresh()
+                // Part E — proactive re-validation after a MEANINGFUL background
+                // gap (overnight standby is the bug; ignore quick app-switcher
+                // peeks). Reuses the same coordinator: it gates on connectivity,
+                // debounces against a concurrent lazy-401 cycle, refreshes the
+                // user on `.valid`, and only logs out on a confirmed `.invalid`.
+                if appState.isAuthenticated,
+                   let since = lastBackgroundedAt,
+                   Date().timeIntervalSince(since) > 60 {
+                    lastBackgroundedAt = nil
+                    Task { await appState.handlePossibleSessionExpiry() }
+                }
             }
         }
         .onChange(of: network.isOnline) { _, online in
@@ -331,12 +407,19 @@ struct AppNavigation: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in
             // Lazy 401 recovery — fired by any API call that surfaces an HTTP
-            // 401 (token expired, revoked, or password reset elsewhere).
-            // Idempotent: `logout()` is safe to call repeatedly. The toast
-            // queue replaces older messages, so concurrent fires collapse to
-            // a single visible "session expired" pill.
+            // 401. We do NOT log out immediately: a single ambiguous 401 (cold
+            // wake, transient server hiccup) would wrongly disconnect a user
+            // whose token is still valid. Instead, silently re-validate against
+            // the server first; logout happens only on a confirmed `.invalid`
+            // (which posts `.cinemaxSessionConfirmedInvalid` below).
             guard appState.isAuthenticated else { return }
-            appState.logout()
+            Task { await appState.handlePossibleSessionExpiry() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionConfirmedInvalid)) { _ in
+            // The session was authoritatively confirmed invalid — `logout()`
+            // already ran inside the coordinator. Surface the toast here (only
+            // on the View, which owns `toasts`/`loc`). The queue collapses
+            // concurrent fires to a single visible pill.
             toasts.error(loc.localized("session.expired"))
         }
         .onChange(of: motionEffects) { _, _ in
@@ -351,6 +434,10 @@ struct AppNavigation: View {
 
 extension Notification.Name {
     static let cinemaxDidEnterBackground = Notification.Name("cinemaxDidEnterBackground")
+    /// Posted by `AppState.handlePossibleSessionExpiry` ONLY when the server
+    /// authoritatively confirms the token is revoked/expired. `logout()` has
+    /// already run; `AppNavigation` surfaces the "session expired" toast.
+    static let cinemaxSessionConfirmedInvalid = Notification.Name("cinemaxSessionConfirmedInvalid")
     /// Posted when the user taps "Refresh Catalogue" in Settings → Server.
     /// Home and Library observe this and reload their content (cache-busted).
     static let cinemaxShouldRefreshCatalogue = Notification.Name("cinemaxShouldRefreshCatalogue")

@@ -389,7 +389,9 @@ final class SearchViewModel {
     }
 
     /// Weighted relevance of one title against the query. 0 = no match (filtered out).
-    nonisolated private static func relevanceScore(title: String, fullQuery: String, queryWords: [String]) -> Double {
+    /// `internal` (not `private`) so the ranking is directly unit-testable via
+    /// `@testable import`.
+    nonisolated static func relevanceScore(title: String, fullQuery: String, queryWords: [String]) -> Double {
         let normalized = normalizeForMatch(title)
         guard !normalized.isEmpty, !fullQuery.isEmpty else { return 0 }
 
@@ -416,7 +418,7 @@ final class SearchViewModel {
     /// Lowercases, strips diacritics, and collapses any run of non-alphanumerics to
     /// a single space so punctuation can't block matches: "Mission : Impossible"
     /// and "mission impossible" normalize to the same string.
-    nonisolated private static func normalizeForMatch(_ raw: String) -> String {
+    nonisolated static func normalizeForMatch(_ raw: String) -> String {
         let folded = raw.folding(options: .diacriticInsensitive, locale: nil).lowercased()
         var out = ""
         out.reserveCapacity(folded.count)

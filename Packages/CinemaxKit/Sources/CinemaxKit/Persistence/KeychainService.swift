@@ -4,6 +4,22 @@ import Security
 public struct KeychainService: Sendable {
     private static let serviceName = "com.cinemax.jellyfin"
 
+    /// Accessibility class for every item we store.
+    ///
+    /// `AfterFirstUnlock…` (not `WhenUnlocked…`): on a tvOS cold boot the app
+    /// can relaunch into `restoreSession()` *before* the keychain finishes
+    /// coming up under `WhenUnlocked`, so `getUserSession()` reads back empty
+    /// and the user appears logged out. `AfterFirstUnlock` keeps items readable
+    /// for the rest of the boot cycle once the device has unlocked once — which
+    /// is exactly the wake-from-standby window where the spurious disconnect
+    /// happened. `ThisDeviceOnly` is preserved (never synced to iCloud).
+    /// Computed (not stored) so the non-`Sendable` `CFString` global isn't
+    /// captured in a `static let` — which Swift 6 rejects as not concurrency-safe.
+    private static var itemAccessibility: CFString { kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly }
+
+    /// One-shot flag so the accessibility migration re-saves stored items only once.
+    private static let accessibilityMigratedKey = "keychain.accessibility.afterFirstUnlock.migrated"
+
     /// Session fallback for the device id: if the keychain is locked at first
     /// launch the `SecItemAdd` below fails, and without this every call would
     /// mint a fresh UUID and fragment device identity. Lock-guarded so the
@@ -58,6 +74,63 @@ public struct KeychainService: Sendable {
 
     public func deleteUserSession() {
         delete(for: "user_session")
+    }
+
+    // MARK: - Accessibility migration
+
+    /// Re-saves already-stored items under the new `AfterFirstUnlock`
+    /// accessibility class. Idempotent (UserDefaults flag) and lossless:
+    /// `save()` is delete-then-add, and we only re-write items that read back
+    /// successfully *this* launch — so a re-save can never erase a value we
+    /// still have. Call after a confirmed-readable restore. The flag is set
+    /// only when every re-save succeeds, so a partial failure retries next launch.
+    public func migrateAccessibilityIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.accessibilityMigratedKey) else { return }
+        var allSucceeded = true
+        if let token = getAccessToken() {
+            do { try saveAccessToken(token) } catch { allSucceeded = false }
+        }
+        if let session = getUserSession() {
+            do { try saveUserSession(session) } catch { allSucceeded = false }
+        }
+        if let url = getServerURL() {
+            do { try saveServerURL(url) } catch { allSucceeded = false }
+        }
+        Self.migrateDeviceIDAccessibility()   // best-effort; has its own in-memory fallback
+        if allSucceeded {
+            UserDefaults.standard.set(true, forKey: Self.accessibilityMigratedKey)
+        }
+    }
+
+    /// Rewrites the persistent device id under the new accessibility class.
+    /// Best-effort: failures are tolerated because `cachedDeviceID` already
+    /// keeps the id stable within a run even if the keychain read/write fails.
+    private static func migrateDeviceIDAccessibility() {
+        let account = "device_id"
+        let readQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(readQuery as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return }
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: itemAccessibility
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
     }
 
     // MARK: - Clear All
@@ -115,7 +188,7 @@ public struct KeychainService: Sendable {
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
             kSecValueData as String: Data(id.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: itemAccessibility
         ]
         // Cache for the session regardless: if the add fails (keychain locked
         // at first launch) we still want a stable id for this run instead of a
@@ -142,7 +215,7 @@ public struct KeychainService: Sendable {
             kSecAttrService as String: Self.serviceName,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: Self.itemAccessibility
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)

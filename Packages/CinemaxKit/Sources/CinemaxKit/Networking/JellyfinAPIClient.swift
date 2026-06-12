@@ -1,8 +1,6 @@
 import Foundation
 import OSLog
-#if DEBUG
 import Get
-#endif
 import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "API")
@@ -94,27 +92,39 @@ public final class JellyfinAPIClient: Sendable {
         return _onUnauthorized
     }
 
-    /// Inspects an error thrown from `client.send(...)` and fires the
-    /// unauthorized callback if the underlying HTTP status was 401.
-    /// `Get.APIError.unacceptableStatusCode(401)` is the canonical signal
-    /// from the Jellyfin SDK, but `Get` is not a direct CinemaxKit
-    /// dependency — only transitive via jellyfin-sdk-swift. Rather than
-    /// add a fourth package dependency just for one type cast, we match
-    /// on the error's textual representation. Get's APIError prints as
-    /// `"unacceptableStatusCode(401)"` and `URLError` for HTTP 401
-    /// surfaces NSURLErrorUserAuthenticationRequired (-1013). Either
-    /// signal fires the callback. Called from the catch block of every
-    /// session-scoped public method that surfaces results to the UI;
-    /// fire-and-forget reporters in `+Playback.swift` skip it because
-    /// they swallow errors silently anyway.
-    internal func notifyIfUnauthorized(_ error: Error) {
-        let description = String(describing: error)
-        let isHTTP401 = description.contains("unacceptableStatusCode(401)")
-            || description.contains("(401)")
-        let isURLAuth = (error as NSError).code == NSURLErrorUserAuthenticationRequired
-        if isHTTP401 || isURLAuth {
-            getOnUnauthorized()?()
+    /// Precise 401 classifier — the SINGLE source of truth for "is this error
+    /// an authentication failure". Used by `notifyIfUnauthorized` (lazy
+    /// recovery) AND `validateSession` (the confirm-before-logout probe).
+    ///
+    /// `Get` is a direct CinemaxKit dependency (see Package.swift), so we
+    /// pattern-match `Get.APIError.unacceptableStatusCode(401)` — the canonical
+    /// signal the Jellyfin SDK throws — instead of the old fragile substring
+    /// match on `"(401)"`, which produced false positives (any error text
+    /// containing `(401)`, a `403/404` body echoing 401, our own
+    /// `playbackFailed("… 401")` message, etc.). Genuine 401s arriving by
+    /// other routes are also covered: `URLError`/`NSURLErrorUserAuthentication-
+    /// Required` (-1013) and our structured `JellyfinError.unauthorized` raised
+    /// from the raw PlaybackInfo POST.
+    static func isUnauthorized(_ error: Error) -> Bool {
+        if case Get.APIError.unacceptableStatusCode(let code) = error, code == 401 {
+            return true
         }
+        if case JellyfinError.unauthorized = error { return true }
+        if (error as NSError).code == NSURLErrorUserAuthenticationRequired { return true }
+        if let urlErr = error as? URLError,
+           let resp = urlErr.userInfo[NSURLErrorFailingURLErrorKey] as? HTTPURLResponse,
+           resp.statusCode == 401 {
+            return true
+        }
+        return false
+    }
+
+    /// Fires the unauthorized callback when `error` is a genuine 401. Called
+    /// from the catch block of every session-scoped public method that surfaces
+    /// results to the UI; fire-and-forget reporters in `+Playback.swift` skip it
+    /// because they swallow errors silently anyway.
+    internal func notifyIfUnauthorized(_ error: Error) {
+        if Self.isUnauthorized(error) { getOnUnauthorized()?() }
     }
 
     /// See `ServerAPI.applyContentRatingLimit`. Pushes the user's Privacy &
@@ -217,6 +227,69 @@ public final class JellyfinAPIClient: Sendable {
         return UserSession(
             userID: userID,
             username: result.user?.name ?? username,
+            accessToken: accessToken,
+            serverID: result.serverID ?? ""
+        )
+    }
+
+    // MARK: - Quick Connect
+
+    public func isQuickConnectEnabled() async throws -> Bool {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        // The endpoint returns a raw JSON boolean body (`true`/`false`), typed
+        // as `Data` by the SDK — decode it ourselves.
+        let data = try await client.send(Paths.getQuickConnectEnabled).value
+        if let bool = try? JSONDecoder().decode(Bool.self, from: data) { return bool }
+        let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text?.lowercased() == "true"
+    }
+
+    public func initiateQuickConnect() async throws -> QuickConnectRequest {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let result = try await client.send(Paths.initiateQuickConnect).value
+        guard let code = result.code, let secret = result.secret else {
+            throw JellyfinError.authenticationFailed
+        }
+        return QuickConnectRequest(code: code, secret: secret)
+    }
+
+    public func quickConnectAuthorized(secret: String) async throws -> Bool {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let result = try await client.send(Paths.getQuickConnectState(secret: secret)).value
+        return result.isAuthenticated ?? false
+    }
+
+    public func authenticateWithQuickConnect(secret: String) async throws -> UserSession {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+
+        let body = QuickConnectDto(secret: secret)
+        let result = try await client.send(Paths.authenticateWithQuickConnect(body)).value
+
+        guard let accessToken = result.accessToken,
+              let userID = result.user?.id else {
+            throw JellyfinError.authenticationFailed
+        }
+
+        // Reconfigure client with the issued access token — identical to the
+        // password path so every downstream call is authenticated.
+        if let url = getServerURL() {
+            let authedClient = JellyfinClient(
+                configuration: .init(
+                    url: url,
+                    accessToken: accessToken,
+                    client: "Cinemax",
+                    deviceName: deviceName,
+                    deviceID: deviceID,
+                    version: appVersion
+                ),
+                sessionConfiguration: Self.fastFailSessionConfiguration
+            )
+            setClient(authedClient, url: url)
+        }
+
+        return UserSession(
+            userID: userID,
+            username: result.user?.name ?? "",
             accessToken: accessToken,
             serverID: result.serverID ?? ""
         )
