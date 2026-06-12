@@ -192,6 +192,8 @@ struct MainTabView: View {
             // screen skips the `includeItemTypes` filter and surfaces every
             // item in the parent folder regardless of how Jellyfin typed it.
             MediaLibraryScreen(itemType: kind, parentId: id, overrideTitle: name)
+        case .libraryFolders(let id, let name, let isPlaylist):
+            LibraryFolderBrowseScreen(parentId: id, title: name, isPlaylist: isPlaylist)
         }
     }
 }

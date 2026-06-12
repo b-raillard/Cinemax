@@ -11,6 +11,7 @@ struct LoginScreen: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @State private var viewModel = LoginViewModel()
+    @State private var showQuickConnect = false
     @State private var easterEggTaps: Int = 0
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -26,6 +27,35 @@ struct LoginScreen: View {
                 mobileLayout
             }
             #endif
+        }
+        .task { await viewModel.checkQuickConnect(using: appState) }
+        .onChange(of: showQuickConnect) { _, presented in
+            if presented {
+                viewModel.startQuickConnect(using: appState, loc: loc)
+            } else {
+                viewModel.cancelQuickConnect()
+            }
+        }
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $showQuickConnect) {
+            QuickConnectSheet(viewModel: viewModel)
+        }
+        #else
+        .sheet(isPresented: $showQuickConnect) {
+            QuickConnectSheet(viewModel: viewModel)
+                .presentationDetents([.medium, .large])
+        }
+        #endif
+    }
+
+    /// Secondary CTA that opens the Quick Connect sheet. Hidden until the
+    /// server confirms the feature is enabled.
+    @ViewBuilder
+    private var quickConnectButton: some View {
+        if viewModel.quickConnectEnabled {
+            helperLink(icon: "qrcode", title: loc.localized("quickConnect.button")) {
+                showQuickConnect = true
+            }
         }
     }
 
@@ -105,6 +135,8 @@ struct LoginScreen: View {
                         Task { await viewModel.authenticate(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isAuthenticating)
+
+                    quickConnectButton
                 }
                 .padding(CinemaSpacing.spacing10)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
@@ -222,6 +254,8 @@ struct LoginScreen: View {
                         Task { await viewModel.authenticate(using: appState, loc: loc) }
                     }
                     .disabled(viewModel.isAuthenticating)
+
+                    quickConnectButton
 
                     helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
                         appState.disconnectServer()

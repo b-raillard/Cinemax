@@ -43,11 +43,22 @@ public enum ExtensionSessionBridge {
             logger.error("ExtensionBridge ▸ App Group suite unavailable — entitlement missing?")
             return
         }
+        let keychain = KeychainService()
         if let serverURL, let accessToken, !accessToken.isEmpty, let userId, !userId.isEmpty {
             let session = Session(serverURL: serverURL, accessToken: accessToken, userId: userId)
-            defaults.set(try? JSONEncoder().encode(session), forKey: sessionKey)
+            let data = try? JSONEncoder().encode(session)
+            // Primary store: the shared, device-only Keychain group — the token
+            // is never written in plaintext nor included in device backups.
+            if let data { keychain.saveSharedSession(data) }
+            // Transitional dual-write: keep the App Group UserDefaults copy for
+            // one release so an extension binary that predates the Keychain
+            // migration still finds a session, and as a fallback if the shared
+            // Keychain group can't be resolved. TODO(next release): drop this
+            // plaintext write once both extensions read from the Keychain.
+            defaults.set(data, forKey: sessionKey)
             logger.info("ExtensionBridge ▸ session published host=\(serverURL.host() ?? "?", privacy: .public)")
         } else {
+            keychain.deleteSharedSession()
             defaults.removeObject(forKey: sessionKey)
             logger.info("ExtensionBridge ▸ session cleared")
         }

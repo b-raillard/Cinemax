@@ -17,6 +17,7 @@ struct EpisodeOverviewSheet: View {
     let item: EpisodeOverviewItem
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -30,6 +31,7 @@ struct EpisodeOverviewSheet: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(loc.localized("action.done"))
 
                 Spacer()
 

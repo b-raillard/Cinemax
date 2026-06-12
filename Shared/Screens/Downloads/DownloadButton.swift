@@ -38,6 +38,12 @@ struct DownloadButton: View {
                     fetchAllEpisodes: @MainActor () async -> [BaseItemDto])
     }
 
+    /// True once this item's download has finished — drives the completion
+    /// haptic. Reading it from the manager keeps it live with the observable.
+    private var isCompleted: Bool {
+        item.id.flatMap { downloads.item(for: $0)?.status } == .completed
+    }
+
     var body: some View {
         Group {
             switch bulk {
@@ -49,6 +55,7 @@ struct DownloadButton: View {
                 bulkMenu(seasonEpisodes: cur, fetchSeries: fetchAll)
             }
         }
+        .sensoryFeedback(.success, trigger: isCompleted) { old, new in !old && new }
         .confirmationDialog(
             loc.localized("downloads.confirmRemove.title"),
             isPresented: $showRemoveConfirm,

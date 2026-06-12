@@ -15,6 +15,14 @@ public protocol SecureStorageProtocol: Sendable {
     func deleteUserSession()
 
     func clearAll()
+
+    /// Upgrades stored items to a cold-boot-readable accessibility class.
+    /// Default no-op so mocks need no change.
+    func migrateAccessibilityIfNeeded()
+}
+
+public extension SecureStorageProtocol {
+    func migrateAccessibilityIfNeeded() {}
 }
 
 // MARK: - Conformance

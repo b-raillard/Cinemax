@@ -61,6 +61,28 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedSession
     }
 
+    var stubbedValidity: SessionValidity = .valid
+    var validateSessionDelayMs: UInt64 = 0
+    private(set) var validateSessionCallCount = 0
+    func validateSession() async -> SessionValidity {
+        validateSessionCallCount += 1
+        if validateSessionDelayMs > 0 {
+            try? await Task.sleep(nanoseconds: validateSessionDelayMs * 1_000_000)
+        }
+        return stubbedValidity
+    }
+
+    func isQuickConnectEnabled() async throws -> Bool { false }
+    func initiateQuickConnect() async throws -> QuickConnectRequest {
+        if shouldThrow { throw stubbedError }
+        return QuickConnectRequest(code: "123456", secret: "secret")
+    }
+    func quickConnectAuthorized(secret: String) async throws -> Bool { true }
+    func authenticateWithQuickConnect(secret: String) async throws -> UserSession {
+        if shouldThrow { throw stubbedError }
+        return stubbedSession
+    }
+
     func getPublicUsers() async throws -> [UserDto] { [] }
     func getUsers() async throws -> [UserDto] { [] }
     func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto] { [] }

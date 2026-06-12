@@ -55,9 +55,18 @@ final class TVScrubBar: UIView {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
         addGestureRecognizer(pan)
+
+        // VoiceOver: expose the bar as an adjustable element so a swipe-up /
+        // swipe-down seeks ±1 step (the caller maps to ±15 s). Label + value
+        // (current playhead) are set by the presenter, which owns the strings.
+        isAccessibilityElement = true
+        accessibilityTraits = .adjustable
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
+
+    override func accessibilityIncrement() { onSeek?(1) }
+    override func accessibilityDecrement() { onSeek?(-1) }
 
     func setProgress(_ p: Float) {
         progressValue = max(0, min(1, p))

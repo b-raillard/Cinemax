@@ -33,6 +33,7 @@
 "player.nextEpisode" = "Épisode suivant";
 "player.chapters" = "Chapitres";
 "player.chapter" = "Chapitre";
+"player.scrubBar" = "Barre de progression";
 "action.logOut" = "Déconnexion";
 "action.viewAll" = "Tout voir";
 "action.refresh" = "Actualiser";
@@ -92,6 +93,9 @@
 "empty.library.filtered.action" = "Effacer les filtres";
 "library.loading.movies" = "Chargement des films…";
 "library.loading.series" = "Chargement des séries…";
+"library.itemCount" = "%d éléments";
+"library.collections.empty" = "Aucune collection pour le moment";
+"library.playlists.empty" = "Aucune playlist pour le moment";
 "empty.home.title" = "Votre bibliothèque est vide";
 "empty.home.subtitle" = "Ajoutez des films ou séries à votre serveur Jellyfin puis tirez pour actualiser.";
 
@@ -290,6 +294,10 @@
 "login.mobileTitle" = "Connexion";
 "login.mobileSubtitle" = "Connectez-vous avec votre compte Jellyfin pour commencer.";
 "login.changeServer" = "Changer de serveur";
+"quickConnect.button" = "Utiliser Quick Connect";
+"quickConnect.title" = "Quick Connect";
+"quickConnect.instructions" = "Sur un appareil déjà connecté, ouvrez votre profil → Quick Connect et saisissez ce code.";
+"quickConnect.waiting" = "En attente d'approbation…";
 "login.username" = "Nom d'utilisateur";
 "login.usernamePlaceholder" = "Votre nom d'utilisateur";
 "login.password" = "Mot de passe";

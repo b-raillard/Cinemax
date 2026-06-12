@@ -300,6 +300,10 @@ extension JellyfinAPIClient {
                 debugLog("PlaybackInfo \(statusCode) body: \(bodyStr.prefix(500))")
             }
             #endif
+            // Surface a structured 401 so `isUnauthorized` matches it precisely
+            // (the old `playbackFailed("… 401")` string only worked under the
+            // now-removed substring heuristic).
+            if statusCode == 401 { throw JellyfinError.unauthorized }
             throw JellyfinError.playbackFailed("PlaybackInfo returned \(statusCode)")
         }
 

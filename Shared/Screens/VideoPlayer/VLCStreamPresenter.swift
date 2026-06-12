@@ -348,6 +348,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Explicit HUD state so single-tap toggling never depends on mid-animation
     /// `alpha` reads.
     private var controlsVisible = true
+    /// Debounce for the Menu button: a single press can be delivered to both
+    /// the press gesture recognizer and `pressesBegan`; this collapses them to
+    /// one peel action so it never hides-then-dismisses on a single press.
+    private var lastMenuHandledAt = Date.distantPast
     /// One tap recognizer disambiguates single vs double itself (no
     /// `require(toFail:)` — that was starving the single tap). A single tap's
     /// toggle is deferred briefly; a second tap inside the window cancels it
@@ -391,6 +395,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // and never after teardown (which would restart the engine and re-arm a
     // progress timer nothing will ever invalidate).
     private var navGeneration = 0
+
+    // App-lifecycle wake resilience. When the device sleeps (Apple TV / phone
+    // locked) mid-playback, the stream socket dies; on resume libVLC is in
+    // `.error`/`.stopped` and the old code stranded the user on a generic
+    // error. On foreground we re-resolve a FRESH PlaybackInfo (new api_key +
+    // playSessionId) and resume from where we left off.
+    private var didBackgroundWhilePlaying = false
+    private var positionAtBackgroundMs: Int32 = 0
+    private var isReResolvingAfterWake = false
+    private var foregroundObserver: NSObjectProtocol?
+    private var backgroundObserver: NSObjectProtocol?
 
     // "Media never opened" watchdog. libVLC 4.0 can fail to open a stream
     // (server 404/416 on the static URL, codec the demuxer rejects) by going
@@ -488,6 +503,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         setupReporter()
         startPlayback()
         scheduleHideControls()
+        setupLifecycleObservers()
     }
 
     #if os(iOS)
@@ -521,6 +537,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         trickplay.reset()
         eventsTask?.cancel()
         eventsTask = nil
+        if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
+        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+        backgroundObserver = nil
+        foregroundObserver = nil
         #if os(iOS)
         pipController = nil
         #endif
@@ -1254,11 +1274,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         videoView.addGestureRecognizer(hold)
         holdPress = hold
         #else
-        // Presses flow through the responder chain to `pressesBegan` below; the
-        // focus engine drives navigation; TVScrubBar seeks left/right only
-        // while focused. The one global gesture is the native "swipe down for
-        // the info panel" — armed only while the HUD is hidden (down-swipes
-        // belong to the focus engine while it's up).
+        // Most presses flow through the responder chain to `pressesBegan` below;
+        // the focus engine drives navigation; TVScrubBar seeks left/right only
+        // while focused.
+        //
+        // Menu is the exception: it MUST be caught by a dedicated press gesture
+        // recognizer on `view`, not by `pressesBegan`. While the HUD is visible
+        // a control (`tvScrub`) holds focus, and a focused control lets tvOS run
+        // its default "Menu dismisses the modal" before the press bubbles to the
+        // controller — so the `pressesBegan` peel logic never fired and Menu shut
+        // the player even with the HUD up. The recognizer intercepts Menu first
+        // in every focus state (this is the canonical tvOS pattern; it was the
+        // pre-`002819e` design, lost when Menu was folded into `pressesBegan`).
+        let menuPress = UITapGestureRecognizer(target: self, action: #selector(handleMenuPress))
+        menuPress.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
+        view.addGestureRecognizer(menuPress)
+
+        // The one global gesture is the native "swipe down for the info panel" —
+        // armed only while the HUD is hidden (down-swipes belong to the focus
+        // engine while it's up).
         let swipeDown = UISwipeGestureRecognizer(target: self, action: #selector(handleInfoPanelSwipe))
         swipeDown.direction = .down
         swipeDown.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
@@ -1272,19 +1306,27 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// press keeps the HUD alive. Menu peels one layer at a time — visible HUD
     /// → hide it, bare video → exit the player (matches the system
     /// AVPlayerViewController). Play/Pause always toggles.
+    /// Remote presses that should WAKE a hidden HUD. Deliberately a whitelist of
+    /// real navigation buttons — NOT "any press". The tvOS simulator delivers a
+    /// keyboard Escape as a spurious non-`.menu` press that, under an "any press
+    /// reveals" rule, un-hid the HUD a beat *before* the real Menu press landed,
+    /// so the Menu peel saw a visible HUD and hid it instead of quitting (an
+    /// infinite hide/reveal loop, never dismissing). Only these wake it now.
+    private static let hudWakePressTypes: Set<UIPress.PressType> = [
+        .upArrow, .downArrow, .leftArrow, .rightArrow, .select
+    ]
+
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // Menu (or keyboard Escape on the simulator) → peel one layer. Handled
+        // HERE too (not only via the recognizer): when the HUD is hidden no
+        // control is focused, so `pressesBegan` is the path that fires. Routing
+        // through the shared, debounced `handleMenu` guarantees "hidden + Menu →
+        // quit" and stops the press from reaching the wake path below.
+        if presses.contains(where: { $0.type == .menu || $0.key?.keyCode == .keyboardEscape }) {
+            handleMenu()
+            return
+        }
         for press in presses {
-            if press.type == .menu {
-                if infoPanelVisible {
-                    setInfoPanelVisible(false)
-                } else if controlsVisible {
-                    hideControlsWorkItem?.cancel()
-                    hideControlsImmediately()
-                } else {
-                    dismiss(animated: true)
-                }
-                return
-            }
             if press.type == .playPause {
                 playPauseTapped()
                 revealControls()
@@ -1303,7 +1345,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
         if controlsContainer.alpha == 0 {
-            revealControls() // consume — first press only un-hides the HUD
+            // Only a real navigation press wakes the HUD (see `hudWakePressTypes`).
+            // An unrecognized press (keyboard noise on the simulator) is ignored
+            // so it can't reveal the HUD ahead of a Menu dismiss.
+            if presses.contains(where: { Self.hudWakePressTypes.contains($0.type) }) {
+                revealControls()
+            }
             return
         }
         scheduleHideControls() // visible: any press keeps it alive
@@ -1350,6 +1397,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // so the focus engine can move left/right between the control buttons
         // when the bar is not focused.
         tvScrub.translatesAutoresizingMaskIntoConstraints = false
+        tvScrub.accessibilityLabel = loc.localized("player.scrubBar")
         tvScrub.onSeek = { [weak self] delta in
             guard let self else { return }
             self.pendingScrubTargetMs = nil
@@ -1523,6 +1571,38 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         ])
     }
 
+    /// Menu button target (press gesture recognizer). Routes to `handleMenu`.
+    @objc private func handleMenuPress() { handleMenu() }
+
+    /// Menu button — peels one layer at a time (matches the system
+    /// `AVPlayerViewController`): info panel up → close it; HUD visible → hide
+    /// it (and cancel the auto-hide timer); **bare video → exit the player**.
+    ///
+    /// Called from BOTH the press gesture recognizer AND `pressesBegan`, because
+    /// tvOS routes the Menu press to different responders depending on focus:
+    /// while a control holds focus (HUD visible) the recognizer wins over the
+    /// system's default modal-dismiss; while the HUD is hidden no control is
+    /// focused and `pressesBegan` is the only path that fires (see the note on
+    /// `handleRemotePlayPause`). A single physical press can reach both within
+    /// the same event, so `lastMenuHandledAt` debounces the duplicate.
+    ///
+    /// Keyed on `controlsContainer.alpha` (the VISUAL truth) — NOT the
+    /// `controlsVisible` flag, which can disagree with what's on screen and was
+    /// the source of the "Menu re-opens the HUD instead of quitting" loop.
+    private func handleMenu() {
+        let now = Date()
+        if now.timeIntervalSince(lastMenuHandledAt) < 0.2 { return }
+        lastMenuHandledAt = now
+        if infoPanelVisible {
+            setInfoPanelVisible(false)
+        } else if controlsContainer.alpha > 0 {
+            hideControlsWorkItem?.cancel()
+            hideControlsImmediately()
+        } else {
+            dismiss(animated: true)
+        }
+    }
+
     @objc private func handleInfoPanelSwipe() {
         // HUD up → the focus engine owns down-swipes; a picker up → ignore.
         guard !infoPanelVisible, controlsContainer.alpha == 0, !pickerPresented else { return }
@@ -1627,6 +1707,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #endif
         b.translatesAutoresizingMaskIntoConstraints = false
         b.addTarget(self, action: #selector(chapterChipTapped(_:)), for: .primaryActionTriggered)
+        b.isAccessibilityElement = true
+        b.accessibilityLabel = "\(loc.localized("player.chapter")): \(title), \(time)"
+        b.accessibilityTraits = .button
 
         let thumb = UIImageView()
         thumb.tag = 99
@@ -1757,6 +1840,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     #if os(tvOS)
     private func updateScrubBar(progress: Float) {
         tvScrub.setProgress(progress)
+        // Keep VoiceOver's spoken value in sync with the playhead. `timeLabel`
+        // is set immediately before every call site, so it's the current time.
+        tvScrub.accessibilityValue = timeLabel.text
     }
 
     /// Positions + populates the trickplay bubble during a touch-surface scrub.
@@ -2551,6 +2637,105 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         errorAlert = nil
         didRetry = false
         alert.dismiss(animated: true)
+    }
+
+    // MARK: - App-lifecycle wake resilience
+
+    /// Observes background/foreground so a stream that died during device sleep
+    /// (Apple TV powered off, phone locked) is re-resolved and resumed instead
+    /// of stranding the user on a generic playback error. Mirrors
+    /// `NativeVideoPresenter.setupBackgroundObserver` (the `@Sendable` observer
+    /// closure hops `Task { @MainActor in … }` to reach `self`).
+    private func setupLifecycleObservers() {
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleDidEnterBackground() }
+        }
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleWillEnterForeground() }
+        }
+    }
+
+    private func handleDidEnterBackground() {
+        // Remember whether we were actively watching, and where, so we can pick
+        // back up. (`.buffering`/`.opening` also count as "was watching".)
+        switch player.state {
+        case .playing, .paused, .buffering, .opening:
+            didBackgroundWhilePlaying = true
+            positionAtBackgroundMs = currentMs
+        default:
+            didBackgroundWhilePlaying = false
+        }
+    }
+
+    private func handleWillEnterForeground() {
+        guard didBackgroundWhilePlaying else { return }
+        didBackgroundWhilePlaying = false
+        // Stream survived the background (audio kept going, or it resumes
+        // cleanly): leave it alone. Only act when the engine is actually dead.
+        switch player.state {
+        case .error, .stopped, .stopping, .idle:
+            reResolveAndResume(from: positionAtBackgroundMs)
+        default:
+            break
+        }
+    }
+
+    /// Re-negotiates a FRESH PlaybackInfo (new `api_key` + `playSessionId`) for
+    /// the current item and resumes from `ms`. Online stream only — offline
+    /// reuses a local file that never expires. Trimmed copy of
+    /// `navigateToEpisode`'s media/proxy/seek machinery (no episode-graph
+    /// changes). Guarded by `navGeneration` so a user episode-nav started during
+    /// the await wins, and one-shot via `isReResolvingAfterWake`.
+    private func reResolveAndResume(from ms: Int32) {
+        guard !isOffline, !isTearingDown, !isReResolvingAfterWake,
+              let apiClient, let userId else { return }
+        isReResolvingAfterWake = true
+        navGeneration += 1
+        let gen = navGeneration
+        let resumeItemId = itemId
+        let resumeSeconds = Double(ms) / 1000.0
+        logger.notice("VLC wake re-resolve for \(resumeItemId, privacy: .public) @ \(Int(resumeSeconds))s")
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.isReResolvingAfterWake = false }
+            // Routes through `notifyIfUnauthorized`: a genuinely revoked token
+            // triggers the confirm-before-logout cycle in AppState. A transient
+            // failure just returns nil → leave the watchdog / error path to it.
+            guard let fresh = try? await apiClient.getPlaybackInfo(
+                itemId: resumeItemId, userId: userId, engine: .vlc
+            ) else { return }
+            guard !self.isTearingDown, gen == self.navGeneration else { return }
+            self.info = fresh
+            self.startTime = resumeSeconds > 1 ? resumeSeconds : nil
+            self.didSeekToStart = (self.startTime == nil)   // re-arm seek-to-resume
+            self.hasValidTime = false
+            self.didRetry = false
+            self.didReportEnd = false
+            self.didApplyServerTrackDefaults = false
+            self.mediaLengthMs = 0
+            self.recoverFromErrorIfNeeded()                 // drop any stale error alert
+            let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
+            let url: URL
+            if (self.usingProxy || StreamTransportPolicy.shared.preferProxy),
+               let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: fresh.authToken) {
+                url = proxied
+                self.usingProxy = true
+            } else {
+                url = authed
+                self.usingProxy = false
+            }
+            guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
+            self.lastPlayStart = Date()
+            try? self.player.play(media)
+            self.scheduleOpenWatchdog()
+            self.reporter?.resetTicking()
+            self.startProgressTimer()
+            self.refreshTimeUISoon()
+        }
     }
 
     /// Seconds elapsed since the first play() of this session — the

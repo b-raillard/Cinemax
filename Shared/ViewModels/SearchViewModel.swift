@@ -360,8 +360,14 @@ final class SearchViewModel {
             .map(String.init)
             .filter { $0.count >= 2 && !searchStopWords.contains($0) }
 
+        // Always fetch the full phrase, plus up to the first 4 significant words.
+        // Each term is a separate concurrent server request, so an unbounded list
+        // turns a long query into a fan-out spike (a 7-word title = 8 requests per
+        // debounced keystroke). The leading words are the most distinctive, and
+        // scoring below still ranks against the *full* `words` set — capping only
+        // the fetch, not the relevance. 1 + 4 = 5 requests worst case.
         var terms: [String] = [query]
-        if words.count > 1 { terms.append(contentsOf: words) }
+        if words.count > 1 { terms.append(contentsOf: words.prefix(4)) }
         let uniqueTerms = Array(Set(terms))
 
         var candidates: [String: BaseItemDto] = [:]
@@ -389,7 +395,9 @@ final class SearchViewModel {
     }
 
     /// Weighted relevance of one title against the query. 0 = no match (filtered out).
-    nonisolated private static func relevanceScore(title: String, fullQuery: String, queryWords: [String]) -> Double {
+    /// `internal` (not `private`) so the ranking is directly unit-testable via
+    /// `@testable import`.
+    nonisolated static func relevanceScore(title: String, fullQuery: String, queryWords: [String]) -> Double {
         let normalized = normalizeForMatch(title)
         guard !normalized.isEmpty, !fullQuery.isEmpty else { return 0 }
 
@@ -416,7 +424,7 @@ final class SearchViewModel {
     /// Lowercases, strips diacritics, and collapses any run of non-alphanumerics to
     /// a single space so punctuation can't block matches: "Mission : Impossible"
     /// and "mission impossible" normalize to the same string.
-    nonisolated private static func normalizeForMatch(_ raw: String) -> String {
+    nonisolated static func normalizeForMatch(_ raw: String) -> String {
         let folded = raw.folding(options: .diacriticInsensitive, locale: nil).lowercased()
         var out = ""
         out.reserveCapacity(folded.count)

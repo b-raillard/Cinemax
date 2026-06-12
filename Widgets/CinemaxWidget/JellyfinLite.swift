@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 // Minimal, dependency-free Jellyfin access for the widget. The extension
 // deliberately does NOT link CinemaxKit (widget memory budgets are tight and
@@ -24,9 +25,36 @@ enum JellyfinLite {
         let posterItemId: String
     }
 
+    /// Account + service the app's `KeychainService` writes the shared session
+    /// under. Hardcoded here because the extension can't link CinemaxKit — keep
+    /// in sync with `KeychainService.serviceName` / `sharedSessionAccount`.
+    private static let keychainService = "com.cinemax.jellyfin"
+    private static let keychainAccount = "extension_session"
+
     static func readSession() -> Session? {
+        // Primary: the shared, device-only Keychain group the app publishes to.
+        if let session = readSessionFromKeychain() { return session }
+        // Fallback: the legacy plaintext App Group copy (dropped a release after
+        // the Keychain migration ships).
         guard let defaults = UserDefaults(suiteName: appGroupId),
               let data = defaults.data(forKey: sessionKey) else { return nil }
+        return try? JSONDecoder().decode(Session.self, from: data)
+    }
+
+    private static func readSessionFromKeychain() -> Session? {
+        guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
+              !prefix.isEmpty else { return nil }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccessGroup as String: prefix + "com.cinemax.shared",
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
         return try? JSONDecoder().decode(Session.self, from: data)
     }
 

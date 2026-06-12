@@ -33,6 +33,7 @@
 "player.nextEpisode" = "Next Episode";
 "player.chapters" = "Chapters";
 "player.chapter" = "Chapter";
+"player.scrubBar" = "Progress bar";
 "action.logOut" = "Log Out";
 "action.viewAll" = "View All";
 "action.refresh" = "Refresh";
@@ -92,6 +93,9 @@
 "empty.library.filtered.action" = "Clear filters";
 "library.loading.movies" = "Loading movies…";
 "library.loading.series" = "Loading series…";
+"library.itemCount" = "%d items";
+"library.collections.empty" = "No collections here yet";
+"library.playlists.empty" = "No playlists here yet";
 "empty.home.title" = "Your library is empty";
 "empty.home.subtitle" = "Add movies or TV shows to your Jellyfin server and pull down to refresh.";
 
@@ -688,6 +692,10 @@
 "login.mobileTitle" = "Sign In";
 "login.mobileSubtitle" = "Sign in with your Jellyfin account to start streaming.";
 "login.changeServer" = "Change server";
+"quickConnect.button" = "Use Quick Connect";
+"quickConnect.title" = "Quick Connect";
+"quickConnect.instructions" = "On a device that's already signed in, open your profile → Quick Connect and enter this code.";
+"quickConnect.waiting" = "Waiting for approval…";
 "login.username" = "Username";
 "login.usernamePlaceholder" = "Your Username";
 "login.password" = "Password";

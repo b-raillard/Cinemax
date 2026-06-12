@@ -94,15 +94,12 @@ final class MediaLibraryViewModel {
                 userId: userId,
                 includeItemTypes: typeFilter
             )
-            async let countResult = appState.apiClient.getItems(
-                userId: userId,
-                parentId: parentId,
-                includeItemTypes: typeFilter,
-                sortBy: [.random],
-                sortOrder: [.ascending],
-                limit: 1
-            )
 
+            // The hero query already returns the full `totalCount` (Jellyfin's
+            // `totalRecordCount` is the count before `limit`), so there's no need
+            // for a second random-sorted `limit: 1` call just for the title count
+            // — a random sort is a full shuffle server-side, paying for it twice
+            // per library load is pure waste.
             async let heroResult = appState.apiClient.getItems(
                 userId: userId,
                 parentId: parentId,
@@ -113,12 +110,10 @@ final class MediaLibraryViewModel {
             )
 
             let fetchedGenres = try await genresResult
-            let countData = try await countResult
+            let heroData = try await heroResult
 
             genres = fetchedGenres
-            totalCount = countData.totalCount
-
-            let heroData = try await heroResult
+            totalCount = heroData.totalCount
             heroItem = heroData.items.randomElement()
 
             try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
