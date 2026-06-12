@@ -13,37 +13,45 @@ struct SkeletonBlock: View {
     var cornerRadius: CGFloat = CinemaRadius.large
 
     @Environment(\.motionEffectsEnabled) private var motionEffects
-    @State private var phase: CGFloat = -1
+
+    /// Sweep period in seconds.
+    private static let period: Double = 1.4
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(CinemaColor.surfaceContainerHigh)
             .overlay {
                 if motionEffects {
-                    GeometryReader { geo in
-                        LinearGradient(
-                            colors: [
-                                .clear,
-                                CinemaColor.surfaceContainerHighest.opacity(0.9),
-                                .clear
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: geo.size.width * 0.6)
-                        // phase -1…1 maps the highlight from fully off-screen
-                        // left to fully off-screen right.
-                        .offset(x: phase * geo.size.width * 1.6)
+                    // Clock-driven sweep via TimelineView rather than a
+                    // `withAnimation(.repeatForever)` started in `onAppear` —
+                    // that pattern silently fails to animate when the block is
+                    // part of the screen's initial render (the state change
+                    // lands inside an already-committed transaction and the
+                    // shimmer freezes). Deriving the phase from the timeline
+                    // date can't be dropped, and all blocks sweep in sync.
+                    TimelineView(.animation) { context in
+                        let t = context.date.timeIntervalSinceReferenceDate
+                        // 0…1 over each period, remapped to -1…1 so the
+                        // highlight travels from fully off-screen left to
+                        // fully off-screen right, then restarts.
+                        let phase = (t.truncatingRemainder(dividingBy: Self.period)) / Self.period * 2 - 1
+                        GeometryReader { geo in
+                            LinearGradient(
+                                colors: [
+                                    .clear,
+                                    CinemaColor.surfaceContainerHighest.opacity(0.9),
+                                    .clear
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                            .frame(width: geo.size.width * 0.6)
+                            .offset(x: phase * geo.size.width * 1.6)
+                        }
                     }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-            .onAppear {
-                guard motionEffects else { return }
-                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
             .accessibilityHidden(true)
     }
 }
