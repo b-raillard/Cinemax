@@ -95,6 +95,22 @@ public struct ImageURLBuilder: Sendable {
         return components.url ?? serverURL
     }
 
+    /// Builds the URL for a trickplay tile sheet — a JPEG grid of scrub-preview
+    /// thumbnails at `/Videos/{itemId}/Trickplay/{width}/{index}.jpg`. The
+    /// manifest (`BaseItemDto.trickplay`) describes the grid geometry; tiles
+    /// are deliberately tag-less (regenerating trickplay changes the manifest,
+    /// and the player re-fetches per session anyway).
+    public func trickplayTileURL(itemId: String, width: Int, index: Int, mediaSourceId: String? = nil) -> URL {
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            return serverURL
+        }
+        components.path = "/Videos/\(itemId)/Trickplay/\(width)/\(index).jpg"
+        if let mediaSourceId, !mediaSourceId.isEmpty {
+            components.queryItems = [URLQueryItem(name: "mediaSourceId", value: mediaSourceId)]
+        }
+        return components.url ?? serverURL
+    }
+
     public func userImageURL(userId: String, tag: String? = nil, maxWidth: Int? = nil) -> URL {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL

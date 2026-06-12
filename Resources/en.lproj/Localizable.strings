@@ -655,6 +655,7 @@
 "settings.homePage.continueWatching" = "Continue Watching";
 "settings.homePage.recentlyAdded" = "Recently Added";
 "settings.homePage.genreRows" = "Genre Rows";
+"settings.homePage.favorites" = "Favorites";
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
 "settings.libraryLayout" = "Library landing";
@@ -741,6 +742,20 @@
 "player.pip" = "Picture in Picture";
 "player.skipIntro" = "Skip Intro";
 "player.skipCredits" = "Skip Credits";
+"player.speed" = "Speed";
+"player.audioDelay" = "Audio delay";
+"player.subtitleDelay" = "Subtitle delay";
+"player.delay.reset" = "Reset (0 ms)";
+"player.stats" = "Statistics";
+"player.stats.video" = "Video";
+"player.stats.audio" = "Audio";
+"player.stats.bitrate" = "Bitrate";
+"player.stats.dropped" = "Dropped frames";
+"player.stats.direct" = "Direct play";
+"player.stats.proxy" = "Via proxy";
+"player.stats.offline" = "Offline";
+"player.nextUp.countdown" = "Next episode in %ds";
+"player.nextUp.play" = "Play now";
 
 // MARK: - Licenses
 
@@ -819,3 +834,13 @@
 "offline.banner" = "Offline mode · downloaded content only";
 "offline.empty.title" = "You're offline";
 "offline.empty.subtitle" = "Download movies or episodes while you have a connection to find them here.";
+
+"home.favorites" = "Favorites";
+"detail.partOf" = "Part of: %@";
+"detail.favorite.add" = "Add to favorites";
+"detail.favorite.remove" = "Remove from favorites";
+"person.movies" = "Movies";
+"person.series" = "TV Shows";
+"person.born" = "Born %@";
+"person.titleCount" = "%d titles";
+"person.empty" = "No titles in your library";

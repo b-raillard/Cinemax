@@ -1,0 +1,127 @@
+import Foundation
+
+// Minimal, dependency-free Jellyfin access for the widget. The extension
+// deliberately does NOT link CinemaxKit (widget memory budgets are tight and
+// the SDK pulls Nuke + generated entities); it reads the session snapshot the
+// app publishes to the App Group (`ExtensionSessionBridge` — keep the suite /
+// key / JSON shape in sync) and talks to two endpoints directly.
+enum JellyfinLite {
+    static let appGroupId = "group.com.cinemax.shared"
+    static let sessionKey = "extension.session"
+
+    struct Session: Codable {
+        let serverURL: URL
+        let accessToken: String
+        let userId: String
+    }
+
+    struct ResumeItem: Identifiable {
+        let id: String
+        let title: String
+        let subtitle: String?
+        /// Item whose Primary image to show — the parent series for episodes,
+        /// so the widget grid stays poster-shaped.
+        let posterItemId: String
+    }
+
+    static func readSession() -> Session? {
+        guard let defaults = UserDefaults(suiteName: appGroupId),
+              let data = defaults.data(forKey: sessionKey) else { return nil }
+        return try? JSONDecoder().decode(Session.self, from: data)
+    }
+
+    private struct ItemsResponse: Decodable {
+        let items: [Item]
+        enum CodingKeys: String, CodingKey { case items = "Items" }
+    }
+
+    private struct Item: Decodable {
+        let id: String
+        let name: String?
+        let seriesName: String?
+        let seriesId: String?
+        let parentIndexNumber: Int?
+        let indexNumber: Int?
+        enum CodingKeys: String, CodingKey {
+            case id = "Id", name = "Name", seriesName = "SeriesName"
+            case seriesId = "SeriesId", parentIndexNumber = "ParentIndexNumber", indexNumber = "IndexNumber"
+        }
+    }
+
+    /// nil = the request failed (offline / server unreachable / auth);
+    /// empty = the server answered with nothing to resume.
+    static func fetchResumeItems(session: Session, limit: Int) async -> [ResumeItem]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = "/UserItems/Resume"
+        comps.queryItems = [
+            URLQueryItem(name: "userId", value: session.userId),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "mediaTypes", value: "Video"),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        return await fetchItems(comps: comps, token: session.accessToken)
+    }
+
+    /// User-hearted movies/series, most recently favorited first. Same
+    /// nil/empty semantics as `fetchResumeItems`.
+    static func fetchFavorites(session: Session, limit: Int) async -> [ResumeItem]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = "/Items"
+        comps.queryItems = [
+            URLQueryItem(name: "userId", value: session.userId),
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "isFavorite", value: "true"),
+            URLQueryItem(name: "sortBy", value: "DateCreated"),
+            URLQueryItem(name: "sortOrder", value: "Descending"),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        return await fetchItems(comps: comps, token: session.accessToken)
+    }
+
+    private static func fetchItems(comps: URLComponents, token: String) async -> [ResumeItem]? {
+        guard let url = comps.url else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+              (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
+              let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
+        return decoded.items.map { item in
+            let isEpisode = item.seriesName != nil
+            let title = isEpisode ? (item.seriesName ?? "") : (item.name ?? "")
+            let subtitle: String? = {
+                guard isEpisode else { return nil }
+                if let s = item.parentIndexNumber, let e = item.indexNumber {
+                    return String(format: "S%02d:E%02d", s, e)
+                }
+                return item.name
+            }()
+            return ResumeItem(
+                id: item.id,
+                title: title,
+                subtitle: subtitle,
+                posterItemId: item.seriesId ?? item.id
+            )
+        }
+    }
+
+    static func posterURL(session: Session, itemId: String, maxWidth: Int) -> URL? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = "/Items/\(itemId)/Images/Primary"
+        comps.queryItems = [
+            URLQueryItem(name: "maxWidth", value: String(maxWidth)),
+            URLQueryItem(name: "quality", value: "85"),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        return comps.url
+    }
+
+    static func fetchImage(_ url: URL?) async -> Data? {
+        guard let url else { return nil }
+        guard let (data, resp) = try? await URLSession.shared.data(from: url),
+              (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
+              !data.isEmpty else { return nil }
+        return data
+    }
+}

@@ -29,6 +29,7 @@ enum SettingsKey {
     // Home page sections
     static let homeShowContinueWatching = "home.showContinueWatching"
     static let homeShowRecentlyAdded = "home.showRecentlyAdded"
+    static let homeShowFavorites = "home.showFavorites"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
 
@@ -73,6 +74,7 @@ enum SettingsKey {
 
         static let homeShowContinueWatching = true
         static let homeShowRecentlyAdded = true
+        static let homeShowFavorites = true
         static let homeShowGenreRows = true
         static let homeShowWatchingNow = true
 

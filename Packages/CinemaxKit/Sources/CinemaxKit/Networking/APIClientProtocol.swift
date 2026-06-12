@@ -83,6 +83,18 @@ public protocol LibraryAPI: Sendable {
     /// Privacy & Security → Clear Continue Watching to drop resume points
     /// without leaking what was being watched.
     func markItemUnplayed(itemId: String, userId: String) async throws
+
+    /// Marks/unmarks the item as a user favorite (heart).
+    func setFavorite(itemId: String, userId: String, favorite: Bool) async throws
+
+    /// Filmography for a person (persons are items — fetch the person's own
+    /// bio via `getItem` with the person id).
+    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
+
+    /// BoxSet collections containing the given item. Uses the server's
+    /// reverse-lookup endpoint when available (post-10.11); older servers
+    /// fall back to matching `tmdbCollectionId` against the boxset list.
+    func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto]
 }
 
 /// Playback: stream resolution, intro/outro segments, and Jellyfin progress reporting.
@@ -311,6 +323,9 @@ public extension LibraryAPI {
     }
     func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
         try await searchItems(userId: userId, searchTerm: searchTerm, limit: limit)
+    }
+    func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
+        try await getPersonItems(personId: personId, userId: userId, limit: limit)
     }
 }
 

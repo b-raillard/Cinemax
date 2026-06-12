@@ -190,7 +190,7 @@ final class VLCStreamPresenter: NSObject {
 
 // MARK: - View controller
 
-private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate {
+private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     // Mutable across episode navigation. Empty / nil in offline mode.
     private var itemId: String
     private var info: PlaybackInfo?
@@ -254,6 +254,33 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let skipGlyph = UIImageView()
     private var skipGlyphHide: DispatchWorkItem?
 
+    // Trickplay scrub previews (server-generated thumbnail grids). The bubble
+    // is shown only while scrubbing; `TrickplayController` resolves position →
+    // cropped thumb and re-fires `onTileLoaded` when an async tile lands.
+    private let trickplay = TrickplayController()
+    private let scrubPreview = UIImageView()
+    private var scrubPreviewCenterX: NSLayoutConstraint?
+    private var lastPreviewMs: Int32 = 0
+
+    // Playback speed. Persisted per-session only (deliberate — 2× is a viewing
+    // mode, not a setting). libVLC resets rate on media swap, so `.playing`
+    // re-applies it after episode nav / retry.
+    private var playbackRate: Float = 1.0
+    private static let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+    // Audio/subtitle delay in ms (positive = track plays later). Reset on
+    // every media change — delays compensate per-file mux drift.
+    private var audioDelayMsState = 0
+    private var subtitleDelayMsState = 0
+
+    // Stats overlay ("nerd stats") — repainted by the 1s tick while visible.
+    private let statsLabel = UILabel()
+    private var statsVisible = false
+
+    // Next-episode countdown card (outro + autoPlayNext + nextEpisode).
+    private var nextUpCard: NextUpCountdownView?
+    private var nextUpCancelledForThisItem = false
+
     #if os(iOS)
     private let closeButton = UIButton(type: .system)
     private let playPauseButton = UIButton(type: .system)
@@ -266,6 +293,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let transportRow = UIStackView()
     private let slider = UISlider()
     private var isScrubbing = false
+    /// Interactive swipe-down-to-dismiss: the whole player surface follows the
+    /// finger; releasing past the threshold (or flicking down) closes the
+    /// player, otherwise it springs back.
+    private var dismissPan: UIPanGestureRecognizer?
+    /// True once the current drag has crossed the dismiss threshold — gates the
+    /// haptic tick so it fires once per crossing, not every frame.
+    private var dismissPastThreshold = false
+    private let dismissHaptic = UIImpactFeedbackGenerator(style: .medium)
+    /// Hold-to-2× (YouTube style): long-press on the bare video surface plays
+    /// at 2× while held, restoring the user's chosen rate on release.
+    private var holdPress: UILongPressGestureRecognizer?
+    private var isHoldBoosting = false
+    private let speedButton = UIButton(type: .system)
+    private let statsButton = UIButton(type: .system)
     #else
     // tvOS custom transport: a focusable scrub bar + a focusable control row.
     // No on-screen Play/Pause button — the Siri Remote has a physical one;
@@ -284,6 +325,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let tvSubtitleButton = UIButton(type: .system)
     private let tvPrevButton = UIButton(type: .system)
     private let tvNextButton = UIButton(type: .system)
+    private let tvSpeedButton = UIButton(type: .system)
+    /// tvOS info panel (native convention: swipe down on the touch surface
+    /// while watching opens a settings strip): speed / audio / subtitles /
+    /// delays / stats. Shown only while the HUD is hidden — when the HUD is
+    /// up, down-swipes belong to the focus engine.
+    private let infoPanel = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+    private let infoPanelStack = UIStackView()
+    private var infoPanelVisible = false
     #endif
 
     private var reporter: PlaybackReporter?
@@ -469,6 +518,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterFetchTask?.cancel()
         chapterThumbTasks.forEach { $0.cancel() }
         chapterThumbTasks = []
+        trickplay.reset()
         eventsTask?.cancel()
         eventsTask = nil
         #if os(iOS)
@@ -599,6 +649,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let dur: Double? = lengthMs > 0 ? Double(lengthMs) / 1000 : nil
         nowPlaying.update(elapsed: now, duration: dur, rate: enginePlaying ? 1.0 : 0.0)
         updateSkipButton(currentTime: now)
+        if statsVisible { refreshStats() }
         if sleepActive {
             sleepRemaining -= 1
             if sleepRemaining <= 0 { fireSleepTimer() }
@@ -643,6 +694,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func updateSkipButton(currentTime: Double) {
         guard hasValidTime else {
             if !skipButton.isHidden { skipButton.isHidden = true }
+            nextUpCard?.hide()
             activeSegmentType = nil
             return
         }
@@ -650,6 +702,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let start = Double(segment.startTicks ?? 0) / 10_000_000
             let end = Double(segment.endTicks ?? 0) / 10_000_000
             guard end > start, currentTime >= start, currentTime < end - 1 else { continue }
+            // Outro with auto-play armed → the countdown card replaces "Skip
+            // credits" (skipping to the end would just trigger the same nav).
+            if segment.type == .outro, autoPlayNext, let next = nextEpisode,
+               episodeNavigator != nil, !nextUpCancelledForThisItem {
+                if activeSegmentType != nil {
+                    activeSegmentType = nil
+                    skipButton.isHidden = true
+                }
+                showNextUpCard(for: next)
+                let totalSec = Double(lengthMs) / 1000
+                nextUpCard?.update(secondsRemaining: Int((totalSec - currentTime).rounded()))
+                return
+            }
             if activeSegmentType != segment.type {
                 activeSegmentType = segment.type
                 let key = segment.type == .intro ? "player.skipIntro" : "player.skipCredits"
@@ -665,6 +730,54 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             activeSegmentType = nil
             skipButton.isHidden = true
         }
+        nextUpCard?.hide()
+    }
+
+    /// Lazily builds the countdown card (it bakes in the next episode's title,
+    /// so episode navigation tears it down for a fresh one).
+    private func showNextUpCard(for next: EpisodeRef) {
+        if nextUpCard == nil {
+            let card = NextUpCountdownView(
+                countdownFormat: loc.localized("player.nextUp.countdown"),
+                episodeTitle: next.title,
+                playTitle: loc.localized("player.nextUp.play"),
+                cancelTitle: loc.localized("action.cancel")
+            )
+            card.onPlayNow = { [weak self] in
+                guard let self, let n = self.nextEpisode else { return }
+                self.nextUpCard?.hide()
+                self.navigateToEpisode(n)
+            }
+            card.onCancel = { [weak self] in
+                guard let self else { return }
+                self.nextUpCancelledForThisItem = true
+                self.nextUpCard?.hide()
+                #if os(tvOS)
+                self.setNeedsFocusUpdate()
+                self.updateFocusIfNeeded()
+                #endif
+            }
+            view.addSubview(card)
+            NSLayoutConstraint.activate([
+                card.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -32),
+                card.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+            ])
+            nextUpCard = card
+        }
+        let wasHidden = nextUpCard?.isHidden ?? true
+        nextUpCard?.show()
+        #if os(tvOS)
+        if wasHidden {
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+        }
+        #endif
+    }
+
+    private func tearDownNextUpCard() {
+        nextUpCard?.removeFromSuperview()
+        nextUpCard = nil
+        nextUpCancelledForThisItem = false
     }
 
     @objc private func skipSegmentTapped() {
@@ -879,11 +992,56 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         ])
         #endif
 
+        // Trickplay scrub-preview bubble. Lives on the controls container so it
+        // fades with the HUD; horizontal position tracks the scrub location.
+        scrubPreview.translatesAutoresizingMaskIntoConstraints = false
+        scrubPreview.contentMode = .scaleAspectFill
+        scrubPreview.clipsToBounds = true
+        scrubPreview.layer.cornerRadius = 8
+        scrubPreview.layer.borderWidth = 2
+        scrubPreview.layer.borderColor = UIColor.white.withAlphaComponent(0.85).cgColor
+        scrubPreview.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        scrubPreview.isHidden = true
+        controlsContainer.addSubview(scrubPreview)
+        trickplay.onTileLoaded = { [weak self] in self?.refreshScrubPreviewImage() }
+
+        // Stats overlay — anchored under the title, outside the HUD container
+        // so it stays readable while the controls are hidden.
+        let statsContainer = UIView()
+        statsContainer.translatesAutoresizingMaskIntoConstraints = false
+        statsContainer.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        statsContainer.layer.cornerRadius = 10
+        statsContainer.isHidden = true
+        statsLabel.translatesAutoresizingMaskIntoConstraints = false
+        statsLabel.numberOfLines = 0
+        statsLabel.textColor = .white
+        #if os(tvOS)
+        statsLabel.font = .monospacedSystemFont(ofSize: 23, weight: .regular)
+        #else
+        statsLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        #endif
+        statsContainer.addSubview(statsLabel)
+        view.addSubview(statsContainer)
+        NSLayoutConstraint.activate([
+            statsContainer.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            statsLabel.topAnchor.constraint(equalTo: statsContainer.topAnchor, constant: 10),
+            statsLabel.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10),
+            statsLabel.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 14),
+            statsLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14)
+        ])
+
         #if os(tvOS)
         buildTVTransport(safe: safe)
         #else
         buildIOSTransport(safe: safe)
         #endif
+    }
+
+    private func setStatsVisible(_ visible: Bool) {
+        statsVisible = visible
+        statsLabel.superview?.isHidden = !visible
+        if visible { refreshStats() }
     }
 
     // MARK: - iOS transport UI
@@ -927,6 +1085,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         configureIOS(pipButton, "pip.enter", pt: 17, loc.localized("player.pip"), compact: true)
         pipButton.addTarget(self, action: #selector(pipTapped), for: .touchUpInside)
         controlsContainer.addSubview(pipButton)
+        configureIOS(speedButton, "gauge.with.needle", pt: 17, loc.localized("player.speed"), compact: true)
+        speedButton.addTarget(self, action: #selector(openSpeedMenu), for: .touchUpInside)
+        controlsContainer.addSubview(speedButton)
+        configureIOS(statsButton, "chart.xyaxis.line", pt: 17, loc.localized("player.stats"), compact: true)
+        statsButton.addTarget(self, action: #selector(toggleStats), for: .touchUpInside)
+        controlsContainer.addSubview(statsButton)
 
         transportRow.translatesAutoresizingMaskIntoConstraints = false
         transportRow.axis = .horizontal
@@ -982,13 +1146,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             closeButton.trailingAnchor.constraint(equalTo: cSafe.trailingAnchor, constant: -12),
             closeButton.topAnchor.constraint(equalTo: cSafe.topAnchor, constant: 8),
             // Title can never run under the top-right cluster.
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: pipButton.leadingAnchor, constant: -12),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: statsButton.leadingAnchor, constant: -12),
             subtitleButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
             subtitleButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             audioButton.trailingAnchor.constraint(equalTo: subtitleButton.leadingAnchor, constant: -4),
             audioButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             pipButton.trailingAnchor.constraint(equalTo: audioButton.leadingAnchor, constant: -4),
             pipButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            speedButton.trailingAnchor.constraint(equalTo: pipButton.leadingAnchor, constant: -4),
+            speedButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            statsButton.trailingAnchor.constraint(equalTo: speedButton.leadingAnchor, constant: -4),
+            statsButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
 
             slider.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
             slider.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
@@ -1010,6 +1178,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
             chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
             chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor)
+        ])
+
+        // Trickplay preview floats above the slider, tracking the thumb.
+        let previewCenterX = scrubPreview.centerXAnchor.constraint(equalTo: slider.leadingAnchor)
+        scrubPreviewCenterX = previewCenterX
+        NSLayoutConstraint.activate([
+            scrubPreview.widthAnchor.constraint(equalToConstant: 160),
+            scrubPreview.heightAnchor.constraint(equalToConstant: 90),
+            scrubPreview.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -10),
+            previewCenterX
         ])
     }
 
@@ -1038,9 +1216,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private var audioPickerSource: UIView? { audioButton }
     private var subtitlePickerSource: UIView? { subtitleButton }
+    private var speedPickerSource: UIView? { speedButton }
     #else
     private var audioPickerSource: UIView? { nil }
     private var subtitlePickerSource: UIView? { nil }
+    private var speedPickerSource: UIView? { nil }
     #endif
 
     private func setupGestures() {
@@ -1055,25 +1235,72 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tap.numberOfTapsRequired = 1
         videoView.addGestureRecognizer(tap)
+
+        // Swipe-down-to-dismiss. Lives on `videoView` like the tap (touches on
+        // HUD controls / the chapter strip never reach it) and only begins on a
+        // predominantly-downward drag, so horizontal chapter scrolls and the
+        // slider stay untouched.
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
+        pan.delegate = self
+        videoView.addGestureRecognizer(pan)
+        dismissPan = pan
+
+        // Hold-to-2×: long-press on the bare video surface boosts to 2× while
+        // held. Stationary by definition, so it never races the dismiss pan;
+        // the shared delegate restricts it to bare-video touches like the pan.
+        let hold = UILongPressGestureRecognizer(target: self, action: #selector(handleHoldBoost(_:)))
+        hold.minimumPressDuration = 0.5
+        hold.delegate = self
+        videoView.addGestureRecognizer(hold)
+        holdPress = hold
         #else
-        // No global press gestures: presses flow through the responder chain to
-        // `pressesBegan` below. The focus engine drives navigation; TVScrubBar
-        // seeks left/right only while focused.
+        // Presses flow through the responder chain to `pressesBegan` below; the
+        // focus engine drives navigation; TVScrubBar seeks left/right only
+        // while focused. The one global gesture is the native "swipe down for
+        // the info panel" — armed only while the HUD is hidden (down-swipes
+        // belong to the focus engine while it's up).
+        let swipeDown = UISwipeGestureRecognizer(target: self, action: #selector(handleInfoPanelSwipe))
+        swipeDown.direction = .down
+        swipeDown.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        view.addGestureRecognizer(swipeDown)
         #endif
     }
 
     #if os(tvOS)
     /// Any remote press while the HUD is hidden just brings the controls back
     /// (and is consumed). While visible, focus/seek work normally and every
-    /// press keeps the HUD alive. Menu always exits; Play/Pause always toggles.
+    /// press keeps the HUD alive. Menu peels one layer at a time — visible HUD
+    /// → hide it, bare video → exit the player (matches the system
+    /// AVPlayerViewController). Play/Pause always toggles.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses {
-            if press.type == .menu { dismiss(animated: true); return }
+            if press.type == .menu {
+                if infoPanelVisible {
+                    setInfoPanelVisible(false)
+                } else if controlsVisible {
+                    hideControlsWorkItem?.cancel()
+                    hideControlsImmediately()
+                } else {
+                    dismiss(animated: true)
+                }
+                return
+            }
             if press.type == .playPause {
                 playPauseTapped()
                 revealControls()
                 return
             }
+        }
+        // The info panel (or a visible next-up card over bare video) owns the
+        // focus engine — let presses flow to its buttons instead of treating
+        // them as "reveal the HUD".
+        if infoPanelVisible {
+            super.pressesBegan(presses, with: event)
+            return
+        }
+        if let card = nextUpCard, !card.isHidden, controlsContainer.alpha == 0 {
+            super.pressesBegan(presses, with: event)
+            return
         }
         if controlsContainer.alpha == 0 {
             revealControls() // consume — first press only un-hides the HUD
@@ -1143,9 +1370,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let target = Int32(Float(len) * progress)
             self.timeLabel.text = PlayerTimeFormat.ms(target)
             self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
+            self.updateTVScrubPreview(progress: progress, targetMs: target)
         }
         tvScrub.onScrubCommit = { [weak self] progress in
             guard let self else { return }
+            self.scrubPreview.isHidden = true
             let len = self.lengthMs
             self.isScrubbing = false
             guard len > 0 else { self.scheduleHideControls(); return }
@@ -1181,6 +1410,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if nextEpisode != nil { controlBar.addArrangedSubview(tvNextButton) }
         controlBar.addArrangedSubview(tvAudioButton)
         controlBar.addArrangedSubview(tvSubtitleButton)
+        configureTV(tvSpeedButton, "gauge.with.needle", loc.localized("player.speed"))
+        tvSpeedButton.addTarget(self, action: #selector(openSpeedMenu), for: .primaryActionTriggered)
+        controlBar.addArrangedSubview(tvSpeedButton)
 
         // Always-on chapter strip — horizontal, focusable. Hidden only until
         // chapters are fetched (or if the media has none).
@@ -1231,6 +1463,84 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let ch = chapterScroll.heightAnchor.constraint(equalToConstant: 0)
         ch.isActive = true
         chapterHeightConstraint = ch
+
+        // Trickplay preview floats above the scrub bar, tracking the position.
+        let previewCenterX = scrubPreview.centerXAnchor.constraint(equalTo: tvScrub.leadingAnchor)
+        scrubPreviewCenterX = previewCenterX
+        NSLayoutConstraint.activate([
+            scrubPreview.widthAnchor.constraint(equalToConstant: 320),
+            scrubPreview.heightAnchor.constraint(equalToConstant: 180),
+            scrubPreview.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -16),
+            previewCenterX
+        ])
+
+        buildInfoPanel(safe: safe)
+    }
+
+    /// Top settings strip (speed / audio / subtitles / delays / stats) —
+    /// opened by swiping down on the Siri Remote while the HUD is hidden,
+    /// closed by Menu. Mirrors the native player's info panel convention.
+    private func buildInfoPanel(safe: UILayoutGuide) {
+        infoPanel.translatesAutoresizingMaskIntoConstraints = false
+        infoPanel.isHidden = true
+        infoPanel.alpha = 0
+        view.addSubview(infoPanel)
+
+        infoPanelStack.translatesAutoresizingMaskIntoConstraints = false
+        infoPanelStack.axis = .horizontal
+        infoPanelStack.alignment = .center
+        infoPanelStack.spacing = 12
+        infoPanel.contentView.addSubview(infoPanelStack)
+
+        let entries: [(String, String, Selector)] = [
+            ("gauge.with.needle", "player.speed", #selector(openSpeedMenu)),
+            ("waveform", "player.audio", #selector(openAudioMenu)),
+            ("captions.bubble", "player.subtitles", #selector(openSubtitleMenu)),
+            ("waveform.badge.minus", "player.audioDelay", #selector(openAudioDelayMenu)),
+            ("captions.bubble.fill", "player.subtitleDelay", #selector(openSubtitleDelayMenu)),
+            ("chart.xyaxis.line", "player.stats", #selector(toggleStats))
+        ]
+        for (symbol, key, action) in entries {
+            let b = UIButton(type: .system)
+            var cfg = UIButton.Configuration.plain()
+            cfg.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold))
+            cfg.title = loc.localized(key)
+            cfg.imagePadding = 10
+            cfg.baseForegroundColor = .white
+            cfg.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20)
+            b.configuration = cfg
+            b.addTarget(self, action: action, for: .primaryActionTriggered)
+            infoPanelStack.addArrangedSubview(b)
+        }
+
+        NSLayoutConstraint.activate([
+            infoPanel.topAnchor.constraint(equalTo: view.topAnchor),
+            infoPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            infoPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            infoPanelStack.centerXAnchor.constraint(equalTo: infoPanel.contentView.centerXAnchor),
+            infoPanelStack.topAnchor.constraint(equalTo: safe.topAnchor, constant: 24),
+            infoPanelStack.bottomAnchor.constraint(equalTo: infoPanel.bottomAnchor, constant: -32)
+        ])
+    }
+
+    @objc private func handleInfoPanelSwipe() {
+        // HUD up → the focus engine owns down-swipes; a picker up → ignore.
+        guard !infoPanelVisible, controlsContainer.alpha == 0, !pickerPresented else { return }
+        setInfoPanelVisible(true)
+    }
+
+    private func setInfoPanelVisible(_ visible: Bool) {
+        infoPanelVisible = visible
+        if visible {
+            infoPanel.isHidden = false
+            UIView.animate(withDuration: 0.25) { self.infoPanel.alpha = 1 }
+        } else {
+            UIView.animate(withDuration: 0.2) { self.infoPanel.alpha = 0 } completion: { _ in
+                if !self.infoPanelVisible { self.infoPanel.isHidden = true }
+            }
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
     }
 
     private func configureTV(_ b: UIButton, _ symbol: String, _ accessibility: String) {
@@ -1258,13 +1568,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterScroll.isHidden = true
         chapterHeightConstraint?.constant = 0
         // Offline: skip — chapter metadata + thumbnails come from the API.
+        trickplay.reset()
+        scrubPreview.isHidden = true
         guard let client = apiClient, let builder = imageBuilder, let uid = userId, !isOffline else { return }
         let id = itemId
         let token = info?.authToken
+        let mediaSourceId = info?.mediaSourceId
         chapterFetchTask = Task { @MainActor [weak self] in
             guard let item = try? await client.getItem(userId: uid, itemId: id),
-                  let chapters = item.chapters, chapters.count > 1,
                   !Task.isCancelled, let self else { return }
+            // Same fetch feeds the trickplay manifest — no extra API call.
+            self.trickplay.configure(item: item, itemId: id, mediaSourceId: mediaSourceId,
+                                     token: token, imageBuilder: builder)
+            guard let chapters = item.chapters, chapters.count > 1 else { return }
             self.chapterStartTicks = chapters.map { $0.startPositionTicks ?? 0 }
             for (i, ch) in chapters.enumerated() {
                 let startSec = Double(ch.startPositionTicks ?? 0) / 10_000_000
@@ -1443,8 +1759,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.setProgress(progress)
     }
 
+    /// Positions + populates the trickplay bubble during a touch-surface scrub.
+    private func updateTVScrubPreview(progress: Float, targetMs: Int32) {
+        guard trickplay.isAvailable else { return }
+        lastPreviewMs = targetMs
+        let trackWidth = tvScrub.bounds.width
+        guard trackWidth > 0 else { return }
+        let half: CGFloat = 160 // preview width / 2 — keep the bubble on-screen
+        let x = min(max(trackWidth * CGFloat(progress), half), trackWidth - half)
+        scrubPreviewCenterX?.constant = x
+        scrubPreview.isHidden = false
+        refreshScrubPreviewImage()
+    }
+
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        controlsContainer.alpha > 0 ? [tvScrub] : []
+        if infoPanelVisible { return [infoPanelStack] }
+        if let card = nextUpCard, !card.isHidden, controlsContainer.alpha == 0 {
+            return [card.playButton]
+        }
+        return controlsContainer.alpha > 0 ? [tvScrub] : []
     }
     #endif
 
@@ -1455,7 +1788,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                                _ options: [(title: String, selected: Bool, action: () -> Void)]) {
         pickerPresented = true
         hideControlsWorkItem?.cancel()
+        #if os(tvOS)
+        // A picker opened from the info panel keeps the panel as its backdrop —
+        // revealing the HUD underneath would stack both chrome layers.
+        if !infoPanelVisible { showControls() }
+        #else
         showControls()
+        #endif
         let sheet = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
         for opt in options {
             sheet.addAction(UIAlertAction(title: opt.title + (opt.selected ? "  ✓" : ""), style: .default) { [weak self] _ in
@@ -1475,6 +1814,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func endPicker() {
         pickerPresented = false
+        #if os(tvOS)
+        if infoPanelVisible {
+            // Back to the panel, not the HUD — restore focus to its buttons.
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+            return
+        }
+        #endif
         showControls()
         scheduleHideControls()
     }
@@ -1502,6 +1849,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self?.player.selectedAudioTrack = track
             }))
         }
+        opts.append(("\(loc.localized("player.audioDelay")) — \(Self.formatDelay(audioDelayMsState))", false, { [weak self] in
+            DispatchQueue.main.async { self?.openAudioDelayMenu() }
+        }))
         presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, opts)
     }
 
@@ -1516,7 +1866,128 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self?.player.selectedSubtitleTrack = track
             }))
         }
+        opts.append(("\(loc.localized("player.subtitleDelay")) — \(Self.formatDelay(subtitleDelayMsState))", false, { [weak self] in
+            DispatchQueue.main.async { self?.openSubtitleDelayMenu() }
+        }))
         presentPicker(loc.localized("player.subtitles"), sourceView: subtitlePickerSource, opts)
+    }
+
+    // MARK: - Speed / delays / stats
+
+    @objc private func openSpeedMenu() {
+        var opts: [(String, Bool, () -> Void)] = []
+        for rate in Self.speedOptions {
+            let label = String(format: "%g×", rate)
+            opts.append((label, abs(playbackRate - rate) < 0.01, { [weak self] in
+                self?.setPlaybackRate(rate)
+            }))
+        }
+        presentPicker(loc.localized("player.speed"), sourceView: speedPickerSource, opts)
+    }
+
+    private func setPlaybackRate(_ rate: Float) {
+        playbackRate = rate
+        player.rate = rate
+    }
+
+    @objc private func openAudioDelayMenu() { presentDelayPicker(isAudio: true) }
+    @objc private func openSubtitleDelayMenu() { presentDelayPicker(isAudio: false) }
+
+    /// Cumulative ±nudge picker. Each adjustment re-opens the picker (title
+    /// shows the running value) so repeated nudges are one tap each — the
+    /// usual flow when syncing against what's on screen.
+    private func presentDelayPicker(isAudio: Bool) {
+        let current = isAudio ? audioDelayMsState : subtitleDelayMsState
+        let titleKey = isAudio ? "player.audioDelay" : "player.subtitleDelay"
+        let title = "\(loc.localized(titleKey)) — \(Self.formatDelay(current))"
+        var opts: [(String, Bool, () -> Void)] = []
+        for delta in [-250, -50, 50, 250] {
+            opts.append((String(format: "%+d ms", delta), false, { [weak self] in
+                self?.setDelay(isAudio: isAudio, ms: current + delta)
+                // Re-present AFTER endPicker resets the picker state, else the
+                // new sheet's pickerPresented flag is immediately cleared.
+                DispatchQueue.main.async { self?.presentDelayPicker(isAudio: isAudio) }
+            }))
+        }
+        opts.append((loc.localized("player.delay.reset"), current == 0, { [weak self] in
+            self?.setDelay(isAudio: isAudio, ms: 0)
+        }))
+        presentPicker(title, sourceView: isAudio ? audioPickerSource : subtitlePickerSource, opts)
+    }
+
+    private func setDelay(isAudio: Bool, ms: Int) {
+        let clamped = max(-5000, min(5000, ms))
+        if isAudio {
+            audioDelayMsState = clamped
+            player.audioDelay = .milliseconds(clamped)
+        } else {
+            subtitleDelayMsState = clamped
+            player.subtitleDelay = .milliseconds(clamped)
+        }
+    }
+
+    private static func formatDelay(_ ms: Int) -> String {
+        ms == 0 ? "0 ms" : String(format: "%+d ms", ms)
+    }
+
+    @objc private func toggleStats() {
+        setStatsVisible(!statsVisible)
+        scheduleHideControls()
+    }
+
+    /// Repainted by the 1s tick while visible — transport path, video/audio
+    /// track facts, live bitrates, dropped frames.
+    private func refreshStats() {
+        guard statsVisible else { return }
+        var lines: [String] = []
+        var transport = isOffline
+            ? loc.localized("player.stats.offline")
+            : (usingProxy ? loc.localized("player.stats.proxy") : loc.localized("player.stats.direct"))
+        if let method = info?.playMethod { transport += " · \(method.rawValue)" }
+        lines.append(transport)
+        if let v = player.videoTracks.first(where: { $0.isSelected }) ?? player.videoTracks.first {
+            var parts: [String] = []
+            if let w = v.width, let h = v.height { parts.append("\(w)×\(h)") }
+            parts.append(Self.fourCCString(v.codec))
+            if let f = v.frameRate, f > 0 { parts.append(String(format: "%.4g fps", f)) }
+            lines.append("\(loc.localized("player.stats.video")) : " + parts.joined(separator: " · "))
+        }
+        if let a = player.selectedAudioTrack ?? player.audioTracks.first {
+            var parts: [String] = [Self.fourCCString(a.codec)]
+            if let c = a.channels, c > 0 { parts.append("\(c) ch") }
+            if let s = a.sampleRate, s > 0 { parts.append("\(s / 1000) kHz") }
+            lines.append("\(loc.localized("player.stats.audio")) : " + parts.joined(separator: " · "))
+        }
+        if let s = player.statistics {
+            // libVLC reports raw f_input_bitrate; ×8000 is what VLC's own UI
+            // shows as kb/s.
+            lines.append(String(
+                format: "%@ : %.0f kb/s · demux %.0f kb/s",
+                loc.localized("player.stats.bitrate"), s.inputBitrate * 8000, s.demuxBitrate * 8000
+            ))
+            lines.append("\(loc.localized("player.stats.dropped")) : \(s.lostPictures) · \(s.latePictures) late · \(s.lostAudioBuffers) audio")
+        }
+        statsLabel.text = lines.joined(separator: "\n")
+    }
+
+    /// FourCC codec int → printable tag ("hev1", "h264", "ac-3"…).
+    private static func fourCCString(_ codec: Int) -> String {
+        let v = UInt32(truncatingIfNeeded: codec)
+        let chars = [v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]
+            .map { c -> Character in
+                let scalar = Unicode.Scalar(UInt8(c))
+                return (32...126).contains(c) ? Character(scalar) : "?"
+            }
+        return String(chars).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Re-crops the preview bubble for the last scrub position — called when
+    /// the position changes and when an async tile sheet lands.
+    private func refreshScrubPreviewImage() {
+        guard !scrubPreview.isHidden else { return }
+        if let img = trickplay.thumbnail(atMs: lastPreviewMs) {
+            scrubPreview.image = img
+        }
     }
 
     /// Apply Jellyfin's negotiated default audio/subtitle (absolute stream
@@ -1551,6 +2022,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         mediaLengthMs = 0
         firstPlayStart = Date()
         usingProxy = false
+        nextUpCancelledForThisItem = false
+        audioDelayMsState = 0
+        subtitleDelayMsState = 0
         let url: URL
         if let local = offlineLocalURL {
             url = local
@@ -1654,6 +2128,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
             self.mediaLengthMs = 0
+            // Per-file state: the countdown card baked in the old "next" title,
+            // and delays compensate per-file mux drift. Speed persists.
+            self.tearDownNextUpCard()
+            self.audioDelayMsState = 0
+            self.subtitleDelayMsState = 0
             self.previousEpisode = nav?.1
             self.nextEpisode = nav?.2
             self.titleLabel.text = ref.title
@@ -1737,6 +2216,95 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
     }
 
+    /// Interactive swipe-down dismissal. The presented view tracks the finger
+    /// (translation + slight fade + corner rounding); past 25% of the screen
+    /// height or on a downward flick the player slides off and dismisses —
+    /// `.overFullScreen` keeps the underlying screen in the hierarchy, so the
+    /// app is revealed live behind the drag. Otherwise it springs back.
+    @objc private func handleDismissPan(_ g: UIPanGestureRecognizer) {
+        let height = max(view.bounds.height, 1)
+        let ty = max(0, g.translation(in: view).y)
+        switch g.state {
+        case .began:
+            view.clipsToBounds = true
+            dismissPastThreshold = false
+            dismissHaptic.prepare()
+        case .changed:
+            view.transform = CGAffineTransform(translationX: 0, y: ty)
+            view.alpha = 1 - 0.35 * min(1, ty / height)
+            view.layer.cornerRadius = min(24, ty * 0.2)
+            // One haptic tick per threshold crossing — "release here closes".
+            let past = ty > height * 0.25
+            if past != dismissPastThreshold {
+                dismissPastThreshold = past
+                if past { dismissHaptic.impactOccurred() }
+            }
+        case .ended, .cancelled:
+            let flick = g.velocity(in: view).y > 900
+            if g.state == .ended, ty > height * 0.25 || flick {
+                UIView.animate(withDuration: 0.22, delay: 0, options: .curveEaseIn) {
+                    self.view.transform = CGAffineTransform(translationX: 0, y: height)
+                    self.view.alpha = 0
+                } completion: { _ in
+                    // The slide already played the exit; a second animated
+                    // cross-dissolve here would double-animate.
+                    self.dismiss(animated: false)
+                }
+            } else {
+                UIView.animate(withDuration: 0.3, delay: 0,
+                               usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+                    self.view.transform = .identity
+                    self.view.alpha = 1
+                    self.view.layer.cornerRadius = 0
+                }
+            }
+        default:
+            break
+        }
+    }
+
+    /// Only begin the dismiss pan on a predominantly-downward drag — sideways
+    /// motion belongs to the chapter strip / double-tap zones, and a slider
+    /// scrub in progress must never tug the whole surface.
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === dismissPan,
+              let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+        guard !isScrubbing else { return false }
+        let v = pan.velocity(in: view)
+        return v.y > 0 && abs(v.y) > abs(v.x)
+    }
+
+    /// The dismiss pan and hold-boost only track touches landing on the bare
+    /// video surface — HUD buttons, the slider, and the chapter strip keep
+    /// their own touches.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldReceive touch: UITouch) -> Bool {
+        guard gestureRecognizer === dismissPan || gestureRecognizer === holdPress else { return true }
+        return touch.view === videoView
+    }
+
+    /// Hold-to-2×: boost while the press is held, restore the user-selected
+    /// rate on release. The skip HUD doubles as the "2×" indicator (manually
+    /// held visible — its usual auto-hide is for transient chapter jumps).
+    @objc private func handleHoldBoost(_ g: UILongPressGestureRecognizer) {
+        switch g.state {
+        case .began:
+            guard enginePlaying else { return }
+            isHoldBoosting = true
+            player.rate = 2.0
+            skipHUDHide?.cancel()
+            skipHUD.text = "  2× ▸▸  "
+            skipHUD.alpha = 1
+        case .ended, .cancelled, .failed:
+            guard isHoldBoosting else { return }
+            isHoldBoosting = false
+            player.rate = playbackRate
+            UIView.animate(withDuration: 0.25) { self.skipHUD.alpha = 0 }
+        default:
+            break
+        }
+    }
+
     @objc private func iosSkipBack() {
         engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: false)
@@ -1755,6 +2323,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         isScrubbing = true
         // Freeze the HUD for the whole drag — re-armed on touch-up.
         hideControlsWorkItem?.cancel()
+        updateScrubPreview()
     }
 
     @objc private func scrubberChanged() {
@@ -1763,14 +2332,30 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let length = lengthMs
         guard length > 0 else { return }
         timeLabel.text = PlayerTimeFormat.ms(Int32(Float(length) * slider.value))
+        updateScrubPreview()
     }
 
     @objc private func scrubberDone() {
+        scrubPreview.isHidden = true
         let length = lengthMs
         guard length > 0 else { isScrubbing = false; return }
         engineSeek(ms: Int32(Float(length) * slider.value))
         isScrubbing = false
         scheduleHideControls()
+    }
+
+    /// Positions + populates the trickplay bubble for the slider's value.
+    private func updateScrubPreview() {
+        guard trickplay.isAvailable, lengthMs > 0 else { return }
+        let ms = Int32(Float(lengthMs) * slider.value)
+        lastPreviewMs = ms
+        let trackWidth = slider.bounds.width
+        guard trackWidth > 0 else { return }
+        let half: CGFloat = 80 // preview width / 2 — keep the bubble on-screen
+        let x = min(max(trackWidth * CGFloat(slider.value), half), trackWidth - half)
+        scrubPreviewCenterX?.constant = x
+        scrubPreview.isHidden = false
+        refreshScrubPreviewImage()
     }
 
     private func setPlayPauseIcon(playing: Bool) {
@@ -1839,6 +2424,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             handlePlaybackEnded()
         case .playing:
             didRetry = false
+            // libVLC resets rate on media swap — re-apply the user's speed
+            // (but never while a hold-boost owns the rate).
+            #if os(iOS)
+            let boosting = isHoldBoosting
+            #else
+            let boosting = false
+            #endif
+            if !boosting, abs(player.rate - playbackRate) > 0.01 {
+                player.rate = playbackRate
+            }
             #if os(iOS)
             setPlayPauseIcon(playing: true)
             #endif
@@ -1867,7 +2462,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard !didReportEnd else { return }
         didReportEnd = true
         cancelOpenWatchdog()
-        if autoPlayNext, let next = nextEpisode, episodeNavigator != nil {
+        nextUpCard?.hide()
+        if autoPlayNext, !nextUpCancelledForThisItem, let next = nextEpisode, episodeNavigator != nil {
             didReportEnd = false
             navigateToEpisode(next)
             return

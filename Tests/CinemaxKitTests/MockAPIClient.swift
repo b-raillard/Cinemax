@@ -277,6 +277,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
     func markItemUnplayed(itemId: String, userId: String) async throws {}
+    func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {}
+    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
+    func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] { [] }
 
     // MARK: - Media Segments
 
