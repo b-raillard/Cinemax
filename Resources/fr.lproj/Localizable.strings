@@ -143,6 +143,8 @@
 "search.surpriseMePrompt" = "Pas d'idée de ce que regarder ?";
 "search.surprise.movie" = "Film surprise";
 "search.surprise.series" = "Série surprise";
+"search.recent" = "Recherches récentes";
+"search.recent.clear" = "Effacer";
 
 // MARK: - Settings
 
@@ -201,6 +203,9 @@
 "privacy.sessions.signOutConfirm" = "Cet appareil sera déconnecté du serveur.";
 "privacy.sessions.empty" = "Aucun autre appareil connecté";
 "privacy.maintenance" = "Maintenance";
+"privacy.search" = "Recherche";
+"privacy.saveSearchHistory" = "Enregistrer les recherches récentes";
+"privacy.saveSearchHistory.subtitle" = "Affichées en suggestions sur l'écran Recherche. Désactiver efface l'historique.";
 "privacy.clearContinueWatching" = "Effacer « Reprendre »";
 "privacy.clearContinueWatching.subtitle" = "Supprimer la progression affichée dans Reprendre.";
 "privacy.clearContinueWatching.confirm" = "Les progressions de lecture seront effacées côté serveur.";
@@ -376,6 +381,8 @@
 
 "accessibility.clearSearch" = "Effacer la recherche";
 "accessibility.voiceSearch" = "Recherche vocale";
+"accessibility.clearRecentSearches" = "Effacer les recherches récentes";
+"accessibility.searchAgainFor" = "Rechercher à nouveau %@";
 "accessibility.stopVoiceSearch" = "Arrêter la recherche vocale";
 "accessibility.previousEpisode" = "Épisode précédent";
 "accessibility.nextEpisode" = "Épisode suivant";

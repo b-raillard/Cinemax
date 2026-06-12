@@ -25,6 +25,8 @@ struct PrivacySecurityScreen: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(SettingsKey.privacyMaxContentAge) private var maxContentAge: Int = SettingsKey.Default.privacyMaxContentAge
+    @AppStorage(SettingsKey.searchSaveHistory) private var saveSearchHistory: Bool = SettingsKey.Default.searchSaveHistory
+    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     @State private var showClearContinueWatchingAlert = false
     @State private var showClearImageCacheAlert = false
@@ -35,6 +37,7 @@ struct PrivacySecurityScreen: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                     parentalControlsSection
+                    searchHistorySection
                     connectedDevicesLink
                     maintenanceSection
                 }
@@ -120,6 +123,49 @@ struct PrivacySecurityScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Search history
+
+    /// Privacy toggle for recent-search capture on the Search screen. Turning
+    /// it OFF also wipes whatever was already stored — keeping stale queries
+    /// around after the user opted out would defeat the point of the toggle.
+    private var searchHistorySection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            sectionHeader(loc.localized("privacy.search"))
+
+            HStack(spacing: CinemaSpacing.spacing3) {
+                rowIcon(systemName: "clock.arrow.circlepath", color: themeManager.accent)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(loc.localized("privacy.saveSearchHistory"))
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurface)
+                    Text(loc.localized("privacy.saveSearchHistory.subtitle"))
+                        .font(CinemaFont.label(.medium))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+
+                Button {
+                    saveSearchHistory.toggle()
+                    if !saveSearchHistory {
+                        UserDefaults.standard.removeObject(forKey: SettingsKey.searchRecentQueries)
+                    }
+                } label: {
+                    CinemaToggleIndicator(isOn: saveSearchHistory, accent: themeManager.accent, animated: motionEffects)
+                }
+                .buttonStyle(.plain)
+                #if os(iOS)
+                .sensoryFeedback(.selection, trigger: saveSearchHistory)
+                #endif
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        }
     }
 
     // MARK: - Connected Devices entry

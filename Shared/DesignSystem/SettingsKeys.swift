@@ -36,6 +36,16 @@ enum SettingsKey {
     // Detail page
     static let detailShowQualityBadges = "detail.showQualityBadges"
 
+    // Search
+    /// When `true` (default), successful search queries are persisted to
+    /// `searchRecentQueries` and surfaced as tappable chips on the empty
+    /// search screen. Toggle lives in Privacy & Security (it's a privacy
+    /// concern, not an interface one).
+    static let searchSaveHistory = "search.saveHistory"
+    /// JSON `[String]` — most-recent-first list of past queries. Not a user
+    /// setting; written only through `SearchViewModel`'s mutators.
+    static let searchRecentQueries = "search.recentQueries"
+
     // Library landing (tvOS only)
     /// `"browse"` (default) shows hero + genre rows; `"grid"` shows a flat poster grid using the default sort.
     static let libraryTVBrowseLayout = "library.tvBrowseLayout"
@@ -79,6 +89,8 @@ enum SettingsKey {
         static let homeShowWatchingNow = true
 
         static let detailShowQualityBadges = true
+
+        static let searchSaveHistory = true
 
         static let libraryTVBrowseLayout = LibraryTVBrowseLayout.browse.rawValue
 
