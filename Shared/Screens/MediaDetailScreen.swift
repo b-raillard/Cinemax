@@ -235,7 +235,16 @@ struct MediaDetailScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
+        #if os(tvOS)
         .frame(height: backdropHeight)
+        #else
+        // iPad hardening: clamp the backdrop to ~55% of the scroll viewport
+        // so action buttons / overview stay reachable in short Stage Manager
+        // or Split View windows. Full-screen sizes resolve to `backdropHeight`.
+        .containerRelativeFrame(.vertical) { length, _ in
+            min(backdropHeight, length * 0.55)
+        }
+        #endif
         .clipped()
     }
 

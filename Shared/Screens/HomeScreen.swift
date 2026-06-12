@@ -310,7 +310,17 @@ struct HomeScreen: View {
         // action buttons off-screen.
         Color.clear
             .frame(maxWidth: .infinity)
+            #if os(tvOS)
             .frame(height: heroHeight)
+            #else
+            // iPad hardening: in a short window (Stage Manager, Split View
+            // landscape) a fixed 500pt hero can swallow the whole viewport.
+            // Clamp to ~60% of the scroll viewport's height; full-screen
+            // iPhone/iPad resolve to the regular `heroHeight` (the min wins).
+            .containerRelativeFrame(.vertical) { length, _ in
+                min(heroHeight, length * 0.62)
+            }
+            #endif
             .overlay {
                 if item.hasBackdropImage, let backdropId = item.backdropItemID {
                     CinemaLazyImage(

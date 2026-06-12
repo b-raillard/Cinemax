@@ -26,7 +26,16 @@ struct LibraryHeroSection: View {
         // outside the visible hero bounds.
         Color.clear
             .frame(maxWidth: .infinity)
+            #if os(tvOS)
             .frame(height: heroHeight)
+            #else
+            // iPad hardening: clamp to ~60% of the scroll viewport so short
+            // Stage Manager / Split View windows keep content below the hero
+            // reachable. Full-screen devices resolve to `heroHeight`.
+            .containerRelativeFrame(.vertical) { length, _ in
+                min(heroHeight, length * 0.62)
+            }
+            #endif
             .overlay {
                 if item.hasBackdropImage, let id = item.id {
                     CinemaLazyImage(
