@@ -15,7 +15,7 @@ Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (d
 
 - **`UIButton`**: use `UIButton.Configuration`; never `UIButton(type:)` + `setTitle/titleLabel?.font/backgroundColor/contentEdgeInsets`. Pattern in `NativeVideoPresenter`. Frosted bg via `config.background.customView = UIVisualEffectView(...)`.
 - Free SwiftUI helpers returning `some View` that touch `PrimitiveButtonStyle.plain`/`Font`/etc. must be `@MainActor`.
-- **iPad**: `UIRequiresFullScreen` removed (deprecated); split view / Stage Manager allowed but hero/backdrop layouts not yet hardened for resize.
+- **iPad**: `UIRequiresFullScreen` removed (deprecated); split view / Stage Manager supported. Hero/backdrop heights are clamped to a viewport fraction via `containerRelativeFrame(.vertical) { min(fixedHeight, length * 0.55…0.62) }` (iOS only — tvOS keeps fixed heights) in `HomeScreen.heroSection` / `LibraryHeroSection` / `MediaDetailScreen.backdropSection` so short windows keep content below the hero reachable. New full-bleed heroes must follow the same pattern.
 - **Toolbar + Liquid Glass**: iOS 26 auto-renders `ToolbarItem` buttons with Liquid Glass. **Never** add `.buttonStyle(.glass)`/`.glassProminent` on toolbar items (nests double capsules). Active state via `.tint(themeManager.accent)` + `.fill` icon variant.
 
 ### Dependencies
@@ -215,6 +215,9 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 | `home.showWatchingNow` | `true` | Watching Now row |
 | `home.showFavorites` | `true` | Favorites row (hearted movies/series) |
 | `detail.showQualityBadges` | `true` | Quality pill row on `MediaDetailScreen` |
+| `detail.showTrailerButton` | `true` | iOS-only "Bande-annonce" button on `MediaDetailScreen` (opens first http(s) `remoteTrailers` URL in Safari; no tvOS browser ⇒ no button/toggle there) |
+| `search.saveHistory` | `true` | Recent-search capture + chips on the empty Search screen. Toggle lives in Privacy & Security; turning OFF wipes `search.recentQueries` |
+| `search.recentQueries` | — | JSON `[String]` — most-recent-first history (cap 8). Not a setting; written only via `SearchViewModel.recordRecentSearch`/`clearRecentSearches` |
 | `library.tvBrowseLayout` | `"browse"` | tvOS-only. `browse` = hero + genre rows; `grid` = flat grid. Filters force grid regardless |
 | `privacy.maxContentAge` | `0` | Rating ceiling (0=unrestricted; 10/12/14/16/18) via `apiClient.applyContentRatingLimit` |
 | `menu.mode` | `"default"` | `"default"` ⇒ canonical 5 tabs; `"custom"` ⇒ user-driven (see `MenuConfigStore`) |
@@ -308,6 +311,7 @@ Jellyfin's `searchTerm` is contiguous + punctuation-sensitive — "Mission Impos
 - `ImageURLBuilder` → `/Items/{id}/Images/{type}`. **Backdrop sizing**: use `ImageURLBuilder.screenPixelWidth` — never hardcode `1920`.
 - **RULE — always pass the `tag:` cache-buster to `imageURL(...)`/`imageURLRaw(...)`**: without it the image URL is byte-identical across server-side poster/backdrop edits, so Nuke (keyed by URL) serves the stale image forever — a metadata/poster change is invisible until reinstall, and `clearCache()`/"Refresh Catalogue" don't help (they clear the JSON cache, not Nuke's). Pass `tag: item.primaryImageTagValue` for `.primary`, `tag: item.backdropImageTagValue` for `.backdrop` (helpers in `BaseItemDto+Metadata.swift`; backdrop helper mirrors `backdropItemID`'s parent-first resolution), `person.primaryImageTag` for cast. Every new live image call site must thread the tag. Deliberately omitted on download-prefetch/offline paths (image is fetched once to disk; some point at the `seriesID` poster whose tag wouldn't match) and `NowPlayingInfoController` (separate `URLSession` cache, re-fetched per playback).
 - **Image cache**: `AppNavigation.init()` configures `ImagePipeline.shared` with 500 MB disk + explicit `ImageCache` `costLimit = 256 MB` (Nuke's ~100 MB default evicts mid-render on tvOS — 4K backdrops decode to 4–8 MB each).
+- **Prefetch (`PosterPrefetcher`, Shared/ViewModels)**: Home + Library warm card images via Nuke `ImagePrefetcher` after each data load. **RULE — prefetched URLs must be byte-identical to the consuming card's request** (same `maxWidth` AND `tag`) — Nuke keys on the URL, a near-miss warms nothing. Posters = primary/300, continue-watching = backdrop/600. Call `reset()` before a full catalogue refresh so refreshed tags re-prefetch.
 - **Backdrop fallback**: `item.backdropItemID` (→ `parentBackdropItemID ?? seriesID ?? id`). **No-backdrop placeholder**: gate on `item.hasBackdropImage` (NOT `backdropItemID` — always non-nil) → `BackdropFallbackView` (centered `film` symbol over `surfaceContainerLow` + accent radial, under `CinemaGradient.heroOverlay`). Wired in `MediaDetailScreen.backdropSection`/`HomeScreen.heroSection`/`LibraryHeroSection`.
 - **Always `CinemaLazyImage`** — never `LazyImage` directly. Card containers: `Color.clear` + `.aspectRatio()` + `.frame(maxWidth: .infinity)` + `.overlay { CinemaLazyImage }` + `.clipped()`. **Backdrop (full-bleed ZStack)**: `CinemaLazyImage` must have `.frame(maxWidth:.infinity, maxHeight:.infinity)` — else ZStack sizes from natural 1920px pushing title off-screen. Outer container `LazyVStack(alignment: .leading)`.
 - **PosterCard title alignment**: hidden `Text("M\nM").hidden()` placeholder + actual title overlaid top-aligned → uniform row height.
