@@ -11,6 +11,7 @@ struct HomeScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State private var viewModel = HomeViewModel()
+    @State private var prefetcher = PosterPrefetcher()
 
     @AppStorage(SettingsKey.homeShowContinueWatching) private var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
@@ -27,7 +28,7 @@ struct HomeScreen: View {
             if !network.isOnline {
                 OfflineLibraryView(scope: .all)
             } else if viewModel.isLoading {
-                LoadingStateView()
+                loadingSkeleton
             } else if isHomeEmpty {
                 homeEmptyState
             } else {
@@ -35,7 +36,7 @@ struct HomeScreen: View {
             }
             #else
             if viewModel.isLoading {
-                LoadingStateView()
+                loadingSkeleton
             } else if isHomeEmpty {
                 homeEmptyState
             } else {
@@ -49,9 +50,14 @@ struct HomeScreen: View {
         #endif
         .task {
             await viewModel.loadInitial(using: appState)
+            prefetchCardImages()
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
-            Task { await viewModel.reload(using: appState) }
+            Task {
+                prefetcher.reset()
+                await viewModel.reload(using: appState)
+                prefetchCardImages()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxFavoritesChanged)) { _ in
             Task { await viewModel.refreshFavorites(using: appState) }
@@ -83,6 +89,29 @@ struct HomeScreen: View {
         let id: String
     }
 
+    /// Warms Nuke's cache for every card the loaded rows will render. URLs
+    /// mirror the cards' own requests exactly (same `maxWidth` + `tag`) —
+    /// a parameter mismatch would warm a different cache entry (see
+    /// `PosterPrefetcher`). Cheap to call repeatedly: already-seen URLs are
+    /// deduped inside the prefetcher.
+    private func prefetchCardImages() {
+        let builder = appState.imageBuilder
+
+        // 2:3 posters — recently added, favorites, genre rows (cards request maxWidth 300).
+        var posterItems = viewModel.latestItems + viewModel.favoriteItems
+        for row in viewModel.genreRows {
+            if case .items(let items) = row.state { posterItems += items }
+        }
+        prefetcher.prefetch(posterItems.map { item in
+            item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
+        })
+
+        // 16:9 backdrops — continue watching (cards request maxWidth 600).
+        prefetcher.prefetch(viewModel.resumeItems.map { item in
+            item.backdropItemID.map { builder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue) }
+        })
+    }
+
     /// True when there's no hero, no resume items, no recently added items, and no genre rows.
     /// Happens on a fresh Jellyfin install or a server with no media.
     private var isHomeEmpty: Bool {
@@ -90,6 +119,26 @@ struct HomeScreen: View {
             && viewModel.resumeItems.isEmpty
             && viewModel.latestItems.isEmpty
             && viewModel.genreRows.isEmpty
+    }
+
+    /// Layout-shaped placeholder shown during the initial load — sketches the
+    /// hero + continue-watching + poster rows the real content will occupy.
+    private var loadingSkeleton: some View {
+        MediaPageSkeleton(
+            heroHeight: heroHeight,
+            rows: [.wide, .poster],
+            posterCardWidth: posterCardWidth,
+            wideCardWidth: wideCardWidth,
+            horizontalPadding: skeletonPadding
+        )
+    }
+
+    private var skeletonPadding: CGFloat {
+        #if os(tvOS)
+        CinemaSpacing.spacing20
+        #else
+        CinemaSpacing.spacing6
+        #endif
     }
 
     private var homeEmptyState: some View {
@@ -261,7 +310,17 @@ struct HomeScreen: View {
         // action buttons off-screen.
         Color.clear
             .frame(maxWidth: .infinity)
+            #if os(tvOS)
             .frame(height: heroHeight)
+            #else
+            // iPad hardening: in a short window (Stage Manager, Split View
+            // landscape) a fixed 500pt hero can swallow the whole viewport.
+            // Clamp to ~60% of the scroll viewport's height; full-screen
+            // iPhone/iPad resolve to the regular `heroHeight` (the min wins).
+            .containerRelativeFrame(.vertical) { length, _ in
+                min(heroHeight, length * 0.62)
+            }
+            #endif
             .overlay {
                 if item.hasBackdropImage, let backdropId = item.backdropItemID {
                     CinemaLazyImage(

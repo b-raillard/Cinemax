@@ -13,6 +13,7 @@ struct MediaLibraryScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State private var viewModel: MediaLibraryViewModel
+    @State private var prefetcher = PosterPrefetcher()
     @State private var showSortFilter = false
     #if os(iOS)
     /// Lifted from `AdminItemMenu` so `navigationDestination(item:)` can
@@ -120,10 +121,35 @@ struct MediaLibraryScreen: View {
         #endif
         .task {
             await viewModel.loadInitial(using: appState, loc: loc)
+            prefetchBrowsePosters()
+        }
+        // Each filtered page that lands gets its posters warmed; the count is
+        // a cheap Equatable proxy for "a page was appended".
+        .onChange(of: viewModel.filteredLoader.items.count) {
+            prefetchPosters(for: viewModel.filteredLoader.items)
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
-            Task { await viewModel.reload(using: appState, loc: loc) }
+            Task {
+                prefetcher.reset()
+                await viewModel.reload(using: appState, loc: loc)
+                prefetchBrowsePosters()
+            }
         }
+    }
+
+    // MARK: - Image prefetch
+
+    /// Warms every genre row's posters once the browse data is in. URLs match
+    /// `LibraryPosterCard`'s request exactly (primary, maxWidth 300, tag).
+    private func prefetchBrowsePosters() {
+        prefetchPosters(for: viewModel.itemsByGenre.values.flatMap { $0 })
+    }
+
+    private func prefetchPosters(for items: [BaseItemDto]) {
+        let builder = appState.imageBuilder
+        prefetcher.prefetch(items.map { item in
+            item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
+        })
     }
 
     // MARK: Main Content Switch
@@ -557,7 +583,33 @@ struct MediaLibraryScreen: View {
 
     // MARK: - Loading & Error
 
-    private var loadingView: some View { LoadingStateView() }
+    /// Layout-shaped placeholder for the initial load — mirrors the browse
+    /// view's hero + poster rows instead of a context-free spinner.
+    private var loadingView: some View {
+        MediaPageSkeleton(
+            heroHeight: skeletonHeroHeight,
+            rows: [.poster, .poster],
+            posterCardWidth: skeletonPosterWidth,
+            wideCardWidth: skeletonPosterWidth * 2,
+            horizontalPadding: browseGenresPadding
+        )
+    }
+
+    private var skeletonHeroHeight: CGFloat {
+        #if os(tvOS)
+        820
+        #else
+        AdaptiveLayout.heroHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
+        #endif
+    }
+
+    private var skeletonPosterWidth: CGFloat {
+        #if os(tvOS)
+        200
+        #else
+        AdaptiveLayout.posterCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
+        #endif
+    }
 
     private func errorView(_ message: String) -> some View {
         ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {

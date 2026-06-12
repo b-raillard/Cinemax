@@ -35,6 +35,20 @@ enum SettingsKey {
 
     // Detail page
     static let detailShowQualityBadges = "detail.showQualityBadges"
+    /// iOS only — shows the "Bande-annonce" button on `MediaDetailScreen` when
+    /// the item carries `remoteTrailers`. tvOS has no browser to open the URL,
+    /// so the button (and its settings row) don't exist there.
+    static let detailShowTrailerButton = "detail.showTrailerButton"
+
+    // Search
+    /// When `true` (default), successful search queries are persisted to
+    /// `searchRecentQueries` and surfaced as tappable chips on the empty
+    /// search screen. Toggle lives in Privacy & Security (it's a privacy
+    /// concern, not an interface one).
+    static let searchSaveHistory = "search.saveHistory"
+    /// JSON `[String]` — most-recent-first list of past queries. Not a user
+    /// setting; written only through `SearchViewModel`'s mutators.
+    static let searchRecentQueries = "search.recentQueries"
 
     // Library landing (tvOS only)
     /// `"browse"` (default) shows hero + genre rows; `"grid"` shows a flat poster grid using the default sort.
@@ -79,6 +93,9 @@ enum SettingsKey {
         static let homeShowWatchingNow = true
 
         static let detailShowQualityBadges = true
+        static let detailShowTrailerButton = true
+
+        static let searchSaveHistory = true
 
         static let libraryTVBrowseLayout = LibraryTVBrowseLayout.browse.rawValue
 

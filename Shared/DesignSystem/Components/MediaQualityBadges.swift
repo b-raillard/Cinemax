@@ -67,14 +67,19 @@ struct MediaQualityBadges: View {
 
     // MARK: - Resolution
 
+    /// Classifies on width OR height (same approach as Jellyfin's web client).
+    /// Height alone is wrong for anything wider than 16:9 — Jellyfin stores
+    /// the encoded frame's dimensions with letterbox bars cropped out, so a
+    /// 2.39:1 4K movie is 3840×1600 (and a scope 1080p is 1920×800). The
+    /// thresholds sit at ~95% of nominal to absorb slightly-cropped encodes.
     private static func resolutionLabel(for stream: MediaStream) -> String? {
-        guard let h = stream.height else { return nil }
-        switch h {
-        case let x where x >= 2160: return "4K"
-        case let x where x >= 1080: return "1080p"
-        case let x where x >= 720:  return "720p"
-        default:                    return "SD"
-        }
+        let w = stream.width ?? 0
+        let h = stream.height ?? 0
+        guard w > 0 || h > 0 else { return nil }
+        if w >= 3800 || h >= 2100 { return "4K" }
+        if w >= 1800 || h >= 1000 { return "1080p" }
+        if w >= 1200 || h >= 700  { return "720p" }
+        return "SD"
     }
 
     // MARK: - HDR

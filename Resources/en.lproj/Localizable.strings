@@ -143,6 +143,8 @@
 "search.surpriseMePrompt" = "Not sure what to watch?";
 "search.surprise.movie" = "Surprise movie";
 "search.surprise.series" = "Surprise series";
+"search.recent" = "Recent searches";
+"search.recent.clear" = "Clear";
 
 // MARK: - Settings
 
@@ -201,6 +203,9 @@
 "privacy.sessions.signOutConfirm" = "This device will be signed out of the server.";
 "privacy.sessions.empty" = "No other connected devices";
 "privacy.maintenance" = "Maintenance";
+"privacy.search" = "Search";
+"privacy.saveSearchHistory" = "Save recent searches";
+"privacy.saveSearchHistory.subtitle" = "Shown as suggestions on the Search screen. Turning this off clears the history.";
 "privacy.clearContinueWatching" = "Clear Continue Watching";
 "privacy.clearContinueWatching.subtitle" = "Remove resume progress shown in Continue Watching.";
 "privacy.clearContinueWatching.confirm" = "Resume progress will be cleared on the server.";
@@ -662,6 +667,7 @@
 "settings.homePage.favorites" = "Favorites";
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
+"settings.detailPage.trailerButton" = "Trailer button";
 "settings.libraryLayout" = "Library landing";
 "settings.libraryLayout.browse" = "Browse";
 "settings.libraryLayout.grid" = "Grid";
@@ -774,6 +780,8 @@
 
 "accessibility.clearSearch" = "Clear search";
 "accessibility.voiceSearch" = "Voice search";
+"accessibility.clearRecentSearches" = "Clear recent searches";
+"accessibility.searchAgainFor" = "Search again for %@";
 "accessibility.stopVoiceSearch" = "Stop voice search";
 "accessibility.previousEpisode" = "Previous episode";
 "accessibility.nextEpisode" = "Next episode";
@@ -846,6 +854,7 @@
 "home.favorites" = "Favorites";
 "detail.partOf" = "Part of: %@";
 "detail.favorite.add" = "Add to favorites";
+"detail.trailer" = "Trailer";
 "detail.favorite.remove" = "Remove from favorites";
 "person.movies" = "Movies";
 "person.series" = "TV Shows";

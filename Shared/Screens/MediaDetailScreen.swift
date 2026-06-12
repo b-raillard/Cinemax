@@ -24,6 +24,10 @@ struct MediaDetailScreen: View {
     @State private var adminPushIntent: AdminMenuPushIntent?
     #endif
     @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
+    #if os(iOS)
+    @AppStorage(SettingsKey.detailShowTrailerButton) private var showTrailerButton: Bool = SettingsKey.Default.detailShowTrailerButton
+    @Environment(\.openURL) private var openURL
+    #endif
 
     init(itemId: String, itemType: BaseItemKind = .movie) {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
@@ -231,7 +235,16 @@ struct MediaDetailScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
+        #if os(tvOS)
         .frame(height: backdropHeight)
+        #else
+        // iPad hardening: clamp the backdrop to ~55% of the scroll viewport
+        // so action buttons / overview stay reachable in short Stage Manager
+        // or Split View windows. Full-screen sizes resolve to `backdropHeight`.
+        .containerRelativeFrame(.vertical) { length, _ in
+            min(backdropHeight, length * 0.55)
+        }
+        #endif
         .clipped()
     }
 
@@ -400,6 +413,7 @@ struct MediaDetailScreen: View {
             .equatable()
             favoriteButton
             #if os(iOS)
+            trailerButton(for: item)
             downloadAffordance(for: item, resolvedNextEpisode: nextEp)
             #endif
             Spacer(minLength: 0)
@@ -431,6 +445,45 @@ struct MediaDetailScreen: View {
         #endif
         .accessibilityLabel(loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"))
     }
+
+    // MARK: - Trailer (iOS)
+
+    #if os(iOS)
+    /// Opens the first remote trailer (YouTube/Vimeo URL provided by the
+    /// server's metadata) in the system browser. iOS-only: tvOS has no
+    /// browser to hand the URL to, so the affordance doesn't exist there.
+    /// Hidden when the item carries no trailer or the user disabled the
+    /// button in Settings → Interface → Detail page.
+    @ViewBuilder
+    private func trailerButton(for item: BaseItemDto) -> some View {
+        if showTrailerButton, let trailerURL = Self.firstTrailerURL(of: item) {
+            Button {
+                openURL(trailerURL)
+            } label: {
+                Image(systemName: "movieclapper")
+                    .font(.system(size: buttonFontSize, weight: .bold))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .padding(.vertical, buttonVerticalPadding)
+                    .padding(.horizontal, CinemaSpacing.spacing4)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(loc.localized("detail.trailer"))
+        }
+    }
+
+    /// First http(s) trailer URL of the item. Defensive on scheme — Jellyfin
+    /// metadata can carry plugin-specific URIs the system can't open.
+    private static func firstTrailerURL(of item: BaseItemDto) -> URL? {
+        for trailer in item.remoteTrailers ?? [] {
+            guard let raw = trailer.url, let url = URL(string: raw),
+                  url.scheme == "https" || url.scheme == "http" else { continue }
+            return url
+        }
+        return nil
+    }
+    #endif
 
     // MARK: - Download affordance (iOS)
 

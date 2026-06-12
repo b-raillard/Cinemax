@@ -16,6 +16,7 @@ struct SearchScreen: View {
     @FocusState private var searchFieldFocused: Bool
     #endif
     @State private var viewModel = SearchViewModel()
+    @AppStorage(SettingsKey.searchSaveHistory) private var saveSearchHistory: Bool = SettingsKey.Default.searchSaveHistory
 
     // Surprise Me state — two buttons (movie + series) in the empty state.
     @State private var surpriseDestination: SurpriseDestination?
@@ -241,6 +242,11 @@ struct SearchScreen: View {
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
 
+                // Past queries as one-tap chips (gated on the Privacy toggle).
+                if saveSearchHistory, !viewModel.recentSearches.isEmpty {
+                    recentSearchesSection
+                }
+
                 // "Not sure what to watch?" → two pills for a random movie or series.
                 surpriseMePills
             }
@@ -255,6 +261,87 @@ struct SearchScreen: View {
                 headerTitle: loc.localized("search.topMatches")
             )
         }
+    }
+
+    // MARK: - Recent Searches
+
+    /// Wrapping chip cloud of past queries + a trailing "clear" chip. A chip
+    /// tap re-runs the query by writing `searchText` (the existing `.onChange`
+    /// debounce path picks it up — no separate search trigger needed).
+    private var recentSearchesSection: some View {
+        VStack(spacing: CinemaSpacing.spacing2) {
+            Text(loc.localized("search.recent"))
+                .font(CinemaFont.dynamicLabel(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+
+            FlowLayout(spacing: CinemaSpacing.spacing2) {
+                ForEach(viewModel.recentSearches, id: \.self) { term in
+                    recentSearchChip(term)
+                }
+
+                Button {
+                    viewModel.clearRecentSearches()
+                } label: {
+                    HStack(spacing: CinemaSpacing.spacing1) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
+                        Text(loc.localized("search.recent.clear"))
+                            .font(CinemaFont.label(.medium))
+                    }
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .padding(.horizontal, CinemaSpacing.spacing3)
+                    .padding(.vertical, CinemaSpacing.spacing2)
+                    .background(CinemaColor.surfaceContainer)
+                    .clipShape(Capsule())
+                }
+                #if os(tvOS)
+                .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                .focusEffectDisabled()
+                .hoverEffectDisabled()
+                #else
+                .buttonStyle(.plain)
+                #endif
+                .accessibilityLabel(loc.localized("accessibility.clearRecentSearches"))
+            }
+            .frame(maxWidth: recentSearchesMaxWidth)
+        }
+        .padding(.horizontal, gridPadding)
+    }
+
+    private func recentSearchChip(_ term: String) -> some View {
+        Button {
+            viewModel.searchText = term
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing1) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: CinemaScale.pt(12)))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                Text(term)
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing3)
+            .padding(.vertical, CinemaSpacing.spacing2)
+            .background(CinemaColor.surfaceContainerHigh)
+            .clipShape(Capsule())
+        }
+        #if os(tvOS)
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityLabel(String(format: loc.localized("accessibility.searchAgainFor"), term))
+    }
+
+    private var recentSearchesMaxWidth: CGFloat {
+        #if os(tvOS)
+        800
+        #else
+        420
+        #endif
     }
 
     // MARK: - Surprise Me

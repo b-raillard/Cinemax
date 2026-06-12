@@ -221,6 +221,18 @@ final class SearchViewModel {
     var isSearching = false
     var hasSearched = false
 
+    /// Most-recent-first queries shown as chips on the empty search screen.
+    /// Persisted as JSON under `SettingsKey.searchRecentQueries`; mutate only
+    /// through `recordRecentSearch` / `clearRecentSearches` (explicit-mutator
+    /// pattern — see the `@Observable`+`didSet` RULE). Loaded in `init` —
+    /// the `@Observable` macro rejects `Self.`-qualified calls in stored
+    /// property initializers ("covariant 'Self'" diagnostic).
+    private(set) var recentSearches: [String] = []
+
+    init() {
+        recentSearches = Self.loadRecentSearches()
+    }
+
     // Voice search state (iOS only)
     var isListening = false
     var showPermissionAlert = false
@@ -334,6 +346,53 @@ final class SearchViewModel {
             guard !Task.isCancelled else { return }
             self?.results = ranked
             self?.hasSearched = true
+            // Only remember queries that produced something — a typo midway
+            // through "missio" shouldn't pollute the history, and the debounce
+            // already collapses keystroke noise into the final query.
+            if !ranked.isEmpty {
+                self?.recordRecentSearch(query)
+            }
+        }
+    }
+
+    // MARK: Recent searches
+
+    private static let maxRecentSearches = 8
+
+    /// Whether history capture is enabled (Privacy & Security toggle).
+    /// Read straight from UserDefaults because `@AppStorage` can't live on an
+    /// `@Observable` class; `object(forKey:)` keeps the default-true semantics
+    /// (`bool(forKey:)` would default to false for fresh installs).
+    private static var isHistoryEnabled: Bool {
+        UserDefaults.standard.object(forKey: SettingsKey.searchSaveHistory) as? Bool
+            ?? SettingsKey.Default.searchSaveHistory
+    }
+
+    private static func loadRecentSearches() -> [String] {
+        guard let data = UserDefaults.standard.data(forKey: SettingsKey.searchRecentQueries),
+              let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return list
+    }
+
+    private func recordRecentSearch(_ query: String) {
+        guard Self.isHistoryEnabled else { return }
+        var list = recentSearches.filter { $0.caseInsensitiveCompare(query) != .orderedSame }
+        list.insert(query, at: 0)
+        if list.count > Self.maxRecentSearches {
+            list = Array(list.prefix(Self.maxRecentSearches))
+        }
+        recentSearches = list
+        persistRecentSearches()
+    }
+
+    func clearRecentSearches() {
+        recentSearches = []
+        UserDefaults.standard.removeObject(forKey: SettingsKey.searchRecentQueries)
+    }
+
+    private func persistRecentSearches() {
+        if let data = try? JSONEncoder().encode(recentSearches) {
+            UserDefaults.standard.set(data, forKey: SettingsKey.searchRecentQueries)
         }
     }
 
