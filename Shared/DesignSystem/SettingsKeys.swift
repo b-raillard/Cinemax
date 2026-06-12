@@ -35,6 +35,10 @@ enum SettingsKey {
 
     // Detail page
     static let detailShowQualityBadges = "detail.showQualityBadges"
+    /// iOS only — shows the "Bande-annonce" button on `MediaDetailScreen` when
+    /// the item carries `remoteTrailers`. tvOS has no browser to open the URL,
+    /// so the button (and its settings row) don't exist there.
+    static let detailShowTrailerButton = "detail.showTrailerButton"
 
     // Search
     /// When `true` (default), successful search queries are persisted to
@@ -89,6 +93,7 @@ enum SettingsKey {
         static let homeShowWatchingNow = true
 
         static let detailShowQualityBadges = true
+        static let detailShowTrailerButton = true
 
         static let searchSaveHistory = true
 

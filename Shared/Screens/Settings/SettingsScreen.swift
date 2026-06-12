@@ -185,6 +185,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
+    @AppStorage(SettingsKey.detailShowTrailerButton) var showTrailerButton: Bool = SettingsKey.Default.detailShowTrailerButton
     @AppStorage(SettingsKey.libraryTVBrowseLayout) var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
@@ -280,9 +281,15 @@ struct SettingsScreen: View {
     }
 
     var detailPageToggleRows: [SettingsToggleRow] {
-        [
+        var rows: [SettingsToggleRow] = [
             .init(id: "detailQualityBadges", icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"), value: $showQualityBadges)
         ]
+        // The trailer button opens the URL in Safari — tvOS has no browser,
+        // so neither the button nor its toggle exist there.
+        #if os(iOS)
+        rows.append(.init(id: "detailTrailerButton", icon: "movieclapper", label: loc.localized("settings.detailPage.trailerButton"), value: $showTrailerButton))
+        #endif
+        return rows
     }
 
     /// iOS marks debug icons orange to signal developer territory. tvOS

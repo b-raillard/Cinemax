@@ -667,6 +667,7 @@
 "settings.homePage.favorites" = "Favorites";
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
+"settings.detailPage.trailerButton" = "Trailer button";
 "settings.libraryLayout" = "Library landing";
 "settings.libraryLayout.browse" = "Browse";
 "settings.libraryLayout.grid" = "Grid";
@@ -853,6 +854,7 @@
 "home.favorites" = "Favorites";
 "detail.partOf" = "Part of: %@";
 "detail.favorite.add" = "Add to favorites";
+"detail.trailer" = "Trailer";
 "detail.favorite.remove" = "Remove from favorites";
 "person.movies" = "Movies";
 "person.series" = "TV Shows";
