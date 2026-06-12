@@ -51,17 +51,17 @@ struct ExtensionSessionContractTests {
         #expect(session.userId == "user-abc")
     }
 
-    @Test("Shared session round-trips through the Keychain access group")
-    func sharedSessionRoundTrips() throws {
-        // Skip cleanly when the shared access group can't be resolved in this
-        // signing context (the mechanism is still build-verified + the on-device
-        // upgrade test is the real gate). Hosted in the app target, so the
-        // host app's keychain-access-groups entitlement applies.
-        let group = try #require(
-            KeychainService.sharedAccessGroup,
-            "AppIdentifierPrefix unavailable — cannot resolve the shared Keychain group"
-        )
-        #expect(group.hasSuffix("com.cinemax.shared"))
+    // Only runs where the shared access group resolves — i.e. a signed context
+    // with a team prefix. Unsigned CI runners expand `$(AppIdentifierPrefix)` to
+    // empty, so `sharedAccessGroup` is nil and the test is SKIPPED (not failed):
+    // the Keychain mechanism is build-verified there, and the real proof is the
+    // local + on-device round-trip.
+    @Test(
+        "Shared session round-trips through the Keychain access group",
+        .enabled(if: KeychainService.sharedAccessGroup != nil)
+    )
+    func sharedSessionRoundTrips() {
+        #expect(KeychainService.sharedAccessGroup?.hasSuffix("com.cinemax.shared") == true)
 
         let keychain = KeychainService()
         let payload = Data("shared-session-payload".utf8)
