@@ -317,10 +317,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// surface — suppresses the periodic time tick so the preview isn't
     /// snapped back (mirrors the iOS slider's `isScrubbing`).
     private var isScrubbing = false
-    /// Set on scrub release: VLC applies a seek asynchronously, so until
-    /// `currentMs` reaches this the periodic tick must keep showing the
-    /// target instead of snapping back to the stale pre-seek position.
-    private var pendingScrubTargetMs: Int32?
     private let tvAudioButton = UIButton(type: .system)
     private let tvSubtitleButton = UIButton(type: .system)
     private let tvPrevButton = UIButton(type: .system)
@@ -334,6 +330,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let infoPanelStack = UIStackView()
     private var infoPanelVisible = false
     #endif
+
+    /// Set on scrub release / coalesced skip: VLC applies a seek asynchronously,
+    /// so until `currentMs` reaches this the periodic tick must keep showing the
+    /// target instead of snapping back to the stale pre-seek position. Shared by
+    /// both platforms (the iOS slider and the tvOS scrub bar both honor it).
+    private var pendingScrubTargetMs: Int32?
+    /// Debounced commit for coalesced ±N skips / chapter jumps. Each press
+    /// advances `pendingScrubTargetMs` (the on-screen target) and re-arms this;
+    /// the single engine seek fires `seekCommitDelay` after the LAST press. See
+    /// `accumulateSeek`.
+    private var seekCommitWork: DispatchWorkItem?
+    private let seekCommitDelay: TimeInterval = 0.3
 
     private var reporter: PlaybackReporter?
     private let remoteCommands: RemoteCommandController
@@ -535,6 +543,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         nowPlaying.detach()
         hideControlsWorkItem?.cancel()
         pendingTapWork?.cancel()
+        cancelPendingSeekCommit()
         segmentFetchTask?.cancel()
         chapterFetchTask?.cancel()
         chapterThumbTasks.forEach { $0.cancel() }
@@ -572,8 +581,58 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         player.seek(to: .milliseconds(Int(max(0, ms))))
     }
 
-    private func engineSeek(bySeconds s: Int) {
-        player.seek(by: .seconds(s))
+    // MARK: Coalesced seeking
+    //
+    // A ±N skip used to fire an immediate relative `player.seek(by:)` on every
+    // press. Over HTTP each seek makes libVLC tear down the current byte-range
+    // request and open a fresh one at the new offset — so mashing the button
+    // unleashes a storm of open/cancel range requests that overloads a
+    // self-hosted / reverse-proxied server (and every other client hitting it)
+    // and can stall the stream into a freeze (the same failure mode as the AVI
+    // index storm, but user-driven and on any container). Instead we accumulate
+    // an ABSOLUTE target and commit ONE engine seek a beat after the last press.
+    // The HUD jumps to the projected position immediately, so it reads as more
+    // responsive, not less. Accumulation is also now exact — `seek(by:)` was
+    // relative to libVLC's lagging position, so five quick taps never reliably
+    // summed to 5×N.
+
+    /// Accumulate a ±N skip: advance the pending target from the last target
+    /// (or the live position if none) and re-arm the debounced commit.
+    private func seek(bySeconds delta: Int) {
+        let base = Int(pendingScrubTargetMs ?? currentMs)
+        accumulateSeek(toAbsoluteMs: Int32(clamping: base + delta * 1000))
+    }
+
+    /// Set an absolute pending target, paint it immediately, and (re)arm the
+    /// single debounced engine seek. Shared by ±N skips and chapter jumps.
+    private func accumulateSeek(toAbsoluteMs target: Int32) {
+        let len = lengthMs
+        var clamped = max(0, target)
+        if len > 0 { clamped = min(clamped, max(0, len - 250)) }
+        pendingScrubTargetMs = clamped // also holds the bar until VLC catches up
+        paintPosition(clamped, lengthMs: len)
+        seekCommitWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.commitPendingSeek() }
+        seekCommitWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seekCommitDelay, execute: work)
+    }
+
+    /// Fire the one accumulated seek. `pendingScrubTargetMs` stays set so the
+    /// periodic tick keeps showing the target until VLC's position reaches it
+    /// (no snap-back); it clears itself in `refreshTimeUI`.
+    private func commitPendingSeek() {
+        seekCommitWork = nil
+        guard let target = pendingScrubTargetMs else { return }
+        engineSeek(ms: target)
+        refreshTimeUISoon()
+    }
+
+    /// Drop any uncommitted skip (scrub takeover, media reload, teardown) so a
+    /// stale target can't seek the wrong position / a freshly-loaded episode.
+    private func cancelPendingSeekCommit() {
+        seekCommitWork?.cancel()
+        seekCommitWork = nil
+        pendingScrubTargetMs = nil
     }
 
     private func enginePlay() { player.resume() }
@@ -1411,10 +1470,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.accessibilityLabel = loc.localized("player.scrubBar")
         tvScrub.onSeek = { [weak self] delta in
             guard let self else { return }
-            self.pendingScrubTargetMs = nil
-            if delta < 0 { self.engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: false) }
-            else { self.engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: true) }
-            self.refreshTimeUISoon()
+            let forward = delta >= 0
+            self.seek(bySeconds: forward ? PlayerSkipConfig.intervalSeconds : -PlayerSkipConfig.intervalSeconds)
+            self.showSkipGlyph(forward: forward)
             self.scheduleHideControls()
         }
         tvScrub.onSelect = { [weak self] in self?.playPauseTapped() }
@@ -1423,6 +1481,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.onScrubPreview = { [weak self] progress in
             guard let self else { return }
             self.isScrubbing = true
+            self.cancelPendingSeekCommit() // a live drag supersedes a queued skip
             self.hideControlsWorkItem?.cancel()
             let len = self.lengthMs
             guard len > 0 else { return }
@@ -1770,9 +1829,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func chapterChipTapped(_ sender: UIButton) {
         let i = sender.tag
         guard i < chapterStartTicks.count else { return }
-        engineSeek(ms: Int32(clamping: chapterStartTicks[i] / 10_000))
-        showSkipHUD(PlayerTimeFormat.ms(Int32(clamping: chapterStartTicks[i] / 10_000)))
-        refreshTimeUISoon()
+        let targetMs = Int32(clamping: chapterStartTicks[i] / 10_000)
+        accumulateSeek(toAbsoluteMs: targetMs) // coalesce rapid chapter taps too
+        showSkipHUD(PlayerTimeFormat.ms(targetMs))
         scheduleHideControls()
     }
 
@@ -2142,6 +2201,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func startPlayback() {
         hasValidTime = false
         didApplyServerTrackDefaults = false
+        cancelPendingSeekCommit()
         mediaLengthMs = 0
         firstPlayStart = Date()
         usingProxy = false
@@ -2249,6 +2309,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didSeekToStart = true // new episode starts at 0
             self.hasValidTime = false
             self.lastKnownPositionMs = 0 // don't resume a retry at the old episode's position
+            self.cancelPendingSeekCommit() // a queued skip must not seek the new episode
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
@@ -2319,13 +2380,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             pendingTapWork = nil
             lastTapTime = 0
             if x < view.bounds.width / 2 {
-                engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds)
+                seek(bySeconds: -PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: false)
             } else {
-                engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds)
+                seek(bySeconds: PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: true)
             }
-            refreshTimeUISoon()
             if controlsVisible { scheduleHideControls() }
             return
         }
@@ -2431,21 +2491,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func iosSkipBack() {
-        engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds)
+        seek(bySeconds: -PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: false)
-        refreshTimeUISoon()
         scheduleHideControls()
     }
 
     @objc private func iosSkipForward() {
-        engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds)
+        seek(bySeconds: PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: true)
-        refreshTimeUISoon()
         scheduleHideControls()
     }
 
     @objc private func scrubberTouchDown() {
         isScrubbing = true
+        cancelPendingSeekCommit() // a live drag supersedes a queued skip
         // Freeze the HUD for the whole drag — re-armed on touch-up.
         hideControlsWorkItem?.cancel()
         updateScrubPreview()
@@ -2824,33 +2883,34 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// after every programmatic seek — VLC doesn't emit time updates while
     /// paused, so without this a seek-while-paused wouldn't move the bar.
     private func refreshTimeUI() {
+        // While the user is sliding, the live preview owns the bar + labels.
+        if isScrubbing { return }
         let currentMs = self.currentMs
         let lengthMs = self.lengthMs
-        #if os(iOS)
-        if !isScrubbing {
-            timeLabel.text = PlayerTimeFormat.ms(currentMs)
-            durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
-            if lengthMs > 0 { slider.value = Float(currentMs) / Float(lengthMs) }
-        }
-        #else
-        // While the user is sliding, the preview owns the bar + labels.
-        if isScrubbing { return }
-        // After release, keep showing the seek target until VLC's position
-        // actually reaches it (within ~1.2 s) — otherwise the tick paints the
-        // stale pre-seek position for a beat and the bar visibly snaps back.
+        // Hold a pending target (coalesced skip, chapter jump, or scrub release)
+        // until VLC's position actually reaches it (within ~1.2 s) — otherwise
+        // the periodic tick paints the stale pre-seek position for a beat and
+        // the bar visibly snaps back. Applies to BOTH platforms.
         if let target = pendingScrubTargetMs {
             if abs(Int(currentMs) - Int(target)) <= 1200 {
                 pendingScrubTargetMs = nil
             } else {
-                timeLabel.text = PlayerTimeFormat.ms(target)
-                durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - target))
-                if lengthMs > 0 { updateScrubBar(progress: Float(target) / Float(lengthMs)) }
+                paintPosition(target, lengthMs: lengthMs)
                 return
             }
         }
-        timeLabel.text = PlayerTimeFormat.ms(currentMs)
-        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
-        if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
+        paintPosition(currentMs, lengthMs: lengthMs)
+    }
+
+    /// Writes one position to the time labels and the platform scrub control.
+    private func paintPosition(_ ms: Int32, lengthMs: Int32) {
+        timeLabel.text = PlayerTimeFormat.ms(ms)
+        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - ms))
+        guard lengthMs > 0 else { return }
+        #if os(iOS)
+        slider.value = Float(ms) / Float(lengthMs)
+        #else
+        updateScrubBar(progress: Float(ms) / Float(lengthMs))
         #endif
     }
 
