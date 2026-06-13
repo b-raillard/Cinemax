@@ -615,31 +615,27 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // MARK: Coalesced seeking
     //
     // A ±N skip used to fire an immediate relative `player.seek(by:)` on every
-    // press. Over HTTP each seek makes libVLC tear down the current byte-range
-    // request and open a fresh one at the new offset — so mashing the button
-    // unleashes a storm of open/cancel range requests that overloads a
-    // self-hosted / reverse-proxied server (and every other client hitting it)
-    // and can stall the stream into a freeze (the same failure mode as the AVI
-    // index storm, but user-driven and on any container). Instead we accumulate
-    // an ABSOLUTE target and commit ONE engine seek a beat after the last press.
-    // The HUD jumps to the projected position immediately, so it reads as more
-    // responsive, not less. Accumulation is also now exact — `seek(by:)` was
-    // relative to libVLC's lagging position, so five quick taps never reliably
-    // summed to 5×N.
+    // press, which storms a self-hosted / reverse-proxied origin with byte-range
+    // open/cancel churn and can stall the stream. Instead we accumulate an
+    // ABSOLUTE target and commit ONE engine seek a beat after the last press; the
+    // HUD jumps to the projected position immediately so it reads as responsive,
+    // not less. The pure target math (exact accumulation + near-end clamp) lives
+    // in `SeekCoalescer` so it can be unit-tested without a live player; this
+    // method owns only the debounce timer, the pending-target storage, the HUD
+    // repaint, and the engine seek.
 
     /// Accumulate a ±N skip: advance the pending target from the last target
     /// (or the live position if none) and re-arm the debounced commit.
     private func seek(bySeconds delta: Int) {
-        let base = Int(pendingScrubTargetMs ?? currentMs)
-        accumulateSeek(toAbsoluteMs: Int32(clamping: base + delta * 1000))
+        accumulateSeek(toAbsoluteMs: SeekCoalescer.relativeTarget(
+            deltaSeconds: delta, pendingMs: pendingScrubTargetMs, currentMs: currentMs))
     }
 
     /// Set an absolute pending target, paint it immediately, and (re)arm the
     /// single debounced engine seek. Shared by ±N skips and chapter jumps.
     private func accumulateSeek(toAbsoluteMs target: Int32) {
         let len = lengthMs
-        var clamped = max(0, target)
-        if len > 0 { clamped = min(clamped, max(0, len - 250)) }
+        let clamped = SeekCoalescer.clamp(target: target, lengthMs: len)
         pendingScrubTargetMs = clamped // also holds the bar until VLC catches up
         paintPosition(clamped, lengthMs: len)
         seekCommitWork?.cancel()
