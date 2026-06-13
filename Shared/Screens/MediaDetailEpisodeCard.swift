@@ -17,6 +17,7 @@ struct MediaDetailEpisodeCard: View, Equatable {
     let epNavigator: EpisodeNavigator?
     let episodeTitleFontSize: CGFloat
     let onSelectOverview: (EpisodeOverviewItem) -> Void
+    let onToggleWatched: (BaseItemDto) -> Void
 
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -100,6 +101,16 @@ struct MediaDetailEpisodeCard: View, Equatable {
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }
                         Spacer(minLength: 0)
+                        Button {
+                            onToggleWatched(episode)
+                        } label: {
+                            Image(systemName: isPlayed ? "checkmark.circle.fill" : "checkmark.circle")
+                                .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                                .foregroundStyle(isPlayed ? themeManager.accent : CinemaColor.onSurfaceVariant)
+                        }
+                        .buttonStyle(.plain)
+                        .sensoryFeedback(.selection, trigger: isPlayed)
+                        .accessibilityLabel(loc.localized(isPlayed ? "detail.watched.remove" : "detail.watched.add"))
                         DownloadButton(item: episode)
                     }
                     Text(episode.name ?? "")

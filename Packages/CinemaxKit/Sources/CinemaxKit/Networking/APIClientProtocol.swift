@@ -111,6 +111,11 @@ public protocol LibraryAPI: Sendable {
     /// without leaking what was being watched.
     func markItemUnplayed(itemId: String, userId: String) async throws
 
+    /// Marks the item as fully played (watched). For a series or season the
+    /// server cascades the state to every child episode. Counterpart to
+    /// `markItemUnplayed`.
+    func markItemPlayed(itemId: String, userId: String) async throws
+
     /// Marks/unmarks the item as a user favorite (heart).
     func setFavorite(itemId: String, userId: String, favorite: Bool) async throws
 

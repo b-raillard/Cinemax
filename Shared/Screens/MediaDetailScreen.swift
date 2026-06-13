@@ -412,6 +412,7 @@ struct MediaDetailScreen: View {
             )
             .equatable()
             favoriteButton
+            watchedButton
             #if os(iOS)
             trailerButton(for: item)
             downloadAffordance(for: item, resolvedNextEpisode: nextEp)
@@ -444,6 +445,31 @@ struct MediaDetailScreen: View {
         .sensoryFeedback(.selection, trigger: viewModel.isFavorite)
         #endif
         .accessibilityLabel(loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"))
+    }
+
+    /// Watched toggle next to the heart. Marks the movie / whole series played;
+    /// optimistic flip on the view model, accent fill when watched.
+    private var watchedButton: some View {
+        Button {
+            Task { await viewModel.togglePlayed(using: appState) }
+        } label: {
+            Image(systemName: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle")
+                .font(.system(size: buttonFontSize, weight: .bold))
+                .foregroundStyle(viewModel.isPlayed ? themeManager.accent : CinemaColor.onSurface)
+                .padding(.vertical, buttonVerticalPadding)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                #if os(iOS)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        #else
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: viewModel.isPlayed)
+        #endif
+        .accessibilityLabel(loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"))
     }
 
     // MARK: - Trailer (iOS)
@@ -656,7 +682,10 @@ struct MediaDetailScreen: View {
                             epNext: nav.next,
                             epNavigator: nav.navigator,
                             episodeTitleFontSize: episodeTitleFontSize,
-                            onSelectOverview: { episodeOverview = $0 }
+                            onSelectOverview: { episodeOverview = $0 },
+                            onToggleWatched: { ep in
+                                Task { await viewModel.toggleEpisodeWatched(ep, using: appState) }
+                            }
                         )
                         .equatable()
                         .containerRelativeFrame(.horizontal) { w, _ in w - contentPadding * 2 - 32 }

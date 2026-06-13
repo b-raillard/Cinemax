@@ -856,6 +856,8 @@
 "detail.favorite.add" = "Add to favorites";
 "detail.trailer" = "Trailer";
 "detail.favorite.remove" = "Remove from favorites";
+"detail.watched.add" = "Mark as watched";
+"detail.watched.remove" = "Mark as unwatched";
 "person.movies" = "Movies";
 "person.series" = "TV Shows";
 "person.born" = "Born %@";

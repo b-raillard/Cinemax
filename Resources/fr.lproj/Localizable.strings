@@ -857,6 +857,8 @@
 "detail.favorite.add" = "Ajouter aux favoris";
 "detail.trailer" = "Bande-annonce";
 "detail.favorite.remove" = "Retirer des favoris";
+"detail.watched.add" = "Marquer comme vu";
+"detail.watched.remove" = "Marquer comme non vu";
 "person.movies" = "Films";
 "person.series" = "Séries";
 "person.born" = "Né(e) le %@";
