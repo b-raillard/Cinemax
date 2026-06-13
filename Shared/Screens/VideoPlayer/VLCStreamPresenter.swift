@@ -661,7 +661,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if isOffline {
             media.addOption(":file-caching=3000")
         } else {
-            media.addOption(":network-caching=3000")
+            // 5 s read-ahead (was 3 s): a deeper cushion rides out a transient
+            // origin drop and, crucially, gives the proxy's transparent
+            // reconnect time to re-establish the upstream BEFORE the buffer
+            // drains — so the drop stays invisible. Costs ~2 s of extra initial
+            // buffering; matches the retry path's network-caching.
+            media.addOption(":network-caching=5000")
         }
         return media
     }
