@@ -62,6 +62,7 @@ extension SettingsScreen {
                 .blur(radius: CinemaBloom.settingsBlur)
         }
         .task { await loadServerUsers() }
+        .task { await probeQuickConnect() }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
                 appState.logout()
@@ -311,6 +312,16 @@ extension SettingsScreen {
                 showsChevron: true,
                 action: { showPrivacySecurity = true }
             )
+
+            if quickConnectEnabled {
+                tvActionRow(
+                    id: "quickConnect",
+                    icon: "qrcode.viewfinder",
+                    label: loc.localized("settings.quickConnect"),
+                    showsChevron: true,
+                    action: { showQuickConnectAuthorize = true }
+                )
+            }
 
             tvActionRow(
                 id: "logout",

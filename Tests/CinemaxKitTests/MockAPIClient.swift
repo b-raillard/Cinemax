@@ -82,6 +82,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldThrow { throw stubbedError }
         return stubbedSession
     }
+    private(set) var authorizeQuickConnectCalls: [String] = []
+    var stubbedAuthorizeQuickConnectResult = true
+    func authorizeQuickConnect(code: String) async throws -> Bool {
+        authorizeQuickConnectCalls.append(code)
+        if shouldThrow { throw stubbedError }
+        return stubbedAuthorizeQuickConnectResult
+    }
 
     func getPublicUsers() async throws -> [UserDto] { [] }
     func getUsers() async throws -> [UserDto] { [] }

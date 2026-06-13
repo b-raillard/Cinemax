@@ -26,6 +26,7 @@ extension SettingsScreen {
             }
         }
         .background(CinemaColor.surfaceContainerLowest)
+        .task { await probeQuickConnect() }
         .navigationDestination(item: $nav.selectedCategory) { category in
             settingsDetailView(for: category)
         }
@@ -214,6 +215,14 @@ extension SettingsScreen {
                     }
 
                     iOSSettingsDivider
+
+                    if quickConnectEnabled {
+                        navigationRow(icon: "qrcode.viewfinder", label: loc.localized("settings.quickConnect")) {
+                            showQuickConnectAuthorize = true
+                        }
+
+                        iOSSettingsDivider
+                    }
 
                     navigationRow(icon: "person.2.circle", label: loc.localized("settings.switchAccount")) {
                         showUserSwitch = true
