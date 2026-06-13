@@ -217,6 +217,19 @@ extension JellyfinAPIClient {
         cache.invalidate(prefix: "resume-")
     }
 
+    public func markItemPlayed(itemId: String, userId: String) async throws {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            _ = try await client.send(Paths.markPlayedItem(itemID: itemId, userID: userId))
+            // Marking watched pulls the item out of Continue Watching — drop the
+            // resume list so the row catches up. Other caches stay intact.
+            cache.invalidate(prefix: "resume-")
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     public func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }

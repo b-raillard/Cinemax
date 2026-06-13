@@ -33,6 +33,11 @@ final class MediaDetailViewModel {
     /// flipped optimistically by `toggleFavorite`.
     var isFavorite = false
 
+    /// User watched state (checkmark). Mirrors `item.userData.isPlayed`,
+    /// flipped optimistically by `togglePlayed`. For a series this is true
+    /// only when every episode has been played.
+    var isPlayed = false
+
     /// BoxSet collection containing this movie ("Part of: …") and its other
     /// members. Empty when the item belongs to no collection (or the server
     /// can't resolve one — see `LibraryAPI.getCollections`).
@@ -83,6 +88,7 @@ final class MediaDetailViewModel {
         }
 
         isFavorite = item?.userData?.isFavorite ?? false
+        isPlayed = item?.userData?.isPlayed ?? false
         // Collections are a movie-only garnish — resolved after the main load
         // so a slow boxset lookup never delays the detail render.
         if resolvedType == .movie, item != nil {
@@ -106,6 +112,80 @@ final class MediaDetailViewModel {
         } catch {
             logger.error("Favorite toggle failed: \(error.localizedDescription, privacy: .public)")
             isFavorite = !target
+        }
+    }
+
+    /// Optimistic watched toggle for the resolved item (a movie, or a whole
+    /// series). Marking a series played cascades to its episodes server-side,
+    /// so the visible season is re-fetched to catch up the per-episode marks.
+    func togglePlayed(using appState: AppState) async {
+        guard let userId = appState.currentUserId, let id = item?.id else { return }
+        let target = !isPlayed
+        isPlayed = target
+        do {
+            if target {
+                try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
+            } else {
+                try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            }
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            if resolvedType == .series {
+                await refreshVisibleEpisodes(seriesId: id, using: appState)
+            }
+        } catch {
+            logger.error("Played toggle failed: \(error.localizedDescription, privacy: .public)")
+            isPlayed = !target
+        }
+    }
+
+    /// Optimistic per-episode watched toggle. Flips the local episode payload
+    /// so the `Equatable` episode card re-renders immediately; reverts on a
+    /// server failure.
+    func toggleEpisodeWatched(_ episode: BaseItemDto, using appState: AppState) async {
+        guard let userId = appState.currentUserId, let id = episode.id else { return }
+        let target = !(episode.userData?.isPlayed ?? false)
+        setEpisodePlayed(id: id, played: target)
+        do {
+            if target {
+                try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
+            } else {
+                try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            }
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+        } catch {
+            logger.error("Episode watched toggle failed: \(error.localizedDescription, privacy: .public)")
+            setEpisodePlayed(id: id, played: !target)
+        }
+    }
+
+    /// Reflects a played-state change in the local episode arrays so the
+    /// `Equatable` episode cards re-render. Marking played also clears the
+    /// resume position so the in-progress bar disappears. Only mutates the
+    /// existing `userData` (episodes always carry it — fetched with
+    /// `enableUserData: true`).
+    private func setEpisodePlayed(id: String, played: Bool) {
+        func apply(to ep: inout BaseItemDto) {
+            guard var userData = ep.userData else { return }
+            userData.isPlayed = played
+            if played { userData.playbackPositionTicks = 0 }
+            ep.userData = userData
+        }
+        if let idx = episodes.firstIndex(where: { $0.id == id }) { apply(to: &episodes[idx]) }
+        if let idx = nextUpEpisodes.firstIndex(where: { $0.id == id }) { apply(to: &nextUpEpisodes[idx]) }
+        if nextUpEpisode?.id == id, var ep = nextUpEpisode {
+            apply(to: &ep)
+            nextUpEpisode = ep
+        }
+    }
+
+    /// Re-fetches the currently selected season's episodes after a series-level
+    /// played toggle cascades server-side. Silent on failure — the optimistic
+    /// `isPlayed` flip already gave the user feedback.
+    private func refreshVisibleEpisodes(seriesId: String, using appState: AppState) async {
+        guard let userId = appState.currentUserId, let seasonId = selectedSeasonId else { return }
+        if let refreshed = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId) {
+            episodes = refreshed
+            rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
         }
     }
 
