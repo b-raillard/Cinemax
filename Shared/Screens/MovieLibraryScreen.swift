@@ -613,7 +613,10 @@ struct MediaLibraryScreen: View {
 
     private func errorView(_ message: String) -> some View {
         ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
-            Task { await viewModel.loadInitial(using: appState, loc: loc) }
+            // `reload` (not `loadInitial`) — `loadInitial` latches `hasLoaded`
+            // on success and is a no-op once attempted, so Retry must go through
+            // the reload path that always re-fetches.
+            Task { await viewModel.reload(using: appState, loc: loc) }
         }
     }
 
