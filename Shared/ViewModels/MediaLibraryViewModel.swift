@@ -63,27 +63,72 @@ final class MediaLibraryViewModel {
     private let genreItemLimit = 12
     let genreLoadLimit = 8
     private var hasLoaded = false
+    /// The in-flight initial load, owned by the view model rather than the
+    /// SwiftUI `.task`. Switching tabs cancels the `.task` but NOT this task —
+    /// the load finishes in the background and the data is ready when the user
+    /// returns, instead of being torn down and restarted on every reappearance.
+    /// Each restart re-fired ~10 requests (incl. an expensive server-side random
+    /// sort); rapid tab switching during the skeleton turned that into a request
+    /// storm that overloaded self-hosted servers (froze every client, not just
+    /// this one) and — because the cancellation was misread as a failure — left
+    /// the tab stuck on a blocking error screen.
+    private var loadTask: Task<Void, Never>?
 
     init(itemType: BaseItemKind?, parentId: String? = nil) {
         self.itemType = itemType
         self.parentId = parentId
     }
 
+    /// First load. Idempotent — safe to call from `.task` on every appearance:
+    /// a no-op once loaded, and it *joins* (rather than restarts) a load already
+    /// running in the background.
     func loadInitial(using appState: AppState, loc: LocalizationManager) async {
-        guard !hasLoaded else { return }
-        hasLoaded = true
-        await performLoad(using: appState, loc: loc)
+        if hasLoaded { return }
+        if loadTask == nil {
+            // `[weak self]` breaks the self → loadTask → closure → self cycle;
+            // the task also clears `loadTask` when it finishes.
+            loadTask = Task { [weak self] in
+                guard let self else { return }
+                let succeeded = await self.performLoad(using: appState, loc: loc)
+                if succeeded { self.hasLoaded = true }
+                self.loadTask = nil
+            }
+        }
+        // Non-throwing await: a cancelled `.task` (tab switch) won't interrupt
+        // this — it simply waits for the background load to complete, so the
+        // prefetch that follows at the call site still fires with data in hand.
+        await loadTask?.value
     }
 
+    /// User-driven reload (pull-to-refresh, Retry, catalogue refresh). Bypasses
+    /// the `hasLoaded` latch and supersedes any background initial load.
     func reload(using appState: AppState, loc: LocalizationManager) async {
-        await performLoad(using: appState, loc: loc)
+        // Drain (cancel AND await) any background initial load before taking
+        // over. `cancel()` only *requests* cancellation, so without the await
+        // the old load would keep running and its writes (isLoading / heroItem
+        // / itemsByGenre, plus its trailing `loadTask = nil`) could interleave
+        // with — and clobber — ours as last-writer-wins. The cancelled load
+        // early-returns without touching state, so draining it is cheap.
+        let inFlight = loadTask
+        inFlight?.cancel()
+        await inFlight?.value
+        loadTask = nil
+
+        let succeeded = await performLoad(using: appState, loc: loc)
+        if succeeded { hasLoaded = true }
         if sortFilter.isFiltered {
             await applyFilter(using: appState)
         }
     }
 
-    private func performLoad(using appState: AppState, loc: LocalizationManager) async {
-        guard let userId = appState.currentUserId else { return }
+    /// Returns `true` only on a clean load. A real error sets `errorMessage`
+    /// (caller leaves `hasLoaded` false so the next visit / Retry re-loads); a
+    /// cancellation (tab switch or a superseding reload) leaves the current
+    /// state untouched — no `isLoading` flip, no error flash — so the load that
+    /// superseded it owns the screen. Both return `false`.
+    @discardableResult
+    private func performLoad(using appState: AppState, loc: LocalizationManager) async -> Bool {
+        guard let userId = appState.currentUserId else { return false }
         isLoading = true
         errorMessage = nil
 
@@ -117,12 +162,29 @@ final class MediaLibraryViewModel {
             heroItem = heroData.items.randomElement()
 
             try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
+            isLoading = false
+            return true
         } catch {
+            if Self.isCancellation(error) {
+                logger.debug("Library load cancelled — leaving state for the superseding load")
+                return false
+            }
             logger.error("Library load failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = loc.userFacingMessage(for: error)
+            isLoading = false
+            return false
         }
+    }
 
-        isLoading = false
+    /// True for errors that only mean "this load was cancelled" (tab switch, a
+    /// superseding reload, deinit) rather than a genuine failure. Cancelling a
+    /// structured load surfaces either a Swift `CancellationError` or a
+    /// URLSession `.cancelled` (-999) depending on where the cancel lands —
+    /// neither should ever render the blocking error screen.
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
     }
 
     private func fetchGenreItems(using appState: AppState, userId: String, genres genreList: [String]) async throws {

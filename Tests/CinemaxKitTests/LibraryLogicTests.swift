@@ -152,3 +152,125 @@ struct EpisodeNavigationTests {
         #expect(unknown == nil)
     }
 }
+
+// MARK: - MediaLibraryViewModel load resilience
+//
+// Regression coverage for the tab-switch bug: cancelling a library load (by
+// switching tabs mid-skeleton) must NOT paint the blocking error screen, real
+// failures still must, and `hasLoaded` must latch only on success so Retry /
+// the next visit actually re-fetch.
+
+@MainActor
+@Suite("MediaLibraryViewModel load resilience")
+struct MediaLibraryViewModelTests {
+
+    private func makeAppState(api: MockAPIClient, userId: String? = "user1") -> AppState {
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = userId
+        return appState
+    }
+
+    private func makeItem(id: String) -> BaseItemDto {
+        var item = BaseItemDto()
+        item.id = id
+        item.name = "Item \(id)"
+        return item
+    }
+
+    @Test("URLError.cancelled (tab switch) never surfaces a blocking error")
+    func urlCancellationDoesNotSurface() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        api.stubbedError = URLError(.cancelled)
+        let vm = MediaLibraryViewModel(itemType: .movie)
+
+        await vm.reload(using: makeAppState(api: api), loc: LocalizationManager())
+
+        #expect(vm.errorMessage == nil)
+    }
+
+    @Test("Swift CancellationError likewise never surfaces an error")
+    func swiftCancellationDoesNotSurface() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        api.stubbedError = CancellationError()
+        let vm = MediaLibraryViewModel(itemType: .movie)
+
+        await vm.reload(using: makeAppState(api: api), loc: LocalizationManager())
+
+        #expect(vm.errorMessage == nil)
+    }
+
+    @Test("A genuine error surfaces the blocking error message")
+    func realErrorSurfaces() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        api.stubbedError = MockError.genericFailure
+        let vm = MediaLibraryViewModel(itemType: .movie)
+
+        await vm.reload(using: makeAppState(api: api), loc: LocalizationManager())
+
+        #expect(vm.errorMessage != nil)
+        #expect(!vm.isLoading)
+    }
+
+    @Test("A clean load populates content and clears the loading flag")
+    func successLoads() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action", "Drama"]
+        api.stubbedItems = [makeItem(id: "m1"), makeItem(id: "m2")]
+        api.stubbedTotalCount = 42
+        let vm = MediaLibraryViewModel(itemType: .movie)
+
+        await vm.reload(using: makeAppState(api: api), loc: LocalizationManager())
+
+        #expect(vm.errorMessage == nil)
+        #expect(!vm.isLoading)
+        #expect(vm.totalCount == 42)
+        #expect(vm.genres == ["Action", "Drama"])
+        #expect(vm.heroItem != nil)
+    }
+
+    @Test("A failed first load doesn't latch — the next visit re-fetches")
+    func failedLoadDoesNotLatch() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        let appState = makeAppState(api: api)
+        let vm = MediaLibraryViewModel(itemType: .movie)
+
+        // First attempt fails. If `loadInitial` wrongly latched `hasLoaded` at
+        // load *start* (the old bug), the recovery below would be a silent no-op.
+        await vm.loadInitial(using: appState, loc: LocalizationManager())
+        #expect(vm.errorMessage != nil)
+
+        // Server recovers — a second loadInitial must actually re-fetch.
+        api.shouldThrow = false
+        api.stubbedGenres = ["Action"]
+        api.stubbedItems = [makeItem(id: "m1")]
+        api.stubbedTotalCount = 7
+        await vm.loadInitial(using: appState, loc: LocalizationManager())
+
+        #expect(vm.errorMessage == nil)
+        #expect(vm.totalCount == 7)
+    }
+
+    @Test("A successful load latches — a second loadInitial is a no-op")
+    func successfulLoadLatches() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action"]
+        api.stubbedItems = [makeItem(id: "m1")]
+        api.stubbedTotalCount = 7
+        let appState = makeAppState(api: api)
+        let vm = MediaLibraryViewModel(itemType: .movie)
+
+        await vm.loadInitial(using: appState, loc: LocalizationManager())
+        #expect(vm.totalCount == 7)
+
+        // Change the stubbed data; a latched loadInitial must NOT re-fetch it
+        // (prevents the hero re-randomizing on every tab switch).
+        api.stubbedTotalCount = 999
+        await vm.loadInitial(using: appState, loc: LocalizationManager())
+
+        #expect(vm.totalCount == 7)
+    }
+}
