@@ -648,12 +648,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             media.addOption(":file-caching=3000")
         } else {
             media.addOption(":network-caching=3000")
-            // Reverse-proxied (HTTP/2) servers occasionally RST a streamed range
-            // mid-playback (`Stream closed (0x5)` / `Cancellation (0x8)` in the
-            // libVLC log). Ask libVLC to transparently reconnect a dropped HTTP
-            // stream rather than escalate to a fatal error. Unknown options are
-            // silently ignored by libVLC, so this is safe on any access module.
-            media.addOption(":http-reconnect")
         }
         return media
     }
@@ -2712,7 +2706,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     media.addOption(":file-caching=3000")
                 } else {
                     media.addOption(":network-caching=5000")
-                    media.addOption(":http-reconnect")
                     // A drop AFTER playback began (HTTP/2 RST on a proxied
                     // server, transient blip): resume where it dropped instead
                     // of restarting at 0. The initial resume-seek already fired,
