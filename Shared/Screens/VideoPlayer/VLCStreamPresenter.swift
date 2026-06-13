@@ -253,6 +253,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var centerGlyphHide: DispatchWorkItem?
     private let skipGlyph = UIImageView()
     private var skipGlyphHide: DispatchWorkItem?
+    /// Centered "loading" spinner. Shown whenever the engine is opening or
+    /// (re)buffering — initial open, a mid-stream retry, a network re-buffer —
+    /// so a stall reads as "working on it" instead of a frozen frame, and a
+    /// retry confirms the action registered. Hidden the moment frames flow.
+    private let loadingIndicator = UIActivityIndicatorView(style: .large)
 
     // Trickplay scrub previews (server-generated thumbnail grids). The bubble
     // is shown only while scrubbing; `TrickplayController` resolves position →
@@ -536,6 +541,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func teardown() {
         isTearingDown = true
+        setLoading(false)
         cancelOpenWatchdog()
         progressTimer?.invalidate()
         progressTimer = nil
@@ -637,6 +643,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func enginePlay() { player.resume() }
     private func enginePause() { player.pause() }
+
+    /// Shows/hides the centered loading spinner. Driven from playback start, the
+    /// retry path, and engine state changes (opening/buffering → on; playing/
+    /// paused → off); also force-cleared once real frames flow.
+    private func setLoading(_ loading: Bool) {
+        if loading { loadingIndicator.startAnimating() }
+        else { loadingIndicator.stopAnimating() }
+    }
 
     /// Builds the SwiftVLC `Media` with a caching option appropriate to the
     /// source: `network-caching` for streamed URLs (matches the VLCKit path),
@@ -1038,6 +1052,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         centerGlyph.clipsToBounds = true
         centerGlyph.alpha = 0
         view.addSubview(centerGlyph)
+
+        loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
+        loadingIndicator.color = .white
+        loadingIndicator.hidesWhenStopped = true
+        view.addSubview(loadingIndicator)
+        NSLayoutConstraint.activate([
+            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
 
         skipGlyph.translatesAutoresizingMaskIntoConstraints = false
         skipGlyph.tintColor = .white
@@ -2196,6 +2219,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hasValidTime = false
         didApplyServerTrackDefaults = false
         cancelPendingSeekCommit()
+        setLoading(true)
         mediaLengthMs = 0
         firstPlayStart = Date()
         usingProxy = false
@@ -2328,6 +2352,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.usingProxy = false
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
+            self.setLoading(true)
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
@@ -2595,12 +2620,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         switch state {
         case .error:
             handlePlaybackError()
+        case .opening, .buffering:
+            // Opening a stream or re-buffering mid-playback → show the spinner so
+            // the gap reads as "loading", not "frozen". Cleared by .playing or the
+            // first time tick.
+            setLoading(true)
         case .stopped:
             guard !isTearingDown,
                   Date().timeIntervalSince(lastPlayStart) > 1.0,
                   lengthMs > 0, currentMs >= lengthMs - 2000 else { return }
             handlePlaybackEnded()
         case .playing:
+            setLoading(false)
             didRetry = false
             // libVLC resets rate on media swap — re-apply the user's speed
             // (but never while a hold-boost owns the rate).
@@ -2617,6 +2648,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #endif
             refreshNowPlayingRate(playing: true)
         case .paused:
+            setLoading(false)
             #if os(iOS)
             setPlayPauseIcon(playing: false)
             #endif
@@ -2719,6 +2751,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                         mediaLengthMs = 0
                     }
                 }
+                setLoading(true)
                 lastPlayStart = Date()
                 try? player.play(media)
                 scheduleOpenWatchdog()
@@ -2727,6 +2760,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         let target = isOffline ? "offline:\(offlineLocalURL?.lastPathComponent ?? "?")" : itemId
         logger.error("VLC error for \(target, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
+        setLoading(false) // the error dialog now owns the screen
         let alert = UIAlertController(
             title: loc.localized("playback.error.title"),
             message: loc.localized("playback.error.generic"),
@@ -2840,6 +2874,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.usingProxy = false
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
+            self.setLoading(true)
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
@@ -2859,6 +2894,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         refreshTimeUI()
         if currentMs > 0 {
             hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded()
+            setLoading(false)
             lastKnownPositionMs = currentMs
         }
         if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
