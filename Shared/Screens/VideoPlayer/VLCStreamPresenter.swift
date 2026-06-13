@@ -1393,20 +1393,33 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     #if os(tvOS)
-    /// Any remote press while the HUD is hidden just brings the controls back
-    /// (and is consumed). While visible, focus/seek work normally and every
-    /// press keeps the HUD alive. Menu peels one layer at a time — visible HUD
-    /// → hide it, bare video → exit the player (matches the system
-    /// AVPlayerViewController). Play/Pause always toggles.
-    /// Remote presses that should WAKE a hidden HUD. Deliberately a whitelist of
-    /// real navigation buttons — NOT "any press". The tvOS simulator delivers a
-    /// keyboard Escape as a spurious non-`.menu` press that, under an "any press
-    /// reveals" rule, un-hid the HUD a beat *before* the real Menu press landed,
-    /// so the Menu peel saw a visible HUD and hid it instead of quitting (an
-    /// infinite hide/reveal loop, never dismissing). Only these wake it now.
-    private static let hudWakePressTypes: Set<UIPress.PressType> = [
-        .upArrow, .downArrow, .leftArrow, .rightArrow, .select
-    ]
+    /// What a press should DO while the HUD is hidden. Each case wakes the HUD;
+    /// select/Enter also toggles play/pause and left/right also skip ∓N s, so a
+    /// hidden-HUD remote/keyboard isn't dead. Deliberately a whitelist — an
+    /// unrecognized press returns nil and is ignored, so stray simulator key
+    /// noise can't un-hide the HUD a beat before a real Menu press lands (that
+    /// raced the Menu peel into an infinite hide/reveal loop). **Matches BOTH
+    /// Siri-remote `PressType` AND hardware-keyboard `key.keyCode`** — keyboard
+    /// arrows/Enter arrive only as `key.keyCode` (no arrow `PressType`), which is
+    /// why they previously did nothing on the simulator.
+    private enum HiddenHUDIntent { case playPause, skipBack, skipForward, revealOnly }
+
+    private static func hiddenHUDIntent(for press: UIPress) -> HiddenHUDIntent? {
+        switch press.type {
+        case .select: return .playPause
+        case .leftArrow: return .skipBack
+        case .rightArrow: return .skipForward
+        case .upArrow, .downArrow: return .revealOnly
+        default: break
+        }
+        switch press.key?.keyCode {
+        case .keyboardReturnOrEnter, .keypadEnter, .keyboardSpacebar: return .playPause
+        case .keyboardLeftArrow: return .skipBack
+        case .keyboardRightArrow: return .skipForward
+        case .keyboardUpArrow, .keyboardDownArrow: return .revealOnly
+        default: return nil
+        }
+    }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         // Menu (or keyboard Escape on the simulator) → peel one layer. Handled
@@ -1437,12 +1450,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
         if controlsContainer.alpha == 0 {
-            // Only a real navigation press wakes the HUD (see `hudWakePressTypes`).
-            // An unrecognized press (keyboard noise on the simulator) is ignored
-            // so it can't reveal the HUD ahead of a Menu dismiss.
-            if presses.contains(where: { Self.hudWakePressTypes.contains($0.type) }) {
-                revealControls()
+            // HUD hidden: a recognized press performs its action AND wakes the
+            // HUD — select/Enter toggles play/pause, left/right skip ∓N s, arrows
+            // up/down just reveal. Unrecognized presses are ignored (see
+            // `hiddenHUDIntent`) so they can't reveal the HUD ahead of a Menu
+            // dismiss. `revealControls()` then moves focus to `tvScrub`, so the
+            // NEXT press routes normally.
+            guard let intent = presses.lazy.compactMap({ Self.hiddenHUDIntent(for: $0) }).first else {
+                return
             }
+            switch intent {
+            case .playPause: playPauseTapped()
+            case .skipBack: seek(bySeconds: -PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: false)
+            case .skipForward: seek(bySeconds: PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: true)
+            case .revealOnly: break
+            }
+            revealControls()
             return
         }
         scheduleHideControls() // visible: any press keeps it alive
