@@ -295,6 +295,24 @@ public final class JellyfinAPIClient: Sendable {
         )
     }
 
+    public func authorizeQuickConnect(code: String) async throws -> Bool {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        do {
+            // No `userID` is sent: the server authorizes for the user behind the
+            // access token (matches the Jellyfin web client, and means a user
+            // can't approve a sign-in as someone else). The endpoint returns a
+            // raw JSON boolean body typed as `Data` by the SDK — decode it like
+            // `isQuickConnectEnabled`.
+            let data = try await client.send(Paths.authorizeQuickConnect(code: code)).value
+            if let bool = try? JSONDecoder().decode(Bool.self, from: data) { return bool }
+            let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text?.lowercased() == "true"
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     /// Invalidates every cached response (resume items, latest media, genres, etc.).
     /// Called by Settings → Server → Refresh Catalogue so that the next fetch hits
     /// the server rather than returning stale cached data.

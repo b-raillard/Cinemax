@@ -702,6 +702,13 @@
 "quickConnect.title" = "Quick Connect";
 "quickConnect.instructions" = "On a device that's already signed in, open your profile → Quick Connect and enter this code.";
 "quickConnect.waiting" = "Waiting for approval…";
+"settings.quickConnect" = "Quick Connect";
+"quickConnect.authorize.title" = "Quick Connect";
+"quickConnect.authorize.instructions" = "Enter the 6-digit code shown on the other device's sign-in screen to approve it.";
+"quickConnect.authorize.codePlaceholder" = "6-digit code";
+"quickConnect.authorize.submit" = "Approve";
+"quickConnect.authorize.success" = "Device approved";
+"quickConnect.authorize.invalidCode" = "Invalid or expired code. Check the code and try again.";
 "login.username" = "Username";
 "login.usernamePlaceholder" = "Your Username";
 "login.password" = "Password";
