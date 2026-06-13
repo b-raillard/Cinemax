@@ -319,16 +319,18 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     /// URLSession configuration applied to every `JellyfinClient` we hand out.
-    /// Default system timeouts (~60s per request, 7 days per resource) make
-    /// the app feel frozen when the user goes offline mid-flow — these tight
-    /// values surface a `URLError` in ~8s so callers can fall back to cached
-    /// or downloaded content. NetworkMonitor in the app layer gives us the
-    /// fast path; this is the safety net for cases where the OS hasn't yet
-    /// flipped path status.
+    /// `waitsForConnectivity = false` + the app-layer `NetworkMonitor` are what
+    /// actually detect *offline* (instantly), so this config only needs to bound
+    /// the "online but slow server" case. The previous 8s/20s values were far too
+    /// tight for self-hosted Jellyfin: a server that briefly stalls (e.g. while
+    /// libVLC floods it with AVI range-requests, or mid-transcode) made a single
+    /// slow API call fail and tore whole screens down to "Serveur injoignable".
+    /// 30s idle / 60s total tolerates a slow server while still failing a truly
+    /// dead one in bounded time.
     fileprivate static let fastFailSessionConfiguration: URLSessionConfiguration = {
         let c = URLSessionConfiguration.default
-        c.timeoutIntervalForRequest = 8
-        c.timeoutIntervalForResource = 20
+        c.timeoutIntervalForRequest = 30
+        c.timeoutIntervalForResource = 60
         c.waitsForConnectivity = false
         return c
     }()

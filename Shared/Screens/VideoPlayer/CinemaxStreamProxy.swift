@@ -27,6 +27,18 @@ final class StreamTransportPolicy {
     /// `true` ⇒ start playback through the loopback proxy immediately.
     private(set) var preferProxy = false
 
+    /// Set once a *direct* playback attempt fails this session (e.g. an IPv4-only
+    /// server published behind a dual-stack DNS record that libVLC intermittently
+    /// stalls on — our connect-only probe can't see sustained-flow flakiness). The
+    /// loopback proxy (URLSession → Happy-Eyeballs → IPv4, robust HTTP/2) is the
+    /// reliable path, so once direct has failed we stop re-rolling the dice on it
+    /// for the rest of the session. Reset on server switch.
+    private(set) var directFailedThisSession = false
+
+    /// Whether a fresh playback should open through the proxy from the first
+    /// frame: either the probe flagged a black-hole, or direct already failed.
+    var shouldStartOnProxy: Bool { preferProxy || directFailedThisSession }
+
     private var serverURL: URL?
     private var probeTask: Task<Void, Never>?
     private let proxy = CinemaxStreamProxy()
@@ -35,6 +47,7 @@ final class StreamTransportPolicy {
     func configure(serverURL: URL?) {
         let changed = self.serverURL != serverURL
         self.serverURL = serverURL
+        if changed { directFailedThisSession = false } // re-evaluate per server
         if serverURL == nil {
             probeTask?.cancel()
             probeTask = nil
@@ -44,6 +57,14 @@ final class StreamTransportPolicy {
         }
         if changed { proxy.prestart() } // listener warm before first play
         refresh()
+    }
+
+    /// Called by the player when a *direct* online attempt fails and it falls
+    /// back to the proxy — pins subsequent plays this session to the proxy.
+    func noteDirectPlaybackFailed() {
+        guard !directFailedThisSession else { return }
+        directFailedThisSession = true
+        proxyLog.log("StreamTransport ▸ direct playback failed — proxy is now sticky for this session")
     }
 
     /// Re-run the probe (call on foreground / connectivity change).
@@ -314,7 +335,10 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         if let range { req.setValue(range, forHTTPHeaderField: "Range") }
         if let t = entry.token { req.setValue("MediaBrowser Token=\(t)", forHTTPHeaderField: "Authorization") }
         let label = "\(method) \(range ?? "full")"
-        let handler = UpstreamHandler(conn: conn, isHead: method == "HEAD", label: label)
+        let (rangeStart, rangeEnd) = Self.parseRange(range)
+        let handler = UpstreamHandler(conn: conn, isHead: method == "HEAD", label: label,
+                                      session: session, url: entry.url, token: entry.token,
+                                      rangeStart: rangeStart, rangeEnd: rangeEnd)
         let task = session.dataTask(with: req)
         handler.task = task
         task.delegate = handler
@@ -331,6 +355,27 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         }
         task.resume()
     }
+
+    /// Parses a `bytes=START-END` / `bytes=START-` Range header into
+    /// `(start, end?)` for the transparent-reconnect offset math. A missing or
+    /// odd header is treated as a full GET `(0, nil)`. A suffix range
+    /// (`bytes=-N`, no start) returns `start = -1` so the handler declines to
+    /// transparently reconnect it (offset math isn't safe without a start).
+    static func parseRange(_ header: String?) -> (start: Int, end: Int?) {
+        guard let header, let eq = header.firstIndex(of: "="),
+              header[..<eq].trimmingCharacters(in: .whitespaces).lowercased() == "bytes" else {
+            return (0, nil)
+        }
+        // Only the first range matters for our single-stream proxy.
+        let spec = (header[header.index(after: eq)...].split(separator: ",").first.map(String.init) ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        guard let dash = spec.firstIndex(of: "-") else { return (0, nil) }
+        let startStr = spec[..<dash].trimmingCharacters(in: .whitespaces)
+        let endStr = spec[spec.index(after: dash)...].trimmingCharacters(in: .whitespaces)
+        let start = startStr.isEmpty ? -1 : (Int(startStr) ?? -1)
+        let end = endStr.isEmpty ? nil : Int(endStr)
+        return (start, end)
+    }
 }
 
 /// Per-request bridge: streams a `URLSession` response into the VLC-facing
@@ -338,17 +383,61 @@ final class CinemaxStreamProxy: @unchecked Sendable {
 /// callback until each loopback send completes. Runs on the proxy session's
 /// CONCURRENT delegate queue, so blocking one request never stalls another
 /// (essential for MKV's simultaneous seek requests).
+///
+/// Transparent reconnect: a reverse-proxied / HTTP-2 origin routinely RSTs a
+/// long-lived range request mid-stream. Rather than close the loopback
+/// connection (which makes libVLC re-buffer / re-open — a visible gap), we
+/// silently re-issue the origin request at the next un-delivered byte and keep
+/// feeding the SAME connection. libVLC only sees a brief pause in its byte
+/// feed, absorbed by its network-caching buffer — so a transient drop is
+/// invisible. Bounded by `reconnectsLeft`, which RESETS on any progress, so a
+/// flaky-but-working stream recovers indefinitely while a truly dead origin
+/// still gives up (closes → libVLC re-opens → player shows its spinner/error).
 private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let conn: NWConnection
     private let isHead: Bool
     private let label: String
-    weak var task: URLSessionTask?
+    private let session: URLSession
+    private let url: URL
+    private let token: String?
+    /// Start byte of the original request (so a reconnect resumes at
+    /// `rangeStart + bytesDelivered`). -1 ⇒ a suffix range we won't resume.
+    private let rangeStart: Int
+    private let rangeEnd: Int?
+    // `task` is read on the netQueue (conn state handler) and written on the
+    // delegate queue (reconnect), so it needs its own lock; the remaining
+    // counters are touched only from per-task delegate callbacks, which are
+    // serialized and strictly sequential across a reconnect (the old task fully
+    // completes before the new one starts) — no lock needed.
+    private let taskLock = NSLock()
+    private weak var _task: URLSessionTask?
     private var headerSent = false
+    private var finished = false
+    private var bytesDelivered = 0
+    private var bytesAtLastReconnect = 0
+    private var reconnectsLeft = maxReconnects
+    private var awaitingResumeHead = false
+    private static let maxReconnects = 5
+    /// Bytes that must stream since the last reconnect before the budget renews.
+    /// A flaky-but-feeding origin clears this each spell and recovers forever; a
+    /// "connect, trickle, RST" loop never does, so it depletes the budget.
+    private static let progressRenewBytes = 256 * 1024
 
-    init(conn: NWConnection, isHead: Bool, label: String) {
+    var task: URLSessionTask? {
+        get { taskLock.withLock { _task } }
+        set { taskLock.withLock { _task = newValue } }
+    }
+
+    init(conn: NWConnection, isHead: Bool, label: String, session: URLSession,
+         url: URL, token: String?, rangeStart: Int, rangeEnd: Int?) {
         self.conn = conn
         self.isHead = isHead
         self.label = label
+        self.session = session
+        self.url = url
+        self.token = token
+        self.rangeStart = rangeStart
+        self.rangeEnd = rangeEnd
         super.init()
         // If VLC drops the connection, stop pulling bytes from the origin.
         conn.stateUpdateHandler = { [weak self] state in
@@ -368,6 +457,21 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
                     didReceive response: URLResponse,
                     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        if awaitingResumeHead {
+            awaitingResumeHead = false
+            // Resume only works if the origin honored the Range with a 206 from
+            // our offset; a 200 (Range ignored) would replay from the start and
+            // corrupt the body, so bail to a clean close (libVLC re-opens).
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard status == 206 else {
+                proxyLog.error("StreamProxy ▸ \(self.label, privacy: .public) reconnect not resumable (status \(status)) — closing")
+                completionHandler(.cancel)
+                finish()
+                return
+            }
+            completionHandler(.allow) // splice the body into the same conn, no new head
+            return
+        }
         sendHead(response as? HTTPURLResponse)
         if isHead {
             completionHandler(.cancel)
@@ -389,18 +493,60 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
             task?.cancel()
             return
         }
+        bytesDelivered += data.count
+        // Renew the reconnect budget only on SUBSTANTIAL progress since the last
+        // reconnect, so a flaky-but-working stream recovers indefinitely while a
+        // pathological trickle-then-RST origin depletes the budget and gives up
+        // (closes → libVLC re-opens) instead of looping and pinning threads.
+        if bytesDelivered - bytesAtLastReconnect >= Self.progressRenewBytes {
+            reconnectsLeft = Self.maxReconnects
+        }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error, (error as? URLError)?.code != .cancelled {
+        let code = (error as? URLError)?.code
+        if let error, code != .cancelled {
             proxyLog.error("StreamProxy ▸ \(self.label, privacy: .public) upstream error: \(error.localizedDescription, privacy: .public)")
         }
+        // Never started (no head yet): surface a gateway error so libVLC retries.
         if error != nil, !headerSent {
             conn.send(content: Data("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n".utf8),
                       isComplete: true, completion: .contentProcessed { [conn] _ in conn.cancel() })
             return
         }
+        // Mid-stream drop AFTER we'd begun streaming (origin RST), VLC still
+        // wants it (not a cancel), and the request is resumable → re-stitch the
+        // upstream invisibly at the next byte.
+        if error != nil, code != .cancelled, headerSent, !isHead,
+           rangeStart >= 0, reconnectsLeft > 0 {
+            reconnect()
+            return
+        }
+        // Clean EOF, VLC walked away (cancel), or budget exhausted → done.
         finish()
+    }
+
+    /// Re-issue the origin GET at the next un-delivered byte and keep streaming
+    /// into the same loopback connection. The response head is NOT forwarded —
+    /// libVLC already has the original head and just keeps reading body bytes.
+    private func reconnect() {
+        reconnectsLeft -= 1
+        bytesAtLastReconnect = bytesDelivered // measure progress of this attempt
+        let resumeFrom = rangeStart + bytesDelivered
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if let rangeEnd {
+            req.setValue("bytes=\(resumeFrom)-\(rangeEnd)", forHTTPHeaderField: "Range")
+        } else {
+            req.setValue("bytes=\(resumeFrom)-", forHTTPHeaderField: "Range")
+        }
+        if let token { req.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization") }
+        awaitingResumeHead = true
+        proxyLog.log("StreamProxy ▸ \(self.label, privacy: .public) reconnecting at byte \(resumeFrom) (\(self.reconnectsLeft) retries left)")
+        let t = session.dataTask(with: req)
+        task = t
+        t.delegate = self
+        t.resume()
     }
 
     private func sendHead(_ http: HTTPURLResponse?) {
@@ -418,6 +564,8 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
     }
 
     private func finish() {
+        guard !finished else { return } // a .cancel disposition re-fires didComplete → don't double-close
+        finished = true
         conn.send(content: nil, isComplete: true, completion: .contentProcessed { [conn] _ in conn.cancel() })
     }
 

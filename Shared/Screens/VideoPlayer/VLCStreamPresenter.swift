@@ -253,6 +253,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var centerGlyphHide: DispatchWorkItem?
     private let skipGlyph = UIImageView()
     private var skipGlyphHide: DispatchWorkItem?
+    /// Centered "loading" spinner. Shown whenever the engine is opening or
+    /// (re)buffering — initial open, a mid-stream retry, a network re-buffer —
+    /// so a stall reads as "working on it" instead of a frozen frame, and a
+    /// retry confirms the action registered. Hidden the moment frames flow.
+    private let loadingIndicator = UIActivityIndicatorView(style: .large)
 
     // Trickplay scrub previews (server-generated thumbnail grids). The bubble
     // is shown only while scrubbing; `TrickplayController` resolves position →
@@ -317,10 +322,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// surface — suppresses the periodic time tick so the preview isn't
     /// snapped back (mirrors the iOS slider's `isScrubbing`).
     private var isScrubbing = false
-    /// Set on scrub release: VLC applies a seek asynchronously, so until
-    /// `currentMs` reaches this the periodic tick must keep showing the
-    /// target instead of snapping back to the stale pre-seek position.
-    private var pendingScrubTargetMs: Int32?
     private let tvAudioButton = UIButton(type: .system)
     private let tvSubtitleButton = UIButton(type: .system)
     private let tvPrevButton = UIButton(type: .system)
@@ -335,6 +336,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var infoPanelVisible = false
     #endif
 
+    /// Set on scrub release / coalesced skip: VLC applies a seek asynchronously,
+    /// so until `currentMs` reaches this the periodic tick must keep showing the
+    /// target instead of snapping back to the stale pre-seek position. Shared by
+    /// both platforms (the iOS slider and the tvOS scrub bar both honor it).
+    private var pendingScrubTargetMs: Int32?
+    /// Debounced commit for coalesced ±N skips / chapter jumps. Each press
+    /// advances `pendingScrubTargetMs` (the on-screen target) and re-arms this;
+    /// the single engine seek fires `seekCommitDelay` after the LAST press. See
+    /// `accumulateSeek`.
+    private var seekCommitWork: DispatchWorkItem?
+    private let seekCommitDelay: TimeInterval = 0.3
+
     private var reporter: PlaybackReporter?
     private let remoteCommands: RemoteCommandController
     private let nowPlaying: NowPlayingInfoController
@@ -345,6 +358,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// intro/outro button stays hidden until then — otherwise a segment that
     /// starts at 0 flashes the button during the loading spinner.
     private var hasValidTime = false
+    /// Last real (non-zero) playhead position, in ms. Tracked every tick so a
+    /// mid-stream error retry can resume at the point it dropped instead of
+    /// restarting at 0 (the initial resume-seek has already fired by then, so
+    /// `startTime` alone wouldn't re-seek). See `handlePlaybackError`.
+    private var lastKnownPositionMs: Int32 = 0
     /// Explicit HUD state so single-tap toggling never depends on mid-animation
     /// `alpha` reads.
     private var controlsVisible = true
@@ -523,6 +541,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func teardown() {
         isTearingDown = true
+        setLoading(false)
         cancelOpenWatchdog()
         progressTimer?.invalidate()
         progressTimer = nil
@@ -530,6 +549,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         nowPlaying.detach()
         hideControlsWorkItem?.cancel()
         pendingTapWork?.cancel()
+        cancelPendingSeekCommit()
         segmentFetchTask?.cancel()
         chapterFetchTask?.cancel()
         chapterThumbTasks.forEach { $0.cancel() }
@@ -567,12 +587,70 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         player.seek(to: .milliseconds(Int(max(0, ms))))
     }
 
-    private func engineSeek(bySeconds s: Int) {
-        player.seek(by: .seconds(s))
+    // MARK: Coalesced seeking
+    //
+    // A ±N skip used to fire an immediate relative `player.seek(by:)` on every
+    // press. Over HTTP each seek makes libVLC tear down the current byte-range
+    // request and open a fresh one at the new offset — so mashing the button
+    // unleashes a storm of open/cancel range requests that overloads a
+    // self-hosted / reverse-proxied server (and every other client hitting it)
+    // and can stall the stream into a freeze (the same failure mode as the AVI
+    // index storm, but user-driven and on any container). Instead we accumulate
+    // an ABSOLUTE target and commit ONE engine seek a beat after the last press.
+    // The HUD jumps to the projected position immediately, so it reads as more
+    // responsive, not less. Accumulation is also now exact — `seek(by:)` was
+    // relative to libVLC's lagging position, so five quick taps never reliably
+    // summed to 5×N.
+
+    /// Accumulate a ±N skip: advance the pending target from the last target
+    /// (or the live position if none) and re-arm the debounced commit.
+    private func seek(bySeconds delta: Int) {
+        let base = Int(pendingScrubTargetMs ?? currentMs)
+        accumulateSeek(toAbsoluteMs: Int32(clamping: base + delta * 1000))
+    }
+
+    /// Set an absolute pending target, paint it immediately, and (re)arm the
+    /// single debounced engine seek. Shared by ±N skips and chapter jumps.
+    private func accumulateSeek(toAbsoluteMs target: Int32) {
+        let len = lengthMs
+        var clamped = max(0, target)
+        if len > 0 { clamped = min(clamped, max(0, len - 250)) }
+        pendingScrubTargetMs = clamped // also holds the bar until VLC catches up
+        paintPosition(clamped, lengthMs: len)
+        seekCommitWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.commitPendingSeek() }
+        seekCommitWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seekCommitDelay, execute: work)
+    }
+
+    /// Fire the one accumulated seek. `pendingScrubTargetMs` stays set so the
+    /// periodic tick keeps showing the target until VLC's position reaches it
+    /// (no snap-back); it clears itself in `refreshTimeUI`.
+    private func commitPendingSeek() {
+        seekCommitWork = nil
+        guard let target = pendingScrubTargetMs else { return }
+        engineSeek(ms: target)
+        refreshTimeUISoon()
+    }
+
+    /// Drop any uncommitted skip (scrub takeover, media reload, teardown) so a
+    /// stale target can't seek the wrong position / a freshly-loaded episode.
+    private func cancelPendingSeekCommit() {
+        seekCommitWork?.cancel()
+        seekCommitWork = nil
+        pendingScrubTargetMs = nil
     }
 
     private func enginePlay() { player.resume() }
     private func enginePause() { player.pause() }
+
+    /// Shows/hides the centered loading spinner. Driven from playback start, the
+    /// retry path, and engine state changes (opening/buffering → on; playing/
+    /// paused → off); also force-cleared once real frames flow.
+    private func setLoading(_ loading: Bool) {
+        if loading { loadingIndicator.startAnimating() }
+        else { loadingIndicator.stopAnimating() }
+    }
 
     /// Builds the SwiftVLC `Media` with a caching option appropriate to the
     /// source: `network-caching` for streamed URLs (matches the VLCKit path),
@@ -583,7 +661,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if isOffline {
             media.addOption(":file-caching=3000")
         } else {
-            media.addOption(":network-caching=3000")
+            // 5 s read-ahead (was 3 s): a deeper cushion rides out a transient
+            // origin drop and, crucially, gives the proxy's transparent
+            // reconnect time to re-establish the upstream BEFORE the buffer
+            // drains — so the drop stays invisible. Costs ~2 s of extra initial
+            // buffering; matches the retry path's network-caching.
+            media.addOption(":network-caching=5000")
         }
         return media
     }
@@ -975,6 +1058,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         centerGlyph.alpha = 0
         view.addSubview(centerGlyph)
 
+        loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
+        loadingIndicator.color = .white
+        loadingIndicator.hidesWhenStopped = true
+        view.addSubview(loadingIndicator)
+        NSLayoutConstraint.activate([
+            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
+
         skipGlyph.translatesAutoresizingMaskIntoConstraints = false
         skipGlyph.tintColor = .white
         skipGlyph.contentMode = .center
@@ -1301,20 +1393,33 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     #if os(tvOS)
-    /// Any remote press while the HUD is hidden just brings the controls back
-    /// (and is consumed). While visible, focus/seek work normally and every
-    /// press keeps the HUD alive. Menu peels one layer at a time — visible HUD
-    /// → hide it, bare video → exit the player (matches the system
-    /// AVPlayerViewController). Play/Pause always toggles.
-    /// Remote presses that should WAKE a hidden HUD. Deliberately a whitelist of
-    /// real navigation buttons — NOT "any press". The tvOS simulator delivers a
-    /// keyboard Escape as a spurious non-`.menu` press that, under an "any press
-    /// reveals" rule, un-hid the HUD a beat *before* the real Menu press landed,
-    /// so the Menu peel saw a visible HUD and hid it instead of quitting (an
-    /// infinite hide/reveal loop, never dismissing). Only these wake it now.
-    private static let hudWakePressTypes: Set<UIPress.PressType> = [
-        .upArrow, .downArrow, .leftArrow, .rightArrow, .select
-    ]
+    /// What a press should DO while the HUD is hidden. Each case wakes the HUD;
+    /// select/Enter also toggles play/pause and left/right also skip ∓N s, so a
+    /// hidden-HUD remote/keyboard isn't dead. Deliberately a whitelist — an
+    /// unrecognized press returns nil and is ignored, so stray simulator key
+    /// noise can't un-hide the HUD a beat before a real Menu press lands (that
+    /// raced the Menu peel into an infinite hide/reveal loop). **Matches BOTH
+    /// Siri-remote `PressType` AND hardware-keyboard `key.keyCode`** — keyboard
+    /// arrows/Enter arrive only as `key.keyCode` (no arrow `PressType`), which is
+    /// why they previously did nothing on the simulator.
+    private enum HiddenHUDIntent { case playPause, skipBack, skipForward, revealOnly }
+
+    private static func hiddenHUDIntent(for press: UIPress) -> HiddenHUDIntent? {
+        switch press.type {
+        case .select: return .playPause
+        case .leftArrow: return .skipBack
+        case .rightArrow: return .skipForward
+        case .upArrow, .downArrow: return .revealOnly
+        default: break
+        }
+        switch press.key?.keyCode {
+        case .keyboardReturnOrEnter, .keypadEnter, .keyboardSpacebar: return .playPause
+        case .keyboardLeftArrow: return .skipBack
+        case .keyboardRightArrow: return .skipForward
+        case .keyboardUpArrow, .keyboardDownArrow: return .revealOnly
+        default: return nil
+        }
+    }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         // Menu (or keyboard Escape on the simulator) → peel one layer. Handled
@@ -1345,12 +1450,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
         if controlsContainer.alpha == 0 {
-            // Only a real navigation press wakes the HUD (see `hudWakePressTypes`).
-            // An unrecognized press (keyboard noise on the simulator) is ignored
-            // so it can't reveal the HUD ahead of a Menu dismiss.
-            if presses.contains(where: { Self.hudWakePressTypes.contains($0.type) }) {
-                revealControls()
+            // HUD hidden: a recognized press performs its action AND wakes the
+            // HUD — select/Enter toggles play/pause, left/right skip ∓N s, arrows
+            // up/down just reveal. Unrecognized presses are ignored (see
+            // `hiddenHUDIntent`) so they can't reveal the HUD ahead of a Menu
+            // dismiss. `revealControls()` then moves focus to `tvScrub`, so the
+            // NEXT press routes normally.
+            guard let intent = presses.lazy.compactMap({ Self.hiddenHUDIntent(for: $0) }).first else {
+                return
             }
+            switch intent {
+            case .playPause: playPauseTapped()
+            case .skipBack: seek(bySeconds: -PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: false)
+            case .skipForward: seek(bySeconds: PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: true)
+            case .revealOnly: break
+            }
+            revealControls()
             return
         }
         scheduleHideControls() // visible: any press keeps it alive
@@ -1400,10 +1515,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.accessibilityLabel = loc.localized("player.scrubBar")
         tvScrub.onSeek = { [weak self] delta in
             guard let self else { return }
-            self.pendingScrubTargetMs = nil
-            if delta < 0 { self.engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: false) }
-            else { self.engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds); self.showSkipGlyph(forward: true) }
-            self.refreshTimeUISoon()
+            let forward = delta >= 0
+            self.seek(bySeconds: forward ? PlayerSkipConfig.intervalSeconds : -PlayerSkipConfig.intervalSeconds)
+            self.showSkipGlyph(forward: forward)
             self.scheduleHideControls()
         }
         tvScrub.onSelect = { [weak self] in self?.playPauseTapped() }
@@ -1412,6 +1526,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.onScrubPreview = { [weak self] progress in
             guard let self else { return }
             self.isScrubbing = true
+            self.cancelPendingSeekCommit() // a live drag supersedes a queued skip
             self.hideControlsWorkItem?.cancel()
             let len = self.lengthMs
             guard len > 0 else { return }
@@ -1759,9 +1874,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func chapterChipTapped(_ sender: UIButton) {
         let i = sender.tag
         guard i < chapterStartTicks.count else { return }
-        engineSeek(ms: Int32(clamping: chapterStartTicks[i] / 10_000))
-        showSkipHUD(PlayerTimeFormat.ms(Int32(clamping: chapterStartTicks[i] / 10_000)))
-        refreshTimeUISoon()
+        let targetMs = Int32(clamping: chapterStartTicks[i] / 10_000)
+        accumulateSeek(toAbsoluteMs: targetMs) // coalesce rapid chapter taps too
+        showSkipHUD(PlayerTimeFormat.ms(targetMs))
         scheduleHideControls()
     }
 
@@ -2102,9 +2217,37 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     // MARK: - Playback
 
+    /// Containers whose layout forces libVLC into a storm of HTTP range
+    /// requests (index/metadata at EOF, not streaming-optimised). Over HTTP/2
+    /// that rapid stream open/cancel can trip a reverse proxy (`peer stream
+    /// error: Protocol error`) and cascade into app-wide timeouts. We route
+    /// these through the loopback proxy, which re-fetches via URLSession with
+    /// bounded concurrency — so the origin never sees the storm.
+    private static let seekHeavyContainers: Set<String> = [
+        "avi", "divx", "wmv", "asf", "flv", "vob", "mpg", "mpeg", "mpe", "m2v"
+    ]
+
+    /// The source container (server-reported, DirectPlay/DirectStream only) is
+    /// one libVLC tends to flood the server with range requests for.
+    private var sourceNeedsProxy: Bool {
+        guard let raw = info?.sourceContainer?.lowercased() else { return false }
+        // `container` can be comma/space-joined ("mov,mp4") — match any token.
+        return raw.split(whereSeparator: { $0 == "," || $0 == " " })
+            .contains { Self.seekHeavyContainers.contains(String($0)) }
+    }
+
+    /// Single decision point for opening a *fresh* stream through the proxy:
+    /// a probed black-hole, a prior direct failure this session, or a
+    /// seek-heavy container that would otherwise flood the server.
+    private var shouldRouteThroughProxy: Bool {
+        StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
+    }
+
     private func startPlayback() {
         hasValidTime = false
         didApplyServerTrackDefaults = false
+        cancelPendingSeekCommit()
+        setLoading(true)
         mediaLengthMs = 0
         firstPlayStart = Date()
         usingProxy = false
@@ -2116,9 +2259,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             url = local
         } else if let info {
             let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-            // Broken-IPv6 server (decided in the background): route via the
-            // loopback proxy; fall back to the direct URL if it can't start.
-            if StreamTransportPolicy.shared.preferProxy,
+            // Broken-IPv6 server (decided in the background), direct already
+            // failed this session, or a seek-heavy container (AVI…): route via
+            // the loopback proxy; fall back to the direct URL if it can't start.
+            if shouldRouteThroughProxy,
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
                 url = proxied
                 usingProxy = true
@@ -2210,6 +2354,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.startTime = nil
             self.didSeekToStart = true // new episode starts at 0
             self.hasValidTime = false
+            self.lastKnownPositionMs = 0 // don't resume a retry at the old episode's position
+            self.cancelPendingSeekCommit() // a queued skip must not seek the new episode
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
@@ -2225,7 +2371,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
             let url: URL
             // Carry the proxy across episodes when the server needs it.
-            if (self.usingProxy || StreamTransportPolicy.shared.preferProxy),
+            if (self.usingProxy || self.shouldRouteThroughProxy),
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: vlcInfo.authToken) {
                 url = proxied
                 self.usingProxy = true
@@ -2234,6 +2380,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.usingProxy = false
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
+            self.setLoading(true)
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
@@ -2280,13 +2427,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             pendingTapWork = nil
             lastTapTime = 0
             if x < view.bounds.width / 2 {
-                engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds)
+                seek(bySeconds: -PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: false)
             } else {
-                engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds)
+                seek(bySeconds: PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: true)
             }
-            refreshTimeUISoon()
             if controlsVisible { scheduleHideControls() }
             return
         }
@@ -2392,21 +2538,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func iosSkipBack() {
-        engineSeek(bySeconds: -PlayerSkipConfig.intervalSeconds)
+        seek(bySeconds: -PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: false)
-        refreshTimeUISoon()
         scheduleHideControls()
     }
 
     @objc private func iosSkipForward() {
-        engineSeek(bySeconds: PlayerSkipConfig.intervalSeconds)
+        seek(bySeconds: PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: true)
-        refreshTimeUISoon()
         scheduleHideControls()
     }
 
     @objc private func scrubberTouchDown() {
         isScrubbing = true
+        cancelPendingSeekCommit() // a live drag supersedes a queued skip
         // Freeze the HUD for the whole drag — re-armed on touch-up.
         hideControlsWorkItem?.cancel()
         updateScrubPreview()
@@ -2503,12 +2648,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         switch state {
         case .error:
             handlePlaybackError()
+        case .opening, .buffering:
+            // Opening a stream or re-buffering mid-playback → show the spinner so
+            // the gap reads as "loading", not "frozen". Cleared by .playing or the
+            // first time tick.
+            setLoading(true)
         case .stopped:
             guard !isTearingDown,
                   Date().timeIntervalSince(lastPlayStart) > 1.0,
                   lengthMs > 0, currentMs >= lengthMs - 2000 else { return }
             handlePlaybackEnded()
         case .playing:
+            setLoading(false)
             didRetry = false
             // libVLC resets rate on media swap — re-apply the user's speed
             // (but never while a hold-boost owns the rate).
@@ -2525,6 +2676,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #endif
             refreshNowPlayingRate(playing: true)
         case .paused:
+            setLoading(false)
             #if os(iOS)
             setPlayPauseIcon(playing: false)
             #endif
@@ -2592,6 +2744,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if let local = offlineLocalURL {
                 url = local
             } else if let info {
+                // A direct attempt failed: pin the rest of the session to the
+                // proxy so we stop re-rolling the dice on the flaky direct path.
+                if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
                 let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
                 // Always retry via the proxy (direct is the path that stalls on
                 // broken IPv6); fall back to direct only if it can't start.
@@ -2607,7 +2762,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if let url, let media = try? Media(url: url) {
                 // Stream retry bumps network-caching; offline retry just
                 // reuses the file-caching setting.
-                media.addOption(isOffline ? ":file-caching=3000" : ":network-caching=5000")
+                if isOffline {
+                    media.addOption(":file-caching=3000")
+                } else {
+                    media.addOption(":network-caching=5000")
+                    // A drop AFTER playback began (HTTP/2 RST on a proxied
+                    // server, transient blip): resume where it dropped instead
+                    // of restarting at 0. The initial resume-seek already fired,
+                    // so re-arm it and reset media state exactly like an episode
+                    // swap. A fresh-open failure (never played, position 0)
+                    // keeps its original `startTime` resume untouched.
+                    if lastKnownPositionMs > 1000 {
+                        startTime = Double(lastKnownPositionMs) / 1000
+                        didSeekToStart = false
+                        hasValidTime = false
+                        mediaLengthMs = 0
+                    }
+                }
+                setLoading(true)
                 lastPlayStart = Date()
                 try? player.play(media)
                 scheduleOpenWatchdog()
@@ -2616,6 +2788,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         let target = isOffline ? "offline:\(offlineLocalURL?.lastPathComponent ?? "?")" : itemId
         logger.error("VLC error for \(target, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
+        setLoading(false) // the error dialog now owns the screen
         let alert = UIAlertController(
             title: loc.localized("playback.error.title"),
             message: loc.localized("playback.error.generic"),
@@ -2720,7 +2893,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
             let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
             let url: URL
-            if (self.usingProxy || StreamTransportPolicy.shared.preferProxy),
+            if (self.usingProxy || self.shouldRouteThroughProxy),
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: fresh.authToken) {
                 url = proxied
                 self.usingProxy = true
@@ -2729,6 +2902,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.usingProxy = false
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
+            self.setLoading(true)
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
@@ -2746,7 +2920,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func onEngineTimeChanged() {
         refreshTimeUI()
-        if currentMs > 0 { hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded() }
+        if currentMs > 0 {
+            hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded()
+            setLoading(false)
+            lastKnownPositionMs = currentMs
+        }
         if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
             didSeekToStart = true
             // `Int32(start * 1000)` traps on overflow if a corrupt resume tick
@@ -2762,33 +2940,34 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// after every programmatic seek — VLC doesn't emit time updates while
     /// paused, so without this a seek-while-paused wouldn't move the bar.
     private func refreshTimeUI() {
+        // While the user is sliding, the live preview owns the bar + labels.
+        if isScrubbing { return }
         let currentMs = self.currentMs
         let lengthMs = self.lengthMs
-        #if os(iOS)
-        if !isScrubbing {
-            timeLabel.text = PlayerTimeFormat.ms(currentMs)
-            durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
-            if lengthMs > 0 { slider.value = Float(currentMs) / Float(lengthMs) }
-        }
-        #else
-        // While the user is sliding, the preview owns the bar + labels.
-        if isScrubbing { return }
-        // After release, keep showing the seek target until VLC's position
-        // actually reaches it (within ~1.2 s) — otherwise the tick paints the
-        // stale pre-seek position for a beat and the bar visibly snaps back.
+        // Hold a pending target (coalesced skip, chapter jump, or scrub release)
+        // until VLC's position actually reaches it (within ~1.2 s) — otherwise
+        // the periodic tick paints the stale pre-seek position for a beat and
+        // the bar visibly snaps back. Applies to BOTH platforms.
         if let target = pendingScrubTargetMs {
             if abs(Int(currentMs) - Int(target)) <= 1200 {
                 pendingScrubTargetMs = nil
             } else {
-                timeLabel.text = PlayerTimeFormat.ms(target)
-                durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - target))
-                if lengthMs > 0 { updateScrubBar(progress: Float(target) / Float(lengthMs)) }
+                paintPosition(target, lengthMs: lengthMs)
                 return
             }
         }
-        timeLabel.text = PlayerTimeFormat.ms(currentMs)
-        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - currentMs))
-        if lengthMs > 0 { updateScrubBar(progress: Float(currentMs) / Float(lengthMs)) }
+        paintPosition(currentMs, lengthMs: lengthMs)
+    }
+
+    /// Writes one position to the time labels and the platform scrub control.
+    private func paintPosition(_ ms: Int32, lengthMs: Int32) {
+        timeLabel.text = PlayerTimeFormat.ms(ms)
+        durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - ms))
+        guard lengthMs > 0 else { return }
+        #if os(iOS)
+        slider.value = Float(ms) / Float(lengthMs)
+        #else
+        updateScrubBar(progress: Float(ms) / Float(lengthMs))
         #endif
     }
 

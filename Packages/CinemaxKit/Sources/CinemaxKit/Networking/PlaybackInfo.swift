@@ -24,6 +24,13 @@ public struct PlaybackInfo: Sendable {
     /// Access token for Authorization header injection into AVURLAsset.
     /// Nil for transcoding URLs where Jellyfin already embeds the token in the path.
     public let authToken: String?
+    /// Source container as the server reports it (e.g. "avi", "mkv"), for
+    /// DirectPlay/DirectStream only. Lets the player route seek-heavy /
+    /// non-streaming-friendly containers (AVI keeps its index at EOF, so libVLC
+    /// floods the server with range requests and can trip a reverse proxy)
+    /// through the loopback proxy, which bounds concurrency. Nil ⇒ unknown / not
+    /// applicable (transcode/HLS).
+    public let sourceContainer: String?
 
     public init(
         url: URL,
@@ -34,7 +41,8 @@ public struct PlaybackInfo: Sendable {
         subtitleTracks: [MediaTrackInfo],
         selectedAudioIndex: Int?,
         selectedSubtitleIndex: Int?,
-        authToken: String?
+        authToken: String?,
+        sourceContainer: String? = nil
     ) {
         self.url = url
         self.playSessionId = playSessionId
@@ -45,5 +53,6 @@ public struct PlaybackInfo: Sendable {
         self.selectedAudioIndex = selectedAudioIndex
         self.selectedSubtitleIndex = selectedSubtitleIndex
         self.authToken = authToken
+        self.sourceContainer = sourceContainer
     }
 }
