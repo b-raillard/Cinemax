@@ -161,6 +161,17 @@ struct SettingsScreen: View {
     @State var showLicenses = false
     @State var showUserSwitch = false
     @State var showPrivacySecurity = false
+    @State var showQuickConnectAuthorize = false
+
+    /// Whether the server has Quick Connect enabled — gates the account-screen
+    /// "Quick Connect" (authorize) row so we never surface a flow the server
+    /// will reject (mirrors the login screen's CTA gating). Resolved once by
+    /// `probeQuickConnect`.
+    @State var quickConnectEnabled = false
+    /// Idempotency guard for `probeQuickConnect`, same rationale as
+    /// `serverUsersLoadAttempted` — the tvOS `.task` re-fires on every menu
+    /// mutation.
+    @State var quickConnectProbeAttempted = false
 
     /// Convenience pass-throughs so the rest of the code keeps using
     /// `selectedCategory` / `selectedInterfaceSub` and the `$`-projection
@@ -312,6 +323,16 @@ struct SettingsScreen: View {
         toasts.success(loc.localized("toast.catalogueRefreshed"))
     }
 
+    /// Probes Quick Connect availability once so the account screen only shows
+    /// the authorize row on servers that support it. Silent on failure (the row
+    /// just stays hidden). Guarded against the tvOS `.task` re-fire storm like
+    /// `loadServerUsers`.
+    func probeQuickConnect() async {
+        guard !quickConnectProbeAttempted else { return }
+        quickConnectProbeAttempted = true
+        quickConnectEnabled = (try? await appState.apiClient.isQuickConnectEnabled()) ?? false
+    }
+
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
@@ -342,5 +363,21 @@ struct SettingsScreen: View {
                 .environment(loc)
                 .environment(toasts)
         }
+        // tvOS `.sheet` renders a cramped modal (same reason the login Quick
+        // Connect sheet uses `.fullScreenCover` there), so split the
+        // presentation by platform.
+        #if os(iOS)
+        .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
+        #else
+        .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
+        #endif
+    }
+
+    private var quickConnectAuthorizeSheet: some View {
+        QuickConnectAuthorizeSheet()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
     }
 }

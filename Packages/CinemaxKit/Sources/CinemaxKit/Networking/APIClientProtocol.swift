@@ -68,6 +68,13 @@ public protocol AuthAPI: Sendable {
     /// Exchanges an approved Quick Connect `secret` for a full session, and
     /// reconfigures the client with the new token (mirrors `authenticate`).
     func authenticateWithQuickConnect(secret: String) async throws -> UserSession
+    /// Authorizes a pending Quick Connect request — the counterpart of
+    /// `initiateQuickConnect`, run from an *already signed-in* session. The new
+    /// device that initiated `code` then receives a session for the current
+    /// user. Authorizes for whoever owns the access token (no `userId` sent, so
+    /// a user can only approve sign-ins as themselves). Returns the server's
+    /// boolean result — `false` means the code was unknown or already expired.
+    func authorizeQuickConnect(code: String) async throws -> Bool
 
     func getPublicUsers() async throws -> [UserDto]
     func getUsers() async throws -> [UserDto]

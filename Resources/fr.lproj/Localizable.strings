@@ -304,6 +304,13 @@
 "quickConnect.title" = "Quick Connect";
 "quickConnect.instructions" = "Sur un appareil déjà connecté, ouvrez votre profil → Quick Connect et saisissez ce code.";
 "quickConnect.waiting" = "En attente d'approbation…";
+"settings.quickConnect" = "Quick Connect";
+"quickConnect.authorize.title" = "Quick Connect";
+"quickConnect.authorize.instructions" = "Saisissez le code à 6 chiffres affiché sur l'écran de connexion de l'autre appareil pour l'autoriser.";
+"quickConnect.authorize.codePlaceholder" = "Code à 6 chiffres";
+"quickConnect.authorize.submit" = "Autoriser";
+"quickConnect.authorize.success" = "Appareil autorisé";
+"quickConnect.authorize.invalidCode" = "Code invalide ou expiré. Vérifiez le code et réessayez.";
 "login.username" = "Nom d'utilisateur";
 "login.usernamePlaceholder" = "Votre nom d'utilisateur";
 "login.password" = "Mot de passe";

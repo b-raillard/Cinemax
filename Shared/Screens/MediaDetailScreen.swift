@@ -387,43 +387,56 @@ struct MediaDetailScreen: View {
             return episodeNavigation(for: id)
         }
 
-        // `.playActionRow` centers the heart / download buttons on the
-        // Lecture button itself — the section's height above it varies
-        // (episode label, progress bar, remaining text), so a `.top`
-        // alignment + padding hack drifts as soon as resume state changes.
+        let playSection = PlayActionButtonsSection(
+            playItemId: playItemId,
+            playTitle: playTitle,
+            nextEpisodeLabel: nextEpisodeLabel,
+            startSeconds: startSeconds,
+            showResume: showResume,
+            progress: progress,
+            remainingText: remainingText,
+            epPrev: epNav?.previous,
+            epNext: epNav?.next,
+            epNavigator: epNav?.navigator,
+            playLabel: loc.localized("detail.play"),
+            playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
+            buttonFontSize: buttonFontSize,
+            buttonVerticalPadding: buttonVerticalPadding,
+            playButtonWidth: playButtonWidth,
+            contentPadding: 0
+        )
+        .equatable()
+
+        #if os(tvOS)
+        // tvOS keeps the inline row: only two focusable ghost accessories
+        // (favorite, watched) sit beside Play, well within the wide TV safe
+        // area. `.playActionRow` centers them on the Lecture button no matter
+        // how much resume chrome (episode label, progress bar, remaining text)
+        // stacks above it.
         return HStack(alignment: .playActionRow, spacing: CinemaSpacing.spacing3) {
-            PlayActionButtonsSection(
-                playItemId: playItemId,
-                playTitle: playTitle,
-                nextEpisodeLabel: nextEpisodeLabel,
-                startSeconds: startSeconds,
-                showResume: showResume,
-                progress: progress,
-                remainingText: remainingText,
-                epPrev: epNav?.previous,
-                epNext: epNav?.next,
-                epNavigator: epNav?.navigator,
-                playLabel: loc.localized("detail.play"),
-                playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
-                buttonFontSize: buttonFontSize,
-                buttonVerticalPadding: buttonVerticalPadding,
-                playButtonWidth: playButtonWidth,
-                contentPadding: 0
-            )
-            .equatable()
+            playSection
             favoriteButton
             watchedButton
-            #if os(iOS)
-            trailerButton(for: item)
-            downloadAffordance(for: item, resolvedNextEpisode: nextEp)
-            #endif
             Spacer(minLength: 0)
         }
         .padding(.horizontal, contentPadding)
+        #else
+        // iOS: Play stays the primary CTA; the secondary actions drop to a
+        // labeled icon row beneath it. The old single line crammed Play plus
+        // four icon accessories together and cropped the last one off narrow
+        // phones once the watched toggle was added — an evenly-distributed
+        // labeled row can't overflow and names each action.
+        return VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+            playSection
+            secondaryActionsRow(for: item, nextEp: nextEp)
+        }
+        .padding(.horizontal, contentPadding)
+        #endif
     }
 
-    /// Heart toggle next to the play actions. Optimistic flip on the view
-    /// model; accent fill when active.
+    #if os(tvOS)
+    /// Heart toggle in the tvOS action row — a focusable ghost button beside
+    /// Play. Optimistic flip on the view model; accent fill when active.
     private var favoriteButton: some View {
         Button {
             Task { await viewModel.toggleFavorite(using: appState) }
@@ -433,22 +446,13 @@ struct MediaDetailScreen: View {
                 .foregroundStyle(viewModel.isFavorite ? themeManager.accent : CinemaColor.onSurface)
                 .padding(.vertical, buttonVerticalPadding)
                 .padding(.horizontal, CinemaSpacing.spacing4)
-                #if os(iOS)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                #endif
         }
-        #if os(tvOS)
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-        #else
-        .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: viewModel.isFavorite)
-        #endif
         .accessibilityLabel(loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"))
     }
 
-    /// Watched toggle next to the heart. Marks the movie / whole series played;
-    /// optimistic flip on the view model, accent fill when watched.
+    /// Watched toggle beside the heart on tvOS. Marks the movie / whole series
+    /// played; optimistic flip on the view model, accent fill when watched.
     private var watchedButton: some View {
         Button {
             Task { await viewModel.togglePlayed(using: appState) }
@@ -458,47 +462,89 @@ struct MediaDetailScreen: View {
                 .foregroundStyle(viewModel.isPlayed ? themeManager.accent : CinemaColor.onSurface)
                 .padding(.vertical, buttonVerticalPadding)
                 .padding(.horizontal, CinemaSpacing.spacing4)
-                #if os(iOS)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                #endif
         }
-        #if os(tvOS)
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-        #else
-        .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: viewModel.isPlayed)
-        #endif
         .accessibilityLabel(loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"))
     }
+    #endif
 
-    // MARK: - Trailer (iOS)
+    // MARK: - Secondary actions row (iOS)
 
     #if os(iOS)
-    /// Opens the first remote trailer (YouTube/Vimeo URL provided by the
-    /// server's metadata) in the system browser. iOS-only: tvOS has no
-    /// browser to hand the URL to, so the affordance doesn't exist there.
-    /// Hidden when the item carries no trailer or the user disabled the
-    /// button in Settings → Interface → Detail page.
+    /// Icon actions beneath the Play CTA: favorite, watched, trailer
+    /// (when available), download. Each is a circular glass chip (44pt,
+    /// matching `DownloadButton`), left-aligned. The icons are self-explanatory,
+    /// so there are no captions; the row sits on its own line beneath the play
+    /// buttons and can't crop the way the old inline accessory row did.
     @ViewBuilder
-    private func trailerButton(for item: BaseItemDto) -> some View {
-        if showTrailerButton, let trailerURL = Self.firstTrailerURL(of: item) {
-            Button {
-                openURL(trailerURL)
-            } label: {
-                Image(systemName: "movieclapper")
-                    .font(.system(size: buttonFontSize, weight: .bold))
-                    .foregroundStyle(CinemaColor.onSurface)
-                    .padding(.vertical, buttonVerticalPadding)
-                    .padding(.horizontal, CinemaSpacing.spacing4)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+    private func secondaryActionsRow(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
+        HStack(spacing: CinemaSpacing.spacing4) {
+            secondaryActionCell(
+                systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
+                active: viewModel.isFavorite,
+                accessibility: loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"),
+                trigger: viewModel.isFavorite
+            ) {
+                Task { await viewModel.toggleFavorite(using: appState) }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(loc.localized("detail.trailer"))
+
+            secondaryActionCell(
+                systemImage: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle",
+                active: viewModel.isPlayed,
+                accessibility: loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"),
+                trigger: viewModel.isPlayed
+            ) {
+                Task { await viewModel.togglePlayed(using: appState) }
+            }
+
+            if showTrailerButton, let trailerURL = Self.firstTrailerURL(of: item) {
+                secondaryActionCell(
+                    systemImage: "movieclapper",
+                    active: false,
+                    accessibility: loc.localized("detail.trailer"),
+                    trigger: false
+                ) {
+                    openURL(trailerURL)
+                }
+            }
+
+            // The download chip is the existing `DownloadButton` (its own state
+            // machine + series download menu) — already a 44pt glass chip, so it
+            // lines up with the icons above.
+            downloadAffordance(for: item, resolvedNextEpisode: nextEp)
+
+            Spacer(minLength: 0)
         }
     }
 
+    /// One secondary action: a tappable 44pt glass icon chip. `active` paints
+    /// the icon in the accent (toggled-on state); `trigger` drives the haptic.
+    private func secondaryActionCell(
+        systemImage: String,
+        active: Bool,
+        accessibility: String,
+        trigger: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 44, height: 44)
+                Image(systemName: systemImage)
+                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
+                    .foregroundStyle(active ? themeManager.accent : CinemaColor.onSurface)
+            }
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: trigger)
+        .accessibilityLabel(accessibility)
+    }
+    #endif
+
+    // MARK: - Trailer URL (iOS)
+
+    #if os(iOS)
     /// First http(s) trailer URL of the item. Defensive on scheme — Jellyfin
     /// metadata can carry plugin-specific URIs the system can't open.
     private static func firstTrailerURL(of item: BaseItemDto) -> URL? {
@@ -900,8 +946,13 @@ private struct PlayActionButtonsSection: View, Equatable {
             }
 
             if showResume {
+                #if os(iOS)
+                ProgressBarView(progress: progress)
+                    .frame(maxWidth: .infinity)
+                #else
                 ProgressBarView(progress: progress)
                     .frame(width: playButtonWidth)
+                #endif
 
                 if let remainingText {
                     Text(remainingText)
@@ -911,72 +962,97 @@ private struct PlayActionButtonsSection: View, Equatable {
             }
 
             if !playItemId.isEmpty {
-                PlayLink(
-                    itemId: playItemId, title: playTitle, startTime: startSeconds,
-                    previousEpisode: epPrev, nextEpisode: epNext,
-                    episodeNavigator: epNavigator
-                ) {
-                    HStack(spacing: CinemaSpacing.spacing2) {
-                        Text(playLabel)
-                            .font(.system(size: buttonFontSize, weight: .bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                        Image(systemName: "play.fill")
-                            .font(.system(size: buttonFontSize - 2, weight: .bold))
+                #if os(iOS)
+                // iOS: Play and "from beginning" share one line and split the
+                // width evenly, so the resume case is a single row and the
+                // secondary label gets more room than a fixed 160pt pill.
+                // Without resume there's only Play — keep it pill-sized.
+                if showResume {
+                    HStack(spacing: CinemaSpacing.spacing3) {
+                        lectureButton.frame(maxWidth: .infinity)
+                        playFromBeginningButton.frame(maxWidth: .infinity)
                     }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, buttonVerticalPadding)
-                    .padding(.horizontal, CinemaSpacing.spacing4)
-                    #if os(iOS)
-                    .background(themeManager.accentContainer)
-                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                    #endif
+                } else {
+                    lectureButton.frame(width: playButtonWidth)
                 }
-                #if os(tvOS)
-                .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
                 #else
-                .buttonStyle(.plain)
-                #endif
-                .frame(width: playButtonWidth)
-                // Exposes this row's center to the parent HStack so the
-                // heart / download accessories center on the Play button
-                // (custom alignment IDs propagate through nested stacks).
-                .alignmentGuide(.playActionRow) { $0[VerticalAlignment.center] }
+                // tvOS keeps the buttons stacked (natural up/down focus order).
+                lectureButton
+                    .frame(width: playButtonWidth)
+                    // Exposes this row's center to the parent HStack so the
+                    // heart / watched accessories center on the Play button
+                    // (custom alignment IDs propagate through nested stacks).
+                    .alignmentGuide(.playActionRow) { $0[VerticalAlignment.center] }
 
                 if showResume {
-                    PlayLink(
-                        itemId: playItemId, title: playTitle, startTime: nil,
-                        previousEpisode: epPrev, nextEpisode: epNext,
-                        episodeNavigator: epNavigator
-                    ) {
-                        HStack(spacing: CinemaSpacing.spacing2) {
-                            Image(systemName: "backward.end.fill")
-                                .font(.system(size: buttonFontSize - 2, weight: .bold))
-                            Text(playFromBeginningLabel)
-                                .font(.system(size: buttonFontSize, weight: .bold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        .foregroundStyle(CinemaColor.onSurface)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, buttonVerticalPadding)
-                        .padding(.horizontal, CinemaSpacing.spacing4)
-                        #if os(iOS)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
-                        #endif
-                    }
-                    #if os(tvOS)
-                    .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-                    #else
-                    .buttonStyle(.plain)
-                    #endif
-                    .frame(width: playButtonWidth)
+                    playFromBeginningButton.frame(width: playButtonWidth)
                 }
+                #endif
             }
         }
         .padding(.horizontal, contentPadding)
+    }
+
+    /// Primary "Lecture" CTA — resumes from `startSeconds` when present.
+    private var lectureButton: some View {
+        PlayLink(
+            itemId: playItemId, title: playTitle, startTime: startSeconds,
+            previousEpisode: epPrev, nextEpisode: epNext,
+            episodeNavigator: epNavigator
+        ) {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                Text(playLabel)
+                    .font(.system(size: buttonFontSize, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Image(systemName: "play.fill")
+                    .font(.system(size: buttonFontSize - 2, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, buttonVerticalPadding)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            #if os(iOS)
+            .background(themeManager.accentContainer)
+            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
+        #else
+        .buttonStyle(.plain)
+        #endif
+    }
+
+    /// Secondary "Lire depuis le début" button — shown only in the resume case.
+    private var playFromBeginningButton: some View {
+        PlayLink(
+            itemId: playItemId, title: playTitle, startTime: nil,
+            previousEpisode: epPrev, nextEpisode: epNext,
+            episodeNavigator: epNavigator
+        ) {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                Image(systemName: "backward.end.fill")
+                    .font(.system(size: buttonFontSize - 2, weight: .bold))
+                Text(playFromBeginningLabel)
+                    .font(.system(size: buttonFontSize, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(CinemaColor.onSurface)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, buttonVerticalPadding)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            #if os(iOS)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        #else
+        .buttonStyle(.plain)
+        #endif
     }
 }
 
