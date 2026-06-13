@@ -134,7 +134,7 @@ struct VideoPlayerView: View {
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                     episodeNavigator: episodeNavigator,
                     apiClient: appState.apiClient, userId: userId,
-                    autoPlayNext: autoPlayNextEpisode,
+                    autoPlayNext: autoPlayNextEpisode, maxBitrate: bitrate,
                     imageBuilder: appState.imageBuilder, loc: loc,
                     onDismiss: { dismiss() }
                 )

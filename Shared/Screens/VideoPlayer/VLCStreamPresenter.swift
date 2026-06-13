@@ -1,6 +1,7 @@
 import UIKit
 import SwiftUI
 import QuartzCore
+import AVFAudio
 import SwiftVLC
 import OSLog
 import CinemaxKit
@@ -51,6 +52,11 @@ final class VLCStreamPresenter: NSObject {
     private let imageBuilder: ImageURLBuilder?
     private let onDismiss: (() -> Void)?
     private let _initialItemId: String?
+    /// The `render4K`-derived ceiling the INITIAL play negotiated with. Carried
+    /// so the wake re-resolve re-uses the SAME ceiling — otherwise it falls back
+    /// to the API's 40 Mbps default and a >40 Mbps 4K remux that DirectPlayed on
+    /// launch would get force-transcoded on resume.
+    private let maxBitrate: Int
     #if os(iOS)
     private let offlineLocalURL: URL?
     #endif
@@ -69,6 +75,7 @@ final class VLCStreamPresenter: NSObject {
         apiClient: any PlaybackAPI & LibraryAPI,
         userId: String,
         autoPlayNext: Bool,
+        maxBitrate: Int,
         imageBuilder: ImageURLBuilder,
         loc: LocalizationManager,
         onDismiss: (() -> Void)?
@@ -81,6 +88,7 @@ final class VLCStreamPresenter: NSObject {
         self.apiClient = apiClient
         self.userId = userId
         self.autoPlayNext = autoPlayNext
+        self.maxBitrate = maxBitrate
         self.imageBuilder = imageBuilder
         self.loc = loc
         self.onDismiss = onDismiss
@@ -109,6 +117,7 @@ final class VLCStreamPresenter: NSObject {
         self.apiClient = nil
         self.userId = nil
         self.autoPlayNext = false
+        self.maxBitrate = 0   // unused offline — a local file never re-negotiates
         self.imageBuilder = nil
         self.loc = loc
         self.onDismiss = onDismiss
@@ -129,7 +138,8 @@ final class VLCStreamPresenter: NSObject {
             itemId: id, info: info, title: title, startTime: startTime,
             previousEpisode: previousEpisode, nextEpisode: nextEpisode,
             episodeNavigator: episodeNavigator, apiClient: client, userId: uid,
-            autoPlayNext: autoPlayNext, imageBuilder: builder, loc: loc, onDismiss: onDismiss
+            autoPlayNext: autoPlayNext, maxBitrate: maxBitrate,
+            imageBuilder: builder, loc: loc, onDismiss: onDismiss
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
@@ -208,6 +218,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let apiClient: (any PlaybackAPI & LibraryAPI)?
     private let userId: String?
     private let autoPlayNext: Bool
+    /// Bitrate ceiling the initial play negotiated with — reused on wake
+    /// re-resolve so resume keeps the same DirectPlay/transcode verdict.
+    private let maxBitrate: Int
     private let imageBuilder: ImageURLBuilder?
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
@@ -415,15 +428,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var navGeneration = 0
 
     // App-lifecycle wake resilience. When the device sleeps (Apple TV / phone
-    // locked) mid-playback, the stream socket dies; on resume libVLC is in
-    // `.error`/`.stopped` and the old code stranded the user on a generic
-    // error. On foreground we re-resolve a FRESH PlaybackInfo (new api_key +
-    // playSessionId) and resume from where we left off.
+    // locked) mid-playback, the stream socket dies AND the OS invalidates the
+    // hardware VideoToolbox decode session + the audio session. On resume we
+    // re-resolve a FRESH PlaybackInfo (new api_key + playSessionId) and rebuild
+    // playback from where we left off. **Recovery runs on `didBecomeActive`, not
+    // `willEnterForeground`** — tvOS won't hand out a valid VT hardware session
+    // (or let the audio session activate) until the app is genuinely
+    // foreground-active, so restarting any earlier reproduces the original bug:
+    // a black frame (invalid VT session) with audio (`561015905`) errors flooding.
     private var didBackgroundWhilePlaying = false
     private var positionAtBackgroundMs: Int32 = 0
+    private var backgroundedAt: Date?
     private var isReResolvingAfterWake = false
-    private var foregroundObserver: NSObjectProtocol?
+    private var didBecomeActiveObserver: NSObjectProtocol?
     private var backgroundObserver: NSObjectProtocol?
+    // A background longer than this is a genuine sleep/power-off: the VT decode
+    // session is dead even if libVLC still reports `.playing`/`.paused`, so we
+    // rebuild unconditionally. A shorter blip only rebuilds if the engine died.
+    private static let wakeRebuildThreshold: TimeInterval = 8
 
     // "Media never opened" watchdog. libVLC 4.0 can fail to open a stream
     // (server 404/416 on the static URL, codec the demuxer rejects) by going
@@ -444,7 +466,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI,
-        userId: String, autoPlayNext: Bool, imageBuilder: ImageURLBuilder,
+        userId: String, autoPlayNext: Bool, maxBitrate: Int, imageBuilder: ImageURLBuilder,
         loc: LocalizationManager, onDismiss: (() -> Void)?
     ) {
         self.itemId = itemId
@@ -458,6 +480,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.apiClient = apiClient
         self.userId = userId
         self.autoPlayNext = autoPlayNext
+        self.maxBitrate = maxBitrate
         self.imageBuilder = imageBuilder
         self.loc = loc
         self.onDismiss = onDismiss
@@ -494,6 +517,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.apiClient = nil
         self.userId = nil
         self.autoPlayNext = false
+        self.maxBitrate = 0   // unused offline — a local file never re-negotiates
         self.imageBuilder = nil
         self.loc = loc
         self.onDismiss = onDismiss
@@ -558,13 +582,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         eventsTask?.cancel()
         eventsTask = nil
         if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
-        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+        if let didBecomeActiveObserver { NotificationCenter.default.removeObserver(didBecomeActiveObserver) }
         backgroundObserver = nil
-        foregroundObserver = nil
+        didBecomeActiveObserver = nil
         #if os(iOS)
         pipController = nil
         #endif
         player.stop()
+        deactivatePlaybackAudioSession()
     }
 
     // MARK: - Engine bridge (SwiftVLC)
@@ -2274,6 +2299,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
+        activatePlaybackAudioSession()
         lastPlayStart = Date()
         try? player.play(media)
         scheduleOpenWatchdog()
@@ -2341,7 +2367,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // negotiated for the native engine, so we re-negotiate for VLC).
             let nav = await navigator(ref.id)
             guard let vlcInfo = try? await apiClient.getPlaybackInfo(
-                itemId: ref.id, userId: userId, engine: .vlc
+                itemId: ref.id, userId: userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
                 return
@@ -2780,6 +2806,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     }
                 }
                 setLoading(true)
+                activatePlaybackAudioSession()
                 lastPlayStart = Date()
                 try? player.play(media)
                 scheduleOpenWatchdog()
@@ -2812,6 +2839,35 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         alert.dismiss(animated: true)
     }
 
+    // MARK: - Audio session ownership (wake-from-sleep resilience)
+
+    /// libVLC's audio-output module activates the `AVAudioSession` itself, which
+    /// works on a clean cold start. But after the device sleeps and wakes, its
+    /// `setActive(true)` fails with `AVAudioSessionErrorCodeCannotStartPlaying`
+    /// (561015905) and the aout retries forever — audio output never starts,
+    /// libVLC's playback clock stalls, and the user is stranded on a black frame
+    /// even though the video decoder is running. Owning the session here (the same
+    /// `.playback`/`.moviePlayback` the native `AVPlayer` path uses) means libVLC
+    /// re-opens onto an already-active, app-owned playback session, so its aout
+    /// starts cleanly. Idempotent — called before every (re)open of a stream.
+    private func activatePlaybackAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .moviePlayback, options: [])
+            try session.setActive(true, options: [])
+        } catch {
+            logger.error("VLC: failed to activate playback audio session: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func deactivatePlaybackAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            logger.error("VLC: failed to deactivate playback audio session: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     // MARK: - App-lifecycle wake resilience
 
     /// Observes background/foreground so a stream that died during device sleep
@@ -2825,35 +2881,54 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         ) { [weak self] _ in
             Task { @MainActor in self?.handleDidEnterBackground() }
         }
-        foregroundObserver = NotificationCenter.default.addObserver(
-            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        // Recover on `didBecomeActive` (NOT `willEnterForeground`): VideoToolbox
+        // only issues a valid hardware decode session — and AVAudioSession only
+        // activates — once the app is genuinely foreground-active. Restarting at
+        // `willEnterForeground` builds an invalid VT session (black frame) and a
+        // dead audio output.
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.handleWillEnterForeground() }
+            Task { @MainActor in self?.handleDidBecomeActive() }
         }
     }
 
     private func handleDidEnterBackground() {
-        // Remember whether we were actively watching, and where, so we can pick
-        // back up. (`.buffering`/`.opening` also count as "was watching".)
+        // Remember whether we were actively watching, where, and for how long, so
+        // we can pick back up. (`.buffering`/`.opening` also count as "watching".)
         switch player.state {
         case .playing, .paused, .buffering, .opening:
             didBackgroundWhilePlaying = true
             positionAtBackgroundMs = currentMs
+            backgroundedAt = Date()
         default:
             didBackgroundWhilePlaying = false
+            backgroundedAt = nil
         }
     }
 
-    private func handleWillEnterForeground() {
+    private func handleDidBecomeActive() {
         guard didBackgroundWhilePlaying else { return }
         didBackgroundWhilePlaying = false
-        // Stream survived the background (audio kept going, or it resumes
-        // cleanly): leave it alone. Only act when the engine is actually dead.
+        defer { backgroundedAt = nil }
         switch player.state {
         case .error, .stopped, .stopping, .idle:
+            // Engine died with the socket — rebuild and resume.
             reResolveAndResume(from: positionAtBackgroundMs)
         default:
-            break
+            // Engine still REPORTS alive, but on tvOS a genuine sleep/power-off
+            // invalidated the VT decode + audio sessions underneath it (the
+            // "audio but black video" symptom). A real sleep ⇒ rebuild anyway.
+            // iOS deliberately skips this: PiP and locked-screen-with-audio keep
+            // a healthy session playing in the background, so a "reports alive"
+            // engine there really IS alive — rebuilding would nuke working PiP.
+            // A genuinely dead iOS stream falls into the `.error/.stopped` case.
+            #if os(tvOS)
+            let backgroundDuration = backgroundedAt.map { Date().timeIntervalSince($0) } ?? 0
+            if backgroundDuration >= Self.wakeRebuildThreshold {
+                reResolveAndResume(from: positionAtBackgroundMs)
+            }
+            #endif
         }
     }
 
@@ -2879,7 +2954,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.
             guard let fresh = try? await apiClient.getPlaybackInfo(
-                itemId: resumeItemId, userId: userId, engine: .vlc
+                itemId: resumeItemId, userId: userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else { return }
             guard !self.isTearingDown, gen == self.navGeneration else { return }
             self.info = fresh
@@ -2903,6 +2978,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.setLoading(true)
+            // Re-assert the playback session BEFORE replay: the system deactivated
+            // it during sleep, and without this libVLC's aout loops forever on
+            // `CannotStartPlaying` (the black-screen-after-wake bug).
+            self.activatePlaybackAudioSession()
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
