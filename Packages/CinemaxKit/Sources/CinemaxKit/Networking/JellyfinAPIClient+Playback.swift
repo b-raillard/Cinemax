@@ -18,7 +18,7 @@ extension JellyfinAPIClient {
         }
     }
 
-    private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?, engine: VideoPlaybackEngine) async throws -> PlaybackInfo {
+    private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?, engine: VideoPlaybackEngine, forceTranscode: Bool = false) async throws -> PlaybackInfo {
         guard let client = getClient(),
               let serverURL = getServerURL() else {
             throw JellyfinError.notConnected
@@ -56,7 +56,8 @@ extension JellyfinAPIClient {
 
         // Step 2: POST PlaybackInfo (matching Swiftfin exactly)
         let deviceProfile: DeviceProfile = (engine == .vlc)
-            ? Self.buildVLCDeviceProfile(maxBitrate: maxBitrate)
+            ? (forceTranscode ? Self.buildVLCTranscodeProfile(maxBitrate: maxBitrate)
+                              : Self.buildVLCDeviceProfile(maxBitrate: maxBitrate))
             : Self.buildAppleDeviceProfile(maxBitrate: maxBitrate)
         var body = PlaybackInfoDto(deviceProfile: deviceProfile)
         body.isAutoOpenLiveStream = true
@@ -126,6 +127,33 @@ extension JellyfinAPIClient {
         debugLog("  directPlay=\(mediaSource.isSupportsDirectPlay ?? false), directStream=\(mediaSource.isSupportsDirectStream ?? false)")
         debugLog("  transcodingURL=\(redactedURL(mediaSource.transcodingURL))")
         #endif
+
+        // Seek-heavy containers (AVI/XviD &c.) keep their index at EOF, so libVLC
+        // seeks constantly over HTTP — un-streamable raw from a reverse-proxied
+        // origin: direct trips the proxy (HTTP/2 range storm) and our loopback
+        // proxy can't serve the random-access pattern (the index seek wedges the
+        // one-shot connection → freeze). So re-resolve once with an empty-DirectPlay
+        // profile, forcing the server to hand us a linear HLS transcode instead.
+        // (A true remux/copy would be lighter, but this server transcodes XviD
+        // regardless: it reports SupportsDirectStream=false / ContainerNotSupported
+        // for mpeg4.) Falls through to the raw path only if the server can't
+        // transcode at all.
+        if engine == .vlc, !forceTranscode,
+           Self.isSeekHeavyContainer(mediaSource.container) {
+            #if DEBUG
+            debugLog("  seek-heavy container '\(mediaSource.container ?? "?")' → forcing HLS transcode")
+            #endif
+            if let transcoded = try? await _getPlaybackInfo(
+                itemId: effectiveItemId, userId: userId, maxBitrate: maxBitrate,
+                audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex,
+                engine: engine, forceTranscode: true
+            ), transcoded.playMethod == .transcode {
+                return transcoded
+            }
+            #if DEBUG
+            debugLog("  forced transcode unavailable — falling back to raw stream")
+            #endif
+        }
 
         // Step 4: Build stream URL (same logic as Swiftfin's streamURL)
 
@@ -584,7 +612,13 @@ extension JellyfinAPIClient {
     // remux) we keep an HLS path so playback isn't impossible.
     nonisolated(unsafe) fileprivate static let _vlcTranscodingProfiles: [TranscodingProfile] = [
         TranscodingProfile(
-            audioCodec: "aac,ac3,alac,dts,eac3,flac,mp1,mp2,mp3,opus,vorbis",
+            // NO mp1/mp2/mp3 here on purpose. When the video is transcoded but a
+            // source MPEG-audio track is COPIED into fMP4 HLS segments, MP3's
+            // encoder delay/priming isn't re-timed against the new video → a
+            // constant audio offset (the "son décalé" on transcoded AVI/XviD).
+            // Leaving these out forces the server to re-encode audio to AAC, which
+            // muxes cleanly into fMP4 and stays locked to the transcoded video.
+            audioCodec: "aac,ac3,alac,dts,eac3,flac,opus,vorbis",
             isBreakOnNonKeyFrames: true,
             container: "mp4",
             context: .streaming,
@@ -618,5 +652,30 @@ extension JellyfinAPIClient {
             subtitleProfiles: _vlcSubtitleProfiles,
             transcodingProfiles: _vlcTranscodingProfiles
         )
+    }
+
+    /// Transcode-forcing VLC profile: empty `directPlayProfiles` means nothing
+    /// matches for DirectPlay/DirectStream, so the server hands back a linear HLS
+    /// transcode. Used only for seek-heavy containers (`isSeekHeavyContainer`)
+    /// that can't be streamed raw over HTTP from a reverse-proxied origin.
+    fileprivate static func buildVLCTranscodeProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
+        DeviceProfile(
+            directPlayProfiles: [],
+            maxStreamingBitrate: maxBitrate,
+            subtitleProfiles: _vlcSubtitleProfiles,
+            transcodingProfiles: _vlcTranscodingProfiles
+        )
+    }
+
+    /// Containers whose index lives at EOF, so libVLC seeks constantly over HTTP
+    /// (the AVI/XviD range storm). These must be transcoded server-side, not
+    /// streamed raw. Matched against the (possibly comma/space-joined) container.
+    private static let seekHeavyContainers: Set<String> = [
+        "avi", "divx", "wmv", "asf", "flv", "vob", "mpg", "mpeg", "mpe", "m2v"
+    ]
+    static func isSeekHeavyContainer(_ container: String?) -> Bool {
+        guard let raw = container?.lowercased() else { return false }
+        return raw.split(whereSeparator: { $0 == "," || $0 == " " })
+            .contains { seekHeavyContainers.contains(String($0)) }
     }
 }

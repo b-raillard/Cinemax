@@ -1790,6 +1790,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				OTHER_LDFLAGS = "-e _NSExtensionMain";
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.tvos.topshelf;
 				PRODUCT_NAME = CinemaxTopShelf;
 				SDKROOT = appletvos;
@@ -1803,13 +1804,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widgets/CinemaxWidget.entitlements;
-				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = Widgets/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.ios.widget;
 				PRODUCT_NAME = CinemaxWidget;
 				SDKROOT = iphoneos;
@@ -1825,12 +1826,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = iOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.ios;
 				PRODUCT_NAME = Cinemax;
 				SDKROOT = iphoneos;
@@ -1879,13 +1880,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widgets/CinemaxWidget.entitlements;
-				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = Widgets/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.ios.widget;
 				PRODUCT_NAME = CinemaxWidget;
 				SDKROOT = iphoneos;
@@ -1907,6 +1908,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.tvos;
 				PRODUCT_NAME = CinemaxTV;
 				SDKROOT = appletvos;
@@ -1927,6 +1929,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				OTHER_LDFLAGS = "-e _NSExtensionMain";
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.tvos.topshelf;
 				PRODUCT_NAME = CinemaxTopShelf;
 				SDKROOT = appletvos;
@@ -1942,12 +1945,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 4T334S4NP6;
 				INFOPLIST_FILE = iOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.ios;
 				PRODUCT_NAME = Cinemax;
 				SDKROOT = iphoneos;
@@ -2029,6 +2032,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				DEVELOPMENT_TEAM = 4T334S4NP6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cinemax.tvos;
 				PRODUCT_NAME = CinemaxTV;
 				SDKROOT = appletvos;
