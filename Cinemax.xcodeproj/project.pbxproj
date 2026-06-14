@@ -172,6 +172,7 @@
 		70AA7510474C61BC215F7181 /* MediaQualityBadges.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D53C46CC9C173E104ABA41C /* MediaQualityBadges.swift */; };
 		7155A56A5485AAF1DC82145D /* SkipSegmentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0C0F047D7CB697E80F4CA5 /* SkipSegmentController.swift */; };
 		7165F9BAF328AF12A60701DE /* MetadataEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3F5E9E871E48C07DB53691 /* MetadataEditorViewModel.swift */; };
+		71B23336490FEFD9143B5D99 /* SeekCoalescerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E3E989946C44C0AAA0640F /* SeekCoalescerTests.swift */; };
 		72281CF32299F9545AA48ED7 /* SearchScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C144D0A57021E0A0A783977B /* SearchScreen.swift */; };
 		735403600F051C38E050FBDE /* VideoPlayerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14D3FE509DDFB9EA6569161 /* VideoPlayerCoordinator.swift */; };
 		73713753B981A3971272B7E3 /* FocusScaleModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */; };
@@ -284,6 +285,7 @@
 		C90F8CB508076E72254A82AA /* DownloadItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611F5F5E09D2E5E70B4D921D /* DownloadItemTests.swift */; };
 		CB8A5B33DC46E1D442D55956 /* PrivacySecurityConnectedDevicesList.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF3A6F8801C8046B8B055A99 /* PrivacySecurityConnectedDevicesList.swift */; };
 		CBAEF4A3CF55793AB18B8A0D /* UserAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FFCCAA7179A62CDE9CECD2E /* UserAvatar.swift */; };
+		CCA01F1FD9DF944BFDEBD578 /* SeekCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC9FEFF022E1379C8523576 /* SeekCoalescer.swift */; };
 		CCD551977D38C74BA8A43DDF /* SettingsTVActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96FE07986012B06BD4B2E9DD /* SettingsTVActionRow.swift */; };
 		CD087ACC17110EF35BCAE4A8 /* IdentifyResultsGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74AE99230CEB07F7CC4FCCFA /* IdentifyResultsGridView.swift */; };
 		CD8E6C6DE6EC7575C36BE5DB /* CinemaxStreamProxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B604F5FE24467521C25021 /* CinemaxStreamProxy.swift */; };
@@ -342,6 +344,7 @@
 		F7B273773AA4C5CAA1D8BD3F /* UserSwitchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF66FBCB52822C36CFD91DA /* UserSwitchSheet.swift */; };
 		F7DB378B44C1CB5274C228BA /* ChipEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94FA6A5683705668178431E2 /* ChipEditor.swift */; };
 		F9659FCF10476792907A642D /* AdminFormScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B63AFBF054B1A7A1253C755 /* AdminFormScreen.swift */; };
+		F9A891C275B494CA3A05BF0C /* SeekCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC9FEFF022E1379C8523576 /* SeekCoalescer.swift */; };
 		F9C5CED88AB7F8798BA4A5E2 /* CinemaxStreamProxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B604F5FE24467521C25021 /* CinemaxStreamProxy.swift */; };
 		FA0D8EAA93AE77CCF5E5D66B /* MediaDetailEpisodeOverviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 520518BCFA8AF149838E5906 /* MediaDetailEpisodeOverviewSheet.swift */; };
 		FA853F39728C4E3652D2C5E5 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C346F0B7AFF504DA6593370E /* HomeViewModel.swift */; };
@@ -418,6 +421,7 @@
 		0B79F879DA7A6AF02AB6D780 /* IdentifyFlowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifyFlowModel.swift; sourceTree = "<group>"; };
 		0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepTimerOption.swift; sourceTree = "<group>"; };
 		0C318571F3DB0BCA88B80EE5 /* DownloadsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsScreen.swift; sourceTree = "<group>"; };
+		0CC9FEFF022E1379C8523576 /* SeekCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeekCoalescer.swift; sourceTree = "<group>"; };
 		0E5C1E6AA06EF0B35E4B4CD2 /* ToastOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastOverlay.swift; sourceTree = "<group>"; };
 		0E8781EB49CEE6EFE3A6560A /* ContentRatingClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRatingClassifierTests.swift; sourceTree = "<group>"; };
 		0EB9A108C0F29A3010E8E65A /* AdminUserDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminUserDetailScreen.swift; sourceTree = "<group>"; };
@@ -469,6 +473,7 @@
 		53363AB0D63349A37334B381 /* QuickConnectAuthorizeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickConnectAuthorizeViewModelTests.swift; sourceTree = "<group>"; };
 		5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CinemaxWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5392E5D6360E4430456477E9 /* ServerDiscoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerDiscoverySheet.swift; sourceTree = "<group>"; };
+		53E3E989946C44C0AAA0640F /* SeekCoalescerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeekCoalescerTests.swift; sourceTree = "<group>"; };
 		54C56CCEB123ABB29AC4D2A8 /* AdminPlaybackScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPlaybackScreen.swift; sourceTree = "<group>"; };
 		55122A5776984A5A63808F80 /* AdminNetworkScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminNetworkScreen.swift; sourceTree = "<group>"; };
 		554633B7F0AE3A72EE4B56BB /* MediaDetailButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailButtonStyles.swift; sourceTree = "<group>"; };
@@ -852,6 +857,7 @@
 				53363AB0D63349A37334B381 /* QuickConnectAuthorizeViewModelTests.swift */,
 				4E7EF991448FA04C0201CBBD /* SearchRelevanceTests.swift */,
 				7F79C18163C57966CF114BD2 /* SearchViewModelTests.swift */,
+				53E3E989946C44C0AAA0640F /* SeekCoalescerTests.swift */,
 				B01CD5F39E429B665FA12B0C /* ServerSetupViewModelTests.swift */,
 				07BE0FC86294412983D44667 /* SessionResilienceTests.swift */,
 				3C5B18A062473FEFA3852339 /* StreamProxyTests.swift */,
@@ -1016,6 +1022,7 @@
 				BEE8ECEE461A97A3A4667563 /* PlayerTimeFormat.swift */,
 				A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */,
 				2704DEBD38156198513A11C4 /* RemoteCommandController.swift */,
+				0CC9FEFF022E1379C8523576 /* SeekCoalescer.swift */,
 				4D0C0F047D7CB697E80F4CA5 /* SkipSegmentController.swift */,
 				74EFA596296688A96C374135 /* SleepTimerController.swift */,
 				AFAC463F8054600F3BCEB911 /* TrickplayController.swift */,
@@ -1338,6 +1345,7 @@
 				0ED6BB9632625BE9F922F728 /* QuickConnectAuthorizeViewModelTests.swift in Sources */,
 				AB379BDB42B5C1F4D687B681 /* SearchRelevanceTests.swift in Sources */,
 				330E22BA7BBD29DD3BE0D93A /* SearchViewModelTests.swift in Sources */,
+				71B23336490FEFD9143B5D99 /* SeekCoalescerTests.swift in Sources */,
 				A19C134787C25532BB34B306 /* ServerSetupViewModelTests.swift in Sources */,
 				B5D1EB16B91B2F81BE6405B0 /* SessionResilienceTests.swift in Sources */,
 				EBCB3B503EE80BA039D62EB4 /* StreamProxyTests.swift in Sources */,
@@ -1475,6 +1483,7 @@
 				15B101DB7D9B770EAD24E7CA /* RemoteCommandController.swift in Sources */,
 				72281CF32299F9545AA48ED7 /* SearchScreen.swift in Sources */,
 				B80500609E8D56844738FB4A /* SearchViewModel.swift in Sources */,
+				CCA01F1FD9DF944BFDEBD578 /* SeekCoalescer.swift in Sources */,
 				95D94E036EDA6AE3326386D4 /* ServerDiscoverySheet.swift in Sources */,
 				4B66D96B583EDB78690FD695 /* ServerHelpSheet.swift in Sources */,
 				97AF9B841BA015AD94A9B390 /* ServerSetupScreen.swift in Sources */,
@@ -1647,6 +1656,7 @@
 				B54B725BA68563ACADEC4B8C /* RemoteCommandController.swift in Sources */,
 				A38CC2D23545EA9986CB053F /* SearchScreen.swift in Sources */,
 				1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */,
+				F9A891C275B494CA3A05BF0C /* SeekCoalescer.swift in Sources */,
 				60C9BC65C7DCC678C8D21DA4 /* ServerDiscoverySheet.swift in Sources */,
 				4979E3EF3554A8E4DF2E07EF /* ServerHelpSheet.swift in Sources */,
 				91ED326A57E034CF33FCA565 /* ServerSetupScreen.swift in Sources */,
