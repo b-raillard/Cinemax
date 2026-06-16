@@ -698,8 +698,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func startEventLoop() {
         guard eventsTask == nil else { return }
         eventsTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            for await event in self.player.events {
+            // Capture only the event stream — NOT a strong `self` hoisted for the
+            // whole loop. The loop lives until the stream finishes, so hoisting
+            // `self` here pinned the entire presenter (UI + controllers + player)
+            // alive, broken only by teardown's explicit cancel — the documented
+            // retain cycle (VC → eventsTask → VC). With weak `self` the task no
+            // longer retains the VC: on release, `player` deallocs and its deinit
+            // finishes the stream, ending this loop. The per-iteration `guard let
+            // self` is a secondary safeguard for that teardown-less window.
+            guard let stream = self?.player.events else { return }
+            for await event in stream {
+                guard let self else { return }
                 switch event {
                 case .lengthChanged(let d):
                     let c = d.components
@@ -2890,6 +2899,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func handleDidEnterBackground() {
+        // Checkpoint progress to the server now: the app may be killed while
+        // backgrounded (tvOS sleep / iOS memory pressure), and otherwise the
+        // server's resume position would be stale by up to the last ~10s tick —
+        // degrading resume + Next Up. Mirrors NativeVideoPresenter; no-op offline
+        // (reporter is nil).
+        reporter?.reportBackgroundProgress()
         // Remember whether we were actively watching, where, and for how long, so
         // we can pick back up. (`.buffering`/`.opening` also count as "watching".)
         switch player.state {
