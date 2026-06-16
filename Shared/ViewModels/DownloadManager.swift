@@ -49,6 +49,25 @@ final class DownloadManager {
     /// so they can be cancelled on `removeAll()` / teardown — otherwise a
     /// detached prep task outlives the manager and writes to a dead instance.
     private var prepTasksByItemId: [String: Task<Void, Never>] = [:]
+    /// Per-item count of automatic resume attempts after a transient network
+    /// drop. In-memory on purpose: a fresh launch grants fresh attempts, and we
+    /// never want a persisted counter to permanently block a download.
+    private var retryAttempts: [String: Int] = [:]
+    /// Max automatic resumes before a transient failure is left as `.failed`
+    /// (manual retry still works). Bounded + backed off ⇒ no retry storm.
+    private static let maxAutoRetries = 3
+    /// `bytesReceived` captured when a retry was scheduled. The retry budget is
+    /// renewed once the download makes `retryBudgetRenewBytes` of fresh progress,
+    /// so a long flaky download survives many *well-spaced*, individually-
+    /// recoverable drops while a trickle-then-drop loop still depletes the budget
+    /// (mirrors `CinemaxStreamProxy`'s progress-based renewal).
+    private var retryProgressBaseline: [String: Int64] = [:]
+    private static let retryBudgetRenewBytes: Int64 = 8 * 1024 * 1024
+
+    private func clearRetryState(_ id: String) {
+        retryAttempts[id] = nil
+        retryProgressBaseline[id] = nil
+    }
 
     init(store: DownloadStore = DownloadStore()) {
         self.store = store
@@ -303,6 +322,7 @@ final class DownloadManager {
             }
         }
         store.remove(id: id)
+        clearRetryState(id)
         items = store.all()
         promoteQueueIfPossible()
         refreshDiskUsage()
@@ -395,8 +415,12 @@ final class DownloadManager {
             attached.insert(id)
         }
         // Items marked downloading whose task didn't survive: try resume data,
-        // else flip to paused so the user can retry.
-        for entry in items where entry.status == .downloading && !attached.contains(entry.id) {
+        // else flip to paused so the user can retry. Iterate the STORE
+        // (authoritative), not the in-memory `items` snapshot: a download that
+        // completed while the app was suspended may have its didFinish callback
+        // delivered around now, and we must not flip a freshly-.completed entry
+        // back to .paused.
+        for entry in store.all() where entry.status == .downloading && !attached.contains(entry.id) {
             if entry.resumeData != nil {
                 startTask(for: entry)
             } else {
@@ -424,9 +448,20 @@ final class DownloadManager {
             copy.status = .downloading
             items[idx] = copy
         }
+        // Renew the auto-retry budget once a retried download has genuinely
+        // progressed, so a long flaky download isn't capped at 3 lifetime drops.
+        if let base = retryProgressBaseline[taskId], received - base >= Self.retryBudgetRenewBytes {
+            clearRetryState(taskId)
+        }
     }
 
-    fileprivate func didFinish(taskId: String, sourceURL: URL) {
+    /// `disposition` / `mime` are captured by the Adapter from the task's
+    /// response at `didFinishDownloadingTo` time — NOT read from
+    /// `tasksByItemId[taskId]?.response` here, because the racing
+    /// `didCompleteWithError` hop can clear that task entry before this runs,
+    /// which previously dropped the headers and mislabeled the file extension
+    /// (e.g. an MKV saved as `.mp4`, then unplayable).
+    fileprivate func didFinish(taskId: String, sourceURL: URL, disposition: String, mime: String) {
         guard let entry = store.item(id: taskId) else {
             try? FileManager.default.removeItem(at: sourceURL)
             return
@@ -437,9 +472,6 @@ final class DownloadManager {
         //      `/Items/{id}/Download` always sets this.
         //   2. `Content-Type` mime mapping.
         //   3. Fall back to the catalog's initial guess.
-        let response = tasksByItemId[taskId]?.response as? HTTPURLResponse
-        let disposition = response?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
-        let mime = response?.value(forHTTPHeaderField: "Content-Type") ?? ""
         let ext = Self.extensionFromDisposition(disposition)
             ?? Self.extensionForMime(mime)
             ?? entry.containerExt
@@ -489,6 +521,7 @@ final class DownloadManager {
                 item.errorMessage = error.localizedDescription
             }
         }
+        clearRetryState(taskId)
         tasksByItemId.removeValue(forKey: taskId)
         items = store.all()
         promoteQueueIfPossible()
@@ -496,27 +529,90 @@ final class DownloadManager {
     }
 
     fileprivate func didFail(taskId: String, error: Error?) {
-        // Successful completion arrives here too, after didFinish — so only
-        // touch the entry if it isn't already terminal.
+        // Successful completion arrives here too (error == nil), after didFinish —
+        // which already finalized + refreshed; just drop the task entry.
         guard let entry = store.item(id: taskId) else { return }
-        if entry.status == .completed { return }
-        if let error {
-            let ns = error as NSError
-            let resumeData = ns.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+        if entry.status == .completed { clearRetryState(taskId); return }
+        guard let error else {
+            clearRetryState(taskId)
+            tasksByItemId.removeValue(forKey: taskId)
+            items = store.all()
+            promoteQueueIfPossible()
+            return
+        }
+
+        let ns = error as NSError
+        let resumeData = ns.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+
+        if ns.code == NSURLErrorCancelled {
+            // User-initiated cancel — already handled via the pause path.
             store.update(id: taskId) { item in
-                if ns.code == NSURLErrorCancelled {
-                    // User-initiated cancel — already handled via pause path.
-                    if item.status != .paused { item.status = .paused }
-                } else {
-                    item.status = .failed
-                    item.errorMessage = error.localizedDescription
-                }
+                if item.status != .paused { item.status = .paused }
                 item.resumeData = resumeData
             }
+            clearRetryState(taskId)
+            tasksByItemId.removeValue(forKey: taskId)
+            items = store.all()
+            promoteQueueIfPossible()
+            return
         }
+
+        // Transient network drop WITH resume data → bounded, backed-off auto-resume
+        // so a backgrounded multi-GB download doesn't die permanently on one
+        // hiccup. (Background URLSession retries a lot on its own; this catches the
+        // cases where it gives up.) Permanent errors / no-resume-data fall through
+        // to `.failed` for a manual retry.
+        let attempt = retryAttempts[taskId] ?? 0
+        if let resumeData, attempt < Self.maxAutoRetries, Self.isTransient(ns) {
+            retryAttempts[taskId] = attempt + 1
+            retryProgressBaseline[taskId] = entry.bytesReceived
+            store.update(id: taskId) { item in
+                item.status = .downloading      // keep the slot reserved during backoff
+                item.resumeData = resumeData
+                item.errorMessage = nil
+            }
+            tasksByItemId.removeValue(forKey: taskId)
+            items = store.all()
+            let backoff = Double(attempt + 1) * 2.0   // 2s, 4s, 6s
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(backoff))
+                guard let self,
+                      let fresh = self.store.item(id: taskId),
+                      fresh.status == .downloading,          // user didn't pause / remove it
+                      self.tasksByItemId[taskId] == nil      // no task already running
+                else { return }
+                self.startTask(for: fresh)
+            }
+            return
+        }
+
+        store.update(id: taskId) { item in
+            item.status = .failed
+            item.errorMessage = error.localizedDescription
+            item.resumeData = resumeData
+        }
+        clearRetryState(taskId)
         tasksByItemId.removeValue(forKey: taskId)
         items = store.all()
         promoteQueueIfPossible()
+    }
+
+    /// Transient network errors worth an automatic resume (vs permanent ones —
+    /// 404 / disk full / unsupported — which should fail fast for a manual retry).
+    private static func isTransient(_ ns: NSError) -> Bool {
+        guard ns.domain == NSURLErrorDomain else { return false }
+        switch ns.code {
+        case NSURLErrorTimedOut,
+             NSURLErrorNetworkConnectionLost,
+             NSURLErrorNotConnectedToInternet,
+             NSURLErrorCannotConnectToHost,
+             NSURLErrorCannotFindHost,
+             NSURLErrorDNSLookupFailed,
+             NSURLErrorResourceUnavailable:
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - Helpers
@@ -586,6 +682,15 @@ final class DownloadManager {
             // The session destroys `location` on return, so move synchronously
             // to a staging path before hopping actors.
             guard let id = downloadTask.taskDescription else { return }
+            // Capture the response headers HERE (delegate queue, `task.response`
+            // is valid) and forward Sendable Strings — NOT the non-Sendable
+            // response, and NOT a deferred `tasksByItemId` read: the racing
+            // `didCompleteWithError` hop can clear that task entry before
+            // `didFinish` runs on the MainActor, which would drop the headers and
+            // mislabel the file extension.
+            let http = downloadTask.response as? HTTPURLResponse
+            let disposition = http?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+            let mime = http?.value(forHTTPHeaderField: "Content-Type") ?? ""
             let staging = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "cinemax-dl-\(UUID().uuidString)"
             )
@@ -596,7 +701,7 @@ final class DownloadManager {
                 return
             }
             Task { @MainActor [weak owner] in
-                owner?.didFinish(taskId: id, sourceURL: staging)
+                owner?.didFinish(taskId: id, sourceURL: staging, disposition: disposition, mime: mime)
             }
         }
 
