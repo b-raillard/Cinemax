@@ -460,6 +460,35 @@ extension SettingsScreen {
     var tvHomePageSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(homePageToggleRows)
+            if showGenreRows {
+                tvHomeGenreSection
+            }
+        }
+        .task { await loadHomeGenres() }
+    }
+
+    /// Genre picker shown under the Home-page toggles when "Genre rows" is on.
+    /// Each genre is a focusable toggle (same chrome as every other setting);
+    /// enabling some replaces Home's default random-4 with exactly those.
+    @ViewBuilder
+    var tvHomeGenreSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            Text(loc.localized("settings.homePage.genreSelection.title").uppercased())
+                .font(.system(size: CinemaScale.pt(17), weight: .bold))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .tracking(1.5)
+                .padding(.top, CinemaSpacing.spacing4)
+            Text(loc.localized("settings.homePage.genreSelection.hint"))
+                .font(.system(size: CinemaScale.pt(16), weight: .regular))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+            if availableGenres.isEmpty {
+                Text(loc.localized("settings.homePage.genreSelection.loading"))
+                    .font(.system(size: CinemaScale.pt(16), weight: .regular))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.7))
+                    .padding(.vertical, CinemaSpacing.spacing2)
+            } else {
+                homeGenreChipFlow
+            }
         }
     }
 
@@ -581,12 +610,15 @@ extension SettingsScreen {
     // MARK: - Sleep Timer Row (tvOS)
 
     /// Library landing layout (browse vs flat grid). tvOS-only setting; iOS
-    /// always uses the browse view because the screen has a real toolbar.
+    /// always uses the browse view because the screen has a real toolbar. Inline
+    /// 2-state toggle (same shape as the language picker) rather than a dropdown
+    /// menu — only two values, so a press / left-right flip is clearer than a
+    /// confirmation dialog.
     var tvLibraryLayoutRow: some View {
         let isFocused = focusedItem == .toggle("libraryLayout")
         let selected = LibraryTVBrowseLayout(rawValue: libraryTVBrowseLayout) ?? .browse
         return Button {
-            showLibraryLayoutPicker = true
+            toggleLibraryLayout()
         } label: {
             HStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: "square.grid.2x2")
@@ -597,12 +629,10 @@ extension SettingsScreen {
                     .font(.system(size: CinemaScale.pt(20), weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
                 Spacer()
-                Text(loc.localized(selected == .browse ? "settings.libraryLayout.browse" : "settings.libraryLayout.grid"))
-                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(CinemaFont.label(.small))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                HStack(spacing: CinemaSpacing.spacing2) {
+                    tvLibraryLayoutChip(.browse, label: loc.localized("settings.libraryLayout.browse"), selected: selected)
+                    tvLibraryLayoutChip(.grid, label: loc.localized("settings.libraryLayout.grid"), selected: selected)
+                }
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)
@@ -612,13 +642,32 @@ extension SettingsScreen {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .toggle("libraryLayout"))
-        .confirmationDialog(loc.localized("settings.libraryLayout"), isPresented: $showLibraryLayoutPicker) {
-            ForEach(LibraryTVBrowseLayout.allCases) { option in
-                Button(loc.localized(option == .browse ? "settings.libraryLayout.browse" : "settings.libraryLayout.grid")) {
-                    libraryTVBrowseLayout = option.rawValue
-                }
+        .onMoveCommand { direction in
+            guard isFocused else { return }
+            switch direction {
+            case .left, .right: toggleLibraryLayout()
+            default: break
             }
         }
+    }
+
+    /// Flips the library layout between its two values.
+    func toggleLibraryLayout() {
+        let selected = LibraryTVBrowseLayout(rawValue: libraryTVBrowseLayout) ?? .browse
+        libraryTVBrowseLayout = (selected == .browse ? LibraryTVBrowseLayout.grid : .browse).rawValue
+    }
+
+    func tvLibraryLayoutChip(_ option: LibraryTVBrowseLayout, label: String, selected: LibraryTVBrowseLayout) -> some View {
+        let isSelected = selected == option
+        return Text(label)
+            .font(.system(size: CinemaScale.pt(20), weight: isSelected ? .bold : .medium))
+            .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing2)
+            .background(
+                RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                    .fill(isSelected ? themeManager.accent : CinemaColor.surfaceContainerHigh)
+            )
     }
 
     var tvSleepTimerRow: some View {

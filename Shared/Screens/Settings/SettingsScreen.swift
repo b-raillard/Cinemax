@@ -195,6 +195,16 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowFavorites) var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
+    /// JSON `[String]` of the user-picked Home genres. Stored as a String because
+    /// `@AppStorage` can't hold `[String]`; encode/decode helpers below. Writing
+    /// it re-renders the picker AND fires `HomeScreen`'s `onChange` (UserDefaults
+    /// is shared) so Home re-fetches its genre rows.
+    @AppStorage(SettingsKey.homeSelectedGenres) var homeSelectedGenresJSON: String = "[]"
+    /// Library genres for the picker, in `@AppStorage` so the genre fetch's
+    /// result actually re-renders the picker (it sits in a `navigationDestination`
+    /// where `@Observable` updates don't, but `@AppStorage` does). Persists across
+    /// launches ⇒ instant after the first fetch.
+    @AppStorage(SettingsKey.libraryCachedGenres) var cachedGenresJSON: String = "[]"
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
     @AppStorage(SettingsKey.detailShowTrailerButton) var showTrailerButton: Bool = SettingsKey.Default.detailShowTrailerButton
     @AppStorage(SettingsKey.libraryTVBrowseLayout) var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
@@ -217,7 +227,6 @@ struct SettingsScreen: View {
     /// requests (and any toast on failure) on every menu interaction.
     @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
-    @State var showLibraryLayoutPicker = false
     #endif
 
     // MARK: Shared Computed Properties
@@ -289,6 +298,164 @@ struct SettingsScreen: View {
             rows.append(.init(id: "homeWatchingNow", icon: "person.2.wave.2", label: loc.localized("settings.homePage.watchingNow"), value: $showWatchingNow))
         }
         return rows
+    }
+
+    // MARK: Home genre picker
+
+    /// Decoded user-picked Home genres (ordered by enable order).
+    var homeSelectedGenres: [String] {
+        guard let data = homeSelectedGenresJSON.data(using: .utf8),
+              let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return list
+    }
+
+    /// Library genres available for picking, decoded from the persisted cache.
+    var availableGenres: [String] {
+        guard let data = cachedGenresJSON.data(using: .utf8),
+              let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return list
+    }
+
+    /// Adds/removes a genre from the Home selection, preserving enable order, and
+    /// persists it. Plain method (no `didSet`) writing through `@AppStorage`.
+    func setHomeGenre(_ genre: String, enabled: Bool) {
+        var list = homeSelectedGenres
+        if enabled {
+            guard !list.contains(genre) else { return }
+            list.append(genre)
+        } else {
+            list.removeAll { $0 == genre }
+        }
+        if let data = try? JSONEncoder().encode(list) {
+            homeSelectedGenresJSON = String(decoding: data, as: UTF8.self)
+        }
+    }
+
+    /// Selects every available genre at once.
+    func selectAllHomeGenres() {
+        if let data = try? JSONEncoder().encode(availableGenres) {
+            homeSelectedGenresJSON = String(decoding: data, as: UTF8.self)
+        }
+    }
+
+    /// Clears the Home genre selection (Home falls back to a random pick).
+    func clearHomeGenres() {
+        homeSelectedGenresJSON = "[]"
+    }
+
+    /// Compact chip flow for the Home genre picker: two ghost action chips
+    /// (select / deselect all) then one tappable chip per genre. Far more compact
+    /// than a full-width toggle per genre, and the chips stay remote-reachable on
+    /// tvOS via `TVFilterChipButtonStyle`. Shared by both platforms; the selection
+    /// set is decoded once per render.
+    var homeGenreChipFlow: some View {
+        let selected = Set(homeSelectedGenres)
+        return FlowLayout(spacing: CinemaSpacing.spacing2) {
+            homeGenreActionChip(loc.localized("settings.homePage.genreSelection.selectAll"),
+                                icon: "checkmark.circle.fill") { selectAllHomeGenres() }
+            homeGenreActionChip(loc.localized("settings.homePage.genreSelection.deselectAll"),
+                                icon: "xmark.circle.fill") { clearHomeGenres() }
+            ForEach(availableGenres, id: \.self) { genre in
+                homeGenreChip(genre, isSelected: selected.contains(genre))
+            }
+        }
+    }
+
+    @ViewBuilder
+    func homeGenreChip(_ genre: String, isSelected: Bool) -> some View {
+        let button = Button {
+            setHomeGenre(genre, enabled: !isSelected)
+        } label: {
+            Text(genre)
+                .font(.system(size: genreChipFontSize, weight: isSelected ? .bold : .medium))
+                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+                .padding(.horizontal, genreChipHPadding)
+                .padding(.vertical, genreChipVPadding)
+                .background(isSelected ? themeManager.accentContainer : CinemaColor.surfaceContainerHigh)
+                .clipShape(Capsule())
+        }
+        #if os(tvOS)
+        button
+            .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+        #else
+        button.buttonStyle(.plain)
+        #endif
+    }
+
+    @ViewBuilder
+    func homeGenreActionChip(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        let button = Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: genreChipFontSize - 2, weight: .semibold))
+                Text(title)
+                    .font(.system(size: genreChipFontSize, weight: .semibold))
+            }
+            .foregroundStyle(themeManager.accent)
+            .padding(.horizontal, genreChipHPadding)
+            .padding(.vertical, genreChipVPadding)
+            .background(CinemaColor.surfaceContainerHigh)
+            .clipShape(Capsule())
+        }
+        #if os(tvOS)
+        button
+            .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+        #else
+        button.buttonStyle(.plain)
+        #endif
+    }
+
+    private var genreChipFontSize: CGFloat {
+        #if os(tvOS)
+        CinemaScale.pt(18)
+        #else
+        CinemaScale.pt(14)
+        #endif
+    }
+    private var genreChipHPadding: CGFloat {
+        #if os(tvOS)
+        18
+        #else
+        CinemaSpacing.spacing3
+        #endif
+    }
+    private var genreChipVPadding: CGFloat {
+        #if os(tvOS)
+        10
+        #else
+        CinemaSpacing.spacing2
+        #endif
+    }
+
+    /// Fetches the library's genres once when the Home-page settings sub-detail
+    /// appears (lazy — never fetched unless the user opens that page). Stores into
+    /// the remount-safe coordinator. Resets the guard on early/failed fetch so a
+    /// later appearance retries. Uses the cached `getGenres` Home already warms.
+    func loadHomeGenres() async {
+        // Refresh the persisted genre cache once per session. The picker shows the
+        // last cached list instantly (via @AppStorage — which, unlike @Observable,
+        // re-renders this navigationDestination), so writing the result here makes
+        // a fetch that lands while the picker is open actually appear — no more
+        // "leave and come back to clear the spinner". A failed fetch leaves the
+        // previous cache in place rather than spinning. Fetch is fast (/Genres +
+        // 300s API cache). Guard resets on early/failed fetch so a later visit retries.
+        guard !settingsNav.homeGenresLoadAttempted else { return }
+        settingsNav.homeGenresLoadAttempted = true
+        guard let userId = appState.currentUserId else {
+            settingsNav.homeGenresLoadAttempted = false
+            return
+        }
+        if let genres = try? await appState.apiClient.getGenres(
+            userId: userId, includeItemTypes: [.movie, .series]
+        ), !genres.isEmpty, let data = try? JSONEncoder().encode(genres) {
+            cachedGenresJSON = String(decoding: data, as: UTF8.self)
+        } else {
+            settingsNav.homeGenresLoadAttempted = false
+        }
     }
 
     var detailPageToggleRows: [SettingsToggleRow] {

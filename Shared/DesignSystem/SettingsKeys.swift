@@ -32,6 +32,12 @@ enum SettingsKey {
     static let homeShowFavorites = "home.showFavorites"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
+    /// JSON `[String]` — genres the user picked to surface as Home rows (ordered
+    /// by enable order). Empty / absent ⇒ Home falls back to a default random
+    /// pick of genres. Not a simple bool, so it has no `Default` entry; read via
+    /// `HomeViewModel.loadSelectedGenres()` and written through the Home-page
+    /// settings genre picker. Only takes effect when `homeShowGenreRows` is on.
+    static let homeSelectedGenres = "home.selectedGenres"
 
     // Detail page
     static let detailShowQualityBadges = "detail.showQualityBadges"
@@ -50,9 +56,19 @@ enum SettingsKey {
     /// setting; written only through `SearchViewModel`'s mutators.
     static let searchRecentQueries = "search.recentQueries"
 
-    // Library landing (tvOS only)
-    /// `"browse"` (default) shows hero + genre rows; `"grid"` shows a flat poster grid using the default sort.
+    // Library landing layout (iOS + tvOS). Key keeps its historical `tv` name to
+    // avoid migrating existing installs; surfaced in Settings → Appearance on
+    // both platforms now.
+    /// `"browse"` (default) shows hero + genre rows ("By genre"); `"grid"` forces
+    /// a flat poster grid ("Show all") even at the default landing.
     static let libraryTVBrowseLayout = "library.tvBrowseLayout"
+    /// JSON `[String]` — last-fetched library genres, backing the Home-page genre
+    /// picker. Stored in `@AppStorage` ON PURPOSE: the picker lives in a
+    /// `navigationDestination` rendered from an extension method, where
+    /// `@Observable` updates don't re-render but `@AppStorage` does — so a genre
+    /// fetch that lands while the picker is open actually refreshes it. Also
+    /// persists across launches ⇒ instant (no spinner) after the first load.
+    static let libraryCachedGenres = "library.cachedGenres"
 
     // Privacy & Security
     /// Maximum content age (years) for items shown across the app.

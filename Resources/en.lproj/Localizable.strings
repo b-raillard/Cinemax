@@ -664,13 +664,19 @@
 "settings.homePage.continueWatching" = "Continue Watching";
 "settings.homePage.recentlyAdded" = "Recently Added";
 "settings.homePage.genreRows" = "Genre Rows";
+"settings.homePage.genreSelection.title" = "Displayed Genres";
+"settings.homePage.genreSelection.hint" = "Pick which genres appear as rows on Home. If none are selected, 4 random genres are shown.";
+"settings.homePage.genreSelection.selectAll" = "Select All";
+"settings.homePage.genreSelection.deselectAll" = "Deselect All";
+"settings.homePage.genreSelection.summaryRandom" = "Random";
+"settings.homePage.genreSelection.loading" = "Loading genres…";
 "settings.homePage.favorites" = "Favorites";
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
 "settings.detailPage.trailerButton" = "Trailer button";
-"settings.libraryLayout" = "Library landing";
-"settings.libraryLayout.browse" = "Browse";
-"settings.libraryLayout.grid" = "Grid";
+"settings.libraryLayout" = "Library Display";
+"settings.libraryLayout.browse" = "By Genre";
+"settings.libraryLayout.grid" = "Show All";
 
 // MARK: - Media Detail
 

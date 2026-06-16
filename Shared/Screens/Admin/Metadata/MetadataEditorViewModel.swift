@@ -199,6 +199,12 @@ final class MetadataEditorViewModel {
     /// Caller threads `userId` through since the VM doesn't own AppState.
     private func reloadItem(using apiClient: any APIClientProtocol, userId: String) async {
         guard let id = item.id else { return }
+        // This refetch runs RIGHT AFTER a server-side mutation (image download,
+        // identify apply, …) and must reflect the fresh DTO — including refreshed
+        // image tags. `getItem` is now backed by a short TTL cache, so drop it
+        // first; otherwise the editor could redisplay the pre-mutation item.
+        // Admin reloads are rare, so a full cache clear here is fine.
+        apiClient.clearCache()
         if let fresh = try? await apiClient.getItem(userId: userId, itemId: id) {
             self.item = fresh
             self.original = fresh
