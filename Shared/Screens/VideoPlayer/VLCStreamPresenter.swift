@@ -2271,7 +2271,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// seek-heavy container that would otherwise flood the server. The
     /// "Force direct playback" debug switch hard-disables it.
     private var shouldRouteThroughProxy: Bool {
-        guard !forceDirectPlayback else { return false }
+        if forceDirectPlayback { return false }   // never proxy
+        if forceProxyPlayback { return true }     // always proxy (diagnostic)
         return StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
     }
 
@@ -2281,6 +2282,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Read from UserDefaults since this is a UIViewController, not a SwiftUI view.
     private var forceDirectPlayback: Bool {
         UserDefaults.standard.bool(forKey: SettingsKey.forceDirectPlayback)
+    }
+
+    /// Debug: always route through the proxy, even on a working-IPv6 server.
+    /// Diagnostic — the proxy's transparent HTTP/2-RST reconnect can survive a
+    /// reverse-proxy that resets the DIRECT stream mid-playback (the suspected
+    /// freeze on a dual-stack server). Ignored when force-direct is on.
+    private var forceProxyPlayback: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKey.forceProxyPlayback)
     }
 
     private func startPlayback() {
@@ -2312,7 +2321,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Field-diagnostic (Debug builds → visible in the Xcode console):
             // which transport this play opened on, and why.
             #if DEBUG
-            print("CINEMAX▸ VLC open via \(usingProxy ? "PROXY" : "DIRECT") — forceDirect=\(forceDirectPlayback) preferProxy=\(StreamTransportPolicy.shared.preferProxy) directFailed=\(StreamTransportPolicy.shared.directFailedThisSession) dualStack=\(StreamTransportPolicy.shared.isDualStack) seekHeavy=\(sourceNeedsProxy)")
+            print("CINEMAX▸ VLC open via \(usingProxy ? "PROXY" : "DIRECT") — forceDirect=\(forceDirectPlayback) forceProxy=\(forceProxyPlayback) preferProxy=\(StreamTransportPolicy.shared.preferProxy) directFailed=\(StreamTransportPolicy.shared.directFailedThisSession) dualStack=\(StreamTransportPolicy.shared.isDualStack) seekHeavy=\(sourceNeedsProxy)")
             #endif
         } else {
             handlePlaybackError(); return

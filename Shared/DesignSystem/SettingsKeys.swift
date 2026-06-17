@@ -83,6 +83,11 @@ enum SettingsKey {
     /// direct libVLC path. Escape hatch to confirm / work around proxy-side
     /// stalls (the proxy only ever helps a dual-stack server with broken IPv6).
     static let forceDirectPlayback = "debug.forceDirectPlayback"
+    /// When `true`, online playback ALWAYS routes through the loopback proxy
+    /// (even on a server with working IPv6). Diagnostic: the proxy's transparent
+    /// HTTP/2-RST reconnect can survive a reverse-proxy that resets the direct
+    /// stream mid-playback. Ignored if `forceDirectPlayback` is also on.
+    static let forceProxyPlayback = "debug.forceProxyPlayback"
 
     // Main menu customization
     static let menuMode = "menu.mode"                          // "default" | "custom"
@@ -124,6 +129,7 @@ enum SettingsKey {
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false
         static let forceDirectPlayback = false
+        static let forceProxyPlayback = false
 
         static let rainbowUnlocked = false
     }

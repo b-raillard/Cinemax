@@ -598,6 +598,9 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         if let token { req.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization") }
         awaitingResumeHead = true
         proxyLog.log("StreamProxy ▸ \(self.label, privacy: .public) reconnecting at byte \(resumeFrom) (\(self.reconnectsLeft) retries left)")
+        #if DEBUG
+        print("CINEMAX▸ proxy [\(self.label)] RECONNECTING at byte \(resumeFrom) — transparent HTTP/2-RST recovery (\(self.reconnectsLeft) left) — this is what the direct path can't do")
+        #endif
         let t = session.dataTask(with: req)
         task = t
         t.delegate = self

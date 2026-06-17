@@ -226,6 +226,7 @@
 "settings.debug.fastSleepTimer" = "Veille rapide (15 s)";
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
 "settings.debug.forceDirectPlayback" = "Lecture directe (sans proxy)";
+"settings.debug.forceProxyPlayback" = "Forcer le proxy";
 "settings.interface" = "Interface";
 "settings.interface.playback" = "Lecture";
 "settings.interface.menu" = "Menu principal";

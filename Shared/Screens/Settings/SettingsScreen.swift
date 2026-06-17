@@ -212,6 +212,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
     @AppStorage(SettingsKey.forceDirectPlayback) var forceDirectPlayback: Bool = SettingsKey.Default.forceDirectPlayback
+    @AppStorage(SettingsKey.forceProxyPlayback) var forceProxyPlayback: Bool = SettingsKey.Default.forceProxyPlayback
     @AppStorage(SettingsKey.rainbowUnlocked) var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @State var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
     @State var showFontSizePicker = false
@@ -478,7 +479,8 @@ struct SettingsScreen: View {
         [
             .init(id: "debugFastSleep", icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"), value: $debugFastSleepTimer, tint: .orange),
             .init(id: "debugSkipToEnd", icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"), value: $debugShowSkipToEnd, tint: .orange),
-            .init(id: "debugForceDirect", icon: "arrow.down.right.circle.fill", label: loc.localized("settings.debug.forceDirectPlayback"), value: $forceDirectPlayback, tint: .orange)
+            .init(id: "debugForceDirect", icon: "arrow.down.right.circle.fill", label: loc.localized("settings.debug.forceDirectPlayback"), value: $forceDirectPlayback, tint: .orange),
+            .init(id: "debugForceProxy", icon: "arrow.triangle.swap", label: loc.localized("settings.debug.forceProxyPlayback"), value: $forceProxyPlayback, tint: .orange)
         ]
     }
 
