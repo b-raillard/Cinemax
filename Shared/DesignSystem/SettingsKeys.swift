@@ -79,6 +79,10 @@ enum SettingsKey {
     // Debug
     static let debugFastSleepTimer = "debug.fastSleepTimer"
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
+    /// When `true`, online playback NEVER uses the loopback proxy — forces the
+    /// direct libVLC path. Escape hatch to confirm / work around proxy-side
+    /// stalls (the proxy only ever helps a dual-stack server with broken IPv6).
+    static let forceDirectPlayback = "debug.forceDirectPlayback"
 
     // Main menu customization
     static let menuMode = "menu.mode"                          // "default" | "custom"
@@ -119,6 +123,7 @@ enum SettingsKey {
 
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false
+        static let forceDirectPlayback = false
 
         static let rainbowUnlocked = false
     }

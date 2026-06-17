@@ -35,8 +35,17 @@ final class StreamTransportPolicy {
     /// for the rest of the session. Reset on server switch.
     private(set) var directFailedThisSession = false
 
+    /// `true` once the active server is known to publish an AAAA (IPv6) record.
+    /// The proxy's only purpose is to dodge a black-holed IPv6, so on a pure-IPv4
+    /// server (no AAAA) it can NEVER help — libVLC is already on IPv4 — and must
+    /// not be engaged. Defaults false (conservative: don't proxy until the probe
+    /// confirms dual-stack); set by `refresh()`'s probe; reset on server switch.
+    private(set) var isDualStack = false
+
     /// Whether a fresh playback should open through the proxy from the first
     /// frame: either the probe flagged a black-hole, or direct already failed.
+    /// Both inputs are now gated on `isDualStack`, so this is only ever true for
+    /// a dual-stack server.
     var shouldStartOnProxy: Bool { preferProxy || directFailedThisSession }
 
     private var serverURL: URL?
@@ -47,7 +56,7 @@ final class StreamTransportPolicy {
     func configure(serverURL: URL?) {
         let changed = self.serverURL != serverURL
         self.serverURL = serverURL
-        if changed { directFailedThisSession = false } // re-evaluate per server
+        if changed { directFailedThisSession = false; isDualStack = false } // re-evaluate per server
         if serverURL == nil {
             probeTask?.cancel()
             probeTask = nil
@@ -63,21 +72,30 @@ final class StreamTransportPolicy {
     /// back to the proxy — pins subsequent plays this session to the proxy.
     func noteDirectPlaybackFailed() {
         guard !directFailedThisSession else { return }
+        // The proxy only helps a DUAL-STACK server whose IPv6 black-holes. On a
+        // pure-IPv4 server libVLC is already on IPv4, so the proxy can't help — a
+        // transient direct failure must NOT pin the session to the heavier
+        // re-stream layer (that's how a healthy IPv4 server ended up frozen).
+        guard isDualStack else {
+            proxyLog.log("StreamTransport ▸ direct failed but server is IPv4-only — staying direct (proxy can't help)")
+            return
+        }
         directFailedThisSession = true
         proxyLog.log("StreamTransport ▸ direct playback failed — proxy is now sticky for this session")
     }
 
     /// Re-run the probe (call on foreground / connectivity change).
     func refresh() {
-        guard let url = serverURL, let host = url.host else { preferProxy = false; return }
+        guard let url = serverURL, let host = url.host else { preferProxy = false; isDualStack = false; return }
         let useTLS = (url.scheme?.lowercased() != "http")
         let port = UInt16(url.port ?? (useTLS ? 443 : 80))
         probeTask?.cancel()
         probeTask = Task { [weak self] in
-            let prefer = await Self.shouldPreferProxy(host: host, port: port, useTLS: useTLS)
+            let result = await Self.probeTransport(host: host, port: port, useTLS: useTLS)
             guard !Task.isCancelled else { return }
-            self?.preferProxy = prefer
-            proxyLog.log("StreamTransport ▸ host=\(host, privacy: .public) preferProxy=\(prefer)")
+            self?.isDualStack = result.dualStack
+            self?.preferProxy = result.prefer
+            proxyLog.log("StreamTransport ▸ host=\(host, privacy: .public) dualStack=\(result.dualStack) preferProxy=\(result.prefer)")
         }
     }
 
@@ -91,13 +109,17 @@ final class StreamTransportPolicy {
 
     // MARK: Probe
 
-    /// Proxy only for the genuine black-hole: dual-stack host AND a TLS session
-    /// to its IPv6 that *hangs* (neither `.ready` nor a fast `.failed` within the
-    /// budget). A fast fail (IPv4-only network) means libVLC falls back fine too.
-    nonisolated private static func shouldPreferProxy(host: String, port: UInt16, useTLS: Bool) async -> Bool {
-        guard let v6 = firstIPv6(host: host) else { return false } // not dual-stack
+    /// Probes the host once: is it dual-stack (publishes AAAA), and should we
+    /// prefer the proxy? Prefer the proxy only for the genuine black-hole —
+    /// dual-stack host AND a TLS session to its IPv6 that *hangs* (neither
+    /// `.ready` nor a fast `.failed` within the budget). A fast fail (IPv4-only
+    /// network) means libVLC falls back fine too. `dualStack` is reported
+    /// independently so the direct-failure fallback can refuse the proxy on a
+    /// pure-IPv4 server (where it can't help).
+    nonisolated private static func probeTransport(host: String, port: UInt16, useTLS: Bool) async -> (dualStack: Bool, prefer: Bool) {
+        guard let v6 = firstIPv6(host: host) else { return (false, false) } // not dual-stack
         let resolvedQuickly = await ipv6ResolvesQuickly(address: v6, serverName: host, port: port, useTLS: useTLS)
-        return !resolvedQuickly
+        return (true, !resolvedQuickly)
     }
 
     nonisolated private static func firstIPv6(host: String) -> String? {
@@ -190,10 +212,21 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     private let liveHandlers = NSHashTable<UpstreamHandler>.weakObjects()
     private let session: URLSession
 
+    /// How long the proxy waits for libVLC to resume reading the loopback before
+    /// treating the peer as genuinely wedged. A full read-ahead buffer makes
+    /// libVLC stop reading the loopback for tens of seconds — that's LEGITIMATE
+    /// backpressure, not a wedge. The old 20s/30s values aborted those healthy
+    /// pauses (→ loopback closed → freeze, the ~30 min regression). This must
+    /// exceed libVLC's longest read-ahead pause (bounded by `network-caching`
+    /// + libVLC's stream cache) yet stay finite so a truly-dead peer is still
+    /// released. Drives BOTH the upstream idle timeout AND the per-chunk
+    /// loopback-send wait so they can't fire on legitimate backpressure.
+    fileprivate static let backpressureToleranceSeconds: TimeInterval = 120
+
     init() {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
-        cfg.timeoutIntervalForRequest = 30
+        cfg.timeoutIntervalForRequest = Self.backpressureToleranceSeconds
         cfg.timeoutIntervalForResource = .infinity // long media streams
         cfg.waitsForConnectivity = false
         // CRITICAL: a CONCURRENT delegate queue. didReceive blocks (backpressure)
@@ -485,9 +518,11 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         guard !isHead else { return }
         let sem = DispatchSemaphore(value: 0)
         conn.send(content: data, completion: .contentProcessed { _ in sem.signal() })
-        // Bounded: if a loopback send's completion never fires (peer wedged),
-        // don't pin this thread forever — abort the request instead.
-        if sem.wait(timeout: .now() + 20) == .timedOut {
+        // Last-resort guard: only a GENUINELY wedged peer (libVLC gone but the
+        // loopback never errors) should trip this — a buffer-full pause is
+        // legitimate and tolerated up to `backpressureToleranceSeconds`. Aborting
+        // a healthy backpressure pause was the ~30 min freeze.
+        if sem.wait(timeout: .now() + CinemaxStreamProxy.backpressureToleranceSeconds) == .timedOut {
             proxyLog.error("StreamProxy ▸ \(self.label, privacy: .public) send stalled — aborting")
             conn.cancel()
             task?.cancel()

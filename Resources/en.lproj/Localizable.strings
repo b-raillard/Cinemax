@@ -623,6 +623,7 @@
 "settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Fast sleep timer (15 s)";
 "settings.debug.skipToEnd" = "Skip-to-end button";
+"settings.debug.forceDirectPlayback" = "Direct playback (no proxy)";
 "settings.interface" = "Interface";
 "settings.interface.playback" = "Playback";
 "settings.interface.menu" = "Main Menu";
