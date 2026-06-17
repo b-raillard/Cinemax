@@ -2309,6 +2309,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             } else {
                 url = authed
             }
+            // Field-diagnostic: which transport this play opened on, and why.
+            logger.log("VLC ▸ open \(self.itemId, privacy: .public) via \(self.usingProxy ? "PROXY" : "DIRECT", privacy: .public) — forceDirect=\(self.forceDirectPlayback) preferProxy=\(StreamTransportPolicy.shared.preferProxy) directFailed=\(StreamTransportPolicy.shared.directFailedThisSession) dualStack=\(StreamTransportPolicy.shared.isDualStack) seekHeavy=\(self.sourceNeedsProxy)")
         } else {
             handlePlaybackError(); return
         }

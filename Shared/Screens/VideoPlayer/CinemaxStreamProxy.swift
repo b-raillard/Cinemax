@@ -518,6 +518,7 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         guard !isHead else { return }
         let sem = DispatchSemaphore(value: 0)
         conn.send(content: data, completion: .contentProcessed { _ in sem.signal() })
+        let waitStart = DispatchTime.now()
         // Last-resort guard: only a GENUINELY wedged peer (libVLC gone but the
         // loopback never errors) should trip this — a buffer-full pause is
         // legitimate and tolerated up to `backpressureToleranceSeconds`. Aborting
@@ -527,6 +528,13 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
             conn.cancel()
             task?.cancel()
             return
+        }
+        // Field-diagnostic + positive proof the 120s tolerance works: a long
+        // buffer-full backpressure pause that RESUMED (the old 20s would have
+        // aborted it → freeze). Only logs notable pauses, so it stays quiet.
+        let waitedSeconds = Double(DispatchTime.now().uptimeNanoseconds - waitStart.uptimeNanoseconds) / 1_000_000_000
+        if waitedSeconds > 5 {
+            proxyLog.log("StreamProxy ▸ \(self.label, privacy: .public) backpressure pause \(Int(waitedSeconds))s — RESUMED (buffer was full, not a stall)")
         }
         bytesDelivered += data.count
         // Renew the reconnect budget only on SUBSTANTIAL progress since the last
