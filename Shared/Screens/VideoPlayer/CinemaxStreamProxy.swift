@@ -518,25 +518,37 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         guard !isHead else { return }
         let sem = DispatchSemaphore(value: 0)
         conn.send(content: data, completion: .contentProcessed { _ in sem.signal() })
+        #if DEBUG
         let waitStart = DispatchTime.now()
+        #endif
         // Last-resort guard: only a GENUINELY wedged peer (libVLC gone but the
         // loopback never errors) should trip this — a buffer-full pause is
         // legitimate and tolerated up to `backpressureToleranceSeconds`. Aborting
         // a healthy backpressure pause was the ~30 min freeze.
         if sem.wait(timeout: .now() + CinemaxStreamProxy.backpressureToleranceSeconds) == .timedOut {
             proxyLog.error("StreamProxy ▸ \(self.label, privacy: .public) send stalled — aborting")
+            #if DEBUG
+            print("CINEMAX▸ proxy [\(self.label)] SEND STALLED — ABORTING (must NOT happen post-fix)")
+            #endif
             conn.cancel()
             task?.cancel()
             return
         }
-        // Field-diagnostic + positive proof the 120s tolerance works: a long
-        // buffer-full backpressure pause that RESUMED (the old 20s would have
-        // aborted it → freeze). Only logs notable pauses, so it stays quiet.
+        bytesDelivered += data.count
+        #if DEBUG
+        // Field-diagnostics, Debug-only, visible in the Xcode console.
+        // (1) Positive proof the 120s tolerance works: a long buffer-full pause
+        //     that RESUMED — the old 20s would have aborted it → freeze.
         let waitedSeconds = Double(DispatchTime.now().uptimeNanoseconds - waitStart.uptimeNanoseconds) / 1_000_000_000
         if waitedSeconds > 5 {
-            proxyLog.log("StreamProxy ▸ \(self.label, privacy: .public) backpressure pause \(Int(waitedSeconds))s — RESUMED (buffer was full, not a stall)")
+            print("CINEMAX▸ proxy [\(self.label)] backpressure pause \(Int(waitedSeconds))s — RESUMED (buffer full, not a stall)")
         }
-        bytesDelivered += data.count
+        // (2) Heartbeat every ~64 MB so a silent-but-healthy stream still shows life.
+        let mb = 64 * 1024 * 1024
+        if bytesDelivered / mb != (bytesDelivered - data.count) / mb {
+            print("CINEMAX▸ proxy [\(self.label)] alive — \(bytesDelivered / (1024 * 1024)) MB delivered")
+        }
+        #endif
         // Renew the reconnect budget only on SUBSTANTIAL progress since the last
         // reconnect, so a flaky-but-working stream recovers indefinitely while a
         // pathological trickle-then-RST origin depletes the budget and gives up

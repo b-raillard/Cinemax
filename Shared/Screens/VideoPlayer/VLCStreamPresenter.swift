@@ -2309,8 +2309,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             } else {
                 url = authed
             }
-            // Field-diagnostic: which transport this play opened on, and why.
-            logger.log("VLC ▸ open \(self.itemId, privacy: .public) via \(self.usingProxy ? "PROXY" : "DIRECT", privacy: .public) — forceDirect=\(self.forceDirectPlayback) preferProxy=\(StreamTransportPolicy.shared.preferProxy) directFailed=\(StreamTransportPolicy.shared.directFailedThisSession) dualStack=\(StreamTransportPolicy.shared.isDualStack) seekHeavy=\(self.sourceNeedsProxy)")
+            // Field-diagnostic (Debug builds → visible in the Xcode console):
+            // which transport this play opened on, and why.
+            #if DEBUG
+            print("CINEMAX▸ VLC open via \(usingProxy ? "PROXY" : "DIRECT") — forceDirect=\(forceDirectPlayback) preferProxy=\(StreamTransportPolicy.shared.preferProxy) directFailed=\(StreamTransportPolicy.shared.directFailedThisSession) dualStack=\(StreamTransportPolicy.shared.isDualStack) seekHeavy=\(sourceNeedsProxy)")
+            #endif
         } else {
             handlePlaybackError(); return
         }
