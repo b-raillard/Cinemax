@@ -698,8 +698,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func startEventLoop() {
         guard eventsTask == nil else { return }
         eventsTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            for await event in self.player.events {
+            // Capture only the event stream — NOT a strong `self` hoisted for the
+            // whole loop. The loop lives until the stream finishes, so hoisting
+            // `self` here pinned the entire presenter (UI + controllers + player)
+            // alive, broken only by teardown's explicit cancel — the documented
+            // retain cycle (VC → eventsTask → VC). With weak `self` the task no
+            // longer retains the VC: on release, `player` deallocs and its deinit
+            // finishes the stream, ending this loop. The per-iteration `guard let
+            // self` is a secondary safeguard for that teardown-less window.
+            guard let stream = self?.player.events else { return }
+            for await event in stream {
+                guard let self else { return }
                 switch event {
                 case .lengthChanged(let d):
                     let c = d.components
@@ -2259,9 +2268,28 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Single decision point for opening a *fresh* stream through the proxy:
     /// a probed black-hole, a prior direct failure this session, or a
-    /// seek-heavy container that would otherwise flood the server.
+    /// seek-heavy container that would otherwise flood the server. The
+    /// "Force direct playback" debug switch hard-disables it.
     private var shouldRouteThroughProxy: Bool {
-        StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
+        if forceDirectPlayback { return false }   // never proxy
+        if forceProxyPlayback { return true }     // always proxy (diagnostic)
+        return StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
+    }
+
+    /// Debug escape hatch (Settings → Interface → Debug → "Force direct
+    /// playback"): never use the loopback proxy — to confirm a proxy-side stall
+    /// and to stay on the lighter direct path on a server that doesn't need it.
+    /// Read from UserDefaults since this is a UIViewController, not a SwiftUI view.
+    private var forceDirectPlayback: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKey.forceDirectPlayback)
+    }
+
+    /// Debug: always route through the proxy, even on a working-IPv6 server.
+    /// Diagnostic — the proxy's transparent HTTP/2-RST reconnect can survive a
+    /// reverse-proxy that resets the DIRECT stream mid-playback (the suspected
+    /// freeze on a dual-stack server). Ignored when force-direct is on.
+    private var forceProxyPlayback: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKey.forceProxyPlayback)
     }
 
     private func startPlayback() {
@@ -2290,6 +2318,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             } else {
                 url = authed
             }
+            // Field-diagnostic (Debug builds → visible in the Xcode console):
+            // which transport this play opened on, and why.
+            #if DEBUG
+            print("CINEMAX▸ VLC open via \(usingProxy ? "PROXY" : "DIRECT") — forceDirect=\(forceDirectPlayback) forceProxy=\(forceProxyPlayback) preferProxy=\(StreamTransportPolicy.shared.preferProxy) directFailed=\(StreamTransportPolicy.shared.directFailedThisSession) dualStack=\(StreamTransportPolicy.shared.isDualStack) seekHeavy=\(sourceNeedsProxy)")
+            #endif
         } else {
             handlePlaybackError(); return
         }
@@ -2392,8 +2425,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.titleLabel.text = ref.title
             let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
             let url: URL
-            // Carry the proxy across episodes when the server needs it.
-            if (self.usingProxy || self.shouldRouteThroughProxy),
+            // Carry the proxy across episodes when the server needs it — unless
+            // the force-direct debug switch is on (then never touch the proxy,
+            // even if an earlier play this session had engaged it).
+            if !self.forceDirectPlayback, self.usingProxy || self.shouldRouteThroughProxy,
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: vlcInfo.authToken) {
                 url = proxied
                 self.usingProxy = true
@@ -2766,17 +2801,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if let local = offlineLocalURL {
                 url = local
             } else if let info {
-                // A direct attempt failed: pin the rest of the session to the
-                // proxy so we stop re-rolling the dice on the flaky direct path.
-                if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
                 let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-                // Always retry via the proxy (direct is the path that stalls on
-                // broken IPv6); fall back to direct only if it can't start.
-                if let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
-                    url = proxied
-                    usingProxy = true
-                } else {
+                if forceDirectPlayback {
+                    // Debug force-direct: never engage the proxy — retry direct.
                     url = authed
+                } else {
+                    // A direct attempt failed: pin the rest of the session to the
+                    // proxy so we stop re-rolling the dice on the flaky direct path.
+                    if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
+                    // Always retry via the proxy (direct is the path that stalls on
+                    // broken IPv6); fall back to direct only if it can't start.
+                    if let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
+                        url = proxied
+                        usingProxy = true
+                    } else {
+                        url = authed
+                    }
                 }
             } else {
                 url = nil
@@ -2890,6 +2930,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func handleDidEnterBackground() {
+        // Checkpoint progress to the server now: the app may be killed while
+        // backgrounded (tvOS sleep / iOS memory pressure), and otherwise the
+        // server's resume position would be stale by up to the last ~10s tick —
+        // degrading resume + Next Up. Mirrors NativeVideoPresenter; no-op offline
+        // (reporter is nil).
+        reporter?.reportBackgroundProgress()
         // Remember whether we were actively watching, where, and for how long, so
         // we can pick back up. (`.buffering`/`.opening` also count as "watching".)
         switch player.state {
@@ -2964,7 +3010,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
             let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
             let url: URL
-            if (self.usingProxy || self.shouldRouteThroughProxy),
+            if !self.forceDirectPlayback, self.usingProxy || self.shouldRouteThroughProxy,
                let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: fresh.authToken) {
                 url = proxied
                 self.usingProxy = true

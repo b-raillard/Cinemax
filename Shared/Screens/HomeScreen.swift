@@ -19,6 +19,11 @@ struct HomeScreen: View {
     @State private var deepLinkTarget: DeepLinkTarget?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
+    /// Watched so a genre-selection change in Settings re-fetches the genre rows.
+    /// Unlike the boolean `home.show*` toggles (which gate purely in this view),
+    /// the genre selection changes which DATA the view model fetches, so it needs
+    /// an explicit reload.
+    @AppStorage(SettingsKey.homeSelectedGenres) private var homeSelectedGenresJSON: String = "[]"
 
     var body: some View {
         ZStack {
@@ -61,6 +66,9 @@ struct HomeScreen: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxFavoritesChanged)) { _ in
             Task { await viewModel.refreshFavorites(using: appState) }
+        }
+        .onChange(of: homeSelectedGenresJSON) {
+            Task { await viewModel.reloadGenreRows(using: appState) }
         }
         // Widget / Top Shelf deep link: push the item's detail. Attached at
         // the screen root (NOT inside the lazy scroll content — see the

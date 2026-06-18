@@ -225,6 +225,8 @@
 "settings.debug" = "Débogage";
 "settings.debug.fastSleepTimer" = "Veille rapide (15 s)";
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
+"settings.debug.forceDirectPlayback" = "Lecture directe (sans proxy)";
+"settings.debug.forceProxyPlayback" = "Forcer le proxy";
 "settings.interface" = "Interface";
 "settings.interface.playback" = "Lecture";
 "settings.interface.menu" = "Menu principal";
@@ -266,13 +268,19 @@
 "settings.homePage.continueWatching" = "Reprendre";
 "settings.homePage.recentlyAdded" = "Ajouts récents";
 "settings.homePage.genreRows" = "Rangées par genre";
+"settings.homePage.genreSelection.title" = "Genres affichés";
+"settings.homePage.genreSelection.hint" = "Choisissez les genres à afficher en rangées sur l'accueil. Si aucun n'est sélectionné, 4 genres sont tirés au hasard.";
+"settings.homePage.genreSelection.selectAll" = "Tout sélectionner";
+"settings.homePage.genreSelection.deselectAll" = "Tout désélectionner";
+"settings.homePage.genreSelection.summaryRandom" = "Aléatoire";
+"settings.homePage.genreSelection.loading" = "Chargement des genres…";
 "settings.homePage.favorites" = "Favoris";
 "settings.detailPage" = "Page de détail";
 "settings.detailPage.qualityBadges" = "Badges de qualité";
 "settings.detailPage.trailerButton" = "Bouton Bande-annonce";
-"settings.libraryLayout" = "Page d'accueil bibliothèque";
-"settings.libraryLayout.browse" = "Parcourir";
-"settings.libraryLayout.grid" = "Grille";
+"settings.libraryLayout" = "Affichage des bibliothèques";
+"settings.libraryLayout.browse" = "Par genre";
+"settings.libraryLayout.grid" = "Tout afficher";
 
 // MARK: - Media Detail
 

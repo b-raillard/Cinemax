@@ -58,6 +58,11 @@ final class MediaDetailViewModel {
     func load(using appState: AppState, loc: LocalizationManager) async {
         guard let userId = appState.currentUserId else { return }
         isLoading = true
+        // Clear any prior error so a SUCCESSFUL reload (post-playback refresh on
+        // tvOS via `lastDismissedAt`, pull-to-refresh, retry) replaces the error
+        // screen with content. Without this, a stale `errorMessage` from one
+        // transient failure kept winning over freshly-loaded `item` forever.
+        errorMessage = nil
 
         do {
             let loadedItem = try await appState.apiClient.getItem(userId: userId, itemId: itemId)

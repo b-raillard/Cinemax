@@ -424,10 +424,60 @@ extension SettingsScreen {
     }
 
     var iOSHomePageSection: some View {
-        VStack(spacing: 0) {
-            iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+            VStack(spacing: 0) {
+                iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects)
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+
+            if showGenreRows {
+                iOSHomeGenreSection
+            }
         }
-        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        .task { await loadHomeGenres() }
+    }
+
+    /// Disclosure row shown under the Home-page toggles when "Genre rows" is on.
+    /// Pushes a native `List` multi-select (`HomeGenreSelectionScreen`) rather
+    /// than inlining a long chip wall — keeps this scroll short and uses native
+    /// iOS chrome for the selection, per the user's request.
+    @ViewBuilder
+    var iOSHomeGenreSection: some View {
+        if availableGenres.isEmpty {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                ProgressView()
+                Text(loc.localized("settings.homePage.genreSelection.loading"))
+                    .font(CinemaFont.dynamicLabel(.large))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(CinemaSpacing.spacing4)
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        } else {
+            NavigationLink {
+                HomeGenreSelectionScreen(genres: availableGenres)
+            } label: {
+                iOSSettingsRow {
+                    HStack {
+                        iOSRowIcon(systemName: "theatermasks", color: themeManager.accent)
+                        Text(loc.localized("settings.homePage.genreSelection.title"))
+                            .font(CinemaFont.dynamicLabel(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Text(homeSelectedGenres.isEmpty
+                             ? loc.localized("settings.homePage.genreSelection.summaryRandom")
+                             : "\(homeSelectedGenres.count)")
+                            .font(CinemaFont.dynamicLabel(.small))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: CinemaScale.pt(13), weight: .semibold))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        }
     }
 
     var iOSPlaybackSection: some View {
@@ -556,6 +606,97 @@ extension SettingsScreen {
                 }
                 .tint(themeManager.accent)
             }
+        }
+    }
+}
+
+// MARK: - Home Genre Selection (native multi-select)
+
+/// Native iOS multi-select for the Home genre rows. Pushed from the Home-page
+/// settings as its OWN screen, so the (potentially long) genre list lives on a
+/// real `List` instead of cluttering the settings scroll with a chip wall — the
+/// user explicitly asked for native iOS chrome here (same sanctioned exception
+/// as `MenuSettingsScreen`'s native `List`/`Stepper`).
+///
+/// Standalone `View` struct (not an extension method) so SwiftUI re-renders it
+/// from its own `@AppStorage`/`@Environment` when pushed — see the iOS
+/// `NavigationStack` rule in CLAUDE.md. Persists to `home.selectedGenres`;
+/// `HomeScreen` reloads its genre rows when that key changes.
+struct HomeGenreSelectionScreen: View {
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+
+    /// Snapshot of the library's genres, passed in at push time (stable for the
+    /// lifetime of this screen — loaded before navigation).
+    let genres: [String]
+
+    @AppStorage(SettingsKey.homeSelectedGenres) private var selectedJSON: String = "[]"
+
+    private var selected: [String] {
+        guard let data = selectedJSON.data(using: .utf8),
+              let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return list
+    }
+
+    var body: some View {
+        let selectedSet = Set(selected)
+        List {
+            Section {
+                Button { selectAll() } label: {
+                    Label(loc.localized("settings.homePage.genreSelection.selectAll"),
+                          systemImage: "checkmark.circle")
+                }
+                .tint(themeManager.accent)
+                Button { clear() } label: {
+                    Label(loc.localized("settings.homePage.genreSelection.deselectAll"),
+                          systemImage: "xmark.circle")
+                }
+                .tint(themeManager.accent)
+            }
+
+            Section {
+                ForEach(genres, id: \.self) { genre in
+                    let isOn = selectedSet.contains(genre)
+                    Button { toggle(genre, on: !isOn) } label: {
+                        HStack {
+                            Text(genre)
+                                .foregroundStyle(CinemaColor.onSurface)
+                            Spacer()
+                            if isOn {
+                                Image(systemName: "checkmark")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(themeManager.accent)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } footer: {
+                Text(loc.localized("settings.homePage.genreSelection.hint"))
+            }
+        }
+        .navigationTitle(loc.localized("settings.homePage.genreSelection.title"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func toggle(_ genre: String, on: Bool) {
+        var list = selected
+        if on {
+            guard !list.contains(genre) else { return }
+            list.append(genre)
+        } else {
+            list.removeAll { $0 == genre }
+        }
+        persist(list)
+    }
+
+    private func selectAll() { persist(genres) }
+    private func clear() { persist([]) }
+
+    private func persist(_ list: [String]) {
+        if let data = try? JSONEncoder().encode(list) {
+            selectedJSON = String(decoding: data, as: UTF8.self)
         }
     }
 }

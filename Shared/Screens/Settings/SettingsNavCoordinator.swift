@@ -22,5 +22,12 @@ final class SettingsNavCoordinator {
     /// page / Playback / Debug). `nil` ⇒ Interface hub.
     var selectedInterfaceSub: InterfaceSubcategory?
 
+    /// Idempotency guard for the genre fetch: the Home-page sub-detail `.task`
+    /// re-fires on every Settings remount. Reset to `false` on a failed/early
+    /// fetch so a later appearance retries. (The genre list itself lives in the
+    /// `@AppStorage` `library.cachedGenres` so it re-renders the
+    /// navigationDestination — see `SettingsScreen.cachedGenresJSON`.)
+    var homeGenresLoadAttempted = false
+
     init() {}
 }

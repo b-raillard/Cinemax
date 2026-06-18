@@ -209,6 +209,24 @@ final class HomeViewModel {
         }
     }
 
+    /// User-picked Home genres from Settings (JSON `[String]`). Read straight
+    /// from UserDefaults — `@AppStorage` can't live on an `@Observable` class —
+    /// mirroring `SearchViewModel.loadRecentSearches`. Empty ⇒ default behaviour.
+    static func loadSelectedGenres() -> [String] {
+        guard let raw = UserDefaults.standard.string(forKey: SettingsKey.homeSelectedGenres),
+              let data = raw.data(using: .utf8),
+              let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return list
+    }
+
+    /// Re-runs only the genre-rows load — fired by `HomeScreen` when the user
+    /// changes their Home genre selection in Settings. Reuses the selection-aware
+    /// `loadGenreRows` without re-shuffling the rest of Home.
+    func reloadGenreRows(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        await loadGenreRows(userId: userId, appState: appState)
+    }
+
     private func loadGenreRows(userId: String, appState: AppState) async {
         let allGenres: [String]
         do {
@@ -225,27 +243,42 @@ final class HomeViewModel {
             return
         }
 
-        let picked = Array(allGenres.shuffled().prefix(4))
+        // User-picked genres (Settings → Interface → Home page) take precedence,
+        // in their chosen order, filtered to ones that still exist. Falls back to
+        // a random sample of 4 when nothing is configured (or all picks vanished),
+        // so the default install behaviour is unchanged. No cap on the count — the
+        // user sees exactly what they picked — but the fetch below is chunked so a
+        // large "Select all" can't fire N simultaneous requests at the server.
+        let configured = Self.loadSelectedGenres().filter { allGenres.contains($0) }
+        let picked = configured.isEmpty
+            ? Array(allGenres.shuffled().prefix(4))
+            : configured
 
-        // Fetch items for each picked genre in parallel. Preserve the order of `picked`.
+        // Fetch items for each picked genre, preserving the order of `picked`.
         // Distinguish failure (→ retry chip) from empty success (→ drop the row).
+        // Bounded concurrency (chunks of `maxConcurrentGenreFetches`) keeps a big
+        // selection from storming a self-hosted server on every Home load.
         enum FetchResult { case success([BaseItemDto]); case failure }
         var results: [String: FetchResult] = [:]
-        await withTaskGroup(of: (String, FetchResult).self) { group in
-            for genre in picked {
-                group.addTask {
-                    do {
-                        let items = try await Self.fetchGenreItems(
-                            genre: genre, userId: userId, appState: appState
-                        )
-                        return (genre, .success(items))
-                    } catch {
-                        return (genre, .failure)
+        let maxConcurrentGenreFetches = 6
+        for start in stride(from: 0, to: picked.count, by: maxConcurrentGenreFetches) {
+            let chunk = picked[start..<min(start + maxConcurrentGenreFetches, picked.count)]
+            await withTaskGroup(of: (String, FetchResult).self) { group in
+                for genre in chunk {
+                    group.addTask {
+                        do {
+                            let items = try await Self.fetchGenreItems(
+                                genre: genre, userId: userId, appState: appState
+                            )
+                            return (genre, .success(items))
+                        } catch {
+                            return (genre, .failure)
+                        }
                     }
                 }
-            }
-            for await (genre, result) in group {
-                results[genre] = result
+                for await (genre, result) in group {
+                    results[genre] = result
+                }
             }
         }
 
@@ -281,12 +314,15 @@ final class HomeViewModel {
     nonisolated private static func fetchGenreItems(
         genre: String, userId: String, appState: AppState
     ) async throws -> [BaseItemDto] {
+        // Newest-first within the genre. Was a server-side `.random` shuffle
+        // (un-indexed full sort, re-run per Home load); `dateCreated` desc is
+        // indexed, deterministic and coherent with the rest of the app.
         let response = try await appState.apiClient.getItems(
             userId: userId,
             parentId: nil,
             includeItemTypes: [.movie, .series],
-            sortBy: [.random],
-            sortOrder: nil,
+            sortBy: [.dateCreated],
+            sortOrder: [.descending],
             genres: [genre],
             years: nil,
             isFavorite: nil,

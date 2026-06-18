@@ -140,17 +140,21 @@ final class MediaLibraryViewModel {
                 includeItemTypes: typeFilter
             )
 
-            // The hero query already returns the full `totalCount` (Jellyfin's
-            // `totalRecordCount` is the count before `limit`), so there's no need
-            // for a second random-sorted `limit: 1` call just for the title count
-            // — a random sort is a full shuffle server-side, paying for it twice
-            // per library load is pure waste.
+            // Most-recently-added item as hero. This was a server-side `.random`
+            // sort (an un-indexed full-table shuffle Jellyfin re-ran on EVERY
+            // library load — expensive on self-hosted servers and incoherent for a
+            // personal library); `dateCreated` desc is indexed and deterministic.
+            // The query also returns the full `totalCount` (Jellyfin's
+            // `totalRecordCount` is the count before `limit`), so the title count
+            // comes free — no second count call. We still fetch a small window so
+            // we can prefer a recent item that actually HAS backdrop art for the
+            // full-bleed hero, falling back to the newest if none do.
             async let heroResult = appState.apiClient.getItems(
                 userId: userId,
                 parentId: parentId,
                 includeItemTypes: typeFilter,
-                sortBy: [.random],
-                sortOrder: [.ascending],
+                sortBy: [.dateCreated],
+                sortOrder: [.descending],
                 limit: 20
             )
 
@@ -159,7 +163,7 @@ final class MediaLibraryViewModel {
 
             genres = fetchedGenres
             totalCount = heroData.totalCount
-            heroItem = heroData.items.randomElement()
+            heroItem = heroData.items.first { $0.hasBackdropImage } ?? heroData.items.first
 
             try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
             isLoading = false
