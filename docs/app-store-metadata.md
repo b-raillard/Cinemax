@@ -16,7 +16,7 @@ Document non public, sert de copy-paste source pour App Store Connect. Identique
 | **Catégorie secondaire** | **Divertissement** (Entertainment) |
 | **Copyright** | `2026 Bastien Raillard` |
 | **Email de contact** | `bastienraillard@gmail.com` |
-| **URL de support** | `https://github.com/b-raillard/Cinemax/issues` |
+| **URL de support** | `https://b-raillard.github.io/Cinemax/support.html` |
 | **URL marketing** *(optionnel)* | `https://github.com/b-raillard/Cinemax` |
 | **URL politique de confidentialité** | `https://b-raillard.github.io/Cinemax/privacy.html` |
 
@@ -32,9 +32,9 @@ Lecteur Jellyfin pour Apple
 
 ### Texte promotionnel (170 caractères max — modifiable sans review)
 ```
-Nouvelle version : lecteur VLC intégré pour la prise en charge native du MKV, du Dolby Vision et du HDR. Téléchargements hors-ligne sur iPhone et iPad.
+Nouvelle version : lecteur VLC intégré pour la prise en charge native du MKV, du Dolby Vision et du HDR. Accès hors ligne à votre médiathèque sur iPhone/iPad.
 ```
-*(159 caractères)*
+*(158 caractères)*
 
 ### Description (4000 caractères max)
 ```
@@ -55,8 +55,9 @@ Cinemax est un client moderne pour vos serveurs Jellyfin, conçu spécifiquement
 • AirPlay vers Apple TV et HomePod
 • Minuteur d'arrêt avec rappel « Toujours en train de regarder ? »
 
-— TÉLÉCHARGEMENTS HORS LIGNE (iPhone / iPad)
-• Téléchargez films, épisodes, saisons ou séries complètes
+— ACCÈS HORS LIGNE À VOTRE PROPRE MÉDIATHÈQUE (iPhone / iPad)
+• Enregistrez sur votre appareil les vidéos de votre propre serveur Jellyfin pour les regarder sans connexion (idéal en voyage)
+• Concerne uniquement votre médiathèque personnelle hébergée sur votre serveur — aucun téléchargement depuis des services ou sources tiers
 • Lecture sans connexion, dans la même interface que vos médias en ligne
 • Gestion fine de l'espace de stockage
 
@@ -83,7 +84,7 @@ Cinemax est un client moderne pour vos serveurs Jellyfin, conçu spécifiquement
 • Toutes les communications se font directement entre votre appareil et votre serveur Jellyfin
 • Code source ouvert : https://github.com/b-raillard/Cinemax
 
-Cinemax requiert un serveur Jellyfin déjà installé (jellyfin.org). L'application n'est ni développée ni soutenue par l'équipe officielle Jellyfin.
+Cinemax requiert un serveur Jellyfin déjà installé (jellyfin.org). Toutes les vidéos proviennent exclusivement de votre propre serveur : l'application ne contient aucun contenu et ne permet pas de télécharger des médias depuis des sources tierces. Cinemax n'est ni développé ni soutenu par l'équipe officielle Jellyfin.
 ```
 
 ### Mots-clés (100 caractères max, séparés par virgules, sans espace)
@@ -98,7 +99,7 @@ Première version publique de Cinemax !
 
 • Lecteur VLC intégré par défaut, prise en charge native du MKV, Dolby Vision et HDR
 • Picture-in-Picture sur iPhone et iPad
-• Téléchargements hors-ligne (iPhone / iPad)
+• Accès hors ligne à votre médiathèque personnelle (iPhone / iPad)
 • Interface optimisée pour la Siri Remote sur Apple TV
 • Tableau de bord d'administration complet sur iPhone et iPad
 • Skip Intro / Skip Crédits, chapitres, lecture automatique de l'épisode suivant
@@ -119,9 +120,9 @@ Jellyfin player for Apple
 
 ### Promotional Text (170 chars max)
 ```
-New release: built-in VLC engine for native MKV, Dolby Vision and HDR playback. Offline downloads on iPhone and iPad.
+New release: built-in VLC engine for native MKV, Dolby Vision and HDR playback. Offline access to your own library on iPhone and iPad.
 ```
-*(117 chars)*
+*(133 chars)*
 
 ### Description (4000 chars max)
 ```
@@ -142,8 +143,9 @@ Cinemax is a modern client for your Jellyfin media servers, designed specificall
 • AirPlay to Apple TV and HomePod
 • Sleep timer with "Still watching?" prompt
 
-— OFFLINE DOWNLOADS (iPhone / iPad)
-• Download movies, episodes, seasons or full series
+— OFFLINE ACCESS TO YOUR OWN LIBRARY (iPhone / iPad)
+• Save videos from your own Jellyfin server to your device to watch them without a connection (great for travel)
+• Applies only to your personal library hosted on your server — no downloading from any third-party service or source
 • Playback without connection, in the same interface as your online media
 • Fine-grained storage management
 
@@ -170,7 +172,7 @@ Cinemax is a modern client for your Jellyfin media servers, designed specificall
 • All communications happen directly between your device and your Jellyfin server
 • Open source: https://github.com/b-raillard/Cinemax
 
-Cinemax requires a Jellyfin server already running (jellyfin.org). This app is neither developed nor endorsed by the official Jellyfin team.
+Cinemax requires a Jellyfin server already running (jellyfin.org). All videos come exclusively from your own server: the app contains no content and does not allow downloading media from any third-party source. Cinemax is neither developed nor endorsed by the official Jellyfin team.
 ```
 
 ### Keywords (100 chars max, comma-separated, no spaces)
@@ -185,7 +187,7 @@ First public release of Cinemax!
 
 • Built-in VLC engine by default, native MKV, Dolby Vision and HDR support
 • Picture-in-Picture on iPhone and iPad
-• Offline downloads (iPhone / iPad)
+• Offline access to your own library (iPhone / iPad)
 • Siri Remote-optimized interface on Apple TV
 • Full administration dashboard on iPhone and iPad
 • Skip Intro / Skip Credits, chapters, autoplay next episode

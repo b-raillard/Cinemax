@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cinemax — Support / Aide</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+    line-height: 1.6;
+    color: #1c1c1e;
+    background: #fafafa;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #f2f2f7; background: #0c0c0e; }
+    a { color: #4ade80; }
+    hr { border-color: #2a2a2e; }
+    .card { background: #161618; }
+  }
+  h1 { font-size: 1.85rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.3rem; margin-top: 2rem; border-bottom: 1px solid currentColor; padding-bottom: 0.25rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .lang-switch { font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .updated { color: #6b6b70; font-size: 0.9rem; }
+  hr { margin: 4rem 0; opacity: 0.3; }
+  a { color: #16a34a; }
+  .card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .card p { margin: 0.35rem 0; }
+  ul { padding-left: 1.25rem; }
+</style>
+</head>
+<body>
+
+<p class="lang-switch"><a href="#fr">Français</a> · <a href="#en">English</a></p>
+
+<section id="fr">
+<h1>Cinemax — Aide &amp; Support</h1>
+<p class="updated">Dernière mise à jour : 18 juin 2026</p>
+
+<p>
+  Cinemax est un client tiers pour les serveurs multimédias
+  <a href="https://jellyfin.org">Jellyfin</a>, pour iPhone, iPad et Apple TV.
+  Cette page vous explique comment obtenir de l'aide et répond aux questions
+  les plus fréquentes.
+</p>
+
+<div class="card">
+  <p><strong>Besoin d'aide ? Contactez-nous :</strong></p>
+  <p>📧 E-mail : <a href="mailto:bastienraillard@gmail.com">bastienraillard@gmail.com</a></p>
+  <p>🐛 Signaler un bug ou proposer une idée :
+     <a href="https://github.com/b-raillard/Cinemax/issues">github.com/b-raillard/Cinemax/issues</a></p>
+  <p>Nous répondons généralement aux e-mails sous 48 à 72 heures.</p>
+</div>
+
+<h2>Pour commencer</h2>
+<p>
+  Cinemax <strong>nécessite un serveur Jellyfin déjà installé</strong> et accessible
+  depuis votre appareil. L'application ne contient aucun contenu et ne fournit pas
+  de serveur : elle se connecte au serveur Jellyfin que <em>vous</em> hébergez et
+  affiche votre propre médiathèque.
+</p>
+<ul>
+  <li>Vous n'avez pas encore de serveur ? Consultez <a href="https://jellyfin.org">jellyfin.org</a> pour l'installer.</li>
+  <li>Au premier lancement, saisissez l'adresse de votre serveur (ex. <code>http://192.168.1.10:8096</code> ou votre URL distante).</li>
+  <li>Connectez-vous avec votre nom d'utilisateur et votre mot de passe Jellyfin, ou via Quick Connect.</li>
+</ul>
+
+<h2>Questions fréquentes</h2>
+
+<h3>L'application ne trouve pas mon serveur sur le réseau local</h3>
+<p>
+  Sur iPhone / iPad, autorisez l'accès au <strong>réseau local</strong> dans
+  Réglages → Cinemax. Vous pouvez aussi saisir manuellement l'adresse complète
+  de votre serveur (URL + port).
+</p>
+
+<h3>La lecture ne démarre pas ou l'image se fige</h3>
+<p>
+  Cinemax utilise le moteur VLC par défaut, qui prend en charge nativement la
+  plupart des formats (MKV, Dolby Vision, HDR). Si un fichier pose problème,
+  essayez le lecteur natif : Réglages → Interface → « Utiliser le lecteur natif ».
+  Vérifiez aussi que votre serveur Jellyfin est à jour et que sa connexion réseau
+  est stable.
+</p>
+
+<h3>À quoi sert le téléchargement hors ligne ?</h3>
+<p>
+  Sur iPhone et iPad, vous pouvez enregistrer sur votre appareil des vidéos
+  <strong>provenant de votre propre serveur Jellyfin</strong> afin de les regarder
+  sans connexion (par exemple en voyage). Cette fonction concerne uniquement votre
+  médiathèque personnelle hébergée sur votre serveur ; elle ne permet pas de
+  télécharger des contenus depuis des services ou des sources tierces. Les fichiers
+  téléchargés peuvent être supprimés à tout moment depuis l'écran « Téléchargements ».
+</p>
+
+<h3>Mes données sont-elles privées ?</h3>
+<p>
+  Oui. Cinemax ne collecte aucune donnée et n'utilise aucun service d'analyse ni de
+  publicité. Toutes les communications se font directement entre votre appareil et
+  votre serveur Jellyfin. Voir la
+  <a href="https://b-raillard.github.io/Cinemax/privacy.html">politique de confidentialité</a>.
+</p>
+
+<h3>Cinemax est-il affilié à Jellyfin ?</h3>
+<p>
+  Non. Cinemax est un client indépendant et open source. Il n'est ni développé ni
+  soutenu par l'équipe officielle Jellyfin.
+</p>
+
+<h2>Signaler un problème</h2>
+<p>
+  Pour signaler un bug, merci d'indiquer : le modèle de votre appareil et sa version
+  d'iOS / tvOS, la version de Cinemax, la version de votre serveur Jellyfin, et les
+  étapes pour reproduire le problème. Envoyez ces informations par
+  <a href="mailto:bastienraillard@gmail.com">e-mail</a> ou ouvrez une
+  <a href="https://github.com/b-raillard/Cinemax/issues">issue GitHub</a>.
+</p>
+</section>
+
+<hr>
+
+<section id="en">
+<h1>Cinemax — Help &amp; Support</h1>
+<p class="updated">Last updated: June 18, 2026</p>
+
+<p>
+  Cinemax is a third-party client for <a href="https://jellyfin.org">Jellyfin</a>
+  media servers, for iPhone, iPad and Apple TV. This page explains how to get help
+  and answers the most common questions.
+</p>
+
+<div class="card">
+  <p><strong>Need help? Contact us:</strong></p>
+  <p>📧 Email: <a href="mailto:bastienraillard@gmail.com">bastienraillard@gmail.com</a></p>
+  <p>🐛 Report a bug or request a feature:
+     <a href="https://github.com/b-raillard/Cinemax/issues">github.com/b-raillard/Cinemax/issues</a></p>
+  <p>We typically reply to emails within 48–72 hours.</p>
+</div>
+
+<h2>Getting started</h2>
+<p>
+  Cinemax <strong>requires a Jellyfin server that is already installed</strong> and
+  reachable from your device. The app contains no content and does not provide a
+  server: it connects to the Jellyfin server <em>you</em> host and displays your own
+  media library.
+</p>
+<ul>
+  <li>Don't have a server yet? See <a href="https://jellyfin.org">jellyfin.org</a> to set one up.</li>
+  <li>On first launch, enter your server address (e.g. <code>http://192.168.1.10:8096</code> or your remote URL).</li>
+  <li>Sign in with your Jellyfin username and password, or via Quick Connect.</li>
+</ul>
+
+<h2>Frequently asked questions</h2>
+
+<h3>The app can't find my server on the local network</h3>
+<p>
+  On iPhone / iPad, allow <strong>Local Network</strong> access in
+  Settings → Cinemax. You can also enter your server's full address (URL + port)
+  manually.
+</p>
+
+<h3>Playback won't start or the picture freezes</h3>
+<p>
+  Cinemax uses the VLC engine by default, which natively supports most formats
+  (MKV, Dolby Vision, HDR). If a file misbehaves, try the native player:
+  Settings → Interface → "Use Native Player". Also make sure your Jellyfin server
+  is up to date and its network connection is stable.
+</p>
+
+<h3>What are offline downloads for?</h3>
+<p>
+  On iPhone and iPad, you can save videos <strong>from your own Jellyfin server</strong>
+  to your device so you can watch them without a connection (for example while
+  travelling). This feature applies only to your personal media library hosted on your
+  server; it does not allow downloading content from any third-party service or source.
+  Downloaded files can be removed at any time from the "Downloads" screen.
+</p>
+
+<h3>Is my data private?</h3>
+<p>
+  Yes. Cinemax collects no data and uses no analytics or advertising. All
+  communication happens directly between your device and your Jellyfin server. See the
+  <a href="https://b-raillard.github.io/Cinemax/privacy.html">privacy policy</a>.
+</p>
+
+<h3>Is Cinemax affiliated with Jellyfin?</h3>
+<p>
+  No. Cinemax is an independent, open-source client. It is neither developed nor
+  endorsed by the official Jellyfin team.
+</p>
+
+<h2>Reporting a problem</h2>
+<p>
+  When reporting a bug, please include: your device model and its iOS / tvOS version,
+  the Cinemax version, your Jellyfin server version, and the steps to reproduce the
+  issue. Send this information by
+  <a href="mailto:bastienraillard@gmail.com">email</a> or open a
+  <a href="https://github.com/b-raillard/Cinemax/issues">GitHub issue</a>.
+</p>
+</section>
+
+</body>
+</html>
