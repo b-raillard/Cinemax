@@ -32,6 +32,15 @@ enum SettingsKey {
     static let homeShowFavorites = "home.showFavorites"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
+    /// JSON `[String]` — the genres the user picked to surface as Home rows.
+    /// An **empty string** (the default) means "never configured" → Home shows
+    /// a deterministic default set; once the user touches the picker the value
+    /// becomes a JSON array (possibly `[]`, meaning an explicit empty choice).
+    /// Stored as a string so `@AppStorage` drives live re-renders even inside a
+    /// `navigationDestination` rendered from an extension method (where
+    /// `@Observable` changes don't re-render — see CLAUDE.md). Read/write
+    /// through `HomeGenrePreferences`.
+    static let homeSelectedGenres = "home.selectedGenres"
 
     // Detail page
     static let detailShowQualityBadges = "detail.showQualityBadges"
@@ -50,9 +59,13 @@ enum SettingsKey {
     /// setting; written only through `SearchViewModel`'s mutators.
     static let searchRecentQueries = "search.recentQueries"
 
-    // Library landing (tvOS only)
-    /// `"browse"` (default) shows hero + genre rows; `"grid"` shows a flat poster grid using the default sort.
-    static let libraryTVBrowseLayout = "library.tvBrowseLayout"
+    // Library landing (iOS + tvOS)
+    /// `"browse"` (default) shows the cinematic hero + genre rows ("By genre");
+    /// `"grid"` shows a flat poster grid using the default sort ("Show all").
+    /// Honored on both platforms — the iOS toggle lives in Appearance, the
+    /// tvOS one in Appearance too. Raw key keeps its legacy `tv` name to
+    /// preserve any existing on-device preference; the value is platform-neutral.
+    static let libraryBrowseLayout = "library.tvBrowseLayout"
 
     // Privacy & Security
     /// Maximum content age (years) for items shown across the app.
@@ -97,7 +110,7 @@ enum SettingsKey {
 
         static let searchSaveHistory = true
 
-        static let libraryTVBrowseLayout = LibraryTVBrowseLayout.browse.rawValue
+        static let libraryBrowseLayout = LibraryBrowseLayout.browse.rawValue
 
         static let privacyMaxContentAge = 0
 
@@ -108,13 +121,67 @@ enum SettingsKey {
     }
 }
 
-/// tvOS landing layout for `MediaLibraryScreen`. Controls whether the screen
-/// opens on the cinematic browse view (hero + genre rows + browse grid) or on
-/// the flat poster grid using the default sort. Filter state still toggles to
-/// the grid regardless — this only governs the *unfiltered* landing.
-enum LibraryTVBrowseLayout: String, CaseIterable, Identifiable {
+/// Landing layout for `MediaLibraryScreen` (iOS + tvOS). Controls whether the
+/// screen opens on the cinematic browse view (hero + genre rows + browse grid,
+/// "By genre") or on the flat poster grid using the default sort ("Show all").
+/// Filter state still toggles to the grid regardless — this only governs the
+/// *unfiltered* landing.
+enum LibraryBrowseLayout: String, CaseIterable, Identifiable {
     case browse
     case grid
 
     var id: String { rawValue }
+}
+
+/// Read/write helper for the user-configurable Home genre rows
+/// (`SettingsKey.homeSelectedGenres`). Centralizes the JSON encoding and the
+/// "empty string = never configured" sentinel so `HomeViewModel` (not a View,
+/// reads `UserDefaults` directly) and the Settings genre pickers (Views, bind
+/// through `@AppStorage`) agree on the exact same semantics.
+enum HomeGenrePreferences {
+    /// How many genre rows Home shows when the user hasn't picked any. A
+    /// deterministic prefix of the server's (sorted) genre list — coherent,
+    /// not random (see the de-randomization decision).
+    static let defaultRowCount = 6
+
+    /// `true` once the user has made an explicit choice in the picker. Distinct
+    /// from "has selected genres" so an explicit empty choice (zero rows) is not
+    /// mistaken for the unconfigured default.
+    static func isConfigured() -> Bool {
+        guard let raw = UserDefaults.standard.string(forKey: SettingsKey.homeSelectedGenres) else { return false }
+        return !raw.isEmpty
+    }
+
+    /// The user's explicit genre picks (empty if unconfigured or explicitly empty).
+    static func selectedGenres() -> [String] {
+        decode(UserDefaults.standard.string(forKey: SettingsKey.homeSelectedGenres))
+    }
+
+    /// Persist an explicit selection. Always marks the preference configured —
+    /// even for an empty array, which means "no genre rows".
+    static func setSelectedGenres(_ genres: [String]) {
+        guard let data = try? JSONEncoder().encode(genres),
+              let json = String(data: data, encoding: .utf8) else { return }
+        UserDefaults.standard.set(json, forKey: SettingsKey.homeSelectedGenres)
+    }
+
+    /// The genres to actually render as Home rows, given the full available
+    /// list (already sorted by the caller). Unconfigured → default prefix;
+    /// configured → the explicit picks intersected with what's available and
+    /// re-ordered to the canonical (available) order. No cap on count.
+    static func effectiveGenres(available: [String]) -> [String] {
+        guard isConfigured() else { return Array(available.prefix(defaultRowCount)) }
+        let chosen = Set(selectedGenres())
+        return available.filter { chosen.contains($0) }
+    }
+
+    /// Decodes the JSON `[String]` payload of `homeSelectedGenres`. Shared by
+    /// the static accessors and the picker Views (which hold the raw string in
+    /// `@AppStorage` for reactivity and decode it for display).
+    static func decode(_ raw: String?) -> [String] {
+        guard let raw, !raw.isEmpty,
+              let data = raw.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return arr
+    }
 }

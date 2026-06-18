@@ -414,6 +414,12 @@ extension JellyfinAPIClient {
             positionTicks: positionTicks
         )
         _ = try? await client.send(Paths.reportPlaybackStopped(body))
+        // Playback just moved this item's resume position server-side. Drop its
+        // short-TTL getItem entry (and the resume list) so the detail screen's
+        // immediate post-dismiss reload — tvOS reloads synchronously on dismiss —
+        // paints the fresh resume bar instead of the pre-playback position.
+        cache.invalidate(prefix: "item-\(itemId)-")
+        cache.invalidate(prefix: "resume-")
     }
 
     /// Compact, single-tag diagnostic for the playback decision.
