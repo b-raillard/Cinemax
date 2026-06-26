@@ -43,6 +43,7 @@
 // MARK: - Home Screen
 
 "home.continueWatching" = "Reprendre";
+"home.nextUp" = "À suivre";
 "home.liveSession" = "EN DIRECT";
 "home.watchingNow" = "En direct";
 "home.watchingNow.playing" = "%@ regarde";
@@ -264,6 +265,7 @@
 "settings.authenticatedDevice" = "Appareil authentifié";
 "settings.homePage" = "Page d'accueil";
 "settings.homePage.continueWatching" = "Reprendre";
+"settings.homePage.nextUp" = "À suivre";
 "settings.homePage.recentlyAdded" = "Ajouts récents";
 "settings.homePage.genreRows" = "Rangées par genre";
 "settings.homePage.favorites" = "Favoris";

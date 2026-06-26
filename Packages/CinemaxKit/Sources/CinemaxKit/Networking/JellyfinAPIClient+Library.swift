@@ -207,6 +207,24 @@ extension JellyfinAPIClient {
         return ContentRatingClassifier.passes(rating: next.officialRating, maxAge: getMaxContentAge()) ? next : nil
     }
 
+    public func getNextUpEpisodes(userId: String, limit: Int = 20) async throws -> [BaseItemDto] {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            // No `seriesID` ⇒ the server returns the next unwatched episode for
+            // every in-progress series (the global rail).
+            let params = Paths.GetNextUpParameters(
+                userID: userId,
+                limit: limit,
+                enableUserData: true
+            )
+            let response = try await client.send(Paths.getNextUp(parameters: params))
+            return applyRatingFilter(response.value.items ?? [])
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     // MARK: - User Item Data
 
     public func markItemUnplayed(itemId: String, userId: String) async throws {

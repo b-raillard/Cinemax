@@ -113,6 +113,12 @@ public protocol LibraryAPI: Sendable {
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto?
 
+    /// Next-up episodes across ALL in-progress series (the global "Next Up"
+    /// rail on Home). Unlike `getNextUp(seriesId:)` this omits the series
+    /// filter, so the server returns the next unwatched episode for every show
+    /// the user has started.
+    func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
+
     /// Clears the user's played/progress state for the given item. Used by
     /// Privacy & Security → Clear Continue Watching to drop resume points
     /// without leaking what was being watched.
@@ -359,6 +365,9 @@ public extension LibraryAPI {
     }
     func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
         try await getSimilarItems(itemId: itemId, userId: userId, limit: limit)
+    }
+    func getNextUpEpisodes(userId: String, limit: Int = 20) async throws -> [BaseItemDto] {
+        try await getNextUpEpisodes(userId: userId, limit: limit)
     }
     func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
         try await searchItems(userId: userId, searchTerm: searchTerm, limit: limit)

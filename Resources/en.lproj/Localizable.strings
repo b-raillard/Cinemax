@@ -43,6 +43,7 @@
 // MARK: - Home Screen
 
 "home.continueWatching" = "Continue Watching";
+"home.nextUp" = "Next Up";
 "home.liveSession" = "LIVE";
 "home.watchingNow" = "Watching Now";
 "home.watchingNow.playing" = "%@ is watching";
@@ -662,6 +663,7 @@
 "settings.authenticatedDevice" = "Authenticated Device";
 "settings.homePage" = "Home Page";
 "settings.homePage.continueWatching" = "Continue Watching";
+"settings.homePage.nextUp" = "Next Up";
 "settings.homePage.recentlyAdded" = "Recently Added";
 "settings.homePage.genreRows" = "Genre Rows";
 "settings.homePage.favorites" = "Favorites";
