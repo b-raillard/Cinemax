@@ -305,6 +305,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return []
     }
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
+    var stubbedNextUpItems: [BaseItemDto] = []
+    func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] {
+        if shouldThrow { throw stubbedError }
+        return stubbedNextUpItems
+    }
     private(set) var markPlayedCalls: [String] = []
     private(set) var markUnplayedCalls: [String] = []
     func markItemUnplayed(itemId: String, userId: String) async throws { markUnplayedCalls.append(itemId) }

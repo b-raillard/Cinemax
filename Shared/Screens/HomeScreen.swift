@@ -14,9 +14,14 @@ struct HomeScreen: View {
     @State private var prefetcher = PosterPrefetcher()
 
     @AppStorage(SettingsKey.homeShowContinueWatching) private var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
+    @AppStorage(SettingsKey.homeShowNextUp) private var showNextUp: Bool = SettingsKey.Default.homeShowNextUp
     @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) private var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
     @State private var deepLinkTarget: DeepLinkTarget?
+    /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
+    /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
+    /// hoisted to the screen root per the lazy-container navigation RULE.
+    @State private var favoritesDestination: FavoritesDestination?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
 
@@ -68,6 +73,11 @@ struct HomeScreen: View {
         .navigationDestination(item: $deepLinkTarget) { target in
             MediaDetailScreen(itemId: target.id, itemType: .movie)
         }
+        // "View All" on the Favorites row → full favorites grid. Hoisted to the
+        // screen root (NOT inside the lazy scroll content — lazy-container RULE).
+        .navigationDestination(item: $favoritesDestination) { _ in
+            FavoritesScreen()
+        }
         .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
             consumeDeepLink(newValue)
         }
@@ -89,6 +99,12 @@ struct HomeScreen: View {
         let id: String
     }
 
+    /// Identity token for the Favorites "View All" push. A fresh instance each
+    /// tap re-triggers `navigationDestination(item:)` (nil → non-nil).
+    private struct FavoritesDestination: Identifiable, Hashable {
+        let id = "favorites"
+    }
+
     /// Warms Nuke's cache for every card the loaded rows will render. URLs
     /// mirror the cards' own requests exactly (same `maxWidth` + `tag`) —
     /// a parameter mismatch would warm a different cache entry (see
@@ -106,8 +122,8 @@ struct HomeScreen: View {
             item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
         })
 
-        // 16:9 backdrops — continue watching (cards request maxWidth 600).
-        prefetcher.prefetch(viewModel.resumeItems.map { item in
+        // 16:9 backdrops — continue watching + next up (cards request maxWidth 600).
+        prefetcher.prefetch((viewModel.resumeItems + viewModel.nextUpItems).map { item in
             item.backdropItemID.map { builder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue) }
         })
     }
@@ -200,6 +216,12 @@ struct HomeScreen: View {
                     // Continue Watching
                     if showContinueWatching, !viewModel.resumeItems.isEmpty {
                         continueWatchingRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
+                    // Next Up (next unwatched episode per in-progress series)
+                    if showNextUp, !viewModel.nextUpItems.isEmpty {
+                        nextUpRow
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
@@ -582,6 +604,57 @@ struct HomeScreen: View {
         )
     }
 
+    // MARK: - Next Up
+
+    /// Next unwatched episode for each in-progress series. Tapping a card plays
+    /// the episode from the start (these are unwatched, so no resume offset).
+    private var nextUpRow: some View {
+        ContentRow(
+            title: loc.localized("home.nextUp"),
+            data: viewModel.nextUpItems,
+            id: \.id
+        ) { item in
+            nextUpPlayLink(item)
+        }
+    }
+
+    @ViewBuilder
+    private func nextUpPlayLink(_ item: BaseItemDto) -> some View {
+        if let id = item.id {
+            PlayLink(itemId: id, title: item.name ?? "") {
+                nextUpCard(item)
+                    .frame(width: wideCardWidth)
+            }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityLabel(item.seriesName ?? item.name ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private func nextUpCard(_ item: BaseItemDto) -> some View {
+        let cardTitle = item.seriesName ?? item.name ?? ""
+        let cardSubtitle: String? = {
+            var label = ""
+            if let season = item.parentIndexNumber, let ep = item.indexNumber {
+                label = String(format: "S%02d:E%02d", season, ep)
+            }
+            if let name = item.name, !name.isEmpty {
+                label = label.isEmpty ? name : "\(label) - \(name)"
+            }
+            return label.isEmpty ? nil : label
+        }()
+
+        WideCard(
+            title: cardTitle,
+            imageURL: item.backdropItemID.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue) },
+            subtitle: cardSubtitle
+        )
+    }
+
     // MARK: - Recently Added
 
     private var recentlyAddedRow: some View {
@@ -601,6 +674,8 @@ struct HomeScreen: View {
     private var favoritesRow: some View {
         ContentRow(
             title: loc.localized("home.favorites"),
+            showViewAll: true,
+            onViewAll: { favoritesDestination = FavoritesDestination() },
             data: viewModel.favoriteItems,
             id: \.id
         ) { item in

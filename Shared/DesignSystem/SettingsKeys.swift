@@ -28,6 +28,7 @@ enum SettingsKey {
 
     // Home page sections
     static let homeShowContinueWatching = "home.showContinueWatching"
+    static let homeShowNextUp = "home.showNextUp"
     static let homeShowRecentlyAdded = "home.showRecentlyAdded"
     static let homeShowFavorites = "home.showFavorites"
     static let homeShowGenreRows = "home.showGenreRows"
@@ -87,6 +88,7 @@ enum SettingsKey {
         static let forceNativeAVPlayer = false
 
         static let homeShowContinueWatching = true
+        static let homeShowNextUp = true
         static let homeShowRecentlyAdded = true
         static let homeShowFavorites = true
         static let homeShowGenreRows = true

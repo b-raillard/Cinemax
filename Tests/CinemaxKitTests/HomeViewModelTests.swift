@@ -73,6 +73,30 @@ struct HomeViewModelTests {
         #expect(vm.heroItem?.name == "Latest")
     }
 
+    @Test("load() populates nextUpItems from the global Next Up endpoint")
+    func loadPopulatesNextUp() async {
+        let api = MockAPIClient()
+        api.stubbedNextUpItems = [makeItem(name: "S01E02"), makeItem(name: "S03E01")]
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(vm.nextUpItems.count == 2)
+        #expect(!vm.isLoading)
+    }
+
+    @Test("Next Up fetch failure leaves nextUpItems empty without failing the load")
+    func nextUpFailureIsIsolated() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(vm.nextUpItems.isEmpty)
+        #expect(!vm.isLoading)
+    }
+
     @Test("API failures leave collections empty and set isLoading false")
     func apiFailureLeavesCollectionsEmpty() async {
         let api = MockAPIClient()
