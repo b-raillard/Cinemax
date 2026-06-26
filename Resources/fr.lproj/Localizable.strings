@@ -44,6 +44,8 @@
 
 "home.continueWatching" = "Reprendre";
 "home.nextUp" = "À suivre";
+"favorites.empty.title" = "Aucun favori";
+"favorites.empty.subtitle" = "Touchez le cœur sur un film ou une série pour l'ajouter ici.";
 "home.liveSession" = "EN DIRECT";
 "home.watchingNow" = "En direct";
 "home.watchingNow.playing" = "%@ regarde";

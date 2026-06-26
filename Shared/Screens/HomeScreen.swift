@@ -18,6 +18,10 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) private var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
     @State private var deepLinkTarget: DeepLinkTarget?
+    /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
+    /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
+    /// hoisted to the screen root per the lazy-container navigation RULE.
+    @State private var favoritesDestination: FavoritesDestination?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
 
@@ -69,6 +73,11 @@ struct HomeScreen: View {
         .navigationDestination(item: $deepLinkTarget) { target in
             MediaDetailScreen(itemId: target.id, itemType: .movie)
         }
+        // "View All" on the Favorites row → full favorites grid. Hoisted to the
+        // screen root (NOT inside the lazy scroll content — lazy-container RULE).
+        .navigationDestination(item: $favoritesDestination) { _ in
+            FavoritesScreen()
+        }
         .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
             consumeDeepLink(newValue)
         }
@@ -88,6 +97,12 @@ struct HomeScreen: View {
 
     private struct DeepLinkTarget: Identifiable, Hashable {
         let id: String
+    }
+
+    /// Identity token for the Favorites "View All" push. A fresh instance each
+    /// tap re-triggers `navigationDestination(item:)` (nil → non-nil).
+    private struct FavoritesDestination: Identifiable, Hashable {
+        let id = "favorites"
     }
 
     /// Warms Nuke's cache for every card the loaded rows will render. URLs
@@ -659,6 +674,8 @@ struct HomeScreen: View {
     private var favoritesRow: some View {
         ContentRow(
             title: loc.localized("home.favorites"),
+            showViewAll: true,
+            onViewAll: { favoritesDestination = FavoritesDestination() },
             data: viewModel.favoriteItems,
             id: \.id
         ) { item in
