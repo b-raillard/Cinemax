@@ -227,7 +227,10 @@ struct AdminUserDetailScreen: View {
                 toggleRow(
                     icon: "arrow.down.circle",
                     label: loc.localized("admin.user.access.allowDownloads"),
-                    isOn: policyBinding(\.enableContentDownloading)
+                    // `default: true` mirrors Jellyfin's policy default — a nil
+                    // field must display as allowed, like every other surface
+                    // of the offline gate (`AppState`, `AdminOfflineViewModel`).
+                    isOn: policyBinding(\.enableContentDownloading, default: true)
                 )
             }
         }
@@ -423,9 +426,12 @@ struct AdminUserDetailScreen: View {
     /// the path is optional-chained. This helper materialises a Binding
     /// that reads the current value (defaulted false) and writes through
     /// `setPolicy` so the policy is always lazily initialised.
-    private func policyBinding(_ keyPath: WritableKeyPath<UserPolicy, Bool?>) -> Binding<Bool> {
+    private func policyBinding(
+        _ keyPath: WritableKeyPath<UserPolicy, Bool?>,
+        default defaultValue: Bool = false
+    ) -> Binding<Bool> {
         Binding(
-            get: { viewModel.editedUser.policy?[keyPath: keyPath] ?? false },
+            get: { viewModel.editedUser.policy?[keyPath: keyPath] ?? defaultValue },
             set: { newValue in
                 setPolicy { policy in
                     policy[keyPath: keyPath] = newValue

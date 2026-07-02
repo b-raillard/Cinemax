@@ -26,8 +26,10 @@ extension JellyfinAPIClient {
         // Authoritative admin read of the branding store (same shape as the
         // public endpoint, but never served from any intermediary cache).
         let current = try await client.send(Paths.getNamedConfiguration(key: "branding"))
-        var options = (try? JSONDecoder().decode(BrandingOptionsDto.self, from: current.value))
-            ?? BrandingOptionsDto()
+        // Throwing decode on purpose (same as `getEncodingOptions`): a decode
+        // failure must abort the write — falling back to an empty DTO here
+        // would clobber the admin's CustomCss / LoginDisclaimer on the server.
+        var options = try JSONDecoder().decode(BrandingOptionsDto.self, from: current.value)
         options.customCss = OfflineFeatureFlag.applying(enabled: enabled, to: options.customCss)
         // Round-trip through AnyJSON — SDK's named-configuration endpoint is
         // type-erased (same pattern as `updateEncodingOptions`).
