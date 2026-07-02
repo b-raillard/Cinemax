@@ -43,7 +43,7 @@ You are a tvOS UX specialist for the Cinemax codebase. Your job is to audit chan
 
 ### Admin section
 
-- Admin is iOS-only by product decision. Every file under `Shared/Screens/Admin/` must be wrapped in `#if os(iOS)`. `SettingsCategory.visibleCases(isAdmin:isTVOS:)` short-circuits when `isTVOS`.
+- Admin is iOS-only by product decision. Every file under `Shared/Screens/Admin/` must be wrapped in `#if os(iOS)`. `SettingsCategory.visibleCases(isAdmin:isTVOS:downloadsEnabled:)` short-circuits when `isTVOS`.
 
 ## How to review
 

@@ -64,7 +64,9 @@ struct MediaLibraryScreen: View {
             CinemaColor.surface.ignoresSafeArea()
 
             #if os(iOS)
-            if !network.isOnline {
+            // Feature-gated like HomeScreen: no downloads feature, no offline
+            // library — the regular error/empty states take over when offline.
+            if !network.isOnline && appState.offlineDownloadsEnabled {
                 OfflineLibraryView(scope: itemType == .series ? .series : .movies)
             } else if viewModel.isLoading {
                 loadingView

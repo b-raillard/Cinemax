@@ -57,8 +57,11 @@ struct MediaDetailScreen: View {
             #if os(iOS)
             // Offline shortcut: if the user has a download for the item id
             // (movie or any episode of a series the screen represents),
-            // render the offline detail and skip every server call.
+            // render the offline detail and skip every server call. Gated on
+            // the admin-controlled downloads feature flag like every other
+            // downloads surface.
             if !network.isOnline,
+               appState.offlineDownloadsEnabled,
                let entry = offlineEntry() {
                 OfflineMediaDetailView(entry: entry)
             } else if viewModel.isLoading {

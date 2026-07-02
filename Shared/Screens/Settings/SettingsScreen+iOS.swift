@@ -76,7 +76,7 @@ extension SettingsScreen {
 
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false)) { category in
+            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false, downloadsEnabled: appState.offlineDownloadsEnabled)) { category in
                 iOSCategoryButton(category)
             }
         }

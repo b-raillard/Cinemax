@@ -422,6 +422,7 @@
 "admin.metadata.subtitle" = "Éditer titres, casting, images et rafraîchir les métadonnées.";
 "admin.users.subtitle" = "Gérer les comptes et les autorisations.";
 "admin.devices.subtitle" = "Voir et révoquer les appareils connectés.";
+"admin.offline.subtitle" = "Autoriser les téléchargements par utilisateur.";
 "admin.activity.subtitle" = "Consulter les événements du serveur.";
 "admin.playback.title" = "Lecture";
 "admin.plugins.title" = "Mes extensions";
@@ -462,6 +463,15 @@
 "admin.users.create.submit" = "Créer";
 "admin.users.create.success" = "Utilisateur créé";
 
+// MARK: - Admin — Fonction hors ligne
+
+"admin.offline.title" = "Fonction hors ligne";
+"admin.offline.enableAll" = "Tout activer";
+"admin.offline.disableAll" = "Tout désactiver";
+"admin.offline.users.title" = "Par utilisateur";
+"admin.offline.users.footer" = "Un utilisateur ne voit les boutons de téléchargement et le menu Téléchargements que si l'option est activée pour son compte. Synchronisé avec « Autoriser les téléchargements de médias » de Jellyfin — activée par défaut pour tout nouveau compte.";
+"admin.offline.save.success" = "Réglages hors ligne enregistrés";
+
 // MARK: - Admin — User Detail
 
 "admin.user.tab.profile" = "Profil";
@@ -491,6 +501,8 @@
 "admin.user.access.libraries.empty" = "Aucune médiathèque trouvée sur le serveur.";
 "admin.user.access.devices" = "Accès des appareils";
 "admin.user.access.enableAllDevices" = "Autoriser l'accès depuis tous les appareils";
+"admin.user.access.allowDownloads" = "Autoriser les téléchargements";
+"admin.user.access.allowDownloads.footer" = "Contrôle l'affichage des téléchargements dans Cinemax pour cet utilisateur. Synchronisé avec « Autoriser les téléchargements de médias » de Jellyfin.";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";
