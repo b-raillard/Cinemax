@@ -39,14 +39,6 @@ public protocol ServerAPI: Sendable {
     /// only logs out on a confirmed `.invalid`. Never throws; a network error
     /// maps to `.indeterminate` (keep the session).
     func validateSession() async -> SessionValidity
-
-    /// Global offline-downloads kill-switch, stored server-side as an inert
-    /// marker in the Branding `CustomCss` (see `OfflineFeatureFlag`). Lives on
-    /// `ServerAPI` (not `AdminAPI`) because every user must be able to *read*
-    /// it — the downloads UI only renders when this AND the caller's own
-    /// `UserPolicy.enableContentDownloading` are both true. Writing is the
-    /// admin-only `AdminAPI.setOfflineDownloadsEnabledGlobally`.
-    func isOfflineDownloadsEnabledGlobally() async throws -> Bool
 }
 
 public extension ServerAPI {
@@ -235,14 +227,6 @@ public protocol AdminAPI: Sendable {
     func startTask(id: String) async throws
     /// Cancels a running task.
     func stopTask(id: String) async throws
-
-    // MARK: Offline-downloads feature flag (global)
-
-    /// Flips the server-wide offline-downloads flag by rewriting the Branding
-    /// `CustomCss` marker (read-modify-write; admin CSS is preserved). The
-    /// read half is `ServerAPI.isOfflineDownloadsEnabledGlobally` — public so
-    /// non-admin clients can evaluate the gate.
-    func setOfflineDownloadsEnabledGlobally(_ enabled: Bool) async throws
 
     // MARK: Server config (named)
 

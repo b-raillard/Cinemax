@@ -4,21 +4,18 @@ import Observation
 import CinemaxKit
 @preconcurrency import JellyfinAPI
 
-/// Admin → "Fonction hors ligne". Edits the two halves of the
-/// offline-downloads gate in one screen:
-///   * the **global** Branding-marker flag (`setOfflineDownloadsEnabledGlobally`)
-///   * each user's **`UserPolicy.enableContentDownloading`** (the native
-///     Jellyfin "Allow media downloads" policy, so the Jellyfin web dashboard
-///     stays in sync with what this screen shows).
-/// Explicit save per the admin-editor rule — only *changed* values are sent.
+/// Admin → "Fonction hors ligne". Edits each user's
+/// `UserPolicy.enableContentDownloading` — the native Jellyfin "Allow media
+/// downloads" policy, so the Jellyfin web dashboard stays in sync with what
+/// this screen shows. Jellyfin's server-side default is ON for every account
+/// (not configurable without a plugin), hence the bulk enable/disable
+/// helpers. Explicit save per the admin-editor rule — only *changed* values
+/// are sent.
 @MainActor @Observable
 final class AdminOfflineViewModel {
     var isLoading = false
     var isSaving = false
     var errorMessage: String?
-
-    var globalEnabled = false
-    private var originalGlobalEnabled = false
 
     /// Users sorted by display name; drives the per-user rows.
     var users: [UserDto] = []
@@ -27,9 +24,7 @@ final class AdminOfflineViewModel {
     var perUser: [String: Bool] = [:]
     private var originalPerUser: [String: Bool] = [:]
 
-    var isDirty: Bool {
-        globalEnabled != originalGlobalEnabled || perUser != originalPerUser
-    }
+    var isDirty: Bool { perUser != originalPerUser }
 
     var hasLoaded: Bool { !users.isEmpty }
 
@@ -37,11 +32,7 @@ final class AdminOfflineViewModel {
         isLoading = true
         errorMessage = nil
         do {
-            async let globalFetch = apiClient.isOfflineDownloadsEnabledGlobally()
-            async let usersFetch = apiClient.getUsers()
-            let (global, fetchedUsers) = try await (globalFetch, usersFetch)
-            globalEnabled = global
-            originalGlobalEnabled = global
+            let fetchedUsers = try await apiClient.getUsers()
             users = fetchedUsers.sorted {
                 ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending
             }
@@ -63,6 +54,15 @@ final class AdminOfflineViewModel {
         perUser[userId] = !(perUser[userId] ?? true)
     }
 
+    /// Bulk edit (local only — still goes through explicit save). The
+    /// pragmatic answer to Jellyfin's on-by-default policy: one tap to turn
+    /// the feature off for everyone, then re-enable selected accounts.
+    func setAll(_ enabled: Bool) {
+        for key in perUser.keys {
+            perUser[key] = enabled
+        }
+    }
+
     /// Saves only what changed. Originals advance per successful write, so a
     /// mid-loop failure leaves the already-saved rows clean and only the
     /// still-failing edits dirty for retry.
@@ -71,10 +71,6 @@ final class AdminOfflineViewModel {
         errorMessage = nil
         defer { isSaving = false }
         do {
-            if globalEnabled != originalGlobalEnabled {
-                try await apiClient.setOfflineDownloadsEnabledGlobally(globalEnabled)
-                originalGlobalEnabled = globalEnabled
-            }
             for user in users {
                 guard let id = user.id,
                       let newValue = perUser[id],

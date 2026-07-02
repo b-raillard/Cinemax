@@ -43,45 +43,27 @@ final class AppState {
 
     // MARK: Offline-downloads feature gate
     //
-    // Two-level AND gate, both halves server-driven and admin-controlled:
-    //   * global — a Branding `CustomCss` marker (see `OfflineFeatureFlag`),
-    //     flipped from Admin → "Offline downloads". Fail-safe: a fresh server
-    //     (no marker) reads as OFF, so App Store review never sees the feature.
-    //   * per-user — the native Jellyfin policy
-    //     `UserPolicy.enableContentDownloading` ("Allow media downloads" in
-    //     the Jellyfin dashboard), editable per user from the same admin screen.
-    // Both are cached in UserDefaults so an offline launch keeps the
-    // last-known gate (downloads must stay reachable on a plane). Client
-    // gating is UX only — the server enforces the policy authoritatively.
-
-    /// Server-wide half of the gate (Branding marker). Seeded from the local
-    /// cache; refreshed by `refreshCurrentUser()`.
-    private(set) var offlineDownloadsGloballyEnabled: Bool =
-        UserDefaults.standard.bool(forKey: SettingsKey.downloadsGlobalFlagCache)
-
-    /// Per-user half of the gate (`UserPolicy.enableContentDownloading`).
-    /// Seeded from the local cache; refreshed by `refreshCurrentUser()`.
-    private(set) var offlineDownloadsAllowedForUser: Bool =
-        UserDefaults.standard.bool(forKey: SettingsKey.downloadsUserFlagCache)
+    // Server-driven, admin-controlled, per user: the native Jellyfin policy
+    // `UserPolicy.enableContentDownloading` ("Allow media downloads" in the
+    // Jellyfin dashboard), editable from Admin → "Fonction hors ligne" or the
+    // user editor's Access tab. Jellyfin's server-side default is ON for
+    // every account — for an App Store review pass, turn it OFF for the demo
+    // account (the admin screen has a bulk "disable all"). Cached in
+    // UserDefaults so an offline launch keeps the last-known gate (downloads
+    // must stay reachable on a plane). Client gating is UX only — the server
+    // enforces the policy authoritatively.
 
     /// Effective gate consumed by every downloads surface (`DownloadButton`,
-    /// Settings → Downloads, the offline library swaps). True only when the
-    /// admin enabled the feature globally AND for this specific user.
-    var offlineDownloadsEnabled: Bool {
-        offlineDownloadsGloballyEnabled && offlineDownloadsAllowedForUser
-    }
+    /// Settings → Downloads, the offline library swaps). Seeded from the
+    /// local cache; refreshed by `refreshCurrentUser()`.
+    private(set) var offlineDownloadsEnabled: Bool =
+        UserDefaults.standard.bool(forKey: SettingsKey.downloadsUserFlagCache)
 
     /// Explicit mutator (no `didSet` on `@Observable` properties — see the
-    /// architecture RULE): updates the stored halves and persists the cache.
-    private func setOfflineDownloadsFlags(global: Bool?, user: Bool?) {
-        if let global {
-            offlineDownloadsGloballyEnabled = global
-            UserDefaults.standard.set(global, forKey: SettingsKey.downloadsGlobalFlagCache)
-        }
-        if let user {
-            offlineDownloadsAllowedForUser = user
-            UserDefaults.standard.set(user, forKey: SettingsKey.downloadsUserFlagCache)
-        }
+    /// architecture RULE): updates the stored flag and persists the cache.
+    private func setOfflineDownloadsEnabled(_ enabled: Bool) {
+        offlineDownloadsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: SettingsKey.downloadsUserFlagCache)
     }
 
     /// Re-entrancy guard for the confirm-before-logout cycle. MainActor-confined
@@ -175,28 +157,19 @@ final class AppState {
         guard let id = currentUserId else {
             currentUser = nil
             isAdministrator = false
-            setOfflineDownloadsFlags(global: nil, user: false)
+            setOfflineDownloadsEnabled(false)
             return
         }
         do {
             let user = try await apiClient.getUserByID(id: id)
             currentUser = user
             isAdministrator = user.policy?.isAdministrator ?? false
-            // `?? true` mirrors Jellyfin's own default for the policy — the
-            // feature still stays hidden unless the admin ALSO set the global
-            // Branding marker, so the App-Store-safe default is preserved.
-            setOfflineDownloadsFlags(
-                global: nil,
-                user: user.policy?.enableContentDownloading ?? true
-            )
+            // `?? true` mirrors Jellyfin's own default for the policy (a nil
+            // field means an old server that predates it — treat as allowed,
+            // exactly like the Jellyfin web client does).
+            setOfflineDownloadsEnabled(user.policy?.enableContentDownloading ?? true)
         } catch {
             // Network blip — keep last-known values.
-        }
-        // Global half of the downloads gate — readable by every user via the
-        // public Branding endpoint. Failure keeps the last-known cached value
-        // (same stale-over-flicker policy as the admin flag above).
-        if let global = try? await apiClient.isOfflineDownloadsEnabledGlobally() {
-            setOfflineDownloadsFlags(global: global, user: nil)
         }
     }
 
@@ -261,7 +234,7 @@ final class AppState {
         accessToken = nil
         currentUser = nil
         isAdministrator = false
-        setOfflineDownloadsFlags(global: false, user: false)
+        setOfflineDownloadsEnabled(false)
     }
 
     /// Confirm-before-logout. A single ambiguous 401 from a hot path (or a
