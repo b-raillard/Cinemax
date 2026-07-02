@@ -90,6 +90,18 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedAuthorizeQuickConnectResult
     }
 
+    var stubbedOfflineDownloadsGloballyEnabled = false
+    private(set) var setOfflineDownloadsGloballyCalls: [Bool] = []
+    func isOfflineDownloadsEnabledGlobally() async throws -> Bool {
+        if shouldThrow { throw stubbedError }
+        return stubbedOfflineDownloadsGloballyEnabled
+    }
+    func setOfflineDownloadsEnabledGlobally(_ enabled: Bool) async throws {
+        setOfflineDownloadsGloballyCalls.append(enabled)
+        if shouldThrow { throw stubbedError }
+        stubbedOfflineDownloadsGloballyEnabled = enabled
+    }
+
     func getPublicUsers() async throws -> [UserDto] { [] }
     func getUsers() async throws -> [UserDto] { [] }
     func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto] { [] }

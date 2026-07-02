@@ -219,6 +219,17 @@ struct AdminUserDetailScreen: View {
                     isOn: policyBinding(\.enableAllDevices)
                 )
             }
+
+            AdminSectionGroup(
+                loc.localized("admin.offline.title"),
+                footer: loc.localized("admin.user.access.allowDownloads.footer")
+            ) {
+                toggleRow(
+                    icon: "arrow.down.circle",
+                    label: loc.localized("admin.user.access.allowDownloads"),
+                    isOn: policyBinding(\.enableContentDownloading)
+                )
+            }
         }
     }
 

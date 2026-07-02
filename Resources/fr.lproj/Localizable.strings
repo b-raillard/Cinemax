@@ -422,6 +422,7 @@
 "admin.metadata.subtitle" = "Éditer titres, casting, images et rafraîchir les métadonnées.";
 "admin.users.subtitle" = "Gérer les comptes et les autorisations.";
 "admin.devices.subtitle" = "Voir et révoquer les appareils connectés.";
+"admin.offline.subtitle" = "Activer les téléchargements globalement et par utilisateur.";
 "admin.activity.subtitle" = "Consulter les événements du serveur.";
 "admin.playback.title" = "Lecture";
 "admin.plugins.title" = "Mes extensions";
@@ -462,6 +463,16 @@
 "admin.users.create.submit" = "Créer";
 "admin.users.create.success" = "Utilisateur créé";
 
+// MARK: - Admin — Fonction hors ligne
+
+"admin.offline.title" = "Fonction hors ligne";
+"admin.offline.global.title" = "Réglage global";
+"admin.offline.global.toggle" = "Activer la fonction hors ligne";
+"admin.offline.global.footer" = "Interrupteur général stocké sur le serveur. Désactivé, les téléchargements disparaissent de l'application pour tous les utilisateurs, quel que soit leur réglage individuel.";
+"admin.offline.users.title" = "Par utilisateur";
+"admin.offline.users.footer" = "Un utilisateur ne voit les boutons de téléchargement et le menu Téléchargements que si la fonction est activée globalement ET pour son compte. Synchronisé avec « Autoriser les téléchargements de médias » de Jellyfin.";
+"admin.offline.save.success" = "Réglages hors ligne enregistrés";
+
 // MARK: - Admin — User Detail
 
 "admin.user.tab.profile" = "Profil";
@@ -491,6 +502,8 @@
 "admin.user.access.libraries.empty" = "Aucune médiathèque trouvée sur le serveur.";
 "admin.user.access.devices" = "Accès des appareils";
 "admin.user.access.enableAllDevices" = "Autoriser l'accès depuis tous les appareils";
+"admin.user.access.allowDownloads" = "Autoriser les téléchargements";
+"admin.user.access.allowDownloads.footer" = "L'utilisateur ne voit les téléchargements que si la fonction hors ligne est aussi activée globalement (Administration avancée → Fonction hors ligne).";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";

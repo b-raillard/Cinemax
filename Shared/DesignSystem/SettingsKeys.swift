@@ -74,6 +74,13 @@ enum SettingsKey {
     // Easter eggs
     static let rainbowUnlocked = "easterEgg.rainbowUnlocked"
 
+    // Offline-downloads feature gate — server-driven values cached locally so
+    // an offline launch keeps the last-known gate (a user on a plane must
+    // still reach their downloads). NOT user settings: written only by
+    // `AppState` (refresh / logout), never by a Settings surface.
+    static let downloadsGlobalFlagCache = "downloads.globalFlagCache" // Branding marker (server-wide)
+    static let downloadsUserFlagCache = "downloads.userFlagCache"     // UserPolicy.enableContentDownloading
+
     enum Default {
         static let darkMode = true
         static let accentColor = "green"

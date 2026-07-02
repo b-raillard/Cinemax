@@ -2,7 +2,7 @@
 
 > Deep reference. The critical override-rules also appear in `CLAUDE.md` under "Admin"; this file carries the full context.
 
-`SettingsCategory.visibleCases(isAdmin:isTVOS:)` short-circuits when `isTVOS`; every `Shared/Screens/Admin/` file `#if os(iOS)`.
+`SettingsCategory.visibleCases(isAdmin:isTVOS:downloadsEnabled:)` short-circuits when `isTVOS`; every `Shared/Screens/Admin/` file `#if os(iOS)`.
 
 - **Gating**: `AppState.isAdministrator` (cached; refreshed on login/reconnect/user switch via `AppState.refreshCurrentUser()`). Server authoritative; client gating is UX. `AppState.currentUser: UserDto?` populated alongside.
 - **API surface**: `AdminAPI` slice. Device listing/revocation stays on `AuthAPI` (server returns full fleet to admins by caller identity).

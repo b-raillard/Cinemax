@@ -123,7 +123,9 @@ extension SettingsScreen {
                 // tvOS explicitly hides admin entries — admin workflows are
                 // iOS/iPadOS-only. `isAdmin: false` is safe because the filter
                 // short-circuits on `isTVOS: true` regardless of admin flag.
-                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true)) { category in
+                // `downloadsEnabled: false` is equally moot on tvOS — the
+                // `isIOSOnly` filter already removes Downloads here.
+                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, downloadsEnabled: false)) { category in
                     tvCategoryButton(category)
                 }
             }

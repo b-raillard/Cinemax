@@ -78,13 +78,17 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         self == .downloads
     }
 
-    /// Filters `allCases` by admin visibility and platform. Use this instead of
-    /// raw `allCases` in rendering code — keeps gating in one place.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [SettingsCategory] {
+    /// Filters `allCases` by admin visibility, platform, and the
+    /// offline-downloads feature gate. Use this instead of raw `allCases` in
+    /// rendering code — keeps gating in one place. `downloadsEnabled` is
+    /// `AppState.offlineDownloadsEnabled` (admin-controlled, server-side):
+    /// when false the Downloads category disappears entirely.
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, downloadsEnabled: Bool) -> [SettingsCategory] {
         allCases.filter { category in
             if isTVOS && category.isAdminOnly { return false }
             if isTVOS && category.isIOSOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
+            if category == .downloads && !downloadsEnabled { return false }
             return true
         }
     }

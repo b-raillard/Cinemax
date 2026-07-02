@@ -242,6 +242,7 @@
 "admin.metadata.subtitle" = "Edit titles, cast, images and refresh metadata.";
 "admin.users.subtitle" = "Manage accounts and permissions.";
 "admin.devices.subtitle" = "Review and revoke connected devices.";
+"admin.offline.subtitle" = "Enable downloads globally and per user.";
 "admin.activity.subtitle" = "Browse server events.";
 "admin.playback.title" = "Playback";
 "admin.plugins.title" = "My plugins";
@@ -282,6 +283,16 @@
 "admin.users.create.submit" = "Create";
 "admin.users.create.success" = "User created";
 
+// MARK: - Admin — Offline downloads
+
+"admin.offline.title" = "Offline downloads";
+"admin.offline.global.title" = "Global setting";
+"admin.offline.global.toggle" = "Enable offline downloads";
+"admin.offline.global.footer" = "Server-wide kill-switch. When off, downloads disappear from the app for every user, regardless of their individual setting.";
+"admin.offline.users.title" = "Per user";
+"admin.offline.users.footer" = "A user only sees download buttons and the Downloads menu when the feature is enabled globally AND for their account. Kept in sync with Jellyfin's \"Allow media downloads\" policy.";
+"admin.offline.save.success" = "Offline settings saved";
+
 // MARK: - Admin — User Detail
 
 "admin.user.tab.profile" = "Profile";
@@ -311,6 +322,8 @@
 "admin.user.access.libraries.empty" = "No libraries found on the server.";
 "admin.user.access.devices" = "Device access";
 "admin.user.access.enableAllDevices" = "Allow access from all devices";
+"admin.user.access.allowDownloads" = "Allow media downloads";
+"admin.user.access.allowDownloads.footer" = "The user only sees downloads when the offline feature is also enabled globally (Advanced admin → Offline downloads).";
 
 "admin.user.parental.rating.title" = "Max content rating";
 "admin.user.parental.rating.footer" = "Hides content rated above the chosen age for this user. Unrated titles stay visible.";
