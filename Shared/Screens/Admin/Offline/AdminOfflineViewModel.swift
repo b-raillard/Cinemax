@@ -26,7 +26,12 @@ final class AdminOfflineViewModel {
 
     var isDirty: Bool { perUser != originalPerUser }
 
-    var hasLoaded: Bool { !users.isEmpty }
+    /// Drives the empty state (loaded, no error, no users). Mirrors
+    /// `AdminUsersViewModel.isEmpty` so an empty result renders a proper empty
+    /// state instead of a blank screen — the previous `hasLoaded` conflated
+    /// "load finished" with "has users", which left an unhandled black-screen
+    /// hole whenever `getUsers()` came back empty.
+    var isEmpty: Bool { !isLoading && errorMessage == nil && users.isEmpty }
 
     func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
         isLoading = true
