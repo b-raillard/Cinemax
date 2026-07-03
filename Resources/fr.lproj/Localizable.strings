@@ -43,6 +43,9 @@
 // MARK: - Home Screen
 
 "home.continueWatching" = "Reprendre";
+"home.nextUp" = "À suivre";
+"favorites.empty.title" = "Aucun favori";
+"favorites.empty.subtitle" = "Touchez le cœur sur un film ou une série pour l'ajouter ici.";
 "home.liveSession" = "EN DIRECT";
 "home.watchingNow" = "En direct";
 "home.watchingNow.playing" = "%@ regarde";
@@ -264,6 +267,7 @@
 "settings.authenticatedDevice" = "Appareil authentifié";
 "settings.homePage" = "Page d'accueil";
 "settings.homePage.continueWatching" = "Reprendre";
+"settings.homePage.nextUp" = "À suivre";
 "settings.homePage.recentlyAdded" = "Ajouts récents";
 "settings.homePage.genreRows" = "Rangées par genre";
 "settings.homePage.favorites" = "Favoris";
