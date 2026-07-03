@@ -15,7 +15,6 @@ struct IOSAppearanceDetailView: View {
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @AppStorage(SettingsKey.motionEffects) private var motionEffectsStorage: Bool = SettingsKey.Default.motionEffects
-    @AppStorage(SettingsKey.libraryBrowseLayout) private var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
     @State private var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
     private let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]
 
@@ -128,59 +127,12 @@ struct IOSAppearanceDetailView: View {
                         .tint(themeManager.accent)
                     }
                 }
-
-                iOSSettingsDivider
-
-                iOSSettingsRow {
-                    // Label on its own line, the two-option control full-width
-                    // below it — side-by-side gets squeezed to "Par…/Tout…" once
-                    // the label + buttons can't share one row (e.g. FR @ 100%).
-                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                        HStack {
-                            iOSRowIcon(systemName: "square.grid.2x2", color: themeManager.accent)
-                            Text(loc.localized("settings.libraryLayout"))
-                                .font(CinemaFont.label(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-                            Spacer()
-                        }
-                        libraryLayoutPicker
-                    }
-                }
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
         }
     }
 
     // MARK: - Appearance-specific helpers
-
-    /// Full-width two-option control. "By genre" = browse (hero + genre rows);
-    /// "Show all" = flat grid. Each button takes half the row so the full FR
-    /// labels ("Par genre" / "Tout afficher") fit without truncation.
-    var libraryLayoutPicker: some View {
-        HStack(spacing: CinemaSpacing.spacing2) {
-            libraryLayoutButton(.browse, label: loc.localized("settings.libraryLayout.browse"))
-            libraryLayoutButton(.grid, label: loc.localized("settings.libraryLayout.grid"))
-        }
-    }
-
-    func libraryLayoutButton(_ option: LibraryBrowseLayout, label: String) -> some View {
-        let isSelected = (LibraryBrowseLayout(rawValue: libraryBrowseLayout) ?? .browse) == option
-        return Button {
-            libraryBrowseLayout = option.rawValue
-        } label: {
-            Text(label)
-                .font(.system(size: CinemaScale.pt(15), weight: .semibold))
-                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
-                .frame(height: 36)
-                .background(
-                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                        .fill(isSelected ? themeManager.accent : CinemaColor.surfaceContainerHigh)
-                )
-        }
-        .buttonStyle(.plain)
-    }
 
     var selectedAccent: AccentOption {
         AccentOption(rawValue: themeManager.accentColorKey) ?? .green

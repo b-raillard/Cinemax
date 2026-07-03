@@ -124,31 +124,13 @@ extension JellyfinAPIClient {
         if let cached: [String] = cache.get(cacheKey) { return cached }
 
         guard let client = getClient() else { throw JellyfinError.notConnected }
-
-        // Prefer /Genres — it reads the genres table directly. The legacy
-        // /Items/Filters scan is recursive and walks every episode under every
-        // series, which is very slow and can effectively hang on large
-        // libraries. Keep /Items/Filters as a fallback for servers/configs where
-        // /Genres returns nothing.
-        let genresParams = Paths.GetGenresParameters(
-            includeItemTypes: includeItemTypes,
+        let params = Paths.GetQueryFiltersParameters(
             userID: userId,
-            enableImages: false,
-            enableTotalRecordCount: false
+            includeItemTypes: includeItemTypes,
+            isRecursive: true
         )
-        let genresResponse = try await client.send(Paths.getGenres(parameters: genresParams))
-        var result = (genresResponse.value.items ?? []).compactMap(\.name)
-
-        if result.isEmpty {
-            let filterParams = Paths.GetQueryFiltersParameters(
-                userID: userId,
-                includeItemTypes: includeItemTypes,
-                isRecursive: true
-            )
-            let filterResponse = try await client.send(Paths.getQueryFilters(parameters: filterParams))
-            result = filterResponse.value.genres?.compactMap(\.name) ?? []
-        }
-
+        let response = try await client.send(Paths.getQueryFilters(parameters: params))
+        let result = response.value.genres?.compactMap(\.name) ?? []
         cache.set(cacheKey, value: result, ttl: 300)
         return result
     }
@@ -161,20 +143,9 @@ extension JellyfinAPIClient {
     }
 
     public func getItem(userId: String, itemId: String) async throws -> BaseItemDto {
-        // Short-TTL cache: at playback start the same item is fetched ~3× in a
-        // burst (the PlaybackInfo resolve, the chapter/trickplay load, the
-        // now-playing metadata enrich). A 10s window collapses that burst into
-        // one network round-trip. Every path that mutates this item's userData
-        // invalidates the key explicitly so a stale entry is never served: the
-        // play-state / favorite mutators, AND `reportPlaybackStopped` (so the
-        // detail screen's immediate post-dismiss reload gets the fresh resume
-        // position — tvOS reloads synchronously on dismiss).
-        let cacheKey = "item-\(itemId)-\(userId)"
-        if let cached: BaseItemDto = cache.get(cacheKey) { return cached }
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let response = try await client.send(Paths.getItem(itemID: itemId, userID: userId))
-            cache.set(cacheKey, value: response.value, ttl: 10)
             return response.value
         } catch {
             notifyIfUnauthorized(error)
@@ -183,20 +154,10 @@ extension JellyfinAPIClient {
     }
 
     public func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
-        // "More like this" is stable per item — cache 5 min so re-opening a
-        // detail screen (or bouncing in/out of the player) doesn't re-fetch it
-        // every time. Cache the raw items and apply the rating filter on the way
-        // out so a mid-session content-age change is always honored.
-        let cacheKey = "similar-\(itemId)-\(userId)-\(limit)"
-        if let cached: [BaseItemDto] = cache.get(cacheKey) {
-            return applyRatingFilter(cached)
-        }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetSimilarItemsParameters(userID: userId, limit: limit)
         let response = try await client.send(Paths.getSimilarItems(itemID: itemId, parameters: params))
-        let items = response.value.items ?? []
-        cache.set(cacheKey, value: items, ttl: 300)
-        return applyRatingFilter(items)
+        return applyRatingFilter(response.value.items ?? [])
     }
 
     public func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
@@ -253,10 +214,7 @@ extension JellyfinAPIClient {
         _ = try await client.send(Paths.markUnplayedItem(itemID: itemId, userID: userId))
         // Only the resume list depends on play state — leave genres / latest /
         // serverInfo caches intact so the next navigation doesn't refetch them.
-        // Also drop this item's short-TTL getItem entry so the detail screen
-        // reflects the new play state immediately rather than after 10s.
         cache.invalidate(prefix: "resume-")
-        cache.invalidate(prefix: "item-\(itemId)-")
     }
 
     public func markItemPlayed(itemId: String, userId: String) async throws {
@@ -264,10 +222,8 @@ extension JellyfinAPIClient {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             _ = try await client.send(Paths.markPlayedItem(itemID: itemId, userID: userId))
             // Marking watched pulls the item out of Continue Watching — drop the
-            // resume list so the row catches up, plus this item's short-TTL
-            // getItem entry. Other caches stay intact.
+            // resume list so the row catches up. Other caches stay intact.
             cache.invalidate(prefix: "resume-")
-            cache.invalidate(prefix: "item-\(itemId)-")
         } catch {
             notifyIfUnauthorized(error)
             throw error
@@ -282,12 +238,10 @@ extension JellyfinAPIClient {
             } else {
                 _ = try await client.send(Paths.unmarkFavoriteItem(itemID: itemId, userID: userId))
             }
-            // The Favorites row refetches uncached; the cached surfaces carrying
-            // favorite state are the resume list's userData and this item's
-            // short-TTL getItem entry. Scope the invalidation to those rather
-            // than nuking genres / latest / serverInfo.
+            // The Favorites row refetches uncached; the only cached surface
+            // carrying favorite state is the resume list's userData. Scope the
+            // invalidation to it rather than nuking genres / latest / serverInfo.
             cache.invalidate(prefix: "resume-")
-            cache.invalidate(prefix: "item-\(itemId)-")
         } catch {
             notifyIfUnauthorized(error)
             throw error

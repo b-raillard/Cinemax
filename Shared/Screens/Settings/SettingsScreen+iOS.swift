@@ -426,29 +426,6 @@ extension SettingsScreen {
     var iOSHomePageSection: some View {
         VStack(spacing: 0) {
             iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects)
-
-            // "Genre rows" is a section toggle; when on, drill into a native
-            // multi-select to choose which genres surface as rows on Home.
-            if showGenreRows {
-                iOSSettingsDivider
-                NavigationLink {
-                    IOSHomeGenrePickerView()
-                } label: {
-                    iOSSettingsRow {
-                        HStack {
-                            iOSRowIcon(systemName: "theatermasks", color: themeManager.accent)
-                            Text(loc.localized("settings.homePage.genreRows.choose"))
-                                .font(CinemaFont.label(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: CinemaScale.pt(13), weight: .semibold))
-                                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
         }
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
@@ -580,97 +557,6 @@ extension SettingsScreen {
                 .tint(themeManager.accent)
             }
         }
-    }
-}
-
-// MARK: - iOS Home Genre Rows Picker
-
-/// Native multi-select `List` for choosing which genres appear as rows on
-/// Home. Pushed from the Home page settings section. Standalone `View` so its
-/// `@State` (fetched genres) and `@AppStorage` selection drive re-renders even
-/// though it's reached through a `NavigationLink` inside the settings stack.
-/// Selection persists through `HomeGenrePreferences` (`home.selectedGenres`).
-struct IOSHomeGenrePickerView: View {
-    @Environment(AppState.self) private var appState
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(LocalizationManager.self) private var loc
-    /// Held only for reactivity — the source of truth is `HomeGenrePreferences`.
-    @AppStorage(SettingsKey.homeSelectedGenres) private var selectionJSON: String = ""
-    @State private var availableGenres: [String] = []
-    @State private var isLoading = true
-
-    var body: some View {
-        Group {
-            if isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if availableGenres.isEmpty {
-                EmptyStateView(
-                    systemImage: "theatermasks",
-                    title: loc.localized("settings.homePage.genreRows.empty")
-                )
-            } else {
-                List(availableGenres, id: \.self, selection: selectionBinding) { genre in
-                    Text(genre)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurface)
-                        .listRowBackground(CinemaColor.surfaceContainer)
-                }
-                .environment(\.editMode, .constant(.active))
-                .scrollContentBackground(.hidden)
-                .tint(themeManager.accent)
-            }
-        }
-        .background(CinemaColor.surface.ignoresSafeArea())
-        .navigationTitle(loc.localized("settings.homePage.genreRows"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !availableGenres.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(loc.localized(allSelected
-                        ? "settings.homePage.genreRows.deselectAll"
-                        : "settings.homePage.genreRows.selectAll")) {
-                        HomeGenrePreferences.setSelectedGenres(allSelected ? [] : availableGenres)
-                    }
-                    .tint(themeManager.accent)
-                }
-            }
-        }
-        .task { await loadGenres() }
-    }
-
-    /// `true` when every available genre is currently selected — drives the
-    /// select-all / deselect-all toggle label and action.
-    private var allSelected: Bool {
-        !availableGenres.isEmpty && selectionBinding.wrappedValue.count == availableGenres.count
-    }
-
-    /// `Set` binding the multi-select `List` drives. The getter falls back to a
-    /// default prefix while unconfigured so the checkmarks match what Home
-    /// shows; the first edit materializes the explicit selection.
-    private var selectionBinding: Binding<Set<String>> {
-        Binding(
-            get: {
-                let explicit = HomeGenrePreferences.decode(selectionJSON)
-                if explicit.isEmpty && !HomeGenrePreferences.isConfigured() {
-                    return Set(availableGenres.prefix(HomeGenrePreferences.defaultRowCount))
-                }
-                return Set(explicit)
-            },
-            set: { newValue in
-                // Persist in canonical (available) order — matches Home's row order.
-                HomeGenrePreferences.setSelectedGenres(availableGenres.filter { newValue.contains($0) })
-            }
-        )
-    }
-
-    private func loadGenres() async {
-        guard let userId = appState.currentUserId else { isLoading = false; return }
-        let genres = (try? await appState.apiClient.getGenres(
-            userId: userId, includeItemTypes: [.movie, .series]
-        )) ?? []
-        availableGenres = genres.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-        isLoading = false
     }
 }
 

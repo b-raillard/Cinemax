@@ -209,15 +209,6 @@ final class HomeViewModel {
         }
     }
 
-    /// Re-fetches only the genre rows — fired from `HomeScreen` when the user
-    /// changes their genre selection in Settings (the `home.selectedGenres`
-    /// `@AppStorage` flips). Bypasses the `hasLoaded` guard so the change is
-    /// reflected live without re-running the whole Home load.
-    func reloadGenreRows(using appState: AppState) async {
-        guard let userId = appState.currentUserId else { return }
-        await loadGenreRows(userId: userId, appState: appState)
-    }
-
     private func loadGenreRows(userId: String, appState: AppState) async {
         let allGenres: [String]
         do {
@@ -229,51 +220,32 @@ final class HomeViewModel {
             return
         }
 
-        // Sort once so Home's row order matches the Settings picker order (both
-        // use the same comparator) and stays coherent across launches.
-        let sortedGenres = allGenres.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-
-        guard !sortedGenres.isEmpty else {
+        guard !allGenres.isEmpty else {
             genreRows = []
             return
         }
 
-        // User-configurable: the explicit picks (no cap), or a deterministic
-        // default set when unconfigured. Each row's item fetch is still bounded
-        // (limit 10) — we bound the fetch, not the number of rows.
-        let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres)
+        let picked = Array(allGenres.shuffled().prefix(4))
 
-        guard !picked.isEmpty else {
-            genreRows = []
-            return
-        }
-
-        // Fetch items for each picked genre. Since the row count is now
-        // user-driven (no cap), bound the fan-out to chunks of 6 so a large
-        // selection doesn't fire dozens of concurrent `getItems` at a
-        // self-hosted server at once. Order is rebuilt from `picked` afterwards.
+        // Fetch items for each picked genre in parallel. Preserve the order of `picked`.
         // Distinguish failure (→ retry chip) from empty success (→ drop the row).
         enum FetchResult { case success([BaseItemDto]); case failure }
-        let concurrencyLimit = 6
         var results: [String: FetchResult] = [:]
-        for start in stride(from: 0, to: picked.count, by: concurrencyLimit) {
-            let chunk = picked[start..<min(start + concurrencyLimit, picked.count)]
-            await withTaskGroup(of: (String, FetchResult).self) { group in
-                for genre in chunk {
-                    group.addTask {
-                        do {
-                            let items = try await Self.fetchGenreItems(
-                                genre: genre, userId: userId, appState: appState
-                            )
-                            return (genre, .success(items))
-                        } catch {
-                            return (genre, .failure)
-                        }
+        await withTaskGroup(of: (String, FetchResult).self) { group in
+            for genre in picked {
+                group.addTask {
+                    do {
+                        let items = try await Self.fetchGenreItems(
+                            genre: genre, userId: userId, appState: appState
+                        )
+                        return (genre, .success(items))
+                    } catch {
+                        return (genre, .failure)
                     }
                 }
-                for await (genre, result) in group {
-                    results[genre] = result
-                }
+            }
+            for await (genre, result) in group {
+                results[genre] = result
             }
         }
 
@@ -313,8 +285,8 @@ final class HomeViewModel {
             userId: userId,
             parentId: nil,
             includeItemTypes: [.movie, .series],
-            sortBy: [.dateCreated],
-            sortOrder: [.descending],
+            sortBy: [.random],
+            sortOrder: nil,
             genres: [genre],
             years: nil,
             isFavorite: nil,

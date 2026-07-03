@@ -197,7 +197,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
     @AppStorage(SettingsKey.detailShowTrailerButton) var showTrailerButton: Bool = SettingsKey.Default.detailShowTrailerButton
-    @AppStorage(SettingsKey.libraryBrowseLayout) var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
+    @AppStorage(SettingsKey.libraryTVBrowseLayout) var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
