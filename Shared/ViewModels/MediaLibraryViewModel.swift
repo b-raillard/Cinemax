@@ -141,16 +141,17 @@ final class MediaLibraryViewModel {
             )
 
             // The hero query already returns the full `totalCount` (Jellyfin's
-            // `totalRecordCount` is the count before `limit`), so there's no need
-            // for a second random-sorted `limit: 1` call just for the title count
-            // — a random sort is a full shuffle server-side, paying for it twice
-            // per library load is pure waste.
+            // `totalRecordCount` is the count before `limit`), so a single fetch
+            // covers both the count and the hero item. Sort by `dateCreated`
+            // descending (newest first) rather than `.random`: a random sort is
+            // an un-indexed full shuffle the server re-runs on every load, and
+            // the coherent newest-first ordering is the intended behavior.
             async let heroResult = appState.apiClient.getItems(
                 userId: userId,
                 parentId: parentId,
                 includeItemTypes: typeFilter,
-                sortBy: [.random],
-                sortOrder: [.ascending],
+                sortBy: [.dateCreated],
+                sortOrder: [.descending],
                 limit: 20
             )
 
@@ -159,7 +160,7 @@ final class MediaLibraryViewModel {
 
             genres = fetchedGenres
             totalCount = heroData.totalCount
-            heroItem = heroData.items.randomElement()
+            heroItem = heroData.items.first
 
             try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
             isLoading = false

@@ -460,6 +460,9 @@ extension SettingsScreen {
     var tvHomePageSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(homePageToggleRows)
+            if showGenreRows {
+                TVHomeGenrePickerView()
+            }
         }
     }
 
@@ -580,11 +583,11 @@ extension SettingsScreen {
 
     // MARK: - Sleep Timer Row (tvOS)
 
-    /// Library landing layout (browse vs flat grid). tvOS-only setting; iOS
-    /// always uses the browse view because the screen has a real toolbar.
+    /// Library landing layout ("By genre" browse vs "Show all" flat grid). The
+    /// iOS equivalent is an inline segmented control in `IOSAppearanceDetailView`.
     var tvLibraryLayoutRow: some View {
         let isFocused = focusedItem == .toggle("libraryLayout")
-        let selected = LibraryTVBrowseLayout(rawValue: libraryTVBrowseLayout) ?? .browse
+        let selected = LibraryBrowseLayout(rawValue: libraryBrowseLayout) ?? .browse
         return Button {
             showLibraryLayoutPicker = true
         } label: {
@@ -613,9 +616,9 @@ extension SettingsScreen {
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .toggle("libraryLayout"))
         .confirmationDialog(loc.localized("settings.libraryLayout"), isPresented: $showLibraryLayoutPicker) {
-            ForEach(LibraryTVBrowseLayout.allCases) { option in
+            ForEach(LibraryBrowseLayout.allCases) { option in
                 Button(loc.localized(option == .browse ? "settings.libraryLayout.browse" : "settings.libraryLayout.grid")) {
-                    libraryTVBrowseLayout = option.rawValue
+                    libraryBrowseLayout = option.rawValue
                 }
             }
         }
@@ -718,6 +721,149 @@ extension View {
                     .strokeBorder(accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
             )
             .animation(animated ? .easeOut(duration: 0.15) : nil, value: isFocused)
+    }
+}
+
+// MARK: - tvOS Home Genre Rows Picker
+
+/// Focusable genre chips for choosing which genres appear as rows on Home.
+/// Standalone `View` so it owns its `@State` (fetched genres) and re-renders
+/// from `@AppStorage` even though it's hosted in the state-machine settings
+/// detail rendered from an extension method (where `@Observable` wouldn't).
+/// Selection persists through `HomeGenrePreferences` (`home.selectedGenres`).
+struct TVHomeGenrePickerView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+    /// Held only for reactivity — the source of truth is `HomeGenrePreferences`.
+    @AppStorage(SettingsKey.homeSelectedGenres) private var selectionJSON: String = ""
+    @State private var availableGenres: [String] = []
+    @State private var didLoad = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            Text(loc.localized("settings.homePage.genreRows.hint"))
+                .font(.system(size: CinemaScale.pt(17), weight: .medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+
+            if availableGenres.isEmpty {
+                Text(loc.localized("settings.homePage.genreRows.empty"))
+                    .font(.system(size: CinemaScale.pt(17), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .padding(.vertical, CinemaSpacing.spacing2)
+            } else {
+                selectAllChip
+                FlowLayout(spacing: CinemaSpacing.spacing2) {
+                    ForEach(availableGenres, id: \.self) { genre in
+                        chip(genre)
+                    }
+                }
+            }
+        }
+        .padding(.top, CinemaSpacing.spacing2)
+        .task {
+            // getGenres is cached client-side (300s); guard so the tvOS `.task`
+            // re-firing on settings re-entry doesn't thrash @State.
+            guard !didLoad else { return }
+            didLoad = true
+            await loadGenres()
+        }
+    }
+
+    private var selection: Set<String> {
+        let explicit = HomeGenrePreferences.decode(selectionJSON)
+        if explicit.isEmpty && !HomeGenrePreferences.isConfigured() {
+            return Set(availableGenres.prefix(HomeGenrePreferences.defaultRowCount))
+        }
+        return Set(explicit)
+    }
+
+    private var allSelected: Bool {
+        !availableGenres.isEmpty && selection.count == availableGenres.count
+    }
+
+    /// Select-all / deselect-all toggle. Selecting all persists the full list;
+    /// deselecting persists an explicit empty choice (zero genre rows).
+    private var selectAllChip: some View {
+        let scheme: ColorScheme = themeManager.darkModeEnabled ? .dark : .light
+        return Button {
+            HomeGenrePreferences.setSelectedGenres(allSelected ? [] : availableGenres)
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing1) {
+                Image(systemName: allSelected ? "xmark.circle" : "checkmark.circle")
+                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                Text(loc.localized(allSelected
+                    ? "settings.homePage.genreRows.deselectAll"
+                    : "settings.homePage.genreRows.selectAll"))
+                    .font(.system(size: CinemaScale.pt(20), weight: .semibold))
+            }
+            .foregroundStyle(CinemaColor.onSurface)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing2)
+            .environment(\.colorScheme, scheme)
+            .background(
+                Capsule()
+                    .fill(CinemaColor.surfaceContainerHigh)
+                    .environment(\.colorScheme, scheme)
+            )
+            .clipShape(Capsule())
+        }
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+    }
+
+    @ViewBuilder
+    private func chip(_ genre: String) -> some View {
+        let isSelected = selection.contains(genre)
+        // A focused tvOS button flips its label's UITraitCollection to light
+        // mode, which would invert every Color.dynamic token (near-black text
+        // on a near-white capsule in dark mode). Re-inject the real scheme on
+        // the label content AND the background fill — same mechanism as
+        // `tvSettingsFocusable`. See CLAUDE.md trait caveat.
+        let scheme: ColorScheme = themeManager.darkModeEnabled ? .dark : .light
+        Button {
+            toggle(genre)
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing1) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: CinemaScale.pt(15), weight: .bold))
+                }
+                Text(genre)
+                    .font(.system(size: CinemaScale.pt(20), weight: isSelected ? .bold : .medium))
+            }
+            .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing2)
+            .environment(\.colorScheme, scheme)
+            .background(
+                Capsule()
+                    .fill(isSelected ? themeManager.accentContainer : CinemaColor.surfaceContainerHigh)
+                    .environment(\.colorScheme, scheme)
+            )
+            .clipShape(Capsule())
+        }
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+    }
+
+    private func toggle(_ genre: String) {
+        var next = selection
+        if next.contains(genre) { next.remove(genre) } else { next.insert(genre) }
+        // Persist in canonical (available) order so Home renders rows in the
+        // same order the chips appear here.
+        HomeGenrePreferences.setSelectedGenres(availableGenres.filter { next.contains($0) })
+    }
+
+    private func loadGenres() async {
+        guard let userId = appState.currentUserId else { return }
+        let genres = (try? await appState.apiClient.getGenres(
+            userId: userId, includeItemTypes: [.movie, .series]
+        )) ?? []
+        availableGenres = genres.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 }
 #endif
