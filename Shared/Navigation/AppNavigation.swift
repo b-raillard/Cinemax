@@ -41,6 +41,31 @@ final class AppState {
     /// still enforces authorization on every endpoint.
     private(set) var isAdministrator: Bool = false
 
+    // MARK: Offline-downloads feature gate
+    //
+    // Server-driven, admin-controlled, per user: the native Jellyfin policy
+    // `UserPolicy.enableContentDownloading` ("Allow media downloads" in the
+    // Jellyfin dashboard), editable from Admin → "Fonction hors ligne" or the
+    // user editor's Access tab. Jellyfin's server-side default is ON for
+    // every account — for an App Store review pass, turn it OFF for the demo
+    // account (the admin screen has a bulk "disable all"). Cached in
+    // UserDefaults so an offline launch keeps the last-known gate (downloads
+    // must stay reachable on a plane). Client gating is UX only — the server
+    // enforces the policy authoritatively.
+
+    /// Effective gate consumed by every downloads surface (`DownloadButton`,
+    /// Settings → Downloads, the offline library swaps). Seeded from the
+    /// local cache; refreshed by `refreshCurrentUser()`.
+    private(set) var offlineDownloadsEnabled: Bool =
+        UserDefaults.standard.bool(forKey: SettingsKey.downloadsUserFlagCache)
+
+    /// Explicit mutator (no `didSet` on `@Observable` properties — see the
+    /// architecture RULE): updates the stored flag and persists the cache.
+    private func setOfflineDownloadsEnabled(_ enabled: Bool) {
+        offlineDownloadsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: SettingsKey.downloadsUserFlagCache)
+    }
+
     /// Re-entrancy guard for the confirm-before-logout cycle. MainActor-confined
     /// (no lock needed) — every trigger hops to MainActor before reading it, so
     /// concurrent 401s / a foreground revalidation collapse into one probe.
@@ -132,12 +157,17 @@ final class AppState {
         guard let id = currentUserId else {
             currentUser = nil
             isAdministrator = false
+            setOfflineDownloadsEnabled(false)
             return
         }
         do {
             let user = try await apiClient.getUserByID(id: id)
             currentUser = user
             isAdministrator = user.policy?.isAdministrator ?? false
+            // `?? true` mirrors Jellyfin's own default for the policy (a nil
+            // field means an old server that predates it — treat as allowed,
+            // exactly like the Jellyfin web client does).
+            setOfflineDownloadsEnabled(user.policy?.enableContentDownloading ?? true)
         } catch {
             // Network blip — keep last-known values.
         }
@@ -204,6 +234,7 @@ final class AppState {
         accessToken = nil
         currentUser = nil
         isAdministrator = false
+        setOfflineDownloadsEnabled(false)
     }
 
     /// Confirm-before-logout. A single ambiguous 401 from a hot path (or a

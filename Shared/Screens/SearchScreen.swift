@@ -66,8 +66,9 @@ struct SearchScreen: View {
             // Spotlight, and keyboard. Voice search is exposed as a leading
             // toolbar button. The body renders results / empty / listening states.
             // When offline, swap in the downloads-only library instead of
-            // searching against an unreachable server.
-            if !network.isOnline {
+            // searching against an unreachable server — but only when the
+            // downloads feature is enabled for this user (admin-controlled).
+            if !network.isOnline && appState.offlineDownloadsEnabled {
                 OfflineLibraryView(scope: .all)
             } else {
                 VStack(spacing: 0) {

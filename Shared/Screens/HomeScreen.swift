@@ -30,7 +30,10 @@ struct HomeScreen: View {
             CinemaColor.surface.ignoresSafeArea()
 
             #if os(iOS)
-            if !network.isOnline {
+            // Offline swap is gated on the downloads feature flag (last-known
+            // cached value): when the admin disabled downloads there is no
+            // offline library to surface — fall through to the normal states.
+            if !network.isOnline && appState.offlineDownloadsEnabled {
                 OfflineLibraryView(scope: .all)
             } else if viewModel.isLoading {
                 loadingSkeleton

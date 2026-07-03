@@ -45,6 +45,17 @@ struct DownloadButton: View {
     }
 
     var body: some View {
+        // Single chokepoint for the offline-downloads feature gate: every
+        // call site (detail screen chip, per-episode card, series menu)
+        // renders through here, so gating the body hides the download
+        // affordance everywhere when the admin disabled the feature for
+        // this user (`UserPolicy.enableContentDownloading`).
+        if appState.offlineDownloadsEnabled {
+            gatedBody
+        }
+    }
+
+    private var gatedBody: some View {
         Group {
             switch bulk {
             case .none:
