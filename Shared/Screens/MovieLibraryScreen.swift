@@ -25,10 +25,8 @@ struct MediaLibraryScreen: View {
     #endif
     #if os(tvOS)
     @State private var showSortPicker = false
+    @AppStorage(SettingsKey.libraryTVBrowseLayout) private var libraryTVBrowseLayout: String = SettingsKey.Default.libraryTVBrowseLayout
     #endif
-    /// Browse ("By genre") vs flat grid ("Show all") landing layout. Honored on
-    /// both platforms; the toggle lives in Settings → Appearance.
-    @AppStorage(SettingsKey.libraryBrowseLayout) private var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
 
     /// `nil` for library tabs of Other / Mixed kind — disables the
     /// `includeItemTypes` filter at query time so every item in the parent
@@ -166,20 +164,17 @@ struct MediaLibraryScreen: View {
     }
 
     /// Filtered grid is shown when:
+    /// - iOS: any non-default state (sort or filter)
     /// - tvOS: any active *filter*, OR the user opted into the flat grid layout
-    ///   ("Show all") in Settings → Appearance. Sort changes alone don't switch
-    ///   out of browse.
-    /// - iOS: any non-default state (sort or filter), OR the user opted into the
-    ///   flat grid layout ("Show all"). The sort sheet flipping to grid is the
-    ///   existing iOS behavior; the layout toggle additionally forces grid even
-    ///   in the pristine default state.
+    ///   in Settings → Interface. Sort changes alone don't switch out of browse,
+    ///   matching the iOS default-sort browse experience.
     private var shouldShowFilteredView: Bool {
         #if os(tvOS)
         if viewModel.sortFilter.isFiltered { return true }
+        return LibraryTVBrowseLayout(rawValue: libraryTVBrowseLayout) == .grid
         #else
-        if viewModel.sortFilter.isNonDefault { return true }
+        return viewModel.sortFilter.isNonDefault
         #endif
-        return LibraryBrowseLayout(rawValue: libraryBrowseLayout) == .grid
     }
 
     // MARK: Browse View (hero + genre rows + browse-genres grid)
