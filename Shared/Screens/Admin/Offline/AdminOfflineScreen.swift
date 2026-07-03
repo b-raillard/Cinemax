@@ -20,39 +20,40 @@ struct AdminOfflineScreen: View {
 
     var body: some View {
         AdminLoadStateContainer(
-            isLoading: viewModel.isLoading && !viewModel.hasLoaded,
-            errorMessage: viewModel.hasLoaded ? nil : viewModel.errorMessage,
-            isEmpty: false,
+            isLoading: viewModel.isLoading && viewModel.users.isEmpty,
+            errorMessage: viewModel.errorMessage,
+            isEmpty: viewModel.isEmpty,
+            emptyIcon: "person.slash",
+            emptyTitle: loc.localized("admin.offline.empty.title"),
+            emptySubtitle: loc.localized("admin.offline.empty.subtitle"),
             onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
         ) {
-            if viewModel.hasLoaded {
-                AdminFormScreen(
-                    isDirty: viewModel.isDirty,
-                    isSaving: viewModel.isSaving,
-                    onSave: {
-                        let ok = await viewModel.save(using: appState.apiClient, loc: loc)
-                        if ok {
-                            toasts.success(loc.localized("admin.offline.save.success"))
-                            // Re-derive the local gate right away — when the
-                            // admin just changed their own policy, their
-                            // Settings/detail surfaces must reflect it
-                            // without waiting for the next launch.
-                            await appState.refreshCurrentUser()
-                        } else if let err = viewModel.errorMessage {
-                            toasts.error(err)
-                        }
+            AdminFormScreen(
+                isDirty: viewModel.isDirty,
+                isSaving: viewModel.isSaving,
+                onSave: {
+                    let ok = await viewModel.save(using: appState.apiClient, loc: loc)
+                    if ok {
+                        toasts.success(loc.localized("admin.offline.save.success"))
+                        // Re-derive the local gate right away — when the
+                        // admin just changed their own policy, their
+                        // Settings/detail surfaces must reflect it
+                        // without waiting for the next launch.
+                        await appState.refreshCurrentUser()
+                    } else if let err = viewModel.errorMessage {
+                        toasts.error(err)
                     }
-                ) {
-                    bulkActions
-                    usersSection
                 }
+            ) {
+                bulkActions
+                usersSection
             }
         }
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(loc.localized("admin.offline.title"))
         .navigationBarTitleDisplayMode(.large)
         .task {
-            if !viewModel.hasLoaded {
+            if viewModel.users.isEmpty {
                 await viewModel.load(using: appState.apiClient, loc: loc)
             }
         }

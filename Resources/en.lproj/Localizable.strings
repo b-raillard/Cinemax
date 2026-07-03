@@ -294,6 +294,8 @@
 "admin.offline.users.title" = "Per user";
 "admin.offline.users.footer" = "A user only sees download buttons and the Downloads menu when the option is enabled for their account. Kept in sync with Jellyfin's \"Allow media downloads\" policy — enabled by default for every new account.";
 "admin.offline.save.success" = "Offline settings saved";
+"admin.offline.empty.title" = "No users";
+"admin.offline.empty.subtitle" = "No user accounts were found on this server.";
 
 // MARK: - Admin — User Detail
 

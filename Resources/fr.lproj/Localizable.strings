@@ -475,6 +475,8 @@
 "admin.offline.users.title" = "Par utilisateur";
 "admin.offline.users.footer" = "Un utilisateur ne voit les boutons de téléchargement et le menu Téléchargements que si l'option est activée pour son compte. Synchronisé avec « Autoriser les téléchargements de médias » de Jellyfin — activée par défaut pour tout nouveau compte.";
 "admin.offline.save.success" = "Réglages hors ligne enregistrés";
+"admin.offline.empty.title" = "Aucun utilisateur";
+"admin.offline.empty.subtitle" = "Aucun compte utilisateur n'a été trouvé sur ce serveur.";
 
 // MARK: - Admin — User Detail
 
