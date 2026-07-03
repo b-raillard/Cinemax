@@ -270,13 +270,18 @@
 "settings.homePage.nextUp" = "À suivre";
 "settings.homePage.recentlyAdded" = "Ajouts récents";
 "settings.homePage.genreRows" = "Rangées par genre";
+"settings.homePage.genreRows.choose" = "Choisir les genres";
+"settings.homePage.genreRows.hint" = "Genres affichés en rangées sur l'accueil";
+"settings.homePage.genreRows.empty" = "Aucun genre disponible";
+"settings.homePage.genreRows.selectAll" = "Tout sélectionner";
+"settings.homePage.genreRows.deselectAll" = "Tout désélectionner";
 "settings.homePage.favorites" = "Favoris";
 "settings.detailPage" = "Page de détail";
 "settings.detailPage.qualityBadges" = "Badges de qualité";
 "settings.detailPage.trailerButton" = "Bouton Bande-annonce";
-"settings.libraryLayout" = "Page d'accueil bibliothèque";
-"settings.libraryLayout.browse" = "Parcourir";
-"settings.libraryLayout.grid" = "Grille";
+"settings.libraryLayout" = "Bibliothèque";
+"settings.libraryLayout.browse" = "Par genre";
+"settings.libraryLayout.grid" = "Tout afficher";
 
 // MARK: - Media Detail
 
