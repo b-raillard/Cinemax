@@ -6,13 +6,13 @@ import UIKit
 // controller's playback/HUD state, only their own closures and properties.
 
 #if os(tvOS)
-/// Focusable tvOS scrub bar. Left/right seek ±15 s ONLY while this view holds
+/// Focusable tvOS scrub bar. Left/right seek ±10 s ONLY while this view holds
 /// focus — every other press (up/down to move focus to the control buttons,
 /// Play/Pause, Menu) is passed to `super` so the focus engine keeps working.
 /// This is what lets the user reach the Audio/Subtitles/episode buttons; the
 /// previous view-level arrow gestures swallowed left/right globally.
 final class TVScrubBar: UIView {
-    /// Discrete clickpad arrow press → ±1 step (caller maps to ±15 s).
+    /// Discrete clickpad arrow press → ±1 step (caller maps to ±10 s).
     var onSeek: ((Int) -> Void)?
     var onSelect: (() -> Void)?
     /// Live position [0,1] while the user slides on the Siri Remote touch
@@ -27,11 +27,23 @@ final class TVScrubBar: UIView {
     private var progressValue: Float = 0
     private var scrubProgress: Float = 0
     private var isScrubbing = false
+    /// Finger travel (points) accumulated since the pan began but BEFORE the
+    /// dead-zone is crossed — reset every gesture. See `activationThreshold`.
+    private var pendingPanTravel: CGFloat = 0
 
     /// Touch-surface gain: fraction of the *whole timeline* covered per one
     /// full bar-width of finger travel on the remote. Lower = less sensitive /
-    /// finer control. 0.5 ⇒ a full swipe ≈ half the movie. Tune here.
-    private let scrubGain: Float = 0.5
+    /// finer control. 0.2 ⇒ a full swipe ≈ a fifth of the movie. Tune here.
+    /// (Was 0.5 — the Siri Remote 2nd-gen touch surface made that too fast, a
+    /// small thumb slide jumped several minutes.)
+    private let scrubGain: Float = 0.2
+
+    /// Dead-zone: the finger must travel this many points on the touch surface
+    /// before a scrub actually engages. The Siri Remote 2nd-gen fires a pan on
+    /// the faintest contact, so without this a resting thumb starts scrubbing
+    /// the instant it touches down AND swallows the ±N clickpad presses (`pressesBegan`
+    /// bails while `isScrubbing`). Below the threshold the gesture is a no-op.
+    private let activationThreshold: CGFloat = 30
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -50,14 +62,14 @@ final class TVScrubBar: UIView {
         // Siri Remote touch-surface slide → variable scrubbing. tvOS delivers
         // indirect (remote touchpad) pans to the *focused* view's recognizers,
         // so this only fires while the bar holds focus — same contract as the
-        // ±15 s clickpad presses below. Restricted to indirect touches so it
+        // ±10 s clickpad presses below. Restricted to indirect touches so it
         // never competes with the focus engine's directional clicks.
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
         addGestureRecognizer(pan)
 
         // VoiceOver: expose the bar as an adjustable element so a swipe-up /
-        // swipe-down seeks ±1 step (the caller maps to ±15 s). Label + value
+        // swipe-down seeks ±1 step (the caller maps to ±10 s). Label + value
         // (current playhead) are set by the presenter, which owns the strings.
         isAccessibilityElement = true
         accessibilityTraits = .adjustable
@@ -97,7 +109,7 @@ final class TVScrubBar: UIView {
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        // A slide that ends in a click would otherwise also fire a ±15 s jump
+        // A slide that ends in a click would otherwise also fire a ±10 s jump
         // on top of the scrub — ignore presses while a scrub is in flight.
         if isScrubbing { return }
         var handled = false
@@ -115,22 +127,36 @@ final class TVScrubBar: UIView {
     @objc private func handlePan(_ g: UIPanGestureRecognizer) {
         switch g.state {
         case .began:
-            // Anchor to the real current playhead and own the bar from here —
-            // the caller suppresses the periodic tick so nothing fights it.
-            isScrubbing = true
-            scrubProgress = progressValue
-            onScrubPreview?(scrubProgress)
+            // Do NOT engage scrubbing yet — wait until the finger has travelled
+            // past the dead-zone (`activationThreshold`). Just arm the counter.
+            pendingPanTravel = 0
         case .changed:
             // Incremental, not absolute: consume the delta each frame and
             // reset the recognizer. Avoids the "jump then snap to current"
             // glitch (no stale absolute baseline) and keeps motion fluid.
             let dx = Float(g.translation(in: self).x)
             g.setTranslation(.zero, in: self)
+            if !isScrubbing {
+                // Still inside the dead-zone: accumulate travel; a resting or
+                // faintly-drifting thumb never crosses it, so ±N clicks keep
+                // working. A deliberate slide crosses it within a few frames.
+                pendingPanTravel += CGFloat(abs(dx))
+                guard pendingPanTravel >= activationThreshold else { return }
+                // Threshold crossed → take over the bar from the real playhead.
+                // The caller suppresses the periodic tick so nothing fights it.
+                isScrubbing = true
+                scrubProgress = progressValue
+                onScrubPreview?(scrubProgress)
+            }
             scrubProgress += (dx / Float(max(bounds.width, 1))) * scrubGain
             scrubProgress = max(0, min(1, scrubProgress))
             setProgress(scrubProgress)
             onScrubPreview?(scrubProgress)
         case .ended, .cancelled, .failed:
+            // Commit only if the dead-zone was crossed — a sub-threshold touch
+            // is a no-op so it can't nudge the playhead or fight a clickpad press.
+            defer { pendingPanTravel = 0 }
+            guard isScrubbing else { return }
             isScrubbing = false
             onScrubCommit?(scrubProgress)
         default:
