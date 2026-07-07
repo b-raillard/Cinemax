@@ -125,6 +125,7 @@ struct MediaDetailScreen: View {
             themeManager: themeManager,
             loc: loc,
             toast: toast,
+            network: network,
             onStart: { intent in startWatchTogether(intent) }
         ))
         #if os(iOS)
@@ -1232,6 +1233,7 @@ private struct WatchTogetherPresentation: ViewModifier {
     let themeManager: ThemeManager
     let loc: LocalizationManager
     let toast: ToastCenter
+    let network: NetworkMonitor
     let onStart: (WatchTogetherIntent) -> Void
 
     func body(content: Content) -> some View {
