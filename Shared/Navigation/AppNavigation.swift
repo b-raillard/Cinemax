@@ -395,6 +395,10 @@ struct AppNavigation: View {
             }
             #if os(iOS)
             downloads.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
+            // App-start-online: drain any offline playback progress captured on
+            // a previous (offline) run back to the server. No-ops when offline
+            // / logged out.
+            if network.isOnline { downloads.flushPendingPlaybackSync() }
             #endif
             // Decide once, in the background, whether this server needs the
             // loopback stream proxy (dual-stack host with a black-holed IPv6
@@ -453,7 +457,15 @@ struct AppNavigation: View {
         .onChange(of: network.isOnline) { _, online in
             // Connectivity flipped (e.g. Wi-Fi ⇄ cellular) — IPv6 reachability
             // is per-network, so re-run the transport probe.
-            if online { StreamTransportPolicy.shared.refresh() }
+            if online {
+                StreamTransportPolicy.shared.refresh()
+                #if os(iOS)
+                // Reconnected — flush offline playback progress (resume points +
+                // watched state) back to the server so Continue Watching / play
+                // state converge across devices.
+                downloads.flushPendingPlaybackSync()
+                #endif
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in
             // Lazy 401 recovery — fired by any API call that surfaces an HTTP

@@ -16,6 +16,10 @@ public final class DownloadStore: @unchecked Sendable {
     /// persist immediately; only the sub-second byte-count churn is coalesced.
     private static let progressPersistInterval: TimeInterval = 5
     private var lastProgressPersist = Date.distantPast
+    /// Separate throttle clock for offline-playback position writes so a
+    /// download in flight and an offline replay don't starve each other's
+    /// persistence (they share `progressPersistInterval` but not the timestamp).
+    private var lastPlaybackPersist = Date.distantPast
 
     public init() {
         let resolved = (try? DownloadStorage.indexURL())
@@ -85,6 +89,31 @@ public final class DownloadStore: @unchecked Sendable {
         let due = now.timeIntervalSince(lastProgressPersist) >= Self.progressPersistInterval
         let snapshot: [DownloadItem]? = due ? Array(items.values) : nil
         if due { lastProgressPersist = now }
+        lock.unlock()
+        if let snapshot { persist(snapshot) }
+        return current
+    }
+
+    /// Offline-playback position write from the VLC offline player's 1 s tick
+    /// (and a forced write on teardown). Mirrors `updateProgress`'s throttle
+    /// discipline: the in-memory catalog updates every call, but disk writes are
+    /// coalesced to at most one per `progressPersistInterval` unless
+    /// `persistImmediately` (teardown). Passing `watched: true` clears the stored
+    /// resume position — a fully-watched item has nothing to resume to.
+    @discardableResult
+    public func updatePlaybackPosition(id: String, positionMs: Int, watched: Bool, persistImmediately: Bool = false) -> DownloadItem? {
+        lock.lock()
+        guard var current = items[id] else {
+            lock.unlock()
+            return nil
+        }
+        current.lastPositionMs = watched ? nil : positionMs
+        current.watched = watched
+        items[id] = current
+        let now = Date()
+        let due = persistImmediately || now.timeIntervalSince(lastPlaybackPersist) >= Self.progressPersistInterval
+        let snapshot: [DownloadItem]? = due ? Array(items.values) : nil
+        if due { lastPlaybackPersist = now }
         lock.unlock()
         if let snapshot { persist(snapshot) }
         return current

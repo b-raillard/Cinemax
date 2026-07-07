@@ -62,6 +62,17 @@ public struct DownloadItem: Codable, Identifiable, Sendable, Hashable {
     public let createdAt: Date
     public var completedAt: Date?
 
+    // Offline playback progress — written by the VLC offline player (see
+    // `DownloadStore.updatePlaybackPosition`). Both are Optional so an old
+    // `index.json` written before offline sync existed decodes cleanly (missing
+    // keys → nil), keeping the catalog forward/backward compatible.
+    /// Last offline playhead position, in milliseconds. Used as the resume
+    /// `startTime` for a later offline session. Cleared (nil) once `watched`.
+    public var lastPositionMs: Int?
+    /// True once offline playback crossed the ~92 % watched threshold. Mirrors
+    /// what the server learns on the next reconnect flush.
+    public var watched: Bool?
+
     public init(
         id: String,
         kind: DownloadKind,
@@ -90,7 +101,9 @@ public struct DownloadItem: Codable, Identifiable, Sendable, Hashable {
         resumeData: Data? = nil,
         errorMessage: String? = nil,
         createdAt: Date = Date(),
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        lastPositionMs: Int? = nil,
+        watched: Bool? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -120,6 +133,20 @@ public struct DownloadItem: Codable, Identifiable, Sendable, Hashable {
         self.errorMessage = errorMessage
         self.createdAt = createdAt
         self.completedAt = completedAt
+        self.lastPositionMs = lastPositionMs
+        self.watched = watched
+    }
+
+    /// Fraction watched (0–1) derived from the locally-persisted offline
+    /// position. `nil` when there's no resume point, no known runtime, or the
+    /// item is already fully watched — the detail screen renders a resume
+    /// progress bar only when this is non-nil.
+    public var offlineResumeFraction: Double? {
+        guard watched != true, let pos = lastPositionMs, pos > 0,
+              let ticks = runtimeTicks, ticks > 0 else { return nil }
+        let runtimeMs = Double(ticks) / 10_000
+        guard runtimeMs > 0 else { return nil }
+        return min(1.0, Double(pos) / runtimeMs)
     }
 
     public var progress: Double {

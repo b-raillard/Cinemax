@@ -26,13 +26,28 @@ private let logger = Logger(subsystem: "com.cinemax", category: "Downloads")
 final class DownloadManager {
     static let maxConcurrent = 2
     static let sessionIdentifier = "com.cinemax.downloads"
+    /// Fraction of runtime past which an offline session counts as fully
+    /// watched — the position is then cleared and the server is told the item
+    /// was played (rather than resumed) on the next reconnect flush.
+    static let watchedThreshold = 0.92
 
     private(set) var items: [DownloadItem] = []
 
     private let store: DownloadStore
+    /// Pending offline-playback progress awaiting a server reconnect. Owned here
+    /// because this manager already holds the API client + user id and is the
+    /// single hub for every offline concern; kept a standalone store so its
+    /// queue logic stays testable and its disk file separate from the catalog.
+    private let syncQueue = OfflinePlaybackSyncQueue()
     private weak var apiClientRef: AnyObject?
     private var apiClient: (any DownloadAPI)? {
         apiClientRef as? any DownloadAPI
+    }
+    /// The same underlying client narrowed to the slices the sync flush needs
+    /// (`markItemPlayed` / `reportPlaybackStopped`). The concrete client
+    /// conforms to every domain, so this cast succeeds whenever `apiClient` does.
+    private var playbackLibraryClient: (any PlaybackAPI & LibraryAPI)? {
+        apiClientRef as? (any PlaybackAPI & LibraryAPI)
     }
     /// Cached at `attach(apiClient:userId:)`. PlaybackInfo negotiation requires
     /// the signed-in user id, but the manager outlives any individual
@@ -82,6 +97,39 @@ final class DownloadManager {
         self.apiClientRef = apiClient as AnyObject
         self.cachedUserId = userId
         Task { await self.reconcile() }
+    }
+
+    // MARK: - Offline playback sync
+
+    /// Records the offline playhead for a downloaded item: persists a local
+    /// resume position (throttled ≤1 disk write/5 s inside `DownloadStore`, forced
+    /// on `final`) AND mirrors it into the pending server-sync queue. Called from
+    /// the VLC offline player's 1 s tick (`final: false`) and at teardown
+    /// (`final: true`). Crossing `watchedThreshold` marks the item watched and
+    /// clears the resume position.
+    func recordOfflinePlaybackProgress(itemId: String, positionMs: Int, durationMs: Int, final: Bool) {
+        guard positionMs > 0 else { return }
+        let watched = durationMs > 0 && Double(positionMs) >= Double(durationMs) * Self.watchedThreshold
+        guard let updated = store.updatePlaybackPosition(
+            id: itemId, positionMs: positionMs, watched: watched, persistImmediately: final
+        ) else { return }
+        // Reflect into the observable catalog in place so the offline detail
+        // screen's resume progress bar updates without a full list rebuild.
+        if let idx = items.firstIndex(where: { $0.id == itemId }) {
+            items[idx] = updated
+        }
+        syncQueue.record(
+            itemId: itemId, positionTicks: positionMs * 10_000,
+            watched: watched, persistImmediately: final
+        )
+    }
+
+    /// Flushes queued offline progress to the server. No-op until an API client
+    /// + user id are attached (offline launch / logged out). Callers gate on
+    /// connectivity — the queue is only meant to drain while online.
+    func flushPendingPlaybackSync() {
+        guard let client = playbackLibraryClient, let userId = cachedUserId else { return }
+        Task { await syncQueue.flush(apiClient: client, userId: userId) }
     }
 
     // MARK: - Queries
@@ -218,6 +266,7 @@ final class DownloadManager {
         for entry in items {
             store.remove(id: entry.id)
         }
+        syncQueue.clear()
         DownloadStorage.wipeEverything()
         items = []
         refreshDiskUsage()
@@ -303,6 +352,8 @@ final class DownloadManager {
             }
         }
         store.remove(id: id)
+        // Item is gone — a pending resume/watched sync for it is now moot.
+        syncQueue.drop(itemId: id)
         items = store.all()
         promoteQueueIfPossible()
         refreshDiskUsage()

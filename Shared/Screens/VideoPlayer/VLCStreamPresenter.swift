@@ -23,6 +23,14 @@ enum PlayerSkipConfig {
     static var forwardSymbol: String { "goforward.\(intervalSeconds)" }
 }
 
+/// Offline resume-position sink. Invoked by the VLC offline player on its 1 s
+/// tick (`final == false`) and once at teardown (`final == true`) with the live
+/// playhead + media length in ms. The receiver (DownloadManager) throttles the
+/// disk write and mirrors it into the pending server-sync queue. Declared
+/// unconditionally (not `#if os(iOS)`) so the cross-platform view controller's
+/// offline initializer type-checks on tvOS, where it's simply never supplied.
+typealias OfflineProgressSink = @MainActor (_ positionMs: Int, _ durationMs: Int, _ final: Bool) -> Void
+
 /// Unified VLC player (iOS + tvOS) covering both online streaming and (iOS-only)
 /// offline downloaded files. In **stream** mode VLC DirectPlays the raw
 /// Jellyfin file (MKV / HEVC 10-bit / Dolby Vision) so the server performs **no
@@ -59,6 +67,8 @@ final class VLCStreamPresenter: NSObject {
     private let maxBitrate: Int
     #if os(iOS)
     private let offlineLocalURL: URL?
+    /// Offline-only resume-position sink threaded to the view controller.
+    private let offlineProgress: OfflineProgressSink?
     #endif
 
     private weak var hostingVC: VLCStreamViewController?
@@ -95,18 +105,21 @@ final class VLCStreamPresenter: NSObject {
         self._initialItemId = itemId
         #if os(iOS)
         self.offlineLocalURL = nil
+        self.offlineProgress = nil
         #endif
     }
 
     #if os(iOS)
     /// Offline init — plays a downloaded file with the same HUD as stream mode.
     /// Stream-only fields are stubbed nil; network-dependent features are
-    /// gated off internally.
+    /// gated off internally. `onProgress` persists the resume position + queues
+    /// the server sync (nil callers get plain playback with no persistence).
     init(
         localURL: URL,
         title: String,
         startTime: Double?,
         loc: LocalizationManager,
+        onProgress: OfflineProgressSink?,
         onDismiss: (() -> Void)?
     ) {
         self.title = title
@@ -123,6 +136,7 @@ final class VLCStreamPresenter: NSObject {
         self.onDismiss = onDismiss
         self._initialItemId = nil
         self.offlineLocalURL = localURL
+        self.offlineProgress = onProgress
     }
     #endif
 
@@ -157,7 +171,7 @@ final class VLCStreamPresenter: NSObject {
         }
         let vc = VLCStreamViewController(
             offlineLocalURL: url, title: title, startTime: startTime,
-            loc: loc, onDismiss: onDismiss
+            loc: loc, onProgress: offlineProgress, onDismiss: onDismiss
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
@@ -210,6 +224,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Local downloaded file URL when in offline mode; nil in stream mode.
     private let offlineLocalURL: URL?
+    /// Offline resume-position sink — nil in stream mode (and for nil callers).
+    private let offlineProgressSink: OfflineProgressSink?
     /// True when the controller was constructed with the offline init.
     private var isOffline: Bool { offlineLocalURL != nil }
 
@@ -481,6 +497,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.itemId = itemId
         self.info = info
         self.offlineLocalURL = nil
+        self.offlineProgressSink = nil
         self.titleText = title
         self.startTime = startTime
         self.previousEpisode = previousEpisode
@@ -513,11 +530,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// progress reporting) are gated off in their respective call sites.
     init(
         offlineLocalURL: URL, title: String, startTime: Double?,
-        loc: LocalizationManager, onDismiss: (() -> Void)?
+        loc: LocalizationManager, onProgress: OfflineProgressSink?,
+        onDismiss: (() -> Void)?
     ) {
         self.itemId = ""
         self.info = nil
         self.offlineLocalURL = offlineLocalURL
+        self.offlineProgressSink = onProgress
         self.titleText = title
         self.startTime = startTime
         self.previousEpisode = nil
@@ -568,9 +587,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         super.viewWillDisappear(animated)
         if isBeingDismissed {
             reporter?.reportStop()
+            persistOfflineProgress(final: true)
             teardown()
             onDismiss?()
         }
+    }
+
+    /// Persists the offline playhead through the injected sink (a no-op in
+    /// stream mode / when no sink was supplied). Called on the 1 s tick
+    /// (`final: false`, throttled by the receiver) and once at teardown
+    /// (`final: true`, forces a durable write). Prefers the live position and
+    /// falls back to the last known one for the teardown case, where the engine
+    /// may already have stopped and `currentMs` reads 0.
+    private func persistOfflineProgress(final: Bool) {
+        guard isOffline, let sink = offlineProgressSink else { return }
+        let live = currentMs
+        let pos = Int(live > 0 ? live : lastKnownPositionMs)
+        guard pos > 0, lengthMs > 0 else { return }
+        sink(pos, Int(lengthMs), final)
     }
 
     private func teardown() {
@@ -789,6 +823,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             sleepRemaining -= 1
             if sleepRemaining <= 0 { fireSleepTimer() }
         }
+        // Offline: persist the resume position (throttled by the receiver). The
+        // teardown path forces a final durable write; a mid-playback force-quit
+        // still keeps the last ≤5 s-old position from these ticks.
+        persistOfflineProgress(final: false)
     }
 
     // MARK: - Skip intro / outro (P3)
