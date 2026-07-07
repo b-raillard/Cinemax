@@ -893,3 +893,20 @@
 // MARK: - UI polish
 "a11y.toggle.on" = "Activé";
 "a11y.toggle.off" = "Désactivé";
+
+// MARK: - SyncPlay
+"syncplay.title" = "Regarder ensemble";
+"syncplay.pill" = "Ensemble · %d";
+"syncplay.groupName" = "Nom du groupe";
+"syncplay.create" = "Créer un groupe";
+"syncplay.join" = "Rejoindre";
+"syncplay.existingGroups" = "Groupes existants";
+"syncplay.noGroups.title" = "Aucun groupe actif";
+"syncplay.noGroups.subtitle" = "Créez un groupe pour regarder ce titre avec d'autres personnes en même temps.";
+"syncplay.unnamedGroup" = "Groupe sans nom";
+"syncplay.defaultName" = "Groupe de %@";
+"syncplay.participants" = "%d participant(s)";
+"syncplay.joined" = "Groupe rejoint";
+"syncplay.left" = "Groupe quitté";
+"syncplay.groupEnded" = "Le groupe s'est terminé";
+"syncplay.error" = "Échec de la synchronisation";

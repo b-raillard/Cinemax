@@ -2,6 +2,16 @@ import SwiftUI
 import CinemaxKit
 import JellyfinAPI
 
+/// The resolved play target a Watch Together group is opened for — the movie,
+/// or a series' next-up episode. Drives both the group sheet and the playback
+/// push once a group is created/joined.
+struct WatchTogetherIntent: Identifiable {
+    let id = UUID()
+    let itemId: String
+    let title: String
+    let startTime: Double?
+}
+
 struct MediaDetailScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -14,6 +24,13 @@ struct MediaDetailScreen: View {
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
     @Environment(NetworkMonitor.self) private var network
+    @Environment(ToastCenter.self) private var toast
+    /// Watch Together (SyncPlay): the item to present the group sheet for, and
+    /// (iOS) the item to push into playback once a group is created/joined.
+    @State private var watchTogetherSheet: WatchTogetherIntent?
+    #if os(iOS)
+    @State private var watchTogetherPlay: WatchTogetherIntent?
+    #endif
     #if os(iOS)
     @Environment(DownloadManager.self) private var downloads
     @Environment(\.dismiss) private var dismiss
@@ -101,6 +118,40 @@ struct MediaDetailScreen: View {
             EpisodeOverviewSheet(item: ep)
                 .environment(themeManager)
         }
+        .modifier(WatchTogetherPresentation(
+            sheet: $watchTogetherSheet,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toast,
+            onStart: { intent in startWatchTogether(intent) }
+        ))
+        #if os(iOS)
+        .navigationDestination(item: $watchTogetherPlay) { intent in
+            VideoPlayerView(itemId: intent.itemId, title: intent.title, startTime: intent.startTime)
+        }
+        #endif
+    }
+
+    /// Kicks off playback once a Watch Together group is created/joined. tvOS
+    /// drives the coordinator (its normal play path); iOS pushes `VideoPlayerView`.
+    private func startWatchTogether(_ intent: WatchTogetherIntent) {
+        #if os(tvOS)
+        coordinator.play(itemId: intent.itemId, title: intent.title, startTime: intent.startTime, using: appState)
+        #else
+        watchTogetherPlay = intent
+        #endif
+    }
+
+    /// Builds the play target for Watch Together: the resolved next-up episode
+    /// for a series, else the item itself.
+    private func watchTogetherIntent(for item: BaseItemDto, nextEp: BaseItemDto?) -> WatchTogetherIntent {
+        let target = nextEp ?? item
+        return WatchTogetherIntent(
+            itemId: target.id ?? item.id ?? viewModel.itemId,
+            title: target.name ?? item.name ?? "",
+            startTime: nil
+        )
     }
 
     // MARK: - Detail Content
@@ -420,6 +471,9 @@ struct MediaDetailScreen: View {
             playSection
             favoriteButton
             watchedButton
+            if network.isOnline {
+                watchTogetherButton(for: item, nextEp: nextEp)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, contentPadding)
@@ -469,6 +523,22 @@ struct MediaDetailScreen: View {
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
         .accessibilityLabel(loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"))
     }
+
+    /// "Watch Together" (SyncPlay) toggle in the tvOS action row — opens the
+    /// group sheet. Accent fill while already in a group.
+    private func watchTogetherButton(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
+        Button {
+            watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+        } label: {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: buttonFontSize, weight: .bold))
+                .foregroundStyle(SyncPlayController.shared.isInGroup ? themeManager.accent : CinemaColor.onSurface)
+                .padding(.vertical, buttonVerticalPadding)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+        }
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        .accessibilityLabel(loc.localized("syncplay.title"))
+    }
     #endif
 
     // MARK: - Secondary actions row (iOS)
@@ -508,6 +578,18 @@ struct MediaDetailScreen: View {
                     trigger: false
                 ) {
                     openURL(trailerURL)
+                }
+            }
+
+            // Watch Together (SyncPlay) — online only. Accent while in a group.
+            if network.isOnline {
+                secondaryActionCell(
+                    systemImage: "person.2.fill",
+                    active: SyncPlayController.shared.isInGroup,
+                    accessibility: loc.localized("syncplay.title"),
+                    trigger: false
+                ) {
+                    watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
                 }
             }
 
@@ -1072,4 +1154,40 @@ extension VerticalAlignment {
         }
     }
     static let playActionRow = VerticalAlignment(PlayActionRow.self)
+}
+
+// MARK: - Watch Together presentation
+
+/// Presents the SyncPlay group sheet — a bottom sheet on iOS, a full-screen
+/// cover on tvOS (`.sheet` renders as a broken narrow modal on tvOS 26). The
+/// key environment objects are re-injected so the sheet's own `@Environment`
+/// reads resolve regardless of automatic propagation.
+private struct WatchTogetherPresentation: ViewModifier {
+    @Binding var sheet: WatchTogetherIntent?
+    let appState: AppState
+    let themeManager: ThemeManager
+    let loc: LocalizationManager
+    let toast: ToastCenter
+    let onStart: (WatchTogetherIntent) -> Void
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content.fullScreenCover(item: $sheet) { intent in sheetView(intent) }
+        #else
+        content.sheet(item: $sheet) { intent in sheetView(intent) }
+        #endif
+    }
+
+    private func sheetView(_ intent: WatchTogetherIntent) -> some View {
+        WatchTogetherSheet(
+            itemId: intent.itemId,
+            itemTitle: intent.title,
+            onStart: { onStart(intent) }
+        )
+        .environment(appState)
+        .environment(themeManager)
+        .environment(loc)
+        .environment(toast)
+        .environment(network)
+    }
 }
