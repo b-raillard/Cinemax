@@ -10,6 +10,13 @@ struct HomeScreen: View {
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
+    #if os(iOS)
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+    /// Index of the hero currently shown in the rotating carousel (iOS only —
+    /// tvOS keeps a single static hero; the focus engine + `.focusSection` rules
+    /// make auto-advancing focusable chrome hazardous there).
+    @State private var heroIndex = 0
+    #endif
     @State private var viewModel = HomeViewModel()
     @State private var prefetcher = PosterPrefetcher()
 
@@ -198,6 +205,20 @@ struct HomeScreen: View {
                     // with the safe-area top (no separate 0-height
                     // sentinel, which would add an unwanted spacing-gap
                     // above the hero — see tab bar heuristic above).
+                    #if os(iOS)
+                    // iOS: rotating hero carousel (crossfade + swipe + dots)
+                    // when there are ≥2 candidates; a single candidate renders
+                    // as a plain static hero. The carousel carries the
+                    // scroll-anchor `id` so the tab-bar pill heuristic is
+                    // unchanged (still no leading gap above the first row).
+                    if !heroCandidates.isEmpty {
+                        heroCarousel
+                            .id(scrollTopID)
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    } else {
+                        Color.clear.frame(height: 0).id(scrollTopID)
+                    }
+                    #else
                     if let hero = viewModel.heroItem {
                         heroSection(hero)
                             .id(scrollTopID)
@@ -207,6 +228,7 @@ struct HomeScreen: View {
                         // scroll proxy still has something to target.
                         Color.clear.frame(height: 0).id(scrollTopID)
                     }
+                    #endif
 
                     // Watching Now (other users on the server) — admin-only:
                     // surfaces who else is streaming, which is elevated data
@@ -322,6 +344,114 @@ struct HomeScreen: View {
             .padding(.horizontal, CinemaSpacing.spacing6)
         }
     }
+
+    // MARK: - Rotating Hero (iOS)
+
+    #if os(iOS)
+    /// Auto-advance interval for the hero carousel.
+    private var heroRotationInterval: Double { 8 }
+
+    /// Up to 5 distinct hero candidates drawn from resume + recently-added.
+    /// The first entry mirrors `viewModel.heroItem` (so a single-hero server is
+    /// unchanged); additional entries require a backdrop so the crossfade never
+    /// flashes the plain `BackdropFallbackView`. Recomputed per render but stable
+    /// by `id`, so `heroIndex` survives re-renders.
+    private var heroCandidates: [BaseItemDto] {
+        var seen = Set<String>()
+        var out: [BaseItemDto] = []
+        for item in viewModel.resumeItems + viewModel.latestItems {
+            guard let id = item.id, !seen.contains(id) else { continue }
+            guard out.isEmpty || item.hasBackdropImage else { continue }
+            seen.insert(id)
+            out.append(item)
+            if out.count == 5 { break }
+        }
+        return out
+    }
+
+    /// Clamped so a shrinking candidate set (e.g. after a refresh) can't index
+    /// out of range before `heroIndex` is reset by the rotation task.
+    private var currentHeroIndex: Int {
+        let count = heroCandidates.count
+        guard count > 0 else { return 0 }
+        return min(heroIndex, count - 1)
+    }
+
+    @ViewBuilder
+    private var heroCarousel: some View {
+        let candidates = heroCandidates
+        let active = currentHeroIndex
+        ZStack {
+            ForEach(Array(candidates.enumerated()), id: \.element.id) { idx, item in
+                if idx == active {
+                    heroSection(item)
+                        .transition(.opacity)
+                }
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if candidates.count > 1 {
+                heroPageDots(count: candidates.count, active: active)
+            }
+        }
+        // Simultaneous (not exclusive) so button taps inside the hero still
+        // land; the direction guard keeps vertical scrolls from switching heroes.
+        .simultaneousGesture(heroSwipeGesture(count: candidates.count))
+        // Task lifecycle is tied to the view — auto-cancels on disappear (pauses
+        // rotation) and never strongly retains the screen. Restarts when the
+        // candidate count or the motion-effects gate changes.
+        .task(id: "\(candidates.count)-\(motionEffects)") {
+            await runHeroRotation()
+        }
+    }
+
+    private func heroPageDots(count: Int, active: Int) -> some View {
+        HStack(spacing: CinemaSpacing.spacing1) {
+            ForEach(0..<count, id: \.self) { i in
+                Circle()
+                    .fill(i == active ? themeManager.accent : CinemaColor.onSurfaceVariant.opacity(0.4))
+                    .frame(width: 7, height: 7)
+            }
+        }
+        .padding(.trailing, heroPadding)
+        .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func heroSwipeGesture(count: Int) -> some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onEnded { value in
+                guard count > 1,
+                      abs(value.translation.width) > abs(value.translation.height),
+                      abs(value.translation.width) > 50 else { return }
+                let forward = value.translation.width < 0
+                let next = forward
+                    ? (currentHeroIndex + 1) % count
+                    : (currentHeroIndex - 1 + count) % count
+                if motionEffects {
+                    withAnimation(.easeInOut(duration: 0.5)) { heroIndex = next }
+                } else {
+                    heroIndex = next
+                }
+            }
+    }
+
+    /// Advances the hero every `heroRotationInterval` seconds with a crossfade.
+    /// No-op when Motion Effects is off (static first hero) or there's <2 heroes.
+    private func runHeroRotation() async {
+        guard motionEffects, heroCandidates.count > 1 else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(heroRotationInterval))
+            guard !Task.isCancelled else { break }
+            let count = heroCandidates.count
+            guard count > 1 else { break }
+            withAnimation(.easeInOut(duration: 0.6)) {
+                heroIndex = (currentHeroIndex + 1) % count
+            }
+        }
+    }
+    #endif
 
     // MARK: - Hero
 

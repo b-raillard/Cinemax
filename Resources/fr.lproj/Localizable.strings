@@ -889,3 +889,7 @@
 "person.born" = "Né(e) le %@";
 "person.titleCount" = "%d titres";
 "person.empty" = "Aucun titre dans votre médiathèque";
+
+// MARK: - UI polish
+"a11y.toggle.on" = "Activé";
+"a11y.toggle.off" = "Désactivé";

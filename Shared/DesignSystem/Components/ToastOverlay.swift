@@ -24,13 +24,14 @@ struct ToastOverlay: View {
                    value: toasts.current)
         #if os(iOS)
         // Haptic feedback paired to toast level — fires only when a new toast
-        // appears (not on dismiss). tvOS has no Taptic Engine.
-        .sensoryFeedback(trigger: toasts.current) { _, new in
-            guard let new else { return nil }
+        // appears (guard drops the dismiss → nil transition). Routed through the
+        // `Haptics` SSOT so all app haptics live in one place. tvOS has no Taptic Engine.
+        .onChange(of: toasts.current) { _, new in
+            guard let new else { return }
             switch new.level {
-            case .success: return .success
-            case .error:   return .error
-            case .info:    return .selection
+            case .success: Haptics.success()
+            case .error:   Haptics.error()
+            case .info:    Haptics.selection()
             }
         }
         #endif
