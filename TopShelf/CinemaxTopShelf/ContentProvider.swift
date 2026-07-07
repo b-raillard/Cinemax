@@ -175,7 +175,7 @@ final class ContentProvider: TVTopShelfContentProvider {
     /// nil = the request failed (network / auth); empty = nothing in progress.
     private static func fetchResumeItems(session: Session, limit: Int) async -> [Item]? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
-        comps.path = "/UserItems/Resume"
+        comps.path = endpointPath("/UserItems/Resume", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
             URLQueryItem(name: "limit", value: String(limit)),
@@ -193,7 +193,7 @@ final class ContentProvider: TVTopShelfContentProvider {
 
     private static func imageURL(session: Session, itemId: String, type: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
-        comps.path = "/Items/\(itemId)/Images/\(type)"
+        comps.path = endpointPath("/Items/\(itemId)/Images/\(type)", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "maxWidth", value: String(maxWidth)),
             URLQueryItem(name: "quality", value: "90"),
@@ -201,4 +201,15 @@ final class ContentProvider: TVTopShelfContentProvider {
         ]
         return comps.url
     }
+}
+
+/// Sets the request path while preserving the server's base path (a server
+/// hosted at `https://host/jellyfin` would otherwise lose `/jellyfin` and
+/// 404). Mirrors `URLComponents.setEndpointPath` in CinemaxKit — kept in
+/// sync manually because this extension can't link the package.
+private func endpointPath(_ endpoint: String, serverURL: URL) -> String {
+    let base = serverURL.path
+    if base.isEmpty || base == "/" { return endpoint }
+    let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
+    return trimmed + endpoint
 }

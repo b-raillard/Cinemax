@@ -34,7 +34,7 @@ public struct ImageURLBuilder: Sendable {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL
         }
-        components.path = "/Items/\(itemId)/Images/\(imageTypeRaw)"
+        components.setEndpointPath("/Items/\(itemId)/Images/\(imageTypeRaw)", preservingBasePathOf: serverURL)
 
         var queryItems: [URLQueryItem] = []
         if let maxWidth {
@@ -80,7 +80,7 @@ public struct ImageURLBuilder: Sendable {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL
         }
-        components.path = "/Items/\(itemId)/Images/Chapter/\(imageIndex)"
+        components.setEndpointPath("/Items/\(itemId)/Images/Chapter/\(imageIndex)", preservingBasePathOf: serverURL)
 
         var queryItems: [URLQueryItem] = []
         if let maxWidth {
@@ -104,7 +104,7 @@ public struct ImageURLBuilder: Sendable {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL
         }
-        components.path = "/Videos/\(itemId)/Trickplay/\(width)/\(index).jpg"
+        components.setEndpointPath("/Videos/\(itemId)/Trickplay/\(width)/\(index).jpg", preservingBasePathOf: serverURL)
         if let mediaSourceId, !mediaSourceId.isEmpty {
             components.queryItems = [URLQueryItem(name: "mediaSourceId", value: mediaSourceId)]
         }
@@ -115,7 +115,7 @@ public struct ImageURLBuilder: Sendable {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL
         }
-        components.path = "/Users/\(userId)/Images/Primary"
+        components.setEndpointPath("/Users/\(userId)/Images/Primary", preservingBasePathOf: serverURL)
 
         var queryItems: [URLQueryItem] = []
         if let maxWidth {

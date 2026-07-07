@@ -282,15 +282,34 @@ final class AppState {
 }
 
 struct AppNavigation: View {
-    @State private var appState = AppState()
+    /// SwiftUI may recreate the root `AppNavigation` struct on scene events,
+    /// and every recreation re-evaluates the `@State` initial-value
+    /// expressions — then discards the results (`@State` keeps the first
+    /// instance). For the heavy stores that's not just wasted work:
+    /// `DownloadManager` synchronously reads + decodes `index.json`, walks the
+    /// downloads tree for orphans, and constructs a background `URLSession`
+    /// whose identifier (`com.cinemax.downloads`) must be process-unique — a
+    /// throwaway second session with the same identifier can steal delegate
+    /// callbacks and silently break download completion. Guarded statics make
+    /// the initial values process-singletons (same rationale as
+    /// `configurePipeline`). The cheap stores (`ThemeManager`, etc.) stay
+    /// inline — rebuilding them costs nothing.
+    private static let sharedAppState = AppState()
+    private static let sharedNetworkMonitor = NetworkMonitor()
+    private static let sharedMenuConfig = MenuConfigStore()
+    #if os(iOS)
+    private static let sharedDownloads = DownloadManager()
+    #endif
+
+    @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
     @State private var loc = LocalizationManager()
     @State private var toasts = ToastCenter()
-    @State private var network = NetworkMonitor()
-    @State private var menuConfig = MenuConfigStore()
+    @State private var network = AppNavigation.sharedNetworkMonitor
+    @State private var menuConfig = AppNavigation.sharedMenuConfig
     @State private var settingsNav = SettingsNavCoordinator()
     #if os(iOS)
-    @State private var downloads = DownloadManager()
+    @State private var downloads = AppNavigation.sharedDownloads
     #endif
     @State private var hasCheckedSession = false
     /// When the app last entered the background — drives Part E foreground

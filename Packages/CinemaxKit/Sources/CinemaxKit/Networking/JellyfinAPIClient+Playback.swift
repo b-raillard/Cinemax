@@ -86,6 +86,11 @@ extension JellyfinAPIClient {
             #if DEBUG
             debugLog("POST PlaybackInfo failed: \(error) — using direct stream fallback")
             #endif
+            // A 401 means the token is revoked — the direct-stream fallback
+            // would fail identically at the media layer with an opaque player
+            // error. Rethrow so the outer `getPlaybackInfo` wrapper runs
+            // `notifyIfUnauthorized` and the session-expiry flow fires.
+            if Self.isUnauthorized(error) { throw error }
             return buildDirectStreamURL(
                 itemId: effectiveItemId, serverURL: serverURL, token: token, etag: item.etag
             )
@@ -191,7 +196,7 @@ extension JellyfinAPIClient {
                 itemId: effectiveItemId, serverURL: serverURL, token: token, etag: item.etag
             )
         }
-        components.path = "/Videos/\(effectiveItemId)/stream"
+        components.setEndpointPath("/Videos/\(effectiveItemId)/stream", preservingBasePathOf: serverURL)
         var queryItems = [
             URLQueryItem(name: "static", value: "true"),
             URLQueryItem(name: "playSessionId", value: playSessionId),
@@ -355,7 +360,7 @@ extension JellyfinAPIClient {
         itemId: String, serverURL: URL, token: String?, etag: String?
     ) -> PlaybackInfo {
         var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) ?? URLComponents()
-        components.path = "/Videos/\(itemId)/stream"
+        components.setEndpointPath("/Videos/\(itemId)/stream", preservingBasePathOf: serverURL)
         var queryItems = [
             URLQueryItem(name: "static", value: "true"),
             URLQueryItem(name: "mediaSourceId", value: itemId),
