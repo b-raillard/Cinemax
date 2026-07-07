@@ -135,38 +135,32 @@ public enum SyncPlaySocketMessage: Sendable {
 // MARK: - Date parsing
 
 /// Shared ISO-8601 parsing for SyncPlay payloads. Jellyfin emits UTC timestamps
-/// with fractional seconds (`.withFractionalSeconds`) but the precision varies,
-/// so we fall back to the no-fraction parser. The formatters are read-only after
-/// construction — safe to share as immutable statics.
+/// with fractional seconds but the precision varies, so we fall back to the
+/// no-fraction parser. Uses `Date.ISO8601FormatStyle` — a `Sendable` value type
+/// — so the statics are provably race-free across the socket actor and the
+/// URLSession decode paths that hit this concurrently (a shared
+/// `ISO8601DateFormatter` here would need `nonisolated(unsafe)`).
 enum SyncPlayDateParser {
-    nonisolated(unsafe) private static let withFraction: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-    nonisolated(unsafe) private static let noFraction: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
+    private static let withFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    private static let noFraction = Date.ISO8601FormatStyle()
 
     static func date(from raw: String) -> Date? {
-        if let d = withFraction.date(from: raw) { return d }
-        if let d = noFraction.date(from: raw) { return d }
+        if let d = try? withFraction.parse(raw) { return d }
+        if let d = try? noFraction.parse(raw) { return d }
         // Last resort: Jellyfin can emit 7-digit ("tick") fractions that the
-        // formatter rejects — truncate to milliseconds and retry.
+        // parser rejects — truncate to milliseconds and retry.
         if let dot = raw.firstIndex(of: ".") {
             let tail = raw[raw.index(after: dot)...]
             let digits = tail.prefix { $0.isNumber }
             let suffix = tail[tail.index(tail.startIndex, offsetBy: digits.count)...]
             let ms = digits.prefix(3)
             let normalized = "\(raw[..<dot]).\(ms)\(suffix)"
-            return withFraction.date(from: normalized)
+            return try? withFraction.parse(normalized)
         }
         return nil
     }
 
     static func string(from date: Date) -> String {
-        withFraction.string(from: date)
+        withFraction.format(date)
     }
 }

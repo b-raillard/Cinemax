@@ -4,8 +4,9 @@ import JellyfinAPI
 
 /// The resolved play target a Watch Together group is opened for — the movie,
 /// or a series' next-up episode. Drives both the group sheet and the playback
-/// push once a group is created/joined.
-struct WatchTogetherIntent: Identifiable {
+/// push once a group is created/joined. `Hashable` because it also feeds
+/// `navigationDestination(item:)` on iOS (same contract as `AdminMenuPushIntent`).
+struct WatchTogetherIntent: Identifiable, Hashable {
     let id = UUID()
     let itemId: String
     let title: String

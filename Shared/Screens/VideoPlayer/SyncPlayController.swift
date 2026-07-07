@@ -223,8 +223,8 @@ final class SyncPlayController {
     private func startSocket() {
         guard let api else { return }
         socketTask?.cancel()
-        // Capture the outgoing socket into a local so the detached stop Task
-        // doesn't touch the MainActor-isolated `self.socket` off-actor.
+        // Snapshot the outgoing socket so the async stop can't race the
+        // `self.socket = socket` reassignment below and stop the NEW socket.
         let previous = self.socket
         Task { await previous?.stop() }
         guard let socket = api.makeSyncPlaySocket() else {
