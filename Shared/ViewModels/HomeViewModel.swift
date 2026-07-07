@@ -179,6 +179,91 @@ final class HomeViewModel {
         isLoading = false
     }
 
+    // MARK: - Continue Watching context-menu mutations
+
+    /// Marks a Continue Watching item fully played. Jellyfin clears its resume
+    /// position when an item is played, so it also drops out of the resume
+    /// rail. Optimistically removes the card, shows a success toast, and
+    /// re-fetches the rail in the background; on failure the item is restored
+    /// and a user-facing error toast is shown.
+    func markResumeItemPlayed(
+        _ item: BaseItemDto,
+        using appState: AppState,
+        toast: ToastCenter,
+        loc: LocalizationManager
+    ) async {
+        await mutateResumeItem(
+            item, markPlayed: true,
+            successKey: "home.continueWatching.markedWatched",
+            using: appState, toast: toast, loc: loc
+        )
+    }
+
+    /// Removes an item from Continue Watching. There is no dedicated
+    /// "hide from resume" endpoint in Jellyfin — the standard client mechanism
+    /// is to clear the item's played/progress state (`markItemUnplayed`), which
+    /// resets its resume position so `/UserItems/Resume` stops returning it.
+    func removeResumeItem(
+        _ item: BaseItemDto,
+        using appState: AppState,
+        toast: ToastCenter,
+        loc: LocalizationManager
+    ) async {
+        await mutateResumeItem(
+            item, markPlayed: false,
+            successKey: "home.continueWatching.removed",
+            using: appState, toast: toast, loc: loc
+        )
+    }
+
+    /// Shared body for both Continue Watching mutations: optimistic removal →
+    /// server call → success toast + background rail refresh, restoring the
+    /// card on failure.
+    private func mutateResumeItem(
+        _ item: BaseItemDto,
+        markPlayed: Bool,
+        successKey: String,
+        using appState: AppState,
+        toast: ToastCenter,
+        loc: LocalizationManager
+    ) async {
+        guard let userId = appState.currentUserId, let id = item.id,
+              let index = resumeItems.firstIndex(where: { $0.id == id }) else { return }
+
+        // Optimistic removal so the rail updates instantly.
+        let removed = resumeItems.remove(at: index)
+        resumeNavigation[id] = nil
+
+        do {
+            if markPlayed {
+                try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
+            } else {
+                try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            }
+            toast.success(loc.localized(successKey))
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            // Background refresh so the rail reflects server truth (e.g. a
+            // series' next-up episode surfacing once the current one is
+            // watched) without re-running the whole Home load.
+            await refreshResume(using: appState)
+        } catch {
+            logger.error("Resume item mutation failed: \(error.localizedDescription, privacy: .public)")
+            // Restore at (clamped) original position and surface the error.
+            resumeItems.insert(removed, at: min(index, resumeItems.count))
+            toast.error(loc.userFacingMessage(for: error))
+        }
+    }
+
+    /// Re-fetches just the Continue Watching rail from the server — used after
+    /// a context-menu mutation so the rail reflects server truth without
+    /// re-running the whole Home load (which would re-shuffle the genre rows).
+    private func refreshResume(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        if let items = try? await appState.apiClient.getResumeItems(userId: userId, limit: 20) {
+            resumeItems = items
+        }
+    }
+
     /// Lightweight refresh of just the Favorites row — fired by
     /// `.cinemaxFavoritesChanged` after a heart toggle, so the row reflects
     /// the change without re-running the whole Home load (which would

@@ -49,6 +49,15 @@ struct MediaDetailEpisodeCard: View, Equatable {
         if let id = episode.id {
             let overview = episode.overview.flatMap { $0.isEmpty ? nil : $0 }
             let isPlayed = episode.userData?.isPlayed ?? false
+            // VoiceOver label for the play zone — episode number + title, with
+            // the watched state appended when played.
+            let playAccessibility: String = {
+                var parts: [String] = []
+                if let num = episode.indexNumber { parts.append(loc.localized("detail.episode", num)) }
+                if let name = episode.name { parts.append(name) }
+                if isPlayed { parts.append(loc.localized("accessibility.episode.watched")) }
+                return parts.joined(separator: ", ")
+            }()
             let epProgress: Double? = {
                 guard let ticks = episode.userData?.playbackPositionTicks,
                       let total = episode.runTimeTicks,
@@ -91,6 +100,7 @@ struct MediaDetailEpisodeCard: View, Equatable {
                         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(playAccessibility)
 
                 // Info below image
                 VStack(alignment: .leading, spacing: 4) {

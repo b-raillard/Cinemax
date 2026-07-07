@@ -7,6 +7,7 @@ struct HomeScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(NetworkMonitor.self) private var network
+    @Environment(ToastCenter.self) private var toast
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -692,6 +693,22 @@ struct HomeScreen: View {
             #else
             .buttonStyle(.plain)
             #endif
+            // Long-press (iOS) / long-press-select (tvOS) context menu — kept
+            // on the PlayLink button, not the label, so focus behavior is
+            // untouched. Both actions optimistically drop the card and refresh
+            // the rail in the background (see HomeViewModel).
+            .contextMenu {
+                Button {
+                    Task { await viewModel.markResumeItemPlayed(item, using: appState, toast: toast, loc: loc) }
+                } label: {
+                    Label(loc.localized("detail.watched.add"), systemImage: "checkmark.circle")
+                }
+                Button(role: .destructive) {
+                    Task { await viewModel.removeResumeItem(item, using: appState, toast: toast, loc: loc) }
+                } label: {
+                    Label(loc.localized("home.continueWatching.remove"), systemImage: "minus.circle")
+                }
+            }
             .accessibilityLabel(item.name ?? "")
         }
     }

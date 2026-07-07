@@ -910,3 +910,9 @@
 "syncplay.left" = "Groupe quitté";
 "syncplay.groupEnded" = "Le groupe s'est terminé";
 "syncplay.error" = "Échec de la synchronisation";
+
+// MARK: - Continue Watching & detail UX
+"home.continueWatching.remove" = "Retirer de Reprendre";
+"home.continueWatching.markedWatched" = "Marqué comme vu";
+"home.continueWatching.removed" = "Retiré de Reprendre";
+"accessibility.episode.watched" = "Vu";

@@ -163,78 +163,141 @@ struct MediaDetailScreen: View {
                 // Backdrop hero
                 backdropSection(item)
 
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                    // Action buttons
-                    actionButtons(item)
-
-                    #if os(iOS)
-                    // Admin-gated 3-dot menu (Identifier / Edit metadata /
-                    // Refresh / Delete). Server enforces authorization on
-                    // every endpoint; client gating is UX only.
-                    if appState.isAdministrator {
-                        adminMenuPill(for: item)
-                    }
-                    #endif
-
-                    // Quality badges
-                    if showQualityBadges {
-                        MediaQualityBadges(item: item)
-                            .padding(.horizontal, contentPadding)
-                    }
-
-                    // Overview — Dynamic Type-aware since users read this prose.
-                    if let overview = item.overview {
-                        Text(overview)
-                            .font(CinemaFont.dynamicBody)
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                            .padding(.horizontal, contentPadding)
-                            #if os(tvOS)
-                            .focusable()
-                            #endif
-                    }
-
-                    // Studio / Network
-                    studioLine(item)
-                        .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                        .padding(.horizontal, contentPadding)
-
-                    // Cast
-                    if let people = item.people, !people.isEmpty {
-                        MediaDetailCastSection(people: people).equatable()
-                    }
-
-                    // Seasons & Episodes (for series)
-                    if viewModel.resolvedType == .series, !viewModel.seasons.isEmpty {
-                        seasonsSection(item)
-                    }
-
-                    // Collection ("Part of: …") — movies that share a BoxSet
-                    if !viewModel.collectionItems.isEmpty {
-                        MediaDetailSimilarSection(
-                            items: viewModel.collectionItems,
-                            cardWidth: similarCardWidth,
-                            titleOverride: String(
-                                format: loc.localized("detail.partOf"),
-                                viewModel.collectionName ?? ""
-                            )
-                        ).equatable()
-                    }
-
-                    // Similar items
-                    if !viewModel.similarItems.isEmpty {
-                        MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
-                    }
-
-                    Spacer(minLength: 80)
-                }
-                .padding(.top, CinemaSpacing.spacing4)
+                belowHeroContent(item)
             }
         }
         #if os(tvOS)
         .scrollClipDisabled()
         #endif
     }
+
+    /// Content below the backdrop hero. iPhone + tvOS stack every section
+    /// vertically; iPad (regular width) splits it into a metadata column
+    /// (action buttons / quality badges / overview) and an episodes-or-cast
+    /// column. The section builders are shared verbatim between both paths —
+    /// only the container differs.
+    @ViewBuilder
+    private func belowHeroContent(_ item: BaseItemDto) -> some View {
+        #if os(iOS)
+        if useTwoColumnLayout {
+            // 40 / 60 split of the full scroll width using the same
+            // `containerRelativeFrame(count:span:)` grid technique as the tvOS
+            // episode row. The horizontal carousels (cast / similar / episodes)
+            // in the right column measure their own scroll viewport, so they
+            // resize to the column automatically.
+            HStack(alignment: .top, spacing: 0) {
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                    primaryColumnSections(item)
+                }
+                .containerRelativeFrame(.horizontal, count: 5, span: 2, spacing: 0)
+
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                    secondaryColumnSections(item)
+                    Spacer(minLength: 80)
+                }
+                .containerRelativeFrame(.horizontal, count: 5, span: 3, spacing: 0)
+            }
+            .padding(.top, CinemaSpacing.spacing4)
+        } else {
+            stackedBelowHeroContent(item)
+        }
+        #else
+        stackedBelowHeroContent(item)
+        #endif
+    }
+
+    /// The single-column (iPhone / tvOS) arrangement — primary then secondary
+    /// sections in one vertical stack, preserving the original order.
+    @ViewBuilder
+    private func stackedBelowHeroContent(_ item: BaseItemDto) -> some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+            primaryColumnSections(item)
+            secondaryColumnSections(item)
+            Spacer(minLength: 80)
+        }
+        .padding(.top, CinemaSpacing.spacing4)
+    }
+
+    /// Metadata sections: action buttons, admin menu (iOS), quality badges,
+    /// overview, studio line. The iPad left column.
+    @ViewBuilder
+    private func primaryColumnSections(_ item: BaseItemDto) -> some View {
+        // Action buttons
+        actionButtons(item)
+
+        #if os(iOS)
+        // Admin-gated 3-dot menu (Identifier / Edit metadata / Refresh /
+        // Delete). Server enforces authorization on every endpoint; client
+        // gating is UX only.
+        if appState.isAdministrator {
+            adminMenuPill(for: item)
+        }
+        #endif
+
+        // Quality badges
+        if showQualityBadges {
+            MediaQualityBadges(item: item)
+                .padding(.horizontal, contentPadding)
+        }
+
+        // Overview — Dynamic Type-aware since users read this prose.
+        if let overview = item.overview {
+            Text(overview)
+                .font(CinemaFont.dynamicBody)
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .frame(maxWidth: readingMaxWidth, alignment: .leading)
+                .padding(.horizontal, contentPadding)
+                #if os(tvOS)
+                .focusable()
+                #endif
+        }
+
+        // Studio / Network
+        studioLine(item)
+            .frame(maxWidth: readingMaxWidth, alignment: .leading)
+            .padding(.horizontal, contentPadding)
+    }
+
+    /// Rich sections: cast, seasons/episodes, collection, similar. The iPad
+    /// right column.
+    @ViewBuilder
+    private func secondaryColumnSections(_ item: BaseItemDto) -> some View {
+        // Cast
+        if let people = item.people, !people.isEmpty {
+            MediaDetailCastSection(people: people).equatable()
+        }
+
+        // Seasons & Episodes (for series)
+        if viewModel.resolvedType == .series, !viewModel.seasons.isEmpty {
+            seasonsSection(item)
+        }
+
+        // Collection ("Part of: …") — movies that share a BoxSet
+        if !viewModel.collectionItems.isEmpty {
+            MediaDetailSimilarSection(
+                items: viewModel.collectionItems,
+                cardWidth: similarCardWidth,
+                titleOverride: String(
+                    format: loc.localized("detail.partOf"),
+                    viewModel.collectionName ?? ""
+                )
+            ).equatable()
+        }
+
+        // Similar items
+        if !viewModel.similarItems.isEmpty {
+            MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
+        }
+    }
+
+    #if os(iOS)
+    /// iPad (regular horizontal size class) shows the two-column detail layout.
+    /// iPhone (compact) keeps the stacked layout. Follows the codebase-wide
+    /// convention of treating regular width as iPad (see `AdaptiveLayout`).
+    private var useTwoColumnLayout: Bool {
+        sizeClass == .regular
+    }
+    #endif
 
     // MARK: - Backdrop
 
