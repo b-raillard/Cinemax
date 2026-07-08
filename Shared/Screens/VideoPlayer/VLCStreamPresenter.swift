@@ -268,7 +268,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     // Shared rich-HUD elements — the iOS HUD now mirrors the tvOS transport
     // (same visual language): an always-on chapter strip, a native-style
-    // center play/pause flash, and a native ±15 s skip indicator.
+    // center play/pause flash, and a native ±10 s skip indicator.
     private let chapterScroll = UIScrollView()
     private let chapterStack = UIStackView()
     private var chapterFetchTask: Task<Void, Never>?
@@ -1145,7 +1145,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             skipHUD.heightAnchor.constraint(equalToConstant: hudH)
         ])
 
-        // Native-style center play/pause flash + ±15 s skip indicator. Shared
+        // Native-style center play/pause flash + ±10 s skip indicator. Shared
         // across platforms so iOS and tvOS speak the same visual language.
         centerGlyph.translatesAutoresizingMaskIntoConstraints = false
         centerGlyph.tintColor = .white
@@ -1605,7 +1605,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         scrim.backgroundColor = UIColor.black.withAlphaComponent(0.45)
         controlsContainer.insertSubview(scrim, at: 0)
 
-        // Focusable scrub bar: left/right seek ±15 s ONLY while it holds focus,
+        // Focusable scrub bar: left/right seek ±10 s ONLY while it holds focus,
         // so the focus engine can move left/right between the control buttons
         // when the bar is not focused.
         tvScrub.translatesAutoresizingMaskIntoConstraints = false
@@ -2569,7 +2569,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     /// Single tap → toggle HUD (deferred ~0.28 s so a double tap can pre-empt
-    /// it). Double tap → seek ∓15 s by screen half; a hidden HUD stays hidden
+    /// it). Double tap → seek ∓10 s by screen half; a hidden HUD stays hidden
     /// (skip glyph is the only feedback), a visible HUD just gets its timer
     /// reset.
     @objc private func handleTap(_ g: UITapGestureRecognizer) {
