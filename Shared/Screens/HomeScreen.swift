@@ -397,7 +397,7 @@ struct HomeScreen: View {
                 }
             }
         }
-        .overlay(alignment: .bottomTrailing) {
+        .overlay(alignment: .bottom) {
             if candidates.count > 1 {
                 heroPageDots(count: candidates.count, active: active)
             }
@@ -421,8 +421,8 @@ struct HomeScreen: View {
                     .frame(width: 7, height: 7)
             }
         }
-        .padding(.trailing, heroPadding)
-        .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, heroPadding)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
