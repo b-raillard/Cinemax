@@ -30,6 +30,18 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      # CI builds from the freshly generated project, so a stale committed
+      # pbxproj (files added without re-running `xcodegen generate`) would pass
+      # CI while breaking every local build that opens the committed project
+      # ("Cannot find 'X' in scope" for types that exist). Fail loudly instead
+      # so the regenerated file has to ship with the PR.
+      - name: Verify committed project.pbxproj is up to date
+        run: |
+          if ! git diff --exit-code -- Cinemax.xcodeproj/project.pbxproj; then
+            echo "::error::Cinemax.xcodeproj/project.pbxproj is stale — run 'xcodegen generate' locally and commit the regenerated project."
+            exit 1
+          fi
+
       - name: Cache SwiftPM
         uses: actions/cache@v4
         with:
