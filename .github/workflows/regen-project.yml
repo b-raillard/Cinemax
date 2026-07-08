@@ -1,0 +1,30 @@
+name: Regenerate Xcode project
+
+# Maintenance utility, manual-trigger only: regenerates project.pbxproj with
+# the same xcodegen CI uses and exposes it (gzip+base64) in the job log so a
+# machine without xcodegen (e.g. a Linux remote session) can commit the
+# canonical bytes. Useful whenever files were added from an environment that
+# can't run `xcodegen generate` locally.
+on:
+  workflow_dispatch:
+
+jobs:
+  regen:
+    name: Generate & export pbxproj
+    runs-on: macos-26
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Export regenerated pbxproj (gzip+base64)
+        run: |
+          echo "PBXPROJ_B64_BEGIN"
+          gzip -9 -c Cinemax.xcodeproj/project.pbxproj | base64
+          echo "PBXPROJ_B64_END"
