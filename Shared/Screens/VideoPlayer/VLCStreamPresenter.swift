@@ -23,6 +23,14 @@ enum PlayerSkipConfig {
     static var forwardSymbol: String { "goforward.\(intervalSeconds)" }
 }
 
+/// Offline resume-position sink. Invoked by the VLC offline player on its 1 s
+/// tick (`final == false`) and once at teardown (`final == true`) with the live
+/// playhead + media length in ms. The receiver (DownloadManager) throttles the
+/// disk write and mirrors it into the pending server-sync queue. Declared
+/// unconditionally (not `#if os(iOS)`) so the cross-platform view controller's
+/// offline initializer type-checks on tvOS, where it's simply never supplied.
+typealias OfflineProgressSink = @MainActor (_ positionMs: Int, _ durationMs: Int, _ final: Bool) -> Void
+
 /// Unified VLC player (iOS + tvOS) covering both online streaming and (iOS-only)
 /// offline downloaded files. In **stream** mode VLC DirectPlays the raw
 /// Jellyfin file (MKV / HEVC 10-bit / Dolby Vision) so the server performs **no
@@ -59,6 +67,8 @@ final class VLCStreamPresenter: NSObject {
     private let maxBitrate: Int
     #if os(iOS)
     private let offlineLocalURL: URL?
+    /// Offline-only resume-position sink threaded to the view controller.
+    private let offlineProgress: OfflineProgressSink?
     #endif
 
     private weak var hostingVC: VLCStreamViewController?
@@ -95,18 +105,21 @@ final class VLCStreamPresenter: NSObject {
         self._initialItemId = itemId
         #if os(iOS)
         self.offlineLocalURL = nil
+        self.offlineProgress = nil
         #endif
     }
 
     #if os(iOS)
     /// Offline init — plays a downloaded file with the same HUD as stream mode.
     /// Stream-only fields are stubbed nil; network-dependent features are
-    /// gated off internally.
+    /// gated off internally. `onProgress` persists the resume position + queues
+    /// the server sync (nil callers get plain playback with no persistence).
     init(
         localURL: URL,
         title: String,
         startTime: Double?,
         loc: LocalizationManager,
+        onProgress: OfflineProgressSink?,
         onDismiss: (() -> Void)?
     ) {
         self.title = title
@@ -123,6 +136,7 @@ final class VLCStreamPresenter: NSObject {
         self.onDismiss = onDismiss
         self._initialItemId = nil
         self.offlineLocalURL = localURL
+        self.offlineProgress = onProgress
     }
     #endif
 
@@ -157,7 +171,7 @@ final class VLCStreamPresenter: NSObject {
         }
         let vc = VLCStreamViewController(
             offlineLocalURL: url, title: title, startTime: startTime,
-            loc: loc, onDismiss: onDismiss
+            loc: loc, onProgress: offlineProgress, onDismiss: onDismiss
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
@@ -210,6 +224,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Local downloaded file URL when in offline mode; nil in stream mode.
     private let offlineLocalURL: URL?
+    /// Offline resume-position sink — nil in stream mode (and for nil callers).
+    private let offlineProgressSink: OfflineProgressSink?
     /// True when the controller was constructed with the offline init.
     private var isOffline: Bool { offlineLocalURL != nil }
 
@@ -462,6 +478,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // Polish: a track/chapter picker is up — freeze the HUD behind it.
     private var pickerPresented = false
 
+    // MARK: - SyncPlay ("Watch Together")
+    // When the shared controller reports we're in a group at bind time, the
+    // presenter's play/pause/seek entry points route through it (the server
+    // echoes the command and THAT is what moves the playhead) instead of
+    // touching the local engine. Bound on the ONLINE path only — never offline.
+    private let syncPlay = SyncPlayController.shared
+    private var syncPlayActive = false
+    private let syncPlayPill = UILabel()
+
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
@@ -472,6 +497,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.itemId = itemId
         self.info = info
         self.offlineLocalURL = nil
+        self.offlineProgressSink = nil
         self.titleText = title
         self.startTime = startTime
         self.previousEpisode = previousEpisode
@@ -504,11 +530,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// progress reporting) are gated off in their respective call sites.
     init(
         offlineLocalURL: URL, title: String, startTime: Double?,
-        loc: LocalizationManager, onDismiss: (() -> Void)?
+        loc: LocalizationManager, onProgress: OfflineProgressSink?,
+        onDismiss: (() -> Void)?
     ) {
         self.itemId = ""
         self.info = nil
         self.offlineLocalURL = offlineLocalURL
+        self.offlineProgressSink = onProgress
         self.titleText = title
         self.startTime = startTime
         self.previousEpisode = nil
@@ -546,6 +574,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         startPlayback()
         scheduleHideControls()
         setupLifecycleObservers()
+        bindSyncPlayIfNeeded()
     }
 
     #if os(iOS)
@@ -558,13 +587,29 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         super.viewWillDisappear(animated)
         if isBeingDismissed {
             reporter?.reportStop()
+            persistOfflineProgress(final: true)
             teardown()
             onDismiss?()
         }
     }
 
+    /// Persists the offline playhead through the injected sink (a no-op in
+    /// stream mode / when no sink was supplied). Called on the 1 s tick
+    /// (`final: false`, throttled by the receiver) and once at teardown
+    /// (`final: true`, forces a durable write). Prefers the live position and
+    /// falls back to the last known one for the teardown case, where the engine
+    /// may already have stopped and `currentMs` reads 0.
+    private func persistOfflineProgress(final: Bool) {
+        guard isOffline, let sink = offlineProgressSink else { return }
+        let live = currentMs
+        let pos = Int(live > 0 ? live : lastKnownPositionMs)
+        guard pos > 0, lengthMs > 0 else { return }
+        sink(pos, Int(lengthMs), final)
+    }
+
     private func teardown() {
         isTearingDown = true
+        unbindSyncPlay()
         setLoading(false)
         cancelOpenWatchdog()
         progressTimer?.invalidate()
@@ -650,7 +695,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func commitPendingSeek() {
         seekCommitWork = nil
         guard let target = pendingScrubTargetMs else { return }
-        engineSeek(ms: target)
+        userEngineSeek(ms: target)
         refreshTimeUISoon()
     }
 
@@ -778,6 +823,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             sleepRemaining -= 1
             if sleepRemaining <= 0 { fireSleepTimer() }
         }
+        // Offline: persist the resume position (throttled by the receiver). The
+        // teardown path forces a final durable write; a mid-playback force-quit
+        // still keeps the last ≤5 s-old position from these ticks.
+        persistOfflineProgress(final: false)
     }
 
     // MARK: - Skip intro / outro (P3)
@@ -907,7 +956,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func skipSegmentTapped() {
         for segment in segments where segment.type == activeSegmentType {
             let end = Int32(Double(segment.endTicks ?? 0) / 10_000_000 * 1000)
-            engineSeek(ms: end)
+            userEngineSeek(ms: end)
             skipButton.isHidden = true
             activeSegmentType = nil
             refreshTimeUISoon()
@@ -1017,6 +1066,33 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         titleLabel.textColor = .white
         titleLabel.lineBreakMode = .byTruncatingTail
         controlsContainer.addSubview(titleLabel)
+
+        // SyncPlay ("Watch Together") pill — sits just under the title, hidden
+        // until a group binds. Same translucent rounded language as `skipHUD`.
+        // The player HUD is always-dark and uses raw UIKit font sizes
+        // throughout (matches `timeFont`/`hudFont` below), so hardcoded sizes
+        // here are consistent with the file, not the SwiftUI CinemaFont rule.
+        #if os(tvOS)
+        let pillFont: CGFloat = 22
+        let pillHeight: CGFloat = 40
+        #else
+        let pillFont: CGFloat = 13
+        let pillHeight: CGFloat = 24
+        #endif
+        syncPlayPill.translatesAutoresizingMaskIntoConstraints = false
+        syncPlayPill.font = .systemFont(ofSize: pillFont, weight: .semibold)
+        syncPlayPill.textColor = .white
+        syncPlayPill.textAlignment = .center
+        syncPlayPill.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        syncPlayPill.layer.cornerRadius = pillHeight / 2
+        syncPlayPill.clipsToBounds = true
+        syncPlayPill.isHidden = true
+        controlsContainer.addSubview(syncPlayPill)
+        NSLayoutConstraint.activate([
+            syncPlayPill.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            syncPlayPill.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
+            syncPlayPill.heightAnchor.constraint(equalToConstant: pillHeight)
+        ])
 
         #if os(tvOS)
         let timeFont: CGFloat = 26
@@ -1570,7 +1646,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.timeLabel.text = PlayerTimeFormat.ms(target)
             self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
             self.updateScrubBar(progress: progress)
-            self.engineSeek(ms: target)
+            self.userEngineSeek(ms: target)
             self.scheduleHideControls()
         }
         controlsContainer.addSubview(tvScrub)
@@ -2340,12 +2416,68 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     @objc private func playPauseTapped() {
         let willPlay = !enginePlaying
-        if enginePlaying { enginePause() } else { enginePlay() }
+        // In a SyncPlay group the tap is a request to the server, not a local
+        // action: emit it and let the echoed command move every participant's
+        // playhead together. The center glyph + icon still flip for immediate
+        // feedback; the engine follows when the echo lands.
+        if syncPlayActive {
+            if willPlay { syncPlay.userDidPlay() } else { syncPlay.userDidPause() }
+        } else {
+            if enginePlaying { enginePause() } else { enginePlay() }
+        }
         flashCenterGlyph(playing: willPlay)
         #if os(iOS)
         setPlayPauseIcon(playing: willPlay)
         #endif
         scheduleHideControls()
+    }
+
+    // MARK: - SyncPlay ("Watch Together")
+
+    /// Binds this presenter to the shared SyncPlay controller when the ONLINE
+    /// path opens while already in a group. The controller drives the engine
+    /// through these closures (never re-emitting), and routes the user's
+    /// transport actions to the server instead.
+    private func bindSyncPlayIfNeeded() {
+        guard !isOffline, syncPlay.isInGroup else { return }
+        syncPlayActive = true
+        syncPlay.bindPlayback(SyncPlayController.PlaybackBridge(
+            play: { [weak self] in self?.enginePlay() },
+            pause: { [weak self] in self?.enginePause() },
+            seekMs: { [weak self] ms in self?.engineSeek(ms: Int32(clamping: ms)) },
+            positionMs: { [weak self] in Int(self?.currentMs ?? 0) },
+            stop: { [weak self] in self?.enginePause() } // v1: pause on server Stop
+        ))
+        syncPlay.onParticipantsChanged = { [weak self] count in self?.updateSyncPlayPill(count: count) }
+        updateSyncPlayPill(count: syncPlay.participantCount)
+    }
+
+    private func updateSyncPlayPill(count: Int) {
+        guard syncPlayActive else { return }
+        syncPlayPill.isHidden = false
+        // Padded with spaces so the rounded background reads as a pill without
+        // a custom label-inset subclass.
+        syncPlayPill.text = "  " + loc.localized("syncplay.pill", max(count, 1)) + "  "
+    }
+
+    /// Detaches from the controller and, since v1 ties the group's lifetime to
+    /// the player, leaves the group. Called from `teardown` (user dismiss).
+    private func unbindSyncPlay() {
+        guard syncPlayActive else { return }
+        syncPlayActive = false
+        syncPlay.onParticipantsChanged = nil
+        syncPlay.unbindPlayback()
+        syncPlay.playbackDidDismiss()
+    }
+
+    /// A user-initiated seek. In a group it becomes a server Seek request (the
+    /// echo does the actual engine seek); otherwise it seeks locally.
+    private func userEngineSeek(ms: Int32) {
+        if syncPlayActive {
+            syncPlay.userDidSeek(toMs: Int(max(0, ms)))
+        } else {
+            engineSeek(ms: ms)
+        }
     }
 
     // MARK: - Episode navigation
@@ -2592,7 +2724,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         scrubPreview.isHidden = true
         let length = lengthMs
         guard length > 0 else { isScrubbing = false; return }
-        engineSeek(ms: Int32(Float(length) * slider.value))
+        userEngineSeek(ms: Int32(Float(length) * slider.value))
         isScrubbing = false
         scheduleHideControls()
     }
@@ -2675,6 +2807,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // the gap reads as "loading", not "frozen". Cleared by .playing or the
             // first time tick.
             setLoading(true)
+            if syncPlayActive { syncPlay.reportBuffering() }
         case .stopped:
             guard !isTearingDown,
                   Date().timeIntervalSince(lastPlayStart) > 1.0,
@@ -2697,12 +2830,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setPlayPauseIcon(playing: true)
             #endif
             refreshNowPlayingRate(playing: true)
+            if syncPlayActive { syncPlay.reportReady(isPlaying: true) }
         case .paused:
             setLoading(false)
             #if os(iOS)
             setPlayPauseIcon(playing: false)
             #endif
             refreshNowPlayingRate(playing: false)
+            if syncPlayActive { syncPlay.reportReady(isPlaying: false) }
         default: break
         }
     }

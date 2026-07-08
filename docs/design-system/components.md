@@ -376,8 +376,8 @@ All `@MainActor @ViewBuilder` free functions in `SettingsRowHelpers.swift`.
 
 | API | Purpose |
 | --- | --- |
-| `iOSToggleRowsJoined(_ rows: [SettingsToggleRow], accent: Color, animated: Bool)` | Renders the array with dividers between; most toggle groups use this. |
-| `iOSToggleRow(icon:label:value:accent:animated:)` | One toggle. Internally calls `iOSSettingsRow` + `iOSRowIcon` + `CinemaToggleIndicator`. |
+| `iOSToggleRowsJoined(_ rows: [SettingsToggleRow], accent: Color, animated: Bool, loc: LocalizationManager)` | Renders the array with dividers between; most toggle groups use this. `loc` feeds the VoiceOver on/off value. |
+| `iOSToggleRow(icon:label:value:accent:animated:loc:)` | One toggle. Internally calls `iOSSettingsRow` + `iOSRowIcon` + `CinemaToggleIndicator`; fires `Haptics.tap()` and exposes a combined VoiceOver toggle element (label + on/off value + `.isToggle`). |
 | `iOSSettingsRow { content }` | Padded row container. `h: spacing4, v: spacing3`. |
 | `iOSRowIcon(systemName:color:)` | 32 × 32 rounded-rect icon badge. |
 | `iOSSettingsDivider` | Thin divider inset past the icon. |
@@ -409,7 +409,7 @@ var interfaceToggleRows: [SettingsToggleRow] {
 
 // 2. Render per platform
 #if os(iOS)
-iOSToggleRowsJoined(interfaceToggleRows, accent: themeManager.accent, animated: motionEnabled)
+iOSToggleRowsJoined(interfaceToggleRows, accent: themeManager.accent, animated: motionEnabled, loc: loc)
 #else
 tvToggleList(interfaceToggleRows)
 #endif

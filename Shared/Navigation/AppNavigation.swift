@@ -282,15 +282,34 @@ final class AppState {
 }
 
 struct AppNavigation: View {
-    @State private var appState = AppState()
+    /// SwiftUI may recreate the root `AppNavigation` struct on scene events,
+    /// and every recreation re-evaluates the `@State` initial-value
+    /// expressions — then discards the results (`@State` keeps the first
+    /// instance). For the heavy stores that's not just wasted work:
+    /// `DownloadManager` synchronously reads + decodes `index.json`, walks the
+    /// downloads tree for orphans, and constructs a background `URLSession`
+    /// whose identifier (`com.cinemax.downloads`) must be process-unique — a
+    /// throwaway second session with the same identifier can steal delegate
+    /// callbacks and silently break download completion. Guarded statics make
+    /// the initial values process-singletons (same rationale as
+    /// `configurePipeline`). The cheap stores (`ThemeManager`, etc.) stay
+    /// inline — rebuilding them costs nothing.
+    private static let sharedAppState = AppState()
+    private static let sharedNetworkMonitor = NetworkMonitor()
+    private static let sharedMenuConfig = MenuConfigStore()
+    #if os(iOS)
+    private static let sharedDownloads = DownloadManager()
+    #endif
+
+    @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
     @State private var loc = LocalizationManager()
     @State private var toasts = ToastCenter()
-    @State private var network = NetworkMonitor()
-    @State private var menuConfig = MenuConfigStore()
+    @State private var network = AppNavigation.sharedNetworkMonitor
+    @State private var menuConfig = AppNavigation.sharedMenuConfig
     @State private var settingsNav = SettingsNavCoordinator()
     #if os(iOS)
-    @State private var downloads = DownloadManager()
+    @State private var downloads = AppNavigation.sharedDownloads
     #endif
     @State private var hasCheckedSession = false
     /// When the app last entered the background — drives Part E foreground
@@ -376,6 +395,10 @@ struct AppNavigation: View {
             }
             #if os(iOS)
             downloads.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
+            // App-start-online: drain any offline playback progress captured on
+            // a previous (offline) run back to the server. No-ops when offline
+            // / logged out.
+            if network.isOnline { downloads.flushPendingPlaybackSync() }
             #endif
             // Decide once, in the background, whether this server needs the
             // loopback stream proxy (dual-stack host with a black-holed IPv6
@@ -434,7 +457,15 @@ struct AppNavigation: View {
         .onChange(of: network.isOnline) { _, online in
             // Connectivity flipped (e.g. Wi-Fi ⇄ cellular) — IPv6 reachability
             // is per-network, so re-run the transport probe.
-            if online { StreamTransportPolicy.shared.refresh() }
+            if online {
+                StreamTransportPolicy.shared.refresh()
+                #if os(iOS)
+                // Reconnected — flush offline playback progress (resume points +
+                // watched state) back to the server so Continue Watching / play
+                // state converge across devices.
+                downloads.flushPendingPlaybackSync()
+                #endif
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in
             // Lazy 401 recovery — fired by any API call that surfaces an HTTP

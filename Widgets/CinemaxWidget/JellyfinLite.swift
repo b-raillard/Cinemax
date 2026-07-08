@@ -80,7 +80,7 @@ enum JellyfinLite {
     /// empty = the server answered with nothing to resume.
     static func fetchResumeItems(session: Session, limit: Int) async -> [ResumeItem]? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
-        comps.path = "/UserItems/Resume"
+        comps.path = endpointPath("/UserItems/Resume", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
             URLQueryItem(name: "limit", value: String(limit)),
@@ -94,7 +94,7 @@ enum JellyfinLite {
     /// nil/empty semantics as `fetchResumeItems`.
     static func fetchFavorites(session: Session, limit: Int) async -> [ResumeItem]? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
-        comps.path = "/Items"
+        comps.path = endpointPath("/Items", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
             URLQueryItem(name: "recursive", value: "true"),
@@ -136,7 +136,7 @@ enum JellyfinLite {
 
     static func posterURL(session: Session, itemId: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
-        comps.path = "/Items/\(itemId)/Images/Primary"
+        comps.path = endpointPath("/Items/\(itemId)/Images/Primary", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "maxWidth", value: String(maxWidth)),
             URLQueryItem(name: "quality", value: "85"),
@@ -152,4 +152,15 @@ enum JellyfinLite {
               !data.isEmpty else { return nil }
         return data
     }
+}
+
+/// Sets the request path while preserving the server's base path (a server
+/// hosted at `https://host/jellyfin` would otherwise lose `/jellyfin` and
+/// 404). Mirrors `URLComponents.setEndpointPath` in CinemaxKit — kept in
+/// sync manually because this extension can't link the package.
+private func endpointPath(_ endpoint: String, serverURL: URL) -> String {
+    let base = serverURL.path
+    if base.isEmpty || base == "/" { return endpoint }
+    let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
+    return trimmed + endpoint
 }

@@ -45,10 +45,13 @@ struct MediaDetailEpisodeRow: View, Equatable {
 
     var body: some View {
         if let id = episode.id {
+            let isPlayed = episode.userData?.isPlayed ?? false
             let epLabel: String = {
                 var parts: [String] = []
                 if let num = episode.indexNumber { parts.append(loc.localized("detail.episode", num)) }
                 if let name = episode.name { parts.append(name) }
+                // VoiceOver: surface the watched state after the title.
+                if isPlayed { parts.append(loc.localized("accessibility.episode.watched")) }
                 return parts.joined(separator: ", ")
             }()
             let overview = episode.overview.flatMap { $0.isEmpty ? nil : $0 }
@@ -78,6 +81,17 @@ struct MediaDetailEpisodeRow: View, Equatable {
                                 if let p = epProgress {
                                     ProgressBarView(progress: p, height: 3, trackColor: CinemaColor.onSurface.opacity(0.25))
                                         .padding(.horizontal, 6).padding(.bottom, 6)
+                                }
+                            }
+                            // Watched badge — mirrors the iOS episode card. `.white`
+                            // over dark thumbnail imagery matches the card's badge
+                            // (checkmark on media artwork, not a neutral surface).
+                            .overlay(alignment: .topTrailing) {
+                                if isPlayed {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: CinemaScale.pt(22), weight: .semibold))
+                                        .foregroundStyle(.white, CinemaColor.surface.opacity(0.8))
+                                        .padding(6)
                                 }
                             }
                         VStack(alignment: .leading, spacing: 4) {

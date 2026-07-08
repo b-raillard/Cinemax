@@ -60,12 +60,21 @@ extension JellyfinAPIClient: DownloadAPI {
             body.mediaSourceID = mediaSourceId
         }
 
-        let response = try await rawPostPlaybackInfo(
-            serverURL: serverURL,
-            itemId: effectiveItemId,
-            client: client,
-            body: body
-        )
+        let response: PlaybackInfoResponse
+        do {
+            response = try await rawPostPlaybackInfo(
+                serverURL: serverURL,
+                itemId: effectiveItemId,
+                client: client,
+                body: body
+            )
+        } catch {
+            // Keep the download path instrumented like the 6 documented hot
+            // paths — a revoked token here must fire the session-expiry flow,
+            // not just fail the download silently.
+            notifyIfUnauthorized(error)
+            throw error
+        }
 
         let mediaSource: MediaSourceInfo? = response.mediaSources?.first(where: { $0.id == mediaSourceId })
             ?? response.mediaSources?.first
@@ -83,7 +92,7 @@ extension JellyfinAPIClient: DownloadAPI {
         // Direct-stream path — source is already AVKit-friendly, no transcode needed.
         if let playSessionId,
            var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) {
-            components.path = "/Videos/\(effectiveItemId)/stream"
+            components.setEndpointPath("/Videos/\(effectiveItemId)/stream", preservingBasePathOf: serverURL)
             components.queryItems = [
                 URLQueryItem(name: "static", value: "true"),
                 URLQueryItem(name: "playSessionId", value: playSessionId),
@@ -101,7 +110,7 @@ extension JellyfinAPIClient: DownloadAPI {
         // container, so the offline-playable gate in `VideoPlayerView` is what
         // catches anything AVKit can't decode.
         var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) ?? URLComponents()
-        components.path = "/Items/\(effectiveItemId)/Download"
+        components.setEndpointPath("/Items/\(effectiveItemId)/Download", preservingBasePathOf: serverURL)
         components.queryItems = [
             URLQueryItem(name: "mediaSourceId", value: mediaSource?.id ?? effectiveItemId),
             URLQueryItem(name: "deviceId", value: deviceID)

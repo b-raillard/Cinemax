@@ -93,6 +93,14 @@ struct VideoPlayerView: View {
 
         do {
             let bitrate = render4K ? 120_000_000 : 20_000_000
+            // Offline resume: an explicit caller `startTime` always wins;
+            // otherwise fall back to the locally-persisted offline playhead from
+            // a previous offline session (unless the item is already watched).
+            // For online items `downloads.item(for:)` is nil, so this is just
+            // `startTime` — no behavior change on the streaming paths.
+            let resolvedStartTime: Double? = startTime ?? downloads.item(for: itemId).flatMap { entry in
+                entry.watched == true ? nil : entry.lastPositionMs.map { Double($0) / 1000 }
+            }
             // Offline-completed file gets two routes:
             //   1. AVKit-friendly container → AVPlayer (full feature set —
             //      skip intro/outro, chapter markers, AirPlay, PiP).
@@ -117,7 +125,7 @@ struct VideoPlayerView: View {
                     #endif
                 } else {
                     // Hand off to libVLC and skip the rest of the AVKit path.
-                    presentVLC(localURL: local)
+                    presentVLC(localURL: local, startTime: resolvedStartTime)
                     return
                 }
             } else if !forceNativeAVPlayer {
@@ -150,7 +158,7 @@ struct VideoPlayerView: View {
             }
 
             let p = NativeVideoPresenter(
-                itemId: itemId, title: title, startTime: startTime,
+                itemId: itemId, title: title, startTime: resolvedStartTime,
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                 episodeNavigator: episodeNavigator,
                 apiClient: appState.apiClient, userId: userId,
@@ -168,12 +176,21 @@ struct VideoPlayerView: View {
         }
     }
 
-    private func presentVLC(localURL: URL) {
+    private func presentVLC(localURL: URL, startTime: Double?) {
         let p = VLCStreamPresenter(
             localURL: localURL,
             title: title,
             startTime: startTime,
             loc: loc,
+            // Persist the offline playhead + queue the server sync on tick /
+            // teardown. Captures `downloads` (a @MainActor store) and the item
+            // id; the sink itself is @MainActor.
+            onProgress: { positionMs, durationMs, final in
+                downloads.recordOfflinePlaybackProgress(
+                    itemId: itemId, positionMs: positionMs,
+                    durationMs: durationMs, final: final
+                )
+            },
             onDismiss: { dismiss() }
         )
         vlcOfflinePresenter = p

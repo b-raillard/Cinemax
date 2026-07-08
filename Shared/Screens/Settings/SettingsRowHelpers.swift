@@ -115,7 +115,8 @@ func iOSToggleRow(
     label: String,
     value: Binding<Bool>,
     accent: Color,
-    animated: Bool
+    animated: Bool,
+    loc: LocalizationManager
 ) -> some View {
     iOSSettingsRow {
         HStack {
@@ -124,11 +125,26 @@ func iOSToggleRow(
                 .font(CinemaFont.dynamicLabel(.large))
                 .foregroundStyle(CinemaColor.onSurface)
             Spacer()
-            Button { value.wrappedValue.toggle() } label: {
+            Button {
+                value.wrappedValue.toggle()
+                Haptics.tap()
+            } label: {
                 CinemaToggleIndicator(isOn: value.wrappedValue, accent: accent, animated: animated)
             }
             .buttonStyle(.plain)
-            .sensoryFeedback(.selection, trigger: value.wrappedValue)
+        }
+        // Collapse the whole row into one VoiceOver element that announces the
+        // label + on/off state + toggle semantics (the bare `CinemaToggleIndicator`
+        // is purely visual, so without this VoiceOver read the setting label-only).
+        // Direct-touch on the pill still works — the accessibility tree is
+        // independent of hit-testing.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(loc.localized(value.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityAction {
+            value.wrappedValue.toggle()
+            Haptics.tap()
         }
     }
 }
@@ -139,14 +155,15 @@ func iOSToggleRow(
 /// this keeps the helper compatible with mixed-row sections.
 @MainActor
 @ViewBuilder
-func iOSToggleRowsJoined(_ rows: [SettingsToggleRow], accent: Color, animated: Bool) -> some View {
+func iOSToggleRowsJoined(_ rows: [SettingsToggleRow], accent: Color, animated: Bool, loc: LocalizationManager) -> some View {
     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
         iOSToggleRow(
             icon: row.icon,
             label: row.label,
             value: row.value,
             accent: row.tint ?? accent,
-            animated: animated
+            animated: animated,
+            loc: loc
         )
         if index < rows.count - 1 {
             iOSSettingsDivider

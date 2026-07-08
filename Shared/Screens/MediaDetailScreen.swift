@@ -2,6 +2,17 @@ import SwiftUI
 import CinemaxKit
 import JellyfinAPI
 
+/// The resolved play target a Watch Together group is opened for — the movie,
+/// or a series' next-up episode. Drives both the group sheet and the playback
+/// push once a group is created/joined. `Hashable` because it also feeds
+/// `navigationDestination(item:)` on iOS (same contract as `AdminMenuPushIntent`).
+struct WatchTogetherIntent: Identifiable, Hashable {
+    let id = UUID()
+    let itemId: String
+    let title: String
+    let startTime: Double?
+}
+
 struct MediaDetailScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -14,6 +25,13 @@ struct MediaDetailScreen: View {
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
     @Environment(NetworkMonitor.self) private var network
+    @Environment(ToastCenter.self) private var toast
+    /// Watch Together (SyncPlay): the item to present the group sheet for, and
+    /// (iOS) the item to push into playback once a group is created/joined.
+    @State private var watchTogetherSheet: WatchTogetherIntent?
+    #if os(iOS)
+    @State private var watchTogetherPlay: WatchTogetherIntent?
+    #endif
     #if os(iOS)
     @Environment(DownloadManager.self) private var downloads
     @Environment(\.dismiss) private var dismiss
@@ -101,6 +119,41 @@ struct MediaDetailScreen: View {
             EpisodeOverviewSheet(item: ep)
                 .environment(themeManager)
         }
+        .modifier(WatchTogetherPresentation(
+            sheet: $watchTogetherSheet,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toast,
+            network: network,
+            onStart: { intent in startWatchTogether(intent) }
+        ))
+        #if os(iOS)
+        .navigationDestination(item: $watchTogetherPlay) { intent in
+            VideoPlayerView(itemId: intent.itemId, title: intent.title, startTime: intent.startTime)
+        }
+        #endif
+    }
+
+    /// Kicks off playback once a Watch Together group is created/joined. tvOS
+    /// drives the coordinator (its normal play path); iOS pushes `VideoPlayerView`.
+    private func startWatchTogether(_ intent: WatchTogetherIntent) {
+        #if os(tvOS)
+        coordinator.play(itemId: intent.itemId, title: intent.title, startTime: intent.startTime, using: appState)
+        #else
+        watchTogetherPlay = intent
+        #endif
+    }
+
+    /// Builds the play target for Watch Together: the resolved next-up episode
+    /// for a series, else the item itself.
+    private func watchTogetherIntent(for item: BaseItemDto, nextEp: BaseItemDto?) -> WatchTogetherIntent {
+        let target = nextEp ?? item
+        return WatchTogetherIntent(
+            itemId: target.id ?? item.id ?? viewModel.itemId,
+            title: target.name ?? item.name ?? "",
+            startTime: nil
+        )
     }
 
     // MARK: - Detail Content
@@ -111,78 +164,141 @@ struct MediaDetailScreen: View {
                 // Backdrop hero
                 backdropSection(item)
 
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                    // Action buttons
-                    actionButtons(item)
-
-                    #if os(iOS)
-                    // Admin-gated 3-dot menu (Identifier / Edit metadata /
-                    // Refresh / Delete). Server enforces authorization on
-                    // every endpoint; client gating is UX only.
-                    if appState.isAdministrator {
-                        adminMenuPill(for: item)
-                    }
-                    #endif
-
-                    // Quality badges
-                    if showQualityBadges {
-                        MediaQualityBadges(item: item)
-                            .padding(.horizontal, contentPadding)
-                    }
-
-                    // Overview — Dynamic Type-aware since users read this prose.
-                    if let overview = item.overview {
-                        Text(overview)
-                            .font(CinemaFont.dynamicBody)
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                            .padding(.horizontal, contentPadding)
-                            #if os(tvOS)
-                            .focusable()
-                            #endif
-                    }
-
-                    // Studio / Network
-                    studioLine(item)
-                        .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                        .padding(.horizontal, contentPadding)
-
-                    // Cast
-                    if let people = item.people, !people.isEmpty {
-                        MediaDetailCastSection(people: people).equatable()
-                    }
-
-                    // Seasons & Episodes (for series)
-                    if viewModel.resolvedType == .series, !viewModel.seasons.isEmpty {
-                        seasonsSection(item)
-                    }
-
-                    // Collection ("Part of: …") — movies that share a BoxSet
-                    if !viewModel.collectionItems.isEmpty {
-                        MediaDetailSimilarSection(
-                            items: viewModel.collectionItems,
-                            cardWidth: similarCardWidth,
-                            titleOverride: String(
-                                format: loc.localized("detail.partOf"),
-                                viewModel.collectionName ?? ""
-                            )
-                        ).equatable()
-                    }
-
-                    // Similar items
-                    if !viewModel.similarItems.isEmpty {
-                        MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
-                    }
-
-                    Spacer(minLength: 80)
-                }
-                .padding(.top, CinemaSpacing.spacing4)
+                belowHeroContent(item)
             }
         }
         #if os(tvOS)
         .scrollClipDisabled()
         #endif
     }
+
+    /// Content below the backdrop hero. iPhone + tvOS stack every section
+    /// vertically; iPad (regular width) splits it into a metadata column
+    /// (action buttons / quality badges / overview) and an episodes-or-cast
+    /// column. The section builders are shared verbatim between both paths —
+    /// only the container differs.
+    @ViewBuilder
+    private func belowHeroContent(_ item: BaseItemDto) -> some View {
+        #if os(iOS)
+        if useTwoColumnLayout {
+            // 40 / 60 split of the full scroll width using the same
+            // `containerRelativeFrame(count:span:)` grid technique as the tvOS
+            // episode row. The horizontal carousels (cast / similar / episodes)
+            // in the right column measure their own scroll viewport, so they
+            // resize to the column automatically.
+            HStack(alignment: .top, spacing: 0) {
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                    primaryColumnSections(item)
+                }
+                .containerRelativeFrame(.horizontal, count: 5, span: 2, spacing: 0)
+
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                    secondaryColumnSections(item)
+                    Spacer(minLength: 80)
+                }
+                .containerRelativeFrame(.horizontal, count: 5, span: 3, spacing: 0)
+            }
+            .padding(.top, CinemaSpacing.spacing4)
+        } else {
+            stackedBelowHeroContent(item)
+        }
+        #else
+        stackedBelowHeroContent(item)
+        #endif
+    }
+
+    /// The single-column (iPhone / tvOS) arrangement — primary then secondary
+    /// sections in one vertical stack, preserving the original order.
+    @ViewBuilder
+    private func stackedBelowHeroContent(_ item: BaseItemDto) -> some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+            primaryColumnSections(item)
+            secondaryColumnSections(item)
+            Spacer(minLength: 80)
+        }
+        .padding(.top, CinemaSpacing.spacing4)
+    }
+
+    /// Metadata sections: action buttons, admin menu (iOS), quality badges,
+    /// overview, studio line. The iPad left column.
+    @ViewBuilder
+    private func primaryColumnSections(_ item: BaseItemDto) -> some View {
+        // Action buttons
+        actionButtons(item)
+
+        #if os(iOS)
+        // Admin-gated 3-dot menu (Identifier / Edit metadata / Refresh /
+        // Delete). Server enforces authorization on every endpoint; client
+        // gating is UX only.
+        if appState.isAdministrator {
+            adminMenuPill(for: item)
+        }
+        #endif
+
+        // Quality badges
+        if showQualityBadges {
+            MediaQualityBadges(item: item)
+                .padding(.horizontal, contentPadding)
+        }
+
+        // Overview — Dynamic Type-aware since users read this prose.
+        if let overview = item.overview {
+            Text(overview)
+                .font(CinemaFont.dynamicBody)
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .frame(maxWidth: readingMaxWidth, alignment: .leading)
+                .padding(.horizontal, contentPadding)
+                #if os(tvOS)
+                .focusable()
+                #endif
+        }
+
+        // Studio / Network
+        studioLine(item)
+            .frame(maxWidth: readingMaxWidth, alignment: .leading)
+            .padding(.horizontal, contentPadding)
+    }
+
+    /// Rich sections: cast, seasons/episodes, collection, similar. The iPad
+    /// right column.
+    @ViewBuilder
+    private func secondaryColumnSections(_ item: BaseItemDto) -> some View {
+        // Cast
+        if let people = item.people, !people.isEmpty {
+            MediaDetailCastSection(people: people).equatable()
+        }
+
+        // Seasons & Episodes (for series)
+        if viewModel.resolvedType == .series, !viewModel.seasons.isEmpty {
+            seasonsSection(item)
+        }
+
+        // Collection ("Part of: …") — movies that share a BoxSet
+        if !viewModel.collectionItems.isEmpty {
+            MediaDetailSimilarSection(
+                items: viewModel.collectionItems,
+                cardWidth: similarCardWidth,
+                titleOverride: String(
+                    format: loc.localized("detail.partOf"),
+                    viewModel.collectionName ?? ""
+                )
+            ).equatable()
+        }
+
+        // Similar items
+        if !viewModel.similarItems.isEmpty {
+            MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
+        }
+    }
+
+    #if os(iOS)
+    /// iPad (regular horizontal size class) shows the two-column detail layout.
+    /// iPhone (compact) keeps the stacked layout. Follows the codebase-wide
+    /// convention of treating regular width as iPad (see `AdaptiveLayout`).
+    private var useTwoColumnLayout: Bool {
+        sizeClass == .regular
+    }
+    #endif
 
     // MARK: - Backdrop
 
@@ -420,6 +536,9 @@ struct MediaDetailScreen: View {
             playSection
             favoriteButton
             watchedButton
+            if network.isOnline {
+                watchTogetherButton(for: item, nextEp: nextEp)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, contentPadding)
@@ -469,6 +588,22 @@ struct MediaDetailScreen: View {
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
         .accessibilityLabel(loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"))
     }
+
+    /// "Watch Together" (SyncPlay) toggle in the tvOS action row — opens the
+    /// group sheet. Accent fill while already in a group.
+    private func watchTogetherButton(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
+        Button {
+            watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+        } label: {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: buttonFontSize, weight: .bold))
+                .foregroundStyle(SyncPlayController.shared.isInGroup ? themeManager.accent : CinemaColor.onSurface)
+                .padding(.vertical, buttonVerticalPadding)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+        }
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        .accessibilityLabel(loc.localized("syncplay.title"))
+    }
     #endif
 
     // MARK: - Secondary actions row (iOS)
@@ -508,6 +643,18 @@ struct MediaDetailScreen: View {
                     trigger: false
                 ) {
                     openURL(trailerURL)
+                }
+            }
+
+            // Watch Together (SyncPlay) — online only. Accent while in a group.
+            if network.isOnline {
+                secondaryActionCell(
+                    systemImage: "person.2.fill",
+                    active: SyncPlayController.shared.isInGroup,
+                    accessibility: loc.localized("syncplay.title"),
+                    trigger: false
+                ) {
+                    watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
                 }
             }
 
@@ -1072,4 +1219,41 @@ extension VerticalAlignment {
         }
     }
     static let playActionRow = VerticalAlignment(PlayActionRow.self)
+}
+
+// MARK: - Watch Together presentation
+
+/// Presents the SyncPlay group sheet — a bottom sheet on iOS, a full-screen
+/// cover on tvOS (`.sheet` renders as a broken narrow modal on tvOS 26). The
+/// key environment objects are re-injected so the sheet's own `@Environment`
+/// reads resolve regardless of automatic propagation.
+private struct WatchTogetherPresentation: ViewModifier {
+    @Binding var sheet: WatchTogetherIntent?
+    let appState: AppState
+    let themeManager: ThemeManager
+    let loc: LocalizationManager
+    let toast: ToastCenter
+    let network: NetworkMonitor
+    let onStart: (WatchTogetherIntent) -> Void
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content.fullScreenCover(item: $sheet) { intent in sheetView(intent) }
+        #else
+        content.sheet(item: $sheet) { intent in sheetView(intent) }
+        #endif
+    }
+
+    private func sheetView(_ intent: WatchTogetherIntent) -> some View {
+        WatchTogetherSheet(
+            itemId: intent.itemId,
+            itemTitle: intent.title,
+            onStart: { onStart(intent) }
+        )
+        .environment(appState)
+        .environment(themeManager)
+        .environment(loc)
+        .environment(toast)
+        .environment(network)
+    }
 }

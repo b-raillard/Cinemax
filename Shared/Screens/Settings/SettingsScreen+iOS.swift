@@ -425,7 +425,7 @@ extension SettingsScreen {
 
     var iOSHomePageSection: some View {
         VStack(spacing: 0) {
-            iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects)
+            iOSToggleRowsJoined(homePageToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
 
             // "Genre rows" is a section toggle; when on, drill into a native
             // multi-select to choose which genres surface as rows on Home.
@@ -455,7 +455,7 @@ extension SettingsScreen {
 
     var iOSPlaybackSection: some View {
         VStack(spacing: 0) {
-            iOSToggleRowsJoined(playbackToggleRows, accent: themeManager.accent, animated: motionEffects)
+            iOSToggleRowsJoined(playbackToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
             iOSSettingsDivider
             iOSSleepTimerRow
         }
@@ -464,14 +464,14 @@ extension SettingsScreen {
 
     var iOSDetailPageSection: some View {
         VStack(spacing: 0) {
-            iOSToggleRowsJoined(detailPageToggleRows, accent: themeManager.accent, animated: motionEffects)
+            iOSToggleRowsJoined(detailPageToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
         }
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
     var iOSDebugSection: some View {
         VStack(spacing: 0) {
-            iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects)
+            iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
         }
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }

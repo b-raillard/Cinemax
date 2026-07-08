@@ -324,13 +324,77 @@ public protocol AdminAPI: Sendable {
     func applyRemoteSearchResult(itemId: String, result: RemoteSearchResult, replaceAllImages: Bool) async throws
 }
 
+/// SyncPlay ("Watch Together"): group discovery / membership and realtime
+/// transport control. Every method is hand-built over `URLSession` (the SDK
+/// doesn't model these endpoints) in `JellyfinAPIClient+SyncPlay.swift`.
+///
+/// All members carry default implementations below so the many `APIClientProtocol`
+/// test mocks keep compiling without an explicit SyncPlay override — only the
+/// real client (and any mock that opts in) needs to implement them.
+public protocol SyncPlayAPI: Sendable {
+    /// Lists the groups currently open on the server (`GET /SyncPlay/List`).
+    func syncPlayListGroups() async throws -> [SyncPlayGroup]
+    /// Creates a new group and joins it (`POST /SyncPlay/New`). The server
+    /// echoes a `GroupJoined` update over the socket with the authoritative id.
+    func syncPlayNewGroup(name: String) async throws
+    /// Joins an existing group (`POST /SyncPlay/Join`).
+    func syncPlayJoinGroup(groupId: String) async throws
+    /// Leaves the current group (`POST /SyncPlay/Leave`).
+    func syncPlayLeaveGroup() async throws
+
+    /// Broadcasts a pause to every participant (`POST /SyncPlay/Pause`). The
+    /// server echoes the command back — applying that echo is what pauses us.
+    func syncPlayPause() async throws
+    /// Broadcasts a resume (`POST /SyncPlay/Unpause`).
+    func syncPlayUnpause() async throws
+    /// Broadcasts a stop (`POST /SyncPlay/Stop`).
+    func syncPlayStop() async throws
+    /// Broadcasts a seek to the given tick position (`POST /SyncPlay/Seek`).
+    func syncPlaySeek(positionTicks: Int) async throws
+
+    /// Reports this client is ready/playing at a position (`POST /SyncPlay/Ready`).
+    func syncPlayReady(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws
+    /// Reports this client is buffering (`POST /SyncPlay/Buffering`).
+    func syncPlayBuffering(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws
+
+    /// Sets the group's playing queue (`POST /SyncPlay/SetNewQueue`). v1 sends a
+    /// single-item queue when the creator starts playback.
+    func syncPlaySetNewQueue(itemIds: [String], startPositionTicks: Int) async throws
+
+    /// Fetches the server's UTC round-trip timestamps for clock-offset
+    /// estimation (`GET /GetUtcTime`).
+    func syncPlayGetUtcTime() async throws -> SyncPlayUtcTime
+
+    /// Opens a WebSocket to the Jellyfin `/socket` endpoint for realtime
+    /// SyncPlay events. Returns `nil` when not connected / unauthenticated.
+    func makeSyncPlaySocket() -> SyncPlaySocket?
+}
+
+public extension SyncPlayAPI {
+    func syncPlayListGroups() async throws -> [SyncPlayGroup] { [] }
+    func syncPlayNewGroup(name: String) async throws {}
+    func syncPlayJoinGroup(groupId: String) async throws {}
+    func syncPlayLeaveGroup() async throws {}
+    func syncPlayPause() async throws {}
+    func syncPlayUnpause() async throws {}
+    func syncPlayStop() async throws {}
+    func syncPlaySeek(positionTicks: Int) async throws {}
+    func syncPlayReady(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {}
+    func syncPlayBuffering(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {}
+    func syncPlaySetNewQueue(itemIds: [String], startPositionTicks: Int) async throws {}
+    func syncPlayGetUtcTime() async throws -> SyncPlayUtcTime {
+        SyncPlayUtcTime(requestReceptionTime: Date(), responseTransmissionTime: Date())
+    }
+    func makeSyncPlaySocket() -> SyncPlaySocket? { nil }
+}
+
 // MARK: - Aggregate
 
 /// Umbrella protocol kept as the default dependency type — view models and
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI & SyncPlayAPI
 
 // MARK: - Default arguments
 
@@ -418,3 +482,4 @@ public extension PlaybackAPI {
 // MARK: - Conformance
 
 extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI, AdminAPI {}
+// `SyncPlayAPI` conformance is declared in `JellyfinAPIClient+SyncPlay.swift`.

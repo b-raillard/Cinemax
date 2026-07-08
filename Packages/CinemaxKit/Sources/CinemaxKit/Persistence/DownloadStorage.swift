@@ -33,6 +33,13 @@ public enum DownloadStorage {
         try downloadsRoot().appendingPathComponent("index.json", isDirectory: false)
     }
 
+    /// JSON file backing the pending offline-playback → server sync queue
+    /// (`OfflinePlaybackSyncQueue`). Kept separate from `index.json` so the
+    /// high-churn queue writes don't rewrite the whole download catalog.
+    public static func syncQueueURL() throws -> URL {
+        try downloadsRoot().appendingPathComponent("playback-sync.json", isDirectory: false)
+    }
+
     public static func filesDirectory() throws -> URL {
         try downloadsRoot().appendingPathComponent("files", isDirectory: true)
     }

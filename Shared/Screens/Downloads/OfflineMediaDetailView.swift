@@ -141,6 +141,14 @@ struct OfflineMediaDetailView: View {
                 Spacer()
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
+
+            // Resume progress from the locally-persisted offline playhead
+            // (movies only — episodes show it per-row in the list below). Reads
+            // the live catalog entry so it reflects the latest offline session.
+            if entry.kind == .movie, let frac = downloads.item(for: entry.id)?.offlineResumeFraction {
+                ProgressBarView(progress: frac, height: 3)
+                    .padding(.horizontal, CinemaSpacing.spacing4)
+            }
         }
     }
 
@@ -253,6 +261,10 @@ struct OfflineMediaDetailView: View {
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurface)
                         .lineLimit(1)
+                    if let frac = ep.offlineResumeFraction {
+                        ProgressBarView(progress: frac, height: 3)
+                            .padding(.top, 3)
+                    }
                 }
                 Spacer()
                 Image(systemName: "play.fill")
