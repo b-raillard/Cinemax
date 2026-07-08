@@ -7,6 +7,11 @@ name: Regenerate Xcode project
 # can't run `xcodegen generate` locally.
 on:
   workflow_dispatch:
+  # Push trigger scoped to this maintenance branch: workflow_dispatch only
+  # works once the workflow exists on the default branch, so first use needs
+  # a push trigger. Harmless to keep — it only fires on this branch name.
+  push:
+    branches: [claude/app-audit-security-performance-cbdyqp]
 
 jobs:
   regen:
