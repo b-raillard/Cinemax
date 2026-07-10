@@ -96,9 +96,10 @@ public struct KeychainService: Sendable {
 
     /// Full identifier of the shared Keychain access group
     /// (`<TeamPrefix>com.cinemax.shared`), resolved from the `AppIdentifierPrefix`
-    /// Info.plist key injected at sign time. `nil` in an unsigned / prefix-less
-    /// context — callers then skip the shared Keychain and the legacy App Group
-    /// UserDefaults copy still covers the extensions.
+    /// Info.plist key injected at sign time. `nil` only in an unsigned /
+    /// prefix-less context — where app extensions don't load anyway, so nothing
+    /// consumes the shared session there. (The token is no longer mirrored to
+    /// App Group UserDefaults; the shared Keychain is the sole store.)
     public static var sharedAccessGroup: String? {
         guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
               !prefix.isEmpty else { return nil }

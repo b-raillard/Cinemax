@@ -47,8 +47,7 @@ final class ToastCenter {
         current = toast
         // A toast is a transient top-anchored pill; VoiceOver neither moves focus
         // to it nor speaks it on its own, so an auto-dismissing toast is silent to
-        // VoiceOver users. Post an announcement so the feedback is spoken. Errors
-        // use `.high` priority so they can interrupt a lower-priority utterance.
+        // VoiceOver users. Post an announcement so the feedback is spoken.
         announceToVoiceOver(toast)
         dismissTask = Task { [weak self, id = toast.id, duration = toast.duration] in
             try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
