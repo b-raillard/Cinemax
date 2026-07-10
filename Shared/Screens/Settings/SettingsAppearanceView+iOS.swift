@@ -38,6 +38,10 @@ struct IOSAppearanceDetailView: View {
                             CinemaToggleIndicator(isOn: themeManager.darkModeEnabled, accent: themeManager.accent, animated: motionEffects)
                         }
                         .buttonStyle(.plain)
+                        // The pill is purely visual — expose the on/off state to VoiceOver.
+                        .accessibilityLabel(loc.localized("settings.darkMode"))
+                        .accessibilityValue(loc.localized(themeManager.darkModeEnabled ? "a11y.toggle.on" : "a11y.toggle.off"))
+                        .accessibilityAddTraits(.isToggle)
                     }
                 }
 
@@ -97,6 +101,9 @@ struct IOSAppearanceDetailView: View {
                         }
                         .buttonStyle(.plain)
                         .sensoryFeedback(.selection, trigger: motionEffectsStorage)
+                        .accessibilityLabel(loc.localized("settings.motionEffects"))
+                        .accessibilityValue(loc.localized(motionEffectsStorage ? "a11y.toggle.on" : "a11y.toggle.off"))
+                        .accessibilityAddTraits(.isToggle)
                     }
                 }
 

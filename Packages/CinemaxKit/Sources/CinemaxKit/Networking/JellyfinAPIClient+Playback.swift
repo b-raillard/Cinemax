@@ -326,7 +326,8 @@ extension JellyfinAPIClient {
         #if DEBUG
         debugLog("POST PlaybackInfo status: \(httpResponse?.statusCode ?? -1)")
         if let responseStr = String(data: data, encoding: .utf8) {
-            debugLog("POST PlaybackInfo response body: \(responseStr.prefix(1000))")
+            // Redact the token embedded in MediaSources[].TranscodingUrl before logging.
+            debugLog("POST PlaybackInfo response body: \(redactedBody(String(responseStr.prefix(1000))))")
         }
         #endif
 
@@ -334,7 +335,7 @@ extension JellyfinAPIClient {
             let statusCode = httpResponse?.statusCode ?? -1
             #if DEBUG
             if let bodyStr = String(data: data, encoding: .utf8) {
-                debugLog("PlaybackInfo \(statusCode) body: \(bodyStr.prefix(500))")
+                debugLog("PlaybackInfo \(statusCode) body: \(redactedBody(String(bodyStr.prefix(500))))")
             }
             #endif
             // Surface a structured 401 so `isUnauthorized` matches it precisely

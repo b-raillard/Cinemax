@@ -161,6 +161,10 @@ struct PrivacySecurityScreen: View {
                 #if os(iOS)
                 .sensoryFeedback(.selection, trigger: saveSearchHistory)
                 #endif
+                // The pill is purely visual — expose the on/off state to VoiceOver.
+                .accessibilityLabel(loc.localized("privacy.saveSearchHistory"))
+                .accessibilityValue(loc.localized(saveSearchHistory ? "a11y.toggle.on" : "a11y.toggle.off"))
+                .accessibilityAddTraits(.isToggle)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)

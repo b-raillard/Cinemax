@@ -39,6 +39,12 @@ struct PersonDetailScreen: View {
                         .font(CinemaFont.dynamicBody)
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .padding(.horizontal, CinemaSpacing.spacing5)
+                        // tvOS: make the bio focusable so the scroll view can pan
+                        // up to it — otherwise focus can't leave the filmography
+                        // row and a long bio is unreachable (mirrors MediaDetailScreen).
+                        #if os(tvOS)
+                        .focusable()
+                        #endif
                 }
                 if let errorMessage {
                     ErrorStateView(

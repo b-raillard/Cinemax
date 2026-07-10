@@ -257,6 +257,10 @@ struct LibrarySortFilterSheet: View {
                 .background(CinemaColor.surfaceContainerHigh)
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
             }
+            // The pill is purely visual — expose the on/off state to VoiceOver
+            // (the button already derives its name from the row label text).
+            .accessibilityValue(loc.localized(sortFilter.showUnwatchedOnly ? "a11y.toggle.on" : "a11y.toggle.off"))
+            .accessibilityAddTraits(.isToggle)
 
             #if os(tvOS)
             row.buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))

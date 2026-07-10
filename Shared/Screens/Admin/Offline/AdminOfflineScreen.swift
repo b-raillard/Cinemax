@@ -120,6 +120,10 @@ struct AdminOfflineScreen: View {
                     )
                 }
                 .buttonStyle(.plain)
+                // The pill is purely visual — expose which user + on/off to VoiceOver.
+                .accessibilityLabel(user.name ?? "—")
+                .accessibilityValue(loc.localized(isOn ? "a11y.toggle.on" : "a11y.toggle.off"))
+                .accessibilityAddTraits(.isToggle)
             }
         }
     }

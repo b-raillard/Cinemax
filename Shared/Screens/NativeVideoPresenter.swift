@@ -31,7 +31,10 @@ final class NativeVideoPresenter {
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any APIClientProtocol
+    // Narrowed to the two domains actually used here (getPlaybackInfo →
+    // PlaybackAPI; sub-controllers → LibraryAPI), matching VLCStreamPresenter —
+    // the player stack must not hold the full privilege surface (incl. AdminAPI).
+    private let apiClient: any PlaybackAPI & LibraryAPI
     private let userId: String
     private let maxBitrate: Int
     private let loc: LocalizationManager
@@ -88,7 +91,7 @@ final class NativeVideoPresenter {
         itemId: String, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?,
-        apiClient: any APIClientProtocol, userId: String,
+        apiClient: any PlaybackAPI & LibraryAPI, userId: String,
         maxBitrate: Int, loc: LocalizationManager,
         autoPlayNextEpisode: Bool,
         imageBuilder: ImageURLBuilder,

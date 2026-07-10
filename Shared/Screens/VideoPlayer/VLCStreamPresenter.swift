@@ -1309,7 +1309,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         configureIOS(prevButton, "backward.end.fill", pt: 24, loc.localized("player.previousEpisode"))
         prevButton.addTarget(self, action: #selector(prevEpisodeTapped), for: .touchUpInside)
-        configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, loc.localized("player.skipIntro"))
+        configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30,
+                     loc.localized("player.skipBackwardSeconds", PlayerSkipConfig.intervalSeconds))
         skipBackButton.addTarget(self, action: #selector(iosSkipBack), for: .touchUpInside)
 
         var ppCfg = UIButton.Configuration.plain()
@@ -1318,9 +1319,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         ppCfg.baseForegroundColor = .white
         playPauseButton.configuration = ppCfg
         playPauseButton.translatesAutoresizingMaskIntoConstraints = false
+        // The pause.fill glyph carries no accessible name — VoiceOver would read
+        // an unlabeled button. Seed it with the "pause" action (playback starts
+        // playing); `setPlayPauseIcon` keeps it in sync with the state.
+        playPauseButton.accessibilityLabel = loc.localized("player.pause")
         playPauseButton.addTarget(self, action: #selector(playPauseTapped), for: .touchUpInside)
 
-        configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, loc.localized("player.skipCredits"))
+        configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30,
+                     loc.localized("player.skipForwardSeconds", PlayerSkipConfig.intervalSeconds))
         skipFwdButton.addTarget(self, action: #selector(iosSkipForward), for: .touchUpInside)
         configureIOS(nextButton, "forward.end.fill", pt: 24, loc.localized("player.nextEpisode"))
         nextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
@@ -2748,6 +2754,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         config.image = UIImage(systemName: playing ? "pause.fill" : "play.fill",
                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .bold))
         playPauseButton.configuration = config
+        // Keep the accessible name in step with the glyph — the button's action
+        // is "pause" while playing and "play" while paused.
+        playPauseButton.accessibilityLabel = loc.localized(playing ? "player.pause" : "player.play")
     }
     #endif
 

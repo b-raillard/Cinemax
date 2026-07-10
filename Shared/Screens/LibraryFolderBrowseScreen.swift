@@ -78,7 +78,13 @@ struct LibraryFolderBrowseScreen: View {
                             subtitle: folder.childCount.map { loc.localized("library.itemCount", $0) }
                         )
                     }
+                    // tvOS card focus lift, matching every other poster grid
+                    // (Home/Favorites/filmography); .plain would drop the brighten.
+                    #if os(tvOS)
+                    .buttonStyle(CinemaTVCardButtonStyle())
+                    #else
                     .buttonStyle(.plain)
+                    #endif
                 }
             }
             .padding(.horizontal, gridPadding)

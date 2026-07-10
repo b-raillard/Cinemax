@@ -37,6 +37,22 @@ public func redactedURL(_ raw: String?) -> String {
 
 public func redactedURL(_ url: URL) -> String { redactedURL(url.absoluteString) }
 
+/// Strips access tokens from a raw response/JSON body before it is logged.
+/// PlaybackInfo bodies embed the token inside `MediaSources[].TranscodingUrl`
+/// (`…api_key=<token>…`), so logging the body verbatim leaks the token the way
+/// `redactedURL` prevents for standalone URLs. Redacts the `api_key`/`apikey`/
+/// `…token…` query-style assignments wherever they appear in the string.
+/// Case-insensitive; keeps everything else intact for debuggability.
+public func redactedBody(_ raw: String) -> String {
+    // Matches `key=<value>` where key is api_key / apikey / anything ending in
+    // "token" (e.g. `api_key`, `X-Emby-Token`), stopping the value at the first
+    // delimiter that can terminate a query param inside JSON or a URL.
+    let pattern = #"(?i)((?:api_?key|[a-z-]*token)=)[^&"'\\\s]+"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return raw }
+    let range = NSRange(raw.startIndex..., in: raw)
+    return regex.stringByReplacingMatches(in: raw, range: range, withTemplate: "$1REDACTED")
+}
+
 public final class JellyfinAPIClient: Sendable {
     // `JellyfinClient` (from jellyfin-sdk-swift) is not marked `Sendable`, but we need
     // cross-actor access. Invariant: every access to `_jellyfinClient` / `_serverURL`

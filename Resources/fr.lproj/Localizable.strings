@@ -31,6 +31,10 @@
 "action.done" = "Terminé";
 "player.previousEpisode" = "Épisode précédent";
 "player.nextEpisode" = "Épisode suivant";
+"player.play" = "Lecture";
+"player.pause" = "Pause";
+"player.skipBackwardSeconds" = "Reculer de %d secondes";
+"player.skipForwardSeconds" = "Avancer de %d secondes";
 "player.chapters" = "Chapitres";
 "player.chapter" = "Chapitre";
 "player.scrubBar" = "Barre de progression";
