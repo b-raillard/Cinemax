@@ -10,9 +10,6 @@ struct VideoPlayerView: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(\.dismiss) private var dismiss
-    #if os(iOS)
-    @Environment(DownloadManager.self) private var downloads
-    #endif
     @AppStorage(SettingsKey.autoPlayNextEpisode) private var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
@@ -26,11 +23,8 @@ struct VideoPlayerView: View {
 
     #if os(iOS)
     @State private var presenter: NativeVideoPresenter?
-    // One VLC presenter for both modes — stream and offline. Two refs let the
-    // SwiftUI state machine cleanly distinguish "I started a stream" vs
-    // "I started an offline session" without juggling a sum type.
+    // VLC presenter for the online stream path.
     @State private var vlcStreamPresenter: VLCStreamPresenter?
-    @State private var vlcOfflinePresenter: VLCStreamPresenter?
     @State private var didPresent = false
     #endif
 
@@ -93,42 +87,8 @@ struct VideoPlayerView: View {
 
         do {
             let bitrate = render4K ? 120_000_000 : 20_000_000
-            // Offline resume: an explicit caller `startTime` always wins;
-            // otherwise fall back to the locally-persisted offline playhead from
-            // a previous offline session (unless the item is already watched).
-            // For online items `downloads.item(for:)` is nil, so this is just
-            // `startTime` — no behavior change on the streaming paths.
-            let resolvedStartTime: Double? = startTime ?? downloads.item(for: itemId).flatMap { entry in
-                entry.watched == true ? nil : entry.lastPositionMs.map { Double($0) / 1000 }
-            }
-            // Offline-completed file gets two routes:
-            //   1. AVKit-friendly container → AVPlayer (full feature set —
-            //      skip intro/outro, chapter markers, AirPlay, PiP).
-            //   2. MKV / AVI / WebM → libVLC via `VLCStreamPresenter` in
-            //      offline mode: same HUD as online (audio/subtitle pickers,
-            //      sleep timer, ±N skip, PiP) minus the network-only bits.
             let info: PlaybackInfo
-            if let entry = downloads.item(for: itemId), entry.status == .completed,
-               let local = downloads.localURL(forItemId: itemId) {
-                if entry.isOfflinePlayable {
-                    info = PlaybackInfo(
-                        url: local,
-                        playSessionId: nil,
-                        mediaSourceId: itemId,
-                        playMethod: .directStream,
-                        audioTracks: [], subtitleTracks: [],
-                        selectedAudioIndex: nil, selectedSubtitleIndex: nil,
-                        authToken: nil
-                    )
-                    #if DEBUG
-                    logger.info("iOS play (offline AVKit): \(local.lastPathComponent)")
-                    #endif
-                } else {
-                    // Hand off to libVLC and skip the rest of the AVKit path.
-                    presentVLC(localURL: local, startTime: resolvedStartTime)
-                    return
-                }
-            } else if !forceNativeAVPlayer {
+            if !forceNativeAVPlayer {
                 // Default online path: VLC DirectPlays the raw file (no server
                 // transcode → no freeze, 4K/HEVC/Dolby Vision preserved).
                 let vlcInfo = try await appState.apiClient.getPlaybackInfo(
@@ -158,7 +118,7 @@ struct VideoPlayerView: View {
             }
 
             let p = NativeVideoPresenter(
-                itemId: itemId, title: title, startTime: resolvedStartTime,
+                itemId: itemId, title: title, startTime: startTime,
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                 episodeNavigator: episodeNavigator,
                 apiClient: appState.apiClient, userId: userId,
@@ -174,28 +134,6 @@ struct VideoPlayerView: View {
             logger.error("iOS playback error: \(error.localizedDescription)")
             errorMessage = loc.userFacingMessage(for: error)
         }
-    }
-
-    private func presentVLC(localURL: URL, startTime: Double?) {
-        let p = VLCStreamPresenter(
-            localURL: localURL,
-            title: title,
-            startTime: startTime,
-            loc: loc,
-            // Persist the offline playhead + queue the server sync on tick /
-            // teardown. Captures `downloads` (a @MainActor store) and the item
-            // id; the sink itself is @MainActor.
-            onProgress: { positionMs, durationMs, final in
-                downloads.recordOfflinePlaybackProgress(
-                    itemId: itemId, positionMs: positionMs,
-                    durationMs: durationMs, final: final
-                )
-            },
-            onDismiss: { dismiss() }
-        )
-        vlcOfflinePresenter = p
-        didPresent = true
-        p.presentOffline()
     }
 
     private func iOSErrorView(error: String) -> some View {

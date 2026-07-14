@@ -4,8 +4,7 @@ import SwiftVLC
 /// Shared SwiftUI host for the SwiftVLC rendering surface. iOS uses
 /// `PiPVideoView` (libVLC pixel-buffer → `AVPictureInPictureController`) and
 /// publishes the `PiPController` back to the presenter; tvOS uses plain
-/// `VideoView` (no PiP). Used by `VLCStreamPresenter` in both its stream
-/// (iOS + tvOS) and offline (iOS-only) modes.
+/// `VideoView` (no PiP). Used by `VLCStreamPresenter` (iOS + tvOS).
 @MainActor
 struct PlayerEngineSurface: View {
     let player: Player

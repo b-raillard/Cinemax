@@ -20,8 +20,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case interface
     case account
     case server
-    /// Offline downloads — iOS only. Hidden on tvOS (no offline use case).
-    case downloads
     // Admin-only categories — gated by `AppState.isAdministrator` at the
     // render site so non-admins never see these rows. Server still enforces
     // authorization on every admin endpoint; client-side gating is UX only.
@@ -36,7 +34,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .account:        "person"
         case .server:         "server.rack"
         case .interface:      "tv"
-        case .downloads:      "arrow.down.circle"
         case .administration: "shield.lefthalf.filled"
         case .advancedAdmin:  "wrench.and.screwdriver"
         }
@@ -48,7 +45,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .account:        loc.localized("settings.account")
         case .server:         loc.localized("settings.server")
         case .interface:      loc.localized("settings.interface")
-        case .downloads:      loc.localized("settings.downloads")
         case .administration: loc.localized("admin.landing.title")
         case .advancedAdmin:  loc.localized("admin.advanced.title")
         }
@@ -73,22 +69,12 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         }
     }
 
-    /// iOS-only categories. Hidden on tvOS (Downloads = mobile-only feature).
-    var isIOSOnly: Bool {
-        self == .downloads
-    }
-
-    /// Filters `allCases` by admin visibility, platform, and the
-    /// offline-downloads feature gate. Use this instead of raw `allCases` in
-    /// rendering code — keeps gating in one place. `downloadsEnabled` is
-    /// `AppState.offlineDownloadsEnabled` (admin-controlled, server-side):
-    /// when false the Downloads category disappears entirely.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, downloadsEnabled: Bool) -> [SettingsCategory] {
+    /// Filters `allCases` by admin visibility and platform. Use this instead
+    /// of raw `allCases` in rendering code — keeps gating in one place.
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [SettingsCategory] {
         allCases.filter { category in
             if isTVOS && category.isAdminOnly { return false }
-            if isTVOS && category.isIOSOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
-            if category == .downloads && !downloadsEnabled { return false }
             return true
         }
     }

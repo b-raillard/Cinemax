@@ -234,7 +234,7 @@ extension JellyfinAPIClient {
     /// Movies (and any other already-playable kind) pass through unchanged.
     /// Series prefers the user's "Next Up" episode; falls back to the first
     /// episode of the first season. Season picks the first episode.
-    internal func resolvePlayableEpisode(
+    private func resolvePlayableEpisode(
         item: BaseItemDto,
         itemId: String,
         userId: String
@@ -281,7 +281,7 @@ extension JellyfinAPIClient {
     }
 
     /// Raw HTTP POST to PlaybackInfo, captures the full response body for diagnosis.
-    internal func rawPostPlaybackInfo(
+    private func rawPostPlaybackInfo(
         serverURL: URL,
         itemId: String,
         client: JellyfinClient,

@@ -385,7 +385,6 @@
 "player.stats.dropped" = "Images perdues";
 "player.stats.direct" = "Lecture directe";
 "player.stats.proxy" = "Via proxy";
-"player.stats.offline" = "Hors ligne";
 "player.nextUp.countdown" = "Épisode suivant dans %d s";
 "player.nextUp.play" = "Lire maintenant";
 
@@ -431,7 +430,6 @@
 "admin.metadata.subtitle" = "Éditer titres, casting, images et rafraîchir les métadonnées.";
 "admin.users.subtitle" = "Gérer les comptes et les autorisations.";
 "admin.devices.subtitle" = "Voir et révoquer les appareils connectés.";
-"admin.offline.subtitle" = "Autoriser les téléchargements par utilisateur.";
 "admin.activity.subtitle" = "Consulter les événements du serveur.";
 "admin.playback.title" = "Lecture";
 "admin.plugins.title" = "Mes extensions";
@@ -472,17 +470,6 @@
 "admin.users.create.submit" = "Créer";
 "admin.users.create.success" = "Utilisateur créé";
 
-// MARK: - Admin — Fonction hors ligne
-
-"admin.offline.title" = "Fonction hors ligne";
-"admin.offline.enableAll" = "Tout activer";
-"admin.offline.disableAll" = "Tout désactiver";
-"admin.offline.users.title" = "Par utilisateur";
-"admin.offline.users.footer" = "Un utilisateur ne voit les boutons de téléchargement et le menu Téléchargements que si l'option est activée pour son compte. Synchronisé avec « Autoriser les téléchargements de médias » de Jellyfin — activée par défaut pour tout nouveau compte.";
-"admin.offline.save.success" = "Réglages hors ligne enregistrés";
-"admin.offline.empty.title" = "Aucun utilisateur";
-"admin.offline.empty.subtitle" = "Aucun compte utilisateur n'a été trouvé sur ce serveur.";
-
 // MARK: - Admin — User Detail
 
 "admin.user.tab.profile" = "Profil";
@@ -512,8 +499,6 @@
 "admin.user.access.libraries.empty" = "Aucune médiathèque trouvée sur le serveur.";
 "admin.user.access.devices" = "Accès des appareils";
 "admin.user.access.enableAllDevices" = "Autoriser l'accès depuis tous les appareils";
-"admin.user.access.allowDownloads" = "Autoriser les téléchargements";
-"admin.user.access.allowDownloads.footer" = "Contrôle l'affichage des téléchargements dans Cinemax pour cet utilisateur. Synchronisé avec « Autoriser les téléchargements de médias » de Jellyfin.";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";
@@ -840,46 +825,6 @@
 "admin.plugins.versionLabel" = "v%@";
 "admin.dashboard.sessionClient" = "• %@";
 
-// MARK: - Downloads (offline)
-
-"settings.downloads" = "Téléchargements";
-"downloads.title" = "Téléchargements";
-"downloads.empty.title" = "Aucun téléchargement";
-"downloads.empty.subtitle" = "Téléchargez un film ou un épisode pour le regarder hors-ligne.";
-"downloads.section.movies" = "Films";
-"downloads.section.series" = "Séries";
-"downloads.totalSpace" = "%@ utilisés";
-"downloads.status.queued" = "En attente";
-"downloads.status.downloading" = "En cours";
-"downloads.status.paused" = "En pause";
-"downloads.status.completed" = "Téléchargé";
-"downloads.status.failed" = "Échec";
-"downloads.action.pause" = "Mettre en pause";
-"downloads.action.resume" = "Reprendre";
-"downloads.action.retry" = "Réessayer";
-"downloads.action.remove" = "Supprimer";
-"downloads.action.removeAll" = "Tout supprimer";
-"downloads.confirmRemove.title" = "Supprimer ce téléchargement ?";
-"downloads.confirmRemove.message" = "Le fichier sera supprimé de cet appareil.";
-"downloads.removeAll.title" = "Tout supprimer ?";
-"downloads.removeAll.message" = "Tous les téléchargements et fichiers résiduels seront effacés de cet appareil.";
-
-"detail.download" = "Télécharger";
-"detail.downloading" = "Téléchargement…";
-"detail.downloaded" = "Téléchargé";
-"detail.download.queueSeason" = "Télécharger la saison";
-"detail.download.queueSeries" = "Télécharger la série";
-
-"toast.download.queued" = "Téléchargement ajouté à la file";
-"toast.download.queuedMany" = "%d épisodes ajoutés à la file";
-"toast.download.removed" = "Téléchargement supprimé";
-"toast.download.error" = "Échec du téléchargement";
-
-// MARK: - Offline mode
-
-"offline.banner" = "Mode hors-ligne · Contenu téléchargé uniquement";
-"offline.empty.title" = "Vous êtes hors-ligne";
-"offline.empty.subtitle" = "Téléchargez des films ou des épisodes lorsque vous avez du réseau pour les retrouver ici.";
 "admin.metadata.ratingDenominator" = "/ 10";
 
 "home.favorites" = "Favoris";

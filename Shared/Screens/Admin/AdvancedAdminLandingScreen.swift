@@ -31,14 +31,6 @@ struct AdvancedAdminLandingScreen: View {
                     )
                     iOSSettingsDivider
                     adminNavRow(
-                        icon: "arrow.down.circle",
-                        tint: themeManager.accent,
-                        label: loc.localized("admin.offline.title"),
-                        subtitle: loc.localized("admin.offline.subtitle"),
-                        destination: AdminOfflineScreen()
-                    )
-                    iOSSettingsDivider
-                    adminNavRow(
                         icon: "clock.arrow.circlepath",
                         tint: themeManager.accent,
                         label: loc.localized("admin.activity.title"),

@@ -76,7 +76,7 @@ extension SettingsScreen {
 
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false, downloadsEnabled: appState.offlineDownloadsEnabled)) { category in
+            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false)) { category in
                 iOSCategoryButton(category)
             }
         }
@@ -162,17 +162,14 @@ extension SettingsScreen {
 
     @ViewBuilder
     func settingsDetailView(for category: SettingsCategory) -> some View {
-        // Admin landings + Downloads manage their own scrolling + background so
-        // pushed sub-screens (or, for Downloads, a custom ScrollView with a
-        // disk-usage banner) aren't fighting the wrapping ScrollView. The
-        // remaining static-form categories keep the original wrapper.
+        // Admin landings manage their own scrolling + background so pushed
+        // sub-screens aren't fighting the wrapping ScrollView. The remaining
+        // static-form categories keep the original wrapper.
         switch category {
         case .administration:
             AdminLandingScreen()
         case .advancedAdmin:
             AdvancedAdminLandingScreen()
-        case .downloads:
-            DownloadsScreen()
         default:
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -185,7 +182,7 @@ extension SettingsScreen {
                         iOSServerDetail
                     case .interface:
                         iOSInterfaceDetail
-                    case .administration, .advancedAdmin, .downloads:
+                    case .administration, .advancedAdmin:
                         EmptyView() // handled above
                     }
                 }

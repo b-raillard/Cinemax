@@ -50,3 +50,35 @@ Thank you, and please let us know if anything else is needed.
 
 Best regards,
 Bastien Raillard
+
+---
+
+## 2026-07-14 — Resubmission reply
+
+Submission ID: `57a52e10-2708-4ea2-bf84-2a6d1906bcb4`
+Guideline 5.2.3 — Business: Other Business Model Issues (Audio/Video Downloading).
+
+Copy-paste into App Store Connect → Resolution Center, then resubmit.
+
+---
+
+Hello,
+
+Thank you for the continued review.
+
+In version 1.0.5 we have removed the offline download feature in its entirety. The app
+no longer contains any download UI, any download engine, or any ability to save media to
+the device — there is no longer any code path that writes media to local storage.
+
+Cinemax is now exclusively a streaming client for the user's own self-hosted Jellyfin
+server (jellyfin.org). Every movie and episode is streamed on demand, directly from the
+server the user installs and controls. The app contains no media of its own and offers no
+downloading or offline playback of any kind.
+
+We have also updated the App Store description and keywords to remove every reference to
+offline access, so the listing accurately reflects the streaming-only behavior of the app.
+
+Thank you, and please let us know if anything else is needed.
+
+Best regards,
+Bastien Raillard

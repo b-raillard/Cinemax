@@ -6,7 +6,6 @@ struct HomeScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
-    @Environment(NetworkMonitor.self) private var network
     @Environment(ToastCenter.self) private var toast
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -40,20 +39,6 @@ struct HomeScreen: View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
-            #if os(iOS)
-            // Offline swap is gated on the downloads feature flag (last-known
-            // cached value): when the admin disabled downloads there is no
-            // offline library to surface — fall through to the normal states.
-            if !network.isOnline && appState.offlineDownloadsEnabled {
-                OfflineLibraryView(scope: .all)
-            } else if viewModel.isLoading {
-                loadingSkeleton
-            } else if isHomeEmpty {
-                homeEmptyState
-            } else {
-                content
-            }
-            #else
             if viewModel.isLoading {
                 loadingSkeleton
             } else if isHomeEmpty {
@@ -61,7 +46,6 @@ struct HomeScreen: View {
             } else {
                 content
             }
-            #endif
         }
         #if os(iOS)
         .navigationTitle(loc.localized("tab.home"))

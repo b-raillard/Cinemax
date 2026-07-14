@@ -219,20 +219,6 @@ struct AdminUserDetailScreen: View {
                     isOn: policyBinding(\.enableAllDevices)
                 )
             }
-
-            AdminSectionGroup(
-                loc.localized("admin.offline.title"),
-                footer: loc.localized("admin.user.access.allowDownloads.footer")
-            ) {
-                toggleRow(
-                    icon: "arrow.down.circle",
-                    label: loc.localized("admin.user.access.allowDownloads"),
-                    // `default: true` mirrors Jellyfin's policy default — a nil
-                    // field must display as allowed, like every other surface
-                    // of the offline gate (`AppState`, `AdminOfflineViewModel`).
-                    isOn: policyBinding(\.enableContentDownloading, default: true)
-                )
-            }
         }
     }
 
