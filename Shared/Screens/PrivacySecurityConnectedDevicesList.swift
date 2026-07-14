@@ -20,20 +20,51 @@ struct ConnectedDevicesList: View {
     @State private var pendingSignOut: DeviceInfoDto?
     @State private var revokingDeviceId: String?
 
+    #if os(tvOS)
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+    private enum FocusTarget: Hashable {
+        case device(String)
+        case current
+    }
+    @FocusState private var focusedItem: FocusTarget?
+    #endif
+
     private var currentDeviceId: String { KeychainService.getOrCreateDeviceID() }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+                #if os(tvOS)
+                // `.navigationTitle` renders no chrome on a tvOS push — paint
+                // the title ourselves (same treatment as the parent screen).
+                Text(loc.localized("privacy.activeSessions"))
+                    .font(CinemaFont.headline(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .padding(.bottom, CinemaSpacing.spacing4)
+                #endif
+
+                // The loading / empty branches carry `.focusable()` on tvOS: if
+                // the pushed screen has zero focusable views, focus stays on the
+                // covered Privacy root and a Menu press hits its
+                // `.onExitCommand`, tearing down the whole cover instead of
+                // popping back.
                 if isLoading {
                     LoadingStateView()
                         .frame(maxWidth: .infinity)
                         .padding(.top, CinemaSpacing.spacing10)
+                        #if os(tvOS)
+                        .focusable()
+                        .focusEffectDisabled()
+                        #endif
                 } else if otherDevices.isEmpty {
                     EmptyStateView(
                         systemImage: "laptopcomputer.slash",
                         title: loc.localized("privacy.sessions.empty")
                     )
+                    #if os(tvOS)
+                    .focusable()
+                    .focusEffectDisabled()
+                    #endif
                 } else {
                     ForEach(otherDevices, id: \.id) { device in
                         deviceRow(device)
@@ -44,7 +75,14 @@ struct ConnectedDevicesList: View {
                     currentDeviceCard(current)
                 }
             }
+            #if os(tvOS)
+            .padding(.horizontal, CinemaSpacing.spacing10)
+            .padding(.vertical, CinemaSpacing.spacing6)
+            .frame(maxWidth: 1400, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+            #else
             .padding(CinemaSpacing.spacing4)
+            #endif
         }
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(loc.localized("privacy.activeSessions"))
@@ -77,6 +115,36 @@ struct ConnectedDevicesList: View {
     @ViewBuilder
     private func deviceRow(_ device: DeviceInfoDto) -> some View {
         let isRevoking = revokingDeviceId == device.id
+        #if os(tvOS)
+        // Whole-row button (one focusable unit per row): select opens the
+        // sign-out confirmation; the capsule is a visual affordance only.
+        Button {
+            pendingSignOut = device
+        } label: {
+            deviceRowContent(device, isRevoking: isRevoking)
+                .padding(CinemaSpacing.spacing4)
+                .frame(maxWidth: .infinity, minHeight: 80)
+                .tvSettingsFocusable(
+                    isFocused: focusedItem == .device(device.id ?? ""),
+                    accent: themeManager.accent,
+                    animated: motionEffects,
+                    colorScheme: themeManager.darkModeEnabled ? .dark : .light
+                )
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .device(device.id ?? ""))
+        .disabled(isRevoking)
+        #else
+        deviceRowContent(device, isRevoking: isRevoking)
+            .padding(CinemaSpacing.spacing4)
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        #endif
+    }
+
+    @ViewBuilder
+    private func deviceRowContent(_ device: DeviceInfoDto, isRevoking: Bool) -> some View {
         HStack(spacing: CinemaSpacing.spacing3) {
             Image(systemName: iconName(for: device))
                 .font(.system(size: CinemaScale.pt(22), weight: .semibold))
@@ -101,23 +169,29 @@ struct ConnectedDevicesList: View {
                 ProgressView()
                     .tint(CinemaColor.error)
             } else {
+                #if os(tvOS)
+                signOutCapsule
+                #else
                 Button {
                     pendingSignOut = device
                 } label: {
-                    Text(loc.localized("privacy.sessions.signOut"))
-                        .font(CinemaFont.label(.medium))
-                        .foregroundStyle(CinemaColor.error)
-                        .padding(.horizontal, CinemaSpacing.spacing3)
-                        .padding(.vertical, CinemaSpacing.spacing2)
-                        .background(
-                            Capsule().fill(CinemaColor.error.opacity(0.12))
-                        )
+                    signOutCapsule
                 }
                 .buttonStyle(.plain)
+                #endif
             }
         }
-        .padding(CinemaSpacing.spacing4)
-        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+    }
+
+    private var signOutCapsule: some View {
+        Text(loc.localized("privacy.sessions.signOut"))
+            .font(CinemaFont.label(.medium))
+            .foregroundStyle(CinemaColor.error)
+            .padding(.horizontal, CinemaSpacing.spacing3)
+            .padding(.vertical, CinemaSpacing.spacing2)
+            .background(
+                Capsule().fill(CinemaColor.error.opacity(0.12))
+            )
     }
 
     @ViewBuilder
@@ -140,7 +214,22 @@ struct ConnectedDevicesList: View {
             Spacer()
         }
         .padding(CinemaSpacing.spacing4)
+        #if os(tvOS)
+        // Focusable (but inert) so focus can rest in this screen even when it
+        // is the only card — see the Menu-press note on the loading state.
+        .frame(maxWidth: .infinity, minHeight: 80)
+        .tvSettingsFocusable(
+            isFocused: focusedItem == .current,
+            accent: themeManager.accent,
+            animated: motionEffects,
+            colorScheme: themeManager.darkModeEnabled ? .dark : .light
+        )
+        .focusable()
+        .focusEffectDisabled()
+        .focused($focusedItem, equals: .current)
+        #else
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        #endif
     }
 
     private func subtitle(for device: DeviceInfoDto) -> String {

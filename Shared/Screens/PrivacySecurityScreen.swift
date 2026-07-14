@@ -5,8 +5,11 @@ import Nuke
 
 /// Settings → Account → Privacy & Security.
 ///
-/// Presented as a sheet on both iOS and tvOS so the same code drives both
-/// platforms. Contents:
+/// Presented as a `.sheet` on iOS and a `.fullScreenCover` on tvOS (tvOS
+/// `.sheet` renders a cramped modal). Chrome is platform-branched like
+/// `ServerHelpSheet`: iOS uses `NavigationStack` + toolbar; tvOS uses a custom
+/// header + accent Done button because tvOS `.toolbar` on a modal clips the
+/// title and renders the trailing button as an empty pill. Contents:
 ///   - Parental controls: age cap routed through `apiClient.applyContentRatingLimit`
 ///     and the `privacyMaxContentAge` `@AppStorage` key.
 ///   - Connected devices: lists server-registered devices (non-admin users see
@@ -32,28 +35,26 @@ struct PrivacySecurityScreen: View {
     @State private var showClearImageCacheAlert = false
     @State private var isClearingContinueWatching = false
 
+    #if os(tvOS)
+    /// One case per focusable row so `.tvSettingsFocusable` can paint the
+    /// accent border on the focused row instead of the system white platter.
+    private enum FocusTarget: Hashable {
+        case age(Int)
+        case searchHistory
+        case devices
+        case clearContinueWatching
+        case clearImageCache
+    }
+    @FocusState private var focusedRow: FocusTarget?
+    #endif
+
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-                    parentalControlsSection
-                    searchHistorySection
-                    connectedDevicesLink
-                    maintenanceSection
-                }
-                .padding(CinemaSpacing.spacing4)
-            }
-            .background(CinemaColor.surface.ignoresSafeArea())
-            .navigationTitle(loc.localized("settings.privacySecurity"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+            #if os(tvOS)
+            tvOSChrome
+            #else
+            iOSChrome
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(loc.localized("action.done")) { dismiss() }
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                }
-            }
         }
         .alert(loc.localized("privacy.clearContinueWatching"), isPresented: $showClearContinueWatchingAlert) {
             Button(loc.localized("action.clear"), role: .destructive) {
@@ -73,12 +74,100 @@ struct PrivacySecurityScreen: View {
         }
     }
 
+    // MARK: - Chrome
+
+    private var sectionsBody: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            parentalControlsSection
+            searchHistorySection
+            connectedDevicesLink
+            maintenanceSection
+        }
+    }
+
+    #if !os(tvOS)
+    private var iOSChrome: some View {
+        ScrollView(showsIndicators: false) {
+            sectionsBody
+                .padding(CinemaSpacing.spacing4)
+        }
+        .background(CinemaColor.surface.ignoresSafeArea())
+        .navigationTitle(loc.localized("settings.privacySecurity"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(loc.localized("action.done")) { dismiss() }
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+        }
+    }
+    #endif
+
+    #if os(tvOS)
+    private var tvOSChrome: some View {
+        ZStack {
+            CinemaColor.surface.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                tvHeader
+
+                ScrollView(showsIndicators: false) {
+                    sectionsBody
+                        .padding(.horizontal, CinemaSpacing.spacing10)
+                        .padding(.bottom, CinemaSpacing.spacing10)
+                        .frame(maxWidth: 1400, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .onExitCommand { dismiss() }
+    }
+
+    private var tvHeader: some View {
+        HStack(alignment: .center) {
+            Text(loc.localized("settings.privacySecurity"))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Spacer(minLength: CinemaSpacing.spacing6)
+
+            CinemaButton(
+                title: loc.localized("action.done"),
+                style: .accent
+            ) {
+                dismiss()
+            }
+            .frame(width: 240)
+        }
+        .padding(.horizontal, CinemaSpacing.spacing10)
+        .padding(.top, CinemaSpacing.spacing8)
+        .padding(.bottom, CinemaSpacing.spacing5)
+        // Without this, up-presses from the first row inside the ScrollView
+        // never reach the Done button (separate container — same rule as the
+        // Home/Library hero `.focusSection()` requirement).
+        .focusSection()
+    }
+
+    private var tvFocusColorScheme: ColorScheme {
+        themeManager.darkModeEnabled ? .dark : .light
+    }
+    #endif
+
     // MARK: - Parental Controls
 
     private var parentalControlsSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             sectionHeader(loc.localized("privacy.parentalControls"))
 
+            #if os(tvOS)
+            VStack(spacing: CinemaSpacing.spacing2) {
+                ForEach(ParentalAgeOption.allCases) { option in
+                    ageRow(option)
+                }
+            }
+            #else
             VStack(spacing: 0) {
                 ForEach(Array(ParentalAgeOption.allCases.enumerated()), id: \.element.id) { index, option in
                     ageRow(option)
@@ -88,6 +177,7 @@ struct PrivacySecurityScreen: View {
                 }
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            #endif
 
             Text(loc.localized("privacy.parentalControls.footer"))
                 .font(CinemaFont.label(.medium))
@@ -119,10 +209,25 @@ struct PrivacySecurityScreen: View {
                 }
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
+            #if os(tvOS)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(
+                isFocused: focusedRow == .age(option.age),
+                accent: themeManager.accent,
+                animated: motionEffects,
+                colorScheme: tvFocusColorScheme
+            )
+            #else
             .padding(.vertical, CinemaSpacing.spacing3)
             .contentShape(Rectangle())
+            #endif
         }
         .buttonStyle(.plain)
+        #if os(tvOS)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedRow, equals: .age(option.age))
+        #endif
     }
 
     // MARK: - Search history
@@ -134,37 +239,86 @@ struct PrivacySecurityScreen: View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             sectionHeader(loc.localized("privacy.search"))
 
-            HStack(spacing: CinemaSpacing.spacing3) {
-                rowIcon(systemName: "clock.arrow.circlepath", color: themeManager.accent)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(loc.localized("privacy.saveSearchHistory"))
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurface)
-                    Text(loc.localized("privacy.saveSearchHistory.subtitle"))
-                        .font(CinemaFont.label(.medium))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer()
-
-                Button {
-                    saveSearchHistory.toggle()
-                    if !saveSearchHistory {
-                        UserDefaults.standard.removeObject(forKey: SettingsKey.searchRecentQueries)
-                    }
-                } label: {
-                    CinemaToggleIndicator(isOn: saveSearchHistory, accent: themeManager.accent, animated: motionEffects)
-                }
-                .buttonStyle(.plain)
-                #if os(iOS)
-                .sensoryFeedback(.selection, trigger: saveSearchHistory)
-                #endif
+            #if os(tvOS)
+            // Whole-row toggle button (same shape as `tvGlassToggle`) — a
+            // focusable inner control inside a non-focusable row would get the
+            // system white platter around the bare pill.
+            Button {
+                toggleSearchHistory()
+            } label: {
+                searchHistoryRowContent
+                    .padding(.horizontal, CinemaSpacing.spacing4)
+                    .padding(.vertical, CinemaSpacing.spacing3)
+                    .frame(maxWidth: .infinity, minHeight: 80)
+                    .tvSettingsFocusable(
+                        isFocused: focusedRow == .searchHistory,
+                        accent: themeManager.accent,
+                        animated: motionEffects,
+                        colorScheme: tvFocusColorScheme
+                    )
             }
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .padding(.vertical, CinemaSpacing.spacing3)
-            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            .buttonStyle(.plain)
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+            .focused($focusedRow, equals: .searchHistory)
+            // Collapse to one VoiceOver element with toggle semantics — the
+            // bare `CinemaToggleIndicator` is purely visual (same pattern as
+            // `SettingsRowHelpers`; activation is the Button itself here).
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(loc.localized("privacy.saveSearchHistory"))
+            .accessibilityValue(loc.localized(saveSearchHistory ? "a11y.toggle.on" : "a11y.toggle.off"))
+            .accessibilityAddTraits(.isToggle)
+            #else
+            searchHistoryRowContent
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.vertical, CinemaSpacing.spacing3)
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(loc.localized("privacy.saveSearchHistory"))
+                .accessibilityValue(loc.localized(saveSearchHistory ? "a11y.toggle.on" : "a11y.toggle.off"))
+                .accessibilityAddTraits(.isToggle)
+                .accessibilityAction {
+                    toggleSearchHistory()
+                    Haptics.tap()
+                }
+            #endif
+        }
+    }
+
+    private var searchHistoryRowContent: some View {
+        HStack(spacing: CinemaSpacing.spacing3) {
+            rowIcon(systemName: "clock.arrow.circlepath", color: themeManager.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(loc.localized("privacy.saveSearchHistory"))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Text(loc.localized("privacy.saveSearchHistory.subtitle"))
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .multilineTextAlignment(.leading)
+            }
+
+            Spacer()
+
+            #if os(tvOS)
+            CinemaToggleIndicator(isOn: saveSearchHistory, accent: themeManager.accent, animated: motionEffects)
+            #else
+            Button {
+                toggleSearchHistory()
+            } label: {
+                CinemaToggleIndicator(isOn: saveSearchHistory, accent: themeManager.accent, animated: motionEffects)
+            }
+            .buttonStyle(.plain)
+            .sensoryFeedback(.selection, trigger: saveSearchHistory)
+            #endif
+        }
+    }
+
+    private func toggleSearchHistory() {
+        saveSearchHistory.toggle()
+        if !saveSearchHistory {
+            UserDefaults.standard.removeObject(forKey: SettingsKey.searchRecentQueries)
         }
     }
 
@@ -195,9 +349,24 @@ struct PrivacySecurityScreen: View {
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
+            #if os(tvOS)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(
+                isFocused: focusedRow == .devices,
+                accent: themeManager.accent,
+                animated: motionEffects,
+                colorScheme: tvFocusColorScheme
+            )
+            #else
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            #endif
         }
         .buttonStyle(.plain)
+        #if os(tvOS)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedRow, equals: .devices)
+        #endif
     }
 
     // MARK: - Maintenance (destructive)
@@ -206,30 +375,56 @@ struct PrivacySecurityScreen: View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             sectionHeader(loc.localized("privacy.maintenance"))
 
+            #if os(tvOS)
+            VStack(spacing: CinemaSpacing.spacing2) {
+                clearContinueWatchingRow
+                clearImageCacheRow
+            }
+            #else
             VStack(spacing: 0) {
-                destructiveRow(
-                    icon: "play.slash",
-                    label: loc.localized("privacy.clearContinueWatching"),
-                    subtitle: loc.localized("privacy.clearContinueWatching.subtitle"),
-                    isBusy: isClearingContinueWatching
-                ) {
-                    showClearContinueWatchingAlert = true
-                }
-
+                clearContinueWatchingRow
                 rowDivider
-
-                destructiveRow(
-                    icon: "photo.stack",
-                    label: loc.localized("privacy.clearImageCache"),
-                    subtitle: loc.localized("privacy.clearImageCache.subtitle"),
-                    isBusy: false
-                ) {
-                    showClearImageCacheAlert = true
-                }
+                clearImageCacheRow
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            #endif
         }
     }
+
+    private var clearContinueWatchingRow: some View {
+        destructiveRow(
+            icon: "play.slash",
+            label: loc.localized("privacy.clearContinueWatching"),
+            subtitle: loc.localized("privacy.clearContinueWatching.subtitle"),
+            isBusy: isClearingContinueWatching,
+            focusTarget: .clearContinueWatching
+        ) {
+            showClearContinueWatchingAlert = true
+        }
+    }
+
+    private var clearImageCacheRow: some View {
+        destructiveRow(
+            icon: "photo.stack",
+            label: loc.localized("privacy.clearImageCache"),
+            subtitle: loc.localized("privacy.clearImageCache.subtitle"),
+            isBusy: false,
+            focusTarget: .clearImageCache
+        ) {
+            showClearImageCacheAlert = true
+        }
+    }
+
+    #if os(tvOS)
+    private typealias RowFocusTarget = FocusTarget
+    #else
+    /// iOS has no focus machinery here — a stand-in so `destructiveRow` keeps
+    /// one signature across platforms.
+    private enum RowFocusTarget {
+        case clearContinueWatching
+        case clearImageCache
+    }
+    #endif
 
     @ViewBuilder
     private func destructiveRow(
@@ -237,6 +432,7 @@ struct PrivacySecurityScreen: View {
         label: String,
         subtitle: String,
         isBusy: Bool,
+        focusTarget: RowFocusTarget,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -262,10 +458,25 @@ struct PrivacySecurityScreen: View {
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
+            #if os(tvOS)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(
+                isFocused: focusedRow == focusTarget,
+                accent: themeManager.accent,
+                animated: motionEffects,
+                colorScheme: tvFocusColorScheme
+            )
+            #else
             .contentShape(Rectangle())
+            #endif
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
+        #if os(tvOS)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedRow, equals: focusTarget)
+        #endif
     }
 
     // MARK: - Shared row chrome
