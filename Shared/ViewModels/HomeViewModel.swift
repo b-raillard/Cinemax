@@ -35,6 +35,10 @@ final class HomeViewModel {
     var genreRows: [GenreRow] = []
     /// Episode navigation keyed by episode item ID. Populated after resumeItems loads.
     var resumeNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
+    /// Episode navigation for the Next Up rail, keyed by episode item ID. Mirrors
+    /// `resumeNavigation` so Next Up cards also get prev/next episode buttons in
+    /// the player. Populated after nextUpItems loads.
+    var nextUpNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Other users currently watching something on this server. Excludes the logged-in user.
     var activeSessions: [SessionInfoDto] = []
     var isLoading = true
@@ -123,60 +127,76 @@ final class HomeViewModel {
         heroItem = resumeItems.first ?? latestItems.first
 
         // Genre rows + active sessions depend on nothing from the episode-nav
-        // phase below — run all three concurrently (each method only mutates
-        // its own state slice, serialized on the main actor).
+        // phase below — run them concurrently with the navigation builds (each
+        // method only mutates its own state slice, serialized on the main actor).
         async let genreRowsDone: Void = loadGenreRows(userId: userId, appState: appState)
         async let sessionsDone: Void = loadActiveSessions(userId: userId, appState: appState)
 
-        // For each unique season referenced by resume episodes, fetch the episode list once
-        // so we can compute prev/next refs and build a navigator for the player.
-        let episodeItems = resumeItems.filter { $0.type == .episode }
-        if !episodeItems.isEmpty {
-            var seasonEpisodes: [String: [BaseItemDto]] = [:]
-            await withTaskGroup(of: (String, [BaseItemDto])?.self) { group in
-                var seen = Set<String>()
-                for item in episodeItems {
-                    guard let seasonId = item.seasonID,
-                          let seriesId = item.seriesID,
-                          !seen.contains(seasonId) else { continue }
-                    seen.insert(seasonId)
-                    group.addTask {
-                        guard let eps = try? await appState.apiClient.getEpisodes(
-                            seriesId: seriesId, seasonId: seasonId, userId: userId
-                        ) else { return nil }
-                        return (seasonId, eps)
-                    }
-                }
-                for await result in group {
-                    if let (seasonId, eps) = result { seasonEpisodes[seasonId] = eps }
-                }
-            }
-
-            // Precompute refs + id→index per season once so each episode's
-            // prev/next lookup is O(1) rather than O(n) inside the helper.
-            var precomputed: [String: (refs: [EpisodeRef], indexByID: [String: Int])] = [:]
-            precomputed.reserveCapacity(seasonEpisodes.count)
-            for (seasonId, eps) in seasonEpisodes {
-                precomputed[seasonId] = precomputeEpisodeRefs(eps)
-            }
-
-            resumeNavigation.removeAll()
-            for item in episodeItems {
-                guard let id = item.id,
-                      let seasonId = item.seasonID,
-                      let pre = precomputed[seasonId] else { continue }
-                resumeNavigation[id] = buildEpisodeNavigation(
-                    for: id, refs: pre.refs, indexByID: pre.indexByID,
-                    apiClient: appState.apiClient, userId: userId
-                )
-            }
-        } else {
-            resumeNavigation.removeAll()
-        }
+        // Build prev/next episode navigation for BOTH episode rails — Continue
+        // Watching and Next Up — so each surfaces prev/next buttons in the
+        // player. Each map fetches its referenced seasons' episode lists once;
+        // both run concurrently with the genre/session loads above.
+        resumeNavigation = await buildNavigationMap(
+            for: resumeItems.filter { $0.type == .episode }, userId: userId, appState: appState
+        )
+        nextUpNavigation = await buildNavigationMap(
+            for: nextUpItems.filter { $0.type == .episode }, userId: userId, appState: appState
+        )
 
         _ = await (genreRowsDone, sessionsDone)
 
         isLoading = false
+    }
+
+    /// Builds a prev/next episode-navigation map keyed by episode item ID for a
+    /// set of episode items. For each unique season referenced, fetches the
+    /// episode list once, then precomputes refs + id→index per season so each
+    /// episode's prev/next lookup is O(1). Shared by the Continue Watching and
+    /// Next Up rails so both surface prev/next buttons in the player.
+    private func buildNavigationMap(
+        for episodeItems: [BaseItemDto],
+        userId: String,
+        appState: AppState
+    ) async -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
+        guard !episodeItems.isEmpty else { return [:] }
+
+        var seasonEpisodes: [String: [BaseItemDto]] = [:]
+        await withTaskGroup(of: (String, [BaseItemDto])?.self) { group in
+            var seen = Set<String>()
+            for item in episodeItems {
+                guard let seasonId = item.seasonID,
+                      let seriesId = item.seriesID,
+                      !seen.contains(seasonId) else { continue }
+                seen.insert(seasonId)
+                group.addTask {
+                    guard let eps = try? await appState.apiClient.getEpisodes(
+                        seriesId: seriesId, seasonId: seasonId, userId: userId
+                    ) else { return nil }
+                    return (seasonId, eps)
+                }
+            }
+            for await result in group {
+                if let (seasonId, eps) = result { seasonEpisodes[seasonId] = eps }
+            }
+        }
+
+        var precomputed: [String: (refs: [EpisodeRef], indexByID: [String: Int])] = [:]
+        precomputed.reserveCapacity(seasonEpisodes.count)
+        for (seasonId, eps) in seasonEpisodes {
+            precomputed[seasonId] = precomputeEpisodeRefs(eps)
+        }
+
+        var navigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
+        for item in episodeItems {
+            guard let id = item.id,
+                  let seasonId = item.seasonID,
+                  let pre = precomputed[seasonId] else { continue }
+            navigation[id] = buildEpisodeNavigation(
+                for: id, refs: pre.refs, indexByID: pre.indexByID,
+                apiClient: appState.apiClient, userId: userId
+            )
+        }
+        return navigation
     }
 
     // MARK: - Continue Watching context-menu mutations

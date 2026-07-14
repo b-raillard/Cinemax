@@ -762,7 +762,12 @@ struct HomeScreen: View {
     @ViewBuilder
     private func nextUpPlayLink(_ item: BaseItemDto) -> some View {
         if let id = item.id {
-            PlayLink(itemId: id, title: item.name ?? "") {
+            let nav = viewModel.nextUpNavigation[id]
+            PlayLink(
+                itemId: id, title: item.name ?? "",
+                previousEpisode: nav?.previous, nextEpisode: nav?.next,
+                episodeNavigator: nav?.navigator
+            ) {
                 nextUpCard(item)
                     .frame(width: wideCardWidth)
             }
