@@ -4,6 +4,15 @@ import JellyfinAPI
 import CinemaxKit
 @testable import Cinemax
 
+/// Free function so it can be called from the non-isolated `@Sendable`
+/// `getEpisodesHandler` closure without crossing actor boundaries.
+private func makeSeasonEpisode(id: String, name: String) -> BaseItemDto {
+    var ep = BaseItemDto()
+    ep.id = id
+    ep.name = name
+    return ep
+}
+
 @MainActor
 @Suite("HomeViewModel")
 struct HomeViewModelTests {
@@ -83,6 +92,36 @@ struct HomeViewModelTests {
 
         #expect(vm.nextUpItems.count == 2)
         #expect(!vm.isLoading)
+    }
+
+    @Test("load() builds Next Up episode navigation with prev/next refs")
+    func loadBuildsNextUpNavigation() async {
+        let api = MockAPIClient()
+        // Next Up surfaces episode 2 of a three-episode season.
+        var nextUp = BaseItemDto()
+        nextUp.id = "ep-2"
+        nextUp.name = "Episode 2"
+        nextUp.type = .episode
+        nextUp.seasonID = "season-1"
+        nextUp.seriesID = "series-1"
+        api.stubbedNextUpItems = [nextUp]
+        api.getEpisodesHandler = { seasonId in
+            guard seasonId == "season-1" else { return [] }
+            return [
+                makeSeasonEpisode(id: "ep-1", name: "Episode 1"),
+                makeSeasonEpisode(id: "ep-2", name: "Episode 2"),
+                makeSeasonEpisode(id: "ep-3", name: "Episode 3"),
+            ]
+        }
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        let nav = vm.nextUpNavigation["ep-2"]
+        #expect(nav != nil)
+        #expect(nav?.previous?.id == "ep-1")
+        #expect(nav?.next?.id == "ep-3")
+        #expect(nav?.navigator != nil)
     }
 
     @Test("Next Up fetch failure leaves nextUpItems empty without failing the load")
