@@ -14,14 +14,14 @@ import CinemaxKit
 /// episode-nav, `update` from the existing 1 s tick + on play/pause
 /// transitions, `detach` on cleanup.
 ///
-/// Optional dependencies (`apiClient`, `userId`, `imageBuilder`, `authToken`):
-/// when nil, item enrichment and artwork fetch are skipped (title + elapsed
-/// still publish), no crash.
+/// Only `authToken` is optional: the native player learns it after init (it
+/// lives on `PlaybackInfo`, fetched later) and injects it via `setAuthToken`
+/// before `attach` — a nil token just sends the artwork request unauthenticated.
 @MainActor
 final class NowPlayingInfoController {
-    private let apiClient: (any LibraryAPI)?
-    private let userId: String?
-    private let imageBuilder: ImageURLBuilder?
+    private let apiClient: any LibraryAPI
+    private let userId: String
+    private let imageBuilder: ImageURLBuilder
     private var authToken: String?
 
     /// Race guard. Bumped in `attach` and `detach` *before* spawning enrichment /
@@ -31,7 +31,7 @@ final class NowPlayingInfoController {
     private var enrichTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
 
-    init(apiClient: (any LibraryAPI)?, userId: String?, imageBuilder: ImageURLBuilder?, authToken: String?) {
+    init(apiClient: any LibraryAPI, userId: String, imageBuilder: ImageURLBuilder, authToken: String?) {
         self.apiClient = apiClient
         self.userId = userId
         self.imageBuilder = imageBuilder
@@ -98,7 +98,8 @@ final class NowPlayingInfoController {
     // MARK: - Private
 
     private func startEnrichment(itemId: String, fallbackTitle: String, generation gen: Int) {
-        guard let apiClient, let userId else { return }
+        let apiClient = self.apiClient
+        let userId = self.userId
         enrichTask = Task { @MainActor [weak self] in
             guard let fullItem = try? await apiClient.getItem(userId: userId, itemId: itemId) else { return }
             guard let self, self.generation == gen, !Task.isCancelled else { return }
@@ -125,7 +126,6 @@ final class NowPlayingInfoController {
     }
 
     private func startArtworkFetch(itemId: String, generation gen: Int) {
-        guard let imageBuilder else { return }
         let url = imageBuilder.imageURL(itemId: itemId, imageType: .primary, maxWidth: 600)
         let token = authToken
         artworkTask = Task { @MainActor [weak self] in

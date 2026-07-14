@@ -37,15 +37,15 @@ final class VLCStreamPresenter: NSObject {
     private let title: String
     private let startTime: Double?
     private let loc: LocalizationManager
-    private let apiClient: (any PlaybackAPI & LibraryAPI)?
-    private let userId: String?
+    private let apiClient: any PlaybackAPI & LibraryAPI
+    private let userId: String
     private let autoPlayNext: Bool
     private let previousEpisode: EpisodeRef?
     private let nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
-    private let imageBuilder: ImageURLBuilder?
+    private let imageBuilder: ImageURLBuilder
     private let onDismiss: (() -> Void)?
-    private let _initialItemId: String?
+    private let _initialItemId: String
     /// The `render4K`-derived ceiling the INITIAL play negotiated with. Carried
     /// so the wake re-resolve re-uses the SAME ceiling — otherwise it falls back
     /// to the API's 40 Mbps default and a >40 Mbps 4K remux that DirectPlayed on
@@ -88,18 +88,17 @@ final class VLCStreamPresenter: NSObject {
 
     /// Presents modally on top of the active scene and starts streaming.
     func present(info: PlaybackInfo) {
-        guard let topVC = Self.topMostViewController(), let id = _initialItemId,
-              let client = apiClient, let uid = userId, let builder = imageBuilder else {
-            logger.error("VLC stream present: missing stream context or no top VC")
+        guard let topVC = Self.topMostViewController() else {
+            logger.error("VLC stream present: no top view controller")
             onDismiss?()
             return
         }
         let vc = VLCStreamViewController(
-            itemId: id, info: info, title: title, startTime: startTime,
+            itemId: _initialItemId, info: info, title: title, startTime: startTime,
             previousEpisode: previousEpisode, nextEpisode: nextEpisode,
-            episodeNavigator: episodeNavigator, apiClient: client, userId: uid,
+            episodeNavigator: episodeNavigator, apiClient: apiClient, userId: userId,
             autoPlayNext: autoPlayNext, maxBitrate: maxBitrate,
-            imageBuilder: builder, loc: loc, onDismiss: onDismiss
+            imageBuilder: imageBuilder, loc: loc, onDismiss: onDismiss
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
@@ -144,20 +143,20 @@ final class VLCStreamPresenter: NSObject {
 private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     // Mutable across episode navigation.
     private var itemId: String
-    private var info: PlaybackInfo?
+    private var info: PlaybackInfo
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private var startTime: Double?
 
     private let titleText: String
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: (any PlaybackAPI & LibraryAPI)?
-    private let userId: String?
+    private let apiClient: any PlaybackAPI & LibraryAPI
+    private let userId: String
     private let autoPlayNext: Bool
     /// Bitrate ceiling the initial play negotiated with — reused on wake
     /// re-resolve so resume keeps the same DirectPlay/transcode verdict.
     private let maxBitrate: Int
-    private let imageBuilder: ImageURLBuilder?
+    private let imageBuilder: ImageURLBuilder
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
 
@@ -644,13 +643,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         )
         // Title / artwork / S×E× on the Lock Screen widget.
         nowPlaying.attach(itemId: itemId, title: titleText, durationSeconds: nil)
-        guard let apiClient, let userId, let info else { return }
         reporter = PlaybackReporter(
             apiClient: apiClient,
             userId: userId,
             context: { [weak self] in
                 guard let self else { return nil }
-                return PlaybackReporter.Context(itemId: self.itemId, info: info, player: nil)
+                // Live read, not a bound snapshot: the same reporter instance
+                // survives episode swaps / wake re-resolves, and each report
+                // must carry the CURRENT session's playSessionId.
+                return PlaybackReporter.Context(itemId: self.itemId, info: self.info, player: nil)
             },
             timeSource: { [weak self] in
                 guard let self else { return (0, true) }
@@ -707,7 +708,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         segments = []
         activeSegmentType = nil
         skipButton.isHidden = true
-        guard let client = apiClient else { return }
+        let client = apiClient
         let id = itemId
         segmentFetchTask = Task { [weak self] in
             let fetched = (try? await client.getMediaSegments(itemId: id, includeSegmentTypes: [.intro, .outro])) ?? []
@@ -1713,10 +1714,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterHeightConstraint?.constant = 0
         trickplay.reset()
         scrubPreview.isHidden = true
-        guard let client = apiClient, let builder = imageBuilder, let uid = userId else { return }
+        let client = apiClient, builder = imageBuilder, uid = userId
         let id = itemId
-        let token = info?.authToken
-        let mediaSourceId = info?.mediaSourceId
+        let token = info.authToken
+        let mediaSourceId = info.mediaSourceId
         chapterFetchTask = Task { @MainActor [weak self] in
             guard let item = try? await client.getItem(userId: uid, itemId: id),
                   !Task.isCancelled, let self else { return }
@@ -1978,13 +1979,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Prefer Jellyfin's DisplayTitle (nicer than libVLC's "Track 1"), mapped
     /// by ordinal within the type; fall back to the SwiftVLC track name.
     private func displayLabel(forAudioOrdinal i: Int, track: Track) -> String {
-        if let info, i < info.audioTracks.count { return info.audioTracks[i].label }
+        if i < info.audioTracks.count { return info.audioTracks[i].label }
         if let lang = track.language, !lang.isEmpty { return "\(track.name) (\(lang))" }
         return track.name
     }
 
     private func displayLabel(forSubtitleOrdinal i: Int, track: Track) -> String {
-        if let info, i < info.subtitleTracks.count { return info.subtitleTracks[i].label }
+        if i < info.subtitleTracks.count { return info.subtitleTracks[i].label }
         if let lang = track.language, !lang.isEmpty { return "\(track.name) (\(lang))" }
         return track.name
     }
@@ -2089,7 +2090,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard statsVisible else { return }
         var lines: [String] = []
         var transport = usingProxy ? loc.localized("player.stats.proxy") : loc.localized("player.stats.direct")
-        if let method = info?.playMethod { transport += " · \(method.rawValue)" }
+        transport += " · \(info.playMethod.rawValue)"
         lines.append(transport)
         if let v = player.videoTracks.first(where: { $0.isSelected }) ?? player.videoTracks.first {
             var parts: [String] = []
@@ -2142,7 +2143,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func applyServerTrackDefaultsIfNeeded() {
         guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
         didApplyServerTrackDefaults = true
-        guard let info else { return }
 
         if let wantAudio = info.selectedAudioIndex,
            let ordinal = info.audioTracks.firstIndex(where: { $0.id == wantAudio }),
@@ -2174,7 +2174,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// The source container (server-reported, DirectPlay/DirectStream only) is
     /// one libVLC tends to flood the server with range requests for.
     private var sourceNeedsProxy: Bool {
-        guard let raw = info?.sourceContainer?.lowercased() else { return false }
+        guard let raw = info.sourceContainer?.lowercased() else { return false }
         // `container` can be comma/space-joined ("mov,mp4") — match any token.
         return raw.split(whereSeparator: { $0 == "," || $0 == " " })
             .contains { Self.seekHeavyContainers.contains(String($0)) }
@@ -2199,20 +2199,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         audioDelayMsState = 0
         subtitleDelayMsState = 0
         let url: URL
-        if let info {
-            let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-            // Broken-IPv6 server (decided in the background), direct already
-            // failed this session, or a seek-heavy container (AVI…): route via
-            // the loopback proxy; fall back to the direct URL if it can't start.
-            if shouldRouteThroughProxy,
-               let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
-                url = proxied
-                usingProxy = true
-            } else {
-                url = authed
-            }
+        let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+        // Broken-IPv6 server (decided in the background), direct already
+        // failed this session, or a seek-heavy container (AVI…): route via
+        // the loopback proxy; fall back to the direct URL if it can't start.
+        if shouldRouteThroughProxy,
+           let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
+            url = proxied
+            usingProxy = true
         } else {
-            handlePlaybackError(); return
+            url = authed
         }
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
@@ -2328,8 +2324,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // MARK: - Episode navigation
 
     private func navigateToEpisode(_ ref: EpisodeRef) {
-        // Only navigable when the episode-nav graph + apiClient are present.
-        guard let navigator = episodeNavigator, let apiClient, let userId else { return }
+        // Only navigable when the episode-nav graph is present.
+        guard let navigator = episodeNavigator else { return }
         navGeneration += 1
         let gen = navGeneration
         reporter?.reportStop()
@@ -2339,8 +2335,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Navigator yields the new prev/next graph (its PlaybackInfo is
             // negotiated for the native engine, so we re-negotiate for VLC).
             let nav = await navigator(ref.id)
-            guard let vlcInfo = try? await apiClient.getPlaybackInfo(
-                itemId: ref.id, userId: userId, maxBitrate: self.maxBitrate, engine: .vlc
+            guard let vlcInfo = try? await self.apiClient.getPlaybackInfo(
+                itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
                 return
@@ -2718,10 +2714,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func showEndOfSeriesOverlay() {
         // Gated on `episodeNavigator != nil` (series playback only).
-        guard let apiClient, let userId else { return }
         Task { [weak self] in
             guard let self else { return }
-            let item = try? await apiClient.getItem(userId: userId, itemId: self.itemId)
+            let item = try? await self.apiClient.getItem(userId: self.userId, itemId: self.itemId)
             let seriesName = item?.seriesName ?? item?.name ?? self.titleText
             let alert = UIAlertController(
                 title: String(format: self.loc.localized("player.finishedSeries.title"), seriesName),
@@ -2740,24 +2735,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
-            var url: URL?
-            if let info {
-                // A direct attempt failed: pin the rest of the session to the
-                // proxy so we stop re-rolling the dice on the flaky direct path.
-                if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
-                let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-                // Always retry via the proxy (direct is the path that stalls on
-                // broken IPv6); fall back to direct only if it can't start.
-                if let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
-                    url = proxied
-                    usingProxy = true
-                } else {
-                    url = authed
-                }
+            // A direct attempt failed: pin the rest of the session to the
+            // proxy so we stop re-rolling the dice on the flaky direct path.
+            if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
+            let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+            // Always retry via the proxy (direct is the path that stalls on
+            // broken IPv6); fall back to direct only if it can't start.
+            let url: URL
+            if let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
+                url = proxied
+                usingProxy = true
             } else {
-                url = nil
+                url = authed
             }
-            if let url, let media = try? Media(url: url) {
+            if let media = try? Media(url: url) {
                 media.addOption(":network-caching=5000")
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
@@ -2903,8 +2894,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// changes). Guarded by `navGeneration` so a user episode-nav started during
     /// the await wins, and one-shot via `isReResolvingAfterWake`.
     private func reResolveAndResume(from ms: Int32) {
-        guard !isTearingDown, !isReResolvingAfterWake,
-              let apiClient, let userId else { return }
+        guard !isTearingDown, !isReResolvingAfterWake else { return }
         isReResolvingAfterWake = true
         navGeneration += 1
         let gen = navGeneration
@@ -2917,8 +2907,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Routes through `notifyIfUnauthorized`: a genuinely revoked token
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.
-            guard let fresh = try? await apiClient.getPlaybackInfo(
-                itemId: resumeItemId, userId: userId, maxBitrate: self.maxBitrate, engine: .vlc
+            guard let fresh = try? await self.apiClient.getPlaybackInfo(
+                itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else { return }
             guard !self.isTearingDown, gen == self.navGeneration else { return }
             self.info = fresh
