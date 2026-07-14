@@ -21,8 +21,7 @@ packages:
   CinemaxKit:
     path: Packages/CinemaxKit
   # SwiftVLC (libVLC 4.0, Swift 6) is the VLC engine for `VLCStreamPresenter`,
-  # which now covers BOTH online streaming (iOS + tvOS) and offline playback
-  # (iOS-only, second init). It replaced VLCKitSPM (libVLC 3.x): native iOS Picture-in-Picture
+  # which covers online streaming (iOS + tvOS). It replaced VLCKitSPM (libVLC 3.x): native iOS Picture-in-Picture
   # (impossible in VLCKit), an object-based track API that fixes the
   # audio-switch silence bug, and Swift-6-native @Observable/@MainActor design.
   # Pinned to 0.3.0 EXACTLY: SwiftVLC >= 0.4.0 declares swift-tools-version 6.3
@@ -36,8 +35,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "1.0.4"
-    CURRENT_PROJECT_VERSION: "1.0.4"
+    MARKETING_VERSION: "1.0.5"
+    CURRENT_PROJECT_VERSION: "1.0.5"
     # Distribution signing: Xcode auto-creates an "iOS App Store" / "tvOS App
     # Store" provisioning profile on first archive when DEVELOPMENT_TEAM is set
     # below. Override DEVELOPMENT_TEAM per-machine in Xcode (Signing & Capabilities)

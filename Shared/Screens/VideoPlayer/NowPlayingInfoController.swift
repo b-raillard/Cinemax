@@ -14,9 +14,9 @@ import CinemaxKit
 /// episode-nav, `update` from the existing 1 s tick + on play/pause
 /// transitions, `detach` on cleanup.
 ///
-/// Optional dependencies (`apiClient`, `userId`, `imageBuilder`, `authToken`)
-/// let the VLC offline init construct one and still publish title + elapsed —
-/// when nil, item enrichment and artwork fetch are skipped, no crash.
+/// Optional dependencies (`apiClient`, `userId`, `imageBuilder`, `authToken`):
+/// when nil, item enrichment and artwork fetch are skipped (title + elapsed
+/// still publish), no crash.
 @MainActor
 final class NowPlayingInfoController {
     private let apiClient: (any LibraryAPI)?

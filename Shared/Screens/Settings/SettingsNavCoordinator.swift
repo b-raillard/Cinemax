@@ -15,7 +15,7 @@ import SwiftUI
 @MainActor @Observable
 final class SettingsNavCoordinator {
     /// Currently-pushed top-level Settings category (Appearance / Account /
-    /// Server / Interface / Downloads / Admin landings). `nil` ⇒ landing page.
+    /// Server / Interface / Admin landings). `nil` ⇒ landing page.
     var selectedCategory: SettingsCategory?
 
     /// Currently-pushed Interface sub-page (Main Menu / Home page / Detail

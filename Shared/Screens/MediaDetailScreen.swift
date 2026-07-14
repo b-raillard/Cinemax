@@ -33,7 +33,6 @@ struct MediaDetailScreen: View {
     @State private var watchTogetherPlay: WatchTogetherIntent?
     #endif
     #if os(iOS)
-    @Environment(DownloadManager.self) private var downloads
     @Environment(\.dismiss) private var dismiss
     /// Lifted from `AdminItemMenu` so SwiftUI honors the destination —
     /// `adminMenuPill` is rendered inside `detailContent`'s `LazyVStack`,
@@ -51,45 +50,10 @@ struct MediaDetailScreen: View {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
     }
 
-    #if os(iOS)
-    /// Resolves a `DownloadItem` that should drive the offline detail view.
-    /// Tries the item id directly first (movie / specific episode), then
-    /// falls back to "any episode whose `seriesId` matches" so navigating to
-    /// a series id while offline still works.
-    private func offlineEntry() -> DownloadItem? {
-        let id = viewModel.itemId
-        if let direct = downloads.item(for: id), direct.status == .completed {
-            return direct
-        }
-        if let firstEpisode = downloads.episodes(forSeriesId: id).first(where: { $0.status == .completed }) {
-            return firstEpisode
-        }
-        return nil
-    }
-    #endif
-
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
-            #if os(iOS)
-            // Offline shortcut: if the user has a download for the item id
-            // (movie or any episode of a series the screen represents),
-            // render the offline detail and skip every server call. Gated on
-            // the admin-controlled downloads feature flag like every other
-            // downloads surface.
-            if !network.isOnline,
-               appState.offlineDownloadsEnabled,
-               let entry = offlineEntry() {
-                OfflineMediaDetailView(entry: entry)
-            } else if viewModel.isLoading {
-                LoadingStateView()
-            } else if let error = viewModel.errorMessage {
-                errorView(error)
-            } else if let item = viewModel.item {
-                detailContent(item)
-            }
-            #else
             if viewModel.isLoading {
                 LoadingStateView()
             } else if let error = viewModel.errorMessage {
@@ -97,7 +61,6 @@ struct MediaDetailScreen: View {
             } else if let item = viewModel.item {
                 detailContent(item)
             }
-            #endif
         }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -610,10 +573,10 @@ struct MediaDetailScreen: View {
 
     #if os(iOS)
     /// Icon actions beneath the Play CTA: favorite, watched, trailer
-    /// (when available), download. Each is a circular glass chip (44pt,
-    /// matching `DownloadButton`), left-aligned. The icons are self-explanatory,
-    /// so there are no captions; the row sits on its own line beneath the play
-    /// buttons and can't crop the way the old inline accessory row did.
+    /// (when available). Each is a circular glass chip (44pt), left-aligned.
+    /// The icons are self-explanatory, so there are no captions; the row sits
+    /// on its own line beneath the play buttons and can't crop the way the old
+    /// inline accessory row did.
     @ViewBuilder
     private func secondaryActionsRow(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
         HStack(spacing: CinemaSpacing.spacing4) {
@@ -658,11 +621,6 @@ struct MediaDetailScreen: View {
                 }
             }
 
-            // The download chip is the existing `DownloadButton` (its own state
-            // machine + series download menu) — already a 44pt glass chip, so it
-            // lines up with the icons above.
-            downloadAffordance(for: item, resolvedNextEpisode: nextEp)
-
             Spacer(minLength: 0)
         }
     }
@@ -704,41 +662,6 @@ struct MediaDetailScreen: View {
             return url
         }
         return nil
-    }
-    #endif
-
-    // MARK: - Download affordance (iOS)
-
-    #if os(iOS)
-    @ViewBuilder
-    private func downloadAffordance(for item: BaseItemDto, resolvedNextEpisode: BaseItemDto?) -> some View {
-        let isSeries = viewModel.resolvedType == .series
-        if isSeries {
-            let seasonName = viewModel.seasons.first { $0.id == viewModel.selectedSeasonId }?.name
-                ?? loc.localized("detail.season")
-            let seriesId = item.id ?? viewModel.itemId
-            let seasons = viewModel.seasons
-            DownloadButton(
-                item: resolvedNextEpisode ?? item,
-                bulk: .series(
-                    currentSeasonEpisodes: viewModel.episodes,
-                    currentSeasonName: seasonName,
-                    fetchAllEpisodes: { @MainActor [appState] in
-                        guard let userId = appState.currentUserId else { return [] }
-                        var all: [BaseItemDto] = []
-                        for season in seasons {
-                            guard let sid = season.id else { continue }
-                            if let eps = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: sid, userId: userId) {
-                                all.append(contentsOf: eps)
-                            }
-                        }
-                        return all
-                    }
-                )
-            )
-        } else {
-            DownloadButton(item: item)
-        }
     }
     #endif
 
@@ -1208,7 +1131,7 @@ private struct PlayActionButtonsSection: View, Equatable {
 
 
 /// Vertical alignment carried by the Play ("Lecture") button's center, so
-/// the heart / download accessories in the action row line up with it no
+/// the heart / watched accessories in the action row line up with it no
 /// matter how much resume chrome (episode label, progress bar, remaining
 /// text) sits above it. Children that don't set an explicit guide fall back
 /// to their own center — exactly the accessory behavior wanted.

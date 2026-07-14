@@ -41,31 +41,6 @@ final class AppState {
     /// still enforces authorization on every endpoint.
     private(set) var isAdministrator: Bool = false
 
-    // MARK: Offline-downloads feature gate
-    //
-    // Server-driven, admin-controlled, per user: the native Jellyfin policy
-    // `UserPolicy.enableContentDownloading` ("Allow media downloads" in the
-    // Jellyfin dashboard), editable from Admin → "Fonction hors ligne" or the
-    // user editor's Access tab. Jellyfin's server-side default is ON for
-    // every account — for an App Store review pass, turn it OFF for the demo
-    // account (the admin screen has a bulk "disable all"). Cached in
-    // UserDefaults so an offline launch keeps the last-known gate (downloads
-    // must stay reachable on a plane). Client gating is UX only — the server
-    // enforces the policy authoritatively.
-
-    /// Effective gate consumed by every downloads surface (`DownloadButton`,
-    /// Settings → Downloads, the offline library swaps). Seeded from the
-    /// local cache; refreshed by `refreshCurrentUser()`.
-    private(set) var offlineDownloadsEnabled: Bool =
-        UserDefaults.standard.bool(forKey: SettingsKey.downloadsUserFlagCache)
-
-    /// Explicit mutator (no `didSet` on `@Observable` properties — see the
-    /// architecture RULE): updates the stored flag and persists the cache.
-    private func setOfflineDownloadsEnabled(_ enabled: Bool) {
-        offlineDownloadsEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: SettingsKey.downloadsUserFlagCache)
-    }
-
     /// Re-entrancy guard for the confirm-before-logout cycle. MainActor-confined
     /// (no lock needed) — every trigger hops to MainActor before reading it, so
     /// concurrent 401s / a foreground revalidation collapse into one probe.
@@ -157,17 +132,12 @@ final class AppState {
         guard let id = currentUserId else {
             currentUser = nil
             isAdministrator = false
-            setOfflineDownloadsEnabled(false)
             return
         }
         do {
             let user = try await apiClient.getUserByID(id: id)
             currentUser = user
             isAdministrator = user.policy?.isAdministrator ?? false
-            // `?? true` mirrors Jellyfin's own default for the policy (a nil
-            // field means an old server that predates it — treat as allowed,
-            // exactly like the Jellyfin web client does).
-            setOfflineDownloadsEnabled(user.policy?.enableContentDownloading ?? true)
         } catch {
             // Network blip — keep last-known values.
         }
@@ -234,7 +204,6 @@ final class AppState {
         accessToken = nil
         currentUser = nil
         isAdministrator = false
-        setOfflineDownloadsEnabled(false)
     }
 
     /// Confirm-before-logout. A single ambiguous 401 from a hot path (or a
@@ -285,21 +254,17 @@ struct AppNavigation: View {
     /// SwiftUI may recreate the root `AppNavigation` struct on scene events,
     /// and every recreation re-evaluates the `@State` initial-value
     /// expressions — then discards the results (`@State` keeps the first
-    /// instance). For the heavy stores that's not just wasted work:
-    /// `DownloadManager` synchronously reads + decodes `index.json`, walks the
-    /// downloads tree for orphans, and constructs a background `URLSession`
-    /// whose identifier (`com.cinemax.downloads`) must be process-unique — a
-    /// throwaway second session with the same identifier can steal delegate
-    /// callbacks and silently break download completion. Guarded statics make
-    /// the initial values process-singletons (same rationale as
+    /// instance). For these three stores that's not just wasted work:
+    /// `NetworkMonitor` starts a long-lived `NWPathMonitor` (a throwaway
+    /// second one would leak a system-level path monitor), `MenuConfigStore`
+    /// synchronously reads + decodes the persisted menu entries on the main
+    /// thread, and `AppState` owns the shared API client + auth state. Guarded
+    /// statics make the initial values process-singletons (same rationale as
     /// `configurePipeline`). The cheap stores (`ThemeManager`, etc.) stay
     /// inline — rebuilding them costs nothing.
     private static let sharedAppState = AppState()
     private static let sharedNetworkMonitor = NetworkMonitor()
     private static let sharedMenuConfig = MenuConfigStore()
-    #if os(iOS)
-    private static let sharedDownloads = DownloadManager()
-    #endif
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -308,9 +273,6 @@ struct AppNavigation: View {
     @State private var network = AppNavigation.sharedNetworkMonitor
     @State private var menuConfig = AppNavigation.sharedMenuConfig
     @State private var settingsNav = SettingsNavCoordinator()
-    #if os(iOS)
-    @State private var downloads = AppNavigation.sharedDownloads
-    #endif
     @State private var hasCheckedSession = false
     /// When the app last entered the background — drives Part E foreground
     /// re-validation (only after a long gap, e.g. overnight standby).
@@ -337,6 +299,25 @@ struct AppNavigation: View {
         config.imageCache = memoryCache
         ImagePipeline.shared = ImagePipeline(configuration: config)
     }()
+
+    #if os(iOS)
+    /// One-shot cleanup for installs that used the removed (1.0.5, App Review
+    /// 5.2.3) offline-downloads feature — the media tree can hold multiple GB
+    /// and no UI remains to clear it. Cheap existence check; safe to re-run.
+    private static func purgeLegacyDownloads() {
+        UserDefaults.standard.removeObject(forKey: "downloads.userFlagCache")
+        Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            guard let appSupport = fm.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask).first else { return }
+            let legacyRoot = appSupport.appendingPathComponent("Cinemax/Downloads",
+                                                               isDirectory: true)
+            if fm.fileExists(atPath: legacyRoot.path) {
+                try? fm.removeItem(at: legacyRoot)
+            }
+        }
+    }
+    #endif
 
     init() {
         _ = Self.configurePipeline
@@ -367,9 +348,6 @@ struct AppNavigation: View {
         .environment(network)
         .environment(menuConfig)
         .environment(settingsNav)
-        #if os(iOS)
-        .environment(downloads)
-        #endif
         .environment(\.motionEffectsEnabled, motionEffects)
         // Respect the user's OS Dynamic Type setting while capping at a size
         // that won't collapse layouts (hero titles, tab bar). The app also has
@@ -394,11 +372,10 @@ struct AppNavigation: View {
                 await menuConfig.refreshAvailableViews()
             }
             #if os(iOS)
-            downloads.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
-            // App-start-online: drain any offline playback progress captured on
-            // a previous (offline) run back to the server. No-ops when offline
-            // / logged out.
-            if network.isOnline { downloads.flushPendingPlaybackSync() }
+            // One-shot cleanup for installs that used the removed offline-
+            // downloads feature — purge the (potentially multi-GB) media tree
+            // that no longer has any UI to clear it.
+            Self.purgeLegacyDownloads()
             #endif
             // Decide once, in the background, whether this server needs the
             // loopback stream proxy (dual-stack host with a black-holed IPv6
@@ -414,12 +391,6 @@ struct AppNavigation: View {
                menuConfig.mode == .custom && menuConfig.customKind == .library {
                 Task { await menuConfig.refreshAvailableViews() }
             }
-            #if os(iOS)
-            // Re-attach when the active user changes (login, quick switch).
-            // The manager caches `userId` for queued-task negotiation, so it
-            // needs to know about the swap.
-            downloads.attach(apiClient: appState.apiClient, userId: newId)
-            #endif
         }
         .onChange(of: appState.serverURL) { old, new in
             // Library view IDs are server-scoped. Invalidate the cached menu
@@ -459,12 +430,6 @@ struct AppNavigation: View {
             // is per-network, so re-run the transport probe.
             if online {
                 StreamTransportPolicy.shared.refresh()
-                #if os(iOS)
-                // Reconnected — flush offline playback progress (resume points +
-                // watched state) back to the server so Continue Watching / play
-                // state converge across devices.
-                downloads.flushPendingPlaybackSync()
-                #endif
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in

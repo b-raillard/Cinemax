@@ -3,10 +3,10 @@ import JellyfinAPI
 
 // MARK: - Domain sub-protocols
 //
-// The API surface is split into four cohesive domains so that narrow consumers
+// The API surface is split into cohesive domains so that narrow consumers
 // (e.g. `PlaybackReporter`, `SkipSegmentController`) can depend on just the slice
 // they need instead of the full `APIClientProtocol`. Every existing call site
-// that takes `APIClientProtocol` keeps working — it still composes all four.
+// that takes `APIClientProtocol` keeps working — it still composes all of them.
 
 /// Server connection, identity, and cache management.
 public protocol ServerAPI: Sendable {
@@ -394,7 +394,7 @@ public extension SyncPlayAPI {
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI & SyncPlayAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI
 
 // MARK: - Default arguments
 

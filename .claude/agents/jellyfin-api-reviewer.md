@@ -8,10 +8,10 @@ You are a Jellyfin API reviewer for the Cinemax codebase. The API layer has a de
 
 ## Ground truth
 
-1. `CLAUDE.md` — sections "API protocol split", "Video Playback", "Offline Downloads", "Admin".
+1. `CLAUDE.md` — sections "API protocol split", "Video Playback", "Admin".
 2. The protocol family lives at `Packages/CinemaxKit/Sources/CinemaxKit/Networking/APIClientProtocol.swift`:
-   `APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & DownloadAPI`.
-3. `JellyfinAPIClient` is wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable. All Jellyfin SDK calls go through the locked methods on `JellyfinAPIClient` and its `+Admin` / `+Library` / `+Playback` / `+Downloads` extensions — never via `apiClient.client.*` from outside.
+   `APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI`.
+3. `JellyfinAPIClient` is wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable. All Jellyfin SDK calls go through the locked methods on `JellyfinAPIClient` and its `+Admin` / `+Library` / `+Playback` extensions — never via `apiClient.client.*` from outside.
 4. Device profiles are split: `.vlc` → `buildVLCDeviceProfile` (broad DirectPlay, no transcode), `.native` → `buildAppleDeviceProfile` (AVKit-safe). API default is `.native`.
 
 ## Rules to enforce
@@ -20,15 +20,15 @@ You are a Jellyfin API reviewer for the Cinemax codebase. The API layer has a de
 
 - Leaf controllers must take **the narrowest slice they need**:
   - `PlaybackReporter`, `SkipSegmentController`, `ChapterController` → `any PlaybackAPI`
-  - `DownloadManager` → `any DownloadAPI`
+  - `SyncPlayController` → `any SyncPlayAPI`
   - Screen view models needing multiple domains → `APIClientProtocol`
 - Flag a controller that takes the full `APIClientProtocol` when it touches only one domain — that broadens the surface, complicates mocking, and obscures intent.
-- Flag a new method added to the wrong slice — e.g. a download-related call added to `LibraryAPI`, or a session-management call added to `PlaybackAPI`.
+- Flag a new method added to the wrong slice — e.g. a SyncPlay transport call added to `LibraryAPI`, or a session-management call added to `PlaybackAPI`.
 
 ### Privilege boundary (AdminAPI)
 
 - **`AdminAPI` is a privilege boundary.** Every call site to an `AdminAPI` method must be reachable only when `AppState.isAdministrator` is true (UI gating) AND the server enforces authoritatively.
-- Flag any `AdminAPI` call from a non-admin code path (e.g. inside `HomeViewModel`, `MediaDetailViewModel`, `SearchViewModel`, `LoginViewModel`, the player stack, the downloads stack).
+- Flag any `AdminAPI` call from a non-admin code path (e.g. inside `HomeViewModel`, `MediaDetailViewModel`, `SearchViewModel`, `LoginViewModel`, the player stack).
 - Flag a new method whose semantics are admin-only (user CRUD, server config, plugin install, scheduled tasks, log streaming, API key revocation) added to a non-`AdminAPI` slice. `Devices` listing/revocation is the documented exception — it lives on `AuthAPI` because the server authorizes by caller identity.
 - Per `CLAUDE.md`'s "API key security" rules — flag any code that logs an API key value, sends it to analytics, or retains a revealed key past `onDisappear`.
 
@@ -43,7 +43,6 @@ You are a Jellyfin API reviewer for the Cinemax codebase. The API layer has a de
 - `getPlaybackInfo(... engine:)` API default is `.native`. Changing the default is a behavior change across every call site — flag it unless the PR description justifies it.
 - `buildAppleDeviceProfile` HLS transcode targets: **must NOT include `mpeg4`** (Jellyfin injects `mpeg4-*` URL params AVFoundation rejects → `-12881`). Allowed: `hevc,h264`.
 - `buildVLCDeviceProfile`: single broad `DirectPlayProfile`, **no container restriction** (yields `/Videos/{id}/stream?static=true`). Flag a VLC profile that adds container filtering or a transcode profile — that defeats the MKV/DV fix.
-- Download path (`+Downloads.swift`): TranscodingProfile must be `protocol=.http`, `container=mp4`, `context=.static`, codecs `h264,aac`. **Never** `?static=true` straight off; **never** `/Videos/{id}/stream.mp4` without a `PlaySessionId`. `buildDownloadRequest` is `async` (POSTs PlaybackInfo first) — flag a sync replacement.
 
 ### 401 / session expiry
 
@@ -68,10 +67,10 @@ You are a Jellyfin API reviewer for the Cinemax codebase. The API layer has a de
 2. Read each changed file in full.
 3. Grep sweeps to surface candidates:
    ```bash
-   grep -rnE 'any APIClientProtocol|any (Server|Auth|Library|Playback|Admin|Download)API' Shared Packages
+   grep -rnE 'any APIClientProtocol|any (Server|Auth|Library|Playback|Admin|SyncPlay)API' Shared Packages
    grep -rnE 'apiClient\.client\.' Shared
    grep -rnE 'AdminAPI|isAdministrator' Shared
-   grep -rnE 'getPlaybackInfo|buildAppleDeviceProfile|buildVLCDeviceProfile|buildDownloadRequest' Shared Packages
+   grep -rnE 'getPlaybackInfo|buildAppleDeviceProfile|buildVLCDeviceProfile' Shared Packages
    grep -rnE 'mpeg4' Packages/CinemaxKit
    ```
 4. For each candidate, classify: slicing OK / privilege OK / lock OK, or violation.

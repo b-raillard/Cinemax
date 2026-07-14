@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shared HH:MM:SS / M:SS formatter for the VLC player — used by
-/// `VLCStreamPresenter` in both its stream and offline modes.
+/// `VLCStreamPresenter`.
 enum PlayerTimeFormat {
     static func ms(_ ms: Int32) -> String {
         let total = Int(max(0, ms) / 1000)

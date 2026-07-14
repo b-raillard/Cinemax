@@ -121,7 +121,6 @@ struct MediaDetailEpisodeCard: View, Equatable {
                         .buttonStyle(.plain)
                         .sensoryFeedback(.selection, trigger: isPlayed)
                         .accessibilityLabel(loc.localized(isPlayed ? "detail.watched.remove" : "detail.watched.add"))
-                        DownloadButton(item: episode)
                     }
                     Text(episode.name ?? "")
                         .font(.system(size: episodeTitleFontSize, weight: .bold))
