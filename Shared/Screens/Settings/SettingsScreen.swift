@@ -348,21 +348,24 @@ struct SettingsScreen: View {
                 .environment(themeManager)
                 .environment(loc)
         }
-        .sheet(isPresented: $showPrivacySecurity) {
-            PrivacySecurityScreen()
-                .environment(appState)
-                .environment(themeManager)
-                .environment(loc)
-                .environment(toasts)
-        }
         // tvOS `.sheet` renders a cramped modal (same reason the login Quick
         // Connect sheet uses `.fullScreenCover` there), so split the
         // presentation by platform.
         #if os(iOS)
+        .sheet(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         #else
+        .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         #endif
+    }
+
+    private var privacySecuritySheet: some View {
+        PrivacySecurityScreen()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
     }
 
     private var quickConnectAuthorizeSheet: some View {
