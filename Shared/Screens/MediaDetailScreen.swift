@@ -29,6 +29,12 @@ struct MediaDetailScreen: View {
     /// Watch Together (SyncPlay): the item to present the group sheet for, and
     /// (iOS) the item to push into playback once a group is created/joined.
     @State private var watchTogetherSheet: WatchTogetherIntent?
+    /// Watch Together (SyncPlay) is not production-ready yet. This kill-switch
+    /// hides both UI entry points (iOS secondary-actions chip + tvOS action-row
+    /// button) while keeping the whole implementation compiled and type-checked.
+    /// Flip to `true` to bring the feature back. See CLAUDE.md "SyncPlay / Watch
+    /// Together". Revisit after 1.0.5 ships.
+    private static let watchTogetherEnabled = false
     #if os(iOS)
     @State private var watchTogetherPlay: WatchTogetherIntent?
     #endif
@@ -499,7 +505,7 @@ struct MediaDetailScreen: View {
             playSection
             favoriteButton
             watchedButton
-            if network.isOnline {
+            if Self.watchTogetherEnabled && network.isOnline {
                 watchTogetherButton(for: item, nextEp: nextEp)
             }
             Spacer(minLength: 0)
@@ -610,7 +616,7 @@ struct MediaDetailScreen: View {
             }
 
             // Watch Together (SyncPlay) — online only. Accent while in a group.
-            if network.isOnline {
+            if Self.watchTogetherEnabled && network.isOnline {
                 secondaryActionCell(
                     systemImage: "person.2.fill",
                     active: SyncPlayController.shared.isInGroup,
