@@ -29,15 +29,26 @@ struct IOSAppearanceDetailView: View {
                         iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
 
                         Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
-                            .font(CinemaFont.label(.large))
+                            .font(CinemaFont.dynamicLabel(.large))
                             .foregroundStyle(CinemaColor.onSurface)
 
                         Spacer()
 
-                        Button { themeManager.darkModeEnabled.toggle() } label: {
+                        Button {
+                            themeManager.darkModeEnabled.toggle()
+                            Haptics.tap()
+                        } label: {
                             CinemaToggleIndicator(isOn: themeManager.darkModeEnabled, accent: themeManager.accent, animated: motionEffects)
                         }
                         .buttonStyle(.plain)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(loc.localized("settings.darkMode"))
+                    .accessibilityValue(loc.localized(themeManager.darkModeEnabled ? "a11y.toggle.on" : "a11y.toggle.off"))
+                    .accessibilityAddTraits(.isToggle)
+                    .accessibilityAction {
+                        themeManager.darkModeEnabled.toggle()
+                        Haptics.tap()
                     }
                 }
 
@@ -49,7 +60,7 @@ struct IOSAppearanceDetailView: View {
                             iOSRowIcon(systemName: "paintpalette.fill", color: selectedAccent.color)
 
                             Text(loc.localized("settings.accentColor"))
-                                .font(CinemaFont.label(.large))
+                                .font(CinemaFont.dynamicLabel(.large))
                                 .foregroundStyle(CinemaColor.onSurface)
 
                             Spacer()
@@ -71,7 +82,7 @@ struct IOSAppearanceDetailView: View {
                         iOSRowIcon(systemName: "globe", color: themeManager.accent)
 
                         Text(loc.localized("settings.language"))
-                            .font(CinemaFont.label(.large))
+                            .font(CinemaFont.dynamicLabel(.large))
                             .foregroundStyle(CinemaColor.onSurface)
 
                         Spacer()
@@ -87,16 +98,26 @@ struct IOSAppearanceDetailView: View {
                         iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
 
                         Text(loc.localized("settings.motionEffects"))
-                            .font(CinemaFont.label(.large))
+                            .font(CinemaFont.dynamicLabel(.large))
                             .foregroundStyle(CinemaColor.onSurface)
 
                         Spacer()
 
-                        Button { motionEffectsStorage.toggle() } label: {
+                        Button {
+                            motionEffectsStorage.toggle()
+                            Haptics.tap()
+                        } label: {
                             CinemaToggleIndicator(isOn: motionEffectsStorage, accent: themeManager.accent, animated: motionEffectsStorage)
                         }
                         .buttonStyle(.plain)
-                        .sensoryFeedback(.selection, trigger: motionEffectsStorage)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(loc.localized("settings.motionEffects"))
+                    .accessibilityValue(loc.localized(motionEffectsStorage ? "a11y.toggle.on" : "a11y.toggle.off"))
+                    .accessibilityAddTraits(.isToggle)
+                    .accessibilityAction {
+                        motionEffectsStorage.toggle()
+                        Haptics.tap()
                     }
                 }
 
@@ -106,7 +127,7 @@ struct IOSAppearanceDetailView: View {
                     HStack {
                         iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
                         Text(loc.localized("settings.fontSize"))
-                            .font(CinemaFont.label(.large))
+                            .font(CinemaFont.dynamicLabel(.large))
                             .foregroundStyle(CinemaColor.onSurface)
                         Spacer()
                         Stepper(
@@ -139,7 +160,7 @@ struct IOSAppearanceDetailView: View {
                         HStack {
                             iOSRowIcon(systemName: "square.grid.2x2", color: themeManager.accent)
                             Text(loc.localized("settings.libraryLayout"))
-                                .font(CinemaFont.label(.large))
+                                .font(CinemaFont.dynamicLabel(.large))
                                 .foregroundStyle(CinemaColor.onSurface)
                             Spacer()
                         }

@@ -134,6 +134,9 @@ struct AdminPluginsScreen: View {
                             CinemaToggleIndicator(isOn: isEnabled, accent: themeManager.accent, animated: motionEffects)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(plugin.name ?? "—")
+                        .accessibilityValue(loc.localized(isEnabled ? "a11y.toggle.on" : "a11y.toggle.off"))
+                        .accessibilityAddTraits(.isToggle)
                     }
 
                     if plugin.canUninstall == true {

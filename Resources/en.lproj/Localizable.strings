@@ -91,6 +91,7 @@
 "search.placeholder" = "Search movies, shows...";
 "search.listening" = "Listening...";
 "search.noResults" = "No results found";
+"search.error.network" = "Couldn't reach the server. Check your connection and try again.";
 "empty.library.filtered.title" = "No matches";
 "empty.library.filtered.subtitle" = "Try adjusting your filters or clearing them.";
 "empty.library.filtered.action" = "Clear filters";
@@ -626,6 +627,7 @@
 "settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Fast sleep timer (15 s)";
 "settings.debug.skipToEnd" = "Skip-to-end button";
+"debug.skipToEnd" = "⏭ Skip to end (Debug)";
 "settings.interface" = "Interface";
 "settings.interface.playback" = "Playback";
 "settings.interface.menu" = "Main Menu";
@@ -818,6 +820,7 @@
 
 "accessibility.playItem" = "Play %@";
 "accessibility.moreInfoAbout" = "More information about %@";
+"accessibility.resumeProgress" = "%d%% watched";
 
 // MARK: - Admin — formatting glyphs
 

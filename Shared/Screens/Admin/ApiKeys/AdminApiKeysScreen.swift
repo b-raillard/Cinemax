@@ -121,10 +121,10 @@ struct AdminApiKeysScreen: View {
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 3) {
                 Text(loc.localized("admin.apiKeys.warning.title"))
-                    .font(CinemaFont.label(.large))
+                    .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                 Text(loc.localized("admin.apiKeys.warning.message"))
-                    .font(CinemaFont.label(.small))
+                    .font(CinemaFont.dynamicLabel(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
             Spacer()
@@ -151,7 +151,7 @@ struct AdminApiKeysScreen: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: CinemaSpacing.spacing2) {
                             Text(key.appName ?? "—")
-                                .font(CinemaFont.label(.large))
+                                .font(CinemaFont.dynamicLabel(.large))
                                 .foregroundStyle(CinemaColor.onSurface)
                             if isCurrentSession {
                                 Text(loc.localized("admin.apiKeys.thisSession"))
@@ -168,7 +168,7 @@ struct AdminApiKeysScreen: View {
                                 format: loc.localized("admin.apiKeys.createdOn"),
                                 date.formatted(date: .abbreviated, time: .shortened)
                             ))
-                            .font(CinemaFont.label(.small))
+                            .font(CinemaFont.dynamicLabel(.small))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }
                     }
@@ -246,12 +246,12 @@ struct AdminApiKeysScreen: View {
                     )
 
                     Text(loc.localized("admin.apiKeys.create.hint"))
-                        .font(CinemaFont.label(.small))
+                        .font(CinemaFont.dynamicLabel(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
 
                     if let err = viewModel.createErrorMessage {
                         Text(err)
-                            .font(CinemaFont.label(.medium))
+                            .font(CinemaFont.dynamicLabel(.medium))
                             .foregroundStyle(CinemaColor.error)
                     }
 
@@ -306,7 +306,7 @@ struct AdminApiKeysScreen: View {
                                 .foregroundStyle(CinemaColor.onSurface)
                             if let name = key.appName {
                                 Text(name)
-                                    .font(CinemaFont.label(.medium))
+                                    .font(CinemaFont.dynamicLabel(.medium))
                                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                             }
                         }
@@ -319,7 +319,7 @@ struct AdminApiKeysScreen: View {
 
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                         Text(loc.localized("admin.apiKeys.created.tokenLabel"))
-                            .font(CinemaFont.label(.medium))
+                            .font(CinemaFont.dynamicLabel(.medium))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
 
                         Text(key.accessToken ?? "—")
@@ -343,7 +343,7 @@ struct AdminApiKeysScreen: View {
                     .padding(.top, CinemaSpacing.spacing2)
 
                     Text(loc.localized("admin.apiKeys.created.reminder"))
-                        .font(CinemaFont.label(.small))
+                        .font(CinemaFont.dynamicLabel(.small))
                         .foregroundStyle(.orange)
                 }
                 .padding(CinemaSpacing.spacing4)

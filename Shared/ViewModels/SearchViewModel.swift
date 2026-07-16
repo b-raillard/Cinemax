@@ -220,6 +220,10 @@ final class SearchViewModel {
     var results: [BaseItemDto] = []
     var isSearching = false
     var hasSearched = false
+    /// True when the last search failed to reach the server (every term fetch
+    /// threw) rather than legitimately returning zero matches — lets the view
+    /// show a retryable error state distinct from the "no results" empty state.
+    var searchFailed = false
 
     /// Most-recent-first queries shown as chips on the empty search screen.
     /// Persisted as JSON under `SettingsKey.searchRecentQueries`; mutate only
@@ -327,6 +331,7 @@ final class SearchViewModel {
         guard !query.isEmpty else {
             results = []
             hasSearched = false
+            searchFailed = false
             return
         }
 
@@ -342,14 +347,16 @@ final class SearchViewModel {
             // UI can remain stuck on the spinner after a quick text change.
             defer { self?.isSearching = false }
 
-            let ranked = await Self.fetchRanked(query: query, userId: userId, api: api)
+            let outcome = await Self.fetchRanked(query: query, userId: userId, api: api)
             guard !Task.isCancelled else { return }
-            self?.results = ranked
+            self?.results = outcome.items
+            self?.searchFailed = outcome.failed
             self?.hasSearched = true
             // Only remember queries that produced something — a typo midway
             // through "missio" shouldn't pollute the history, and the debounce
-            // already collapses keystroke noise into the final query.
-            if !ranked.isEmpty {
+            // already collapses keystroke noise into the final query. A failed
+            // fetch never records (the query may be perfectly valid).
+            if !outcome.failed && !outcome.items.isEmpty {
                 self?.recordRecentSearch(query)
             }
         }
@@ -410,7 +417,7 @@ final class SearchViewModel {
         query: String,
         userId: String,
         api: any LibraryAPI
-    ) async -> [BaseItemDto] {
+    ) async -> (items: [BaseItemDto], failed: Bool) {
         let normalizedQuery = normalizeForMatch(query)
         // Drop stop words so per-word fetches and the word-presence tiers stay
         // meaningful — otherwise "the"/"le"/"de" alone match hundreds of titles.
@@ -429,19 +436,27 @@ final class SearchViewModel {
         if words.count > 1 { terms.append(contentsOf: words.prefix(4)) }
         let uniqueTerms = Array(Set(terms))
 
+        // Each task returns nil when its fetch threw. If EVERY term fetch throws
+        // (server unreachable / dropped mid-query) we surface a failure so the UI
+        // can distinguish "couldn't reach the server" from a legitimate zero-match.
         var candidates: [String: BaseItemDto] = [:]
-        await withTaskGroup(of: [BaseItemDto].self) { group in
+        var anySucceeded = false
+        await withTaskGroup(of: [BaseItemDto]?.self) { group in
             for term in uniqueTerms {
                 group.addTask {
-                    (try? await api.searchItems(userId: userId, searchTerm: term, limit: 30)) ?? []
+                    try? await api.searchItems(userId: userId, searchTerm: term, limit: 30)
                 }
             }
-            for await items in group {
+            for await result in group {
+                guard let items = result else { continue }
+                anySucceeded = true
                 for item in items where item.id != nil {
                     candidates[item.id!] = item
                 }
             }
         }
+
+        let failed = !uniqueTerms.isEmpty && !anySucceeded
 
         let scored = candidates.values.compactMap { item -> (item: BaseItemDto, score: Double)? in
             let score = max(
@@ -450,7 +465,7 @@ final class SearchViewModel {
             )
             return score > 0 ? (item, score) : nil
         }
-        return scored.sorted { $0.score > $1.score }.map(\.item)
+        return (scored.sorted { $0.score > $1.score }.map(\.item), failed)
     }
 
     /// Weighted relevance of one title against the query. 0 = no match (filtered out).

@@ -236,7 +236,7 @@ struct AdminUserDetailScreen: View {
                         color: isOn ? themeManager.accent : CinemaColor.onSurfaceVariant
                     )
                     Text(folder.name ?? "—")
-                        .font(CinemaFont.label(.large))
+                        .font(CinemaFont.dynamicLabel(.large))
                         .foregroundStyle(CinemaColor.onSurface)
                     Spacer()
                 }
@@ -257,7 +257,7 @@ struct AdminUserDetailScreen: View {
                     HStack {
                         iOSRowIcon(systemName: "person.badge.shield.checkmark", color: themeManager.accent)
                         Text(loc.localized("admin.user.parental.rating.label"))
-                            .font(CinemaFont.label(.large))
+                            .font(CinemaFont.dynamicLabel(.large))
                             .foregroundStyle(CinemaColor.onSurface)
                         Spacer()
                         Menu {
@@ -275,7 +275,7 @@ struct AdminUserDetailScreen: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Text(currentParentalRatingLabel)
-                                    .font(CinemaFont.label(.large))
+                                    .font(CinemaFont.dynamicLabel(.large))
                                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                                 Image(systemName: "chevron.up.chevron.down")
                                     .font(.system(size: CinemaScale.pt(11), weight: .semibold))
@@ -336,7 +336,7 @@ struct AdminUserDetailScreen: View {
 
                         if !viewModel.newPassword.isEmpty && !viewModel.passwordsMatch {
                             Text(loc.localized("admin.user.password.mismatch"))
-                                .font(CinemaFont.label(.medium))
+                                .font(CinemaFont.dynamicLabel(.medium))
                                 .foregroundStyle(CinemaColor.error)
                         }
 
@@ -371,7 +371,7 @@ struct AdminUserDetailScreen: View {
                             HStack {
                                 iOSRowIcon(systemName: "key.slash", color: CinemaColor.error)
                                 Text(loc.localized("admin.user.password.resetAction"))
-                                    .font(CinemaFont.label(.large))
+                                    .font(CinemaFont.dynamicLabel(.large))
                                     .foregroundStyle(CinemaColor.error)
                                 Spacer()
                             }
@@ -452,21 +452,33 @@ struct AdminUserDetailScreen: View {
                 iOSRowIcon(systemName: icon, color: themeManager.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
-                        .font(CinemaFont.label(.large))
+                        .font(CinemaFont.dynamicLabel(.large))
                         .foregroundStyle(disabled ? CinemaColor.onSurfaceVariant : CinemaColor.onSurface)
                     if disabled, let hint = disabledHint {
                         Text(hint)
-                            .font(CinemaFont.label(.small))
+                            .font(CinemaFont.dynamicLabel(.small))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                     }
                 }
                 Spacer()
-                Button { isOn.wrappedValue.toggle() } label: {
+                Button {
+                    isOn.wrappedValue.toggle()
+                    Haptics.tap()
+                } label: {
                     CinemaToggleIndicator(isOn: isOn.wrappedValue, accent: themeManager.accent, animated: motionEffects)
                 }
                 .buttonStyle(.plain)
                 .disabled(disabled)
                 .opacity(disabled ? 0.5 : 1.0)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityValue(loc.localized(isOn.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityAction {
+                guard !disabled else { return }
+                isOn.wrappedValue.toggle()
+                Haptics.tap()
             }
         }
     }

@@ -181,19 +181,7 @@ struct AdminPlaybackScreen: View {
 
     @ViewBuilder
     private func toggleRow(icon: String, label: String, binding: Binding<Bool>) -> some View {
-        iOSSettingsRow {
-            HStack {
-                iOSRowIcon(systemName: icon, color: themeManager.accent)
-                Text(label)
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                Button { binding.wrappedValue.toggle() } label: {
-                    CinemaToggleIndicator(isOn: binding.wrappedValue, accent: themeManager.accent, animated: motionEffects)
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        iOSToggleRow(icon: icon, label: label, value: binding, accent: themeManager.accent, animated: motionEffects, loc: loc)
     }
 
     @ViewBuilder
