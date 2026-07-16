@@ -12,15 +12,24 @@ import SwiftUI
 enum CinemaxRailKind: String {
     case continueWatching
     case favorites
+    case nextUp
+    case recentlyAdded
 
     var headerIcon: String {
-        self == .favorites ? "heart.fill" : "play.fill"
+        switch self {
+        case .continueWatching: return "play.fill"
+        case .favorites: return "heart.fill"
+        case .nextUp: return "forward.end.fill"
+        case .recentlyAdded: return "sparkles"
+        }
     }
 
     func headerTitle(french: Bool) -> String {
         switch self {
         case .continueWatching: return french ? "En cours" : "Continue Watching"
         case .favorites: return french ? "Favoris" : "Favorites"
+        case .nextUp: return french ? "À suivre" : "Next Up"
+        case .recentlyAdded: return french ? "Récemment ajoutés" : "Recently Added"
         }
     }
 
@@ -28,6 +37,8 @@ enum CinemaxRailKind: String {
         switch self {
         case .continueWatching: return french ? "Rien à reprendre" : "Nothing to resume"
         case .favorites: return french ? "Aucun favori" : "No favorites yet"
+        case .nextUp: return french ? "Rien à suivre" : "Nothing up next"
+        case .recentlyAdded: return french ? "Rien de récent" : "Nothing new"
         }
     }
 }
@@ -124,6 +135,10 @@ struct PosterRailProvider: TimelineProvider {
             fetched = await JellyfinLite.fetchResumeItems(session: session, limit: maxPosters)
         case .favorites:
             fetched = await JellyfinLite.fetchFavorites(session: session, limit: maxPosters)
+        case .nextUp:
+            fetched = await JellyfinLite.fetchNextUp(session: session, limit: maxPosters)
+        case .recentlyAdded:
+            fetched = await JellyfinLite.fetchRecentlyAdded(session: session, limit: maxPosters)
         }
         guard let items = fetched else {
             return PosterRailEntry(date: .now, kind: kind, posters: [], state: .unreachable)
@@ -304,10 +319,46 @@ struct CinemaxFavoritesWidget: Widget {
     }
 }
 
+struct CinemaxNextUpWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "CinemaxNextUp", provider: PosterRailProvider(kind: .nextUp)) { entry in
+            PosterRailWidgetView(entry: entry)
+        }
+        .configurationDisplayName(
+            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true ? "À suivre" : "Next Up"
+        )
+        .description(
+            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
+                ? "Le prochain épisode à regarder de vos séries en cours."
+                : "The next episode to watch from your shows."
+        )
+        .supportedFamilies([.systemMedium, .systemLarge])
+    }
+}
+
+struct CinemaxRecentlyAddedWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "CinemaxRecentlyAdded", provider: PosterRailProvider(kind: .recentlyAdded)) { entry in
+            PosterRailWidgetView(entry: entry)
+        }
+        .configurationDisplayName(
+            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true ? "Récemment ajoutés" : "Recently Added"
+        )
+        .description(
+            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
+                ? "Les derniers films et séries ajoutés à votre serveur."
+                : "The latest movies and shows added to your server."
+        )
+        .supportedFamilies([.systemMedium, .systemLarge])
+    }
+}
+
 @main
 struct CinemaxWidgetBundle: WidgetBundle {
     var body: some Widget {
         CinemaxContinueWatchingWidget()
         CinemaxFavoritesWidget()
+        CinemaxNextUpWidget()
+        CinemaxRecentlyAddedWidget()
     }
 }
