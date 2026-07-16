@@ -39,7 +39,11 @@ struct HomeScreen: View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
-            if viewModel.isLoading {
+            if viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded) {
+                // Skeleton during phase-1, and kept up while a phase-1-empty
+                // result is still filling later phases — the all-empty state
+                // must only appear once the *entire* load finishes, never as a
+                // mid-load flash (genre rows populate after the hero/rails).
                 loadingSkeleton
             } else if isHomeEmpty {
                 homeEmptyState
