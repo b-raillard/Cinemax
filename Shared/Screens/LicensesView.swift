@@ -96,13 +96,59 @@ struct LicensesView: View {
         SOFTWARE.
         """
 
+    private let mplLicense = """
+        This Source Code Form is subject to the terms of the Mozilla Public \
+        License, v. 2.0. If a copy of the MPL was not distributed with this \
+        software, you can obtain one at https://mozilla.org/MPL/2.0/.
+
+        This Source Code Form is "Incompatible With Secondary Licenses", as \
+        defined by the Mozilla Public License, v. 2.0.
+
+        The full license text is available at https://mozilla.org/MPL/2.0/.
+        """
+
+    private let lgplLicense = """
+        This program uses the libVLC media framework (© VideoLAN and the VLC \
+        Authors), licensed under the GNU Lesser General Public License, version \
+        2.1 or later.
+
+        This library is free software; you can redistribute it and/or modify it \
+        under the terms of the GNU Lesser General Public License as published by \
+        the Free Software Foundation; either version 2.1 of the License, or (at \
+        your option) any later version.
+
+        This library is distributed in the hope that it will be useful, but \
+        WITHOUT ANY WARRANTY; without even the implied warranty of \
+        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser \
+        General Public License for more details.
+
+        The full license text is available at \
+        https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+        Cinemax links libvlc dynamically as a prebuilt xcframework; you may \
+        relink the application against a modified version of the library in \
+        accordance with LGPL-2.1 §6. Source: https://code.videolan.org/videolan/vlc
+        """
+
     private var licenses: [OSSLicense] {
         [
             OSSLicense(
                 name: "Jellyfin SDK Swift",
                 version: "0.6.0",
                 url: "github.com/jellyfin/jellyfin-sdk-swift",
-                text: "Copyright (c) Jellyfin Contributors\n\n" + mitLicense
+                text: "Copyright (c) Jellyfin & Jellyfin Contributors\n\n" + mplLicense
+            ),
+            OSSLicense(
+                name: "libVLC",
+                version: "4.0",
+                url: "code.videolan.org/videolan/vlc",
+                text: "Copyright (c) VideoLAN and the VLC Authors\n\n" + lgplLicense
+            ),
+            OSSLicense(
+                name: "SwiftVLC",
+                version: "0.3.0",
+                url: "github.com/harflabs/SwiftVLC",
+                text: "Copyright (c) 2025 Omar Albeik\n\n" + mitLicense
             ),
             OSSLicense(
                 name: "Nuke",

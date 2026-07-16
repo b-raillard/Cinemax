@@ -1,0 +1,8 @@
+/* Permission d'accès au réseau local (découverte des serveurs Jellyfin) */
+"NSLocalNetworkUsageDescription" = "Cinemax utilise votre réseau local pour découvrir automatiquement les serveurs Jellyfin de votre réseau Wi-Fi.";
+
+/* Permission d'accès au microphone (recherche vocale) */
+"NSMicrophoneUsageDescription" = "Cinemax utilise le microphone pour la recherche vocale.";
+
+/* Permission de reconnaissance vocale (recherche vocale) */
+"NSSpeechRecognitionUsageDescription" = "Cinemax utilise la reconnaissance vocale pour rechercher des films et des séries.";

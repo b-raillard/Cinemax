@@ -23,6 +23,7 @@
 		0C4D6F89D7F95157F7800C6F /* IdentifyConfirmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC975266050EC8748AA2D9AC /* IdentifyConfirmView.swift */; };
 		0C4FDF863DEADECFEBABE17B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 653AA083295D61DCACCEC0A1 /* PrivacyInfo.xcprivacy */; };
 		0E09FF53825D339001BB6137 /* VideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D97F65D618EBC05344F98AD7 /* VideoPlayerView.swift */; };
+		0E311694DD10CE61A29C7E5D /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 03A665C8AC6BE9D36AD43C7F /* InfoPlist.strings */; };
 		0E89D264CCF6B086910782A7 /* ServerSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0A552AFA2A46BB879FE87B /* ServerSetupViewModel.swift */; };
 		0ED6BB9632625BE9F922F728 /* QuickConnectAuthorizeViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53363AB0D63349A37334B381 /* QuickConnectAuthorizeViewModelTests.swift */; };
 		100AA327B088A392E7732C98 /* MediaDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */; };
@@ -196,6 +197,7 @@
 		86280CCCB1F5B8F2F64E0DF2 /* ExtensionSessionContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */; };
 		86AC24861A35CA8EDFE28605 /* AdminPluginsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762983CA570B7EB3C9E1F65 /* AdminPluginsScreen.swift */; };
 		88F9D715BA01E84DCB310C87 /* PlayerTimeFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C78DE5E6487FF7D0204D485 /* PlayerTimeFormatTests.swift */; };
+		89BD7033117AAC2AD4EF269E /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 03A665C8AC6BE9D36AD43C7F /* InfoPlist.strings */; };
 		89E70B6249FE96008E832974 /* SleepTimerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74EFA596296688A96C374135 /* SleepTimerController.swift */; };
 		89F53E8EDBEA3B58E4C7EE7B /* IdentifyConfirmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC975266050EC8748AA2D9AC /* IdentifyConfirmView.swift */; };
 		8A4A9494BC7233D7F806E0AA /* AdminLoadStateContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FCF5A94AA4897A4644B777A /* AdminLoadStateContainer.swift */; };
@@ -300,6 +302,7 @@
 		D857D49B215D1F23176E0150 /* SettingsRowHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE57A7C26153CDFAB148F7 /* SettingsRowHelpers.swift */; };
 		D8EC262762FCEF516D8EBE3F /* MenuSettingsScreen+tvOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9D01599D90904C2EF5B69CE /* MenuSettingsScreen+tvOS.swift */; };
 		DADE943ED5B61311F81B6C00 /* AdminCatalogViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D1688AF2E9B0107B12884F /* AdminCatalogViewModel.swift */; };
+		DB973C3C014B3237668AE306 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3D5783E76C6ECEE8A6DEAA04 /* PrivacyInfo.xcprivacy */; };
 		DC1F05EB9B9923CAE0CE8FB2 /* AdminUsersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C4BDE5967D19D5A14647B4 /* AdminUsersViewModel.swift */; };
 		DD527ADA33EDBEC22FBE5EB1 /* PlayerTransportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */; };
 		DDE0943D46488F809421872D /* CastCircle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6663B7C168DECE8F2BAC327 /* CastCircle.swift */; };
@@ -346,6 +349,7 @@
 		FA853F39728C4E3652D2C5E5 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C346F0B7AFF504DA6593370E /* HomeViewModel.swift */; };
 		FB0B24DF085E61FD16E5F70A /* BackdropFallbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A855157B1CDF9464CA308220 /* BackdropFallbackView.swift */; };
 		FB6FC7ADD24BFD093F9D6098 /* NativeVideoPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07FE737816B4F86FC1A9D144 /* NativeVideoPresenter.swift */; };
+		FC1B2E5E3AD07540A82FD198 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7245AC0008EF86CB3AF4972B /* PrivacyInfo.xcprivacy */; };
 		FC977C55710C5DEB48C5A122 /* TVButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */; };
 		FD4CBABBA7CDAC4D6F3B41CB /* boot.c in Sources */ = {isa = PBXBuildFile; fileRef = EAEC7B9C5388FF38DAC9FE9A /* boot.c */; };
 		FD6809BE7F3DE297190B4BC3 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5F40A4DB82730AD3871CB7 /* SettingsScreen.swift */; };
@@ -422,6 +426,7 @@
 		0E8781EB49CEE6EFE3A6560A /* ContentRatingClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRatingClassifierTests.swift; sourceTree = "<group>"; };
 		0EB9A108C0F29A3010E8E65A /* AdminUserDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminUserDetailScreen.swift; sourceTree = "<group>"; };
 		0F5616DF4D32335730006F23 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		0FD4620B55D35A09B985CA2E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		11C9143719533910733C49F4 /* AdminLogsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLogsViewModel.swift; sourceTree = "<group>"; };
 		13082AD25DB233BD0E63DB1C /* AdvancedAdminLandingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedAdminLandingScreen.swift; sourceTree = "<group>"; };
 		150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionSessionContractTests.swift; sourceTree = "<group>"; };
@@ -454,6 +459,7 @@
 		3BB21434207D275C5DE4B7E1 /* SyncPlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncPlayController.swift; sourceTree = "<group>"; };
 		3C5B18A062473FEFA3852339 /* StreamProxyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamProxyTests.swift; sourceTree = "<group>"; };
 		3D4F7E03E3AA68A284C0FD7E /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		3D5783E76C6ECEE8A6DEAA04 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3D8C4660090ABCAD7FF2FA16 /* SettingsNavCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavCoordinator.swift; sourceTree = "<group>"; };
 		40DF377C72F0695AEC1CB0D6 /* LibraryHeroSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryHeroSection.swift; sourceTree = "<group>"; };
 		410E2B368E14B0EE19701528 /* AdminDevicesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminDevicesScreen.swift; sourceTree = "<group>"; };
@@ -492,9 +498,11 @@
 		69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModelTests.swift; sourceTree = "<group>"; };
 		6B63AFBF054B1A7A1253C755 /* AdminFormScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminFormScreen.swift; sourceTree = "<group>"; };
 		6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminActivityScreen.swift; sourceTree = "<group>"; };
+		6C9E3A0CDA86FD6E609A719F /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		6E2E6BDC1B376722400F1A3C /* MenuConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuConfig.swift; sourceTree = "<group>"; };
 		70046F639E1635F36221E545 /* MetadataIdentifyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataIdentifyTab.swift; sourceTree = "<group>"; };
 		71EDA47106672004DE07BDCF /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		7245AC0008EF86CB3AF4972B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		726F34A0F8B1ADDDFE4FE4C3 /* MenuSettingsScreen+iOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuSettingsScreen+iOS.swift"; sourceTree = "<group>"; };
 		74AE99230CEB07F7CC4FCCFA /* IdentifyResultsGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifyResultsGridView.swift; sourceTree = "<group>"; };
 		74EFA596296688A96C374135 /* SleepTimerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepTimerController.swift; sourceTree = "<group>"; };
@@ -643,6 +651,7 @@
 			children = (
 				EAEC7B9C5388FF38DAC9FE9A /* boot.c */,
 				E15F2D44D68F8FD79A6A7488 /* ContentProvider.swift */,
+				3D5783E76C6ECEE8A6DEAA04 /* PrivacyInfo.xcprivacy */,
 			);
 			path = CinemaxTopShelf;
 			sourceTree = "<group>";
@@ -923,6 +932,7 @@
 		943FF0F751C21904343B7FB3 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				03A665C8AC6BE9D36AD43C7F /* InfoPlist.strings */,
 				AF177D070920EC62E7827637 /* Localizable.strings */,
 				280786386ED204F8AAAF36B6 /* Assets.xcassets */,
 				653AA083295D61DCACCEC0A1 /* PrivacyInfo.xcprivacy */,
@@ -1028,6 +1038,7 @@
 			children = (
 				4AC195F26167266BFFE287F1 /* CinemaxWidget.swift */,
 				A8757BE6612821942C5A36AB /* JellyfinLite.swift */,
+				7245AC0008EF86CB3AF4972B /* PrivacyInfo.xcprivacy */,
 			);
 			path = CinemaxWidget;
 			sourceTree = "<group>";
@@ -1168,6 +1179,7 @@
 			buildConfigurationList = 1C5EC60B3C8171551A7217A5 /* Build configuration list for PBXNativeTarget "CinemaxTopShelf" */;
 			buildPhases = (
 				479441B57A4DE2639E06DD68 /* Sources */,
+				E7BB305F01AC165B806D54C9 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -1208,6 +1220,7 @@
 			buildConfigurationList = 9D0E4D2EE14DFACFF5340EED /* Build configuration list for PBXNativeTarget "CinemaxWidget" */;
 			buildPhases = (
 				0ADF0A8C258C44D97EB9DFFD /* Sources */,
+				9F8EBCFDD5B75ACEFB8D8693 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -1275,13 +1288,30 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		9F8EBCFDD5B75ACEFB8D8693 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FC1B2E5E3AD07540A82FD198 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D978BCFFED2E6EB8C778E89D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				9F7E13CC3312F27A84915032 /* Assets.xcassets in Resources */,
+				0E311694DD10CE61A29C7E5D /* InfoPlist.strings in Resources */,
 				64406006E2A4AB13FDE38E19 /* Localizable.strings in Resources */,
 				0C4FDF863DEADECFEBABE17B /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E7BB305F01AC165B806D54C9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DB973C3C014B3237668AE306 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1290,6 +1320,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2853B78C03BA5522E348B212 /* Assets.xcassets in Resources */,
+				89BD7033117AAC2AD4EF269E /* InfoPlist.strings in Resources */,
 				C394E04E4C329F99F29E70D6 /* Localizable.strings in Resources */,
 				2795FD90A8FA67405535C2B7 /* PrivacyInfo.xcprivacy in Resources */,
 			);
@@ -1691,6 +1722,15 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
+		03A665C8AC6BE9D36AD43C7F /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				0FD4620B55D35A09B985CA2E /* en */,
+				6C9E3A0CDA86FD6E609A719F /* fr */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
 		AF177D070920EC62E7827637 /* Localizable.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
