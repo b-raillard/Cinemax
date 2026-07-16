@@ -174,13 +174,24 @@ final class AppState {
         switch url.host() {
         case "item":
             let id = url.lastPathComponent
-            guard !id.isEmpty, id != "/" else { return }
+            // Defense-in-depth: only dispatch a well-formed Jellyfin item id
+            // (32-char undashed hex OR a canonical dashed GUID) so a malformed
+            // deep link can't drive a lookup with attacker-controlled path text.
+            guard Self.isValidItemId(id) else { return }
             pendingDeepLinkItemId = id
         case "home":
             pendingDeepLinkTabId = "home"
         default:
             break
         }
+    }
+
+    /// Accepts the two Jellyfin item-id forms only: a 32-character undashed hex
+    /// string (`a1b2…`) or a canonical dashed GUID (`UUID(uuidString:)`).
+    /// Everything else is rejected.
+    static func isValidItemId(_ id: String) -> Bool {
+        if id.count == 32, id.allSatisfy(\.isHexDigit) { return true }
+        return UUID(uuidString: id) != nil
     }
 
     /// Returns the user from `LoginScreen` to `ServerSetupScreen` so they can pick a different

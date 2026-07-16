@@ -1834,15 +1834,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Authorization header, so it works regardless of server hardening.
     nonisolated private static func loadImage(url: URL, token: String?) async -> Data? {
         let authed = VLCStreamPresenter.authedURL(url, token: token)
-        var request = URLRequest(url: authed)
-        if let token { request.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization") }
-        guard let (data, resp) = try? await URLSession.shared.data(for: request) else {
+        guard let (data, resp) = await AuthenticatedImageFetch.data(from: authed, token: token) else {
             #if DEBUG
             logger.debug("CINEMAX-CHAPTERIMG ▸ request failed \(redactedURL(authed))")
             #endif
             return nil
         }
-        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        let code = resp.statusCode
         #if DEBUG
         logger.debug("CINEMAX-CHAPTERIMG ▸ status=\(code) bytes=\(data.count) \(redactedURL(authed))")
         #endif

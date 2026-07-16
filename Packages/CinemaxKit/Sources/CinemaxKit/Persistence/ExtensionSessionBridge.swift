@@ -74,10 +74,4 @@ public enum ExtensionSessionBridge {
         TVTopShelfContentProvider.topShelfContentDidChange()
         #endif
     }
-
-    public static func read() -> Session? {
-        guard let defaults = UserDefaults(suiteName: appGroupId),
-              let data = defaults.data(forKey: sessionKey) else { return nil }
-        return try? JSONDecoder().decode(Session.self, from: data)
-    }
 }
