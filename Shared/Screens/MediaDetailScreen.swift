@@ -24,6 +24,8 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    /// Drives the "mark whole season watched" confirmation dialog (F10).
+    @State private var showMarkSeasonWatchedConfirm = false
     @Environment(NetworkMonitor.self) private var network
     @Environment(ToastCenter.self) private var toast
     /// Watch Together (SyncPlay): the item to present the group sheet for, and
@@ -749,6 +751,14 @@ struct MediaDetailScreen: View {
                     .padding(.horizontal, contentPadding)
                 }
             }
+            // Season bulk "mark watched" (F10) — cascades to every episode
+            // server-side. Confirmed via the dialog attached below.
+            HStack {
+                Spacer()
+                markSeasonWatchedButton
+            }
+            .padding(.horizontal, contentPadding)
+            .focusSection()
             // tvOS: vertical list of unified episode rows. `LazyVStack` so a
             // 20+ episode season doesn't render every row up-front.
             LazyVStack(spacing: 12) {
@@ -768,34 +778,41 @@ struct MediaDetailScreen: View {
             }
             .padding(.horizontal, contentPadding)
             #else
-            // iOS: dropdown Menu for season selection (hidden when only one season)
-            if showSeasonPicker {
-                Menu {
-                    ForEach(viewModel.seasons, id: \.id) { season in
-                        Button {
-                            if let id = season.id {
-                                Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
+            // iOS: dropdown Menu for season selection (hidden when only one
+            // season), paired with the season bulk "mark watched" button (F10).
+            HStack(spacing: CinemaSpacing.spacing3) {
+                if showSeasonPicker {
+                    Menu {
+                        ForEach(viewModel.seasons, id: \.id) { season in
+                            Button {
+                                if let id = season.id {
+                                    Task { await viewModel.selectSeason(id, seriesId: seriesId, using: appState) }
+                                }
+                            } label: {
+                                Text(season.name ?? loc.localized("detail.season"))
                             }
-                        } label: {
-                            Text(season.name ?? loc.localized("detail.season"))
                         }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(currentSeasonName)
+                                .font(.system(size: seasonTabFontSize, weight: .bold))
+                                .foregroundStyle(themeManager.accent)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: CinemaScale.pt(11), weight: .semibold))
+                                .foregroundStyle(themeManager.accent)
+                        }
+                        .padding(.horizontal, CinemaSpacing.spacing3)
+                        .padding(.vertical, 10)
+                        .background(CinemaColor.surfaceContainerHigh)
+                        .clipShape(Capsule())
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(currentSeasonName)
-                            .font(.system(size: seasonTabFontSize, weight: .bold))
-                            .foregroundStyle(themeManager.accent)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
-                            .foregroundStyle(themeManager.accent)
-                    }
-                    .padding(.horizontal, CinemaSpacing.spacing3)
-                    .padding(.vertical, 10)
-                    .background(CinemaColor.surfaceContainerHigh)
-                    .clipShape(Capsule())
                 }
-                .padding(.horizontal, contentPadding)
+
+                Spacer(minLength: 0)
+
+                markSeasonWatchedButton
             }
+            .padding(.horizontal, contentPadding)
             // iOS: horizontal scroll of episode cards
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 16) {
@@ -822,6 +839,54 @@ struct MediaDetailScreen: View {
             .scrollTargetBehavior(.viewAligned)
             #endif
         }
+        .confirmationDialog(
+            loc.localized("detail.season.markWatched"),
+            isPresented: $showMarkSeasonWatchedConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(loc.localized("detail.watched.add")) {
+                if let seasonId = viewModel.selectedSeasonId {
+                    Task {
+                        await viewModel.markSeasonWatched(
+                            seasonId: seasonId, seriesId: seriesId,
+                            using: appState, toast: toast, loc: loc
+                        )
+                    }
+                }
+            }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        } message: {
+            Text(loc.localized("detail.season.markWatched.message"))
+        }
+    }
+
+    /// Season bulk "mark watched" affordance (F10). Opens a confirmation
+    /// dialog; on confirm the whole season is marked played (cascades to every
+    /// episode server-side).
+    private var markSeasonWatchedButton: some View {
+        Button {
+            showMarkSeasonWatchedConfirm = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: CinemaScale.pt(13), weight: .semibold))
+                Text(loc.localized("detail.season.markWatched"))
+                    .font(.system(size: seasonTabFontSize, weight: .semibold))
+            }
+            .foregroundStyle(themeManager.accent)
+            .padding(.horizontal, CinemaSpacing.spacing3)
+            .padding(.vertical, 10)
+            .background(CinemaColor.surfaceContainerHigh)
+            .clipShape(Capsule())
+        }
+        #if os(tvOS)
+        .buttonStyle(SeasonTabButtonStyle(isSelected: false, accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityLabel(loc.localized("detail.season.markWatched"))
     }
 
     // MARK: - Error

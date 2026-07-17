@@ -207,6 +207,12 @@ extension SettingsScreen {
                 // TODO(v2): wire a user-facing Profile Settings screen
                 // (password change + avatar) — see docs/v2-todo.md.
                 VStack(spacing: 0) {
+                    navigationRow(icon: "clock.arrow.circlepath", label: loc.localized("settings.watchedHistory")) {
+                        showWatchedHistory = true
+                    }
+
+                    iOSSettingsDivider
+
                     navigationRow(icon: "lock.shield", label: loc.localized("settings.privacySecurity")) {
                         showPrivacySecurity = true
                     }

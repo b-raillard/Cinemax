@@ -10,6 +10,33 @@ import AVFoundation
 /// Typed voice-search failures so user-facing copy lives in
 /// Localizable.strings (localized at the view) instead of being hardcoded
 /// English in the speech helper.
+/// Result-type scope for the search filter chips. `all` keeps the original
+/// movie+series+episode fan-out; the narrowed scopes constrain the server
+/// `includeItemTypes` so the candidate set (and ranking) only sees that kind.
+enum SearchScope: String, CaseIterable, Identifiable, Sendable {
+    case all
+    case movies
+    case series
+
+    var id: String { rawValue }
+
+    var includeItemTypes: [BaseItemKind] {
+        switch self {
+        case .all:    [.movie, .series, .episode]
+        case .movies: [.movie]
+        case .series: [.series]
+        }
+    }
+
+    var localizationKey: String {
+        switch self {
+        case .all:    "search.filter.all"
+        case .movies: "search.filter.movies"
+        case .series: "search.filter.series"
+        }
+    }
+}
+
 enum VoiceSearchPermissionError: Sendable {
     case microphoneDenied
     case speechRecognitionDenied
@@ -221,6 +248,10 @@ final class SearchViewModel {
     var isSearching = false
     var hasSearched = false
 
+    /// Active result-type filter (All / Movies / Series). Changing it re-runs
+    /// the current query — the screen fires `search(using:)` from `.onChange`.
+    var scope: SearchScope = .all
+
     /// Most-recent-first queries shown as chips on the empty search screen.
     /// Persisted as JSON under `SettingsKey.searchRecentQueries`; mutate only
     /// through `recordRecentSearch` / `clearRecentSearches` (explicit-mutator
@@ -331,6 +362,7 @@ final class SearchViewModel {
         }
 
         let api = appState.apiClient
+        let includeItemTypes = scope.includeItemTypes
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
@@ -342,7 +374,7 @@ final class SearchViewModel {
             // UI can remain stuck on the spinner after a quick text change.
             defer { self?.isSearching = false }
 
-            let ranked = await Self.fetchRanked(query: query, userId: userId, api: api)
+            let ranked = await Self.fetchRanked(query: query, userId: userId, includeItemTypes: includeItemTypes, api: api)
             guard !Task.isCancelled else { return }
             self?.results = ranked
             self?.hasSearched = true
@@ -409,6 +441,7 @@ final class SearchViewModel {
     nonisolated private static func fetchRanked(
         query: String,
         userId: String,
+        includeItemTypes: [BaseItemKind],
         api: any LibraryAPI
     ) async -> [BaseItemDto] {
         let normalizedQuery = normalizeForMatch(query)
@@ -433,7 +466,7 @@ final class SearchViewModel {
         await withTaskGroup(of: [BaseItemDto].self) { group in
             for term in uniqueTerms {
                 group.addTask {
-                    (try? await api.searchItems(userId: userId, searchTerm: term, limit: 30)) ?? []
+                    (try? await api.searchItems(userId: userId, searchTerm: term, includeItemTypes: includeItemTypes, limit: 30)) ?? []
                 }
             }
             for await items in group {

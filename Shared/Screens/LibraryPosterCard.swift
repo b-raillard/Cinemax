@@ -60,6 +60,11 @@ struct LibraryPosterCard: View {
                 .buttonStyle(.plain)
                 #endif
                 .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+                // Long-press / long-press-select watched + favorite actions.
+                // On the NavigationLink (the focusable button), never its label,
+                // so tvOS focus is untouched; coexists with the admin ellipsis
+                // ZStack sibling below (taps hit the menu, long-press hits this).
+                .mediaCardContextMenu(item: item)
 
                 #if os(iOS)
                 if appState.isAdministrator {

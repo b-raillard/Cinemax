@@ -49,6 +49,7 @@ struct SearchScreen: View {
                     Color.clear.frame(height: 0).id("search.top")
                     VStack(spacing: 0) {
                         searchField
+                        filterChips
                         resultContent
                     }
                     .frame(maxWidth: .infinity, minHeight: 720, maxHeight: .infinity)
@@ -65,6 +66,7 @@ struct SearchScreen: View {
             // Spotlight, and keyboard. Voice search is exposed as a leading
             // toolbar button. The body renders results / empty / listening states.
             VStack(spacing: 0) {
+                filterChips
                 resultContent
             }
             #endif
@@ -202,6 +204,53 @@ struct SearchScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
         .padding(.horizontal, gridPadding)
         .padding(.vertical, CinemaSpacing.spacing3)
+    }
+
+    // MARK: - Filter chips (All / Movies / Series)
+
+    /// Result-type scope chips. Shown once a search is under way so the user can
+    /// narrow (or re-widen) results without retyping; changing scope re-runs the
+    /// current query via `viewModel.search`.
+    @ViewBuilder
+    private var filterChips: some View {
+        if viewModel.hasSearched || !viewModel.results.isEmpty {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                ForEach(SearchScope.allCases) { scope in
+                    filterChip(scope)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, gridPadding)
+            .padding(.bottom, CinemaSpacing.spacing3)
+        }
+    }
+
+    private func filterChip(_ scope: SearchScope) -> some View {
+        let isSelected = viewModel.scope == scope
+        return Button {
+            guard viewModel.scope != scope else { return }
+            viewModel.scope = scope
+            viewModel.search(using: appState)
+        } label: {
+            Text(loc.localized(scope.localizationKey))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                .padding(.vertical, CinemaSpacing.spacing2)
+                .background(
+                    isSelected ? themeManager.accentContainer : CinemaColor.surfaceContainerHigh,
+                    in: Capsule()
+                )
+        }
+        #if os(tvOS)
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityLabel(loc.localized(scope.localizationKey))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     // MARK: - Results
@@ -583,6 +632,10 @@ private struct SearchResultCard: View {
                 .compactMap { $0 }
                 .joined(separator: ", ")
         )
+        // Long-press / long-press-select watched + favorite actions, on the
+        // NavigationLink (the focusable button) not its label — see
+        // `mediaCardContextMenu`.
+        .mediaCardContextMenu(item: item)
     }
 
     private static func subtitle(for item: BaseItemDto) -> String {
