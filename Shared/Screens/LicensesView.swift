@@ -101,9 +101,6 @@ struct LicensesView: View {
         License, v. 2.0. If a copy of the MPL was not distributed with this \
         software, you can obtain one at https://mozilla.org/MPL/2.0/.
 
-        This Source Code Form is "Incompatible With Secondary Licenses", as \
-        defined by the Mozilla Public License, v. 2.0.
-
         The full license text is available at https://mozilla.org/MPL/2.0/.
         """
 
@@ -125,9 +122,11 @@ struct LicensesView: View {
         The full license text is available at \
         https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
 
-        Cinemax links libvlc dynamically as a prebuilt xcframework; you may \
-        relink the application against a modified version of the library in \
-        accordance with LGPL-2.1 §6. Source: https://code.videolan.org/videolan/vlc
+        Cinemax bundles libVLC as a prebuilt static xcframework. In accordance \
+        with LGPL-2.1 §6, the complete source code of the application is \
+        available at https://github.com/b-raillard/Cinemax, permitting \
+        relinking against a modified version of the library. libVLC source: \
+        https://code.videolan.org/videolan/vlc
         """
 
     private var licenses: [OSSLicense] {
