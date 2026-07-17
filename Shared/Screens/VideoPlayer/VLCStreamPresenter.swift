@@ -2085,9 +2085,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let target = bps ?? initialMaxBitrate
         let willBeAuto = (bps == nil)
         guard target != maxBitrate || willBeAuto != bitrateIsAuto else { return }
+        // `reResolveAndResume` reads `maxBitrate` for the fresh negotiation, so set
+        // it first — but revert if the re-resolve is refused (a wake / quality
+        // re-resolve is already in flight): otherwise the menu shows a ceiling the
+        // stream never negotiated and re-picking that value would no-op forever.
+        let previousBitrate = maxBitrate
+        let previousAuto = bitrateIsAuto
         maxBitrate = target
         bitrateIsAuto = willBeAuto
-        reResolveAndResume(from: currentMs)
+        // Before the first engine time lands, `currentMs` is 0 and the resume-seek
+        // hasn't fired yet — fall back to the original resume offset so a quality
+        // change during the opening spinner doesn't restart the item from 0:00.
+        let ms = hasValidTime ? currentMs : Int32(clamping: Int((startTime ?? 0) * 1000))
+        if !reResolveAndResume(from: ms) {
+            maxBitrate = previousBitrate
+            bitrateIsAuto = previousAuto
+        }
     }
 
     @objc private func openAudioDelayMenu() { presentDelayPicker(isAudio: true) }
@@ -2972,13 +2985,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `navigateToEpisode`'s media/proxy/seek machinery (no episode-graph
     /// changes). Guarded by `navGeneration` so a user episode-nav started during
     /// the await wins, and one-shot via `isReResolvingAfterWake`.
-    private func reResolveAndResume(from ms: Int32) {
-        guard !isTearingDown, !isReResolvingAfterWake else { return }
+    @discardableResult
+    private func reResolveAndResume(from ms: Int32) -> Bool {
+        guard !isTearingDown, !isReResolvingAfterWake else { return false }
+        // A committed-but-not-yet-landed skip is the user's intended position:
+        // resume there rather than the stale pre-seek tick, then drop the pending
+        // seek so it can't fire against the reloaded media or leave `refreshTimeUI`
+        // frozen painting a target the new stream never reaches. Mirrors the
+        // `cancelPendingSeekCommit()` that `startPlayback`/`navigateToEpisode` do.
+        let resumeMs = pendingScrubTargetMs ?? ms
+        cancelPendingSeekCommit()
         isReResolvingAfterWake = true
         navGeneration += 1
         let gen = navGeneration
         let resumeItemId = itemId
-        let resumeSeconds = Double(ms) / 1000.0
+        let resumeSeconds = Double(resumeMs) / 1000.0
         logger.notice("VLC wake re-resolve for \(resumeItemId, privacy: .public) @ \(Int(resumeSeconds))s")
         Task { [weak self] in
             guard let self else { return }
@@ -3022,6 +3043,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.startProgressTimer()
             self.refreshTimeUISoon()
         }
+        return true
     }
 
     /// Seconds elapsed since the first play() of this session — the
