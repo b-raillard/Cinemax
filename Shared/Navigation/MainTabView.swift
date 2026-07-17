@@ -69,7 +69,19 @@ struct MainTabView: View {
         // custom menu has no Home tab to route through, present the detail
         // modally from the tab root so the link is honored under any menu
         // configuration.
-        .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
+        //
+        // `initial: true` is load-bearing for **cold launch** (app opened
+        // FROM a widget/Top Shelf tap): `onOpenURL` → `handleDeepLink` sets
+        // `pendingDeepLinkItemId` during scene connect, but `MainTabView`
+        // only mounts after `restoreSession()` flips `hasCheckedSession`, so
+        // the id is already non-nil at mount and a plain `.onChange` never
+        // fires for that baseline. When a Home tab exists this branch only
+        // selects it and `HomeScreen.onAppear` stays the primary consumer;
+        // when it doesn't, `HomeScreen` never mounts to catch it, so without
+        // the initial fire the pending id would sit unconsumed forever. The
+        // no-Home branch is the only one that clears the id + presents, so
+        // there is no double-navigation when a Home tab is present.
+        .onChange(of: appState.pendingDeepLinkItemId, initial: true) { _, newValue in
             guard let newValue else { return }
             if menuConfig.resolvedTabs.contains(where: { $0.id == "home" }) {
                 selectedTabID = "home"
