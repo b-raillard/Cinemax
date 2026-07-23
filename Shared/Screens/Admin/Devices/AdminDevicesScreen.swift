@@ -158,10 +158,6 @@ struct AdminDevicesScreen: View {
 
     // Hoisted to avoid allocating a `RelativeDateTimeFormatter` on every row
     // render. Main-actor render only, so `nonisolated(unsafe)` is safe.
-    nonisolated(unsafe) private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
+    nonisolated(unsafe) private static let relativeFormatter = AdminRelativeFormatter.make(.full)
 }
 #endif

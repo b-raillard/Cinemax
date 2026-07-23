@@ -150,11 +150,7 @@ struct AdminActivityScreen: View {
     // non-trivial and was previously allocated on every list row render. Only
     // ever touched during main-actor view rendering, so `nonisolated(unsafe)`
     // is safe.
-    nonisolated(unsafe) private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
+    nonisolated(unsafe) private static let relativeFormatter = AdminRelativeFormatter.make(.full)
 
     private func relativeTimeLabel(for date: Date) -> String {
         Self.relativeFormatter.localizedString(for: date, relativeTo: Date())

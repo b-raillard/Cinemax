@@ -149,3 +149,48 @@ struct HomeViewModelTests {
         #expect(!vm.isLoading)
     }
 }
+
+/// Tri-state sentinel: a missing/empty `home.selectedGenres` string means
+/// "never configured" (→ deterministic default prefix) while an explicit `[]`
+/// means "configured, zero rows". Locks that empty-string ≠ empty-array.
+@Suite("HomeGenrePreferences", .serialized)
+struct HomeGenrePreferencesTests {
+
+    private let key = SettingsKey.homeSelectedGenres
+
+    private func clear() { UserDefaults.standard.removeObject(forKey: key) }
+
+    @Test("missing key → not configured, renders the default prefix")
+    func unconfiguredMissing() {
+        clear(); defer { clear() }
+        #expect(HomeGenrePreferences.isConfigured() == false)
+        let available = ["Action", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Romance"]
+        #expect(HomeGenrePreferences.effectiveGenres(available: available)
+                == Array(available.prefix(HomeGenrePreferences.defaultRowCount)))
+    }
+
+    @Test("empty-string value is still treated as unconfigured")
+    func emptyStringUnconfigured() {
+        clear(); defer { clear() }
+        UserDefaults.standard.set("", forKey: key)
+        #expect(HomeGenrePreferences.isConfigured() == false)
+        #expect(HomeGenrePreferences.effectiveGenres(available: ["Action", "Comedy"]) == ["Action", "Comedy"])
+    }
+
+    @Test("explicit empty array is configured and yields zero rows")
+    func explicitEmptyArray() {
+        clear(); defer { clear() }
+        HomeGenrePreferences.setSelectedGenres([])
+        #expect(HomeGenrePreferences.isConfigured() == true)
+        #expect(HomeGenrePreferences.effectiveGenres(available: ["Action", "Comedy"]).isEmpty)
+    }
+
+    @Test("explicit picks intersect availability and follow canonical order")
+    func explicitPicks() {
+        clear(); defer { clear() }
+        HomeGenrePreferences.setSelectedGenres(["Horror", "Action", "Unavailable"])
+        #expect(HomeGenrePreferences.isConfigured() == true)
+        let available = ["Action", "Comedy", "Drama", "Horror"]
+        #expect(HomeGenrePreferences.effectiveGenres(available: available) == ["Action", "Horror"])
+    }
+}
