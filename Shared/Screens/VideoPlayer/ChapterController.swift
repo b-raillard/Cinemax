@@ -56,8 +56,8 @@ final class ChapterController {
 
             #if os(tvOS)
             let images: [Int: Data] = await withTaskGroup(of: (Int, Data?).self) { group in
-                for (index, _) in chapters.enumerated() {
-                    let url = builder.chapterImageURL(itemId: itemId, imageIndex: index, maxWidth: 480)
+                for (index, chapter) in chapters.enumerated() {
+                    let url = builder.chapterImageURL(itemId: itemId, imageIndex: index, tag: chapter.imageTag, maxWidth: 480)
                     group.addTask {
                         await Self.loadImage(url: url, token: token).map { (index, $0) } ?? (index, nil)
                     }

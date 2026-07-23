@@ -64,7 +64,6 @@ final class NowPlayingInfoController {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
         startEnrichment(itemId: itemId, fallbackTitle: title, generation: gen)
-        startArtworkFetch(itemId: itemId, generation: gen)
     }
 
     /// Cheap per-tick update: mutates elapsed, duration (if it has just become
@@ -97,12 +96,24 @@ final class NowPlayingInfoController {
 
     // MARK: - Private
 
+    /// Fetches the full item once and drives BOTH the metadata write-back and
+    /// the artwork fetch off it — `fullItem.primaryImageTagValue` is only known
+    /// after this call resolves, so artwork is deliberately sequenced behind
+    /// enrichment (this `getItem` is single-flighted + 10s-cached, so the extra
+    /// hop is normally a cache hit, not a second round trip). The placeholder
+    /// dict published in `attach` already covers the gap.
     private func startEnrichment(itemId: String, fallbackTitle: String, generation gen: Int) {
         let apiClient = self.apiClient
         let userId = self.userId
         enrichTask = Task { @MainActor [weak self] in
-            guard let fullItem = try? await apiClient.getItem(userId: userId, itemId: itemId) else { return }
+            let fullItem = try? await apiClient.getItem(userId: userId, itemId: itemId)
             guard let self, self.generation == gen, !Task.isCancelled else { return }
+            guard let fullItem else {
+                // Enrichment failed — still fetch artwork (untagged, matching
+                // the prior behavior) rather than dropping it entirely.
+                self.startArtworkFetch(itemId: itemId, tag: nil, generation: gen)
+                return
+            }
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
             if let name = fullItem.name, !name.isEmpty {
                 info[MPMediaItemPropertyTitle] = name
@@ -122,11 +133,12 @@ final class NowPlayingInfoController {
                 }
             }
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            self.startArtworkFetch(itemId: itemId, tag: fullItem.primaryImageTagValue, generation: gen)
         }
     }
 
-    private func startArtworkFetch(itemId: String, generation gen: Int) {
-        let url = imageBuilder.imageURL(itemId: itemId, imageType: .primary, maxWidth: 600)
+    private func startArtworkFetch(itemId: String, tag: String?, generation gen: Int) {
+        let url = imageBuilder.imageURL(itemId: itemId, imageType: .primary, maxWidth: 600, tag: tag)
         let token = authToken
         artworkTask = Task { @MainActor [weak self] in
             guard let data = await AuthenticatedImageFetch.data(from: url, token: token),

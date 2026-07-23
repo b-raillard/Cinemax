@@ -25,6 +25,25 @@ struct CinemaxKitTests {
         #expect(url.path().contains("/Items/item123/Images/Primary"))
         #expect(url.absoluteString.contains("maxWidth=300"))
     }
+
+    /// Locks the contract `ChapterController`/`VLCStreamPresenter` depend on:
+    /// the chapter thumbnail URL must carry the server's per-chapter `imageTag`
+    /// as a cache-buster, else regenerated chapter images stay masked behind
+    /// Nuke's disk-cache URL key (see `AuthenticatedImageFetch`) until eviction.
+    @Test("ImageURLBuilder chapter URL carries the cache-busting tag")
+    func testChapterImageURLCarriesTag() {
+        let builder = ImageURLBuilder(serverURL: URL(string: "http://localhost:8096")!)
+        let url = builder.chapterImageURL(itemId: "item123", imageIndex: 2, tag: "abc123tag", maxWidth: 480)
+        #expect(url.path().contains("/Items/item123/Images/Chapter/2"))
+        #expect(url.absoluteString.contains("tag=abc123tag"))
+    }
+
+    @Test("ImageURLBuilder chapter URL omits the tag param when nil")
+    func testChapterImageURLWithoutTag() {
+        let builder = ImageURLBuilder(serverURL: URL(string: "http://localhost:8096")!)
+        let url = builder.chapterImageURL(itemId: "item123", imageIndex: 0, maxWidth: 480)
+        #expect(!url.absoluteString.contains("tag="))
+    }
 }
 
 /// `setEndpointPath(_:preservingBasePathOf:)` must keep the sub-path of a
