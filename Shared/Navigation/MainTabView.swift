@@ -13,6 +13,14 @@ struct MainTabView: View {
     @Environment(MenuConfigStore.self) private var menuConfig
     @Environment(SettingsNavCoordinator.self) private var settingsNav
     @State private var selectedTabID: String = "home"
+    /// Deep-link item to present modally from the tab root when the user's
+    /// custom menu has no Home tab to route through (see the deep-link
+    /// `onChange` below). A token so it threads through `*Cover(item:)`.
+    @State private var deepLinkFallback: DeepLinkFallback?
+
+    private struct DeepLinkFallback: Identifiable, Hashable {
+        let id: String
+    }
 
     #if os(tvOS)
     /// Snapshot of `menuConfig.resolvedTabs` used to render the tvOS tab bar.
@@ -58,13 +66,28 @@ struct MainTabView: View {
         }
         // Widget / Top Shelf deep link → land on Home, whose
         // `navigationDestination` pushes the item detail. If the user's
-        // custom menu has no Home tab the link is unroutable — drop it.
-        .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
-            guard newValue != nil else { return }
+        // custom menu has no Home tab to route through, present the detail
+        // modally from the tab root so the link is honored under any menu
+        // configuration.
+        //
+        // `initial: true` is load-bearing for **cold launch** (app opened
+        // FROM a widget/Top Shelf tap): `onOpenURL` → `handleDeepLink` sets
+        // `pendingDeepLinkItemId` during scene connect, but `MainTabView`
+        // only mounts after `restoreSession()` flips `hasCheckedSession`, so
+        // the id is already non-nil at mount and a plain `.onChange` never
+        // fires for that baseline. When a Home tab exists this branch only
+        // selects it and `HomeScreen.onAppear` stays the primary consumer;
+        // when it doesn't, `HomeScreen` never mounts to catch it, so without
+        // the initial fire the pending id would sit unconsumed forever. The
+        // no-Home branch is the only one that clears the id + presents, so
+        // there is no double-navigation when a Home tab is present.
+        .onChange(of: appState.pendingDeepLinkItemId, initial: true) { _, newValue in
+            guard let newValue else { return }
             if menuConfig.resolvedTabs.contains(where: { $0.id == "home" }) {
                 selectedTabID = "home"
             } else {
                 appState.pendingDeepLinkItemId = nil
+                deepLinkFallback = DeepLinkFallback(id: newValue)
             }
         }
         // "See all" widget tile → just land on the tab, no push.
@@ -75,6 +98,18 @@ struct MainTabView: View {
                 selectedTabID = newValue
             }
         }
+        // Fallback presentation for menus without a Home tab (see the
+        // deep-link `onChange` above). iOS: a sheet (swipe-to-dismiss);
+        // tvOS: a full-screen cover dismissed with the Menu button.
+        #if os(tvOS)
+        .fullScreenCover(item: $deepLinkFallback) { target in
+            deepLinkDetail(target)
+        }
+        #else
+        .sheet(item: $deepLinkFallback) { target in
+            deepLinkDetail(target)
+        }
+        #endif
         #if os(tvOS)
         .onAppear {
             // Initial seed — without this the bar is empty for one frame.
@@ -110,6 +145,31 @@ struct MainTabView: View {
             // user sees what they're configuring.
             displayedTabs = menuConfig.resolvedTabs
         }
+        #endif
+    }
+
+    // MARK: - Deep-link fallback detail
+
+    /// Modal detail shown when a `cinemax://item/{id}` deep link arrives but the
+    /// active menu has no Home tab to route the push through. Wrapped in its own
+    /// `NavigationStack` so cast / episode pushes work; the tvOS coordinator
+    /// environment is re-injected because the cover renders outside the tab
+    /// content that carries it.
+    @ViewBuilder
+    private func deepLinkDetail(_ target: DeepLinkFallback) -> some View {
+        NavigationStack {
+            MediaDetailScreen(itemId: target.id)
+            #if os(iOS)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(loc.localized("action.done")) { deepLinkFallback = nil }
+                    }
+                }
+            #endif
+        }
+        #if os(tvOS)
+        .environment(playerCoordinator)
+        .onExitCommand { deepLinkFallback = nil }
         #endif
     }
 
