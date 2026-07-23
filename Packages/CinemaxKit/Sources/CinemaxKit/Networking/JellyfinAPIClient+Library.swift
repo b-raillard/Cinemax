@@ -199,7 +199,12 @@ extension JellyfinAPIClient {
         return applyRatingFilter(items)
     }
 
-    public func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
+    public func searchItems(
+        userId: String,
+        searchTerm: String,
+        includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
+        limit: Int = 20
+    ) async throws -> [BaseItemDto] {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
@@ -209,7 +214,7 @@ extension JellyfinAPIClient {
                 limit: limit,
                 isRecursive: true,
                 searchTerm: searchTerm,
-                includeItemTypes: [.movie, .series, .episode]
+                includeItemTypes: includeItemTypes
             )
             let response = try await client.send(Paths.getItems(parameters: params))
             return response.value.items ?? []

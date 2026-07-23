@@ -46,6 +46,8 @@
 "home.nextUp" = "À suivre";
 "favorites.empty.title" = "Aucun favori";
 "favorites.empty.subtitle" = "Touchez le cœur sur un film ou une série pour l'ajouter ici.";
+"watchedHistory.empty.title" = "Aucun historique";
+"watchedHistory.empty.subtitle" = "Les films et séries que vous regardez apparaîtront ici.";
 "home.liveSession" = "EN DIRECT";
 "home.watchingNow" = "En direct";
 "home.watchingNow.playing" = "%@ regarde";
@@ -92,6 +94,9 @@
 "search.listening" = "Écoute en cours...";
 "search.noResults" = "Aucun résultat";
 "search.error.network" = "Serveur injoignable. Vérifiez votre connexion et réessayez.";
+"search.filter.all" = "Tout";
+"search.filter.movies" = "Films";
+"search.filter.series" = "Séries";
 "empty.library.filtered.title" = "Aucun résultat";
 "empty.library.filtered.subtitle" = "Essayez d'ajuster vos filtres ou de les effacer.";
 "empty.library.filtered.action" = "Effacer les filtres";
@@ -174,6 +179,7 @@
 "settings.admin" = "Admin";
 "settings.user" = "Utilisateur";
 "settings.switchAccount" = "Changer de compte";
+"settings.watchedHistory" = "Historique de visionnage";
 "switchAccount.enterPasswordFor" = "Mot de passe de %@";
 "switchAccount.signIn" = "Connexion";
 "switchAccount.authFailed" = "Échec de la connexion";
@@ -840,6 +846,13 @@
 "detail.favorite.remove" = "Retirer des favoris";
 "detail.watched.add" = "Marquer comme vu";
 "detail.watched.remove" = "Marquer comme non vu";
+"card.markedWatched" = "Marqué comme vu";
+"card.markedUnwatched" = "Marqué comme non vu";
+"card.favorited" = "Ajouté aux favoris";
+"card.unfavorited" = "Retiré des favoris";
+"detail.season.markWatched" = "Marquer la saison comme vue";
+"detail.season.markWatched.message" = "Tous les épisodes de cette saison seront marqués comme vus.";
+"detail.season.markedWatched" = "Saison marquée comme vue";
 "person.movies" = "Films";
 "person.series" = "Séries";
 "person.born" = "Né(e) le %@";

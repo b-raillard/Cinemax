@@ -138,6 +138,35 @@ final class MediaDetailViewModel {
         }
     }
 
+    /// Marks an entire season as watched. `markItemPlayed` on a season id
+    /// cascades to every episode server-side, so we optimistically flip all
+    /// loaded episodes of the visible season to played, then re-fetch to catch
+    /// up to server truth. Reverts + surfaces an error toast on failure.
+    func markSeasonWatched(
+        seasonId: String,
+        seriesId: String,
+        using appState: AppState,
+        toast: ToastCenter,
+        loc: LocalizationManager
+    ) async {
+        guard let userId = appState.currentUserId else { return }
+
+        // Optimistic: flip every loaded episode of the visible season.
+        let previous = episodes
+        for id in episodes.compactMap(\.id) { setEpisodePlayed(id: id, played: true) }
+
+        do {
+            try await appState.apiClient.markItemPlayed(itemId: seasonId, userId: userId)
+            toast.success(loc.localized("detail.season.markedWatched"))
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            await refreshVisibleEpisodes(seriesId: seriesId, using: appState)
+        } catch {
+            logger.error("Season mark-watched failed: \(error.localizedDescription, privacy: .public)")
+            episodes = previous
+            toast.error(loc.userFacingMessage(for: error))
+        }
+    }
+
     /// Optimistic per-episode watched toggle. Flips the local episode payload
     /// so the `Equatable` episode card re-renders immediately; reverts on a
     /// server failure.
