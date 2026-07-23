@@ -129,8 +129,7 @@ final class NowPlayingInfoController {
         let url = imageBuilder.imageURL(itemId: itemId, imageType: .primary, maxWidth: 600)
         let token = authToken
         artworkTask = Task { @MainActor [weak self] in
-            guard let (data, http) = await AuthenticatedImageFetch.data(from: url, token: token),
-                  http.statusCode == 200,
+            guard let data = await AuthenticatedImageFetch.data(from: url, token: token),
                   let image = UIImage(data: data) else { return }
             guard let self, self.generation == gen, !Task.isCancelled else { return }
             // **Sendable closure**: MediaPlayer invokes the request handler on a
