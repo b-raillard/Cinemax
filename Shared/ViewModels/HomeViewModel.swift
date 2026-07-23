@@ -41,7 +41,15 @@ final class HomeViewModel {
     var nextUpNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Other users currently watching something on this server. Excludes the logged-in user.
     var activeSessions: [SessionInfoDto] = []
+    /// Gates the full-screen skeleton — flips false once the phase-1 fetches
+    /// (resume/latest/favorites/next-up) land and the hero is chosen, so the
+    /// hero + rails render while genre rows and the episode-nav maps keep
+    /// filling in off their own `@Observable` slices.
     var isLoading = true
+    /// True only after the *entire* load (genre rows + nav maps included)
+    /// completes. `HomeScreen` gates the all-empty `EmptyStateView` on this so
+    /// it can't flash mid-load while later phases are still populating.
+    var isFullyLoaded = false
     var errorMessage: String?
 
     /// Guards `loadInitial` so tab remounts (tvOS recreates hosting controllers
@@ -69,6 +77,7 @@ final class HomeViewModel {
         guard let userId = appState.currentUserId else { return }
         hasLoaded = true
         isLoading = true
+        isFullyLoaded = false
         errorMessage = nil
 
         enum Section { case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto]); case nextUp([BaseItemDto]) }
@@ -126,6 +135,12 @@ final class HomeViewModel {
 
         heroItem = resumeItems.first ?? latestItems.first
 
+        // Progressive render: the hero + rails are ready, so drop the skeleton
+        // now. Genre rows, active sessions, and the episode-nav maps keep filling
+        // in below off their own `@Observable` slices (the nav maps only gate the
+        // in-player prev/next buttons — nothing on the initial paint).
+        isLoading = false
+
         // Genre rows + active sessions depend on nothing from the episode-nav
         // phase below — run them concurrently with the navigation builds (each
         // method only mutates its own state slice, serialized on the main actor).
@@ -133,31 +148,35 @@ final class HomeViewModel {
         async let sessionsDone: Void = loadActiveSessions(userId: userId, appState: appState)
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
-        // Watching and Next Up — so each surfaces prev/next buttons in the
-        // player. Each map fetches its referenced seasons' episode lists once;
-        // both run concurrently with the genre/session loads above.
-        resumeNavigation = await buildNavigationMap(
-            for: resumeItems.filter { $0.type == .episode }, userId: userId, appState: appState
+        // Watching and Next Up. Fetch every referenced season's episode list
+        // exactly once across BOTH rails (overlapping seasons were fetched twice
+        // before), then derive each map from the shared season→episodes dict.
+        let resumeEpisodes = resumeItems.filter { $0.type == .episode }
+        let nextUpEpisodes = nextUpItems.filter { $0.type == .episode }
+        let seasonEpisodes = await fetchSeasonEpisodes(
+            for: resumeEpisodes + nextUpEpisodes, userId: userId, appState: appState
         )
-        nextUpNavigation = await buildNavigationMap(
-            for: nextUpItems.filter { $0.type == .episode }, userId: userId, appState: appState
+        resumeNavigation = buildNavigationMap(
+            for: resumeEpisodes, seasonEpisodes: seasonEpisodes, userId: userId, appState: appState
+        )
+        nextUpNavigation = buildNavigationMap(
+            for: nextUpEpisodes, seasonEpisodes: seasonEpisodes, userId: userId, appState: appState
         )
 
         _ = await (genreRowsDone, sessionsDone)
 
-        isLoading = false
+        isFullyLoaded = true
     }
 
-    /// Builds a prev/next episode-navigation map keyed by episode item ID for a
-    /// set of episode items. For each unique season referenced, fetches the
-    /// episode list once, then precomputes refs + id→index per season so each
-    /// episode's prev/next lookup is O(1). Shared by the Continue Watching and
-    /// Next Up rails so both surface prev/next buttons in the player.
-    private func buildNavigationMap(
+    /// Fetches the episode list for every unique season referenced by
+    /// `episodeItems`, exactly once. Shared across the Continue Watching and Next
+    /// Up rails so a season referenced by both is fetched a single time (the
+    /// `getEpisodes` 10s cache backs this up across separate calls too).
+    private func fetchSeasonEpisodes(
         for episodeItems: [BaseItemDto],
         userId: String,
         appState: AppState
-    ) async -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
+    ) async -> [String: [BaseItemDto]] {
         guard !episodeItems.isEmpty else { return [:] }
 
         var seasonEpisodes: [String: [BaseItemDto]] = [:]
@@ -179,10 +198,27 @@ final class HomeViewModel {
                 if let (seasonId, eps) = result { seasonEpisodes[seasonId] = eps }
             }
         }
+        return seasonEpisodes
+    }
+
+    /// Builds a prev/next episode-navigation map keyed by episode item ID for a
+    /// set of episode items, deriving each episode's prev/next from the shared
+    /// `seasonEpisodes` dict. Precomputes refs + id→index per referenced season
+    /// so each lookup is O(1). Pure (no fetching) — the season episode lists are
+    /// resolved once up front by `fetchSeasonEpisodes`.
+    private func buildNavigationMap(
+        for episodeItems: [BaseItemDto],
+        seasonEpisodes: [String: [BaseItemDto]],
+        userId: String,
+        appState: AppState
+    ) -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
+        guard !episodeItems.isEmpty else { return [:] }
 
         var precomputed: [String: (refs: [EpisodeRef], indexByID: [String: Int])] = [:]
-        precomputed.reserveCapacity(seasonEpisodes.count)
-        for (seasonId, eps) in seasonEpisodes {
+        for item in episodeItems {
+            guard let seasonId = item.seasonID,
+                  precomputed[seasonId] == nil,
+                  let eps = seasonEpisodes[seasonId] else { continue }
             precomputed[seasonId] = precomputeEpisodeRefs(eps)
         }
 

@@ -84,7 +84,14 @@ final class LoginViewModel {
         quickConnectCode = nil
         showSuccess = true
         await appState.refreshCurrentUser()
-        try? await Task.sleep(for: .seconds(1))
+        // Brief dwell so the success animation reads before navigating away.
+        // Skipped entirely when Motion Effects is off; capped at 0.4s otherwise
+        // (was a fixed 1s that made every sign-in feel sluggish).
+        let motionEffects = UserDefaults.standard.object(forKey: SettingsKey.motionEffects) as? Bool
+            ?? SettingsKey.Default.motionEffects
+        if motionEffects {
+            try? await Task.sleep(for: .milliseconds(400))
+        }
         appState.isAuthenticated = true
     }
 
