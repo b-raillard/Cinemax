@@ -177,7 +177,7 @@ struct MetadataGeneralTab: View {
             ) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                     Text(loc.localized("admin.metadata.general.genres"))
-                        .font(CinemaFont.label(.small).weight(.bold))
+                        .font(CinemaFont.dynamicLabel(.small).weight(.bold))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                     ChipEditor(
                         items: arrayBinding(\.genres),
@@ -185,7 +185,7 @@ struct MetadataGeneralTab: View {
                     )
 
                     Text(loc.localized("admin.metadata.general.tags"))
-                        .font(CinemaFont.label(.small).weight(.bold))
+                        .font(CinemaFont.dynamicLabel(.small).weight(.bold))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .padding(.top, CinemaSpacing.spacing2)
                     ChipEditor(
@@ -194,7 +194,7 @@ struct MetadataGeneralTab: View {
                     )
 
                     Text(loc.localized("admin.metadata.general.studios"))
-                        .font(CinemaFont.label(.small).weight(.bold))
+                        .font(CinemaFont.dynamicLabel(.small).weight(.bold))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .padding(.top, CinemaSpacing.spacing2)
                     ChipEditor(
@@ -227,7 +227,7 @@ struct MetadataGeneralTab: View {
         iOSSettingsRow {
             HStack {
                 Text(label)
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .frame(width: 110, alignment: .leading)
                 TextField(placeholder, text: binding)
@@ -242,7 +242,7 @@ struct MetadataGeneralTab: View {
         iOSSettingsRow {
             HStack {
                 Text(loc.localized("admin.metadata.general.year"))
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .frame(width: 110, alignment: .leading)
                 TextField("2024", text: yearBinding)
@@ -258,7 +258,7 @@ struct MetadataGeneralTab: View {
         iOSSettingsRow {
             HStack {
                 Text(label)
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .frame(width: 110, alignment: .leading)
                 if let date = binding.wrappedValue {
@@ -276,7 +276,7 @@ struct MetadataGeneralTab: View {
                         binding.wrappedValue = Date()
                     }
                     .foregroundStyle(themeManager.accent)
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                 }
                 Spacer()
             }
@@ -287,7 +287,7 @@ struct MetadataGeneralTab: View {
         iOSSettingsRow {
             HStack {
                 Text(loc.localized("admin.metadata.general.communityRating"))
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .frame(width: 110, alignment: .leading)
                 TextField("7.5", text: communityRatingBinding)
@@ -295,7 +295,7 @@ struct MetadataGeneralTab: View {
                     .font(CinemaFont.body)
                     .foregroundStyle(CinemaColor.onSurface)
                 Text(loc.localized("admin.metadata.ratingDenominator"))
-                    .font(CinemaFont.label(.small))
+                    .font(CinemaFont.dynamicLabel(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
         }

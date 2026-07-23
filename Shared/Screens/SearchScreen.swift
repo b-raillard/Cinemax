@@ -212,6 +212,17 @@ struct SearchScreen: View {
             Spacer()
             LoadingStateView()
             Spacer()
+        } else if viewModel.searchFailed && viewModel.hasSearched {
+            // Distinct from "no results": the fetch never reached the server, so
+            // offer a retry rather than implying the library has no matches.
+            Spacer()
+            ErrorStateView(
+                message: loc.localized("search.error.network"),
+                retryTitle: loc.localized("action.retry")
+            ) {
+                viewModel.search(using: appState)
+            }
+            Spacer()
         } else if viewModel.results.isEmpty && viewModel.hasSearched {
             Spacer()
             VStack(spacing: CinemaSpacing.spacing3) {

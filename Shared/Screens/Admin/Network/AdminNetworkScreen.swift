@@ -91,7 +91,7 @@ struct AdminNetworkScreen: View {
                 .font(.system(size: CinemaScale.pt(18)))
                 .foregroundStyle(.orange)
             Text(loc.localized("admin.network.warning"))
-                .font(CinemaFont.label(.small))
+                .font(CinemaFont.dynamicLabel(.small))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
             Spacer()
         }
@@ -225,7 +225,7 @@ struct AdminNetworkScreen: View {
             HStack {
                 iOSRowIcon(systemName: icon, color: themeManager.accent)
                 Text(label)
-                    .font(CinemaFont.label(.large))
+                    .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                 Spacer()
                 TextField("0", text: binding)
@@ -245,7 +245,7 @@ struct AdminNetworkScreen: View {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     iOSRowIcon(systemName: icon, color: themeManager.accent)
                     Text(label)
-                        .font(CinemaFont.label(.large))
+                        .font(CinemaFont.dynamicLabel(.large))
                         .foregroundStyle(CinemaColor.onSurface)
                     Spacer()
                 }
@@ -262,19 +262,7 @@ struct AdminNetworkScreen: View {
 
     @ViewBuilder
     private func toggleRow(icon: String, label: String, binding: Binding<Bool>) -> some View {
-        iOSSettingsRow {
-            HStack {
-                iOSRowIcon(systemName: icon, color: themeManager.accent)
-                Text(label)
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                Button { binding.wrappedValue.toggle() } label: {
-                    CinemaToggleIndicator(isOn: binding.wrappedValue, accent: themeManager.accent, animated: motionEffects)
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        iOSToggleRow(icon: icon, label: label, value: binding, accent: themeManager.accent, animated: motionEffects, loc: loc)
     }
 
     @ViewBuilder
@@ -282,7 +270,7 @@ struct AdminNetworkScreen: View {
         iOSSettingsRow {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                 Text(value)
                     .font(.system(size: CinemaScale.pt(13), design: .monospaced))

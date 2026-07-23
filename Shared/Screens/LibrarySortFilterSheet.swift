@@ -240,6 +240,7 @@ struct LibrarySortFilterSheet: View {
 
             let row = Button {
                 sortFilter.showUnwatchedOnly.toggle()
+                Haptics.tap()
             } label: {
                 HStack {
                     Text(loc.localized("filter.unwatchedOnly"))
@@ -256,6 +257,14 @@ struct LibrarySortFilterSheet: View {
                 .padding(.vertical, CinemaSpacing.spacing3)
                 .background(CinemaColor.surfaceContainerHigh)
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(loc.localized("filter.unwatchedOnly"))
+            .accessibilityValue(loc.localized(sortFilter.showUnwatchedOnly ? "a11y.toggle.on" : "a11y.toggle.off"))
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityAction {
+                sortFilter.showUnwatchedOnly.toggle()
+                Haptics.tap()
             }
 
             #if os(tvOS)
