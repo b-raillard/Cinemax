@@ -7,6 +7,14 @@ import CinemaxKit
 /// Subtitle composition differs by `itemType` (series show season counts,
 /// movies show community rating).
 ///
+/// `body` only computes the two cheap, focus-independent pieces (the poster
+/// image URL + the subtitle string) and hands them to `PosterCardContent`,
+/// which renders everything else. On tvOS, `PosterCardContent` owns the
+/// `dimUnfocusedPosters` spotlight `@FocusState` itself, so a focus step
+/// re-evaluates only `PosterCardContent.body` — never re-runs the URL
+/// construction (`appState.imageBuilder.imageURL(...)`) or subtitle
+/// formatting in this `body`.
+///
 /// Admin overlay (iOS): when `appState.isAdministrator` is true the image
 /// carries a small blur-circle ellipsis at the bottom-right that opens the
 /// shared `AdminItemMenu` (Identifier / Edit metadata / Refresh / Delete).
@@ -33,10 +41,80 @@ struct LibraryPosterCard: View {
 
     var body: some View {
         let subtitle = subtitleText
-        let destination: URL? = item.id.map {
+        let posterURL: URL? = item.id.map {
             appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
         }
 
+        #if os(iOS)
+        PosterCardContent(
+            item: item,
+            itemType: itemType,
+            subtitle: subtitle,
+            posterURL: posterURL,
+            onAdminAction: onAdminAction
+        )
+        #else
+        PosterCardContent(
+            item: item,
+            itemType: itemType,
+            subtitle: subtitle,
+            posterURL: posterURL
+        )
+        #endif
+    }
+
+    private var subtitleText: String {
+        var parts: [String] = []
+        if let year = item.productionYear { parts.append(String(year)) }
+        if itemType == .series {
+            if let count = item.childCount {
+                parts.append(loc.localized(count == 1 ? "tvShows.season" : "tvShows.seasonsPlural", count))
+            }
+        } else {
+            if let rating = item.communityRating {
+                parts.append(String(format: "%.1f", rating))
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - Poster Card Content
+
+/// Renders the actual card chrome (poster `NavigationLink` + admin overlay +
+/// title/subtitle rows) from values `LibraryPosterCard.body` has already
+/// computed. Kept as its own `View` (not a `ViewModifier`) so the tvOS
+/// `dimUnfocusedPosters` spotlight — which needs `.focused($isFocused)` on
+/// the `NavigationLink` AND the `.opacity`/`.animation` dim on the outer
+/// `VStack` spanning both the poster and the title rows — can own its own
+/// `@FocusState` without touching `LibraryPosterCard.body`. A `ViewModifier`
+/// can't do this: `.focused` only binds correctly when attached directly to
+/// the focusable control, so a modifier applied there could only dim that
+/// control, not the title text below it too. Byte-identical dim semantics to
+/// the pre-refactor code, now isolated one level down: `PosterCardContent`'s
+/// own `body` re-evaluates per focus step (cheap — pure composition from
+/// already-computed values), while `LibraryPosterCard.body` never does.
+private struct PosterCardContent: View {
+    @Environment(AppState.self) private var appState
+
+    let item: BaseItemDto
+    let itemType: BaseItemKind
+    let subtitle: String
+    let posterURL: URL?
+    #if os(iOS)
+    var onAdminAction: ((BaseItemDto, AdminItemMenu.Destination) -> Void)? = nil
+    #endif
+
+    #if os(tvOS)
+    // Opt-in "spotlight" — dims this card while a *sibling* holds focus. Read
+    // per-card via `@FocusState` so no grid-level focus plumbing is needed; the
+    // feature is gated on the `dimUnfocusedPosters` setting (default off).
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+    @AppStorage(SettingsKey.dimUnfocusedPosters) private var dimUnfocused = SettingsKey.Default.dimUnfocusedPosters
+    @FocusState private var isFocused: Bool
+    #endif
+
+    var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             ZStack(alignment: .bottomTrailing) {
                 NavigationLink {
@@ -48,7 +126,7 @@ struct LibraryPosterCard: View {
                         .aspectRatio(2 / 3, contentMode: .fit)
                         .frame(maxWidth: .infinity)
                         .overlay {
-                            CinemaLazyImage(url: destination, fallbackIcon: "film")
+                            CinemaLazyImage(url: posterURL, fallbackIcon: "film")
                         }
                         .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
@@ -56,11 +134,7 @@ struct LibraryPosterCard: View {
                 }
                 #if os(tvOS)
                 .buttonStyle(CinemaTVCardButtonStyle())
-                // Opt-in "spotlight" dim, isolated in its own `ViewModifier` so a
-                // focus step re-evaluates only that modifier's body — never this
-                // card's `body` (which builds the poster image URL + subtitle
-                // text). See `PosterDimFocusModifier` below.
-                .posterDimFocus()
+                .focused($isFocused)
                 #else
                 .buttonStyle(.plain)
                 #endif
@@ -85,13 +159,19 @@ struct LibraryPosterCard: View {
                 #endif
             }
 
-            titleRows(subtitle: subtitle)
+            titleRows
                 .accessibilityHidden(true)
         }
+        #if os(tvOS)
+        // Spotlight: recede while another card is focused (opt-in, default off).
+        .opacity(dimUnfocused && !isFocused ? 0.55 : 1)
+        .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+        .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: dimUnfocused)
+        #endif
     }
 
     @ViewBuilder
-    private func titleRows(subtitle: String) -> some View {
+    private var titleRows: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             Text("M\nM")
                 .font(CinemaFont.label(.large))
@@ -114,52 +194,4 @@ struct LibraryPosterCard: View {
             }
         }
     }
-
-    private var subtitleText: String {
-        var parts: [String] = []
-        if let year = item.productionYear { parts.append(String(year)) }
-        if itemType == .series {
-            if let count = item.childCount {
-                parts.append(loc.localized(count == 1 ? "tvShows.season" : "tvShows.seasonsPlural", count))
-            }
-        } else {
-            if let rating = item.communityRating {
-                parts.append(String(format: "%.1f", rating))
-            }
-        }
-        return parts.joined(separator: " · ")
-    }
 }
-
-#if os(tvOS)
-// MARK: - Poster Dim Focus Modifier
-
-/// Opt-in "spotlight" — dims the poster while a *sibling* card holds focus.
-/// Owns the `@FocusState` + `dimUnfocusedPosters` + `motionEffectsEnabled`
-/// reads itself so a focus step re-evaluates only this modifier's own
-/// `body(content:)` — never `LibraryPosterCard.body`, which builds the
-/// poster image URL and subtitle text and has no reason to re-run on every
-/// focus change. Same isolation pattern as `CinemaFocusModifier`
-/// (`FocusScaleModifier.swift`) and `CinemaTVCardButtonStyle`
-/// (`TVButtonStyles.swift`). Attached directly to the `NavigationLink` (the
-/// focusable control) so `.focused($isFocused)` binds to it correctly.
-private struct PosterDimFocusModifier: ViewModifier {
-    @Environment(\.motionEffectsEnabled) private var motionEnabled
-    @AppStorage(SettingsKey.dimUnfocusedPosters) private var dimUnfocused = SettingsKey.Default.dimUnfocusedPosters
-    @FocusState private var isFocused: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .focused($isFocused)
-            .opacity(dimUnfocused && !isFocused ? 0.55 : 1)
-            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
-            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: dimUnfocused)
-    }
-}
-
-private extension View {
-    func posterDimFocus() -> some View {
-        modifier(PosterDimFocusModifier())
-    }
-}
-#endif
