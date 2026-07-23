@@ -29,6 +29,17 @@ struct MediaLibraryScreen: View {
     /// both platforms; the toggle lives in Settings → Appearance.
     @AppStorage(SettingsKey.libraryBrowseLayout) private var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
 
+    /// Tracks whether this tab is on-screen so refresh notifications can be
+    /// deferred while it sits alive-but-hidden inside `TabView` — the biggest
+    /// win here, since every visited library tab otherwise re-runs its genre
+    /// fan-out on any catalogue notification. Degrades safely: if `onDisappear`
+    /// doesn't fire, `isVisible` stays true and behavior is today's immediate
+    /// reload.
+    @State private var isVisible = false
+    /// A refresh notification (tier-1 or tier-2) arrived while hidden — run one
+    /// reload on next appear. Several while hidden collapse into one.
+    @State private var pendingReload = false
+
     /// `nil` for library tabs of Other / Mixed kind — disables the
     /// `includeItemTypes` filter at query time so every item in the parent
     /// folder surfaces. The screen still needs a concrete kind for layout
@@ -117,12 +128,38 @@ struct MediaLibraryScreen: View {
         .onChange(of: viewModel.filteredLoader.items.count) {
             prefetchPosters(for: viewModel.filteredLoader.items)
         }
+        // Both refresh tiers reload the library the same way while visible (a
+        // toggle from the grid's own context menu must still be reflected, e.g.
+        // under the unwatched-only filter); both defer while hidden.
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
-            Task {
-                prefetcher.reset()
-                await viewModel.reload(using: appState, loc: loc)
-                prefetchBrowsePosters()
+            reloadOrDefer()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
+            reloadOrDefer()
+        }
+        .onAppear {
+            isVisible = true
+            if pendingReload {
+                pendingReload = false
+                performReload()
             }
+        }
+        .onDisappear { isVisible = false }
+    }
+
+    /// Reloads immediately if the tab is visible, otherwise records the intent
+    /// to reload on next appear.
+    private func reloadOrDefer() {
+        if isVisible { performReload() } else { pendingReload = true }
+    }
+
+    /// Full library reload + poster re-prefetch. Shared by the refresh observers
+    /// and the deferred-on-appear path.
+    private func performReload() {
+        Task {
+            prefetcher.reset()
+            await viewModel.reload(using: appState, loc: loc)
+            prefetchBrowsePosters()
         }
     }
 

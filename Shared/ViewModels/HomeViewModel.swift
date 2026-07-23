@@ -297,11 +297,13 @@ final class HomeViewModel {
                 try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             }
             toast.success(loc.localized(successKey))
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
-            // Background refresh so the rail reflects server truth (e.g. a
-            // series' next-up episode surfacing once the current one is
-            // watched) without re-running the whole Home load.
-            await refreshResume(using: appState)
+            // One item's userData changed — post the lighter tier-2 notification.
+            // Home's own `.cinemaxItemUserDataChanged` handler re-fetches the
+            // resume rail exactly once (via `refreshUserDataRails`), which also
+            // catches server truth like a series' next-up episode surfacing once
+            // the current one is watched; other screens react per the two-tier
+            // scheme. No explicit `refreshResume` here — that would double-fetch.
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
         } catch {
             logger.error("Resume item mutation failed: \(error.localizedDescription, privacy: .public)")
             // Restore at (clamped) original position and surface the error.
@@ -337,6 +339,31 @@ final class HomeViewModel {
             ).items
         } catch {
             logger.warning("Favorites refresh failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Targeted refresh of only the userData-dependent rails — Continue Watching
+    /// (resume), Next Up, and Favorites — fired by `.cinemaxItemUserDataChanged`
+    /// after a per-item watched / resume toggle anywhere in the app. Mirrors
+    /// `refreshResume` / `refreshFavorites`: single fetches mutating only those
+    /// `@Observable` slices, NO genre fan-out / latest / sessions. Like
+    /// `refreshResume` it deliberately does NOT rebuild the episode-nav maps —
+    /// those only gate the in-player prev/next buttons and tolerate brief
+    /// staleness (rail-only refresh is the established pattern).
+    func refreshUserDataRails(using appState: AppState) async {
+        async let resume: Void = refreshResume(using: appState)
+        async let nextUp: Void = refreshNextUp(using: appState)
+        async let favorites: Void = refreshFavorites(using: appState)
+        _ = await (resume, nextUp, favorites)
+    }
+
+    /// Re-fetches just the Next Up rail. Companion to `refreshResume` — used by
+    /// `refreshUserDataRails` so a watched toggle surfaces the freshly-unlocked
+    /// next-up episode without re-running the whole Home load.
+    private func refreshNextUp(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        if let items = try? await appState.apiClient.getNextUpEpisodes(userId: userId, limit: 20) {
+            nextUpItems = items
         }
     }
 

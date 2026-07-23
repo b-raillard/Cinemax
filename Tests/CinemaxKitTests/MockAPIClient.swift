@@ -252,12 +252,22 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func clearCache() {}
     func applyContentRatingLimit(maxAge: Int) {}
 
+    // Call counters — let tests assert which fetches a targeted refresh touches.
+    private(set) var getResumeItemsCallCount = 0
+    private(set) var getLatestMediaCallCount = 0
+    private(set) var getGenresCallCount = 0
+    /// Count of `getItems` calls scoped to favorites (`isFavorite == true`),
+    /// distinguishing the Favorites-row fetch from genre-row fetches.
+    private(set) var favoriteFetchCount = 0
+
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
+        getResumeItemsCallCount += 1
         if shouldThrow { throw stubbedError }
         return stubbedResumeItems
     }
 
     func getLatestMedia(userId: String, parentId: String?, limit: Int) async throws -> [BaseItemDto] {
+        getLatestMediaCallCount += 1
         if shouldThrow { throw stubbedError }
         return stubbedLatestItems
     }
@@ -268,11 +278,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         genres: [String]?, years: [Int]?, isFavorite: Bool?,
         filters: [ItemFilter]?, limit: Int?, startIndex: Int?
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
+        if isFavorite == true { favoriteFetchCount += 1 }
         if shouldThrow { throw stubbedError }
         return (stubbedItems, stubbedTotalCount)
     }
 
     func getGenres(userId: String, includeItemTypes: [BaseItemKind]?) async throws -> [String] {
+        getGenresCallCount += 1
         if shouldThrow { throw stubbedError }
         return stubbedGenres
     }
@@ -306,7 +318,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
     var stubbedNextUpItems: [BaseItemDto] = []
+    private(set) var getNextUpEpisodesCallCount = 0
     func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] {
+        getNextUpEpisodesCallCount += 1
         if shouldThrow { throw stubbedError }
         return stubbedNextUpItems
     }

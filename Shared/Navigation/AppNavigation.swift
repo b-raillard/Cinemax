@@ -476,9 +476,21 @@ extension Notification.Name {
     /// authoritatively confirms the token is revoked/expired. `logout()` has
     /// already run; `AppNavigation` surfaces the "session expired" toast.
     static let cinemaxSessionConfirmedInvalid = Notification.Name("cinemaxSessionConfirmedInvalid")
-    /// Posted when the user taps "Refresh Catalogue" in Settings → Server.
-    /// Home and Library observe this and reload their content (cache-busted).
+    /// Tier-1 refresh: catalogue *content* changed or the cache was cleared —
+    /// a FULL reload is warranted. Fired by Settings → Server "Refresh
+    /// Catalogue", the parental-controls rating limit, and Admin metadata /
+    /// identify / delete flows. Home + every mounted Library tab full-reload,
+    /// deferred until next visible for hidden screens.
     static let cinemaxShouldRefreshCatalogue = Notification.Name("cinemaxShouldRefreshCatalogue")
+    /// Tier-2 refresh: ONE item's watched / resume-position userData changed via
+    /// a per-item toggle (card context menu, detail / episode / season watched
+    /// toggle, Continue Watching menu, "clear Continue Watching"). The lighter
+    /// sibling of `cinemaxShouldRefreshCatalogue`: Home refreshes only its
+    /// userData rails (resume / next-up / favorites), never the genre fan-out;
+    /// Library tabs reload only while visible (so an unwatched-only filter
+    /// reflects the toggle) and defer otherwise. Favorite hearts stay on the
+    /// separate `.cinemaxFavoritesChanged` fast path (cards carry no heart badge).
+    static let cinemaxItemUserDataChanged = Notification.Name("cinemaxItemUserDataChanged")
     /// Posted after a favorite heart toggle succeeds. Home observes it and
     /// refreshes just its Favorites row (the full-reload notification above
     /// would re-shuffle genre rows and clear caches — overkill for a heart).

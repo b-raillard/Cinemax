@@ -128,7 +128,7 @@ final class MediaDetailViewModel {
             } else {
                 try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             }
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
             if resolvedType == .series {
                 await refreshVisibleEpisodes(seriesId: id, using: appState)
             }
@@ -158,7 +158,7 @@ final class MediaDetailViewModel {
         do {
             try await appState.apiClient.markItemPlayed(itemId: seasonId, userId: userId)
             toast.success(loc.localized("detail.season.markedWatched"))
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
             await refreshVisibleEpisodes(seriesId: seriesId, using: appState)
         } catch {
             logger.error("Season mark-watched failed: \(error.localizedDescription, privacy: .public)")
@@ -180,7 +180,7 @@ final class MediaDetailViewModel {
             } else {
                 try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             }
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
         } catch {
             logger.error("Episode watched toggle failed: \(error.localizedDescription, privacy: .public)")
             setEpisodePlayed(id: id, played: !target)

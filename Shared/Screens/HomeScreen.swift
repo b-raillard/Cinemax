@@ -35,6 +35,20 @@ struct HomeScreen: View {
     /// made in Settings → Interface → Home page and refresh the rows live.
     @AppStorage(SettingsKey.homeSelectedGenres) private var selectedGenresJSON: String = ""
 
+    /// Tracks whether this screen is currently on-screen so refresh
+    /// notifications can be deferred while Home sits idle behind another tab
+    /// (visited tabs stay alive inside `TabView`). Degrades safely: if
+    /// `onDisappear` doesn't fire in some container, `isVisible` stays true and
+    /// behavior falls back to today's immediate reload.
+    @State private var isVisible = false
+    /// A `.cinemaxShouldRefreshCatalogue` arrived while hidden — run the full
+    /// reload on next appear. Subsumes any pending userData refresh.
+    @State private var pendingFullReload = false
+    /// A `.cinemaxItemUserDataChanged` arrived while hidden — run the targeted
+    /// rail refresh on next appear. Coalesces naturally: several while hidden
+    /// collapse into one refresh on appear.
+    @State private var pendingUserDataRefresh = false
+
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
@@ -60,10 +74,17 @@ struct HomeScreen: View {
             prefetchCardImages()
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
-            Task {
-                prefetcher.reset()
-                await viewModel.reload(using: appState)
-                prefetchCardImages()
+            // Tier-1: full reload while visible, otherwise defer to next appear.
+            if isVisible { performFullReload() } else { pendingFullReload = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
+            // Tier-2: targeted rail refresh while visible, otherwise defer. This
+            // also handles Home's own Continue Watching mutations (posted by
+            // `mutateResumeItem`), so the resume rail is fetched exactly once.
+            if isVisible {
+                Task { await viewModel.refreshUserDataRails(using: appState) }
+            } else {
+                pendingUserDataRefresh = true
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxFavoritesChanged)) { _ in
@@ -88,7 +109,29 @@ struct HomeScreen: View {
             consumeDeepLink(newValue)
         }
         .onAppear {
+            isVisible = true
             consumeDeepLink(appState.pendingDeepLinkItemId)
+            // Consume any refresh deferred while hidden. A pending full reload
+            // subsumes a pending targeted refresh — run only the heavier one.
+            if pendingFullReload {
+                pendingFullReload = false
+                pendingUserDataRefresh = false
+                performFullReload()
+            } else if pendingUserDataRefresh {
+                pendingUserDataRefresh = false
+                Task { await viewModel.refreshUserDataRails(using: appState) }
+            }
+        }
+        .onDisappear { isVisible = false }
+    }
+
+    /// Full Home reload + poster re-prefetch. Shared by the tier-1 observer and
+    /// the deferred-on-appear path.
+    private func performFullReload() {
+        Task {
+            prefetcher.reset()
+            await viewModel.reload(using: appState)
+            prefetchCardImages()
         }
     }
 

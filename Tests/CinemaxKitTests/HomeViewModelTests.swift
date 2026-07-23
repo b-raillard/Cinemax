@@ -148,6 +148,29 @@ struct HomeViewModelTests {
         #expect(vm.latestItems.isEmpty)
         #expect(!vm.isLoading)
     }
+
+    // MARK: - Targeted userData refresh
+
+    @Test("refreshUserDataRails re-fetches only resume/nextUp/favorites, not genre/latest")
+    func refreshUserDataRailsIsTargeted() async {
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeItem(name: "Resuming")]
+        api.stubbedNextUpItems = [makeItem(name: "NextUp")]
+        let vm = HomeViewModel()
+
+        await vm.refreshUserDataRails(using: makeAppState(api: api))
+
+        // Hit exactly the three userData rails, once each.
+        #expect(api.getResumeItemsCallCount == 1)
+        #expect(api.getNextUpEpisodesCallCount == 1)
+        #expect(api.favoriteFetchCount == 1)
+        // Left the heavy catalogue fetches untouched.
+        #expect(api.getLatestMediaCallCount == 0)
+        #expect(api.getGenresCallCount == 0)
+        // And the rails reflect server truth.
+        #expect(vm.resumeItems.count == 1)
+        #expect(vm.nextUpItems.count == 1)
+    }
 }
 
 /// Tri-state sentinel: a missing/empty `home.selectedGenres` string means
