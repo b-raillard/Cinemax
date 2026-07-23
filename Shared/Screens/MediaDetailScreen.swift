@@ -817,7 +817,7 @@ struct MediaDetailScreen: View {
             .padding(.horizontal, contentPadding)
             // iOS: horizontal scroll of episode cards
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 16) {
+                LazyHStack(alignment: .top, spacing: 16) {
                     ForEach(viewModel.episodes, id: \.id) { episode in
                         let nav = episodeNavigation(for: episode.id ?? "")
                         MediaDetailEpisodeCard(
