@@ -29,9 +29,20 @@ private struct MediaCardContextMenu: ViewModifier {
 
     let item: BaseItemDto
 
+    // Optimistic mirrors of the toggle state. The menu label is derived from
+    // the item's `userData`, but that value is a snapshot captured when the
+    // owning grid built the card — and the library browse grid does NOT reload
+    // its genre-row cards on `.cinemaxFavoritesChanged`, so without these the
+    // menu re-opens showing a stale "add to favorites" after the item was
+    // already favorited. Each toggle updates its mirror so the label reflects
+    // the action immediately, with no extra server round-trip / catalogue
+    // reload. `@State` is per-card-identity, so it never leaks across items.
+    @State private var playedOverride: Bool?
+    @State private var favoriteOverride: Bool?
+
     func body(content: Content) -> some View {
-        let isPlayed = item.userData?.isPlayed ?? false
-        let isFavorite = item.userData?.isFavorite ?? false
+        let isPlayed = playedOverride ?? item.userData?.isPlayed ?? false
+        let isFavorite = favoriteOverride ?? item.userData?.isFavorite ?? false
 
         content.contextMenu {
             Button {
@@ -61,6 +72,7 @@ private struct MediaCardContextMenu: ViewModifier {
             } else {
                 try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
             }
+            playedOverride = !isPlayed
             toast.success(loc.localized(isPlayed ? "card.markedUnwatched" : "card.markedWatched"))
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
         } catch {
@@ -73,6 +85,7 @@ private struct MediaCardContextMenu: ViewModifier {
         guard let userId = appState.currentUserId, let id = item.id else { return }
         do {
             try await appState.apiClient.setFavorite(itemId: id, userId: userId, favorite: !isFavorite)
+            favoriteOverride = !isFavorite
             toast.success(loc.localized(isFavorite ? "card.unfavorited" : "card.favorited"))
             NotificationCenter.default.post(name: .cinemaxFavoritesChanged, object: nil)
         } catch {
