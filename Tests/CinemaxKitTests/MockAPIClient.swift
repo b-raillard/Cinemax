@@ -307,12 +307,25 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedUserViews
     }
 
+    /// Count of `getItem` calls + an optional per-itemId handler so tests can
+    /// inject fresh userData / delays / cancellation-sensitive behavior
+    /// (mirrors `getEpisodesHandler`). Falls back to an empty `BaseItemDto`.
+    private(set) var getItemCallCount = 0
+    var getItemHandler: (@Sendable (String) async throws -> BaseItemDto)?
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto {
+        getItemCallCount += 1
+        if let handler = getItemHandler {
+            return try await handler(itemId)
+        }
         if shouldThrow { throw stubbedError }
         return BaseItemDto()
     }
 
-    func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
+    private(set) var getSimilarItemsCallCount = 0
+    func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] {
+        getSimilarItemsCallCount += 1
+        return []
+    }
 
     func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int) async throws -> [BaseItemDto] {
         if let handler = searchItemsHandler {
@@ -322,14 +335,25 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedSearchResults
     }
 
-    func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto] { [] }
+    private(set) var getSeasonsCallCount = 0
+    func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto] {
+        getSeasonsCallCount += 1
+        return []
+    }
+    private(set) var getEpisodesCallCount = 0
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] {
+        getEpisodesCallCount += 1
         if let handler = getEpisodesHandler {
             return try await handler(seasonId)
         }
         return []
     }
-    func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? { nil }
+    var stubbedNextUp: BaseItemDto?
+    private(set) var getNextUpCallCount = 0
+    func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
+        getNextUpCallCount += 1
+        return stubbedNextUp
+    }
     var stubbedNextUpItems: [BaseItemDto] = []
     private(set) var getNextUpEpisodesCallCount = 0
     func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] {
