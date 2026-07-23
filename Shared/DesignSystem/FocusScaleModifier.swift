@@ -16,17 +16,27 @@ struct CinemaFocusModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             #if os(tvOS)
+            // Crisper 3 pt accent ring at full opacity (was 2 pt @ 0.8) so the
+            // focused card reads unambiguously from the couch.
             .overlay(
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
                     .strokeBorder(
-                        themeManager.accent.opacity(isFocused ? 0.8 : 0),
-                        lineWidth: 2
+                        themeManager.accent.opacity(isFocused ? 1 : 0),
+                        lineWidth: 3
                     )
             )
+            // Accent-tinted halo (was a near-invisible grey `surfaceTint` glow)
+            // for relief, over a darker ambient shadow that lifts the card off
+            // the background without any vertical translation.
             .shadow(
-                color: CinemaColor.surfaceTint.opacity(isFocused ? 0.12 : 0),
-                radius: 24,
-                x: 0, y: 12
+                color: themeManager.accent.opacity(isFocused ? 0.35 : 0),
+                radius: 22,
+                x: 0, y: 8
+            )
+            .shadow(
+                color: Color.black.opacity(isFocused ? 0.45 : 0),
+                radius: 26,
+                x: 0, y: 16
             )
             .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
             #else

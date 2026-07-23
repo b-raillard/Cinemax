@@ -10,7 +10,7 @@ iOS (iPhone), iPadOS, and tvOS share tokens and components. Divergence is at the
 | --- | --- | --- | --- |
 | Shell | `TabView` (bottom bar) | `NavigationSplitView` (sidebar) | `TabView` (top bar) |
 | Input | Touch | Touch + pointer (hover) | Siri Remote (focus engine) |
-| Focus indicator | system defaults | `.hoverEffect(.lift)` | 2 pt accent stroke + scale 1.05 + shadow |
+| Focus indicator | system defaults | `.hoverEffect(.lift)` | 3 pt accent ring + 1.06 scale + accent halo |
 | Toggle affordance | `CinemaToggleIndicator` in `Button` | same as iPhone | same, but via `tvSettingsFocusable(colorScheme:)` |
 | Video player dismissal | `PlayerHostingVC.viewWillDisappear(isBeingDismissed:)` | same as iPhone | `TVDismissDelegate` (no child VC embedding) |
 | Alert style | SwiftUI `.alert` OK; `UIAlertController` inside playback | same | Always `UIAlertController` |
@@ -98,13 +98,13 @@ Same codebase as iPhone, but distinguished by size class + iPad-specific afforda
 ### Focus model
 
 - `@FocusState` + `.focusEffectDisabled()` + `.hoverEffectDisabled()` — Cinemax draws its own focus indicator, suppressing the system's halo.
-- Indicator is a 2 pt accent `strokeBorder` with radius `.large`, plus a `surfaceTint`-coloured shadow. No scale (scale is from button style), no white background.
+- Indicator is a 3 pt accent `strokeBorder` at full opacity with radius `.large`, plus an accent-tinted halo over a darker ambient shadow (was 2 pt @ 0.8 + a near-invisible grey `surfaceTint` glow). Cards also grow 1.06× from the button style, no white background.
 - Settings-row focus: `tvSettingsFocusable(isFocused:, accent:, colorScheme:)` — **always** pass `colorScheme: themeManager.darkModeEnabled ? .dark : .light` (see [colors.md § tvOS focus caveat](./colors.md#tvos-focus-caveat)).
 
 ### Button styles
 
-- Cards: `CinemaTVCardButtonStyle` — 0.97 press scale, 0.05 brightness lift on focus.
-- Buttons: `CinemaTVButtonStyle(cinemaStyle:)` — 1.05 focus scale, 0.95 press scale, style-specific shadow. Wrapped by `CinemaButton`.
+- Cards: `CinemaTVCardButtonStyle` — 1.06 focus scale, 0.97 press scale, +0.08 brightness lift. Round portraits (`CastCircle`) add their own circular accent ring since the rectangular `cinemaFocus()` doesn't fit a circle.
+- Buttons: `CinemaTVButtonStyle(cinemaStyle:)` — 1.05 focus scale + 3 pt lift + accent focus ring (a light ring on the already-saturated `.accent` style), 0.95 press scale, ghost fill brightens on focus. Wrapped by `CinemaButton`.
 - Chips: `TVFilterChipButtonStyle(accent:)` — stroke border on focus, no scale.
 
 ### Rules (non-negotiable)

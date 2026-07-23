@@ -688,6 +688,7 @@
 "settings.libraryLayout" = "Library";
 "settings.libraryLayout.browse" = "By genre";
 "settings.libraryLayout.grid" = "Show all";
+"settings.dimUnfocusedPosters" = "Dim unfocused posters";
 
 // MARK: - Media Detail
 

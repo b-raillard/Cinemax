@@ -9,8 +9,13 @@ struct CinemaTVCardButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .brightness(isFocused ? 0.05 : 0)
+            // Focus grows the card 1.06× so it visibly "pops" out of a dense
+            // grid at 10-foot distance (repérage). A pressed card wins with the
+            // 0.97 dip. The growth (~8 pt on a ~274 pt tvOS grid poster) stays
+            // well inside the 32 pt gutter, so a single focused card never
+            // overlaps its neighbours — see the grid's `.scrollClipDisabled()`.
+            .scaleEffect(configuration.isPressed ? 0.97 : (isFocused ? 1.06 : 1.0))
+            .brightness(isFocused ? 0.08 : 0)
             .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
             .animation(motionEnabled ? .easeInOut(duration: 0.1) : nil, value: configuration.isPressed)
     }
