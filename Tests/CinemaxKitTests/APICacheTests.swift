@@ -93,4 +93,91 @@ struct APICacheTests {
         let hit: Int? = cache.get("key.delta")
         #expect(hit == 99)
     }
+
+    // MARK: - Single-flight coalescing
+
+    /// Counts how many times a coalesced operation actually executed. An actor
+    /// so concurrent callers can bump it without a data race.
+    private actor CallCounter {
+        private(set) var count = 0
+        func increment() { count += 1 }
+    }
+
+    private struct StubError: Error {}
+
+    @Test("coalesce runs the operation once for concurrent callers and delivers the result to both")
+    func coalesceRunsOnceForConcurrentCallers() async throws {
+        let cache = APICache()
+        let counter = CallCounter()
+
+        // Two callers race on the SAME key. The winner registers its in-flight
+        // task synchronously (under the lock, before any await), so the loser
+        // always joins it instead of firing a second operation.
+        async let first: Int = cache.coalesce(key: "flight.item") {
+            await counter.increment()
+            try await Task.sleep(for: .milliseconds(80))
+            return 7
+        }
+        async let second: Int = cache.coalesce(key: "flight.item") {
+            await counter.increment()
+            try await Task.sleep(for: .milliseconds(80))
+            return 7
+        }
+
+        let (a, b) = try await (first, second)
+        #expect(a == 7)
+        #expect(b == 7)
+        let runs = await counter.count
+        #expect(runs == 1)
+    }
+
+    @Test("coalesce propagates a thrown error to every in-flight caller")
+    func coalescePropagatesErrorToAll() async {
+        let cache = APICache()
+        let counter = CallCounter()
+        let op: @Sendable () async throws -> Int = {
+            await counter.increment()
+            try await Task.sleep(for: .milliseconds(50))
+            throw StubError()
+        }
+
+        async let first: Int = cache.coalesce(key: "flight.err", operation: op)
+        async let second: Int = cache.coalesce(key: "flight.err", operation: op)
+
+        var firstThrew = false
+        var secondThrew = false
+        do { _ = try await first } catch { firstThrew = true }
+        do { _ = try await second } catch { secondThrew = true }
+
+        #expect(firstThrew)
+        #expect(secondThrew)
+        let runs = await counter.count
+        #expect(runs == 1)
+    }
+
+    @Test("A failed coalesce does not poison the key — a later call re-executes")
+    func coalesceDoesNotPoisonAfterFailure() async throws {
+        let cache = APICache()
+        let counter = CallCounter()
+
+        do {
+            _ = try await cache.coalesce(key: "flight.retry") { () async throws -> Int in
+                await counter.increment()
+                throw StubError()
+            }
+            Issue.record("expected the first coalesce to throw")
+        } catch {
+            // expected — the in-flight entry must be dropped on failure.
+        }
+
+        // A subsequent call for the same key must run a fresh operation (proving
+        // the failed task was removed, not cached), not re-serve the error.
+        let value: Int = try await cache.coalesce(key: "flight.retry") { () async throws -> Int in
+            await counter.increment()
+            return 99
+        }
+        #expect(value == 99)
+        let runs = await counter.count
+        #expect(runs == 2)
+    }
 }
