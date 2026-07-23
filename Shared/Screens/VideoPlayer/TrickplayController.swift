@@ -43,7 +43,7 @@ final class TrickplayController {
     var onTileLoaded: (() -> Void)?
 
     init() {
-        tileCache.countLimit = 16
+        tileCache.totalCostLimit = 64 * 1024 * 1024
     }
 
     var isAvailable: Bool { manifest != nil }
@@ -115,6 +115,15 @@ final class TrickplayController {
         return UIImage(cgImage: cg)
     }
 
+    /// Estimates the decoded byte size of a tile sheet image for cache cost.
+    private func estimatedDecodedBytes(for image: UIImage) -> Int {
+        if let cgImage = image.cgImage {
+            return cgImage.bytesPerRow * cgImage.height
+        }
+        // Fallback: estimate as RGBA (4 bytes per pixel)
+        return Int(image.size.width * image.scale * image.size.height * image.scale * 4)
+    }
+
     private func fetchTile(_ index: Int) {
         guard let m = manifest, let itemId, let imageBuilder, index >= 0 else { return }
         let perTile = m.tileWidth * m.tileHeight
@@ -131,7 +140,8 @@ final class TrickplayController {
             guard let self, self.generation == gen else { return }
             self.inflightTiles.remove(index)
             guard let data, let image = UIImage(data: data) else { return }
-            self.tileCache.setObject(image, forKey: NSNumber(value: index))
+            let cost = self.estimatedDecodedBytes(for: image)
+            self.tileCache.setObject(image, forKey: NSNumber(value: index), cost: cost)
             self.onTileLoaded?()
         }
         fetchTasks.append(task)

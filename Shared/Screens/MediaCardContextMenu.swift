@@ -12,10 +12,11 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaCardContex
 /// label — so tvOS focus behavior is untouched.
 ///
 /// Actions read the item's current played / favorite state from `userData`,
-/// call the matching API, toast the result, and post
-/// `.cinemaxShouldRefreshCatalogue` / `.cinemaxFavoritesChanged` so the owning
-/// grid (and Home) reload from server truth. A failure surfaces a user-facing
-/// error toast (`userFacingMessage(for:)`) and leaves server state untouched.
+/// call the matching API, toast the result, and post the tier-2
+/// `.cinemaxItemUserDataChanged` (watched) / `.cinemaxFavoritesChanged`
+/// (favorite) so the owning grid (and Home) reflect server truth without a
+/// catalogue-wide fan-out. A failure surfaces a user-facing error toast
+/// (`userFacingMessage(for:)`) and leaves server state untouched.
 extension View {
     func mediaCardContextMenu(item: BaseItemDto) -> some View {
         modifier(MediaCardContextMenu(item: item))
@@ -74,7 +75,7 @@ private struct MediaCardContextMenu: ViewModifier {
             }
             playedOverride = !isPlayed
             toast.success(loc.localized(isPlayed ? "card.markedUnwatched" : "card.markedWatched"))
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
         } catch {
             logger.error("Card watched toggle failed: \(error.localizedDescription, privacy: .public)")
             toast.error(loc.userFacingMessage(for: error))

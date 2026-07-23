@@ -535,7 +535,10 @@ struct PrivacySecurityScreen: View {
                 failures += 1
             }
         }
-        NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+        // Clearing Continue Watching only resets resume-position userData — it
+        // changes no catalogue content — so it's a tier-2 event: Home refreshes
+        // just its resume/next-up/favorites rails, not the genre fan-out.
+        NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
         if failures == 0 {
             toasts.success(loc.localized("toast.continueWatchingCleared"))
         } else {

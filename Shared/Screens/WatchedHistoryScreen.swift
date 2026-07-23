@@ -79,6 +79,11 @@ struct WatchedHistoryScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             Task { await viewModel.load(using: appState); prefetchPosters() }
         }
+        // A per-item watched toggle (tier-2) — reload immediately so an un-watch
+        // drops the item from history while this grid is on screen.
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
+            Task { await viewModel.load(using: appState); prefetchPosters() }
+        }
     }
 
     // MARK: - Chrome
