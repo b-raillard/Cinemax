@@ -105,6 +105,10 @@ extension JellyfinAPIClient {
                 years: years
             )
             params.isFavorite = isFavorite
+            params.fields = [.overview, .genres, .childCount]
+            params.enableUserData = true
+            params.enableImageTypes = [.primary, .backdrop, .thumb]
+            params.imageTypeLimit = 1
             let response = try await client.send(Paths.getItems(parameters: params))
             let result = response.value
             return (result.items ?? [], result.totalRecordCount ?? 0)
