@@ -195,6 +195,9 @@ extension MenuSettingsScreen {
                 // List row — `.plain` lets the row's tap-handler swallow it.
                 .buttonStyle(.borderless)
                 .sensoryFeedback(.selection, trigger: entry.enabled)
+                .accessibilityLabel(entryLabel(entry))
+                .accessibilityValue(loc.localized(entry.enabled ? "a11y.toggle.on" : "a11y.toggle.off"))
+                .accessibilityAddTraits(.isToggle)
             }
         }
         .padding(.vertical, 2)

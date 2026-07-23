@@ -289,7 +289,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
 
-    func searchItems(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto] {
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int) async throws -> [BaseItemDto] {
         if let handler = searchItemsHandler {
             return try await handler(searchTerm)
         }

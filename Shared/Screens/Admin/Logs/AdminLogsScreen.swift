@@ -19,7 +19,7 @@ struct AdminLogsScreen: View {
 
     // Hoisted to avoid allocating a `RelativeDateTimeFormatter` per log-file
     // row render. Main-actor render only, so `nonisolated(unsafe)` is safe.
-    nonisolated(unsafe) private static let relativeFormatter = RelativeDateTimeFormatter()
+    nonisolated(unsafe) private static let relativeFormatter = AdminRelativeFormatter.make()
 
     var body: some View {
         AdminLoadStateContainer(

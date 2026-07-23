@@ -159,10 +159,13 @@ struct MetadataActionsTab: View {
         iOSSettingsRow {
             HStack {
                 Text(label)
-                    .font(CinemaFont.label(.large))
+                    .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                 Spacer()
-                Button { isOn.wrappedValue.toggle() } label: {
+                Button {
+                    isOn.wrappedValue.toggle()
+                    Haptics.tap()
+                } label: {
                     CinemaToggleIndicator(
                         isOn: isOn.wrappedValue,
                         accent: themeManager.accent,
@@ -170,6 +173,14 @@ struct MetadataActionsTab: View {
                     )
                 }
                 .buttonStyle(.plain)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityValue(loc.localized(isOn.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityAction {
+                isOn.wrappedValue.toggle()
+                Haptics.tap()
             }
         }
     }

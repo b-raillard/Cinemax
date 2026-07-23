@@ -1,0 +1,8 @@
+/* Local network permission (Jellyfin server discovery) */
+"NSLocalNetworkUsageDescription" = "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi.";
+
+/* Microphone permission (voice search) */
+"NSMicrophoneUsageDescription" = "Cinemax uses the microphone for voice search.";
+
+/* Speech recognition permission (voice search) */
+"NSSpeechRecognitionUsageDescription" = "Cinemax uses speech recognition for voice search to find movies and shows.";

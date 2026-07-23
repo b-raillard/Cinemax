@@ -107,7 +107,7 @@ public protocol LibraryAPI: Sendable {
     func getUserViews(userId: String) async throws -> [BaseItemDto]
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
-    func searchItems(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto]
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int) async throws -> [BaseItemDto]
 
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
@@ -433,8 +433,13 @@ public extension LibraryAPI {
     func getNextUpEpisodes(userId: String, limit: Int = 20) async throws -> [BaseItemDto] {
         try await getNextUpEpisodes(userId: userId, limit: limit)
     }
-    func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
-        try await searchItems(userId: userId, searchTerm: searchTerm, limit: limit)
+    func searchItems(
+        userId: String,
+        searchTerm: String,
+        includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
+        limit: Int = 20
+    ) async throws -> [BaseItemDto] {
+        try await searchItems(userId: userId, searchTerm: searchTerm, includeItemTypes: includeItemTypes, limit: limit)
     }
     func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
         try await getPersonItems(personId: personId, userId: userId, limit: limit)

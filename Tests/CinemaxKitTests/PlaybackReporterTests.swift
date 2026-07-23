@@ -65,7 +65,11 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStart(startTime: nil)
-        try await Task.sleep(for: .milliseconds(30))
+        // The API call rides a Task.detached — on a loaded CI host a fixed
+        // sleep races its scheduling, so poll (bounded) for the effect instead.
+        for _ in 0..<200 where mock.startCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(mock.startCount == 1)
     }
 

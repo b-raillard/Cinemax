@@ -108,6 +108,43 @@ enum JellyfinLite {
         return await fetchItems(comps: comps, token: session.accessToken)
     }
 
+    /// Global "Next Up" — the next unwatched episode across in-progress series
+    /// (the app's Home "Next Up" rail). `/Shows/NextUp` answers with the same
+    /// `{Items:[]}` envelope, so it reuses `fetchItems`. Same nil/empty
+    /// semantics as `fetchResumeItems`.
+    static func fetchNextUp(session: Session, limit: Int) async -> [ResumeItem]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = endpointPath("/Shows/NextUp", serverURL: session.serverURL)
+        comps.queryItems = [
+            URLQueryItem(name: "userId", value: session.userId),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        return await fetchItems(comps: comps, token: session.accessToken)
+    }
+
+    /// Recently added movies/series, newest first (the app's Home "Recently
+    /// Added" row). `/Items/Latest` answers with a bare JSON array — NOT the
+    /// `{Items:[]}` envelope the other endpoints use — so it needs its own
+    /// decode. Same nil/empty semantics as `fetchResumeItems`.
+    static func fetchRecentlyAdded(session: Session, limit: Int) async -> [ResumeItem]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = endpointPath("/Items/Latest", serverURL: session.serverURL)
+        comps.queryItems = [
+            URLQueryItem(name: "userId", value: session.userId),
+            URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "api_key", value: session.accessToken)
+        ]
+        guard let url = comps.url else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+              (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
+              let decoded = try? JSONDecoder().decode([Item].self, from: data) else { return nil }
+        return decoded.map(makeResumeItem)
+    }
+
     private static func fetchItems(comps: URLComponents, token: String) async -> [ResumeItem]? {
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
@@ -115,23 +152,28 @@ enum JellyfinLite {
         guard let (data, resp) = try? await URLSession.shared.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
-        return decoded.items.map { item in
-            let isEpisode = item.seriesName != nil
-            let title = isEpisode ? (item.seriesName ?? "") : (item.name ?? "")
-            let subtitle: String? = {
-                guard isEpisode else { return nil }
-                if let s = item.parentIndexNumber, let e = item.indexNumber {
-                    return String(format: "S%02d:E%02d", s, e)
-                }
-                return item.name
-            }()
-            return ResumeItem(
-                id: item.id,
-                title: title,
-                subtitle: subtitle,
-                posterItemId: item.seriesId ?? item.id
-            )
-        }
+        return decoded.items.map(makeResumeItem)
+    }
+
+    /// Maps a decoded Jellyfin item to a widget poster entry. Episodes show the
+    /// parent series title + `SxxExx` and use the series poster so the grid
+    /// stays poster-shaped.
+    private static func makeResumeItem(_ item: Item) -> ResumeItem {
+        let isEpisode = item.seriesName != nil
+        let title = isEpisode ? (item.seriesName ?? "") : (item.name ?? "")
+        let subtitle: String? = {
+            guard isEpisode else { return nil }
+            if let s = item.parentIndexNumber, let e = item.indexNumber {
+                return String(format: "S%02d:E%02d", s, e)
+            }
+            return item.name
+        }()
+        return ResumeItem(
+            id: item.id,
+            title: title,
+            subtitle: subtitle,
+            posterItemId: item.seriesId ?? item.id
+        )
     }
 
     static func posterURL(session: Session, itemId: String, maxWidth: Int) -> URL? {

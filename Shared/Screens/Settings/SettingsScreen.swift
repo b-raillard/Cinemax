@@ -152,6 +152,7 @@ struct SettingsScreen: View {
     @State var showUserSwitch = false
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
+    @State var showWatchedHistory = false
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
     /// "Quick Connect" (authorize) row so we never surface a flow the server
@@ -354,10 +355,20 @@ struct SettingsScreen: View {
         #if os(iOS)
         .sheet(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
+        .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
         #else
         .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
+        .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
         #endif
+    }
+
+    private var watchedHistorySheet: some View {
+        WatchedHistoryScreen()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
     }
 
     private var privacySecuritySheet: some View {

@@ -306,6 +306,14 @@ extension SettingsScreen {
             tvProfileSection
 
             tvActionRow(
+                id: "watchedHistory",
+                icon: "clock.arrow.circlepath",
+                label: loc.localized("settings.watchedHistory"),
+                showsChevron: true,
+                action: { showWatchedHistory = true }
+            )
+
+            tvActionRow(
                 id: "privacySecurity",
                 icon: "lock.shield",
                 label: loc.localized("settings.privacySecurity"),
@@ -691,6 +699,15 @@ extension SettingsScreen {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .toggle(key))
+        // Collapse the row into one VoiceOver element announcing label + on/off
+        // state + toggle semantics (the CinemaToggleIndicator is purely visual).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(loc.localized(value.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityAction {
+            value.wrappedValue.toggle()
+        }
     }
 
     // MARK: - tvOS Helpers

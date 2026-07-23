@@ -153,9 +153,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let apiClient: any PlaybackAPI & LibraryAPI
     private let userId: String
     private let autoPlayNext: Bool
-    /// Bitrate ceiling the initial play negotiated with — reused on wake
-    /// re-resolve so resume keeps the same DirectPlay/transcode verdict.
-    private let maxBitrate: Int
+    /// Bitrate ceiling the current negotiation uses — reused on wake re-resolve
+    /// so resume keeps the same DirectPlay/transcode verdict. Mutable because the
+    /// in-player quality selector overrides it per session (see `openQualityMenu`).
+    private var maxBitrate: Int
+    /// The `render4K`-derived ceiling the INITIAL play negotiated with — the
+    /// "Auto" quality option restores it. Per-session only, never persisted.
+    private let initialMaxBitrate: Int
+    /// False once the user pins a specific bitrate ceiling from the quality menu.
+    private var bitrateIsAuto = true
+    /// Bitrate ceilings offered by the in-player quality selector (bits/s),
+    /// alongside "Auto" (= `initialMaxBitrate`).
+    private static let bitrateOptions: [Int] = [20_000_000, 8_000_000, 4_000_000, 2_000_000]
     private let imageBuilder: ImageURLBuilder
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
@@ -260,6 +269,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var isHoldBoosting = false
     private let speedButton = UIButton(type: .system)
     private let statsButton = UIButton(type: .system)
+    private let qualityButton = UIButton(type: .system)
     #else
     // tvOS custom transport: a focusable scrub bar + a focusable control row.
     // No on-screen Play/Pause button — the Siri Remote has a physical one;
@@ -424,6 +434,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         self.userId = userId
         self.autoPlayNext = autoPlayNext
         self.maxBitrate = maxBitrate
+        self.initialMaxBitrate = maxBitrate
         self.imageBuilder = imageBuilder
         self.loc = loc
         self.onDismiss = onDismiss
@@ -1153,6 +1164,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         configureIOS(statsButton, "chart.xyaxis.line", pt: 17, loc.localized("player.stats"), compact: true)
         statsButton.addTarget(self, action: #selector(toggleStats), for: .touchUpInside)
         controlsContainer.addSubview(statsButton)
+        configureIOS(qualityButton, "slider.horizontal.3", pt: 17, loc.localized("player.quality"), compact: true)
+        qualityButton.addTarget(self, action: #selector(openQualityMenu), for: .touchUpInside)
+        controlsContainer.addSubview(qualityButton)
 
         transportRow.translatesAutoresizingMaskIntoConstraints = false
         transportRow.axis = .horizontal
@@ -1208,7 +1222,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             closeButton.trailingAnchor.constraint(equalTo: cSafe.trailingAnchor, constant: -12),
             closeButton.topAnchor.constraint(equalTo: cSafe.topAnchor, constant: 8),
             // Title can never run under the top-right cluster.
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: statsButton.leadingAnchor, constant: -12),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: qualityButton.leadingAnchor, constant: -12),
             subtitleButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
             subtitleButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             audioButton.trailingAnchor.constraint(equalTo: subtitleButton.leadingAnchor, constant: -4),
@@ -1219,6 +1233,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             speedButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             statsButton.trailingAnchor.constraint(equalTo: speedButton.leadingAnchor, constant: -4),
             statsButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            qualityButton.trailingAnchor.constraint(equalTo: statsButton.leadingAnchor, constant: -4),
+            qualityButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
 
             slider.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
             slider.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
@@ -1279,10 +1295,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var audioPickerSource: UIView? { audioButton }
     private var subtitlePickerSource: UIView? { subtitleButton }
     private var speedPickerSource: UIView? { speedButton }
+    private var qualityPickerSource: UIView? { qualityButton }
     #else
     private var audioPickerSource: UIView? { nil }
     private var subtitlePickerSource: UIView? { nil }
     private var speedPickerSource: UIView? { nil }
+    private var qualityPickerSource: UIView? { nil }
     #endif
 
     private func setupGestures() {
@@ -1607,6 +1625,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         let entries: [(String, String, Selector)] = [
             ("gauge.with.needle", "player.speed", #selector(openSpeedMenu)),
+            ("slider.horizontal.3", "player.quality", #selector(openQualityMenu)),
             ("waveform", "player.audio", #selector(openAudioMenu)),
             ("captions.bubble", "player.subtitles", #selector(openSubtitleMenu)),
             ("waveform.badge.minus", "player.audioDelay", #selector(openAudioDelayMenu)),
@@ -1834,15 +1853,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Authorization header, so it works regardless of server hardening.
     nonisolated private static func loadImage(url: URL, token: String?) async -> Data? {
         let authed = VLCStreamPresenter.authedURL(url, token: token)
-        var request = URLRequest(url: authed)
-        if let token { request.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization") }
-        guard let (data, resp) = try? await URLSession.shared.data(for: request) else {
+        guard let (data, resp) = await AuthenticatedImageFetch.data(from: authed, token: token) else {
             #if DEBUG
             logger.debug("CINEMAX-CHAPTERIMG ▸ request failed \(redactedURL(authed))")
             #endif
             return nil
         }
-        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        let code = resp.statusCode
         #if DEBUG
         logger.debug("CINEMAX-CHAPTERIMG ▸ status=\(code) bytes=\(data.count) \(redactedURL(authed))")
         #endif
@@ -2037,6 +2054,51 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         player.rate = rate
+    }
+
+    /// In-player quality ceiling picker. "Auto" restores the render4K-derived
+    /// launch ceiling; each explicit option pins a lower `maxBitrate` so the
+    /// server transcodes down (or DirectPlay stays under the cap). Selection
+    /// re-negotiates a fresh PlaybackInfo and resumes at the current position
+    /// via the wake re-resolve machinery (the loading spinner covers the re-open).
+    /// Per-session only — no persisted setting.
+    @objc private func openQualityMenu() {
+        var opts: [(String, Bool, () -> Void)] = []
+        opts.append((loc.localized("player.quality.auto"), bitrateIsAuto, { [weak self] in
+            self?.applyBitrate(nil)
+        }))
+        for bps in Self.bitrateOptions {
+            let label = loc.localized("player.quality.mbps", bps / 1_000_000)
+            let selected = !bitrateIsAuto && maxBitrate == bps
+            opts.append((label, selected, { [weak self] in
+                self?.applyBitrate(bps)
+            }))
+        }
+        presentPicker(loc.localized("player.quality"), sourceView: qualityPickerSource, opts)
+    }
+
+    /// Applies a new bitrate ceiling (nil = Auto) and re-resolves playback at the
+    /// current position. No-op when the selection is unchanged.
+    private func applyBitrate(_ bps: Int?) {
+        let target = bps ?? initialMaxBitrate
+        let willBeAuto = (bps == nil)
+        guard target != maxBitrate || willBeAuto != bitrateIsAuto else { return }
+        // `reResolveAndResume` reads `maxBitrate` for the fresh negotiation, so set
+        // it first — but revert if the re-resolve is refused (a wake / quality
+        // re-resolve is already in flight): otherwise the menu shows a ceiling the
+        // stream never negotiated and re-picking that value would no-op forever.
+        let previousBitrate = maxBitrate
+        let previousAuto = bitrateIsAuto
+        maxBitrate = target
+        bitrateIsAuto = willBeAuto
+        // Before the first engine time lands, `currentMs` is 0 and the resume-seek
+        // hasn't fired yet — fall back to the original resume offset so a quality
+        // change during the opening spinner doesn't restart the item from 0:00.
+        let ms = hasValidTime ? currentMs : Int32(clamping: Int((startTime ?? 0) * 1000))
+        if !reResolveAndResume(from: ms) {
+            maxBitrate = previousBitrate
+            bitrateIsAuto = previousAuto
+        }
     }
 
     @objc private func openAudioDelayMenu() { presentDelayPicker(isAudio: true) }
@@ -2544,6 +2606,34 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         scheduleHideControls()
     }
 
+    // MARK: - iPad hardware-keyboard shortcuts
+    //
+    // Space = play/pause, ←/→ = seek ∓10 s. Both seek shortcuts route through the
+    // documented coalesced path (`seek(bySeconds:)` → `accumulateSeek`) via the
+    // existing iOS skip handlers — never a direct engine seek. Wired as UIKit key
+    // commands so they coexist with the gesture/HUD stack without touching it.
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        becomeFirstResponder()
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        let cmds = [
+            UIKeyCommand(input: " ", modifierFlags: [], action: #selector(keyTogglePlayPause)),
+            UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(keySeekBackward)),
+            UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [], action: #selector(keySeekForward))
+        ]
+        // Space/arrows are otherwise absorbed by system scroll/select behavior.
+        cmds.forEach { $0.wantsPriorityOverSystemBehavior = true }
+        return cmds
+    }
+
+    @objc private func keyTogglePlayPause() { showControls(); playPauseTapped() }
+    @objc private func keySeekBackward() { showControls(); iosSkipBack() }
+    @objc private func keySeekForward() { showControls(); iosSkipForward() }
+
     @objc private func scrubberTouchDown() {
         isScrubbing = true
         cancelPendingSeekCommit() // a live drag supersedes a queued skip
@@ -2893,13 +2983,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `navigateToEpisode`'s media/proxy/seek machinery (no episode-graph
     /// changes). Guarded by `navGeneration` so a user episode-nav started during
     /// the await wins, and one-shot via `isReResolvingAfterWake`.
-    private func reResolveAndResume(from ms: Int32) {
-        guard !isTearingDown, !isReResolvingAfterWake else { return }
+    @discardableResult
+    private func reResolveAndResume(from ms: Int32) -> Bool {
+        guard !isTearingDown, !isReResolvingAfterWake else { return false }
+        // A committed-but-not-yet-landed skip is the user's intended position:
+        // resume there rather than the stale pre-seek tick, then drop the pending
+        // seek so it can't fire against the reloaded media or leave `refreshTimeUI`
+        // frozen painting a target the new stream never reaches. Mirrors the
+        // `cancelPendingSeekCommit()` that `startPlayback`/`navigateToEpisode` do.
+        let resumeMs = pendingScrubTargetMs ?? ms
+        cancelPendingSeekCommit()
         isReResolvingAfterWake = true
         navGeneration += 1
         let gen = navGeneration
         let resumeItemId = itemId
-        let resumeSeconds = Double(ms) / 1000.0
+        let resumeSeconds = Double(resumeMs) / 1000.0
         logger.notice("VLC wake re-resolve for \(resumeItemId, privacy: .public) @ \(Int(resumeSeconds))s")
         Task { [weak self] in
             guard let self else { return }
@@ -2943,6 +3041,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.startProgressTimer()
             self.refreshTimeUISoon()
         }
+        return true
     }
 
     /// Seconds elapsed since the first play() of this session — the

@@ -199,7 +199,12 @@ extension JellyfinAPIClient {
         return applyRatingFilter(items)
     }
 
-    public func searchItems(userId: String, searchTerm: String, limit: Int = 20) async throws -> [BaseItemDto] {
+    public func searchItems(
+        userId: String,
+        searchTerm: String,
+        includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
+        limit: Int = 20
+    ) async throws -> [BaseItemDto] {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
@@ -209,7 +214,7 @@ extension JellyfinAPIClient {
                 limit: limit,
                 isRecursive: true,
                 searchTerm: searchTerm,
-                includeItemTypes: [.movie, .series, .episode]
+                includeItemTypes: includeItemTypes
             )
             let response = try await client.send(Paths.getItems(parameters: params))
             return response.value.items ?? []
@@ -227,10 +232,22 @@ extension JellyfinAPIClient {
     }
 
     public func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] {
+        // Short-TTL cache mirroring `getItem`: a season's episode list is fetched
+        // in overlapping bursts (Home's prev/next nav maps for the Continue
+        // Watching + Next Up rails, then the detail screen re-fetching the same
+        // season). A 10s window collapses those into one round-trip. Every path
+        // that mutates episode userData (played state / resume position)
+        // invalidates the `episodes-` prefix so a stale watched-mark / progress
+        // bar is never served — see `markItemPlayed` / `markItemUnplayed` /
+        // `reportPlaybackStopped`.
+        let cacheKey = "episodes-\(seasonId)-\(userId)"
+        if let cached: [BaseItemDto] = cache.get(cacheKey) { return applyRatingFilter(cached) }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetEpisodesParameters(userID: userId, fields: [.overview], seasonID: seasonId, enableUserData: true)
         let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
-        return applyRatingFilter(response.value.items ?? [])
+        let items = response.value.items ?? []
+        cache.set(cacheKey, value: items, ttl: 10)
+        return applyRatingFilter(items)
     }
 
     public func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
@@ -272,9 +289,12 @@ extension JellyfinAPIClient {
         // Only the resume list depends on play state — leave genres / latest /
         // serverInfo caches intact so the next navigation doesn't refetch them.
         // Also drop this item's short-TTL getItem entry so the detail screen
-        // reflects the new play state immediately rather than after 10s.
+        // reflects the new play state immediately rather than after 10s, and the
+        // cached episode lists (a series-level toggle cascades to every episode's
+        // watched mark; the mutator only knows the item id, so drop the lot).
         cache.invalidate(prefix: "resume-")
         cache.invalidate(prefix: "item-\(itemId)-")
+        cache.invalidate(prefix: "episodes-")
     }
 
     public func markItemPlayed(itemId: String, userId: String) async throws {
@@ -283,9 +303,11 @@ extension JellyfinAPIClient {
             _ = try await client.send(Paths.markPlayedItem(itemID: itemId, userID: userId))
             // Marking watched pulls the item out of Continue Watching — drop the
             // resume list so the row catches up, plus this item's short-TTL
-            // getItem entry. Other caches stay intact.
+            // getItem entry and the cached episode lists (a series-level toggle
+            // cascades to every episode's watched mark). Other caches stay intact.
             cache.invalidate(prefix: "resume-")
             cache.invalidate(prefix: "item-\(itemId)-")
+            cache.invalidate(prefix: "episodes-")
         } catch {
             notifyIfUnauthorized(error)
             throw error

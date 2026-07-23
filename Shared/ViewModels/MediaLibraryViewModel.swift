@@ -162,9 +162,10 @@ final class MediaLibraryViewModel {
             totalCount = heroData.totalCount
             heroItem = heroData.items.first
 
-            try await fetchGenreItems(using: appState, userId: userId, genres: fetchedGenres)
+            // Progressive render: the hero (and its `totalCount`) are ready, so
+            // drop the skeleton now. The genre rows fetched below fill in off
+            // their own `@Observable` slice (`itemsByGenre`) as each lands.
             isLoading = false
-            return true
         } catch {
             if Self.isCancellation(error) {
                 logger.debug("Library load cancelled — leaving state for the superseding load")
@@ -175,6 +176,18 @@ final class MediaLibraryViewModel {
             isLoading = false
             return false
         }
+
+        // Genre rows are non-critical to the first paint — a failure here just
+        // drops them (the hero + browse-genres grid still render), rather than
+        // replacing the already-visible content with a full error screen. A
+        // cancellation still supersedes the load so it isn't marked succeeded.
+        do {
+            try await fetchGenreItems(using: appState, userId: userId, genres: genres)
+        } catch {
+            if Self.isCancellation(error) { return false }
+            logger.error("Library genre rows failed: \(error.localizedDescription, privacy: .public)")
+        }
+        return true
     }
 
     /// True for errors that only mean "this load was cancelled" (tab switch, a
@@ -201,23 +214,30 @@ final class MediaLibraryViewModel {
         let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
         let parentScopeID = parentId
         let limit = genreItemLimit
-        try await withThrowingTaskGroup(of: GenreResult.self) { group in
-            for genre in genresToLoad {
-                group.addTask {
-                    let result = try await appState.apiClient.getItems(
-                        userId: userId,
-                        parentId: parentScopeID,
-                        includeItemTypes: typeFilter,
-                        sortBy: [snapshot.sortBy],
-                        sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
-                        genres: [genre],
-                        limit: limit
-                    )
-                    return GenreResult(genre: genre, items: result.items)
+        // Bound the fan-out to chunks of 6 (matching Home's throttle) so a full
+        // `genreLoadLimit` set doesn't fire every `getItems` at a self-hosted
+        // server at once.
+        let concurrencyLimit = 6
+        for start in stride(from: 0, to: genresToLoad.count, by: concurrencyLimit) {
+            let chunk = genresToLoad[start..<min(start + concurrencyLimit, genresToLoad.count)]
+            try await withThrowingTaskGroup(of: GenreResult.self) { group in
+                for genre in chunk {
+                    group.addTask {
+                        let result = try await appState.apiClient.getItems(
+                            userId: userId,
+                            parentId: parentScopeID,
+                            includeItemTypes: typeFilter,
+                            sortBy: [snapshot.sortBy],
+                            sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
+                            genres: [genre],
+                            limit: limit
+                        )
+                        return GenreResult(genre: genre, items: result.items)
+                    }
                 }
-            }
-            for try await entry in group {
-                itemsByGenre[entry.genre] = entry.items
+                for try await entry in group {
+                    itemsByGenre[entry.genre] = entry.items
+                }
             }
         }
     }

@@ -415,7 +415,7 @@ final class NativeVideoPresenter {
         // can actually reach it via the Siri Remote.
         if UserDefaults.standard.bool(forKey: SettingsKey.debugShowSkipToEnd) {
             items.append(UIAction(
-                title: "⏭ Skip to End (Debug)",
+                title: loc.localized("debug.skipToEnd"),
                 image: UIImage(systemName: "forward.end.alt.fill")
             ) { [weak self] _ in
                 Task { @MainActor [weak self] in

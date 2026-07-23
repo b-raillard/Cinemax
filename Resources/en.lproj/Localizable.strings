@@ -46,6 +46,8 @@
 "home.nextUp" = "Next Up";
 "favorites.empty.title" = "No favorites yet";
 "favorites.empty.subtitle" = "Tap the heart on a movie or show to add it here.";
+"watchedHistory.empty.title" = "No history yet";
+"watchedHistory.empty.subtitle" = "Movies and shows you watch will appear here.";
 "home.liveSession" = "LIVE";
 "home.watchingNow" = "Watching Now";
 "home.watchingNow.playing" = "%@ is watching";
@@ -91,6 +93,10 @@
 "search.placeholder" = "Search movies, shows...";
 "search.listening" = "Listening...";
 "search.noResults" = "No results found";
+"search.error.network" = "Couldn't reach the server. Check your connection and try again.";
+"search.filter.all" = "All";
+"search.filter.movies" = "Movies";
+"search.filter.series" = "Series";
 "empty.library.filtered.title" = "No matches";
 "empty.library.filtered.subtitle" = "Try adjusting your filters or clearing them.";
 "empty.library.filtered.action" = "Clear filters";
@@ -173,6 +179,7 @@
 "settings.admin" = "Admin";
 "settings.user" = "User";
 "settings.switchAccount" = "Switch Account";
+"settings.watchedHistory" = "Watch History";
 "switchAccount.enterPasswordFor" = "Enter password for %@";
 "switchAccount.signIn" = "Sign In";
 "switchAccount.authFailed" = "Sign-in failed";
@@ -626,6 +633,7 @@
 "settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Fast sleep timer (15 s)";
 "settings.debug.skipToEnd" = "Skip-to-end button";
+"debug.skipToEnd" = "⏭ Skip to end (Debug)";
 "settings.interface" = "Interface";
 "settings.interface.playback" = "Playback";
 "settings.interface.menu" = "Main Menu";
@@ -783,6 +791,9 @@
 "player.stats.dropped" = "Dropped frames";
 "player.stats.direct" = "Direct play";
 "player.stats.proxy" = "Via proxy";
+"player.quality" = "Quality";
+"player.quality.auto" = "Automatic";
+"player.quality.mbps" = "%d Mbps";
 "player.nextUp.countdown" = "Next episode in %ds";
 "player.nextUp.play" = "Play now";
 
@@ -818,6 +829,7 @@
 
 "accessibility.playItem" = "Play %@";
 "accessibility.moreInfoAbout" = "More information about %@";
+"accessibility.resumeProgress" = "%d%% watched";
 
 // MARK: - Admin — formatting glyphs
 
@@ -832,6 +844,13 @@
 "detail.favorite.remove" = "Remove from favorites";
 "detail.watched.add" = "Mark as watched";
 "detail.watched.remove" = "Mark as unwatched";
+"card.markedWatched" = "Marked as watched";
+"card.markedUnwatched" = "Marked as unwatched";
+"card.favorited" = "Added to favorites";
+"card.unfavorited" = "Removed from favorites";
+"detail.season.markWatched" = "Mark season as watched";
+"detail.season.markWatched.message" = "All episodes in this season will be marked as watched.";
+"detail.season.markedWatched" = "Season marked as watched";
 "person.movies" = "Movies";
 "person.series" = "TV Shows";
 "person.born" = "Born %@";

@@ -39,7 +39,11 @@ struct HomeScreen: View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
 
-            if viewModel.isLoading {
+            if viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded) {
+                // Skeleton during phase-1, and kept up while a phase-1-empty
+                // result is still filling later phases — the all-empty state
+                // must only appear once the *entire* load finishes, never as a
+                // mid-load flash (genre rows populate after the hero/rails).
                 loadingSkeleton
             } else if isHomeEmpty {
                 homeEmptyState
@@ -389,6 +393,12 @@ struct HomeScreen: View {
         // Simultaneous (not exclusive) so button taps inside the hero still
         // land; the direction guard keeps vertical scrolls from switching heroes.
         .simultaneousGesture(heroSwipeGesture(count: candidates.count))
+        // VoiceOver three-finger swipe pages the carousel (the drag gesture above
+        // is invisible to assistive tech).
+        .accessibilityScrollAction { edge in
+            guard candidates.count > 1 else { return }
+            advanceHero(forward: edge == .trailing || edge == .bottom, count: candidates.count)
+        }
         // Task lifecycle is tied to the view — auto-cancels on disappear (pauses
         // rotation) and never strongly retains the screen. Restarts when the
         // candidate count or the motion-effects gate changes.
@@ -417,16 +427,22 @@ struct HomeScreen: View {
                 guard count > 1,
                       abs(value.translation.width) > abs(value.translation.height),
                       abs(value.translation.width) > 50 else { return }
-                let forward = value.translation.width < 0
-                let next = forward
-                    ? (currentHeroIndex + 1) % count
-                    : (currentHeroIndex - 1 + count) % count
-                if motionEffects {
-                    withAnimation(.easeInOut(duration: 0.5)) { heroIndex = next }
-                } else {
-                    heroIndex = next
-                }
+                advanceHero(forward: value.translation.width < 0, count: count)
             }
+    }
+
+    /// Pages the hero carousel one step, wrapping at the ends. Shared by the
+    /// touch swipe gesture and the VoiceOver scroll action.
+    private func advanceHero(forward: Bool, count: Int) {
+        guard count > 1 else { return }
+        let next = forward
+            ? (currentHeroIndex + 1) % count
+            : (currentHeroIndex - 1 + count) % count
+        if motionEffects {
+            withAnimation(.easeInOut(duration: 0.5)) { heroIndex = next }
+        } else {
+            heroIndex = next
+        }
     }
 
     /// Advances the hero every `heroRotationInterval` seconds with a crossfade.
@@ -670,6 +686,11 @@ struct HomeScreen: View {
                 guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
                 return Double(ticks) / 10_000_000
             }()
+            let resumePercent: Int? = {
+                guard let position = item.userData?.playbackPositionTicks,
+                      let total = item.runTimeTicks, total > 0, position > 0 else { return nil }
+                return Int((Double(position) / Double(total) * 100).rounded())
+            }()
             PlayLink(
                 itemId: id, title: item.name ?? "",
                 startTime: startSeconds,
@@ -701,6 +722,7 @@ struct HomeScreen: View {
                 }
             }
             .accessibilityLabel(item.name ?? "")
+            .accessibilityValue(resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) } ?? "")
         }
     }
 

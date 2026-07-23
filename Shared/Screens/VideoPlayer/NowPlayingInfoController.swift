@@ -129,12 +129,8 @@ final class NowPlayingInfoController {
         let url = imageBuilder.imageURL(itemId: itemId, imageType: .primary, maxWidth: 600)
         let token = authToken
         artworkTask = Task { @MainActor [weak self] in
-            var req = URLRequest(url: url)
-            if let token, !token.isEmpty {
-                req.addValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization")
-            }
-            guard let (data, response) = try? await URLSession.shared.data(for: req),
-                  let http = response as? HTTPURLResponse, http.statusCode == 200,
+            guard let (data, http) = await AuthenticatedImageFetch.data(from: url, token: token),
+                  http.statusCode == 200,
                   let image = UIImage(data: data) else { return }
             guard let self, self.generation == gen, !Task.isCancelled else { return }
             // **Sendable closure**: MediaPlayer invokes the request handler on a

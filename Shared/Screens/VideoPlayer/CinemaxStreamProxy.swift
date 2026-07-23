@@ -316,6 +316,23 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         let parts = requestLine.split(separator: " ")
         let method = parts.first.map(String.init)?.uppercased() ?? "GET"
         let path = parts.count > 1 ? String(parts[1]) : "/"
+        // Defense-in-depth: the listener already binds to 127.0.0.1 only, but
+        // reject anything that isn't a well-formed /s/<id> loopback request so a
+        // stray local client can't probe the proxy. Legitimate stream URLs are
+        // always http://127.0.0.1:<port>/s/<uuid>; the Host, when present, must
+        // resolve to loopback. Neither check touches the legitimate path.
+        var badRequest: Bool { !path.hasPrefix("/s/") }
+        let hostLine = lines.dropFirst().first { $0.lowercased().hasPrefix("host:") }
+        let hostIsLoopback: Bool = {
+            guard let hostLine else { return true } // no Host header ⇒ don't reject
+            let host = hostLine.dropFirst("host:".count).trimmingCharacters(in: .whitespaces).lowercased()
+            return host.hasPrefix("127.") || host.hasPrefix("localhost") || host.hasPrefix("[::1]") || host == "::1"
+        }()
+        guard !badRequest, hostIsLoopback else {
+            conn.send(content: Data("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".utf8),
+                      isComplete: true, completion: .contentProcessed { _ in conn.cancel() })
+            return
+        }
         var range: String?
         for line in lines.dropFirst() where line.lowercased().hasPrefix("range:") {
             range = line.dropFirst("range:".count).trimmingCharacters(in: .whitespaces)

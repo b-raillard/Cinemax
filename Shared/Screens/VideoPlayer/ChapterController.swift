@@ -132,12 +132,8 @@ final class ChapterController {
     /// Downloads one chapter thumbnail with the Jellyfin access token attached.
     /// Returns `nil` on HTTP error or non-image content.
     nonisolated private static func loadImage(url: URL, token: String?) async -> Data? {
-        var request = URLRequest(url: url)
-        if let token {
-            request.addValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization")
-        }
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        guard let (data, http) = await AuthenticatedImageFetch.data(from: url, token: token),
+              http.statusCode == 200 else {
             return nil
         }
         return data
