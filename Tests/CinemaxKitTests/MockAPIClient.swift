@@ -33,6 +33,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// inject cancellation-sensitive delays. Falls back to `stubbedSearchResults`.
     var searchItemsHandler: (@Sendable (String) async throws -> [BaseItemDto])?
 
+    /// Called by `getItems(...)` when set, keyed on `startIndex`, so pagination
+    /// tests can return a different page per call. Falls back to the flat
+    /// `stubbedItems`/`stubbedTotalCount` pair when nil.
+    var getItemsHandler: (@Sendable (Int?) async throws -> ([BaseItemDto], Int))?
+
     // MARK: - Error control
 
     var shouldThrow = false
@@ -259,6 +264,10 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// Count of `getItems` calls scoped to favorites (`isFavorite == true`),
     /// distinguishing the Favorites-row fetch from genre-row fetches.
     private(set) var favoriteFetchCount = 0
+    /// Every `getItems` call's `startIndex`/`limit`, in order — lets pagination
+    /// tests assert the loader requested the right page (`PaginatedLoader`
+    /// passes `items.count` as `startIndex`).
+    private(set) var getItemsCalls: [(startIndex: Int?, limit: Int?)] = []
 
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
         getResumeItemsCallCount += 1
@@ -279,7 +288,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         filters: [ItemFilter]?, limit: Int?, startIndex: Int?
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         if isFavorite == true { favoriteFetchCount += 1 }
+        getItemsCalls.append((startIndex: startIndex, limit: limit))
         if shouldThrow { throw stubbedError }
+        if let handler = getItemsHandler {
+            return try await handler(startIndex)
+        }
         return (stubbedItems, stubbedTotalCount)
     }
 

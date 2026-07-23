@@ -1,18 +1,19 @@
 import SwiftUI
 import OSLog
 import CinemaxKit
-import JellyfinAPI
+@preconcurrency import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "WatchedHistory")
 
 /// Most-recently-watched movies and episodes, newest first. Mirrors the
-/// `FavoritesViewModel` load pattern (grid, limit 200) but filters on
-/// `.isPlayed` and sorts by `.datePlayed` descending. Only leaf items carry a
-/// real play timestamp, so the query includes movies + episodes (a series is
-/// "played" only once fully watched, which would surface it out of order).
+/// `FavoritesViewModel` load pattern (paginated, 40/page via `PaginatedLoader`)
+/// but filters on `.isPlayed` and sorts by `.datePlayed` descending. Only leaf
+/// items carry a real play timestamp, so the query includes movies + episodes
+/// (a series is "played" only once fully watched, which would surface it out
+/// of order).
 @MainActor @Observable
 final class WatchedHistoryViewModel {
-    var items: [BaseItemDto] = []
+    let loader = PaginatedLoader<BaseItemDto>(pageSize: 40)
     var isLoading = true
     /// True when the last fetch threw — drives the error state instead of the
     /// (misleading) empty state.
@@ -25,25 +26,45 @@ final class WatchedHistoryViewModel {
         await load(using: appState)
     }
 
+    /// Full reload from page 0 — pull-to-refresh and every catalogue /
+    /// userData notification. Resets the paginator first so a stale page 2+
+    /// never survives under a changed history set.
     func load(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         hasLoaded = true
         isLoading = true
-        loadFailed = false
-        do {
-            items = try await appState.apiClient.getItems(
-                userId: userId,
-                includeItemTypes: [.movie, .episode],
-                sortBy: [.datePlayed],
-                sortOrder: [.descending],
-                filters: [.isPlayed],
-                limit: 200
-            ).items
-        } catch {
-            logger.warning("Watched history load failed: \(error.localizedDescription, privacy: .public)")
-            loadFailed = true
-        }
+        loader.reset()
+        await fetchNextPage(using: appState, userId: userId)
         isLoading = false
+    }
+
+    /// Pagination continuation — called from the grid's last-card `.onAppear`
+    /// trigger.
+    func loadMore(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        await fetchNextPage(using: appState, userId: userId)
+    }
+
+    private func fetchNextPage(using appState: AppState, userId: String) async {
+        await loader.loadMore { startIndex in
+            do {
+                let result = try await appState.apiClient.getItems(
+                    userId: userId,
+                    includeItemTypes: [.movie, .episode],
+                    sortBy: [.datePlayed],
+                    sortOrder: [.descending],
+                    filters: [.isPlayed],
+                    limit: 40,
+                    startIndex: startIndex
+                )
+                self.loadFailed = false
+                return (items: result.items, total: result.totalCount)
+            } catch {
+                logger.warning("Watched history load failed: \(error.localizedDescription, privacy: .public)")
+                self.loadFailed = true
+                throw error
+            }
+        }
     }
 }
 
@@ -74,15 +95,20 @@ struct WatchedHistoryScreen: View {
         }
         .task {
             await viewModel.loadInitial(using: appState)
+        }
+        // Each page that lands (initial or paginated) gets its posters warmed;
+        // the count is a cheap Equatable proxy for "a page was appended" —
+        // mirrors `MediaLibraryScreen`'s filtered-grid prefetch.
+        .onChange(of: viewModel.loader.items.count) {
             prefetchPosters()
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
-            Task { await viewModel.load(using: appState); prefetchPosters() }
+            Task { await viewModel.load(using: appState) }
         }
         // A per-item watched toggle (tier-2) — reload immediately so an un-watch
         // drops the item from history while this grid is on screen.
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
-            Task { await viewModel.load(using: appState); prefetchPosters() }
+            Task { await viewModel.load(using: appState) }
         }
     }
 
@@ -149,13 +175,13 @@ struct WatchedHistoryScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.isLoading && viewModel.items.isEmpty {
+        if viewModel.isLoading && viewModel.loader.items.isEmpty {
             LoadingStateView()
-        } else if viewModel.loadFailed && viewModel.items.isEmpty {
+        } else if viewModel.loadFailed && viewModel.loader.items.isEmpty {
             ErrorStateView(message: loc.localized("error.generic"), retryTitle: loc.localized("action.retry")) {
                 Task { await viewModel.load(using: appState) }
             }
-        } else if viewModel.items.isEmpty {
+        } else if viewModel.loader.items.isEmpty {
             EmptyStateView(
                 systemImage: "clock.arrow.circlepath",
                 title: loc.localized("watchedHistory.empty.title"),
@@ -169,12 +195,17 @@ struct WatchedHistoryScreen: View {
     private var grid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: gridSpacing) {
-                ForEach(viewModel.items, id: \.id) { item in
+                ForEach(viewModel.loader.items, id: \.id) { item in
                     historyCard(item)
+                        .onAppear { maybeLoadMore(triggerId: item.id) }
                 }
             }
             .padding(.horizontal, gridPadding)
             .padding(.top, CinemaSpacing.spacing3)
+
+            if viewModel.loader.isLoadingMore {
+                paginationFooter
+            }
 
             Spacer(minLength: 80)
         }
@@ -184,6 +215,27 @@ struct WatchedHistoryScreen: View {
         #if os(iOS)
         .refreshable { await viewModel.load(using: appState) }
         #endif
+    }
+
+    /// Footer row under the grid while paginating additional pages — keeps
+    /// visual continuity instead of centering a mid-screen spinner. Mirrors
+    /// `MovieLibraryScreen.filteredPaginationFooter`.
+    private var paginationFooter: some View {
+        ProgressView()
+            .tint(CinemaColor.onSurfaceVariant)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, CinemaSpacing.spacing6)
+    }
+
+    /// Guards pagination against SwiftUI calling `.onAppear` multiple times for
+    /// the same card. Mirrors `MovieLibraryScreen.maybeLoadMore`.
+    private func maybeLoadMore(triggerId: String?) {
+        let loader = viewModel.loader
+        guard !loader.isLoadingMore,
+              !loader.hasLoadedAll,
+              let triggerId,
+              triggerId == loader.items.last?.id else { return }
+        Task { await viewModel.loadMore(using: appState) }
     }
 
     @ViewBuilder
@@ -230,7 +282,7 @@ struct WatchedHistoryScreen: View {
 
     private func prefetchPosters() {
         let builder = appState.imageBuilder
-        prefetcher.prefetch(viewModel.items.map { item in
+        prefetcher.prefetch(viewModel.loader.items.map { item in
             item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
         })
     }
