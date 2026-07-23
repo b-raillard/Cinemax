@@ -792,9 +792,6 @@
 "player.stats.dropped" = "Dropped frames";
 "player.stats.direct" = "Direct play";
 "player.stats.proxy" = "Via proxy";
-"player.quality" = "Quality";
-"player.quality.auto" = "Automatic";
-"player.quality.mbps" = "%d Mbps";
 "player.nextUp.countdown" = "Next episode in %ds";
 "player.nextUp.play" = "Play now";
 

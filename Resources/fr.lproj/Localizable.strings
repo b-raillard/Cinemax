@@ -394,9 +394,6 @@
 "player.stats.dropped" = "Images perdues";
 "player.stats.direct" = "Lecture directe";
 "player.stats.proxy" = "Via proxy";
-"player.quality" = "Qualité";
-"player.quality.auto" = "Automatique";
-"player.quality.mbps" = "%d Mbps";
 "player.nextUp.countdown" = "Épisode suivant dans %d s";
 "player.nextUp.play" = "Lire maintenant";
 
