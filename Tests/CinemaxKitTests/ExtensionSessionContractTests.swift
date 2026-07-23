@@ -86,3 +86,57 @@ struct ExtensionSessionContractTests {
         #expect(keychain.readSharedSession() == nil)
     }
 }
+
+/// Locks the pure equivalence decision `ExtensionSessionBridge.publish` uses to
+/// skip a redundant Keychain write + UserDefaults write + WidgetCenter/Top
+/// Shelf poke when nothing actually changed since the last publish. Only the
+/// decision is tested here — never the WidgetCenter/Top Shelf side effects.
+@Suite("Extension session republish skip decision")
+struct ExtensionSessionSkipDecisionTests {
+    let session = ExtensionSessionBridge.Session(
+        serverURL: URL(string: "https://jelly.example.com")!,
+        accessToken: "tok-123",
+        userId: "user-abc"
+    )
+
+    @Test("Identical blobs in both stores ⇒ current, skip publish")
+    func identicalBlobsSkip() throws {
+        let data = try JSONEncoder().encode(session)
+        #expect(ExtensionSessionBridge.isCurrent(session: session, keychainData: data, defaultsData: data))
+    }
+
+    @Test("Token changed ⇒ not current, must publish")
+    func tokenChangedPublishes() throws {
+        let data = try JSONEncoder().encode(session)
+        let changed = ExtensionSessionBridge.Session(
+            serverURL: session.serverURL,
+            accessToken: "tok-456",
+            userId: session.userId
+        )
+        #expect(!ExtensionSessionBridge.isCurrent(session: changed, keychainData: data, defaultsData: data))
+    }
+
+    @Test("Keychain matches but UserDefaults copy is missing ⇒ must publish (keeps dual-write contract)")
+    func defaultsMissingPublishes() throws {
+        let data = try JSONEncoder().encode(session)
+        #expect(!ExtensionSessionBridge.isCurrent(session: session, keychainData: data, defaultsData: nil))
+    }
+
+    @Test("Corrupt/undecodable Keychain blob ⇒ treated as changed, must publish")
+    func corruptKeychainPublishes() throws {
+        let data = try JSONEncoder().encode(session)
+        let corrupt = Data("not json".utf8)
+        #expect(!ExtensionSessionBridge.isCurrent(session: session, keychainData: corrupt, defaultsData: data))
+    }
+
+    @Test("Both stores already empty while clearing ⇒ current, skip publish")
+    func bothEmptyClearSkips() {
+        #expect(ExtensionSessionBridge.isCurrent(session: nil, keychainData: nil, defaultsData: nil))
+    }
+
+    @Test("A stale store still holds data while clearing ⇒ must publish")
+    func staleStoreClearPublishes() throws {
+        let data = try JSONEncoder().encode(session)
+        #expect(!ExtensionSessionBridge.isCurrent(session: nil, keychainData: data, defaultsData: nil))
+    }
+}

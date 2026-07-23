@@ -24,7 +24,7 @@ public enum ExtensionSessionBridge {
     public static let appGroupId = "group.com.cinemax.shared"
     public static let sessionKey = "extension.session"
 
-    public struct Session: Codable, Sendable {
+    public struct Session: Codable, Sendable, Equatable {
         public let serverURL: URL
         public let accessToken: String
         public let userId: String
@@ -44,8 +44,14 @@ public enum ExtensionSessionBridge {
             return
         }
         let keychain = KeychainService()
+        let existingKeychainData = keychain.readSharedSession()
+        let existingDefaultsData = defaults.data(forKey: sessionKey)
         if let serverURL, let accessToken, !accessToken.isEmpty, let userId, !userId.isEmpty {
             let session = Session(serverURL: serverURL, accessToken: accessToken, userId: userId)
+            guard !isCurrent(session: session, keychainData: existingKeychainData, defaultsData: existingDefaultsData) else {
+                logger.debug("ExtensionBridge ▸ session unchanged, skipped")
+                return
+            }
             let data = try? JSONEncoder().encode(session)
             // Primary store: the shared, device-only Keychain group — the token
             // is never written in plaintext nor included in device backups.
@@ -58,6 +64,10 @@ public enum ExtensionSessionBridge {
             defaults.set(data, forKey: sessionKey)
             logger.info("ExtensionBridge ▸ session published host=\(serverURL.host() ?? "?", privacy: .public)")
         } else {
+            guard !isCurrent(session: nil, keychainData: existingKeychainData, defaultsData: existingDefaultsData) else {
+                logger.debug("ExtensionBridge ▸ session unchanged, skipped")
+                return
+            }
             keychain.deleteSharedSession()
             defaults.removeObject(forKey: sessionKey)
             logger.info("ExtensionBridge ▸ session cleared")
@@ -66,12 +76,37 @@ public enum ExtensionSessionBridge {
         // their own cached timelines/content. Without an explicit poke the
         // widget keeps its pre-login "sign in" entry for up to its 30-min
         // refresh window after the user logs in (and a stale shelf lingers
-        // after logout).
+        // after logout). Only reached when a write above actually happened.
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
         #if canImport(TVServices)
         TVTopShelfContentProvider.topShelfContentDidChange()
         #endif
+    }
+
+    /// Pure equivalence decision: is `session` (nil ⇒ the "clear" intent)
+    /// already what's stored in BOTH the Keychain and the transitional
+    /// UserDefaults copy, so `publish` can skip the write + WidgetCenter/Top
+    /// Shelf poke entirely? Compares decoded `Session` values field-wise
+    /// (never raw `Data` bytes — JSON key order isn't guaranteed stable), and
+    /// treats a corrupt/undecodable stored blob as "changed" so a bad read
+    /// never suppresses a legitimate publish. Internal + testable via
+    /// `@testable import`.
+    static func isCurrent(session: Session?, keychainData: Data?, defaultsData: Data?) -> Bool {
+        guard let session else {
+            // Clearing: only current if both stores are already empty — a
+            // stale leftover in either one still needs the clear to run.
+            return keychainData == nil && defaultsData == nil
+        }
+        guard let keychainData,
+              let storedKeychainSession = try? JSONDecoder().decode(Session.self, from: keychainData) else {
+            return false
+        }
+        guard let defaultsData,
+              let storedDefaultsSession = try? JSONDecoder().decode(Session.self, from: defaultsData) else {
+            return false
+        }
+        return storedKeychainSession == session && storedDefaultsSession == session
     }
 }

@@ -47,6 +47,13 @@ final class MediaDetailViewModel {
     /// Generation counter to discard stale season results on rapid selection.
     private var seasonGeneration: Int = 0
 
+    /// Generation counter shared by `load` and `refreshAfterPlayback` so a
+    /// still-running full load and a post-playback refresh can't interleave and
+    /// clobber each other's `@Observable` writes. Bumped at each entry; every
+    /// pass re-checks it after each await cluster and bails (writing nothing,
+    /// not even `isLoading`) once superseded.
+    private var loadGeneration: Int = 0
+
     let itemId: String
     let itemType: BaseItemKind
 
@@ -57,36 +64,46 @@ final class MediaDetailViewModel {
 
     func load(using appState: AppState, loc: LocalizationManager) async {
         guard let userId = appState.currentUserId else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
 
         do {
             let loadedItem = try await appState.apiClient.getItem(userId: userId, itemId: itemId)
+            guard loadGeneration == generation else { return }
 
             // Resolve episodes/seasons to their parent series for full detail
             let effectiveType = loadedItem.type ?? itemType
             if effectiveType == .episode || effectiveType == .season,
                let seriesId = loadedItem.seriesID {
                 let seriesItem = try await appState.apiClient.getItem(userId: userId, itemId: seriesId)
+                guard loadGeneration == generation else { return }
                 item = seriesItem
                 resolvedType = .series
 
-                try await loadSeriesDetail(seriesId: seriesId, apiClient: appState.apiClient, userId: userId)
+                try await loadSeriesDetail(seriesId: seriesId, apiClient: appState.apiClient, userId: userId, generation: generation)
+                guard loadGeneration == generation else { return }
             } else {
                 item = loadedItem
                 resolvedType = effectiveType
 
                 if effectiveType == .series {
-                    try await loadSeriesDetail(seriesId: itemId, apiClient: appState.apiClient, userId: userId)
+                    try await loadSeriesDetail(seriesId: itemId, apiClient: appState.apiClient, userId: userId, generation: generation)
+                    guard loadGeneration == generation else { return }
                 } else {
                     async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
-                    similarItems = try await similar
+                    let loadedSimilar = try await similar
+                    guard loadGeneration == generation else { return }
+                    similarItems = loadedSimilar
                 }
             }
         } catch {
+            guard loadGeneration == generation else { return }
             logger.error("MediaDetail load failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = loc.userFacingMessage(for: error)
         }
 
+        guard loadGeneration == generation else { return }
         isFavorite = item?.userData?.isFavorite ?? false
         isPlayed = item?.userData?.isPlayed ?? false
         // Collections are a movie-only garnish — resolved after the main load
@@ -95,6 +112,80 @@ final class MediaDetailViewModel {
             Task { await loadCollection(using: appState) }
         }
 
+        isLoading = false
+    }
+
+    /// Targeted refresh after the player dismisses (tvOS dismiss path). Unlike
+    /// `load()` it flips NO `isLoading` (so the screen never flashes back to a
+    /// spinner) and re-fetches ONLY the userData-bearing slices: a movie's own
+    /// item, or a series' item (userData) + next-up + the visible season's
+    /// episodes — fetched concurrently. Similar items and seasons are NOT
+    /// re-fetched (watching doesn't change them). All fetches hit the caches
+    /// `reportPlaybackStopped` just invalidated, so they return fresh data.
+    /// Shares `loadGeneration` with `load()` so the two can't interleave.
+    func refreshAfterPlayback(using appState: AppState) async {
+        guard let userId = appState.currentUserId, let id = item?.id else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
+        let apiClient = appState.apiClient
+
+        if resolvedType == .series {
+            let seasonId = selectedSeasonId
+            async let itemTask = apiClient.getItem(userId: userId, itemId: id)
+            async let nextUpTask = apiClient.getNextUp(seriesId: id, userId: userId)
+            async let episodesTask: [BaseItemDto]? = {
+                guard let seasonId else { return nil }
+                return try? await apiClient.getEpisodes(seriesId: id, seasonId: seasonId, userId: userId)
+            }()
+
+            let refreshedItem = try? await itemTask
+            let refreshedNextUp = try? await nextUpTask
+            let refreshedEpisodes = await episodesTask
+
+            guard loadGeneration == generation else { return }
+            if let refreshedItem { item = refreshedItem }
+            nextUpEpisode = refreshedNextUp
+            if let refreshedEpisodes {
+                episodes = refreshedEpisodes
+            }
+
+            // Cross-season next-up (mirrors `loadSeriesDetail`'s cross-season
+            // branch): when the refreshed next-up episode lives in a season
+            // other than the one on screen, `nextUpNavigationMap` needs that
+            // season's episode list to resolve prev/next for it — otherwise
+            // the in-player Next Up prev/next buttons silently disappear.
+            // When it matches (or there's no next-up), `loadSeriesDetail`
+            // never populates `nextUpEpisodes` for that pass either — clear
+            // it here so a stale cross-season list from a PRIOR refresh can't
+            // leave dangling nav entries pointing at the wrong season.
+            let nextUpSeasonId = refreshedNextUp?.seasonID
+            if let nextUpSeasonId, nextUpSeasonId != seasonId {
+                let refreshedNextUpEpisodes = (try? await apiClient.getEpisodes(
+                    seriesId: id, seasonId: nextUpSeasonId, userId: userId
+                )) ?? []
+                guard loadGeneration == generation else { return }
+                nextUpEpisodes = refreshedNextUpEpisodes
+            } else {
+                nextUpEpisodes = []
+            }
+
+            rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+            isFavorite = item?.userData?.isFavorite ?? false
+            isPlayed = item?.userData?.isPlayed ?? false
+        } else {
+            let refreshedItem = try? await apiClient.getItem(userId: userId, itemId: id)
+            guard loadGeneration == generation else { return }
+            if let refreshedItem {
+                item = refreshedItem
+                isFavorite = refreshedItem.userData?.isFavorite ?? false
+                isPlayed = refreshedItem.userData?.isPlayed ?? false
+            }
+        }
+
+        // Defensive no-op in the normal flow (this function never flips
+        // `isLoading` true), but recovers a stranded spinner if a superseded
+        // `load()` pass were ever able to return without clearing it.
+        guard loadGeneration == generation else { return }
         isLoading = false
     }
 
@@ -246,30 +337,40 @@ final class MediaDetailViewModel {
     private func loadSeriesDetail(
         seriesId: String,
         apiClient: any APIClientProtocol,
-        userId: String
+        userId: String,
+        generation: Int
     ) async throws {
         async let similarTask = apiClient.getSimilarItems(itemId: seriesId, userId: userId, limit: 12)
         async let seasonsTask = apiClient.getSeasons(seriesId: seriesId, userId: userId)
         async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
 
-        similarItems = try await similarTask
-        seasons = try await seasonsTask
-        nextUpEpisode = try? await nextUpTask
+        let loadedSimilar = try await similarTask
+        let loadedSeasons = try await seasonsTask
+        let loadedNextUp = try? await nextUpTask
+        guard loadGeneration == generation else { return }
+        similarItems = loadedSimilar
+        seasons = loadedSeasons
+        nextUpEpisode = loadedNextUp
 
-        guard let seasonId = seasons.first?.id else {
+        guard let seasonId = loadedSeasons.first?.id else {
             rebuildNavigationMaps(apiClient: apiClient, userId: userId)
             return
         }
         selectedSeasonId = seasonId
 
-        let nextUpSeasonId = nextUpEpisode?.seasonID
+        let nextUpSeasonId = loadedNextUp?.seasonID
         if let nextUpSeasonId, nextUpSeasonId != seasonId {
             async let currentEpisodesTask = apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
             async let nextUpEpisodesTask = apiClient.getEpisodes(seriesId: seriesId, seasonId: nextUpSeasonId, userId: userId)
-            episodes = try await currentEpisodesTask
-            nextUpEpisodes = (try? await nextUpEpisodesTask) ?? []
+            let loadedEpisodes = try await currentEpisodesTask
+            let loadedNextUpEpisodes = (try? await nextUpEpisodesTask) ?? []
+            guard loadGeneration == generation else { return }
+            episodes = loadedEpisodes
+            nextUpEpisodes = loadedNextUpEpisodes
         } else {
-            episodes = try await apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
+            let loadedEpisodes = try await apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
+            guard loadGeneration == generation else { return }
+            episodes = loadedEpisodes
         }
 
         rebuildNavigationMaps(apiClient: apiClient, userId: userId)

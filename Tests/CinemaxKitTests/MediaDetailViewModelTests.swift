@@ -24,6 +24,15 @@ private func makeWatchableEpisode(id: String, name: String, played: Bool) -> Bas
     return ep
 }
 
+/// Episode tagged with its parent season id, so cross-season next-up
+/// resolution (`nextUpEpisode?.seasonID != selectedSeasonId`) has something
+/// to compare against.
+private func makeEpisodeInSeason(id: String, name: String, seasonId: String) -> BaseItemDto {
+    var ep = makeEpisode(id: id, name: name)
+    ep.seasonID = seasonId
+    return ep
+}
+
 private func makeMovie(id: String, played: Bool) -> BaseItemDto {
     var item = BaseItemDto()
     item.id = id
@@ -32,6 +41,29 @@ private func makeMovie(id: String, played: Bool) -> BaseItemDto {
     userData.isPlayed = played
     item.userData = userData
     return item
+}
+
+private func makeSeries(id: String, played: Bool) -> BaseItemDto {
+    var item = BaseItemDto()
+    item.id = id
+    item.type = .series
+    var userData = UserItemDataDto()
+    userData.isPlayed = played
+    item.userData = userData
+    return item
+}
+
+/// Thread-safe monotonic counter so a `@Sendable` handler can tell which call it
+/// is (the load-race test needs the first call to be slow, the second fast, but
+/// both target the same `itemId`).
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func next() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        value += 1
+        return value
+    }
 }
 
 @MainActor
@@ -123,6 +155,138 @@ struct MediaDetailViewModelTests {
         #expect(vm.episodes.first?.userData?.isPlayed == true)
         #expect(vm.episodes.first?.userData?.playbackPositionTicks == 0)
         #expect(api.markPlayedCalls == ["ep-1"])
+    }
+
+    // MARK: - refreshAfterPlayback (targeted post-playback refresh)
+
+    /// A movie's post-playback refresh re-fetches ONLY the item (for fresh
+    /// userData) — never the similar/seasons/next-up fan-out a full `load()`
+    /// would run.
+    @Test("refreshAfterPlayback for a movie fetches item once, skips similar/seasons/nextUp")
+    func refreshAfterPlaybackMovieTargeted() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { _ in makeMovie(id: "movie-1", played: true) }
+        let appState = makeAppState(api: api)
+
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        vm.item = makeMovie(id: "movie-1", played: false)
+        vm.resolvedType = .movie
+        vm.isPlayed = false
+        vm.isLoading = false // post-load state — a refresh must not flash the spinner back
+
+        await vm.refreshAfterPlayback(using: appState)
+
+        #expect(api.getItemCallCount == 1)
+        #expect(api.getSimilarItemsCallCount == 0)
+        #expect(api.getSeasonsCallCount == 0)
+        #expect(api.getNextUpCallCount == 0)
+        // Fresh userData is reflected without an isLoading spinner flash.
+        #expect(vm.isPlayed == true)
+        #expect(vm.isLoading == false)
+    }
+
+    /// A series' post-playback refresh re-fetches the item (userData), next-up,
+    /// and the visible season's episodes concurrently — but NOT seasons or
+    /// similar (those don't change from watching).
+    @Test("refreshAfterPlayback for a series refreshes episodes + nextUp, skips seasons/similar")
+    func refreshAfterPlaybackSeriesTargeted() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeSeries(id: id, played: false) }
+        api.stubbedNextUp = makeEpisode(id: "next-ep", name: "Next")
+        api.getEpisodesHandler = { _ in
+            [makeEpisode(id: "ep-1", name: "One"), makeEpisode(id: "ep-2", name: "Two")]
+        }
+        let appState = makeAppState(api: api)
+
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        vm.item = makeSeries(id: "series-1", played: false)
+        vm.resolvedType = .series
+        vm.selectedSeasonId = "season-1"
+        vm.isLoading = false // post-load state — a refresh must not flash the spinner back
+
+        await vm.refreshAfterPlayback(using: appState)
+
+        #expect(api.getItemCallCount == 1)
+        #expect(api.getNextUpCallCount == 1)
+        #expect(api.getEpisodesCallCount == 1)
+        #expect(api.getSeasonsCallCount == 0)
+        #expect(api.getSimilarItemsCallCount == 0)
+        #expect(vm.nextUpEpisode?.id == "next-ep")
+        #expect(vm.episodes.map(\.id) == ["ep-1", "ep-2"])
+        #expect(vm.isLoading == false)
+    }
+
+    /// When the refreshed next-up episode lands in a DIFFERENT season than the
+    /// one currently displayed, `refreshAfterPlayback` must re-fetch that
+    /// season's episodes into `nextUpEpisodes` so `nextUpNavigationMap` can
+    /// resolve prev/next for it -- mirroring `loadSeriesDetail`'s cross-season
+    /// branch. Regression test: the targeted refresh used to never touch
+    /// `nextUpEpisodes`, silently dropping the in-player Next Up prev/next
+    /// buttons whenever the next episode crossed a season boundary.
+    @Test("refreshAfterPlayback fetches cross-season next-up episodes when next-up differs from the visible season")
+    func refreshAfterPlaybackCrossSeasonNextUp() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeSeries(id: id, played: false) }
+        api.stubbedNextUp = makeEpisodeInSeason(id: "next-ep", name: "Next", seasonId: "season-2")
+        api.getEpisodesHandler = { seasonId in
+            switch seasonId {
+            case "season-1":
+                return [makeEpisode(id: "ep-1", name: "One"), makeEpisode(id: "ep-2", name: "Two")]
+            case "season-2":
+                return [makeEpisode(id: "next-ep", name: "Next")]
+            default:
+                return []
+            }
+        }
+        let appState = makeAppState(api: api)
+
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        vm.item = makeSeries(id: "series-1", played: false)
+        vm.resolvedType = .series
+        vm.selectedSeasonId = "season-1"
+        vm.isLoading = false // post-load state -- a refresh must not flash the spinner back
+
+        await vm.refreshAfterPlayback(using: appState)
+
+        #expect(api.getEpisodesCallCount == 2) // visible season + cross-season next-up
+        #expect(vm.nextUpEpisode?.id == "next-ep")
+        #expect(vm.episodes.map(\.id) == ["ep-1", "ep-2"])
+        #expect(vm.nextUpEpisodes.map(\.id) == ["next-ep"])
+        #expect(vm.nextUpNavigationMap["next-ep"] != nil)
+        #expect(vm.isLoading == false)
+    }
+
+    /// A slow first `load()` must not clobber the state a fast second `load()`
+    /// already produced — the generation guard discards the stale pass (mirrors
+    /// the `selectSeason` race test).
+    @Test("load discards stale results when a newer load completes first")
+    func loadRaceKeepsLatest() async {
+        let api = MockAPIClient()
+        let counter = CallCounter()
+        api.getItemHandler = { _ in
+            // The first-started load resolves LAST (slow); the second resolves
+            // first (fast) — last-writer-wins would leave "old" without a guard.
+            if counter.next() == 1 {
+                try? await Task.sleep(for: .milliseconds(200))
+                return makeMovie(id: "old", played: false)
+            } else {
+                try? await Task.sleep(for: .milliseconds(20))
+                return makeMovie(id: "new", played: true)
+            }
+        }
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        let loc = LocalizationManager()
+
+        async let firstCall: Void = vm.load(using: appState, loc: loc)
+        // Ensure the first load bumps + snapshots its generation before the second.
+        try? await Task.sleep(for: .milliseconds(10))
+        async let secondCall: Void = vm.load(using: appState, loc: loc)
+
+        _ = await (firstCall, secondCall)
+
+        #expect(vm.item?.id == "new")
+        #expect(vm.isPlayed == true)
     }
 
     @Test("selectSeason without userId short-circuits")

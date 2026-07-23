@@ -7,6 +7,11 @@ final class APICache: @unchecked Sendable {
         let expiry: Date
     }
     private var store: [String: Entry] = [:]
+    /// In-flight `Task`s keyed by cache key, held as `Any` because the value
+    /// type (`Task<T, Error>`) is generic per call site. Guarded by the same
+    /// `lock` as `store`. `Task` is unconditionally `Sendable`, and the class is
+    /// already `@unchecked Sendable`, so no per-field annotation is needed.
+    private var inFlight: [String: Any] = [:]
     private let lock = NSLock()
 
     func get<T>(_ key: String) -> T? {
@@ -38,6 +43,41 @@ final class APICache: @unchecked Sendable {
 
     func clear() {
         lock.withLock { store.removeAll() }
+    }
+
+    /// Single-flight coalescing: while an operation for `key` is in flight, a
+    /// concurrent call joins it and awaits the *same* result instead of firing a
+    /// second `operation`. The in-flight entry is registered synchronously under
+    /// the lock (before any suspension) so a racing caller always observes it,
+    /// and is removed the moment the operation finishes — on success AND on
+    /// failure, so a thrown error never poisons later retries. Distinct from
+    /// `get`/`set`: this coalesces the *fetch*, not the cached value; callers
+    /// layer it under their own TTL `get`/`set`.
+    ///
+    /// `T: Sendable` because the shared result is delivered to every awaiting
+    /// task — a genuine cross-domain send. Callers whose payload isn't Sendable
+    /// (e.g. an SDK DTO) coalesce at `T == Void` and have the operation write the
+    /// value into this cache, then read it back via `get` (see `getItem`).
+    func coalesce<T: Sendable>(key: String, operation: @Sendable @escaping () async throws -> T) async throws -> T {
+        let task: Task<T, Error> = lock.withLock {
+            if let existing = inFlight[key] as? Task<T, Error> {
+                return existing
+            }
+            let created = Task<T, Error> {
+                // Drop the in-flight entry before returning so a later call for
+                // the same key starts fresh. No caller can create a competing
+                // task in the meantime: `key` stays occupied until this runs.
+                defer { self.removeInFlight(key: key) }
+                return try await operation()
+            }
+            inFlight[key] = created
+            return created
+        }
+        return try await task.value
+    }
+
+    private func removeInFlight(key: String) {
+        lock.withLock { _ = inFlight.removeValue(forKey: key) }
     }
 
     /// Number of entries physically retained (live or not). Test-only hook for

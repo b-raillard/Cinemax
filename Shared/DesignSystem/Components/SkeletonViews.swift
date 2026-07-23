@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Shared shimmer phase environment key
+
+extension EnvironmentValues {
+    /// Shimmer phase (-1...1) shared by all `SkeletonBlock`s on a page, driven
+    /// by one `TimelineView` hoisted to `MediaPageSkeleton` instead of each
+    /// block running its own 120 Hz timeline. `nil` (the default) means no
+    /// shared clock is present — `SkeletonBlock` then falls back to its own
+    /// standalone `TimelineView` so it keeps working outside `MediaPageSkeleton`.
+    @Entry var skeletonPhase: Double? = nil
+}
+
 // MARK: - Skeleton building blocks
 
 /// Shimmering placeholder block used to sketch a screen's layout while its
@@ -13,46 +24,65 @@ struct SkeletonBlock: View {
     var cornerRadius: CGFloat = CinemaRadius.large
 
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    @Environment(\.skeletonPhase) private var sharedPhase
 
     /// Sweep period in seconds.
-    private static let period: Double = 1.4
+    fileprivate static let period: Double = 1.4
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(CinemaColor.surfaceContainerHigh)
             .overlay {
                 if motionEffects {
-                    // Clock-driven sweep via TimelineView rather than a
-                    // `withAnimation(.repeatForever)` started in `onAppear` —
-                    // that pattern silently fails to animate when the block is
-                    // part of the screen's initial render (the state change
-                    // lands inside an already-committed transaction and the
-                    // shimmer freezes). Deriving the phase from the timeline
-                    // date can't be dropped, and all blocks sweep in sync.
-                    TimelineView(.animation) { context in
-                        let t = context.date.timeIntervalSinceReferenceDate
-                        // 0…1 over each period, remapped to -1…1 so the
-                        // highlight travels from fully off-screen left to
-                        // fully off-screen right, then restarts.
-                        let phase = (t.truncatingRemainder(dividingBy: Self.period)) / Self.period * 2 - 1
+                    if let sharedPhase {
+                        // A `MediaPageSkeleton` ancestor already drives one
+                        // shared clock — reuse its phase instead of running
+                        // another per-block `TimelineView` (up to 43 of them
+                        // on Library otherwise, all reading the same wall
+                        // clock in lockstep).
                         GeometryReader { geo in
-                            LinearGradient(
-                                colors: [
-                                    .clear,
-                                    CinemaColor.surfaceContainerHighest.opacity(0.9),
-                                    .clear
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                            .frame(width: geo.size.width * 0.6)
-                            .offset(x: phase * geo.size.width * 1.6)
+                            shimmer(phase: sharedPhase, in: geo)
+                        }
+                    } else {
+                        // Standalone fallback (no shared clock in the
+                        // environment): clock-driven sweep via TimelineView
+                        // rather than a `withAnimation(.repeatForever)`
+                        // started in `onAppear` — that pattern silently fails
+                        // to animate when the block is part of the screen's
+                        // initial render (the state change lands inside an
+                        // already-committed transaction and the shimmer
+                        // freezes). Deriving the phase from the timeline date
+                        // can't be dropped, and all blocks sweep in sync.
+                        TimelineView(.animation) { context in
+                            let t = context.date.timeIntervalSinceReferenceDate
+                            // 0…1 over each period, remapped to -1…1 so the
+                            // highlight travels from fully off-screen left to
+                            // fully off-screen right, then restarts.
+                            let phase = (t.truncatingRemainder(dividingBy: Self.period)) / Self.period * 2 - 1
+                            GeometryReader { geo in
+                                shimmer(phase: phase, in: geo)
+                            }
                         }
                     }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func shimmer(phase: Double, in geo: GeometryProxy) -> some View {
+        LinearGradient(
+            colors: [
+                .clear,
+                CinemaColor.surfaceContainerHighest.opacity(0.9),
+                .clear
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(width: geo.size.width * 0.6)
+        .offset(x: phase * geo.size.width * 1.6)
     }
 }
 
@@ -76,7 +106,29 @@ struct MediaPageSkeleton: View {
     let wideCardWidth: CGFloat
     let horizontalPadding: CGFloat
 
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+
     var body: some View {
+        // One shared clock for every `SkeletonBlock` on the page (up to 43 on
+        // Library) instead of each block running its own `TimelineView` —
+        // they all read the same wall clock, so a single phase computed here
+        // and broadcast via `.skeletonPhase` is pixel-identical to the old
+        // per-block version. Skipped entirely when Motion Effects is off so
+        // no clock ever ticks behind static blocks.
+        if motionEffects {
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let phase = (t.truncatingRemainder(dividingBy: SkeletonBlock.period)) / SkeletonBlock.period * 2 - 1
+                content
+                    .environment(\.skeletonPhase, phase)
+            }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
             SkeletonBlock(cornerRadius: 0)
                 .frame(maxWidth: .infinity)

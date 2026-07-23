@@ -151,8 +151,6 @@ final class TrickplayController {
     /// (what image endpoints accept) plus the Authorization header.
     nonisolated private static func loadTile(url: URL, token: String?) async -> Data? {
         let authed = VLCStreamPresenter.authedURL(url, token: token)
-        guard let (data, http) = await AuthenticatedImageFetch.data(from: authed, token: token),
-              (200..<300).contains(http.statusCode), !data.isEmpty else { return nil }
-        return data
+        return await AuthenticatedImageFetch.data(from: authed, token: token)
     }
 }

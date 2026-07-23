@@ -105,6 +105,10 @@ extension JellyfinAPIClient {
                 years: years
             )
             params.isFavorite = isFavorite
+            params.fields = [.overview, .genres, .childCount]
+            params.enableUserData = true
+            params.enableImageTypes = [.primary, .backdrop, .thumb]
+            params.imageTypeLimit = 1
             let response = try await client.send(Paths.getItems(parameters: params))
             let result = response.value
             return (result.items ?? [], result.totalRecordCount ?? 0)
@@ -169,13 +173,28 @@ extension JellyfinAPIClient {
         // play-state / favorite mutators, AND `reportPlaybackStopped` (so the
         // detail screen's immediate post-dismiss reload gets the fresh resume
         // position — tvOS reloads synchronously on dismiss).
+        //
+        // `coalesce` adds in-flight single-flighting so the burst's concurrent
+        // callers (which all miss the TTL before the first response lands) share
+        // ONE request instead of each firing their own. We coalesce at `Void`:
+        // the winning task runs `fetch` (which writes the TTL entry as a side
+        // effect) while the others await that same task, then everyone reads the
+        // freshly-cached value back — `BaseItemDto` isn't Sendable, so it must
+        // never cross the coalescing boundary itself.
         let cacheKey = "item-\(itemId)-\(userId)"
         if let cached: BaseItemDto = cache.get(cacheKey) { return cached }
-        do {
+        let fetch: @Sendable () async throws -> BaseItemDto = { [self] in
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let response = try await client.send(Paths.getItem(itemID: itemId, userID: userId))
             cache.set(cacheKey, value: response.value, ttl: 10)
             return response.value
+        }
+        do {
+            try await cache.coalesce(key: cacheKey) { _ = try await fetch() }
+            if let cached: BaseItemDto = cache.get(cacheKey) { return cached }
+            // Rare: the entry was invalidated between the winner's `set` and this
+            // read (a concurrent userData mutation). Fetch directly.
+            return try await fetch()
         } catch {
             notifyIfUnauthorized(error)
             throw error

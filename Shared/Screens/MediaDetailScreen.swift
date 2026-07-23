@@ -83,7 +83,9 @@ struct MediaDetailScreen: View {
         }
         #if os(tvOS)
         .onChange(of: coordinator.lastDismissedAt) { _, _ in
-            Task { await viewModel.load(using: appState, loc: loc) }
+            // Targeted refresh (userData / episodes / next-up) — no full reload,
+            // no spinner flash. See `MediaDetailViewModel.refreshAfterPlayback`.
+            Task { await viewModel.refreshAfterPlayback(using: appState) }
         }
         #endif
         .sheet(item: $episodeOverview) { ep in
@@ -815,7 +817,7 @@ struct MediaDetailScreen: View {
             .padding(.horizontal, contentPadding)
             // iOS: horizontal scroll of episode cards
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 16) {
+                LazyHStack(alignment: .top, spacing: 16) {
                     ForEach(viewModel.episodes, id: \.id) { episode in
                         let nav = episodeNavigation(for: episode.id ?? "")
                         MediaDetailEpisodeCard(

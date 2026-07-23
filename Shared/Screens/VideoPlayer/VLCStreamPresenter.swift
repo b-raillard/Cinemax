@@ -289,6 +289,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// target instead of snapping back to the stale pre-seek position. Shared by
     /// both platforms (the iOS slider and the tvOS scrub bar both honor it).
     private var pendingScrubTargetMs: Int32?
+    /// Series name resolved by `fetchChapters`' `getItem` at playback start.
+    /// Reused by `showEndOfSeriesOverlay` so the end-of-series card doesn't
+    /// re-fetch the whole item purely for its `seriesName` (the getItem TTL has
+    /// long expired by playback end). Reset per-media (episode swap / reload).
+    private var resolvedSeriesName: String?
     /// Debounced commit for coalesced ±N skips / chapter jumps. Each press
     /// advances `pendingScrubTargetMs` (the on-screen target) and re-arms this;
     /// the single engine seek fires `seekCommitDelay` after the LAST press. See
@@ -1724,6 +1729,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Same fetch feeds the trickplay manifest — no extra API call.
             self.trickplay.configure(item: item, itemId: id, mediaSourceId: mediaSourceId,
                                      token: token, imageBuilder: builder)
+            // Reused by `showEndOfSeriesOverlay` so the end-of-series card
+            // doesn't re-fetch this item just for its series name.
+            self.resolvedSeriesName = item.seriesName ?? item.name
             guard let chapters = item.chapters, chapters.count > 1 else { return }
             self.chapterStartTicks = chapters.map { $0.startPositionTicks ?? 0 }
             for (i, ch) in chapters.enumerated() {
@@ -1834,17 +1842,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Authorization header, so it works regardless of server hardening.
     nonisolated private static func loadImage(url: URL, token: String?) async -> Data? {
         let authed = VLCStreamPresenter.authedURL(url, token: token)
-        guard let (data, resp) = await AuthenticatedImageFetch.data(from: authed, token: token) else {
+        guard let data = await AuthenticatedImageFetch.data(from: authed, token: token) else {
             #if DEBUG
             logger.debug("CINEMAX-CHAPTERIMG ▸ request failed \(redactedURL(authed))")
             #endif
             return nil
         }
-        let code = resp.statusCode
         #if DEBUG
-        logger.debug("CINEMAX-CHAPTERIMG ▸ status=\(code) bytes=\(data.count) \(redactedURL(authed))")
+        logger.debug("CINEMAX-CHAPTERIMG ▸ ok bytes=\(data.count) \(redactedURL(authed))")
         #endif
-        guard (200..<300).contains(code), !data.isEmpty else { return nil }
         return data
     }
 
@@ -2194,6 +2200,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         firstPlayStart = Date()
         usingProxy = false
         nextUpCancelledForThisItem = false
+        resolvedSeriesName = nil
         audioDelayMsState = 0
         subtitleDelayMsState = 0
         let url: URL
@@ -2356,6 +2363,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Per-file state: the countdown card baked in the old "next" title,
             // and delays compensate per-file mux drift. Speed persists.
             self.tearDownNextUpCard()
+            self.resolvedSeriesName = nil // fetchChapters re-resolves for the new episode
             self.audioDelayMsState = 0
             self.subtitleDelayMsState = 0
             self.previousEpisode = nav?.1
@@ -2742,8 +2750,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Gated on `episodeNavigator != nil` (series playback only).
         Task { [weak self] in
             guard let self else { return }
-            let item = try? await self.apiClient.getItem(userId: self.userId, itemId: self.itemId)
-            let seriesName = item?.seriesName ?? item?.name ?? self.titleText
+            // `fetchChapters` already resolved the series name at playback start
+            // — reuse it and only fall back to a fresh `getItem` if it's missing
+            // (e.g. chapters never loaded). Saves a redundant item fetch at the
+            // end of every series episode.
+            let seriesName: String
+            if let cached = self.resolvedSeriesName {
+                seriesName = cached
+            } else {
+                let item = try? await self.apiClient.getItem(userId: self.userId, itemId: self.itemId)
+                seriesName = item?.seriesName ?? item?.name ?? self.titleText
+            }
             let alert = UIAlertController(
                 title: String(format: self.loc.localized("player.finishedSeries.title"), seriesName),
                 message: self.loc.localized("player.finishedSeries.subtitle"),
