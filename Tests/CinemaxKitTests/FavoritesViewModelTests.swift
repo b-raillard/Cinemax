@@ -418,4 +418,70 @@ struct PaginatedLoaderTests {
         #expect(!loader.isLoadingMore)
         #expect(!loader.hasLoadedAll)
     }
+
+    @Test("reset discards a stale in-flight loadMore instead of splicing its result into the fresh page")
+    func resetDiscardsStaleInFlightLoadMore() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+
+        // Seed an initial page so the subsequent loadMore mirrors the real
+        // "scrolled to the last card, loadMore in flight" trigger scenario.
+        await loader.loadMore { _ in (items: [1, 2], total: 10) }
+        #expect(loader.items == [1, 2])
+
+        let fetchStarted = PaginatedLoaderGate()
+        let releaseStaleFetch = PaginatedLoaderGate()
+
+        // Kick off a loadMore whose fetch suspends until released — simulating
+        // a network call still in flight when a refresh notification fires.
+        let staleTask = Task { @MainActor in
+            await loader.loadMore { _ in
+                await fetchStarted.signal()
+                await releaseStaleFetch.wait()
+                return (items: [999, 998], total: 999)
+            }
+        }
+
+        // Wait until the stale fetch has actually started (isLoadingMore is
+        // already true and the closure is suspended) before resetting.
+        await fetchStarted.wait()
+
+        // A refresh notification (e.g. .cinemaxItemUserDataChanged) fires while
+        // that fetch is still in flight: reset, then re-fetch page 0.
+        loader.reset()
+        await loader.loadMore { _ in (items: [7, 8], total: 2) }
+
+        #expect(loader.items == [7, 8])
+        #expect(loader.totalCount == 2)
+        #expect(loader.hasLoadedAll)
+
+        // Now let the stale fetch resume and complete.
+        await releaseStaleFetch.signal()
+        await staleTask.value
+
+        // The stale page must NOT be spliced in, and it must not clobber the
+        // totalCount/hasLoadedAll the fresh fetch just established.
+        #expect(loader.items == [7, 8])
+        #expect(loader.totalCount == 2)
+        #expect(loader.hasLoadedAll)
+        #expect(!loader.isLoadingMore)
+    }
+}
+
+/// One-shot async gate used to deterministically interleave a stale in-flight
+/// `loadMore` fetch with a `reset()` + fresh `loadMore` on the main actor,
+/// without relying on `Task.yield()` scheduling order.
+private actor PaginatedLoaderGate {
+    private var isSignaled = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if isSignaled { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func signal() {
+        isSignaled = true
+        continuation?.resume()
+        continuation = nil
+    }
 }
