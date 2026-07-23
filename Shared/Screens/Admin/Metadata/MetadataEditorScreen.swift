@@ -55,7 +55,15 @@ struct MetadataEditorScreen: View {
             AdminTabBar(items: tabs, selection: $viewModel.selectedTab)
 
             Group {
-                if tabUsesSharedSave {
+                if viewModel.isLoadingFullItem {
+                    // Gate the form until the full DTO lands (see
+                    // `MetadataEditorViewModel.loadFullItemIfNeeded`) — the
+                    // seeded item may be a narrowed `getItems` list DTO
+                    // missing `people`/`studios`, and editing/saving against
+                    // it would silently drop those fields server-side.
+                    LoadingStateView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if tabUsesSharedSave {
                     AdminFormScreen(
                         isDirty: viewModel.isDirty,
                         isSaving: viewModel.isSaving,
@@ -104,6 +112,12 @@ struct MetadataEditorScreen: View {
         .background(CinemaColor.surface.ignoresSafeArea())
         .navigationTitle(viewModel.item.name ?? loc.localized("admin.metadata.title"))
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.loadFullItemIfNeeded(
+                using: appState.apiClient,
+                userId: appState.currentUserId ?? ""
+            )
+        }
     }
 }
 
