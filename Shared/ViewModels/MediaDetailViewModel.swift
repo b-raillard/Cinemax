@@ -147,17 +147,46 @@ final class MediaDetailViewModel {
             nextUpEpisode = refreshedNextUp
             if let refreshedEpisodes {
                 episodes = refreshedEpisodes
-                rebuildNavigationMaps(apiClient: apiClient, userId: userId)
             }
+
+            // Cross-season next-up (mirrors `loadSeriesDetail`'s cross-season
+            // branch): when the refreshed next-up episode lives in a season
+            // other than the one on screen, `nextUpNavigationMap` needs that
+            // season's episode list to resolve prev/next for it — otherwise
+            // the in-player Next Up prev/next buttons silently disappear.
+            // When it matches (or there's no next-up), `loadSeriesDetail`
+            // never populates `nextUpEpisodes` for that pass either — clear
+            // it here so a stale cross-season list from a PRIOR refresh can't
+            // leave dangling nav entries pointing at the wrong season.
+            let nextUpSeasonId = refreshedNextUp?.seasonID
+            if let nextUpSeasonId, nextUpSeasonId != seasonId {
+                let refreshedNextUpEpisodes = (try? await apiClient.getEpisodes(
+                    seriesId: id, seasonId: nextUpSeasonId, userId: userId
+                )) ?? []
+                guard loadGeneration == generation else { return }
+                nextUpEpisodes = refreshedNextUpEpisodes
+            } else {
+                nextUpEpisodes = []
+            }
+
+            rebuildNavigationMaps(apiClient: apiClient, userId: userId)
             isFavorite = item?.userData?.isFavorite ?? false
             isPlayed = item?.userData?.isPlayed ?? false
         } else {
-            guard let refreshedItem = try? await apiClient.getItem(userId: userId, itemId: id) else { return }
+            let refreshedItem = try? await apiClient.getItem(userId: userId, itemId: id)
             guard loadGeneration == generation else { return }
-            item = refreshedItem
-            isFavorite = refreshedItem.userData?.isFavorite ?? false
-            isPlayed = refreshedItem.userData?.isPlayed ?? false
+            if let refreshedItem {
+                item = refreshedItem
+                isFavorite = refreshedItem.userData?.isFavorite ?? false
+                isPlayed = refreshedItem.userData?.isPlayed ?? false
+            }
         }
+
+        // Defensive no-op in the normal flow (this function never flips
+        // `isLoading` true), but recovers a stranded spinner if a superseded
+        // `load()` pass were ever able to return without clearing it.
+        guard loadGeneration == generation else { return }
+        isLoading = false
     }
 
     /// Optimistic heart toggle — reverted if the server call fails.

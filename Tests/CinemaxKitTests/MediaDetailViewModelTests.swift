@@ -24,6 +24,15 @@ private func makeWatchableEpisode(id: String, name: String, played: Bool) -> Bas
     return ep
 }
 
+/// Episode tagged with its parent season id, so cross-season next-up
+/// resolution (`nextUpEpisode?.seasonID != selectedSeasonId`) has something
+/// to compare against.
+private func makeEpisodeInSeason(id: String, name: String, seasonId: String) -> BaseItemDto {
+    var ep = makeEpisode(id: id, name: name)
+    ep.seasonID = seasonId
+    return ep
+}
+
 private func makeMovie(id: String, played: Bool) -> BaseItemDto {
     var item = BaseItemDto()
     item.id = id
@@ -204,6 +213,46 @@ struct MediaDetailViewModelTests {
         #expect(api.getSimilarItemsCallCount == 0)
         #expect(vm.nextUpEpisode?.id == "next-ep")
         #expect(vm.episodes.map(\.id) == ["ep-1", "ep-2"])
+        #expect(vm.isLoading == false)
+    }
+
+    /// When the refreshed next-up episode lands in a DIFFERENT season than the
+    /// one currently displayed, `refreshAfterPlayback` must re-fetch that
+    /// season's episodes into `nextUpEpisodes` so `nextUpNavigationMap` can
+    /// resolve prev/next for it -- mirroring `loadSeriesDetail`'s cross-season
+    /// branch. Regression test: the targeted refresh used to never touch
+    /// `nextUpEpisodes`, silently dropping the in-player Next Up prev/next
+    /// buttons whenever the next episode crossed a season boundary.
+    @Test("refreshAfterPlayback fetches cross-season next-up episodes when next-up differs from the visible season")
+    func refreshAfterPlaybackCrossSeasonNextUp() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeSeries(id: id, played: false) }
+        api.stubbedNextUp = makeEpisodeInSeason(id: "next-ep", name: "Next", seasonId: "season-2")
+        api.getEpisodesHandler = { seasonId in
+            switch seasonId {
+            case "season-1":
+                return [makeEpisode(id: "ep-1", name: "One"), makeEpisode(id: "ep-2", name: "Two")]
+            case "season-2":
+                return [makeEpisode(id: "next-ep", name: "Next")]
+            default:
+                return []
+            }
+        }
+        let appState = makeAppState(api: api)
+
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        vm.item = makeSeries(id: "series-1", played: false)
+        vm.resolvedType = .series
+        vm.selectedSeasonId = "season-1"
+        vm.isLoading = false // post-load state -- a refresh must not flash the spinner back
+
+        await vm.refreshAfterPlayback(using: appState)
+
+        #expect(api.getEpisodesCallCount == 2) // visible season + cross-season next-up
+        #expect(vm.nextUpEpisode?.id == "next-ep")
+        #expect(vm.episodes.map(\.id) == ["ep-1", "ep-2"])
+        #expect(vm.nextUpEpisodes.map(\.id) == ["next-ep"])
+        #expect(vm.nextUpNavigationMap["next-ep"] != nil)
         #expect(vm.isLoading == false)
     }
 
