@@ -290,6 +290,7 @@
 "settings.libraryLayout" = "Bibliothèque";
 "settings.libraryLayout.browse" = "Par genre";
 "settings.libraryLayout.grid" = "Tout afficher";
+"settings.dimUnfocusedPosters" = "Estomper les affiches non sélectionnées";
 
 // MARK: - Media Detail
 

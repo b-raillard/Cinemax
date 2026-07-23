@@ -19,6 +19,15 @@ struct LibraryPosterCard: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
 
+    #if os(tvOS)
+    // Opt-in "spotlight" — dims this card while a *sibling* holds focus. Read
+    // per-card via `@FocusState` so no grid-level focus plumbing is needed; the
+    // feature is gated on the `dimUnfocusedPosters` setting (default off).
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+    @AppStorage(SettingsKey.dimUnfocusedPosters) private var dimUnfocused = SettingsKey.Default.dimUnfocusedPosters
+    @FocusState private var isCardFocused: Bool
+    #endif
+
     let item: BaseItemDto
     let itemType: BaseItemKind
     #if os(iOS)
@@ -56,6 +65,7 @@ struct LibraryPosterCard: View {
                 }
                 #if os(tvOS)
                 .buttonStyle(CinemaTVCardButtonStyle())
+                .focused($isCardFocused)
                 #else
                 .buttonStyle(.plain)
                 #endif
@@ -83,6 +93,12 @@ struct LibraryPosterCard: View {
             titleRows(subtitle: subtitle)
                 .accessibilityHidden(true)
         }
+        #if os(tvOS)
+        // Spotlight: recede while another card is focused (opt-in, default off).
+        .opacity(dimUnfocused && !isCardFocused ? 0.55 : 1)
+        .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isCardFocused)
+        .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: dimUnfocused)
+        #endif
     }
 
     @ViewBuilder

@@ -68,6 +68,14 @@ enum SettingsKey {
     /// preserve any existing on-device preference; the value is platform-neutral.
     static let libraryBrowseLayout = "library.tvBrowseLayout"
 
+    /// tvOS only. When `true`, poster grids dim every non-focused card to
+    /// spotlight the one holding focus (a stronger "repérage" cue than the
+    /// scale + accent ring alone). Default `false` — the focus scale/halo
+    /// already disambiguates; dimming is an opt-in for users who want the
+    /// cinema-spotlight effect. Read in `LibraryPosterCard`; the toggle lives
+    /// in Settings → Appearance (tvOS).
+    static let dimUnfocusedPosters = "tvos.dimUnfocusedPosters"
+
     // Privacy & Security
     /// Maximum content age (years) for items shown across the app.
     /// `0` = unrestricted; 10/12/14/16/18 select a ceiling and any item rated
@@ -113,6 +121,7 @@ enum SettingsKey {
         static let searchSaveHistory = true
 
         static let libraryBrowseLayout = LibraryBrowseLayout.browse.rawValue
+        static let dimUnfocusedPosters = false
 
         static let privacyMaxContentAge = 0
 

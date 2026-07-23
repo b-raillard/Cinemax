@@ -122,26 +122,39 @@ struct CinemaTVButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(backgroundView(pressed: configuration.isPressed))
+            .background(backgroundView(pressed: configuration.isPressed, focused: isFocused))
             .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+            // Accent ring on focus — previously the CTA relied on scale + a
+            // faint shadow alone and got lost over a busy backdrop. The accent
+            // button gets a light ring (it's already saturated); neutral/ghost
+            // buttons get the accent itself.
+            .overlay(
+                RoundedRectangle(cornerRadius: CinemaRadius.large)
+                    .strokeBorder(focusRingColor.opacity(isFocused ? 1 : 0), lineWidth: 2.5)
+            )
             .scaleEffect(isFocused ? 1.05 : (configuration.isPressed ? 0.95 : 1.0))
+            // Subtle lift for relief (buttons are self-contained, so a vertical
+            // offset is safe here — unlike poster cards whose title sits outside).
+            .offset(y: isFocused && !configuration.isPressed ? -3 : 0)
             .shadow(
-                color: shadowColor.opacity(isFocused ? 0.3 : 0),
-                radius: 20,
-                y: 10
+                color: focusHaloColor.opacity(isFocused ? 0.42 : 0),
+                radius: 24,
+                y: 12
             )
             .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
             .animation(motionEnabled ? .easeInOut(duration: 0.1) : nil, value: configuration.isPressed)
     }
 
     @ViewBuilder
-    private func backgroundView(pressed: Bool) -> some View {
+    private func backgroundView(pressed: Bool, focused: Bool) -> some View {
         switch cinemaStyle {
         case .primary:
             CinemaGradient.primaryButton
         case .ghost:
+            // Ghost fill brightens on focus so secondary actions (Retry, "From
+            // the start", audio/subtitle) read clearly as selected.
             RoundedRectangle(cornerRadius: CinemaRadius.large)
-                .fill(CinemaColor.surfaceContainerHigh.opacity(pressed ? 0.8 : 0.6))
+                .fill(CinemaColor.surfaceContainerHigh.opacity(focused ? 0.95 : (pressed ? 0.8 : 0.6)))
                 .overlay(
                     RoundedRectangle(cornerRadius: CinemaRadius.large)
                         .stroke(CinemaColor.outline.opacity(0.3), lineWidth: 1)
@@ -151,11 +164,22 @@ struct CinemaTVButtonStyle: ButtonStyle {
         }
     }
 
-    private var shadowColor: Color {
+    /// Focus ring colour — a light ring on the already-saturated accent button,
+    /// the accent hue on neutral/ghost buttons.
+    private var focusRingColor: Color {
+        switch cinemaStyle {
+        case .accent:          Color.white.opacity(0.65)
+        case .ghost, .primary: themeManager.accent
+        }
+    }
+
+    /// Focus halo colour. Ghost buttons glow accent (their idle shadow is grey);
+    /// the accent button keeps its container tint; primary stays neutral.
+    private var focusHaloColor: Color {
         switch cinemaStyle {
         case .primary: CinemaColor.primary
-        case .ghost: CinemaColor.surfaceTint
-        case .accent: themeManager.accentContainer
+        case .ghost:   themeManager.accent
+        case .accent:  themeManager.accentContainer
         }
     }
 }

@@ -296,6 +296,13 @@ extension SettingsScreen {
 
             tvFontSizeRow
             tvLibraryLayoutRow
+
+            tvGlassToggle(
+                icon: "viewfinder",
+                label: loc.localized("settings.dimUnfocusedPosters"),
+                key: "dimUnfocusedPosters",
+                value: $dimUnfocusedPosters
+            )
         }
     }
 
