@@ -19,15 +19,6 @@ struct LibraryPosterCard: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
 
-    #if os(tvOS)
-    // Opt-in "spotlight" — dims this card while a *sibling* holds focus. Read
-    // per-card via `@FocusState` so no grid-level focus plumbing is needed; the
-    // feature is gated on the `dimUnfocusedPosters` setting (default off).
-    @Environment(\.motionEffectsEnabled) private var motionEnabled
-    @AppStorage(SettingsKey.dimUnfocusedPosters) private var dimUnfocused = SettingsKey.Default.dimUnfocusedPosters
-    @FocusState private var isCardFocused: Bool
-    #endif
-
     let item: BaseItemDto
     let itemType: BaseItemKind
     #if os(iOS)
@@ -65,7 +56,11 @@ struct LibraryPosterCard: View {
                 }
                 #if os(tvOS)
                 .buttonStyle(CinemaTVCardButtonStyle())
-                .focused($isCardFocused)
+                // Opt-in "spotlight" dim, isolated in its own `ViewModifier` so a
+                // focus step re-evaluates only that modifier's body — never this
+                // card's `body` (which builds the poster image URL + subtitle
+                // text). See `PosterDimFocusModifier` below.
+                .posterDimFocus()
                 #else
                 .buttonStyle(.plain)
                 #endif
@@ -93,12 +88,6 @@ struct LibraryPosterCard: View {
             titleRows(subtitle: subtitle)
                 .accessibilityHidden(true)
         }
-        #if os(tvOS)
-        // Spotlight: recede while another card is focused (opt-in, default off).
-        .opacity(dimUnfocused && !isCardFocused ? 0.55 : 1)
-        .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isCardFocused)
-        .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: dimUnfocused)
-        #endif
     }
 
     @ViewBuilder
@@ -141,3 +130,36 @@ struct LibraryPosterCard: View {
         return parts.joined(separator: " · ")
     }
 }
+
+#if os(tvOS)
+// MARK: - Poster Dim Focus Modifier
+
+/// Opt-in "spotlight" — dims the poster while a *sibling* card holds focus.
+/// Owns the `@FocusState` + `dimUnfocusedPosters` + `motionEffectsEnabled`
+/// reads itself so a focus step re-evaluates only this modifier's own
+/// `body(content:)` — never `LibraryPosterCard.body`, which builds the
+/// poster image URL and subtitle text and has no reason to re-run on every
+/// focus change. Same isolation pattern as `CinemaFocusModifier`
+/// (`FocusScaleModifier.swift`) and `CinemaTVCardButtonStyle`
+/// (`TVButtonStyles.swift`). Attached directly to the `NavigationLink` (the
+/// focusable control) so `.focused($isFocused)` binds to it correctly.
+private struct PosterDimFocusModifier: ViewModifier {
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+    @AppStorage(SettingsKey.dimUnfocusedPosters) private var dimUnfocused = SettingsKey.Default.dimUnfocusedPosters
+    @FocusState private var isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .focused($isFocused)
+            .opacity(dimUnfocused && !isFocused ? 0.55 : 1)
+            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: dimUnfocused)
+    }
+}
+
+private extension View {
+    func posterDimFocus() -> some View {
+        modifier(PosterDimFocusModifier())
+    }
+}
+#endif
