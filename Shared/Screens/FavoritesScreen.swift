@@ -103,7 +103,10 @@ struct FavoritesScreen: View {
             Task { await viewModel.load(using: appState) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
-            Task { await viewModel.load(using: appState) }
+            Task {
+                prefetcher.reset()
+                await viewModel.load(using: appState)
+            }
         }
         // A per-item watched/resume toggle (tier-2) — reload immediately so an
         // un-watch drops the item while this grid is on screen.

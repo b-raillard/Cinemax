@@ -51,7 +51,7 @@ extension JellyfinAPIClient {
     }
 
     public func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
-        let cacheKey = "latest-\(userId)-\(limit)-\(getMaxContentAge())"
+        let cacheKey = "latest-\(userId)-\(parentId ?? "all")-\(limit)-\(getMaxContentAge())"
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
 
         do {

@@ -143,6 +143,19 @@ final class MenuConfigStore {
     /// renders on an offline launch without a network call.
     var availableViews: [LibraryView]
 
+    /// Memoized final tab list for `MainTabView` — the resolution of `mode` /
+    /// `customKind` / entry arrays / `availableViews`. Recomputed by
+    /// `recomputeResolvedTabs()` at the end of every mutator that changes an
+    /// input (see that method); consumers read this stored value so Observation
+    /// re-renders them exactly when the resolved tabs change. `private(set)` so
+    /// only the store's mutators can publish a new value.
+    ///
+    /// No truncation/cap — SwiftUI's `TabView` on iPhone in compact width
+    /// natively creates an overflow ("More") tab when the count exceeds 5,
+    /// rendered with the iOS 26 liquid-glass treatment. We don't replace that
+    /// behaviour with a custom synthetic tab.
+    private(set) var resolvedTabs: [ResolvedTab] = []
+
     var isLoadingViews: Bool = false
     var lastFetchError: String?
 
@@ -162,6 +175,9 @@ final class MenuConfigStore {
         self.contentTypeEntries = Self.applyCap(to: storedContentType)
         self.libraryEntries = Self.applyCap(to: storedLibrary)
         self.availableViews = Self.load([LibraryView].self, forKey: SettingsKey.menuCachedViews) ?? []
+        // Seed the memoized tab list from the restored state (all stored
+        // properties are initialized by this point).
+        recomputeResolvedTabs()
     }
 
     /// Trims the enabled flags of `entries` so the total enabled count does
@@ -190,12 +206,14 @@ final class MenuConfigStore {
     func setMode(_ value: Mode) {
         mode = value
         Self.persist(value.rawValue, forKey: SettingsKey.menuMode)
+        recomputeResolvedTabs()
     }
 
     func setCustomKind(_ value: CustomKind) {
         customKind = value
         Self.persist(value.rawValue, forKey: SettingsKey.menuCustomKind)
         if value == .library { ensureLibraryEntriesPopulated() }
+        recomputeResolvedTabs()
     }
 
     func attach(apiClient: any APIClientProtocol, userId: String?) {
@@ -270,6 +288,7 @@ final class MenuConfigStore {
         copy[idx].enabled.toggle()
         self[keyPath: keyPath] = copy
         persist()
+        recomputeResolvedTabs()
         return wantsEnable ? .enabled : .disabled
     }
 
@@ -287,6 +306,7 @@ final class MenuConfigStore {
             libraryEntries = copy
             persistLibraryEntries()
         }
+        recomputeResolvedTabs()
     }
 
     /// tvOS bridge — swap with neighbor at `delta` offset (-1 = up, +1 = down).
@@ -309,6 +329,9 @@ final class MenuConfigStore {
             libraryEntries = copy
             persistLibraryEntries()
         }
+        // Only reached on a successful swap — the guards above `return` early
+        // when nothing moved, so this never recomputes for a no-op.
+        recomputeResolvedTabs()
     }
 
     // MARK: - Persistence (explicit)
@@ -336,6 +359,7 @@ final class MenuConfigStore {
         Self.persist(customKind.rawValue, forKey: SettingsKey.menuCustomKind)
         persistContentTypeEntries()
         persistLibraryEntries()
+        recomputeResolvedTabs()
     }
 
     // MARK: - Views fetching
@@ -380,6 +404,10 @@ final class MenuConfigStore {
                 libraryEntries = merged
                 persistLibraryEntries()
             }
+            // Refresh the memoized tab list; the equality guard inside makes a
+            // same-views refresh a no-op (no spurious re-render), preserving the
+            // idempotence the two guards above establish.
+            recomputeResolvedTabs()
         } catch {
             guard gen == refreshGeneration else { return }
             lastFetchError = "\(error)"
@@ -394,6 +422,7 @@ final class MenuConfigStore {
         libraryEntries = []
         persistAvailableViews()
         persistLibraryEntries()
+        recomputeResolvedTabs()
     }
 
     private func ensureLibraryEntriesPopulated() {
@@ -478,14 +507,25 @@ final class MenuConfigStore {
 
     // MARK: - Resolution
 
-    /// Final tab list for `MainTabView`. Reactive: any mutation that updates
-    /// the entries / mode / customKind / availableViews recomputes this.
-    ///
-    /// No truncation/cap — SwiftUI's `TabView` on iPhone in compact width
-    /// natively creates an overflow ("More") tab when the count exceeds 5,
-    /// rendered with the iOS 26 liquid-glass treatment. We don't replace
-    /// that behaviour with a custom synthetic tab.
-    var resolvedTabs: [ResolvedTab] {
+    /// Recomputes `resolvedTabs` and publishes it only when the value actually
+    /// changed. The equality guard mirrors the `availableViews`/`libraryEntries`
+    /// guards in `refreshAvailableViews` — an idempotent mutation (e.g. a repeat
+    /// refresh with the same views) must NOT fire a spurious `@Observable`
+    /// notification (which previously surfaced as a "redirected to Home"
+    /// flicker on iOS). Because inputs never carry `didSet` (see the RULE on
+    /// `@Observable` + property observers), every mutator that changes an
+    /// input to the resolution calls this at its end: `setMode`,
+    /// `setCustomKind`, `toggleInternal`, `move`, `moveBy`, `reset`,
+    /// `refreshAvailableViews`, `invalidateViews`, plus `init`.
+    private func recomputeResolvedTabs() {
+        let updated = computeResolvedTabs()
+        if updated != resolvedTabs { resolvedTabs = updated }
+    }
+
+    /// Pure derivation of the tab list from the current mode / customKind /
+    /// entry arrays / `availableViews`. Never observed directly — consumers
+    /// read the memoized `resolvedTabs` instead.
+    private func computeResolvedTabs() -> [ResolvedTab] {
         switch mode {
         case .default: return defaultResolved
         case .custom:

@@ -250,8 +250,15 @@ struct HomeScreen: View {
                     // as a plain static hero. The carousel carries the
                     // scroll-anchor `id` so the tab-bar pill heuristic is
                     // unchanged (still no leading gap above the first row).
-                    if !heroCandidates.isEmpty {
-                        heroCarousel
+                    //
+                    // Evaluate `heroCandidates` ONCE per render and thread the
+                    // result down: the property loops over resume+latest and
+                    // builds a Set, and was previously recomputed here (the
+                    // emptiness check), inside the carousel body, and via the
+                    // index clamp.
+                    let heroCandidateList = heroCandidates
+                    if !heroCandidateList.isEmpty {
+                        heroCarousel(heroCandidateList)
                             .id(scrollTopID)
                             .padding(.bottom, CinemaSpacing.spacing6)
                     } else {
@@ -417,9 +424,12 @@ struct HomeScreen: View {
     }
 
     @ViewBuilder
-    private var heroCarousel: some View {
-        let candidates = heroCandidates
-        let active = currentHeroIndex
+    private func heroCarousel(_ candidates: [BaseItemDto]) -> some View {
+        // `candidates` is the single per-render evaluation threaded from
+        // `content`; clamp the index against it here instead of re-reading
+        // `heroCandidates` through `currentHeroIndex` (same value — the caller
+        // only renders this when `candidates` is non-empty).
+        let active = candidates.isEmpty ? 0 : min(heroIndex, candidates.count - 1)
         ZStack {
             ForEach(Array(candidates.enumerated()), id: \.element.id) { idx, item in
                 if idx == active {

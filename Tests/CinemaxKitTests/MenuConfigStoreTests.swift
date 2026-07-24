@@ -175,6 +175,126 @@ struct MenuConfigStoreTests {
         #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
     }
 
+    // MARK: - Resolution memoization (recompute-in-mutators)
+
+    // `resolvedTabs` is a memoized stored cache recomputed at the end of every
+    // mutator that changes an input (mode / customKind / entry arrays /
+    // availableViews). These tests lock in that every mutation category keeps
+    // the cache in sync — a missed `recomputeResolvedTabs()` call in any
+    // mutator would surface here as a stale bar.
+
+    @Test("resolvedTabs: setMode flips the cached array between default and custom")
+    func resolvedTabsReflectsModeFlip() {
+        clearMenuDefaults()
+        let store = MenuConfigStore()
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+
+        // Disable movies in the custom entries while still in default mode —
+        // default mode ignores custom entries, so the cache must not change yet.
+        #expect(store.toggle(MenuEntry.moviesID) == .disabled)
+        #expect(store.resolvedTabs.contains { $0.id == "movies" })
+
+        // Flipping to custom now surfaces the disabled state.
+        store.setMode(.custom)
+        #expect(!store.resolvedTabs.contains { $0.id == "movies" })
+
+        // Back to default → canonical 5 regardless of custom entry state.
+        store.setMode(.default)
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+    }
+
+    @Test("resolvedTabs: setCustomKind switches the cached set between content-type and library")
+    func resolvedTabsReflectsKindFlip() {
+        clearMenuDefaults()
+        let store = MenuConfigStore()
+        store.setMode(.custom)
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+
+        // Seed a library view + entries, then flip the kind — setCustomKind
+        // recomputes the cache off the freshly-seeded state.
+        store.availableViews = [LibraryView(id: "v1", name: "Ciné", collectionType: "movies")]
+        store.libraryEntries = [
+            .init(id: MenuEntry.homeID, enabled: true),
+            .init(id: MenuEntry.libraryID(viewId: "v1"), enabled: true),
+            .init(id: MenuEntry.settingsID, enabled: true)
+        ]
+        store.setCustomKind(.library)
+        #expect(store.resolvedTabs.map(\.id) == ["home", MenuEntry.libraryID(viewId: "v1"), "settings"])
+
+        // Flip back to content-type → built-in tabs again.
+        store.setCustomKind(.contentType)
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+    }
+
+    @Test("resolvedTabs: toggling a content-type entry updates the cache immediately")
+    func resolvedTabsReflectsEntryToggle() {
+        clearMenuDefaults()
+        let store = MenuConfigStore()
+        store.setMode(.custom)
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+
+        #expect(store.toggle(MenuEntry.seriesID) == .disabled)
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "search", "settings"])
+
+        #expect(store.toggle(MenuEntry.seriesID) == .enabled)
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+    }
+
+    @Test("resolvedTabs: reordering entries (move + moveBy) reorders the cache")
+    func resolvedTabsReflectsReorder() {
+        clearMenuDefaults()
+        let store = MenuConfigStore()
+        store.setMode(.custom)
+
+        // move offset 0 → 3: [movies, series, home, search, settings]
+        store.move(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+        #expect(store.resolvedTabs.map(\.id) == ["movies", "tvShows", "home", "search", "settings"])
+
+        // moveBy swaps neighbors: home (index 2) up one → [movies, home, series, …]
+        store.moveBy(MenuEntry.homeID, delta: -1)
+        #expect(store.resolvedTabs.map(\.id) == ["movies", "home", "tvShows", "search", "settings"])
+    }
+
+    @Test("resolvedTabs: refreshAvailableViews surfaces new library tabs and is idempotent for unchanged views")
+    func resolvedTabsReflectsRefreshAndIsIdempotent() async {
+        clearMenuDefaults()
+        let api = MockAPIClient()
+        api.stubbedUserViews = [makeView(id: "B", name: "Films")]
+
+        let store = MenuConfigStore()
+        store.attach(apiClient: api, userId: "user1")
+        store.setMode(.custom)
+        store.setCustomKind(.library)
+
+        await store.refreshAvailableViews()
+        #expect(store.resolvedTabs.contains { $0.id == MenuEntry.libraryID(viewId: "B") })
+
+        // Idempotent: a repeat refresh with the SAME views leaves the cache
+        // byte-identical (mirrors the existing availableViews/libraryEntries
+        // equality guards — no spurious re-resolution).
+        let snapshot = store.resolvedTabs
+        await store.refreshAvailableViews()
+        #expect(store.resolvedTabs == snapshot)
+
+        // A changed view set updates the cache.
+        api.stubbedUserViews = [makeView(id: "B", name: "Films"), makeView(id: "C", name: "Docs")]
+        await store.refreshAvailableViews()
+        #expect(store.resolvedTabs != snapshot)
+        #expect(store.resolvedTabs.contains { $0.id == MenuEntry.libraryID(viewId: "C") })
+    }
+
+    @Test("resolvedTabs: reset restores the canonical 5 tabs")
+    func resolvedTabsReflectsReset() {
+        clearMenuDefaults()
+        let store = MenuConfigStore()
+        store.setMode(.custom)
+        #expect(store.toggle(MenuEntry.moviesID) == .disabled)
+        #expect(!store.resolvedTabs.contains { $0.id == "movies" })
+
+        store.reset()
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+    }
+
     @Test("resolvedTabs: library mode maps views to tabs and skips ids without a cached view")
     func resolvedLibraryMode() {
         clearMenuDefaults()
