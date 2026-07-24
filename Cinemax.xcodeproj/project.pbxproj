@@ -1296,9 +1296,9 @@
 			targets = (
 				33B5F934E645045C8C030A82 /* Cinemax */,
 				3F568A1C4BE9976375703E61 /* CinemaxTV */,
-				148D1FF36DA64F2D2D56B082 /* CinemaxTests */,
-				39470DC3A27C7E6F2A1C838C /* CinemaxTopShelf */,
 				DD52143E3B835E6EDCD2A22A /* CinemaxWidget */,
+				39470DC3A27C7E6F2A1C838C /* CinemaxTopShelf */,
+				148D1FF36DA64F2D2D56B082 /* CinemaxTests */,
 			);
 		};
 /* End PBXProject section */

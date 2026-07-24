@@ -376,12 +376,13 @@ struct AppNavigation: View {
             appState.isOnlineProvider = { [weak network] in network?.isOnline ?? true }
             await appState.restoreSession()
             hasCheckedSession = true
+            // Baseline attach so the menu editor has an API client even with
+            // no session. The library-mode view refresh is NOT triggered here:
+            // `onChange(of: appState.currentUserId)` below owns it for every
+            // session-establishing transition (restore, fresh login, user
+            // switch) — `restoreSession` has already set `currentUserId` by
+            // now, so the cold-restore case fires through that observer.
             menuConfig.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
-            // Pre-load views if the user is in library mode so the tabs
-            // render with library names from first frame after launch.
-            if menuConfig.mode == .custom && menuConfig.customKind == .library {
-                await menuConfig.refreshAvailableViews()
-            }
             #if os(iOS)
             // One-shot cleanup for installs that used the removed offline-
             // downloads feature — purge the (potentially multi-GB) media tree
@@ -395,10 +396,17 @@ struct AppNavigation: View {
         }
         .onChange(of: appState.currentUserId) { oldId, newId in
             menuConfig.attach(apiClient: appState.apiClient, userId: newId)
-            // Skip the cold-launch transition (`nil → some`) — `.task`
-            // already owns that case and would otherwise double-fire the
-            // refresh. Only refresh on a *genuine* user switch.
-            if let oldId, oldId != newId,
+            // Single owner of the library-mode view refresh: fires on EVERY
+            // transition that establishes or changes the signed-in user —
+            // cold-launch session restore (`restoreSession` sets the id from
+            // inside `.task`), fresh login (`completeSession`), and user
+            // switch. The fresh-login case is load-bearing: after a server
+            // switch, `invalidateViews()` left the library cache empty and
+            // `.task` ran pre-login with a nil userId, so skipping `nil →
+            // some` here meant nothing ever re-fetched the views — the tab
+            // bar resolved to zero tabs and the app came up as a black
+            // screen until the next full relaunch.
+            if newId != nil, oldId != newId,
                menuConfig.mode == .custom && menuConfig.customKind == .library {
                 Task { await menuConfig.refreshAvailableViews() }
             }
