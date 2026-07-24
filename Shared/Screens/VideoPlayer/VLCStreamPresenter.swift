@@ -490,6 +490,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hideControlsWorkItem?.cancel()
         pendingTapWork?.cancel()
         cancelPendingSeekCommit()
+        skipHUDHide?.cancel()
+        centerGlyphHide?.cancel()
+        skipGlyphHide?.cancel()
+        pendingTimeRefreshes.forEach { $0.cancel() }
+        pendingTimeRefreshes = []
         segmentFetchTask?.cancel()
         chapterFetchTask?.cancel()
         chapterThumbTasks.forEach { $0.cancel() }
@@ -504,6 +509,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #if os(iOS)
         pipController = nil
         #endif
+        videoHost?.willMove(toParent: nil)
+        videoHost?.view.removeFromSuperview()
+        videoHost?.removeFromParent()
+        videoHost = nil
         player.stop()
         deactivatePlaybackAudioSession()
     }
