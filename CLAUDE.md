@@ -91,7 +91,7 @@ docs/design-system/         Canonical design system reference
 
 ### Custom menu / dynamic tabs (`MenuConfigStore`)
 
-`MainTabView` consumes `menuConfig.resolvedTabs` (computed from `mode` / `customKind` / persisted entry arrays / `availableViews` cache). Three modes:
+`MainTabView` consumes `menuConfig.resolvedTabs` (a memoized `private(set)` stored cache of the resolution of `mode` / `customKind` / persisted entry arrays / `availableViews`; recomputed via `recomputeResolvedTabs()` at the end of every mutator that changes an input — `setMode`, `setCustomKind`, `toggleInternal`, `move`, `moveBy`, `reset`, `refreshAvailableViews`, `invalidateViews`, plus `init` — NEVER a `didSet`, per the `@Observable` RULE; the recompute is equality-guarded so an idempotent refresh fires no spurious re-render). Three modes:
 
 - **`.default`** — the canonical 5 tabs (Home, Movies, TV Shows, Search, Settings).
 - **`.custom + .contentType`** — user picks which of the canonical 5 are enabled and in what order.
