@@ -318,6 +318,53 @@ struct MenuConfigStoreTests {
         #expect(libTab?.destination == .libraryView(id: "v1", name: "Ciné", kind: .movie))
     }
 
+    // MARK: - Empty-resolution fallback (post-login black screen)
+
+    // `MainTabView` renders whatever `resolvedTabs` holds; an empty array means
+    // a `TabView` with zero tabs — a fully black screen with no recovery path.
+    // The real-world trigger: `.custom + .library` mode whose cache was wiped
+    // (server switch → `invalidateViews()`), then a fresh login that never
+    // re-fetches the views. The store must therefore NEVER publish an empty
+    // list — it falls back to the canonical default 5.
+
+    @Test("resolvedTabs: library mode with an empty cache falls back to the default 5, never empty")
+    func resolvedTabsNeverEmptyInLibraryMode() {
+        clearMenuDefaults()
+        // These two tests persist the custom+library+empty combo — the exact
+        // state that used to black-screen the app. Leaving it behind makes the
+        // NEXT test run's live test-host boot into it, so scrub on exit.
+        defer { clearMenuDefaults() }
+        let store = MenuConfigStore()
+        store.setMode(.custom)
+        // Force the pathological persisted state directly (entries emptied,
+        // as `invalidateViews` leaves them), then recompute via a mutator.
+        store.libraryEntries = []
+        store.availableViews = []
+        store.setCustomKind(.library)
+        // `ensureLibraryEntriesPopulated` seeds builtins when empty — wipe
+        // again through the public API to simulate the invalidated state.
+        store.invalidateViews()
+
+        #expect(!store.resolvedTabs.isEmpty)
+        #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+    }
+
+    @Test("resolvedTabs: a fresh store restoring an invalidated library config still resolves tabs")
+    func resolvedTabsNeverEmptyAfterRestore() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        // Persist the exact on-disk state a server switch leaves behind:
+        // custom+library mode with both arrays empty.
+        let seed = MenuConfigStore()
+        seed.setMode(.custom)
+        seed.setCustomKind(.library)
+        seed.invalidateViews()
+
+        let fresh = MenuConfigStore()
+        #expect(!fresh.resolvedTabs.isEmpty)
+        #expect(fresh.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+    }
+
     // MARK: - LibraryView filtering
 
     @Test("LibraryView.isVideoLibrary excludes non-video collection types, keeps nil/mixed")

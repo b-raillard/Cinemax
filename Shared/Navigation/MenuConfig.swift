@@ -525,15 +525,24 @@ final class MenuConfigStore {
     /// Pure derivation of the tab list from the current mode / customKind /
     /// entry arrays / `availableViews`. Never observed directly — consumers
     /// read the memoized `resolvedTabs` instead.
+    ///
+    /// Never returns an empty list: `MainTabView` renders exactly this array,
+    /// and zero tabs is a `TabView` with no content — a fully black screen
+    /// with no recovery affordance. A custom/library resolution can
+    /// legitimately come up empty (library cache invalidated by a server
+    /// switch, then a fresh login that hasn't re-fetched views yet), so an
+    /// empty resolution falls back to the canonical default 5.
     private func computeResolvedTabs() -> [ResolvedTab] {
+        let resolved: [ResolvedTab]
         switch mode {
-        case .default: return defaultResolved
+        case .default: resolved = defaultResolved
         case .custom:
             switch customKind {
-            case .contentType: return resolveContentType()
-            case .library: return resolveLibrary()
+            case .contentType: resolved = resolveContentType()
+            case .library: resolved = resolveLibrary()
             }
         }
+        return resolved.isEmpty ? defaultResolved : resolved
     }
 
     private var defaultResolved: [ResolvedTab] {
