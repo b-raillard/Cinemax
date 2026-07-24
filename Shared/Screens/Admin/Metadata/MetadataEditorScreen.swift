@@ -63,6 +63,21 @@ struct MetadataEditorScreen: View {
                     // it would silently drop those fields server-side.
                     LoadingStateView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.fullItemLoadFailed {
+                    // Fetch failed: stay gated (same field-wipe edge as above)
+                    // and offer a retry instead of a stuck spinner.
+                    ErrorStateView(
+                        message: loc.localized("error.generic"),
+                        retryTitle: loc.localized("action.retry")
+                    ) {
+                        Task {
+                            await viewModel.loadFullItemIfNeeded(
+                                using: appState.apiClient,
+                                userId: appState.currentUserId ?? ""
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if tabUsesSharedSave {
                     AdminFormScreen(
                         isDirty: viewModel.isDirty,

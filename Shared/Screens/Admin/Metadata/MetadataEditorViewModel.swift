@@ -26,15 +26,19 @@ final class MetadataEditorViewModel {
     var isDeleting = false
     var errorMessage: String?
 
-    /// True until the initial full-DTO reload (`loadFullItemIfNeeded`)
-    /// completes, success or failure. The item this VM is seeded with may
-    /// come from a narrowed `getItems` list fetch (`MetadataBrowserScreen`'s
-    /// grid, `AdminItemMenu`'s poster-card entry) that omits `people`/
-    /// `studios`/other ItemFields — using it directly in `save()` would
-    /// silently wipe those fields server-side (`updateItem` POSTs the whole
-    /// DTO). The screen gates the form on this flag so no edit/save can
-    /// happen against the narrow DTO.
+    /// True while the initial full-DTO reload (`loadFullItemIfNeeded`) is in
+    /// flight. The item this VM is seeded with may come from a narrowed
+    /// `getItems` list fetch (`MetadataBrowserScreen`'s grid,
+    /// `AdminItemMenu`'s poster-card entry) that omits `people`/`studios`/
+    /// other ItemFields — using it directly in `save()` would silently wipe
+    /// those fields server-side (`updateItem` POSTs the whole DTO). The
+    /// screen gates the form on this flag (and `fullItemLoadFailed`) so no
+    /// edit/save can happen against the narrow DTO.
     var isLoadingFullItem = true
+    /// True when the full-DTO fetch failed. The screen keeps the form gated
+    /// and shows a retry affordance instead — opening the form on the narrow
+    /// seed would re-expose the server-side field-wipe edge above.
+    var fullItemLoadFailed = false
     private var hasLoadedFullItem = false
 
     // Images
@@ -74,21 +78,27 @@ final class MetadataEditorViewModel {
 
     /// Self-heals a narrowed seed item by re-fetching the full DTO via
     /// `getItem` once on screen appearance. Mirrors
-    /// `IdentifyFlowModel.loadPathIfNeeded`'s pattern. A fetch failure falls
-    /// back to the originally-seeded (possibly narrowed) item — the
-    /// pre-existing behavior before this fix, so it's a safe degradation
-    /// rather than a new failure mode.
+    /// `IdentifyFlowModel.loadPathIfNeeded`'s pattern. Latches only on
+    /// success: a fetch failure sets `fullItemLoadFailed` (the screen stays
+    /// gated with a retry) and the next call — re-fired `.task` or the retry
+    /// button — tries again.
     func loadFullItemIfNeeded(using apiClient: any APIClientProtocol, userId: String) async {
         guard !hasLoadedFullItem, let id = item.id else {
             isLoadingFullItem = false
             return
         }
-        hasLoadedFullItem = true
+        isLoadingFullItem = true
+        fullItemLoadFailed = false
         defer { isLoadingFullItem = false }
-        guard let fresh = try? await apiClient.getItem(userId: userId, itemId: id) else { return }
-        item = fresh
-        original = fresh
-        identify = IdentifyFlowModel(item: fresh)
+        do {
+            let fresh = try await apiClient.getItem(userId: userId, itemId: id)
+            item = fresh
+            original = fresh
+            identify = IdentifyFlowModel(item: fresh)
+            hasLoadedFullItem = true
+        } catch {
+            fullItemLoadFailed = true
+        }
     }
 
     // MARK: - Save
