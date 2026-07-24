@@ -8,6 +8,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     // MARK: - Call tracking
 
+    /// Serializes every mutation of the call-recording state below. View
+    /// models fan out concurrent TaskGroup calls into this mock (Home
+    /// phase-1, the genre-row chunk-of-6, the season-episode dedupe), and an
+    /// unsynchronized `Array.append` / `+= 1` from parallel tasks corrupts
+    /// the heap — intermittent SIGSEGV in `Array.append` mid-suite. Tests
+    /// READ the recorded state only after awaiting the work (task joins give
+    /// happens-before), so locking the writes is sufficient.
+    private let recordLock = NSLock()
+
     var connectCalled = false
     var authenticateCalled = false
     var reconnectCalled = false
@@ -46,7 +55,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     // MARK: - APIClientProtocol
 
     func connectToServer(url: URL) async throws -> ServerInfo {
-        connectCalled = true
+        recordLock.withLock { connectCalled = true }
         if shouldThrow { throw stubbedError }
         return stubbedServerInfo
     }
@@ -57,11 +66,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func reconnect(url: URL, accessToken: String) {
-        reconnectCalled = true
+        recordLock.withLock { reconnectCalled = true }
     }
 
     func authenticate(username: String, password: String) async throws -> UserSession {
-        authenticateCalled = true
+        recordLock.withLock { authenticateCalled = true }
         if shouldThrow { throw stubbedError }
         return stubbedSession
     }
@@ -70,7 +79,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var validateSessionDelayMs: UInt64 = 0
     private(set) var validateSessionCallCount = 0
     func validateSession() async -> SessionValidity {
-        validateSessionCallCount += 1
+        recordLock.withLock { validateSessionCallCount += 1 }
         if validateSessionDelayMs > 0 {
             try? await Task.sleep(nanoseconds: validateSessionDelayMs * 1_000_000)
         }
@@ -90,7 +99,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     private(set) var authorizeQuickConnectCalls: [String] = []
     var stubbedAuthorizeQuickConnectResult = true
     func authorizeQuickConnect(code: String) async throws -> Bool {
-        authorizeQuickConnectCalls.append(code)
+        recordLock.withLock { authorizeQuickConnectCalls.append(code) }
         if shouldThrow { throw stubbedError }
         return stubbedAuthorizeQuickConnectResult
     }
@@ -270,13 +279,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     private(set) var getItemsCalls: [(startIndex: Int?, limit: Int?)] = []
 
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
-        getResumeItemsCallCount += 1
+        recordLock.withLock { getResumeItemsCallCount += 1 }
         if shouldThrow { throw stubbedError }
         return stubbedResumeItems
     }
 
     func getLatestMedia(userId: String, parentId: String?, limit: Int) async throws -> [BaseItemDto] {
-        getLatestMediaCallCount += 1
+        recordLock.withLock { getLatestMediaCallCount += 1 }
         if shouldThrow { throw stubbedError }
         return stubbedLatestItems
     }
@@ -287,8 +296,10 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         genres: [String]?, years: [Int]?, isFavorite: Bool?,
         filters: [ItemFilter]?, limit: Int?, startIndex: Int?
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
-        if isFavorite == true { favoriteFetchCount += 1 }
-        getItemsCalls.append((startIndex: startIndex, limit: limit))
+        recordLock.withLock {
+            if isFavorite == true { favoriteFetchCount += 1 }
+            getItemsCalls.append((startIndex: startIndex, limit: limit))
+        }
         if shouldThrow { throw stubbedError }
         if let handler = getItemsHandler {
             return try await handler(startIndex)
@@ -297,7 +308,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func getGenres(userId: String, includeItemTypes: [BaseItemKind]?) async throws -> [String] {
-        getGenresCallCount += 1
+        recordLock.withLock { getGenresCallCount += 1 }
         if shouldThrow { throw stubbedError }
         return stubbedGenres
     }
@@ -313,7 +324,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     private(set) var getItemCallCount = 0
     var getItemHandler: (@Sendable (String) async throws -> BaseItemDto)?
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto {
-        getItemCallCount += 1
+        recordLock.withLock { getItemCallCount += 1 }
         if let handler = getItemHandler {
             return try await handler(itemId)
         }
@@ -323,7 +334,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     private(set) var getSimilarItemsCallCount = 0
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] {
-        getSimilarItemsCallCount += 1
+        recordLock.withLock { getSimilarItemsCallCount += 1 }
         return []
     }
 
@@ -337,12 +348,12 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     private(set) var getSeasonsCallCount = 0
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto] {
-        getSeasonsCallCount += 1
+        recordLock.withLock { getSeasonsCallCount += 1 }
         return []
     }
     private(set) var getEpisodesCallCount = 0
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] {
-        getEpisodesCallCount += 1
+        recordLock.withLock { getEpisodesCallCount += 1 }
         if let handler = getEpisodesHandler {
             return try await handler(seasonId)
         }
@@ -351,20 +362,20 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedNextUp: BaseItemDto?
     private(set) var getNextUpCallCount = 0
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
-        getNextUpCallCount += 1
+        recordLock.withLock { getNextUpCallCount += 1 }
         return stubbedNextUp
     }
     var stubbedNextUpItems: [BaseItemDto] = []
     private(set) var getNextUpEpisodesCallCount = 0
     func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] {
-        getNextUpEpisodesCallCount += 1
+        recordLock.withLock { getNextUpEpisodesCallCount += 1 }
         if shouldThrow { throw stubbedError }
         return stubbedNextUpItems
     }
     private(set) var markPlayedCalls: [String] = []
     private(set) var markUnplayedCalls: [String] = []
-    func markItemUnplayed(itemId: String, userId: String) async throws { markUnplayedCalls.append(itemId) }
-    func markItemPlayed(itemId: String, userId: String) async throws { markPlayedCalls.append(itemId) }
+    func markItemUnplayed(itemId: String, userId: String) async throws { recordLock.withLock { markUnplayedCalls.append(itemId) } }
+    func markItemPlayed(itemId: String, userId: String) async throws { recordLock.withLock { markPlayedCalls.append(itemId) } }
     func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {}
     func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
     func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] { [] }

@@ -305,3 +305,74 @@ struct MediaDetailViewModelTests {
         #expect(vm.episodes.isEmpty)
     }
 }
+
+// MARK: - MetadataEditorViewModel full-item gate
+
+#if os(iOS)
+/// Lives in this file (not its own) because a new file under Tests/ needs an
+/// xcodegen regen; the suite reuses this file's MockAPIClient idioms.
+///
+/// The editor is seeded with a narrowed `getItems` list DTO. `save()` POSTs the
+/// whole DTO, so opening the form before the full `getItem` DTO lands would let
+/// a Save silently wipe `people`/`studios`/`tags` server-side. These tests lock
+/// the gate's failure behavior: a failed fetch must not latch (the re-fired
+/// `.task` / retry button retries), and only a success un-gates the form.
+@MainActor
+@Suite("MetadataEditorViewModel full-item gate")
+struct MetadataEditorViewModelGateTests {
+
+    private func makeNarrowSeed() -> BaseItemDto {
+        var item = BaseItemDto()
+        item.id = "item-1"
+        item.name = "Narrow"
+        return item
+    }
+
+    @Test("fetch failure does not latch — a re-fired load retries and recovers")
+    func failureRetriesOnNextFire() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { @Sendable _ in throw MockError.genericFailure }
+        let vm = MetadataEditorViewModel(item: makeNarrowSeed())
+
+        await vm.loadFullItemIfNeeded(using: api, userId: "user1")
+
+        // Still gated: not loading anymore, but flagged failed — the screen
+        // renders the retry state, never the form.
+        #expect(vm.isLoadingFullItem == false)
+        #expect(vm.fullItemLoadFailed == true)
+        #expect(vm.item.name == "Narrow")
+
+        api.getItemHandler = { @Sendable _ in
+            var full = BaseItemDto()
+            full.id = "item-1"
+            full.name = "Full"
+            return full
+        }
+        await vm.loadFullItemIfNeeded(using: api, userId: "user1")
+
+        #expect(api.getItemCallCount == 2)
+        #expect(vm.item.name == "Full")
+        #expect(vm.isLoadingFullItem == false)
+        #expect(vm.fullItemLoadFailed == false)
+    }
+
+    @Test("successful load latches — a re-fired load does not refetch")
+    func successLatches() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { @Sendable _ in
+            var full = BaseItemDto()
+            full.id = "item-1"
+            full.name = "Full"
+            return full
+        }
+        let vm = MetadataEditorViewModel(item: makeNarrowSeed())
+
+        await vm.loadFullItemIfNeeded(using: api, userId: "user1")
+        await vm.loadFullItemIfNeeded(using: api, userId: "user1")
+
+        #expect(api.getItemCallCount == 1)
+        #expect(vm.item.name == "Full")
+        #expect(vm.isLoadingFullItem == false)
+    }
+}
+#endif

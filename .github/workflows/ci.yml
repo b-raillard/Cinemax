@@ -24,8 +24,20 @@ jobs:
           xcode-select -p
           xcodebuild -version
 
+      # Pinned via the official release artifact, NOT `brew install`: the
+      # macOS runner pool carries heterogeneous brew caches (2.45.4 and 2.46.0
+      # observed pouring on different runners the same day), and xcodegen's
+      # output format changes between versions — a floating install turns the
+      # pbxproj verify step below into a per-runner coin flip. Bump
+      # XCODEGEN_VERSION together with a local `xcodegen generate` (same
+      # version) + committed pbxproj, and keep regen-project.yml in sync.
       - name: Install xcodegen
-        run: brew install xcodegen
+        env:
+          XCODEGEN_VERSION: 2.46.0
+        run: |
+          curl -fsSL -o /tmp/xcodegen.zip "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          unzip -q /tmp/xcodegen.zip -d /tmp/xcodegen-dist
+          echo "/tmp/xcodegen-dist/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Generate Xcode project
         run: xcodegen generate

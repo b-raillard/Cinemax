@@ -57,7 +57,11 @@ final class ChapterController {
             #if os(tvOS)
             let images: [Int: Data] = await withTaskGroup(of: (Int, Data?).self) { group in
                 for (index, chapter) in chapters.enumerated() {
-                    let url = builder.chapterImageURL(itemId: itemId, imageIndex: index, tag: chapter.imageTag, maxWidth: 480)
+                    // Skip the request entirely when the server has no chapter
+                    // image (no `imageTag`) — the marker keeps its title-only
+                    // form (mirrors `VLCStreamPresenter`'s chapter strip).
+                    guard let tag = chapter.imageTag, !tag.isEmpty else { continue }
+                    let url = builder.chapterImageURL(itemId: itemId, imageIndex: index, tag: tag, maxWidth: 480)
                     group.addTask {
                         await Self.loadImage(url: url, token: token).map { (index, $0) } ?? (index, nil)
                     }

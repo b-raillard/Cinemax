@@ -22,8 +22,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned to the SAME version as ci.yml (this workflow's whole point is
+      # producing the canonical bytes the CI verify step expects) — see the
+      # comment in ci.yml for why `brew install` is a per-runner coin flip.
       - name: Install xcodegen
-        run: brew install xcodegen
+        env:
+          XCODEGEN_VERSION: 2.46.0
+        run: |
+          curl -fsSL -o /tmp/xcodegen.zip "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          unzip -q /tmp/xcodegen.zip -d /tmp/xcodegen-dist
+          echo "/tmp/xcodegen-dist/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Generate Xcode project
         run: xcodegen generate

@@ -72,8 +72,9 @@ enum SettingsKey {
     /// spotlight the one holding focus (a stronger "repérage" cue than the
     /// scale + accent ring alone). Default `false` — the focus scale/halo
     /// already disambiguates; dimming is an opt-in for users who want the
-    /// cinema-spotlight effect. Read in `LibraryPosterCard`; the toggle lives
-    /// in Settings → Appearance (tvOS).
+    /// cinema-spotlight effect. Read in `PosterCardContent` (file-private in
+    /// `LibraryPosterCard.swift`); the toggle lives in Settings → Appearance
+    /// (tvOS).
     static let dimUnfocusedPosters = "tvos.dimUnfocusedPosters"
 
     // Privacy & Security
