@@ -665,10 +665,16 @@ struct HomeScreen: View {
     private var watchingNowRow: some View {
         ContentRow(
             title: loc.localized("home.watchingNow"),
-            data: Array(viewModel.activeSessions.indices),
-            id: \.self
-        ) { idx in
-            watchingNowCard(viewModel.activeSessions[idx])
+            // Feed the sessions themselves — NEVER a snapshot of their indices.
+            // `reload()` (pull-to-refresh, tier-1 catalogue refresh) empties
+            // `activeSessions` before refetching, and Observation invalidates the
+            // already-instantiated LazyHStack children directly: they re-run their
+            // body against the emptied array while still holding the old index
+            // snapshot, trapping with "Index out of range".
+            data: viewModel.activeSessions,
+            id: \.id
+        ) { session in
+            watchingNowCard(session)
                 .frame(width: wideCardWidth)
         }
     }
