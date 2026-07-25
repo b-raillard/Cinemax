@@ -9,16 +9,16 @@ extension JellyfinAPIClient {
     /// 1. Get full item → extract initial media source
     /// 2. POST PlaybackInfo with device profile
     /// 3. Build stream URL from response (transcodingURL or direct stream)
-    public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000, audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil, engine: VideoPlaybackEngine = .native) async throws -> PlaybackInfo {
+    public func getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int = 40_000_000, audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil, engine: VideoPlaybackEngine = .native, mediaSourceId: String? = nil) async throws -> PlaybackInfo {
         do {
-            return try await _getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: maxBitrate, audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex, engine: engine)
+            return try await _getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: maxBitrate, audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex, engine: engine, mediaSourceId: mediaSourceId)
         } catch {
             notifyIfUnauthorized(error)
             throw error
         }
     }
 
-    private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?, engine: VideoPlaybackEngine, forceTranscode: Bool = false) async throws -> PlaybackInfo {
+    private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?, engine: VideoPlaybackEngine, mediaSourceId: String? = nil, forceTranscode: Bool = false) async throws -> PlaybackInfo {
         guard let client = getClient(),
               let serverURL = getServerURL() else {
             throw JellyfinError.notConnected
@@ -39,7 +39,18 @@ extension JellyfinAPIClient {
         item = resolved.item
         effectiveItemId = resolved.itemId
 
-        let initialMediaSource = item.mediaSources?.first
+        // Multi-version items (a 4K remux alongside a 1080p encode, an IMAX cut
+        // alongside the theatrical) expose several sources here. Ranking is
+        // owned by `MediaSourceQuality` so the version this opens is the same
+        // one the detail screen's badges describe — `mediaSources.first` used to
+        // pick arbitrarily on both sides. An explicit `mediaSourceId` is the
+        // user's override from the version row; a stale one falls back to the
+        // ranked pick rather than failing playback.
+        let initialMediaSource = MediaSourceQuality.resolve(
+            item.mediaSources ?? [],
+            preferredID: mediaSourceId,
+            maxBitrate: maxBitrate
+        )
         let initialMediaSourceId = initialMediaSource?.id
 
         #if DEBUG
@@ -103,7 +114,10 @@ extension JellyfinAPIClient {
                let match = sources.first(where: { $0.eTag == etag }) { return match }
             if let id = initialMediaSourceId,
                let match = sources.first(where: { $0.id == id }) { return match }
-            return sources.first
+            // Neither the eTag nor the id matched what `getItem` reported, so
+            // rank the response's own sources rather than taking whichever
+            // happens to be first — same owner, same answer.
+            return MediaSourceQuality.best(of: sources, maxBitrate: maxBitrate)
         }()
 
         guard let mediaSource else {
@@ -148,10 +162,13 @@ extension JellyfinAPIClient {
             #if DEBUG
             debugLog("  seek-heavy container '\(mediaSource.container ?? "?")' → forcing HLS transcode")
             #endif
+            // Carry the resolved source id into the retry: without it the
+            // re-resolve would re-rank from scratch and could transcode a
+            // different version than the one that triggered the fallback.
             if let transcoded = try? await _getPlaybackInfo(
                 itemId: effectiveItemId, userId: userId, maxBitrate: maxBitrate,
                 audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex,
-                engine: engine, forceTranscode: true
+                engine: engine, mediaSourceId: mediaSource.id ?? mediaSourceId, forceTranscode: true
             ), transcoded.playMethod == .transcode {
                 return transcoded
             }

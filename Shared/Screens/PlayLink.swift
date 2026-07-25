@@ -84,6 +84,10 @@ struct PlayLink<Label: View>: View {
     var previousEpisode: EpisodeRef? = nil
     var nextEpisode: EpisodeRef? = nil
     var episodeNavigator: EpisodeNavigator? = nil
+    /// Pins a specific version of a multi-source item — the user's pick from
+    /// the detail screen's version row. `nil` lets `MediaSourceQuality` rank
+    /// and choose, which is the default for every other entry point.
+    var mediaSourceId: String? = nil
     @ViewBuilder let label: () -> Label
 
     #if os(tvOS)
@@ -97,7 +101,8 @@ struct PlayLink<Label: View>: View {
             coordinator.play(
                 itemId: itemId, title: title, startTime: startTime,
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
-                episodeNavigator: episodeNavigator, using: appState
+                episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId,
+                using: appState
             )
         } label: {
             label()
@@ -107,7 +112,7 @@ struct PlayLink<Label: View>: View {
             VideoPlayerView(
                 itemId: itemId, title: title, startTime: startTime,
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
-                episodeNavigator: episodeNavigator
+                episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId
             )
         } label: {
             label()

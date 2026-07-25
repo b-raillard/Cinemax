@@ -2,13 +2,27 @@ import SwiftUI
 import CinemaxKit
 import JellyfinAPI
 
-/// Horizontal row of small pill badges summarising the technical quality of the
-/// primary media source: resolution, HDR, video codec, audio format, channels.
+/// Horizontal row of small pill badges summarising the technical quality of a
+/// media source: resolution, HDR, video codec, audio format, channels.
+///
+/// Classification lives in `CinemaxKit.MediaSourceQuality`, NOT here — the same
+/// type also decides which source plays. Keeping one owner is what stops the
+/// badges from advertising a version the player never opens (see the type's own
+/// doc comment).
 struct MediaQualityBadges: View {
     let item: BaseItemDto
+    /// Explicit source to describe. `nil` falls back to the ranked pick, which
+    /// is what playback would choose. Pass the user's selection when the detail
+    /// screen has one so the badges track the version row.
+    var source: MediaSourceInfo?
+
+    init(item: BaseItemDto, source: MediaSourceInfo? = nil) {
+        self.item = item
+        self.source = source
+    }
 
     var body: some View {
-        let labels = Self.badgeLabels(for: item)
+        let labels = Self.badgeLabels(for: item, source: source)
         if labels.isEmpty {
             EmptyView()
         } else {
@@ -30,140 +44,11 @@ struct MediaQualityBadges: View {
 
     // MARK: - Derivation
 
-    static func badgeLabels(for item: BaseItemDto) -> [String] {
-        guard let source = item.mediaSources?.first else { return [] }
-        let streams = source.mediaStreams ?? []
-        let videoStream = streams.first { $0.type == .video }
-
-        let defaultAudioIndex = source.defaultAudioStreamIndex
-        let audioStream: MediaStream? = {
-            if let idx = defaultAudioIndex,
-               let match = streams.first(where: { $0.type == .audio && $0.index == idx }) {
-                return match
-            }
-            return streams.first { $0.type == .audio }
-        }()
-
-        var labels: [String] = []
-
-        if let v = videoStream, let res = resolutionLabel(for: v) {
-            labels.append(res)
+    /// Labels for `source` when given, else for the source playback would pick.
+    static func badgeLabels(for item: BaseItemDto, source: MediaSourceInfo? = nil) -> [String] {
+        guard let resolved = source ?? MediaSourceQuality.best(of: item.mediaSources ?? []) else {
+            return []
         }
-        if let v = videoStream, let hdr = hdrLabel(for: v) {
-            labels.append(hdr)
-        }
-        if let v = videoStream, let codec = videoCodecLabel(for: v) {
-            labels.append(codec)
-        }
-        if let a = audioStream, let audio = audioFormatLabel(for: a) {
-            labels.append(audio)
-        }
-        if let a = audioStream, let ch = channelsLabel(for: a) {
-            labels.append(ch)
-        }
-
-        return labels
-    }
-
-    // MARK: - Resolution
-
-    /// Classifies on width OR height (same approach as Jellyfin's web client).
-    /// Height alone is wrong for anything wider than 16:9 — Jellyfin stores
-    /// the encoded frame's dimensions with letterbox bars cropped out, so a
-    /// 2.39:1 4K movie is 3840×1600 (and a scope 1080p is 1920×800). The
-    /// thresholds sit at ~95% of nominal to absorb slightly-cropped encodes.
-    private static func resolutionLabel(for stream: MediaStream) -> String? {
-        let w = stream.width ?? 0
-        let h = stream.height ?? 0
-        guard w > 0 || h > 0 else { return nil }
-        if w >= 3800 || h >= 2100 { return "4K" }
-        if w >= 1800 || h >= 1000 { return "1080p" }
-        if w >= 1200 || h >= 700  { return "720p" }
-        return "SD"
-    }
-
-    // MARK: - HDR
-
-    private static func hdrLabel(for stream: MediaStream) -> String? {
-        if let t = stream.videoRangeType {
-            switch t {
-            case .dovi, .doviWithHDR10, .doviWithHLG, .doviWithSDR,
-                 .doviWithEL, .doviWithHDR10Plus, .doviWithELHDR10Plus, .doviInvalid:
-                return "Dolby Vision"
-            case .hdr10Plus:
-                return "HDR10+"
-            case .hdr10:
-                return "HDR10"
-            case .hlg:
-                return "HDR"
-            case .sdr, .unknown:
-                break
-            }
-        }
-        if stream.videoRange == .hdr {
-            return "HDR"
-        }
-        return nil
-    }
-
-    // MARK: - Video codec
-
-    private static func videoCodecLabel(for stream: MediaStream) -> String? {
-        guard let codec = stream.codec?.lowercased(), !codec.isEmpty else { return nil }
-        switch codec {
-        case "hevc", "h265": return "HEVC"
-        case "h264":         return "H.264"
-        case "av1":          return "AV1"
-        case "vp9":          return "VP9"
-        default:             return codec.uppercased()
-        }
-    }
-
-    // MARK: - Audio format
-
-    private static func audioFormatLabel(for stream: MediaStream) -> String? {
-        let profile = stream.profile?.lowercased() ?? ""
-        let displayTitle = stream.displayTitle?.lowercased() ?? ""
-        if profile.contains("atmos") || displayTitle.contains("atmos") {
-            return "Dolby Atmos"
-        }
-        guard let codec = stream.codec?.lowercased(), !codec.isEmpty else { return nil }
-        switch codec {
-        case "truehd": return "TrueHD"
-        case "eac3":   return "Dolby Digital+"
-        case "ac3":    return "Dolby Digital"
-        case "aac":    return "AAC"
-        case "flac":   return "FLAC"
-        case "opus":   return "Opus"
-        case "mp3":    return "MP3"
-        default:
-            if codec == "dts" || codec.contains("dts") {
-                return "DTS"
-            }
-            return codec.uppercased()
-        }
-    }
-
-    // MARK: - Channels
-
-    private static func channelsLabel(for stream: MediaStream) -> String? {
-        if let layout = stream.channelLayout, !layout.isEmpty {
-            let lower = layout.lowercased()
-            switch lower {
-            case "stereo": return "Stereo"
-            case "mono":   return "Mono"
-            default:       return layout.uppercased()
-            }
-        }
-        if let ch = stream.channels {
-            switch ch {
-            case 8: return "7.1"
-            case 6: return "5.1"
-            case 2: return "Stereo"
-            case 1: return "Mono"
-            default: return "\(ch)ch"
-            }
-        }
-        return nil
+        return MediaSourceQuality.badgeLabels(for: resolved)
     }
 }

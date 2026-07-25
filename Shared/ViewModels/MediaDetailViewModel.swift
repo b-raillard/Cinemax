@@ -44,6 +44,18 @@ final class MediaDetailViewModel {
     var collectionName: String?
     var collectionItems: [BaseItemDto] = []
 
+    /// The version the user picked from the detail screen's version row, when
+    /// the item carries several media sources. `nil` ⇒ play whatever
+    /// `MediaSourceQuality` ranks highest.
+    ///
+    /// Deliberately **session-scoped and not persisted**: the standing "always
+    /// give me the smaller file" preference is already served by `render4K`'s
+    /// bitrate cap, so what's left is genuinely a one-off ("play the other cut
+    /// just now"). Reverts to the ranked default next time the screen is
+    /// opened. Plain stored property with no `didSet` — see the `@Observable`
+    /// RULE in CLAUDE.md.
+    var selectedMediaSourceId: String?
+
     /// Generation counter to discard stale season results on rapid selection.
     private var seasonGeneration: Int = 0
 
