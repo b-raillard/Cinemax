@@ -203,11 +203,6 @@ final class NativeVideoPresenter {
         self.currentSubtitleIndex = info.selectedSubtitleIndex
         self.currentPlayMethod = info.playMethod
 
-        // AVAudioSession must be `.playback` before we hand a player item to AVKit,
-        // otherwise AirPlay routing drops audio when the iPhone silent switch is on
-        // or the screen locks during a cast.
-        activatePlaybackAudioSession()
-
         // Start with nil item — native player chrome appears immediately while
         // we fetch and filter the HLS manifest in the background.
         let avPlayer = AVPlayer(playerItem: nil)
@@ -265,7 +260,21 @@ final class NativeVideoPresenter {
         // to intercept the manifest and strip subtitle/CC renditions before AVKit parses it.
         let st = startTime
         Task { [weak self] in
-            guard let self else { return }
+            // The session must be `.playback` before we hand a player item to AVKit,
+            // otherwise AirPlay routing drops audio when the iPhone silent switch is
+            // on or the screen locks during a cast. Runs off the main thread (see
+            // `PlaybackAudioSession`) — the modal is already presented above, so the
+            // hop delays only the item attachment, never the player chrome.
+            //
+            // `playerVC` (set before this Task) is the liveness sentinel, checked on
+            // BOTH sides of the hop: `cleanup()` nils it but can't reach the local
+            // `avPlayer`, so resuming after a dismiss would attach an item and `play()`
+            // an orphaned player — audio with no UI, and a re-activated session the
+            // queued `deactivate()` just tore down. Checking before the hop also keeps
+            // the activation from being enqueued behind that `deactivate()`.
+            guard self?.playerVC != nil else { return }
+            await PlaybackAudioSession.activate()
+            guard let self, self.playerVC != nil else { return }
             let playerItem = self.makePlayerItem(for: info)
             applyTitleMetadata(to: playerItem, title: self.title)
 
@@ -509,6 +518,18 @@ final class NativeVideoPresenter {
             self.currentAudioIndex = info.selectedAudioIndex
             self.currentSubtitleIndex = info.selectedSubtitleIndex
             self.currentPlayMethod = info.playMethod
+
+            // The episode we're leaving can have died during a device sleep, which
+            // also deactivated the session — re-assert it before AVKit gets the new
+            // item, or the autoplay comes back with no audio route. `playerVC` is the
+            // liveness sentinel, checked on BOTH sides of the hop: `cleanup()` nils it
+            // but can't reach the `vc`/`avPlayer` captured here, so resuming after a
+            // dismiss would resurrect playback — and checking before the hop keeps the
+            // activation from being enqueued behind that teardown's `deactivate()`
+            // (a dismiss can already have landed during the `navigator` await above).
+            guard self.playerVC != nil else { return }
+            await PlaybackAudioSession.activate()
+            guard self.playerVC != nil else { return }
 
             let playerItem = makePlayerItem(for: info)
             applyTitleMetadata(to: playerItem, title: ep.title)
@@ -793,29 +814,6 @@ final class NativeVideoPresenter {
         return item
     }
 
-    // MARK: - Audio Session (AirPlay + screen-lock continuity)
-
-    /// `.playback` + `.moviePlayback` is the Apple-recommended category for a video
-    /// player: it keeps audio flowing over AirPlay when the ringer is silent or the
-    /// device locks, and cooperates with other media apps' interruption handling.
-    private func activatePlaybackAudioSession() {
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.playback, mode: .moviePlayback, options: [])
-            try session.setActive(true, options: [])
-        } catch {
-            logger.error("Failed to activate playback audio session: \(error.localizedDescription)")
-        }
-    }
-
-    private func deactivatePlaybackAudioSession() {
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            logger.error("Failed to deactivate playback audio session: \(error.localizedDescription)")
-        }
-    }
-
     private func setupBackgroundObserver() {
         backgroundObserver = NotificationCenter.default.addObserver(
             forName: .cinemaxDidEnterBackground, object: nil, queue: .main
@@ -860,7 +858,7 @@ final class NativeVideoPresenter {
         #endif
         cleanupPlayer()
         playerVC = nil
-        deactivatePlaybackAudioSession()
+        PlaybackAudioSession.deactivate()
     }
 
     // MARK: - Platform-specific dismiss detection
