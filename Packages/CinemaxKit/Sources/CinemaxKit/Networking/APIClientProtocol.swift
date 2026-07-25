@@ -144,13 +144,19 @@ public protocol LibraryAPI: Sendable {
 
 /// Playback: stream resolution, intro/outro segments, and Jellyfin progress reporting.
 public protocol PlaybackAPI: Sendable {
+    /// `mediaSourceId` pins a specific version of a multi-source item (the
+    /// user's pick from the detail screen's version row). `nil` — the common
+    /// case — lets `MediaSourceQuality` rank the sources and choose, which is
+    /// also what the badge row describes. A stale id falls back to the ranked
+    /// pick rather than failing playback.
     func getPlaybackInfo(
         itemId: String,
         userId: String,
         maxBitrate: Int,
         audioStreamIndex: Int?,
         subtitleStreamIndex: Int?,
-        engine: VideoPlaybackEngine
+        engine: VideoPlaybackEngine,
+        mediaSourceId: String?
     ) async throws -> PlaybackInfo
 
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto]
@@ -474,12 +480,13 @@ public extension PlaybackAPI {
         maxBitrate: Int = 40_000_000,
         audioStreamIndex: Int? = nil,
         subtitleStreamIndex: Int? = nil,
-        engine: VideoPlaybackEngine = .native
+        engine: VideoPlaybackEngine = .native,
+        mediaSourceId: String? = nil
     ) async throws -> PlaybackInfo {
         try await getPlaybackInfo(
             itemId: itemId, userId: userId, maxBitrate: maxBitrate,
             audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex,
-            engine: engine
+            engine: engine, mediaSourceId: mediaSourceId
         )
     }
 }

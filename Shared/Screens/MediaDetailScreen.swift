@@ -48,6 +48,20 @@ struct MediaDetailScreen: View {
     /// silently dropped by the runtime.
     @State private var adminPushIntent: AdminMenuPushIntent?
     #endif
+    /// tvOS picks versions through a `confirmationDialog` (the app's existing
+    /// picker idiom — see the library sort menu); iOS uses a native `Menu`, so
+    /// this flag is tvOS-only.
+    #if os(tvOS)
+    @State private var showVersionPicker = false
+    /// Drives the row's own accent focus ring — `.focusEffectDisabled()` kills
+    /// the system effect, so the indicator has to be drawn from this.
+    @FocusState private var versionRowFocused: Bool
+    #endif
+
+    /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
+    /// row ranks sources exactly the way playback will.
+    @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
+
     @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
     #if os(iOS)
     @AppStorage(SettingsKey.detailShowTrailerButton) private var showTrailerButton: Bool = SettingsKey.Default.detailShowTrailerButton
@@ -208,9 +222,13 @@ struct MediaDetailScreen: View {
         }
         #endif
 
-        // Quality badges
+        // Version picker — only for multi-source items (see `versionSources`).
+        versionRow(item)
+
+        // Quality badges — described for the version that will actually play,
+        // not `mediaSources.first`, so the row and the picker never disagree.
         if showQualityBadges {
-            MediaQualityBadges(item: item)
+            MediaQualityBadges(item: item, source: selectedSource(item))
                 .padding(.horizontal, contentPadding)
         }
 
@@ -421,6 +439,177 @@ struct MediaDetailScreen: View {
     // MARK: - Episode Navigation
 
     /// Looks up precomputed prev/next episode refs from the ViewModel's navigation maps.
+    // MARK: - Version picker (multi-source items)
+
+    /// The item's media sources, best first, or empty when there's nothing to
+    /// choose between.
+    ///
+    /// Series are excluded on purpose: their Play button targets an *episode*,
+    /// and `getNextUp` doesn't carry that episode's `mediaSources`, so a row
+    /// rendered from the series' own sources would offer a choice that doesn't
+    /// apply to what's about to play. Multi-version libraries are overwhelmingly
+    /// a movie phenomenon, so this covers the real case without guessing.
+    private func versionSources(_ item: BaseItemDto) -> [MediaSourceInfo] {
+        guard viewModel.resolvedType != .series else { return [] }
+        let sources = item.mediaSources ?? []
+        guard sources.count > 1 else { return [] }
+        return MediaSourceQuality.ranked(sources, maxBitrate: playbackBitrateCeiling)
+    }
+
+    /// The source the Play button will open: the user's pick when they've made
+    /// one, else the ranked default. `nil` for single-source items (the badge
+    /// view then falls back to its own ranking, which agrees).
+    private func selectedSource(_ item: BaseItemDto) -> MediaSourceInfo? {
+        let sources = versionSources(item)
+        guard !sources.isEmpty else { return nil }
+        return MediaSourceQuality.resolve(
+            sources,
+            preferredID: viewModel.selectedMediaSourceId,
+            maxBitrate: playbackBitrateCeiling
+        )
+    }
+
+    /// Mirrors the ceiling the players pass to `getPlaybackInfo`, so the row
+    /// ranks sources the same way playback will.
+    private var playbackBitrateCeiling: Int { render4K ? 120_000_000 : 20_000_000 }
+
+    /// Human label for one version: the server's version name when it has one,
+    /// else its spec summary, else a numbered fallback.
+    private func versionLabel(_ source: MediaSourceInfo, index: Int) -> String {
+        if let name = MediaSourceQuality.versionName(for: source) { return name }
+        let summary = MediaSourceQuality.summary(for: source)
+        return summary.isEmpty ? loc.localized("detail.version.fallback", index + 1) : summary
+    }
+
+    /// Trailing detail for a version: spec summary plus size when known.
+    private func versionDetail(_ source: MediaSourceInfo) -> String {
+        // `sizeLabel` is optional and `summary` can be empty — compact both away
+        // so a source missing either doesn't leave a dangling separator.
+        [MediaSourceQuality.summary(for: source), MediaSourceQuality.sizeLabel(for: source) ?? ""]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    /// Labelled row under the action buttons, shown only when the item has more
+    /// than one version. Opens a native `Menu` on iOS and a
+    /// `confirmationDialog` on tvOS — one focusable unit either way, which is
+    /// what keeps it out of the way of the focus path to Play.
+    @ViewBuilder
+    private func versionRow(_ item: BaseItemDto) -> some View {
+        let sources = versionSources(item)
+        if !sources.isEmpty, let selected = selectedSource(item) {
+            // Real position of the selection, so the numbered fallback in
+            // `versionLabel` names the right one for a source the server left
+            // unnamed and unclassifiable.
+            let selectedIndex = sources.firstIndex { $0.id == selected.id } ?? 0
+            #if os(tvOS)
+            Button {
+                showVersionPicker = true
+            } label: {
+                versionRowLabel(selected, index: selectedIndex, isFocused: versionRowFocused)
+            }
+            .buttonStyle(.plain)
+            .focused($versionRowFocused)
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+            .padding(.horizontal, contentPadding)
+            .confirmationDialog(
+                loc.localized("detail.version"),
+                isPresented: $showVersionPicker,
+                titleVisibility: .visible
+            ) {
+                ForEach(Array(sources.enumerated()), id: \.offset) { index, source in
+                    Button(versionPickerLabel(source, index: index)) {
+                        viewModel.selectedMediaSourceId = source.id
+                    }
+                }
+                Button(loc.localized("action.cancel"), role: .cancel) {}
+            }
+            #else
+            Menu {
+                ForEach(Array(sources.enumerated()), id: \.offset) { index, source in
+                    Button {
+                        viewModel.selectedMediaSourceId = source.id
+                    } label: {
+                        // A checkmark can't be drawn directly in a Menu label, so
+                        // the selected row is marked with the system's own
+                        // selection affordance via Label + image.
+                        if source.id == selected.id {
+                            Label(versionPickerLabel(source, index: index), systemImage: "checkmark")
+                        } else {
+                            Text(versionPickerLabel(source, index: index))
+                        }
+                    }
+                }
+            } label: {
+                versionRowLabel(selected, index: selectedIndex)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, contentPadding)
+            #endif
+        }
+    }
+
+    /// One menu entry: name on the first line, specs on the second.
+    private func versionPickerLabel(_ source: MediaSourceInfo, index: Int) -> String {
+        let name = versionLabel(source, index: index)
+        let detail = versionDetail(source)
+        return detail.isEmpty ? name : "\(name) — \(detail)"
+    }
+
+    /// `isFocused` is tvOS-only and unused on iOS (which has no focus engine);
+    /// it keeps one label builder shared between both platforms.
+    private func versionRowLabel(_ selected: MediaSourceInfo, index: Int, isFocused: Bool = false) -> some View {
+        HStack(spacing: CinemaSpacing.spacing3) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(loc.localized("detail.version"))
+                    .font(CinemaFont.label(.small))
+                    .textCase(.uppercase)
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                Text(versionRowValue(selected, index: index))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: CinemaScale.pt(12), weight: .semibold))
+                .foregroundStyle(themeManager.accent)
+        }
+        .padding(.horizontal, CinemaSpacing.spacing3)
+        .padding(.vertical, CinemaSpacing.spacing2)
+        #if os(tvOS)
+        // Same treatment as a settings row — this is the same kind of control,
+        // and it supplies both the surface and the accent focus border. Passing
+        // `colorScheme` explicitly is required: a focused tvOS Button flips the
+        // trait collection to light inside its label and would otherwise wash
+        // out every `Color.dynamic` token in here.
+        .tvSettingsFocusable(
+            isFocused: isFocused,
+            accent: themeManager.accent,
+            colorScheme: themeManager.darkModeEnabled ? .dark : .light
+        )
+        #else
+        .background(CinemaColor.surfaceContainer)
+        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+        #endif
+        .frame(maxWidth: readingMaxWidth, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("detail.version"))
+        .accessibilityValue(versionRowValue(selected, index: index))
+        .accessibilityHint(loc.localized("detail.version.hint"))
+    }
+
+    /// Row value: version name plus the spec summary when they differ (a source
+    /// named only by its specs shouldn't repeat itself).
+    private func versionRowValue(_ source: MediaSourceInfo, index: Int) -> String {
+        let name = versionLabel(source, index: index)
+        let summary = MediaSourceQuality.summary(for: source)
+        guard !summary.isEmpty, name != summary else { return name }
+        return "\(name) · \(summary)"
+    }
+
     private func episodeNavigation(for episodeId: String) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
         if let nav = viewModel.episodeNavigationMap[episodeId] {
             return nav
@@ -490,6 +679,9 @@ struct MediaDetailScreen: View {
             epPrev: epNav?.previous,
             epNext: epNav?.next,
             epNavigator: epNav?.navigator,
+            // Only meaningful for multi-source items; `selectedSource` returns
+            // nil otherwise and playback falls back to the ranked pick.
+            mediaSourceId: selectedSource(item)?.id,
             playLabel: loc.localized("detail.play"),
             playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
             buttonFontSize: buttonFontSize,
@@ -1050,6 +1242,8 @@ private struct PlayActionButtonsSection: View, Equatable {
     let epPrev: EpisodeRef?
     let epNext: EpisodeRef?
     let epNavigator: EpisodeNavigator?
+    /// User's version pick for multi-source items; `nil` ⇒ ranked default.
+    let mediaSourceId: String?
 
     let playLabel: String
     let playFromBeginningLabel: String
@@ -1074,6 +1268,7 @@ private struct PlayActionButtonsSection: View, Equatable {
             && lhs.remainingText == rhs.remainingText
             && lhs.epPrev?.id == rhs.epPrev?.id
             && lhs.epNext?.id == rhs.epNext?.id
+            && lhs.mediaSourceId == rhs.mediaSourceId
             && lhs.playLabel == rhs.playLabel
             && lhs.playFromBeginningLabel == rhs.playFromBeginningLabel
             && lhs.buttonFontSize == rhs.buttonFontSize
@@ -1144,7 +1339,7 @@ private struct PlayActionButtonsSection: View, Equatable {
         PlayLink(
             itemId: playItemId, title: playTitle, startTime: startSeconds,
             previousEpisode: epPrev, nextEpisode: epNext,
-            episodeNavigator: epNavigator
+            episodeNavigator: epNavigator, mediaSourceId: mediaSourceId
         ) {
             HStack(spacing: CinemaSpacing.spacing2) {
                 Text(playLabel)
@@ -1175,7 +1370,7 @@ private struct PlayActionButtonsSection: View, Equatable {
         PlayLink(
             itemId: playItemId, title: playTitle, startTime: nil,
             previousEpisode: epPrev, nextEpisode: epNext,
-            episodeNavigator: epNavigator
+            episodeNavigator: epNavigator, mediaSourceId: mediaSourceId
         ) {
             HStack(spacing: CinemaSpacing.spacing2) {
                 Image(systemName: "backward.end.fill")

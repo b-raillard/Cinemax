@@ -844,6 +844,11 @@
 "detail.favorite.remove" = "Retirer des favoris";
 "detail.watched.add" = "Marquer comme vu";
 "detail.watched.remove" = "Marquer comme non vu";
+
+// MARK: - Detail (version picker, multi-source items)
+"detail.version" = "Version";
+"detail.version.fallback" = "Version %d";
+"detail.version.hint" = "Choisir une autre version de ce titre";
 "card.markedWatched" = "Marqué comme vu";
 "card.markedUnwatched" = "Marqué comme non vu";
 "card.favorited" = "Ajouté aux favoris";

@@ -394,13 +394,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getPlaybackInfo(
         itemId: String, userId: String, maxBitrate: Int,
         audioStreamIndex: Int?, subtitleStreamIndex: Int?,
-        engine: VideoPlaybackEngine
+        engine: VideoPlaybackEngine, mediaSourceId: String?
     ) async throws -> PlaybackInfo {
         if shouldThrow { throw stubbedError }
         return PlaybackInfo(
             url: URL(string: "http://localhost/stream")!,
             playSessionId: "session1",
-            mediaSourceId: itemId,
+            // Echo the requested version back so tests can assert the override
+            // reached the API rather than being dropped in the plumbing.
+            mediaSourceId: mediaSourceId ?? itemId,
             playMethod: .directStream,
             audioTracks: [], subtitleTracks: [],
             selectedAudioIndex: nil, selectedSubtitleIndex: nil,
