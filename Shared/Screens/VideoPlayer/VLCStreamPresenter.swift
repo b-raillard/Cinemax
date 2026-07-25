@@ -301,6 +301,36 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var seekCommitWork: DispatchWorkItem?
     private let seekCommitDelay: TimeInterval = 0.3
 
+    /// Target (ms) of the engine seek currently settling, or nil when none is.
+    /// libVLC echoes the seek target as a time update the instant the seek is
+    /// issued — long before it has re-opened the byte range and re-buffered — so
+    /// the time tick alone would clear the spinner while the picture is still
+    /// frozen (the "no loader after a fast-forward" bug). While this is set, the
+    /// spinner is held until the playhead is demonstrably MOVING again.
+    private var seekLoadingTargetMs: Int32?
+    /// Last position observed while a seek was settling, so progress is measured
+    /// between two consecutive reports. Comparing against the target instead
+    /// would misfire on sparse-keyframe files, where VLC legitimately resumes
+    /// seconds *before* the requested position.
+    private var seekLoadingLastMs: Int32?
+    /// Consecutive samples that showed forward progress. While the engine still
+    /// reports `.opening`/`.buffering` two in a row are required before the seek
+    /// counts as landed (one jump alone can be the demuxer resettling).
+    private var seekLoadingProgressTicks = 0
+    private var seekLoadingStartedAt = Date.distantPast
+    private var seekLoadingWork: DispatchWorkItem?
+    /// Grace period before the post-seek spinner appears: a seek that lands
+    /// instantly (cached / local range) must not flash a spinner, only one that
+    /// actually makes the user wait should.
+    private let seekSpinnerDelay: TimeInterval = 0.35
+    /// Forward progress between two consecutive post-seek position reports that
+    /// counts as "frames are flowing again". libVLC ticks ~4×/s while playing;
+    /// while re-buffering the reported position doesn't advance at all.
+    private static let seekLandedProgressMs: Int32 = 120
+    /// Backstop so a missed engine signal can never leave the spinner turning
+    /// forever over a picture that is actually playing.
+    private static let seekLoadingMaxHold: TimeInterval = 30
+
     private var reporter: PlaybackReporter?
     private let remoteCommands: RemoteCommandController
     private let nowPlaying: NowPlayingInfoController
@@ -534,7 +564,82 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var enginePlaying: Bool { player.state == .playing }
 
     private func engineSeek(ms: Int32) {
-        player.seek(to: .milliseconds(Int(max(0, ms))))
+        let target = max(0, ms)
+        beginSeekLoading(target: target)
+        player.seek(to: .milliseconds(Int(target)))
+    }
+
+    // MARK: Post-seek loading state
+    //
+    // A seek tears down and re-opens libVLC's HTTP byte range, so on a slow /
+    // self-hosted origin the picture stays frozen on the pre-seek frame for
+    // several seconds. VLC reports the new position immediately, so the plain
+    // `.playing` / time-tick paths cleared the spinner right away and the wait
+    // read as a freeze. These three helpers hold the spinner across that gap.
+
+    /// Arm the settle window for a seek that just fired. The spinner only shows
+    /// if the seek hasn't produced real frames within `seekSpinnerDelay`.
+    private func beginSeekLoading(target: Int32) {
+        seekLoadingTargetMs = target
+        seekLoadingLastMs = nil
+        seekLoadingProgressTicks = 0
+        seekLoadingStartedAt = Date()
+        seekLoadingWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            // Re-check rather than trusting the window is still open: a seek that
+            // already resumed (or settled into pause) must not flash a spinner.
+            guard let self, self.updateSeekLoading() else { return }
+            self.setLoading(true)
+        }
+        seekLoadingWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seekSpinnerDelay, execute: work)
+    }
+
+    /// Drop the settle window (landed, superseded, or no frames expected any
+    /// more). Doesn't touch the spinner — the caller owns that.
+    private func endSeekLoading() {
+        seekLoadingWork?.cancel()
+        seekLoadingWork = nil
+        seekLoadingTargetMs = nil
+        seekLoadingLastMs = nil
+        seekLoadingProgressTicks = 0
+    }
+
+    /// Re-evaluates a settling seek against the live position. Returns true while
+    /// the spinner must stay up; clears the window (and returns false) as soon as
+    /// the playhead is moving again, the player has settled into pause, or the
+    /// backstop expires. Called from the time tick, the 1 s heartbeat, and the
+    /// `.playing` state change — every path that would otherwise hide the spinner.
+    @discardableResult
+    private func updateSeekLoading() -> Bool {
+        guard seekLoadingTargetMs != nil else { return false }
+        let now = currentMs
+        let moved = seekLoadingLastMs.map {
+            Int(now) - Int($0) >= Int(Self.seekLandedProgressMs)
+        } ?? false
+        seekLoadingProgressTicks = moved ? seekLoadingProgressTicks + 1 : 0
+        seekLoadingLastMs = now
+
+        let landed: Bool
+        switch player.state {
+        case .paused:
+            // Nothing more to wait for: VLC emits no time updates while paused,
+            // and the frame at the seek target is exactly what the user asked for.
+            landed = true
+        case .opening, .buffering:
+            // The engine says it's still loading, so demand sustained progress
+            // before believing otherwise: a single jump can be the demuxer
+            // resettling on a distant keyframe, not frames reaching the screen.
+            landed = seekLoadingProgressTicks >= 2
+        default:
+            landed = moved // the playhead is moving again: real frames
+        }
+        // Backstop: a missed engine signal must never strand the spinner.
+        if landed || Date().timeIntervalSince(seekLoadingStartedAt) > Self.seekLoadingMaxHold {
+            endSeekLoading()
+            return false
+        }
+        return true
     }
 
     // MARK: Coalesced seeking
@@ -585,14 +690,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         seekCommitWork?.cancel()
         seekCommitWork = nil
         pendingScrubTargetMs = nil
+        endSeekLoading() // a superseded seek must not keep holding the spinner
     }
 
     private func enginePlay() { player.resume() }
     private func enginePause() { player.pause() }
 
     /// Shows/hides the centered loading spinner. Driven from playback start, the
-    /// retry path, and engine state changes (opening/buffering → on; playing/
-    /// paused → off); also force-cleared once real frames flow.
+    /// retry path, engine state changes (opening/buffering → on; playing/paused →
+    /// off), and the post-seek settle window (`beginSeekLoading`); also
+    /// force-cleared once real frames flow.
     private func setLoading(_ loading: Bool) {
         if loading { loadingIndicator.startAnimating() }
         else { loadingIndicator.stopAnimating() }
@@ -690,6 +797,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let dur: Double? = lengthMs > 0 ? Double(lengthMs) / 1000 : nil
         nowPlaying.update(elapsed: now, duration: dur, rate: enginePlaying ? 1.0 : 0.0)
         updateSkipButton(currentTime: now)
+        // Second chance to close a settling seek: if VLC went quiet on time
+        // updates the heartbeat's own sampling still sees the playhead move.
+        if seekLoadingTargetMs != nil, !updateSeekLoading() { setLoading(false) }
         if statsVisible { refreshStats() }
         if sleepActive {
             sleepRemaining -= 1
@@ -2693,12 +2803,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setLoading(true)
             if syncPlayActive { syncPlay.reportBuffering() }
         case .stopped:
+            endSeekLoading() // no frames are coming — a pending settle is moot
             guard !isTearingDown,
                   Date().timeIntervalSince(lastPlayStart) > 1.0,
                   lengthMs > 0, currentMs >= lengthMs - 2000 else { return }
             handlePlaybackEnded()
         case .playing:
-            setLoading(false)
+            // `.playing` can be reported while a seek is still re-buffering, so
+            // defer to the settle window rather than clearing the spinner blindly.
+            if !updateSeekLoading() { setLoading(false) }
             didRetry = false
             // libVLC resets rate on media swap — re-apply the user's speed
             // (but never while a hold-boost owns the rate).
@@ -2716,6 +2829,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             refreshNowPlayingRate(playing: true)
             if syncPlayActive { syncPlay.reportReady(isPlaying: true) }
         case .paused:
+            endSeekLoading()
             setLoading(false)
             #if os(iOS)
             setPlayPauseIcon(playing: false)
@@ -2784,6 +2898,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func handlePlaybackError() {
         cancelOpenWatchdog()
+        endSeekLoading() // the media is being reloaded (or given up on)
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
@@ -3016,7 +3131,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         refreshTimeUI()
         if currentMs > 0 {
             hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded()
-            setLoading(false)
+            // A settling seek echoes its target here before any frame is decoded —
+            // only hide the spinner once the playhead is actually moving again.
+            if !updateSeekLoading() { setLoading(false) }
             lastKnownPositionMs = currentMs
         }
         if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
