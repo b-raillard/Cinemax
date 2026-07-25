@@ -544,7 +544,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         videoHost?.removeFromParent()
         videoHost = nil
         player.stop()
-        deactivatePlaybackAudioSession()
+        PlaybackAudioSession.deactivate()
     }
 
     // MARK: - Engine bridge (SwiftVLC)
@@ -2336,10 +2336,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
-        activatePlaybackAudioSession()
-        lastPlayStart = Date()
-        try? player.play(media)
-        scheduleOpenWatchdog()
+        activateSessionThenPlay(media)
         reporter?.reportStart(startTime: startTime)
         startProgressTimer()
         fetchSegments()
@@ -2501,6 +2498,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.setLoading(true)
+            // The episode we're leaving can have died during a device sleep, which
+            // also deactivated the session — re-assert it before opening the next
+            // one, or libVLC's aout loops on `CannotStartPlaying` and the autoplay
+            // lands on a black frame. No pre-hop guard needed: everything from the
+            // `isTearingDown` check above to here is one main-actor slice, so a
+            // teardown's `deactivate()` can't be enqueued ahead of this activation.
+            await PlaybackAudioSession.activate()
+            guard !self.isTearingDown, gen == self.navGeneration else { return }
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
@@ -2930,10 +2935,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     mediaLengthMs = 0
                 }
                 setLoading(true)
-                activatePlaybackAudioSession()
-                lastPlayStart = Date()
-                try? player.play(media)
-                scheduleOpenWatchdog()
+                activateSessionThenPlay(media)
             }
             return
         }
@@ -2964,30 +2966,39 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     // MARK: - Audio session ownership (wake-from-sleep resilience)
 
+    /// Bring up the app-owned playback session, then open `media` — in that order,
+    /// always.
+    ///
     /// libVLC's audio-output module activates the `AVAudioSession` itself, which
     /// works on a clean cold start. But after the device sleeps and wakes, its
     /// `setActive(true)` fails with `AVAudioSessionErrorCodeCannotStartPlaying`
     /// (561015905) and the aout retries forever — audio output never starts,
     /// libVLC's playback clock stalls, and the user is stranded on a black frame
-    /// even though the video decoder is running. Owning the session here (the same
-    /// `.playback`/`.moviePlayback` the native `AVPlayer` path uses) means libVLC
-    /// re-opens onto an already-active, app-owned playback session, so its aout
-    /// starts cleanly. Idempotent — called before every (re)open of a stream.
-    private func activatePlaybackAudioSession() {
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.playback, mode: .moviePlayback, options: [])
-            try session.setActive(true, options: [])
-        } catch {
-            logger.error("VLC: failed to activate playback audio session: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    private func deactivatePlaybackAudioSession() {
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            logger.error("VLC: failed to deactivate playback audio session: \(error.localizedDescription, privacy: .public)")
+    /// even though the video decoder is running. Opening onto an already-active,
+    /// app-owned session (`PlaybackAudioSession`, shared with the native
+    /// `AVPlayer` path) means its aout starts cleanly.
+    ///
+    /// The activation is a `mediaserverd` round-trip, so it runs off the main
+    /// thread and this suspends rather than blocking. Two guards pay for that:
+    ///
+    /// - **before** the hop, so a player already torn down never enqueues an
+    ///   activation *behind* its own `deactivate()` — that ordering would leave
+    ///   the session active with no player behind it, and the serial queue can't
+    ///   undo it (it orders work, it can't cancel a superseded activation);
+    /// - **after** the hop, because the user can dismiss (`isTearingDown`) or
+    ///   trigger an episode nav (`navGeneration` — `navigateToEpisode` bumps it
+    ///   synchronously, then opens its own media) while we wait. Without the
+    ///   generation re-check a slow activation would replay the *previous*
+    ///   episode's media over the new one.
+    private func activateSessionThenPlay(_ media: Media) {
+        let gen = navGeneration
+        Task { [weak self] in
+            guard self?.isTearingDown == false else { return }
+            await PlaybackAudioSession.activate()
+            guard let self, !self.isTearingDown, gen == self.navGeneration else { return }
+            self.lastPlayStart = Date()
+            try? self.player.play(media)
+            self.scheduleOpenWatchdog()
         }
     }
 
@@ -3109,8 +3120,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.setLoading(true)
             // Re-assert the playback session BEFORE replay: the system deactivated
             // it during sleep, and without this libVLC's aout loops forever on
-            // `CannotStartPlaying` (the black-screen-after-wake bug).
-            self.activatePlaybackAudioSession()
+            // `CannotStartPlaying` (the black-screen-after-wake bug). Already in an
+            // async context, so await it directly — and re-check the generation
+            // afterwards, since a user episode-nav can land during the hop.
+            await PlaybackAudioSession.activate()
+            guard !self.isTearingDown, gen == self.navGeneration else { return }
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
