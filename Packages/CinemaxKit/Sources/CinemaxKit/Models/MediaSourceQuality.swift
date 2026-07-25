@@ -111,12 +111,15 @@ public enum MediaSourceQuality {
             return bitrate <= maxBitrate
         }()
 
+        // `Self.`-qualified throughout: several of these helpers share a name
+        // with the `Score` initializer label they feed, and the unqualified
+        // form makes that needlessly hard for both the compiler and a reader.
         return Score(
             withinBitrateCap: withinCap,
-            resolution: video.map(resolution(of:)) ?? .unknown,
-            videoRange: video.map(videoRange(of:)) ?? .sdr,
-            isIMAX: isIMAX(source),
-            audio: audio.map(audioTier(of:)) ?? .unknown,
+            resolution: video.map { Self.resolution(of: $0) } ?? .unknown,
+            videoRange: video.map { Self.videoRange(of: $0) } ?? .sdr,
+            isIMAX: Self.isIMAX(source),
+            audio: audio.map { Self.audioTier(of: $0) } ?? .unknown,
             channels: audio?.channels ?? 0,
             bitrate: bitrate
         )
@@ -131,16 +134,20 @@ public enum MediaSourceQuality {
     /// could disagree about which version won, which is precisely the bug this
     /// type exists to prevent.
     public static func ranked(_ sources: [MediaSourceInfo], maxBitrate: Int? = nil) -> [MediaSourceInfo] {
-        sources
-            .enumerated()
-            .map { (offset: $0.offset, source: $0.element, score: score(for: $0.element, maxBitrate: maxBitrate)) }
+        // Decorate-sort-undecorate so each source is scored once rather than on
+        // every comparison. Plain closures throughout: Swift has no key paths
+        // into tuples, so `.map(\.source)` would not compile.
+        let decorated = sources.enumerated().map {
+            (offset: $0.offset, source: $0.element, score: Self.score(for: $0.element, maxBitrate: maxBitrate))
+        }
+        return decorated
             .sorted { lhs, rhs in
                 if lhs.score != rhs.score { return lhs.score > rhs.score }
                 let lid = lhs.source.id ?? "", rid = rhs.source.id ?? ""
                 if lid != rid { return lid < rid }
                 return lhs.offset < rhs.offset
             }
-            .map(\.source)
+            .map { $0.source }
     }
 
     /// The source that should play by default.
