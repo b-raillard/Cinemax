@@ -42,6 +42,9 @@ final class VideoPlayerCoordinator {
         itemId: String, title: String, startTime: Double? = nil,
         previousEpisode: EpisodeRef? = nil, nextEpisode: EpisodeRef? = nil,
         episodeNavigator: EpisodeNavigator? = nil,
+        /// Version override from the detail screen's version row. `nil` ⇒ let
+        /// `MediaSourceQuality` rank the item's sources and pick.
+        mediaSourceId: String? = nil,
         using appState: AppState
     ) {
         guard let loc = localizationManager else {
@@ -66,7 +69,7 @@ final class VideoPlayerCoordinator {
                 return
             }
             do {
-                let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine)
+                let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine, mediaSourceId: mediaSourceId)
                 #if DEBUG
                 logger.info("tvOS play: engine=\(engine.rawValue), method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
                 #endif

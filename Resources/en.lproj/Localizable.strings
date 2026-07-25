@@ -842,6 +842,11 @@
 "detail.favorite.remove" = "Remove from favorites";
 "detail.watched.add" = "Mark as watched";
 "detail.watched.remove" = "Mark as unwatched";
+
+// MARK: - Detail (version picker, multi-source items)
+"detail.version" = "Version";
+"detail.version.fallback" = "Version %d";
+"detail.version.hint" = "Choose a different version of this title";
 "card.markedWatched" = "Marked as watched";
 "card.markedUnwatched" = "Marked as unwatched";
 "card.favorited" = "Added to favorites";

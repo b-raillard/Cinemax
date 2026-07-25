@@ -20,6 +20,9 @@ struct VideoPlayerView: View {
     var previousEpisode: EpisodeRef? = nil
     var nextEpisode: EpisodeRef? = nil
     var episodeNavigator: EpisodeNavigator? = nil
+    /// Version override from the detail screen's version row. `nil` ⇒ let
+    /// `MediaSourceQuality` rank the item's sources and pick.
+    var mediaSourceId: String? = nil
 
     #if os(iOS)
     @State private var presenter: NativeVideoPresenter?
@@ -92,7 +95,8 @@ struct VideoPlayerView: View {
                 // Default online path: VLC DirectPlays the raw file (no server
                 // transcode → no freeze, 4K/HEVC/Dolby Vision preserved).
                 let vlcInfo = try await appState.apiClient.getPlaybackInfo(
-                    itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .vlc
+                    itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .vlc,
+                    mediaSourceId: mediaSourceId
                 )
                 #if DEBUG
                 logger.info("iOS play: engine=vlc, method=\(vlcInfo.playMethod.rawValue), url=\(redactedURL(vlcInfo.url))")
@@ -111,7 +115,7 @@ struct VideoPlayerView: View {
                 v.present(info: vlcInfo)
                 return
             } else {
-                info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .native)
+                info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .native, mediaSourceId: mediaSourceId)
                 #if DEBUG
                 logger.info("iOS play: engine=native, method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
                 #endif
