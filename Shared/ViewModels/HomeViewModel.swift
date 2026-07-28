@@ -179,23 +179,38 @@ final class HomeViewModel {
     ) async -> [String: [BaseItemDto]] {
         guard !episodeItems.isEmpty else { return [:] }
 
+        // Dedup first — one entry per unique season across BOTH rails.
+        var seen = Set<String>()
+        var seasons: [(seasonId: String, seriesId: String)] = []
+        for item in episodeItems {
+            guard let seasonId = item.seasonID,
+                  let seriesId = item.seriesID,
+                  !seen.contains(seasonId) else { continue }
+            seen.insert(seasonId)
+            seasons.append((seasonId: seasonId, seriesId: seriesId))
+        }
+
+        // Bound the fan-out to chunks of 6, matching every other fan-out in the
+        // app (`loadGenreRows` below, `MediaLibraryViewModel.fetchGenreItems`).
+        // The two rails carry up to 20 items each, so an unchunked group could
+        // fire ~40 concurrent `getEpisodes` at a self-hosted server — while the
+        // genre fan-out is running alongside it.
+        let concurrencyLimit = 6
         var seasonEpisodes: [String: [BaseItemDto]] = [:]
-        await withTaskGroup(of: (String, [BaseItemDto])?.self) { group in
-            var seen = Set<String>()
-            for item in episodeItems {
-                guard let seasonId = item.seasonID,
-                      let seriesId = item.seriesID,
-                      !seen.contains(seasonId) else { continue }
-                seen.insert(seasonId)
-                group.addTask {
-                    guard let eps = try? await appState.apiClient.getEpisodes(
-                        seriesId: seriesId, seasonId: seasonId, userId: userId
-                    ) else { return nil }
-                    return (seasonId, eps)
+        for start in stride(from: 0, to: seasons.count, by: concurrencyLimit) {
+            let chunk = seasons[start..<min(start + concurrencyLimit, seasons.count)]
+            await withTaskGroup(of: (String, [BaseItemDto])?.self) { group in
+                for season in chunk {
+                    group.addTask {
+                        guard let eps = try? await appState.apiClient.getEpisodes(
+                            seriesId: season.seriesId, seasonId: season.seasonId, userId: userId
+                        ) else { return nil }
+                        return (season.seasonId, eps)
+                    }
                 }
-            }
-            for await result in group {
-                if let (seasonId, eps) = result { seasonEpisodes[seasonId] = eps }
+                for await result in group {
+                    if let (seasonId, eps) = result { seasonEpisodes[seasonId] = eps }
+                }
             }
         }
         return seasonEpisodes
