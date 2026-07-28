@@ -82,4 +82,93 @@ struct LoginViewModelTests {
 
         #expect(!vm.isAuthenticating)
     }
+
+    // MARK: - Quick Connect poll resilience
+
+    /// Polls the VM until `condition` holds or the budget elapses. Keeps the
+    /// Quick Connect tests off wall-clock sleeps.
+    private func waitFor(_ condition: @MainActor () -> Bool) async {
+        for _ in 0..<300 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @Test("Transient poll failures keep polling and approval still completes")
+    func quickConnectSurvivesTransientPollFailures() async {
+        let api = MockAPIClient()
+        api.stubbedSession = UserSession(userID: "u1", username: "Alice", accessToken: "tok", serverID: "s1")
+        // One under the budget, then approval — the flow must not have exited.
+        api.quickConnectAuthorizedHandler = { index in
+            if index < LoginViewModel.quickConnectFailureBudget { throw MockError.genericFailure }
+            return true
+        }
+        let vm = LoginViewModel()
+        vm.quickConnectPollInterval = .milliseconds(1)
+
+        vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
+        await waitFor { vm.showSuccess }
+        vm.cancelQuickConnect()
+
+        #expect(vm.showSuccess)
+        #expect(vm.quickConnectError == nil)
+        #expect(api.quickConnectPollCount == LoginViewModel.quickConnectFailureBudget)
+    }
+
+    @Test("A successful poll resets the consecutive-failure budget")
+    func quickConnectResetsBudgetOnSuccessfulPoll() async {
+        let api = MockAPIClient()
+        api.stubbedSession = UserSession(userID: "u1", username: "Alice", accessToken: "tok", serverID: "s1")
+        // 4 failures, one successful (not-yet-approved) poll, then 4 more
+        // failures: 8 total failures but never 5 in a row, so the flow survives
+        // and completes on the 10th poll.
+        api.quickConnectAuthorizedHandler = { index in
+            if index == 5 { return false }
+            if index < 10 { throw MockError.genericFailure }
+            return true
+        }
+        let vm = LoginViewModel()
+        vm.quickConnectPollInterval = .milliseconds(1)
+
+        vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
+        await waitFor { vm.showSuccess }
+        vm.cancelQuickConnect()
+
+        #expect(vm.showSuccess)
+        #expect(vm.quickConnectError == nil)
+    }
+
+    @Test("Poll gives up after the consecutive-failure budget")
+    func quickConnectGivesUpAfterBudget() async {
+        let api = MockAPIClient()
+        api.quickConnectAuthorizedHandler = { _ in throw MockError.genericFailure }
+        let vm = LoginViewModel()
+        vm.quickConnectPollInterval = .milliseconds(1)
+
+        vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
+        await waitFor { vm.quickConnectError != nil }
+
+        #expect(vm.quickConnectError != nil)
+        #expect(!vm.showSuccess)
+        #expect(api.quickConnectPollCount == LoginViewModel.quickConnectFailureBudget)
+    }
+
+    @Test("Cancelling the sheet exits the poll loop without surfacing an error")
+    func quickConnectCancelExitsSilently() async {
+        let api = MockAPIClient()
+        api.quickConnectAuthorizedHandler = { _ in false }   // never approved
+        let vm = LoginViewModel()
+        vm.quickConnectPollInterval = .milliseconds(1)
+
+        vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
+        await waitFor { api.quickConnectPollCount > 2 }
+        vm.cancelQuickConnect()
+        let pollsAtCancel = api.quickConnectPollCount
+        try? await Task.sleep(for: .milliseconds(60))
+
+        #expect(vm.quickConnectError == nil)
+        #expect(vm.quickConnectCode == nil)
+        // Loop actually stopped — not just "no error surfaced".
+        #expect(api.quickConnectPollCount <= pollsAtCancel + 1)
+    }
 }
