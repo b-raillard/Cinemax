@@ -195,7 +195,8 @@ final class PlaybackLiveActivityController {
     /// through `endOtherActivities()`, which spares the one it owns.
     static func endStaleActivities() {
         for activity in Activity<PlaybackActivityAttributes>.activities {
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            let box = ActivityBox(activity)
+            Task { await box.activity.end(nil, dismissalPolicy: .immediate) }
         }
     }
 
