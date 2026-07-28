@@ -172,25 +172,42 @@ final class ContentProvider: TVTopShelfContentProvider {
         return try? JSONDecoder().decode(Session.self, from: data)
     }
 
+    /// JSON fetches go through an EPHEMERAL session, never `URLSession.shared`:
+    /// the shared session carries a disk-backed `URLCache`, so authenticated
+    /// Jellyfin responses would be written to a cache file in the extension
+    /// container. Top Shelf re-queries on every invocation anyway.
+    private static let httpSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 10
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     /// nil = the request failed (network / auth); empty = nothing in progress.
     private static func fetchResumeItems(session: Session, limit: Int) async -> [Item]? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/UserItems/Resume", serverURL: session.serverURL)
+        // No `api_key` query item — auth rides the Authorization header below,
+        // so the token never lands in a URL log or cache key.
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
             URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "mediaTypes", value: "Video"),
-            URLQueryItem(name: "api_key", value: session.accessToken)
+            URLQueryItem(name: "mediaTypes", value: "Video")
         ]
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+        guard let (data, resp) = try? await httpSession.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
         return decoded.items
     }
 
+    /// The ONE place the token legitimately stays in a URL: these URLs are handed
+    /// to `TVTopShelfSectionedItem.setImageURL`, i.e. the SYSTEM fetches them —
+    /// we never issue the request, so header auth is impossible here.
     private static func imageURL(session: Session, itemId: String, type: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/Items/\(itemId)/Images/\(type)", serverURL: session.serverURL)
