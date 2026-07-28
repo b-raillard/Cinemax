@@ -51,6 +51,9 @@ final class NativeVideoPresenter {
     private var endOfSeries: EndOfSeriesOverlayController!
     private var remoteCommands: RemoteCommandController!
     private var nowPlaying: NowPlayingInfoController!
+    /// iOS Lock Screen / Dynamic Island Live Activity. No-op stub on tvOS
+    /// (no ActivityKit) so the call sites below stay platform-free.
+    private var liveActivity: PlaybackLiveActivityController!
 
     // Track state
     private var audioTracks: [MediaTrackInfo] = []
@@ -152,6 +155,7 @@ final class NativeVideoPresenter {
             apiClient: apiClient, userId: userId,
             imageBuilder: imageBuilder, authToken: nil
         )
+        self.liveActivity = PlaybackLiveActivityController(apiClient: apiClient, userId: userId)
     }
 
     /// Called by `RemoteCommandController` when the system play/pause command
@@ -167,6 +171,11 @@ final class NativeVideoPresenter {
             player.play()
         }
         nowPlaying.update(
+            elapsed: player.currentTime().seconds,
+            duration: currentItemDurationSeconds(),
+            rate: player.rate > 0 ? 1.0 : 0.0
+        )
+        liveActivity.update(
             elapsed: player.currentTime().seconds,
             duration: currentItemDurationSeconds(),
             rate: player.rate > 0 ? 1.0 : 0.0
@@ -226,6 +235,8 @@ final class NativeVideoPresenter {
         remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
         nowPlaying.setAuthToken(playbackInfo?.authToken)
         nowPlaying.attach(itemId: itemId, title: title, durationSeconds: nil)
+        // Lock Screen / Dynamic Island Live Activity (iOS; no-op on tvOS).
+        liveActivity.attach(itemId: itemId, title: title, subtitle: nil, durationSeconds: nil)
         setupTrackMenus()
         setupBackgroundObserver()
 
@@ -540,6 +551,11 @@ final class NativeVideoPresenter {
             remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
             nowPlaying.setAuthToken(playbackInfo?.authToken)
             nowPlaying.attach(itemId: ep.id, title: ep.title, durationSeconds: nil)
+            // Episode swap = end the old activity + start a fresh one (an
+            // activity's attributes are frozen for its lifetime). `attach`
+            // detaches first, and its generation guard drops a lookup still in
+            // flight from the episode we just left.
+            liveActivity.attach(itemId: ep.id, title: ep.title, subtitle: nil, durationSeconds: nil)
             setupTrackMenus()              // refreshes native "..." menu for new episode
 
             playerObservation?.invalidate()
@@ -610,6 +626,13 @@ final class NativeVideoPresenter {
                 self.playbackReporter.onTick()
                 let rate = (self.playerVC?.player?.rate ?? 0) > 0 ? 1.0 : 0.0
                 self.nowPlaying.update(
+                    elapsed: time.seconds,
+                    duration: self.currentItemDurationSeconds(),
+                    rate: rate
+                )
+                // Same tick, no second timer: the controller itself decides
+                // whether this sample is a discontinuity worth a push.
+                self.liveActivity.update(
                     elapsed: time.seconds,
                     duration: self.currentItemDurationSeconds(),
                     rate: rate
@@ -859,6 +882,7 @@ final class NativeVideoPresenter {
     private func cleanup() {
         remoteCommands.detach()
         nowPlaying.detach()
+        liveActivity.detach()
         if let vc = playerVC { applyTransportBarItems([], to: vc) }
         #if os(tvOS)
         dismissDelegate = nil

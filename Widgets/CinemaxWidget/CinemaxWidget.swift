@@ -360,5 +360,10 @@ struct CinemaxWidgetBundle: WidgetBundle {
         CinemaxFavoritesWidget()
         CinemaxNextUpWidget()
         CinemaxRecentlyAddedWidget()
+        // Playback Live Activity (Lock Screen + Dynamic Island) — views and
+        // configuration live in PlaybackLiveActivityWidget.swift.
+        #if canImport(ActivityKit)
+        CinemaxPlaybackLiveActivity()
+        #endif
     }
 }
