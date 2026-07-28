@@ -171,6 +171,65 @@ struct HomeViewModelTests {
         #expect(vm.resumeItems.count == 1)
         #expect(vm.nextUpItems.count == 1)
     }
+
+    // MARK: - Genre retry (stale-index regression)
+    //
+    // `retryGenre` suspends on the fetch; `genreRows` can be emptied or
+    // reordered meanwhile (pull-to-refresh, a genre-selection change, another
+    // retry chip). Reusing the pre-await index crashed with "Index out of
+    // range" or wrote into the wrong row.
+
+    @Test("retryGenre bails silently when its row disappears during the fetch")
+    func retryGenreRowRemovedMidFlight() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel()
+        vm.genreRows = [GenreRow(genre: "Action", state: .failed),
+                        GenreRow(genre: "Comedy", state: .failed)]
+        // Runs while `retryGenre` is suspended — same effect as a concurrent
+        // `loadGenreRows` wiping the rows.
+        api.getItemsHandler = { _ in
+            await MainActor.run { vm.genreRows = [] }
+            return ([], 0)
+        }
+
+        await vm.retryGenre("Action", using: makeAppState(api: api))
+
+        #expect(vm.genreRows.isEmpty)
+    }
+
+    @Test("retryGenre re-resolves the index when rows shift during the fetch")
+    func retryGenreIndexShiftsMidFlight() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel()
+        vm.genreRows = [GenreRow(genre: "Action", state: .failed),
+                        GenreRow(genre: "Comedy", state: .failed),
+                        GenreRow(genre: "Drama", state: .failed)]
+        // Drop the row ahead of the retried one: "Drama" moves from index 2 to 1
+        // and the old index would now be out of bounds.
+        api.getItemsHandler = { _ in
+            await MainActor.run { vm.genreRows.removeFirst() }
+            return ([makeSeasonEpisode(id: "d1", name: "Dramatic")], 1)
+        }
+
+        await vm.retryGenre("Drama", using: makeAppState(api: api))
+
+        #expect(vm.genreRows.map(\.genre) == ["Comedy", "Drama"])
+        #expect(vm.genreRows.first(where: { $0.genre == "Drama" })?.state != .failed)
+        #expect(vm.genreRows.first(where: { $0.genre == "Comedy" })?.state == .failed)
+    }
+
+    @Test("retryGenre no-ops when the genre isn't in genreRows at all")
+    func retryGenreUnknownGenre() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel()
+        vm.genreRows = [GenreRow(genre: "Action", state: .failed)]
+
+        await vm.retryGenre("Comedy", using: makeAppState(api: api))
+
+        #expect(vm.genreRows.count == 1)
+        #expect(vm.genreRows[0].state == .failed)
+        #expect(api.getItemsCalls.isEmpty)
+    }
 }
 
 /// Tri-state sentinel: a missing/empty `home.selectedGenres` string means

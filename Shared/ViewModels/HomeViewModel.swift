@@ -471,17 +471,27 @@ final class HomeViewModel {
 
     /// Re-fetches a single genre after the user taps its retry chip.
     /// Updates `genreRows` in place so only the affected row re-renders.
+    /// The index is deliberately re-resolved by genre AFTER the await, in both
+    /// the success and the failure path: `genreRows` can shrink or be replaced
+    /// wholesale while the fetch is in flight (a pull-to-refresh runs
+    /// `loadGenreRows`, a Settings genre-selection change runs
+    /// `reloadGenreRows`, another retry chip can remove a row), and reusing the
+    /// pre-await index crashes with `Fatal error: Index out of range` or writes
+    /// into the wrong row. A nil lookup means the row is gone — the superseding
+    /// load owns the state, so bail silently.
     func retryGenre(_ genre: String, using appState: AppState) async {
         guard let userId = appState.currentUserId,
-              let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
+              genreRows.contains(where: { $0.genre == genre }) else { return }
         do {
             let items = try await Self.fetchGenreItems(genre: genre, userId: userId, appState: appState)
+            guard let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
             if items.isEmpty {
                 genreRows.remove(at: index)
             } else {
                 genreRows[index].state = .items(items)
             }
         } catch {
+            guard let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
             genreRows[index].state = .failed
         }
     }
