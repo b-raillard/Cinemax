@@ -322,6 +322,11 @@ struct AdminApiKeysScreen: View {
                             .font(CinemaFont.dynamicLabel(.medium))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
 
+                        // Deliberately NOT `.textSelection(.enabled)`: a long-press
+                        // Copy there writes the token to the GENERAL pasteboard
+                        // (no expiry, no `localOnly` — it syncs via Universal
+                        // Clipboard), bypassing the hardened `copyToken` path
+                        // below. The Copy button is the only sanctioned export.
                         Text(key.accessToken ?? "—")
                             .font(.system(size: CinemaScale.pt(13), design: .monospaced))
                             .foregroundStyle(CinemaColor.onSurface)
@@ -329,7 +334,6 @@ struct AdminApiKeysScreen: View {
                             .padding(CinemaSpacing.spacing3)
                             .background(CinemaColor.surfaceContainerHigh)
                             .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
-                            .textSelection(.enabled)
                             .privacySensitive()
                     }
 
