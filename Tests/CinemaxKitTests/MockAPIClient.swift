@@ -482,18 +482,9 @@ final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
 
     func saveActiveServerId(_ id: String?) { savedActiveServerId = id }
 
-    /// Same shape as `KeychainService.migrateToMultiServerIfNeeded()` — both
-    /// route through the pure `ServerEntry.migrated(...)` builder.
-    func migrateToMultiServerIfNeeded() {
-        guard savedServers.isEmpty else { return }
-        guard let entry = ServerEntry.migrated(
-            serverURL: savedServerURL,
-            session: savedSession,
-            accessToken: savedAccessToken
-        ) else { return }
-        savedServers = [entry]
-        savedActiveServerId = entry.id
-    }
+    // `migrateToMultiServerIfNeeded()` is deliberately NOT overridden — the
+    // `SecureStorageProtocol` extension carries the one implementation, so a
+    // migration test drives the exact code `KeychainService` runs in production.
 }
 
 // MARK: - Error

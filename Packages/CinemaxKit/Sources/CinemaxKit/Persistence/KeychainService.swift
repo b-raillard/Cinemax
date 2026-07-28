@@ -135,22 +135,10 @@ public struct KeychainService: Sendable {
         try? save(data: Data(id.utf8), for: Self.activeServerIdAccount)
     }
 
-    /// Seeds the registry from the pre-multi-server single-server items.
-    ///
-    /// One-shot, idempotent and **non-destructive** — the legacy trio survives
-    /// untouched (see the type-level RULE). Idempotence is keyed on "the list is
-    /// non-empty", so a locked Keychain at first launch simply re-runs the
-    /// migration next launch instead of latching a flag against an empty store.
-    public func migrateToMultiServerIfNeeded() {
-        guard getServers().isEmpty else { return }              // already migrated
-        guard let entry = ServerEntry.migrated(
-            serverURL: getServerURL(),                          // nil ⇒ fresh install / no server
-            session: getUserSession(),
-            accessToken: getAccessToken()
-        ) else { return }
-        try? saveServers([entry])
-        saveActiveServerId(entry.id)
-    }
+    // The single-server → registry migration deliberately lives in the
+    // `SecureStorageProtocol` extension, NOT here: it needs only protocol
+    // members, and a copy on each conformer would let the test mock's version
+    // drift from the one that actually ships. See the RULE there.
 
     // MARK: - Shared extension session (Keychain access group)
 

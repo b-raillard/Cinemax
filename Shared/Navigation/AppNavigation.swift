@@ -1,7 +1,10 @@
 import SwiftUI
 import CinemaxKit
 import Nuke
+import OSLog
 @preconcurrency import JellyfinAPI
+
+private let logger = Logger(subsystem: "com.cinemax", category: "Servers")
 
 @MainActor @Observable
 final class AppState {
@@ -68,6 +71,12 @@ final class AppState {
     /// `true` while the pre-auth flow is being reused to ADD a server rather
     /// than to configure the first one — drives the cancel affordance.
     var isAddingServer = false
+
+    /// Bumped synchronously by every server-transition entry point. A transition
+    /// that awaits the network re-checks it before writing, so a slow one can
+    /// never overwrite the state a newer one already committed — same pattern as
+    /// `NowPlayingInfoController.generation`.
+    private var serverTransitionGeneration = 0
 
     let apiClient: any APIClientProtocol
     let keychain: any SecureStorageProtocol
@@ -268,7 +277,14 @@ final class AppState {
     }
 
     private func persistRegistry() {
-        try? keychain.saveServers(servers)
+        do {
+            try keychain.saveServers(servers)
+        } catch {
+            // In-memory state stays correct for this session; the next mutation
+            // retries. Logged because a silent failure here means the server
+            // list quietly reverts on relaunch.
+            logger.error("Persisting the server registry failed: \(error.localizedDescription, privacy: .public)")
+        }
         keychain.saveActiveServerId(activeServerId)
     }
 
@@ -277,23 +293,35 @@ final class AppState {
     /// Makes `entry` the active server end to end: mirror, registry, API
     /// client, observable state, extensions, catalogue refresh.
     func applyActiveServer(_ entry: ServerEntry) async {
-        guard let token = entry.accessToken, !token.isEmpty else {
-            // Tokenless target — never half-apply a session; send the user to
-            // `LoginScreen` scoped to that server instead.
+        // A usable session needs BOTH a token and a user id. A token-without-user
+        // entry is reachable (a migrated install whose `access_token` survived but
+        // whose `user_session` didn't) and applying it would persist a
+        // `UserSession(userID: "")` mirror and flip `isAuthenticated` with a nil
+        // `currentUserId` — a signed-in shell that can't load anything. Both
+        // incomplete shapes fall through to a real login instead.
+        guard let token = entry.accessToken, !token.isEmpty,
+              let userId = entry.userId, !userId.isEmpty else {
             await beginReLogin(for: entry)
             return
         }
+        serverTransitionGeneration &+= 1
 
         // 1. Legacy mirror. Every existing read path (`restoreSession`,
         //    `SettingsScreen`, `ExtensionSessionBridge`) keeps working unchanged.
-        try? keychain.saveServerURL(entry.url)
-        try? keychain.saveAccessToken(token)
-        try? keychain.saveUserSession(UserSession(
-            userID: entry.userId ?? "",
-            username: entry.username ?? "",
-            accessToken: token,
-            serverID: entry.serverID ?? ""
-        ))
+        do {
+            try keychain.saveServerURL(entry.url)
+            try keychain.saveAccessToken(token)
+            try keychain.saveUserSession(UserSession(
+                userID: userId,
+                username: entry.username ?? "",
+                accessToken: token,
+                serverID: entry.serverID ?? ""
+            ))
+        } catch {
+            // The in-memory session below still works for this launch; the next
+            // relaunch would fall back to the previously mirrored server.
+            logger.error("Writing the active-session mirror failed: \(error.localizedDescription, privacy: .public)")
+        }
 
         // 2. Registry: bump `lastUsedAt`, mark active, persist.
         var used = entry
@@ -320,7 +348,7 @@ final class AppState {
         serverInfo = nil
         hasServer = true
         accessToken = token
-        currentUserId = used.userId
+        currentUserId = userId
         isAuthenticated = true
 
         // The switch committed — nothing left to roll back to.
@@ -339,6 +367,10 @@ final class AppState {
         Task { [weak self] in
             guard let self else { return }
             guard let info = try? await self.apiClient.fetchServerInfo() else { return }
+            // Race guard: a slow fetch for server A must never land after a
+            // switch to B — it would paint A's name in B's chrome and, through
+            // `upsertActiveEntry`, persist A's identity onto B's entry.
+            guard self.activeServerId == used.id else { return }
             self.serverInfo = info
             self.updateServerMetadata(id: used.id, name: info.name, version: info.version, serverID: info.serverID)
         }
@@ -367,6 +399,13 @@ final class AppState {
     func switchTo(_ entry: ServerEntry) async -> SwitchDecision {
         guard entry.id != activeServerId else { return .commit }
 
+        // Captured BEFORE the client is repointed, and used explicitly on the
+        // rollback path. Resolving the previous server lazily via
+        // `currentActiveEntry` is unsafe here: its most-recently-used fallback
+        // (for a nil / stale `activeServerId`) can resolve to `entry` itself, so
+        // a refused switch would "roll back" onto the very server it just refused.
+        let previous = currentActiveEntry
+
         switch ServerRegistry.decideSwitch(entry: entry, isOnline: isOnlineProvider(), validity: nil) {
         case .offline:
             return .offline                     // caller toasts; nothing mutated
@@ -394,9 +433,29 @@ final class AppState {
         case .indeterminate:
             // Unprovable failure: restore the previous client and KEEP the
             // target's token (the "never destroy on indeterminate" rule).
-            await restorePreviousServer()
+            await rollBackFailedSwitch(to: previous)
             return .unreachable
         }
+    }
+
+    /// Undoes the `reconnect` a refused switch performed, without any of the
+    /// side effects of a real switch.
+    ///
+    /// Deliberately NOT `applyActiveServer`: nothing about the current server
+    /// actually changed, so re-running the full path would post a tier-1 refresh,
+    /// re-fetch the user and bump `lastUsedAt` — i.e. a flaky network would blow
+    /// away the working server's loaded screens. Only the client is repointed
+    /// (and the rating cap re-applied, since `reconnect` drops it).
+    private func rollBackFailedSwitch(to previous: ServerEntry?) async {
+        guard let previous, let token = previous.accessToken, !token.isEmpty else {
+            // No usable server to fall back to — take the full path, which knows
+            // how to land on LoginScreen / ServerSetupScreen.
+            await restorePreviousServer()
+            return
+        }
+        apiClient.reconnect(url: previous.url, accessToken: token)
+        let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        apiClient.applyContentRatingLimit(maxAge: storedAge)
     }
 
     /// Points the shared client at `entry` without a token and leaves the app in
@@ -408,7 +467,13 @@ final class AppState {
         if pendingRollbackServer == nil, let current = currentActiveEntry, current.id != entry.id {
             pendingRollbackServer = current
         }
+        serverTransitionGeneration &+= 1
+        let generation = serverTransitionGeneration
         let info = try? await apiClient.connectToServer(url: entry.url)
+        // Race guard: a newer transition (another switch, an add, a logout)
+        // started while this handshake was in flight — its state has already been
+        // committed and must not be overwritten by this stale one.
+        guard generation == serverTransitionGeneration else { return }
         serverURL = entry.url
         serverInfo = info
         hasServer = true
@@ -422,6 +487,7 @@ final class AppState {
     /// `clearAll()`: the registry and the legacy mirror must both survive a
     /// cancelled add, which `restorePreviousServer()` then replays.
     func beginAddServer() {
+        serverTransitionGeneration &+= 1
         pendingRollbackServer = currentActiveEntry
         isAddingServer = true
         hasServer = false
@@ -436,6 +502,7 @@ final class AppState {
     /// Falls back to today's `disconnectServer()` behavior when there is no
     /// previous server at all.
     func restorePreviousServer() async {
+        serverTransitionGeneration &+= 1
         let snapshot = pendingRollbackServer ?? currentActiveEntry
         pendingRollbackServer = nil
         isAddingServer = false
@@ -503,11 +570,17 @@ final class AppState {
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
         ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil)
+        serverTransitionGeneration &+= 1
         isAuthenticated = false
         currentUserId = nil
         accessToken = nil
         currentUser = nil
         isAdministrator = false
+        // A logout ends whatever add / re-login flow was pending: a stale
+        // snapshot would otherwise drive the LoginScreen's "go back to the
+        // server you came from" affordance toward a session that no longer exists.
+        pendingRollbackServer = nil
+        isAddingServer = false
 
         switch reason {
         case .userInitiated:
@@ -515,10 +588,13 @@ final class AppState {
                 if await switchTo(candidate) == .commit {
                     return .switchedTo(candidate)
                 }
-                // The hop didn't commit (offline / unreachable / revoked token):
-                // `switchTo` has already left the app in a coherent state —
-                // `LoginScreen` for the candidate, or the previous server
-                // restored. Don't wipe it on top of that.
+                // The hop didn't commit. `hasServer` / `serverURL` are left
+                // pointing at the server we just signed out of, so the user
+                // lands on its `LoginScreen` — the same place a session-expiry
+                // logout leaves them, and the one screen that is correct for
+                // every failure here (`.offline` mutates nothing, `.needsLogin`
+                // already routed to the candidate's login, `.unreachable` only
+                // repointed the client back).
                 return .signedOut
             }
             // Nothing left to hop to → `ServerSetupScreen`. The tokenless entry
