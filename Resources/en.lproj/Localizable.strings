@@ -907,3 +907,6 @@
 "servers.empty.title" = "No servers yet";
 "servers.empty.subtitle" = "Add a Jellyfin server to get started.";
 "servers.signedOut" = "Signed out";
+"server.alreadyAdded" = "That server is already in your list.";
+"server.cancelAdd" = "Cancel";
+"login.myServers" = "My servers";

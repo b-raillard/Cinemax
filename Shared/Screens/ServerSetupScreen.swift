@@ -124,11 +124,13 @@ struct ServerSetupScreen: View {
                     helperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
                         showDiscoverySheet = true
                     }
-                    Divider()
-                        .frame(height: 20)
-                        .overlay(CinemaColor.outlineVariant.opacity(0.3))
+                    helperDivider(height: 20)
                     helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
                         showHelpSheet = true
+                    }
+                    if appState.isAddingServer {
+                        helperDivider(height: 20)
+                        cancelAddLink
                     }
                 }
                 .padding(.bottom, CinemaSpacing.spacing6)
@@ -230,14 +232,17 @@ struct ServerSetupScreen: View {
                         helperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
                             showDiscoverySheet = true
                         }
-                        Divider()
-                            .frame(height: 16)
-                            .overlay(CinemaColor.outlineVariant.opacity(0.3))
+                        helperDivider(height: 16)
                         helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
                             showHelpSheet = true
                         }
                     }
                     .padding(.top, CinemaSpacing.spacing2)
+
+                    // Second row so the three links never crowd a compact width.
+                    if appState.isAddingServer {
+                        cancelAddLink
+                    }
                 }
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.bottom, CinemaSpacing.spacing6)
@@ -335,6 +340,21 @@ struct ServerSetupScreen: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             #endif
         }
+    }
+
+    /// Abandons an in-flight "add a server" and returns to the server the user
+    /// came from. Only rendered while `AppState.isAddingServer` — in first-run
+    /// mode there is nothing to go back to.
+    private var cancelAddLink: some View {
+        helperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
+            Task { await appState.restorePreviousServer() }
+        }
+    }
+
+    private func helperDivider(height: CGFloat) -> some View {
+        Divider()
+            .frame(height: height)
+            .overlay(CinemaColor.outlineVariant.opacity(0.3))
     }
 
     private func helperLink(icon: String, title: String, action: @escaping () -> Void) -> some View {

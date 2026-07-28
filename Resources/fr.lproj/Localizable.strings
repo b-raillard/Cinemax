@@ -909,3 +909,6 @@
 "servers.empty.title" = "Aucun serveur enregistré";
 "servers.empty.subtitle" = "Ajoutez un serveur Jellyfin pour commencer.";
 "servers.signedOut" = "Déconnecté";
+"server.alreadyAdded" = "Ce serveur figure déjà dans votre liste.";
+"server.cancelAdd" = "Annuler l'ajout";
+"login.myServers" = "Mes serveurs";
