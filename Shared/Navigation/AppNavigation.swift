@@ -234,6 +234,12 @@ final class AppState {
     /// server. Only clears server-side state — auth state is already empty at that point in
     /// the flow, so there's nothing user-related to wipe.
     func disconnectServer() {
+        // Multi-server: this is now reachable concurrently with a switch / an
+        // add (the `LoginScreen` escape hatch sits next to them), so it counts
+        // as a server transition — an in-flight `beginReLogin` handshake must
+        // not resurrect `hasServer` after the user backed out. Every method
+        // that mutates `hasServer` / `serverURL` bumps this.
+        serverTransitionGeneration &+= 1
         keychain.deleteServerURL()
         hasServer = false
         serverURL = nil

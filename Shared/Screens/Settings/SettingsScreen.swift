@@ -153,6 +153,7 @@ struct SettingsScreen: View {
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
+    @State var showServers = false
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
     /// "Quick Connect" (authorize) row so we never surface a flow the server
@@ -357,11 +358,31 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
+        .sheet(isPresented: $showServers) { serversSheet }
         #else
         .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
+        .fullScreenCover(isPresented: $showServers) { serversSheet }
         #endif
+    }
+
+    /// Signs out of the active server and reports what happened. The auto-hop
+    /// to another registered server is invisible otherwise — the plan mandates
+    /// it always be accompanied by the toast.
+    func performLogout() async {
+        let outcome = await appState.logout(reason: .userInitiated)
+        if case .switchedTo(let entry) = outcome {
+            toasts.success(loc.localized("servers.switchedTo", entry.name))
+        }
+    }
+
+    private var serversSheet: some View {
+        ServersScreen()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
     }
 
     private var watchedHistorySheet: some View {

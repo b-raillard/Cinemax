@@ -172,7 +172,7 @@
 "settings.account" = "Account";
 "settings.privacySecurity" = "Privacy & Security";
 "settings.premiumMember" = "Premium Member \U2022 Managed Profile";
-"settings.logOutConfirm" = "You will be returned to the server setup screen.";
+"settings.logOutConfirm" = "You'll be signed out of this server.";
 
 // MARK: - Settings (tvOS)
 
@@ -888,3 +888,22 @@
 "home.continueWatching.markedWatched" = "Marked as watched";
 "home.continueWatching.removed" = "Removed from Continue Watching";
 "accessibility.episode.watched" = "Watched";
+
+// MARK: - Multi-server (registered servers list)
+"settings.servers" = "Servers";
+"servers.title" = "My Servers";
+"servers.current" = "Current";
+"servers.add" = "Add a server";
+"servers.switch.confirm" = "Switch to “%@”? Your screens will reload from that server.";
+"servers.switch.action" = "Switch server";
+"servers.switchedTo" = "Connected to %@";
+"servers.offline" = "You're offline. Can't switch servers right now.";
+"servers.unreachable" = "That server is unreachable. Staying on the current one.";
+"servers.delete" = "Remove";
+"servers.delete.confirm" = "Remove “%@” from your servers? This device's session will be revoked there.";
+"servers.deleted" = "%@ removed";
+"servers.online" = "Online";
+"servers.offlineBadge" = "Offline";
+"servers.empty.title" = "No servers yet";
+"servers.empty.subtitle" = "Add a Jellyfin server to get started.";
+"servers.signedOut" = "Signed out";
