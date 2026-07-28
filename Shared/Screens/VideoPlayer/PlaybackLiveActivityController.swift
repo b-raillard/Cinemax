@@ -274,14 +274,16 @@ final class PlaybackLiveActivityController {
         lastPush = nil
         guard let activity else { return }
         self.activity = nil
-        enqueue { await activity.end(nil, dismissalPolicy: .immediate) }
+        let box = ActivityBox(activity)
+        enqueue { await box.activity.end(nil, dismissalPolicy: .immediate) }
     }
 
     /// Ends every activity of ours EXCEPT the one this controller holds.
     private func endOtherActivities() {
         let mine = activity?.id
         for orphan in Activity<PlaybackActivityAttributes>.activities where orphan.id != mine {
-            enqueue { await orphan.end(nil, dismissalPolicy: .immediate) }
+            let box = ActivityBox(orphan)
+            enqueue { await box.activity.end(nil, dismissalPolicy: .immediate) }
         }
     }
 
@@ -295,26 +297,31 @@ final class PlaybackLiveActivityController {
             now: snapshot.at
         )
         let content = ActivityContent(state: state, staleDate: state.staleDate(at: snapshot.at))
-        enqueue { await activity.update(content) }
+        let box = ActivityBox(activity)
+        enqueue { await box.activity.update(content) }
+    }
+
+    /// Launders a non-Sendable `Activity` into a `Sendable` value so the async
+    /// `update`/`end` calls can cross into the serialising chain's executor.
+    /// `Activity` is non-Sendable and its async methods "send" the instance off
+    /// the main actor — which Xcode 26.5's region checker rejects (local 26.2 was
+    /// laxer) — but ActivityKit documents those methods as thread-safe, so the
+    /// `@unchecked` assertion is sound. Same escape-hatch class as
+    /// `PiPRestoreHandlerBox`.
+    private struct ActivityBox: @unchecked Sendable {
+        let activity: Activity<PlaybackActivityAttributes>
+        init(_ activity: Activity<PlaybackActivityAttributes>) { self.activity = activity }
     }
 
     /// Serialises every ActivityKit mutation. `update` / `end` are async, and two
     /// independent `Task`s can complete out of order — a pause immediately
     /// followed by a seek would then leave the banner showing the pause. Chaining
     /// each call behind the previous one guarantees the widget observes the same
-    /// order the player produced.
-    ///
-    /// The parameter is `sending`, not `@MainActor`: `Activity` is not `Sendable`,
-    /// and CI's Xcode 26.5 region-isolation checker rejects capturing one into a
-    /// closure that escapes into a `Task` — even a main-actor-isolated one — with
-    /// "sending '…' risks causing data races" (local Xcode 26.2 doesn't; this is
-    /// the documented toolchain-divergence footgun). `sending` states the caller
-    /// hands the captured activity to the chain and never touches it again — which
-    /// every call site honours — so the transfer into the serialising `Task` is
-    /// provably race-free on both toolchains.
-    private func enqueue(_ operation: sending @escaping () async -> Void) {
+    /// order the player produced. Each closure captures only a `Sendable`
+    /// `ActivityBox` plus `Sendable` content, never a raw `Activity`.
+    private func enqueue(_ operation: @escaping @MainActor () async -> Void) {
         let previous = pushChain
-        pushChain = Task {
+        pushChain = Task { @MainActor in
             await previous?.value
             await operation()
         }
