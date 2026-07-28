@@ -10,16 +10,21 @@ import TVServices
 private let logger = Logger(subsystem: "com.cinemax", category: "ExtensionBridge")
 
 /// Hands the Jellyfin session to the app extensions (iOS widget, tvOS Top
-/// Shelf) through the shared App Group. Extensions can't read the app's
-/// keychain items, and reworking the keychain into a shared access group
-/// would orphan existing installs' items — so the app *publishes* a snapshot
-/// here on every session change (login, restore, user switch, logout) and the
-/// extensions only ever read.
+/// Shelf) through the **shared Keychain access group** — the app *publishes*
+/// a snapshot on every session change (login, restore, user switch, logout)
+/// and the extensions only ever read. The token is never written in
+/// plaintext, so it can't be lifted from the App Group container or a device
+/// backup.
 ///
 /// The extensions deliberately don't link CinemaxKit (widget memory budgets
-/// are tight) — they re-declare the suite/key constants and the same JSON
-/// shape. Keep `appGroupId`, `sessionKey`, and `Session`'s coding keys in
-/// sync with `Widgets/` and `TopShelf/` if they ever change.
+/// are tight) — they re-declare the Keychain service/account/group literals
+/// and the same JSON shape. Keep `KeychainService.serviceName` /
+/// `sharedSessionAccount` / `sharedAccessGroupSuffix` and `Session`'s coding
+/// keys in sync with `Widgets/` and `TopShelf/` if they ever change.
+///
+/// `appGroupId` / `sessionKey` survive only to name the *legacy* plaintext
+/// App Group copy that `publish` scrubs on upgraded installs — nothing reads
+/// them any more.
 public enum ExtensionSessionBridge {
     public static let appGroupId = "group.com.cinemax.shared"
     public static let sessionKey = "extension.session"
@@ -39,37 +44,28 @@ public enum ExtensionSessionBridge {
     /// Publishes the current session, or clears it when any part is nil
     /// (logout / disconnect).
     public static func publish(serverURL: URL?, accessToken: String?, userId: String?) {
-        guard let defaults = UserDefaults(suiteName: appGroupId) else {
-            logger.error("ExtensionBridge ▸ App Group suite unavailable — entitlement missing?")
-            return
-        }
+        // Runs on BOTH paths (publish + clear) and *before* the skip
+        // early-return below, so an upgraded install's leftover plaintext copy
+        // is deleted even when the session itself hasn't changed.
+        scrubLegacyDefaultsCopy()
         let keychain = KeychainService()
         let existingKeychainData = keychain.readSharedSession()
-        let existingDefaultsData = defaults.data(forKey: sessionKey)
         if let serverURL, let accessToken, !accessToken.isEmpty, let userId, !userId.isEmpty {
             let session = Session(serverURL: serverURL, accessToken: accessToken, userId: userId)
-            guard !isCurrent(session: session, keychainData: existingKeychainData, defaultsData: existingDefaultsData) else {
+            guard !isCurrent(session: session, keychainData: existingKeychainData) else {
                 logger.debug("ExtensionBridge ▸ session unchanged, skipped")
                 return
             }
-            let data = try? JSONEncoder().encode(session)
-            // Primary store: the shared, device-only Keychain group — the token
+            // Sole store: the shared, device-only Keychain group — the token
             // is never written in plaintext nor included in device backups.
-            if let data { keychain.saveSharedSession(data) }
-            // Transitional dual-write: keep the App Group UserDefaults copy for
-            // one release so an extension binary that predates the Keychain
-            // migration still finds a session, and as a fallback if the shared
-            // Keychain group can't be resolved. TODO(next release): drop this
-            // plaintext write once both extensions read from the Keychain.
-            defaults.set(data, forKey: sessionKey)
+            if let data = try? JSONEncoder().encode(session) { keychain.saveSharedSession(data) }
             logger.info("ExtensionBridge ▸ session published host=\(serverURL.host() ?? "?", privacy: .public)")
         } else {
-            guard !isCurrent(session: nil, keychainData: existingKeychainData, defaultsData: existingDefaultsData) else {
+            guard !isCurrent(session: nil, keychainData: existingKeychainData) else {
                 logger.debug("ExtensionBridge ▸ session unchanged, skipped")
                 return
             }
             keychain.deleteSharedSession()
-            defaults.removeObject(forKey: sessionKey)
             logger.info("ExtensionBridge ▸ session cleared")
         }
         // Writing the snapshot is not enough — the extensions render from
@@ -85,28 +81,46 @@ public enum ExtensionSessionBridge {
         #endif
     }
 
+    /// Deletes the legacy plaintext App Group copy of the session that 1.0.3
+    /// through 1.0.6 dual-wrote. That write is gone (the token now lives only
+    /// in the shared Keychain group), but installs upgrading from those builds
+    /// still carry the cleartext blob in the App Group container — and in
+    /// their backups — until something removes it.
+    ///
+    /// Presence-guarded on purpose: the steady state costs one
+    /// `object(forKey:)` read and never a write, so calling this ahead of
+    /// `publish`'s skip early-return doesn't defeat that optimisation. A
+    /// missing App Group suite only skips the scrub — it must never abort the
+    /// Keychain publish, which doesn't depend on the App Group at all.
+    private static func scrubLegacyDefaultsCopy() {
+        guard let defaults = UserDefaults(suiteName: appGroupId) else {
+            logger.error("ExtensionBridge ▸ App Group suite unavailable — entitlement missing?")
+            return
+        }
+        guard defaults.object(forKey: sessionKey) != nil else { return }
+        defaults.removeObject(forKey: sessionKey)
+        logger.info("ExtensionBridge ▸ legacy plaintext session copy scrubbed")
+    }
+
     /// Pure equivalence decision: is `session` (nil ⇒ the "clear" intent)
-    /// already what's stored in BOTH the Keychain and the transitional
-    /// UserDefaults copy, so `publish` can skip the write + WidgetCenter/Top
-    /// Shelf poke entirely? Compares decoded `Session` values field-wise
-    /// (never raw `Data` bytes — JSON key order isn't guaranteed stable), and
-    /// treats a corrupt/undecodable stored blob as "changed" so a bad read
-    /// never suppresses a legitimate publish. Internal + testable via
-    /// `@testable import`.
-    static func isCurrent(session: Session?, keychainData: Data?, defaultsData: Data?) -> Bool {
+    /// already what's stored in the shared Keychain, so `publish` can skip the
+    /// write + WidgetCenter/Top Shelf poke entirely? Compares decoded
+    /// `Session` values field-wise (never raw `Data` bytes — JSON key order
+    /// isn't guaranteed stable), and treats a corrupt/undecodable stored blob
+    /// as "changed" so a bad read never suppresses a legitimate publish.
+    /// The legacy plaintext copy is deliberately NOT an input — it's scrubbed
+    /// unconditionally by `scrubLegacyDefaultsCopy()`, never republished.
+    /// Internal + testable via `@testable import`.
+    static func isCurrent(session: Session?, keychainData: Data?) -> Bool {
         guard let session else {
-            // Clearing: only current if both stores are already empty — a
-            // stale leftover in either one still needs the clear to run.
-            return keychainData == nil && defaultsData == nil
+            // Clearing: only current if the store is already empty — a stale
+            // leftover still needs the clear to run.
+            return keychainData == nil
         }
         guard let keychainData,
               let storedKeychainSession = try? JSONDecoder().decode(Session.self, from: keychainData) else {
             return false
         }
-        guard let defaultsData,
-              let storedDefaultsSession = try? JSONDecoder().decode(Session.self, from: defaultsData) else {
-            return false
-        }
-        return storedKeychainSession == session && storedDefaultsSession == session
+        return storedKeychainSession == session
     }
 }

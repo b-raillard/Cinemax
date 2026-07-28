@@ -3,7 +3,7 @@ import SwiftUI
 
 // Two home-screen widgets sharing one provider/view pipeline:
 // "Continue Watching" (resume items) and "Favorites" (hearted items). Both
-// read the session snapshot the app publishes to the App Group, fetch posters
+// read the session snapshot the app publishes to the shared Keychain group, fetch posters
 // over the network, and label themselves with a header so the user can tell
 // the rails apart. Layout is a 4-column poster grid whose LAST cell is a
 // "See all" tile deep-linking to the app's Home tab (cinemax://home); each
