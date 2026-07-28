@@ -328,10 +328,14 @@ final class PlaybackLiveActivityController {
 
     private func startObservingForeground() {
         guard foregroundObserver == nil else { return }
+        // `[weak self]` belongs on the OUTER observer block: that is the closure
+        // NotificationCenter retains until `removeObserver`, so capturing self
+        // strongly there pins the controller for the observer's whole lifetime
+        // (the inner capture list only weakened an already-strong reference).
         foregroundObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated { [weak self] in self?.reconcile() }
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reconcile() }
         }
     }
 
