@@ -130,6 +130,8 @@
 "playback.error.network" = "The connection to your server was lost. Check your network and retry.";
 "playback.error.transcode" = "The server couldn't transcode this file. Check your server's transcoding settings.";
 "playback.error.close" = "Close";
+"player.episodeNav.failed" = "Episode unavailable";
+"player.episodeNav.failed.message" = "Couldn't load this episode. Check your connection and try again.";
 
 // MARK: - End of Series
 

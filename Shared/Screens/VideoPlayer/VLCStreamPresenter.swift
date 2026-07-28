@@ -1119,6 +1119,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             skipHUD.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             skipHUD.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             skipHUD.widthAnchor.constraint(greaterThanOrEqualToConstant: hudMinW),
+            // The HUD also carries localized sentences now (episode-nav failure),
+            // and it's a single-line label pinned only by its centre — without a
+            // ceiling a long translation grows straight past the screen edges.
+            skipHUD.widthAnchor.constraint(lessThanOrEqualTo: safe.widthAnchor, constant: -48),
             skipHUD.heightAnchor.constraint(equalToConstant: hudH)
         ])
 
@@ -1992,7 +1996,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
-    private func showSkipHUD(_ text: String) {
+    /// `duration` defaults to the chapter-jump flash; error feedback passes a
+    /// longer dwell so a sentence is actually readable.
+    private func showSkipHUD(_ text: String, duration: TimeInterval = 0.9) {
         skipHUDHide?.cancel()
         skipHUD.text = "  \(text)  "
         skipHUD.alpha = 1
@@ -2000,7 +2006,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             UIView.animate(withDuration: 0.3) { self?.skipHUD.alpha = 0 }
         }
         skipHUDHide = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 
     /// Native-style ±N s indicator (N = `PlayerSkipConfig.intervalSeconds`),
@@ -2444,7 +2450,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     // MARK: - Episode navigation
 
-    private func navigateToEpisode(_ ref: EpisodeRef) {
+    /// `isAutoplay` marks the end-of-episode hand-off (`handlePlaybackEnded`),
+    /// where nothing is playing any more — it selects the recovery surface used
+    /// when the negotiation fails (see `handleFailedEpisodeNav`).
+    private func navigateToEpisode(_ ref: EpisodeRef, isAutoplay: Bool = false) {
         // Only navigable when the episode-nav graph is present.
         guard let navigator = episodeNavigator else { return }
         navGeneration += 1
@@ -2460,6 +2469,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
+                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay)
                 return
             }
             // Dismissed mid-nav, or a newer nav superseded this one: applying
@@ -2524,6 +2534,44 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.showControls()
             self.scheduleHideControls()
         }
+    }
+
+    /// Negotiation for the target episode failed (offline blip, server hiccup).
+    /// `navigateToEpisode` has already closed the server session
+    /// (`reporter?.reportStop()`) and killed the 1 s heartbeat at entry, so
+    /// without this the player is left in a half-dead state: frozen resume
+    /// position, no sleep-timer / skip-segment / now-playing ticks, and — on the
+    /// manual path — a Next button that just looks broken.
+    ///
+    /// - manual nav: the current episode is still playing, so recovery is
+    ///   deliberately NON-terminal — re-open the session at the live position,
+    ///   restart the heartbeat, and flash the transient centre HUD.
+    /// - autoplay at end of episode: nothing is playing any more, so there is no
+    ///   session to restore. Surface a terminal alert with a single dismiss
+    ///   action, mirroring `showEndOfSeriesOverlay`'s end-of-playback precedent.
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
+        // A teardown, or a newer nav that already re-armed the timers, owns the
+        // session now — recovering here would double-arm / resurrect state.
+        guard !isTearingDown, gen == navGeneration else { return }
+        guard !isAutoplay else {
+            // The engine already stopped; re-latch the end guard so a stray
+            // `.stopped` can't stack a second alert behind this one.
+            didReportEnd = true
+            let alert = UIAlertController(
+                title: loc.localized("player.episodeNav.failed"),
+                message: loc.localized("player.episodeNav.failed.message"),
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default) { [weak self] _ in
+                self?.dismiss(animated: true)
+            })
+            present(alert, animated: true)
+            return
+        }
+        reporter?.resetTicking()
+        reporter?.reportStart(startTime: Double(currentMs) / 1000.0)
+        startProgressTimer()
+        showSkipHUD(loc.localized("player.episodeNav.failed"), duration: 1.8)
     }
 
     #if os(iOS)
@@ -2863,7 +2911,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         nextUpCard?.hide()
         if autoPlayNext, !nextUpCancelledForThisItem, let next = nextEpisode, episodeNavigator != nil {
             didReportEnd = false
-            navigateToEpisode(next)
+            navigateToEpisode(next, isAutoplay: true)
             return
         }
         reporter?.reportStop()

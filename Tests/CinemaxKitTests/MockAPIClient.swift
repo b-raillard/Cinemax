@@ -91,7 +91,25 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldThrow { throw stubbedError }
         return QuickConnectRequest(code: "123456", secret: "secret")
     }
-    func quickConnectAuthorized(secret: String) async throws -> Bool { true }
+    /// Called by `quickConnectAuthorized(secret:)` when set, with the 1-based
+    /// poll index, so tests can throw for the first N polls (transient-failure
+    /// resilience). Falls back to an immediate `true`.
+    var quickConnectAuthorizedHandler: (@Sendable (Int) async throws -> Bool)?
+    private var pollCount = 0
+    /// Lock-guarded on READ too (unlike the other counters): the Quick Connect
+    /// tests poll it live from the main actor while the VM's poll Task is still
+    /// writing it, so "read only after awaiting the work" doesn't apply here.
+    var quickConnectPollCount: Int { recordLock.withLock { pollCount } }
+    func quickConnectAuthorized(secret: String) async throws -> Bool {
+        let index = recordLock.withLock { () -> Int in
+            pollCount += 1
+            return pollCount
+        }
+        if let quickConnectAuthorizedHandler {
+            return try await quickConnectAuthorizedHandler(index)
+        }
+        return true
+    }
     func authenticateWithQuickConnect(secret: String) async throws -> UserSession {
         if shouldThrow { throw stubbedError }
         return stubbedSession

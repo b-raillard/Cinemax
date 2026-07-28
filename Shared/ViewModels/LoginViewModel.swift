@@ -23,6 +23,21 @@ final class LoginViewModel {
     var quickConnectError: String?
     private var quickConnectTask: Task<Void, Never>?
 
+    /// Consecutive failed polls tolerated before the flow gives up. At the ~3 s
+    /// cadence that is ~15 s of *continuous* failure — long enough to ride out a
+    /// Wi-Fi blip on an Apple TV (this flow's primary platform, where the code is
+    /// on screen and the user is waiting on another device) without leaving a
+    /// genuinely unreachable server polling forever. Any successful poll resets it.
+    ///
+    /// `nonisolated` (Sendable `Int`) so `@Sendable` closures — the test mock's
+    /// poll handler — can read it without crossing the main actor; see the
+    /// documented escape hatch in CLAUDE.md.
+    nonisolated static let quickConnectFailureBudget = 5
+
+    /// Poll cadence. Stored rather than a constant purely so tests can shrink it;
+    /// every production path uses the 3 s default.
+    var quickConnectPollInterval: Duration = .seconds(3)
+
     /// Probes Quick Connect availability once when the login screen appears.
     /// Silent on failure — a missing/old server just keeps the button hidden.
     func checkQuickConnect(using appState: AppState) async {
@@ -35,6 +50,7 @@ final class LoginViewModel {
     func startQuickConnect(using appState: AppState, loc: LocalizationManager) {
         quickConnectError = nil
         quickConnectTask?.cancel()
+        let pollInterval = quickConnectPollInterval
         quickConnectTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -43,10 +59,28 @@ final class LoginViewModel {
 
                 // Poll ~every 3s until authorized or cancelled. The server
                 // expires unapproved requests on its own; we stop on cancel.
+                //
+                // A transient poll failure must NOT end the flow: the code stays
+                // on screen, so an exited Task looks identical to "waiting" while
+                // approval can never complete. Each poll catches its own error and
+                // keeps going until `quickConnectFailureBudget` CONSECUTIVE
+                // failures — only then does it rethrow into the terminal state.
+                var consecutiveFailures = 0
                 while !Task.isCancelled {
-                    try await Task.sleep(for: .seconds(3))
+                    try await Task.sleep(for: pollInterval)
                     if Task.isCancelled { return }
-                    let authorized = try await appState.apiClient.quickConnectAuthorized(secret: request.secret)
+                    let authorized: Bool
+                    do {
+                        authorized = try await appState.apiClient.quickConnectAuthorized(secret: request.secret)
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        consecutiveFailures += 1
+                        logger.error("Quick Connect poll failed (\(consecutiveFailures, privacy: .public)/\(Self.quickConnectFailureBudget, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+                        if consecutiveFailures >= Self.quickConnectFailureBudget { throw error }
+                        continue   // re-checks Task.isCancelled at the loop head
+                    }
+                    consecutiveFailures = 0
                     guard authorized else { continue }
 
                     let session = try await appState.apiClient.authenticateWithQuickConnect(secret: request.secret)
@@ -56,6 +90,10 @@ final class LoginViewModel {
             } catch is CancellationError {
                 // User dismissed the sheet — nothing to surface.
             } catch {
+                // A cancelled URLSession surfaces as `URLError.cancelled`, not
+                // `CancellationError` — never surface an error the user caused by
+                // dismissing the sheet.
+                guard !Task.isCancelled else { return }
                 logger.error("Quick Connect failed: \(error.localizedDescription, privacy: .public)")
                 self.quickConnectError = loc.userFacingMessage(for: error)
             }
