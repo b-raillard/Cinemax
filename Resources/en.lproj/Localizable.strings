@@ -667,6 +667,7 @@
 "settings.4kRendering" = "4K UI Rendering";
 "settings.autoPlayNextEpisode" = "Auto-play Next Episode";
 "settings.forceNativeAVPlayer" = "Use Native Player";
+"settings.playback.liveActivity" = "Live Activity";
 "settings.systemSettings" = "System Settings";
 "settings.version" = "Version %@";
 "settings.deviceName" = "Device Name";

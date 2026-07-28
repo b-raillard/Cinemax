@@ -51,6 +51,12 @@ targets:
       - path: iOS
       - path: Shared
       - path: Resources
+      # Live Activity contract, shared with the widget extension by SOURCE.
+      # The extension links none of our frameworks (widget memory budget), so
+      # listing this one file in both targets is the only way to share the type.
+      # It stays under Widgets/ because the extension's whole directory is its
+      # source path — the app is the one that has to opt in explicitly.
+      - path: Widgets/CinemaxWidget/PlaybackActivityAttributes.swift
     dependencies:
       - package: CinemaxKit
       - package: SwiftVLC
@@ -100,6 +106,10 @@ targets:
         # the App Store validator rejects `airplay` as invalid).
         UIBackgroundModes:
           - audio
+        # Playback Live Activity (Lock Screen + Dynamic Island). Required on the
+        # APP target only — the widget extension that renders it needs no extra
+        # key or entitlement.
+        NSSupportsLiveActivities: true
         UILaunchScreen: {}
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
