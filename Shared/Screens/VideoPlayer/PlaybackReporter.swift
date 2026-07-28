@@ -50,9 +50,29 @@ final class PlaybackReporter {
         return (player.currentTime().seconds, player.rate == 0)
     }
 
+    /// Converts a playback position in seconds to Jellyfin's 100 ns ticks.
+    ///
+    /// `Int(seconds * 10_000_000)` **traps** ("Double value cannot be converted
+    /// to Int because it is either infinite or NaN") the moment the source
+    /// isn't finite — and `AVPlayer.currentTime()` is exactly that whenever no
+    /// item is attached: `NativeVideoPresenter.present` builds
+    /// `AVPlayer(playerItem: nil)` and only hands it the item after an async
+    /// audio-session hop, so a dismiss (`reportStop`) or a background
+    /// (`reportBackgroundProgress`) inside that window crashed. Same trap class
+    /// as the `Int32(clamping:)` conversions in `VLCStreamPresenter`:
+    /// non-finite ⇒ 0, out of `Int` range ⇒ clamped, negative ⇒ 0.
+    nonisolated static func positionTicks(fromSeconds seconds: Double) -> Int {
+        guard seconds.isFinite else { return 0 }
+        let ticks = (seconds * 10_000_000).rounded()
+        // `ticks` can itself be infinite here (a finite but astronomically
+        // large `seconds` overflows the multiply), so never force the cast.
+        guard let exact = Int(exactly: ticks) else { return ticks < 0 ? 0 : Int.max }
+        return max(0, exact)
+    }
+
     func reportStart(startTime: Double?) {
         guard let ctx = context() else { return }
-        let positionTicks = startTime.map { Int($0 * 10_000_000) } ?? 0
+        let positionTicks = startTime.map { Self.positionTicks(fromSeconds: $0) } ?? 0
         let client = apiClient
         let uid = userId
         let itemId = ctx.itemId
@@ -68,7 +88,7 @@ final class PlaybackReporter {
 
     func reportStop() {
         guard let ctx = context() else { return }
-        let positionTicks = Int((currentState(ctx)?.seconds ?? 0) * 10_000_000)
+        let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient
         let uid = userId
         let itemId = ctx.itemId
@@ -87,7 +107,7 @@ final class PlaybackReporter {
     /// AVPlayer is still technically playing audio.
     func reportBackgroundProgress() {
         guard let ctx = context(), let state = currentState(ctx) else { return }
-        let positionTicks = Int(state.seconds * 10_000_000)
+        let positionTicks = Self.positionTicks(fromSeconds: state.seconds)
         let client = apiClient
         let uid = userId
         let itemId = ctx.itemId
@@ -116,7 +136,7 @@ final class PlaybackReporter {
 
     private func reportPeriodicProgress() {
         guard let ctx = context(), let state = currentState(ctx) else { return }
-        let positionTicks = Int(state.seconds * 10_000_000)
+        let positionTicks = Self.positionTicks(fromSeconds: state.seconds)
         let isPaused = state.isPaused
         let client = apiClient
         let uid = userId
