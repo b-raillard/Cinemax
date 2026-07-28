@@ -41,6 +41,11 @@ public enum ServerReachability {
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = probeTimeout
+        // This request IS the liveness check — a cached 200 would paint a green
+        // dot on a server that is already dead. Belt-and-braces with the
+        // session's `urlCache = nil` (an injected test session, or a future
+        // config change, must not be able to re-introduce a cached answer).
+        request.cachePolicy = .reloadIgnoringLocalCacheData
 
         do {
             let (data, response) = try await (session ?? probeSession).data(for: request)
@@ -67,12 +72,20 @@ public enum ServerReachability {
 
     /// Dedicated session: `URLSession.shared`'s 60 s default would let a
     /// black-holed host hold a status dot spinning long after the user left.
+    ///
+    /// `urlCache = nil` + `reloadIgnoringLocalCacheData`: `.ephemeral` still
+    /// installs an in-memory `URLCache`, and `/System/Info/Public` is exactly
+    /// the kind of static response a server (or a reverse proxy in front of it)
+    /// will mark cacheable — a replayed 200 would then keep the status dot
+    /// green long after the host went down, which defeats the whole probe.
     private static let probeSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = probeTimeout
         configuration.timeoutIntervalForResource = probeTimeout
         configuration.waitsForConnectivity = false
         configuration.allowsCellularAccess = true
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: configuration)
     }()
 }
@@ -153,12 +166,15 @@ public enum ServerSessionRevoker {
     }
 
     /// Own session for the same reason `ServerReachability` keeps one: bounded
-    /// timeouts, and never the app-wide shared pool.
+    /// timeouts, and never the app-wide shared pool. `urlCache = nil` because
+    /// this request carries the account's `MediaBrowser Token=…` header — the
+    /// same at-rest discipline as `fastFailSessionConfiguration`.
     private static let revokeSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = requestTimeout
         configuration.timeoutIntervalForResource = requestTimeout
         configuration.waitsForConnectivity = false
+        configuration.urlCache = nil
         return URLSession(configuration: configuration)
     }()
 }
