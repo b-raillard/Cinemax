@@ -255,7 +255,10 @@ extension SettingsScreen {
         }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
-                appState.logout()
+                // Revokes this device's session server-side, keeps the (now
+                // tokenless) registry entry, and hops to another registered
+                // server when one still holds a valid session.
+                Task { await appState.logout(reason: .userInitiated) }
             }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {

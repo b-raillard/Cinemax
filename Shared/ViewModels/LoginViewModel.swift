@@ -118,6 +118,11 @@ final class LoginViewModel {
         }
         appState.accessToken = session.accessToken
         appState.currentUserId = session.userID
+        // Record this server in the multi-server registry and mark it active
+        // (dedups on the normalized URL, so re-logging into a known server
+        // updates its entry in place rather than adding a duplicate). Covers
+        // first-ever login, add-server login and re-login after expiry.
+        appState.upsertActiveEntry(session: session)
         password = ""
         quickConnectCode = nil
         showSuccess = true

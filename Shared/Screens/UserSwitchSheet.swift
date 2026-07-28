@@ -329,6 +329,9 @@ struct UserSwitchSheet: View {
             try appState.keychain.saveUserSession(session)
             appState.accessToken = session.accessToken
             appState.currentUserId = session.userID
+            // Same server, different user: refresh the active registry entry so
+            // the servers list shows who is signed in on it.
+            appState.upsertActiveEntry(session: session)
             // reconnect() clears the cache as its first action — needed so
             // personalised DTOs (resume, next-up, rating-filtered lists)
             // from the previous user's session don't bleed across accounts.
