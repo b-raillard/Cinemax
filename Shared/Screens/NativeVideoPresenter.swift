@@ -814,7 +814,15 @@ final class NativeVideoPresenter {
         return item
     }
 
+    /// Registered once per presentation and torn down in `cleanup()` — NOT in
+    /// `cleanupPlayer()`, which also runs on every episode navigation and used
+    /// to leave the 2nd episode onward of a native-path binge with no
+    /// background reporting at all. Remove-before-add keeps a second call
+    /// idempotent (today `present` is the only caller, and it runs once per
+    /// presenter instance — the PiP restore re-hosts the existing
+    /// `AVPlayerViewController` instead of re-presenting).
     private func setupBackgroundObserver() {
+        removeBackgroundObserver()
         backgroundObserver = NotificationCenter.default.addObserver(
             forName: .cinemaxDidEnterBackground, object: nil, queue: .main
         ) { [weak self] _ in
@@ -837,12 +845,15 @@ final class NativeVideoPresenter {
             NotificationCenter.default.removeObserver(obs)
             itemEndObserver = nil
         }
+        playerVC?.player?.pause()
+        playerVC?.player?.replaceCurrentItem(with: nil)
+    }
+
+    private func removeBackgroundObserver() {
         if let obs = backgroundObserver {
             NotificationCenter.default.removeObserver(obs)
             backgroundObserver = nil
         }
-        playerVC?.player?.pause()
-        playerVC?.player?.replaceCurrentItem(with: nil)
     }
 
     private func cleanup() {
@@ -856,6 +867,7 @@ final class NativeVideoPresenter {
         isInPictureInPicture = false
         didRestoreFromPiP = false
         #endif
+        removeBackgroundObserver()
         cleanupPlayer()
         playerVC = nil
         PlaybackAudioSession.deactivate()
