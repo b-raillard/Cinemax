@@ -773,7 +773,19 @@ struct AppNavigation: View {
                 } else if !appState.hasServer {
                     ServerSetupScreen()
                 } else if !appState.isAuthenticated {
+                    // Keyed on the target server so retargeting the pre-auth
+                    // flow at a DIFFERENT server (Servers sheet → "add", or
+                    // "Change server" from the login screen) rebuilds the view
+                    // instead of reusing it. `LoginViewModel` is owned by
+                    // `LoginScreen`'s own `@State`, so a new identity is what
+                    // discards the previous server's typed username/password,
+                    // its stale error message and its Quick Connect code — and
+                    // it re-fires `.task { checkQuickConnect }`, which is the
+                    // only thing that re-probes whether THIS server has Quick
+                    // Connect enabled (otherwise the CTA keeps the old
+                    // server's answer).
                     LoginScreen()
+                        .id(appState.serverURL)
                 } else {
                     MainTabView()
                 }
