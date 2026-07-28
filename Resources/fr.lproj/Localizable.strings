@@ -172,7 +172,7 @@
 "settings.account" = "Compte";
 "settings.privacySecurity" = "Confidentialité et sécurité";
 "settings.premiumMember" = "Membre Premium \U2022 Profil géré";
-"settings.logOutConfirm" = "Vous serez redirigé vers l'écran de configuration du serveur.";
+"settings.logOutConfirm" = "Vous serez déconnecté de ce serveur.";
 
 // MARK: - Settings (tvOS)
 
@@ -890,3 +890,27 @@
 "home.continueWatching.markedWatched" = "Marqué comme vu";
 "home.continueWatching.removed" = "Retiré de Reprendre";
 "accessibility.episode.watched" = "Vu";
+
+// MARK: - Multi-server (registered servers list)
+"settings.servers" = "Serveurs";
+"servers.title" = "Mes serveurs";
+"servers.current" = "Actuel";
+"servers.add" = "Ajouter un serveur";
+"servers.switch.confirm" = "Basculer vers « %@ » ? Vos écrans seront rechargés depuis ce serveur.";
+"servers.switch.action" = "Changer de serveur";
+"servers.switchedTo" = "Connecté à %@";
+"servers.offline" = "Vous êtes hors ligne. Impossible de changer de serveur.";
+"servers.unreachable" = "Ce serveur est injoignable. Vous restez connecté au serveur actuel.";
+"servers.delete" = "Supprimer";
+"servers.delete.confirm" = "Retirer « %@ » de vos serveurs ? La session de cet appareil y sera révoquée.";
+"servers.deleted" = "%@ a été retiré";
+"servers.online" = "En ligne";
+"servers.offlineBadge" = "Hors ligne";
+"servers.empty.title" = "Aucun serveur enregistré";
+"servers.empty.subtitle" = "Ajoutez un serveur Jellyfin pour commencer.";
+"servers.signedOut" = "Déconnecté";
+"server.alreadyAdded" = "Ce serveur figure déjà dans votre liste.";
+"server.cancelAdd" = "Annuler l'ajout";
+"login.myServers" = "Mes serveurs";
+"servers.checking" = "Vérification…";
+"servers.alreadyCurrent" = "Vous êtes déjà connecté à %@";

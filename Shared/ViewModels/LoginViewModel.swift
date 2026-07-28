@@ -111,6 +111,15 @@ final class LoginViewModel {
     /// Connect paths: persist the session, hydrate the user, flip authenticated.
     private func completeSession(_ session: UserSession, using appState: AppState) async {
         do {
+            // All THREE legacy-mirror items are written together here, so the
+            // trio can never describe two different servers. This is the write
+            // that commits an add: `ServerSetupViewModel.connect` deliberately
+            // skips `server_url` while `isAddingServer`, because until this
+            // point the mirror must keep pointing at the server the user is
+            // still signed in to.
+            if let url = appState.serverURL {
+                try appState.keychain.saveServerURL(url)
+            }
             try appState.keychain.saveAccessToken(session.accessToken)
             try appState.keychain.saveUserSession(session)
         } catch {
@@ -118,6 +127,11 @@ final class LoginViewModel {
         }
         appState.accessToken = session.accessToken
         appState.currentUserId = session.userID
+        // Record this server in the multi-server registry and mark it active
+        // (dedups on the normalized URL, so re-logging into a known server
+        // updates its entry in place rather than adding a duplicate). Covers
+        // first-ever login, add-server login and re-login after expiry.
+        appState.upsertActiveEntry(session: session)
         password = ""
         quickConnectCode = nil
         showSuccess = true

@@ -39,6 +39,7 @@
 		15B101DB7D9B770EAD24E7CA /* RemoteCommandController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2704DEBD38156198513A11C4 /* RemoteCommandController.swift */; };
 		1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611E44F72064D91AE6DBCC6C /* SearchViewModel.swift */; };
 		16C42CECBAAA1EA78363222D /* AdminDashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1A9840C693FD9D46644B69 /* AdminDashboardViewModel.swift */; };
+		1727EDD9DA195084B90AEC28 /* ServersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */; };
 		172A4AE31E117BAB19C89CA6 /* PosterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE5FB096BB1BE0581798DFD /* PosterCard.swift */; };
 		173F19747EE155F10F3B6115 /* AlphabeticalJumpBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9B086604524FCFB71F0E15 /* AlphabeticalJumpBar.swift */; };
 		18D5366C4AD5FA663CF6EC03 /* TVButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */; };
@@ -69,6 +70,7 @@
 		28A82A58BDED7ACD5B9221F8 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */; };
 		2BC23AB09D961A04A91415F7 /* AppNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78377E8E832D65F7226A2A06 /* AppNavigation.swift */; };
 		2C598521E34C029BD36C4A3C /* AdminActivityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */; };
+		2CBC178E02BABE6865247534 /* ServerRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5D9387C11356CF0140347C /* ServerRegistryTests.swift */; };
 		2E1A085843FA335D04A9B52B /* ToastCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5610FD34CD71B2F9E4D65FC6 /* ToastCenter.swift */; };
 		2E41DA320C3BAD16BED4FBFD /* JellyfinLite.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8757BE6612821942C5A36AB /* JellyfinLite.swift */; };
 		2F4C51078FC6EFB427650A5F /* AccentOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6972E29F4227F16D517B124A /* AccentOption.swift */; };
@@ -134,6 +136,7 @@
 		52F51831022AFCDC5833B695 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */; };
 		53C1963BDCD2235326155AE6 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5F40A4DB82730AD3871CB7 /* SettingsScreen.swift */; };
 		558BB88F463A93FA7EBE9838 /* AdminUserDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */; };
+		55DDC66E0CC921159717737F /* ServersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */; };
 		5696ECB7B9811A5CD17279E7 /* AdminRelativeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54A9FC0F398EBC3E87764B50 /* AdminRelativeFormatter.swift */; };
 		574B9D39C15D539DEC66C125 /* AdminTabbedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE7EDAE1CB51A7F06D6BD83 /* AdminTabbedScreen.swift */; };
 		575A596CB9AB11EAB858E4F5 /* SleepTimerOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */; };
@@ -491,6 +494,7 @@
 		4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewModel.swift; sourceTree = "<group>"; };
 		4E7EF991448FA04C0201CBBD /* SearchRelevanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchRelevanceTests.swift; sourceTree = "<group>"; };
 		4E89BA58B136AF96428F4078 /* MediaQualityBadgesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaQualityBadgesTests.swift; sourceTree = "<group>"; };
+		4F5D9387C11356CF0140347C /* ServerRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRegistryTests.swift; sourceTree = "<group>"; };
 		520518BCFA8AF149838E5906 /* MediaDetailEpisodeOverviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailEpisodeOverviewSheet.swift; sourceTree = "<group>"; };
 		53363AB0D63349A37334B381 /* QuickConnectAuthorizeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickConnectAuthorizeViewModelTests.swift; sourceTree = "<group>"; };
 		5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CinemaxWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -563,6 +567,7 @@
 		A25B07319865E0C6A31D44ED /* HLSManifestLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HLSManifestLoader.swift; sourceTree = "<group>"; };
 		A39CFEB21A7A6E968468DF9A /* CinemaxTV.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CinemaxTV.entitlements; sourceTree = "<group>"; };
 		A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTransportViews.swift; sourceTree = "<group>"; };
+		A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServersScreen.swift; sourceTree = "<group>"; };
 		A548CB9FD413FC2170099AEF /* MediaDetailEpisodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailEpisodeRow.swift; sourceTree = "<group>"; };
 		A5E3375B86131BF66AFD5CAC /* LibraryGenreRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryGenreRow.swift; sourceTree = "<group>"; };
 		A6663B7C168DECE8F2BAC327 /* CastCircle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastCircle.swift; sourceTree = "<group>"; };
@@ -876,6 +881,7 @@
 				4E7EF991448FA04C0201CBBD /* SearchRelevanceTests.swift */,
 				7F79C18163C57966CF114BD2 /* SearchViewModelTests.swift */,
 				53E3E989946C44C0AAA0640F /* SeekCoalescerTests.swift */,
+				4F5D9387C11356CF0140347C /* ServerRegistryTests.swift */,
 				B01CD5F39E429B665FA12B0C /* ServerSetupViewModelTests.swift */,
 				07BE0FC86294412983D44667 /* SessionResilienceTests.swift */,
 				3C5B18A062473FEFA3852339 /* StreamProxyTests.swift */,
@@ -922,6 +928,7 @@
 				5392E5D6360E4430456477E9 /* ServerDiscoverySheet.swift */,
 				C23376A2C6A25FD3A7A74DBE /* ServerHelpSheet.swift */,
 				171E69387E1D6BAAB538ECA0 /* ServerSetupScreen.swift */,
+				A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */,
 				2BF66FBCB52822C36CFD91DA /* UserSwitchSheet.swift */,
 				D97F65D618EBC05344F98AD7 /* VideoPlayerView.swift */,
 				7CE70722EFBCE65782C560AB /* WatchedHistoryScreen.swift */,
@@ -1398,6 +1405,7 @@
 				AB379BDB42B5C1F4D687B681 /* SearchRelevanceTests.swift in Sources */,
 				330E22BA7BBD29DD3BE0D93A /* SearchViewModelTests.swift in Sources */,
 				71B23336490FEFD9143B5D99 /* SeekCoalescerTests.swift in Sources */,
+				2CBC178E02BABE6865247534 /* ServerRegistryTests.swift in Sources */,
 				A19C134787C25532BB34B306 /* ServerSetupViewModelTests.swift in Sources */,
 				B5D1EB16B91B2F81BE6405B0 /* SessionResilienceTests.swift in Sources */,
 				EBCB3B503EE80BA039D62EB4 /* StreamProxyTests.swift in Sources */,
@@ -1542,6 +1550,7 @@
 				4B66D96B583EDB78690FD695 /* ServerHelpSheet.swift in Sources */,
 				97AF9B841BA015AD94A9B390 /* ServerSetupScreen.swift in Sources */,
 				0E89D264CCF6B086910782A7 /* ServerSetupViewModel.swift in Sources */,
+				1727EDD9DA195084B90AEC28 /* ServersScreen.swift in Sources */,
 				D3BAE11501833552BCAC705A /* SettingsAppearanceView+iOS.swift in Sources */,
 				01058A5E8018344307CEA19B /* SettingsKeys.swift in Sources */,
 				47B27E0D7F56970D99CA5F69 /* SettingsNavCoordinator.swift in Sources */,
@@ -1720,6 +1729,7 @@
 				4979E3EF3554A8E4DF2E07EF /* ServerHelpSheet.swift in Sources */,
 				91ED326A57E034CF33FCA565 /* ServerSetupScreen.swift in Sources */,
 				5FA751E81BBEE26DE820FA36 /* ServerSetupViewModel.swift in Sources */,
+				55DDC66E0CC921159717737F /* ServersScreen.swift in Sources */,
 				036F818EFCE1E0D3FBF91C8B /* SettingsAppearanceView+iOS.swift in Sources */,
 				06BDE914978422D2AF610106 /* SettingsKeys.swift in Sources */,
 				62F7E3C1CAB9A895D8A5D456 /* SettingsNavCoordinator.swift in Sources */,

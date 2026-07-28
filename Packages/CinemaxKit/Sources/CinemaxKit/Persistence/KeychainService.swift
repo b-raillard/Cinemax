@@ -1,6 +1,23 @@
 import Foundation
 import Security
 
+/// App-private Keychain storage.
+///
+/// **RULE — the legacy trio (`server_url` / `user_session` / `access_token`) is
+/// a derived MIRROR of the active `ServerEntry`, never an independent source of
+/// truth.** Multi-server added two items (`servers`, `active_server_id`) but did
+/// NOT change how the rest of the app reads a session: `getServerURL()` /
+/// `getAccessToken()` / `getUserSession()` still return the legacy trio verbatim,
+/// so `AppState.restoreSession`, `LoginViewModel.completeSession`,
+/// `SettingsScreen` and `ExtensionSessionBridge` are untouched by the feature.
+/// Exactly one function rewrites that mirror — `AppState.applyActiveServer` —
+/// and `migrateToMultiServerIfNeeded()` seeds the registry *from* it. Consequences:
+/// - `clearAll()` clears ONLY the legacy trio. Wiping `servers` there would nuke
+///   every other registered server on a plain logout.
+/// - The migration is purely additive: it never deletes a legacy item, so even a
+///   total migration failure preserves today's exact single-server behavior.
+///
+/// `device_id` stays global across servers (one device identity per install).
 public struct KeychainService: Sendable {
     /// Keychain service name for every stored item. `internal` (not `private`)
     /// so the extension-contract test can lock it — the extensions
@@ -79,6 +96,49 @@ public struct KeychainService: Sendable {
     public func deleteUserSession() {
         delete(for: "user_session")
     }
+
+    // MARK: - Multi-server registry
+
+    /// Account holding the JSON-encoded `[ServerEntry]` list.
+    static let serversAccount = "servers"
+    /// Account holding the active entry's id (UTF-8), or absent when none.
+    static let activeServerIdAccount = "active_server_id"
+
+    /// The registered servers. A decode failure returns `[]` — which also
+    /// re-arms `migrateToMultiServerIfNeeded()` off the still-present legacy
+    /// trio, so a corrupt blob self-heals instead of stranding the user.
+    public func getServers() -> [ServerEntry] {
+        guard let data = getData(for: Self.serversAccount) else { return [] }
+        return (try? JSONDecoder().decode([ServerEntry].self, from: data)) ?? []
+    }
+
+    /// Single atomic item (the private `save` is delete-then-add), so a partial
+    /// write can't leave a half-updated list.
+    public func saveServers(_ entries: [ServerEntry]) throws {
+        try save(data: JSONEncoder().encode(entries), for: Self.serversAccount)
+    }
+
+    public func getActiveServerId() -> String? {
+        guard let data = getData(for: Self.activeServerIdAccount),
+              let id = String(data: data, encoding: .utf8),
+              !id.isEmpty else { return nil }
+        return id
+    }
+
+    /// `nil` (or empty) removes the pointer — used when the last server is
+    /// signed out and the app falls back to `ServerSetupScreen`.
+    public func saveActiveServerId(_ id: String?) {
+        guard let id, !id.isEmpty else {
+            delete(for: Self.activeServerIdAccount)
+            return
+        }
+        try? save(data: Data(id.utf8), for: Self.activeServerIdAccount)
+    }
+
+    // The single-server → registry migration deliberately lives in the
+    // `SecureStorageProtocol` extension, NOT here: it needs only protocol
+    // members, and a copy on each conformer would let the test mock's version
+    // drift from the one that actually ships. See the RULE there.
 
     // MARK: - Shared extension session (Keychain access group)
 
@@ -212,6 +272,13 @@ public struct KeychainService: Sendable {
 
     // MARK: - Clear All
 
+    /// Clears the ACTIVE session mirror only.
+    ///
+    /// **Deliberately scoped to the legacy trio**: `servers` /
+    /// `active_server_id` must survive a plain logout, otherwise signing out of
+    /// one server would silently delete every other registered server.
+    /// `AppState.logout(reason:)` is what strips the token from the active
+    /// `ServerEntry` (keeping the entry itself, tokenless).
     public func clearAll() {
         deleteAccessToken()
         deleteServerURL()

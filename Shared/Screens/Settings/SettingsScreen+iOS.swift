@@ -213,6 +213,12 @@ extension SettingsScreen {
 
                     iOSSettingsDivider
 
+                    navigationRow(icon: "server.rack", label: loc.localized("settings.servers")) {
+                        showServers = true
+                    }
+
+                    iOSSettingsDivider
+
                     navigationRow(icon: "lock.shield", label: loc.localized("settings.privacySecurity")) {
                         showPrivacySecurity = true
                     }
@@ -255,7 +261,11 @@ extension SettingsScreen {
         }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
-                appState.logout()
+                // Revokes this device's session server-side, keeps the (now
+                // tokenless) registry entry, and hops to another registered
+                // server when one still holds a valid session — `performLogout`
+                // toasts that hop, which is otherwise unexplained.
+                Task { await performLogout() }
             }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {

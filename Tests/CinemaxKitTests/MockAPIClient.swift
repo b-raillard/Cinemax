@@ -65,8 +65,17 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedServerInfo
     }
 
+    /// Every `reconnect` the code performed, in order — the multi-server switch
+    /// tests assert both the count (one commit, not a storm) and the target.
+    private(set) var reconnectedURLs: [URL] = []
+    private(set) var reconnectedTokens: [String] = []
+
     func reconnect(url: URL, accessToken: String) {
-        recordLock.withLock { reconnectCalled = true }
+        recordLock.withLock {
+            reconnectCalled = true
+            reconnectedURLs.append(url)
+            reconnectedTokens.append(accessToken)
+        }
     }
 
     func authenticate(username: String, password: String) async throws -> UserSession {
@@ -281,8 +290,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     // MARK: - Cache
 
-    func clearCache() {}
-    func applyContentRatingLimit(maxAge: Int) {}
+    private(set) var clearCacheCallCount = 0
+    private(set) var appliedRatingLimits: [Int] = []
+
+    func clearCache() {
+        recordLock.withLock { clearCacheCallCount += 1 }
+    }
+
+    func applyContentRatingLimit(maxAge: Int) {
+        recordLock.withLock { appliedRatingLimits.append(maxAge) }
+    }
 
     // Call counters — let tests assert which fetches a targeted refresh touches.
     private(set) var getResumeItemsCallCount = 0
@@ -458,11 +475,33 @@ final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
     func getUserSession() -> UserSession? { savedSession }
     func deleteUserSession() { savedSession = nil }
 
+    /// Mirrors `KeychainService.clearAll()`: the legacy trio only. The
+    /// multi-server registry deliberately survives a logout.
     func clearAll() {
         savedAccessToken = nil
         savedServerURL = nil
         savedSession = nil
     }
+
+    // MARK: - Multi-server registry (in-memory)
+
+    var savedServers: [ServerEntry] = []
+    var savedActiveServerId: String?
+
+    func getServers() -> [ServerEntry] { savedServers }
+
+    func saveServers(_ entries: [ServerEntry]) throws {
+        if shouldThrowOnSave { throw MockError.genericFailure }
+        savedServers = entries
+    }
+
+    func getActiveServerId() -> String? { savedActiveServerId }
+
+    func saveActiveServerId(_ id: String?) { savedActiveServerId = id }
+
+    // `migrateToMultiServerIfNeeded()` is deliberately NOT overridden — the
+    // `SecureStorageProtocol` extension carries the one implementation, so a
+    // migration test drives the exact code `KeychainService` runs in production.
 }
 
 // MARK: - Error
