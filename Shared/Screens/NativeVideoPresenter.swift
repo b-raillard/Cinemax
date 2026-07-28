@@ -517,7 +517,16 @@ final class NativeVideoPresenter {
         guard let navigator = episodeNavigator, let vc = playerVC else { return }
         Task {
             playbackReporter.reportStop()
-            guard let (info, prev, next) = await navigator(ep.id) else { return }
+            guard let (info, prev, next) = await navigator(ep.id) else {
+                // The session is already closed and the new episode never
+                // resolved, so this bail is terminal for the banner: without a
+                // detach the Live Activity strands on the Lock Screen showing
+                // the previous episode's playhead. (Recovering playback itself
+                // is deliberately out of scope here — see the VLC path's
+                // `handleFailedEpisodeNav`.)
+                liveActivity.detach()
+                return
+            }
             cleanupPlayer()
             self.hasRetriedDirectURL = false
             self.playbackInfo = info

@@ -336,8 +336,24 @@ struct ServersScreen: View {
         }
     }
 
+    /// First line under the name: enough of the URL to tell two entries apart.
+    ///
+    /// The bare `host` is NOT enough — the registry keys on the full URL, so
+    /// `http://nas:8096` / `http://nas:8920` and `https://box/jellyfin` /
+    /// `https://box/media` are legitimately distinct entries that all rendered
+    /// as the same string. Port and path are appended only when present, so the
+    /// common `https://host` case still reads as a plain hostname (the scheme
+    /// stays off — it's noise on the row, and the status dot carries liveness).
     private func displayAddress(_ entry: ServerEntry) -> String {
-        entry.url.host ?? entry.url.absoluteString
+        guard let host = entry.url.host, !host.isEmpty else { return entry.url.absoluteString }
+        var address = host
+        if let port = entry.url.port { address += ":\(port)" }
+        // Drop a trailing "/" so a base-path-less URL doesn't render as "host/".
+        let path = entry.url.path
+        if !path.isEmpty, path != "/" {
+            address += path.hasSuffix("/") ? String(path.dropLast()) : path
+        }
+        return address
     }
 
     /// Second line: who we're signed in as + the server version, or the

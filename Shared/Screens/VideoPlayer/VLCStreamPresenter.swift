@@ -2587,6 +2587,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // The engine already stopped; re-latch the end guard so a stray
             // `.stopped` can't stack a second alert behind this one.
             didReportEnd = true
+            // Nothing is playing any more and this branch is terminal, so the
+            // Live Activity would otherwise sit on the Lock Screen projecting a
+            // paused playhead for an episode that never started. `detach()` is
+            // the same hand-off `handlePlaybackEnded` makes when there is no
+            // next episode.
+            liveActivity.detach()
             let alert = UIAlertController(
                 title: loc.localized("player.episodeNav.failed"),
                 message: loc.localized("player.episodeNav.failed.message"),
