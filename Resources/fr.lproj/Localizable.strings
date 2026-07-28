@@ -130,6 +130,8 @@
 "playback.error.network" = "La connexion au serveur a été perdue. Vérifiez votre réseau et réessayez.";
 "playback.error.transcode" = "Le serveur n'a pas pu transcoder ce fichier. Vérifiez les réglages de transcodage.";
 "playback.error.close" = "Fermer";
+"player.episodeNav.failed" = "Épisode indisponible";
+"player.episodeNav.failed.message" = "Impossible de charger cet épisode. Vérifiez votre connexion et réessayez.";
 
 // MARK: - End of Series
 
