@@ -1,6 +1,9 @@
 import SwiftUI
+import OSLog
 import CinemaxKit
 @preconcurrency import JellyfinAPI
+
+private let menuLog = Logger(subsystem: "com.cinemax", category: "Menu")
 
 // MARK: - LibraryView snapshot
 
@@ -157,7 +160,12 @@ final class MenuConfigStore {
     private(set) var resolvedTabs: [ResolvedTab] = []
 
     var isLoadingViews: Bool = false
-    var lastFetchError: String?
+    /// Last `refreshAvailableViews()` failure, kept as the raw `Error` so the
+    /// store stays UI-agnostic. **Never render this directly** (RULE: never
+    /// surface a raw error description) — the two render sites map it through
+    /// `LocalizationManager.userFacingMessage(for:)`; the raw value is logged
+    /// at the catch site instead.
+    var lastFetchError: (any Error)?
 
     private var apiClient: (any APIClientProtocol)?
     private var userId: String?
@@ -410,7 +418,13 @@ final class MenuConfigStore {
             recomputeResolvedTabs()
         } catch {
             guard gen == refreshGeneration else { return }
-            lastFetchError = "\(error)"
+            // `localizedDescription`, never `String(describing:)`: a bridged
+            // NSError's description renders its whole userInfo — including
+            // `NSErrorFailingURLKey`, i.e. the server hostname and the user
+            // GUID from the failing /Users/{id}/Views request — into the
+            // PUBLIC unified log. Matches the house convention everywhere else.
+            menuLog.error("MenuConfigStore ▸ getUserViews failed: \(error.localizedDescription, privacy: .public)")
+            lastFetchError = error
         }
     }
 
