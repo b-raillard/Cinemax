@@ -458,10 +458,41 @@ final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
     func getUserSession() -> UserSession? { savedSession }
     func deleteUserSession() { savedSession = nil }
 
+    /// Mirrors `KeychainService.clearAll()`: the legacy trio only. The
+    /// multi-server registry deliberately survives a logout.
     func clearAll() {
         savedAccessToken = nil
         savedServerURL = nil
         savedSession = nil
+    }
+
+    // MARK: - Multi-server registry (in-memory)
+
+    var savedServers: [ServerEntry] = []
+    var savedActiveServerId: String?
+
+    func getServers() -> [ServerEntry] { savedServers }
+
+    func saveServers(_ entries: [ServerEntry]) throws {
+        if shouldThrowOnSave { throw MockError.genericFailure }
+        savedServers = entries
+    }
+
+    func getActiveServerId() -> String? { savedActiveServerId }
+
+    func saveActiveServerId(_ id: String?) { savedActiveServerId = id }
+
+    /// Same shape as `KeychainService.migrateToMultiServerIfNeeded()` — both
+    /// route through the pure `ServerEntry.migrated(...)` builder.
+    func migrateToMultiServerIfNeeded() {
+        guard savedServers.isEmpty else { return }
+        guard let entry = ServerEntry.migrated(
+            serverURL: savedServerURL,
+            session: savedSession,
+            accessToken: savedAccessToken
+        ) else { return }
+        savedServers = [entry]
+        savedActiveServerId = entry.id
     }
 }
 
