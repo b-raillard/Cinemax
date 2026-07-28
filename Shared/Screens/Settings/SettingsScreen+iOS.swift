@@ -213,12 +213,6 @@ extension SettingsScreen {
 
                     iOSSettingsDivider
 
-                    navigationRow(icon: "server.rack", label: loc.localized("settings.servers")) {
-                        showServers = true
-                    }
-
-                    iOSSettingsDivider
-
                     navigationRow(icon: "lock.shield", label: loc.localized("settings.privacySecurity")) {
                         showPrivacySecurity = true
                     }
@@ -310,6 +304,14 @@ extension SettingsScreen {
                 .padding(CinemaSpacing.spacing4)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
+
+            // Servers (multi-server list)
+            VStack(spacing: 0) {
+                navigationRow(icon: "server.rack", label: loc.localized("settings.servers")) {
+                    showServers = true
+                }
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
 
             // Refresh Catalogue
             VStack(spacing: 0) {

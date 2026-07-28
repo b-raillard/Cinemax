@@ -325,14 +325,6 @@ extension SettingsScreen {
             )
 
             tvActionRow(
-                id: "servers",
-                icon: "server.rack",
-                label: loc.localized("settings.servers"),
-                showsChevron: true,
-                action: { showServers = true }
-            )
-
-            tvActionRow(
                 id: "privacySecurity",
                 icon: "lock.shield",
                 label: loc.localized("settings.privacySecurity"),
@@ -402,6 +394,14 @@ extension SettingsScreen {
                         RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
                             .fill(CinemaColor.surfaceVariant.opacity(0.6))
                     )
+            )
+
+            tvActionRow(
+                id: "servers",
+                icon: "server.rack",
+                label: loc.localized("settings.servers"),
+                showsChevron: true,
+                action: { showServers = true }
             )
 
             tvLicensesButton
