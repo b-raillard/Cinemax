@@ -356,11 +356,19 @@ public final class JellyfinAPIClient: Sendable {
     /// slow API call fail and tore whole screens down to "Serveur injoignable".
     /// 30s idle / 60s total tolerates a slow server while still failing a truly
     /// dead one in bounded time.
+    ///
+    /// `urlCache = nil`: every request on this session is authenticated, and
+    /// `URLSessionConfiguration.default` otherwise writes those responses to a
+    /// disk-backed `URLCache` inside the app container. Jellyfin's JSON is
+    /// rarely cacheable to begin with, and freshness is already owned by the
+    /// app's own `APICache` (short TTLs + explicit invalidation) — so the HTTP
+    /// cache bought nothing and only widened the at-rest footprint.
     fileprivate static let fastFailSessionConfiguration: URLSessionConfiguration = {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 30
         c.timeoutIntervalForResource = 60
         c.waitsForConnectivity = false
+        c.urlCache = nil
         return c
     }()
 
