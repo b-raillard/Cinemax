@@ -108,6 +108,25 @@ struct StreamProxyTests {
             )
             #expect(!CinemaxStreamProxy.isLoopbackHost(host))
         }
+
+        // Precedence pin: the HOST check runs before the method check, so a
+        // rebinding probe that also uses a disallowed method is answered 400
+        // (bad host) — never 405, which would confirm to the caller that the
+        // host was accepted and only the verb was wrong.
+        #expect(
+            CinemaxStreamProxy.admission(method: "POST", path: "/s/abc", hostHeader: "localhost.evil.com")
+                == .reject(status: "400 Bad Request")
+        )
+
+        // A Host header that is PRESENT but empty/whitespace is malformed and
+        // rejected — only a genuinely ABSENT Host (nil) is waved through.
+        for empty in ["", " ", "\t "] {
+            #expect(
+                CinemaxStreamProxy.admission(method: "GET", path: "/s/abc", hostHeader: empty)
+                    == .reject(status: "400 Bad Request"),
+                "empty host \(empty.debugDescription) must be rejected"
+            )
+        }
     }
 
     @Test("only GET/HEAD are forwarded upstream — writes get 405")

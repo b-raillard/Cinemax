@@ -399,7 +399,7 @@ final class CinemaxStreamProxy: @unchecked Sendable {
 
     /// Only reads are ever proxied — the upstream request carries the Jellyfin
     /// token, so a forwarded write would act on the user's account.
-    static let allowedMethods: Set<String> = ["GET", "HEAD"]
+    private static let allowedMethods: Set<String> = ["GET", "HEAD"]
 
     /// Exact-match loopback test for a `Host` header value: strips an optional
     /// `:port` (and the brackets of an IPv6 literal), then compares the bare

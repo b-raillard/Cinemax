@@ -418,7 +418,12 @@ final class MenuConfigStore {
             recomputeResolvedTabs()
         } catch {
             guard gen == refreshGeneration else { return }
-            menuLog.error("MenuConfigStore ▸ getUserViews failed: \(String(describing: error), privacy: .public)")
+            // `localizedDescription`, never `String(describing:)`: a bridged
+            // NSError's description renders its whole userInfo — including
+            // `NSErrorFailingURLKey`, i.e. the server hostname and the user
+            // GUID from the failing /Users/{id}/Views request — into the
+            // PUBLIC unified log. Matches the house convention everywhere else.
+            menuLog.error("MenuConfigStore ▸ getUserViews failed: \(error.localizedDescription, privacy: .public)")
             lastFetchError = error
         }
     }
