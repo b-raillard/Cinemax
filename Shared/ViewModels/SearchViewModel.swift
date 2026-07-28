@@ -295,6 +295,14 @@ final class SearchViewModel {
             self?.isListening = false
         }
         speechHelper.onPermissionError = { [weak self] error in
+            // `toggleListening` flips `isListening` optimistically, before the TCC
+            // prompts resolve. Every bail-out in the helper (speech denied, mic
+            // denied, recognizer/session/audio-route unavailable) reports here and
+            // returns WITHOUT reaching `stop()` — whose idempotency guard would
+            // early-return before `onStopped` anyway, since nothing ever started.
+            // So this is the single place that has to clear the flag, or the mic
+            // pill keeps pulsing "listening" while nothing is recording.
+            self?.isListening = false
             self?.permissionError = error
             self?.showPermissionAlert = true
         }
