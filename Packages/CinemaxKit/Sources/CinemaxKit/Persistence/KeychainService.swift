@@ -1,5 +1,8 @@
 import Foundation
 import Security
+import os
+
+private let keychainLog = Logger(subsystem: "com.cinemax", category: "Keychain")
 
 /// App-private Keychain storage.
 ///
@@ -342,9 +345,14 @@ public struct KeychainService: Sendable {
         deviceIDLock.unlock()
         let status = SecItemAdd(saveQuery as CFDictionary, nil)
         if status != errSecSuccess && status != errSecDuplicateItem {
-            // Persisted-store write failed; the session cache above keeps the
-            // id stable until the next launch retries.
-            assertionFailure("Keychain device-id write failed: \(status)")
+            // Persisted-store write failed; the session cache above keeps the id
+            // stable until the next launch retries. This must NOT trap: a keychain
+            // write can legitimately fail (locked keychain at first unlock, or an
+            // unsigned/entitlement-less build such as CI's CODE_SIGNING_ALLOWED=NO
+            // test host → errSecMissingEntitlement -34018). A signed production
+            // build never hits it; an `assertionFailure` here turned that tolerated
+            // condition into a crash.
+            keychainLog.error("device-id keychain write failed (status \(status)); using session-cached id")
         }
         return id
     }
