@@ -316,20 +316,10 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         let parts = requestLine.split(separator: " ")
         let method = parts.first.map(String.init)?.uppercased() ?? "GET"
         let path = parts.count > 1 ? String(parts[1]) : "/"
-        // Defense-in-depth: the listener already binds to 127.0.0.1 only, but
-        // reject anything that isn't a well-formed /s/<id> loopback request so a
-        // stray local client can't probe the proxy. Legitimate stream URLs are
-        // always http://127.0.0.1:<port>/s/<uuid>; the Host, when present, must
-        // resolve to loopback. Neither check touches the legitimate path.
-        var badRequest: Bool { !path.hasPrefix("/s/") }
         let hostLine = lines.dropFirst().first { $0.lowercased().hasPrefix("host:") }
-        let hostIsLoopback: Bool = {
-            guard let hostLine else { return true } // no Host header ⇒ don't reject
-            let host = hostLine.dropFirst("host:".count).trimmingCharacters(in: .whitespaces).lowercased()
-            return host.hasPrefix("127.") || host.hasPrefix("localhost") || host.hasPrefix("[::1]") || host == "::1"
-        }()
-        guard !badRequest, hostIsLoopback else {
-            conn.send(content: Data("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".utf8),
+        let hostHeader = hostLine.map { String($0.dropFirst("host:".count)) }
+        if case .reject(let status) = Self.admission(method: method, path: path, hostHeader: hostHeader) {
+            conn.send(content: Data("HTTP/1.1 \(status)\r\nConnection: close\r\n\r\n".utf8),
                       isComplete: true, completion: .contentProcessed { _ in conn.cancel() })
             return
         }
@@ -371,6 +361,76 @@ final class CinemaxStreamProxy: @unchecked Sendable {
             break
         }
         task.resume()
+    }
+
+    // MARK: Request admission (pure — unit-tested)
+
+    /// Whether a loopback request may be forwarded upstream, and if not, the
+    /// HTTP status line to answer with.
+    enum Admission: Equatable {
+        case accept
+        /// Status line fragment, e.g. `"400 Bad Request"`.
+        case reject(status: String)
+    }
+
+    /// Defense-in-depth admission check for the loopback listener; the listener
+    /// already binds to 127.0.0.1 only, but a co-resident process (or a browser
+    /// page doing DNS rebinding) can still reach it. Three rules, none of which
+    /// touches the legitimate path — every real stream URL is
+    /// `http://127.0.0.1:<port>/s/<uuid>` fetched with `GET`/`HEAD`:
+    ///   1. the path must be a well-formed `/s/<id>`;
+    ///   2. the `Host`, **when present**, must be an EXACT loopback name — a
+    ///      `hasPrefix` test is precisely what `localhost.evil.com` /
+    ///      `127.evil.com` slip through, which is the rebinding case this
+    ///      check exists to stop. A missing `Host` stays allowed (libVLC's
+    ///      access module doesn't always send one);
+    ///   3. the method must be a read. Anything else would be forwarded to the
+    ///      real origin with the account's token attached, so it is refused.
+    /// Pure + `static` so `StreamProxyTests` can exercise it without an
+    /// `NWConnection` (same rationale as `parseRange`).
+    static func admission(method: String, path: String, hostHeader: String?) -> Admission {
+        guard path.hasPrefix("/s/") else { return .reject(status: "400 Bad Request") }
+        if let hostHeader, !isLoopbackHost(hostHeader) { return .reject(status: "400 Bad Request") }
+        guard allowedMethods.contains(method.uppercased()) else {
+            return .reject(status: "405 Method Not Allowed")
+        }
+        return .accept
+    }
+
+    /// Only reads are ever proxied — the upstream request carries the Jellyfin
+    /// token, so a forwarded write would act on the user's account.
+    static let allowedMethods: Set<String> = ["GET", "HEAD"]
+
+    /// Exact-match loopback test for a `Host` header value: strips an optional
+    /// `:port` (and the brackets of an IPv6 literal), then compares the bare
+    /// name against the three loopback forms. Never a prefix match.
+    static func isLoopbackHost(_ rawHeaderValue: String) -> Bool {
+        let host = rawHeaderValue.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !host.isEmpty else { return false }
+        let name: String
+        if host.hasPrefix("[") {
+            // Bracketed IPv6 literal, optionally with a port: `[::1]`, `[::1]:8080`.
+            guard let close = host.firstIndex(of: "]") else { return false }
+            let after = host[host.index(after: close)...]
+            guard after.isEmpty || isPortSuffix(after) else { return false }
+            name = String(host[host.index(after: host.startIndex)..<close])
+        } else if host.filter({ $0 == ":" }).count > 1 {
+            // Unbracketed IPv6 literal — illegal in a Host header, but accept
+            // the bare loopback form rather than guessing a port boundary.
+            name = host
+        } else if let colon = host.lastIndex(of: ":") {
+            guard isPortSuffix(host[colon...]) else { return false }
+            name = String(host[..<colon])
+        } else {
+            name = host
+        }
+        return name == "127.0.0.1" || name == "localhost" || name == "::1"
+    }
+
+    private static func isPortSuffix(_ suffix: Substring) -> Bool {
+        guard suffix.hasPrefix(":") else { return false }
+        let digits = suffix.dropFirst()
+        return !digits.isEmpty && digits.allSatisfy { $0.isASCII && $0.isNumber }
     }
 
     /// Parses a `bytes=START-END` / `bytes=START-` Range header into
