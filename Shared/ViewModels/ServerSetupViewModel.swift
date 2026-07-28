@@ -19,15 +19,13 @@ final class ServerSetupViewModel {
             return
         }
 
-        // Prepend https:// if no scheme
-        var urlString = trimmed
-        if !urlString.contains("://") {
-            urlString = "https://\(urlString)"
-        }
-
-        guard let url = URL(string: urlString),
-              let host = url.host, !host.isEmpty,
-              url.scheme == "http" || url.scheme == "https" else {
+        // Single source of truth for the canonical spelling of a server URL:
+        // the same normalizer the registry dedups on, so the URL we connect to
+        // and the URL we store as a `ServerEntry` can never disagree. It keeps
+        // the historical behavior of this screen (prepend `https://` when no
+        // scheme is typed, reject anything that isn't a usable http(s) URL) and
+        // additionally drops the default port / trailing slash / query.
+        guard let url = ServerURLNormalizer.normalize(trimmed) else {
             errorMessage = loc.localized("server.invalidURL")
             return
         }
