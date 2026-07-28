@@ -4,12 +4,10 @@ import Security
 // Minimal, dependency-free Jellyfin access for the widget. The extension
 // deliberately does NOT link CinemaxKit (widget memory budgets are tight and
 // the SDK pulls Nuke + generated entities); it reads the session snapshot the
-// app publishes to the App Group (`ExtensionSessionBridge` — keep the suite /
-// key / JSON shape in sync) and talks to two endpoints directly.
+// app publishes to the shared Keychain access group (`ExtensionSessionBridge`
+// — keep the service / account / group / JSON shape in sync) and talks to two
+// endpoints directly.
 enum JellyfinLite {
-    static let appGroupId = "group.com.cinemax.shared"
-    static let sessionKey = "extension.session"
-
     struct Session: Codable {
         let serverURL: URL
         let accessToken: String
@@ -31,14 +29,12 @@ enum JellyfinLite {
     private static let keychainService = "com.cinemax.jellyfin"
     private static let keychainAccount = "extension_session"
 
+    /// Sole store: the shared, device-only Keychain group the app publishes
+    /// to. The legacy plaintext App Group fallback is gone — the app has
+    /// written the Keychain copy since 1.0.3, and the app scrubs the old
+    /// cleartext blob on its next `publish`.
     static func readSession() -> Session? {
-        // Primary: the shared, device-only Keychain group the app publishes to.
-        if let session = readSessionFromKeychain() { return session }
-        // Fallback: the legacy plaintext App Group copy (dropped a release after
-        // the Keychain migration ships).
-        guard let defaults = UserDefaults(suiteName: appGroupId),
-              let data = defaults.data(forKey: sessionKey) else { return nil }
-        return try? JSONDecoder().decode(Session.self, from: data)
+        readSessionFromKeychain()
     }
 
     private static func readSessionFromKeychain() -> Session? {

@@ -7,11 +7,12 @@ private let logger = Logger(subsystem: "com.cinemax", category: "TopShelf")
 
 // Apple TV Top Shelf: a "Continue Watching" row above the app icon when
 // Cinemax sits in the dock's top row. Reads the session snapshot the app
-// publishes to the App Group (`ExtensionSessionBridge` in CinemaxKit — keep
-// the suite / key / JSON shape in sync; the extension stays dependency-free),
-// then queries the resume list. Item artwork is served straight off the
-// Jellyfin image endpoints (the system fetches the URLs itself), and
-// selecting an item deep-links via cinemax://item/{id}.
+// publishes to the shared Keychain access group (`ExtensionSessionBridge` in
+// CinemaxKit — keep the service / account / group / JSON shape in sync; the
+// extension stays dependency-free), then queries the resume list. Item
+// artwork is served straight off the Jellyfin image endpoints (the system
+// fetches the URLs itself), and selecting an item deep-links via
+// cinemax://item/{id}.
 /// Stable ObjC name: `NSExtensionPrincipalClass` resolution of Swift
 /// module-qualified names ("CinemaxTopShelf.ContentProvider") proved flaky
 /// here — the extension process launched and exited within ~60ms without
@@ -69,11 +70,12 @@ final class ContentProvider: TVTopShelfContentProvider {
     private static func run(handler: HandlerBox) async {
         logger.info("TopShelf ▸ loadTopShelfContent invoked")
         guard let session = readSession() else {
-            logger.error("TopShelf ▸ no session snapshot in App Group (app not opened since install, or App Group not shared)")
+            logger.error("TopShelf ▸ no session snapshot in the shared Keychain group (app not opened since install, or keychain-access-group not shared)")
             // No session snapshot visible from the extension. Either the app
-            // hasn't been opened since install, or the App Group entitlement
-            // isn't provisioned (each side then writes/reads its own private
-            // container). A diagnostic tile beats a silent static image.
+            // hasn't been opened since install, or the shared
+            // keychain-access-group isn't provisioned (each side then
+            // writes/reads its own private items). A diagnostic tile beats a
+            // silent static image.
             handler.call(diagnosticContent(
                 fr: "Ouvrez Cinemax pour activer cette rangée",
                 en: "Open Cinemax to enable this row"
@@ -142,14 +144,12 @@ final class ContentProvider: TVTopShelfContentProvider {
         return TVTopShelfSectionedContent(sections: [section])
     }
 
+    /// Sole store: the shared, device-only Keychain group the app publishes
+    /// to. The legacy plaintext App Group fallback is gone — the app has
+    /// written the Keychain copy since 1.0.3, and the app scrubs the old
+    /// cleartext blob on its next `publish`.
     private static func readSession() -> Session? {
-        // Primary: the shared, device-only Keychain group the app publishes to.
-        if let session = readSessionFromKeychain() { return session }
-        // Fallback: the legacy plaintext App Group copy (dropped a release after
-        // the Keychain migration ships).
-        guard let defaults = UserDefaults(suiteName: "group.com.cinemax.shared"),
-              let data = defaults.data(forKey: "extension.session") else { return nil }
-        return try? JSONDecoder().decode(Session.self, from: data)
+        readSessionFromKeychain()
     }
 
     /// Reads the shared session from the Keychain group. Service + account are

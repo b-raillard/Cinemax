@@ -2,14 +2,14 @@ import Testing
 import Foundation
 @testable import CinemaxKit
 
-/// Locks the App Group session contract that three intentionally un-deduplicated
+/// Locks the shared-session contract that three intentionally un-deduplicated
 /// copies of the shape must agree on:
 ///   • the app — CinemaxKit `ExtensionSessionBridge.Session` (the publisher);
 ///   • the iOS widget — `Widgets/CinemaxWidget/JellyfinLite.Session`;
 ///   • the tvOS Top Shelf — `TopShelf/CinemaxTopShelf/ContentProvider.Session`.
 ///
 /// The two extensions deliberately don't link CinemaxKit (widget memory budget),
-/// so they re-declare the suite id, the defaults key, and the JSON shape by hand.
+/// so they re-declare the Keychain item identifiers and the JSON shape by hand.
 /// A rename or recoding on the CinemaxKit side would silently break them at
 /// runtime — the extension would read `nil` and fall back to its signed-out
 /// state — with no compiler error to catch it. These assertions fail the moment
@@ -17,10 +17,15 @@ import Foundation
 @Suite("Extension session contract")
 struct ExtensionSessionContractTests {
 
-    @Test("Suite + key constants match the extension copies")
-    func constantsMatch() {
-        // Hardcoded as string literals in JellyfinLite.swift and
-        // ContentProvider.swift — keep all three in lockstep.
+    @Test("Legacy App Group constants still name the scrub target")
+    func legacyScrubConstantsMatch() {
+        // These two are NO LONGER part of the extension contract — the
+        // extensions read the Keychain only (see the suite/test below). They
+        // survive because `ExtensionSessionBridge.publish` uses them to delete
+        // the legacy (1.0.3–1.0.6) plaintext copy of the token from the App Group
+        // container on upgraded installs. Change either literal and the scrub
+        // silently stops finding that blob, leaving the token in cleartext
+        // forever — so they stay locked here.
         #expect(ExtensionSessionBridge.appGroupId == "group.com.cinemax.shared")
         #expect(ExtensionSessionBridge.sessionKey == "extension.session")
     }
@@ -53,7 +58,7 @@ struct ExtensionSessionContractTests {
 
     @Test("A payload in the extensions' wire shape decodes back into Session")
     func decodesExtensionWireShape() throws {
-        // The exact byte shape an extension reads from the App Group defaults.
+        // The exact byte shape an extension reads from the Keychain group.
         let json = Data("""
         {"serverURL":"https://jelly.example.com","accessToken":"tok-123","userId":"user-abc"}
         """.utf8)
@@ -88,9 +93,14 @@ struct ExtensionSessionContractTests {
 }
 
 /// Locks the pure equivalence decision `ExtensionSessionBridge.publish` uses to
-/// skip a redundant Keychain write + UserDefaults write + WidgetCenter/Top
-/// Shelf poke when nothing actually changed since the last publish. Only the
-/// decision is tested here — never the WidgetCenter/Top Shelf side effects.
+/// skip a redundant Keychain write + WidgetCenter/Top Shelf poke when nothing
+/// actually changed since the last publish. Only the decision is tested here —
+/// never the WidgetCenter/Top Shelf side effects.
+///
+/// The decision is Keychain-only: the legacy plaintext App Group copy is no
+/// longer an input (it used to force a republish whenever it went missing, to
+/// keep the dual-write in step). It's scrubbed unconditionally ahead of this
+/// check and never rewritten, so it can neither suppress nor trigger a publish.
 @Suite("Extension session republish skip decision")
 struct ExtensionSessionSkipDecisionTests {
     let session = ExtensionSessionBridge.Session(
@@ -99,10 +109,10 @@ struct ExtensionSessionSkipDecisionTests {
         userId: "user-abc"
     )
 
-    @Test("Identical blobs in both stores ⇒ current, skip publish")
-    func identicalBlobsSkip() throws {
+    @Test("Keychain blob matches ⇒ current, skip publish")
+    func matchingKeychainBlobSkips() throws {
         let data = try JSONEncoder().encode(session)
-        #expect(ExtensionSessionBridge.isCurrent(session: session, keychainData: data, defaultsData: data))
+        #expect(ExtensionSessionBridge.isCurrent(session: session, keychainData: data))
     }
 
     @Test("Token changed ⇒ not current, must publish")
@@ -113,30 +123,28 @@ struct ExtensionSessionSkipDecisionTests {
             accessToken: "tok-456",
             userId: session.userId
         )
-        #expect(!ExtensionSessionBridge.isCurrent(session: changed, keychainData: data, defaultsData: data))
+        #expect(!ExtensionSessionBridge.isCurrent(session: changed, keychainData: data))
     }
 
-    @Test("Keychain matches but UserDefaults copy is missing ⇒ must publish (keeps dual-write contract)")
-    func defaultsMissingPublishes() throws {
-        let data = try JSONEncoder().encode(session)
-        #expect(!ExtensionSessionBridge.isCurrent(session: session, keychainData: data, defaultsData: nil))
+    @Test("Keychain copy missing ⇒ must publish")
+    func missingKeychainPublishes() {
+        #expect(!ExtensionSessionBridge.isCurrent(session: session, keychainData: nil))
     }
 
     @Test("Corrupt/undecodable Keychain blob ⇒ treated as changed, must publish")
-    func corruptKeychainPublishes() throws {
-        let data = try JSONEncoder().encode(session)
+    func corruptKeychainPublishes() {
         let corrupt = Data("not json".utf8)
-        #expect(!ExtensionSessionBridge.isCurrent(session: session, keychainData: corrupt, defaultsData: data))
+        #expect(!ExtensionSessionBridge.isCurrent(session: session, keychainData: corrupt))
     }
 
-    @Test("Both stores already empty while clearing ⇒ current, skip publish")
-    func bothEmptyClearSkips() {
-        #expect(ExtensionSessionBridge.isCurrent(session: nil, keychainData: nil, defaultsData: nil))
+    @Test("Keychain already empty while clearing ⇒ current, skip publish")
+    func emptyKeychainClearSkips() {
+        #expect(ExtensionSessionBridge.isCurrent(session: nil, keychainData: nil))
     }
 
-    @Test("A stale store still holds data while clearing ⇒ must publish")
-    func staleStoreClearPublishes() throws {
+    @Test("A stale Keychain blob while clearing ⇒ must publish")
+    func staleKeychainClearPublishes() throws {
         let data = try JSONEncoder().encode(session)
-        #expect(!ExtensionSessionBridge.isCurrent(session: nil, keychainData: data, defaultsData: nil))
+        #expect(!ExtensionSessionBridge.isCurrent(session: nil, keychainData: data))
     }
 }
