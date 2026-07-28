@@ -38,6 +38,16 @@ private func deepLink(itemId: String) -> URL? {
     URL(string: "cinemax://item/\(itemId)")
 }
 
+/// "2×" / "1.25×" / "0.5×" — shown in place of the elapsed label while playback
+/// runs off-speed (see `PlaybackProgressRow.leadingLabel`).
+private func rateLabel(_ rate: Double) -> String {
+    let rounded = (rate * 100).rounded() / 100
+    let digits = rounded == rounded.rounded()
+        ? String(format: "%.0f", rounded)
+        : String(format: "%g", rounded)
+    return "\(digits)×"
+}
+
 // MARK: - Shared pieces
 
 /// Square film-reel tile standing in for the poster. The extension can't reach
@@ -88,31 +98,23 @@ private struct PlaybackHeadline: View {
     }
 }
 
-/// Progress bar + elapsed / remaining labels. While playing these are live
-/// SwiftUI timer views (zero pushes); while paused they're static text.
+/// Progress bar + elapsed / remaining labels.
+///
+/// `state.timerRange` is a **wall-clock** range anchored to the current rate, so
+/// while playing the bar and the countdown are live SwiftUI timer views at ANY
+/// speed and cost zero pushes. It is `nil` while paused, which selects the
+/// static rendering below.
 private struct PlaybackProgressRow: View {
     let state: PlaybackActivityAttributes.ContentState
 
     var body: some View {
-        if let range = state.timerRange {
+        if state.duration > 0 {
             VStack(spacing: 3) {
-                if state.isPaused {
-                    ProgressView(value: state.elapsed(at: .now), total: state.duration)
-                        .progressViewStyle(.linear)
-                        .tint(.white.opacity(0.9))
-                } else {
-                    ProgressView(timerInterval: range, countsDown: false) {
-                        EmptyView()
-                    } currentValueLabel: {
-                        EmptyView()
-                    }
-                    .progressViewStyle(.linear)
-                    .tint(.white.opacity(0.9))
-                }
+                bar
                 HStack {
-                    elapsedLabel(range)
+                    leadingLabel
                     Spacer(minLength: 8)
-                    remainingLabel(range)
+                    trailingLabel
                 }
                 .font(.system(size: 11, weight: .medium).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.6))
@@ -121,41 +123,70 @@ private struct PlaybackProgressRow: View {
     }
 
     @ViewBuilder
-    private func elapsedLabel(_ range: ClosedRange<Date>) -> some View {
-        if state.isPaused {
-            Text(playbackClock(state.elapsed(at: .now)))
+    private var bar: some View {
+        if let range = state.timerRange {
+            ProgressView(timerInterval: range, countsDown: false) {
+                EmptyView()
+            } currentValueLabel: {
+                EmptyView()
+            }
+            .progressViewStyle(.linear)
+            .tint(.white.opacity(0.9))
         } else {
-            Text(timerInterval: range, countsDown: false)
+            ProgressView(value: state.progressFraction(at: .now))
+                .progressViewStyle(.linear)
+                .tint(.white.opacity(0.9))
         }
     }
 
+    /// Elapsed, live, while playing at 1×. **Off-speed swaps in a rate badge**:
+    /// the only live timer SwiftUI offers counts wall-clock, which at 2× is not
+    /// the media playhead — showing one there would simply be a wrong number.
     @ViewBuilder
-    private func remainingLabel(_ range: ClosedRange<Date>) -> some View {
-        if state.isPaused {
-            Text("-" + playbackClock(max(0, state.duration - state.elapsed(at: .now))))
+    private var leadingLabel: some View {
+        if state.isOffSpeed {
+            Text(rateLabel(state.rate)).fontWeight(.bold)
+        } else if let range = state.timerRange {
+            Text(timerInterval: range, countsDown: false)
         } else {
+            Text(playbackClock(state.elapsed(at: .now)))
+        }
+    }
+
+    /// Time until the media ends. Correct at every rate — the range is anchored
+    /// in wall-clock, so at 2× it counts down twice as fast, which is exactly
+    /// how much longer the user actually has to wait.
+    @ViewBuilder
+    private var trailingLabel: some View {
+        if let range = state.timerRange {
             Text(timerInterval: range, countsDown: true)
+        } else {
+            Text("-" + playbackClock(max(0, state.duration - state.elapsed(at: .now))))
         }
     }
 }
 
-/// Compact/minimal Dynamic Island trailing slot: remaining time, or the state
+/// Compact/minimal Dynamic Island trailing slot: time remaining, or the state
 /// glyph when the runtime is unknown.
 private struct PlaybackRemainingPill: View {
     let state: PlaybackActivityAttributes.ContentState
 
     var body: some View {
-        if let range = state.timerRange {
+        if state.duration > 0 {
             Group {
-                if state.isPaused {
-                    Text(playbackClock(max(0, state.duration - state.elapsed(at: .now))))
-                } else {
+                if let range = state.timerRange {
                     Text(timerInterval: range, countsDown: true)
+                } else {
+                    Text(playbackClock(max(0, state.duration - state.elapsed(at: .now))))
                 }
             }
             .font(.system(size: 13, weight: .semibold).monospacedDigit())
+            .lineLimit(1)
+            // Wide enough for "1:23:45": a film with over an hour left was
+            // truncated at 52pt. `minimumScaleFactor` absorbs the rest.
+            .minimumScaleFactor(0.7)
             .multilineTextAlignment(.trailing)
-            .frame(maxWidth: 52)
+            .frame(maxWidth: 66)
         } else {
             Image(systemName: state.isPaused ? "pause.fill" : "play.fill")
                 .font(.system(size: 12, weight: .bold))
