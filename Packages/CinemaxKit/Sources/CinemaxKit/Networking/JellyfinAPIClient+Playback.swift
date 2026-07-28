@@ -440,11 +440,13 @@ extension JellyfinAPIClient {
         // short-TTL getItem entry (and the resume list) so the detail screen's
         // immediate post-dismiss reload — tvOS reloads synchronously on dismiss —
         // paints the fresh resume bar instead of the pre-playback position. Also
-        // drop the cached episode lists so a season's per-episode progress bar
-        // reflects the just-watched episode.
+        // drop every userData-bearing series cache so a season's per-episode
+        // progress bar reflects the just-watched episode and the detail screen's
+        // post-playback refresh re-resolves the next episode instead of
+        // re-serving the one that just finished.
         cache.invalidate(prefix: "item-\(itemId)-")
         cache.invalidate(prefix: "resume-")
-        cache.invalidate(prefix: "episodes-")
+        for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
     }
 
     /// Compact, single-tag diagnostic for the playback decision.

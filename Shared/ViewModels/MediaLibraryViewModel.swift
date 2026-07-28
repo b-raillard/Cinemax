@@ -73,6 +73,16 @@ final class MediaLibraryViewModel {
     /// this one) and — because the cancellation was misread as a failure — left
     /// the tab stuck on a blocking error screen.
     private var loadTask: Task<Void, Never>?
+    /// The sort/filter state whose genre-row fan-out is already reflected in
+    /// `itemsByGenre`. The browse view drives `reloadGenreItems` from a
+    /// `.task(id: sortFilter)`, and `.task(id:)` fires on every *attach* — not
+    /// only when the id changes — so returning from the filtered grid, a tvOS
+    /// hosting-controller recreation after a menu edit, or a browse↔grid toggle
+    /// each re-ran the whole `genreLoadLimit` fan-out for byte-identical
+    /// results. Equality-guard idiom, same as `MenuConfigStore
+    /// .refreshAvailableViews`. Stamped only after a clean pass, so a failed
+    /// fan-out never latches it and a retry can always re-run.
+    private var appliedGenreSortFilter: LibrarySortFilterState?
 
     init(itemType: BaseItemKind?, parentId: String? = nil) {
         self.itemType = itemType
@@ -113,6 +123,14 @@ final class MediaLibraryViewModel {
         inFlight?.cancel()
         await inFlight?.value
         loadTask = nil
+
+        // Every explicit refresh funnels through here (pull-to-refresh, Retry,
+        // and both `.cinemaxShouldRefreshCatalogue` / `.cinemaxItemUserDataChanged`
+        // tiers), and each one must re-fetch even when the sort/filter state is
+        // unchanged. `performLoad` calls `fetchGenreItems` directly rather than
+        // through the guarded `reloadGenreItems`, so it already bypasses the
+        // guard — clearing the stamp here keeps that explicit.
+        appliedGenreSortFilter = nil
 
         let succeeded = await performLoad(using: appState, loc: loc)
         if succeeded { hasLoaded = true }
@@ -240,10 +258,20 @@ final class MediaLibraryViewModel {
                 }
             }
         }
+        // Reached only when every chunk completed without throwing (a failure or
+        // cancellation propagates out above), so the stamp always describes rows
+        // that actually landed.
+        appliedGenreSortFilter = snapshot
     }
 
+    /// Re-runs the genre-row fan-out for the current sort state. Driven by the
+    /// browse view's `.task(id: sortFilter)`, which re-fires on every attach —
+    /// so this no-ops when the fan-out already ran for this exact state. The
+    /// explicit refresh paths don't come through here: they go through
+    /// `reload(using:)` → `performLoad` → `fetchGenreItems`, which is ungated.
     func reloadGenreItems(using appState: AppState) async {
         guard !genres.isEmpty, let userId = appState.currentUserId else { return }
+        guard appliedGenreSortFilter != sortFilter else { return }
         try? await fetchGenreItems(using: appState, userId: userId, genres: genres)
     }
 

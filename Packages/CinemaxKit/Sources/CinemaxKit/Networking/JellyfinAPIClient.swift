@@ -49,6 +49,21 @@ public final class JellyfinAPIClient: Sendable {
     nonisolated(unsafe) private var _onUnauthorized: (@Sendable () -> Void)?
     internal let cache = APICache()
 
+    /// Every short-TTL cache key whose payload carries per-item **userData**
+    /// (watched marks, resume positions, the series' next-up pointer). All three
+    /// must be swept together by every userData mutator — `markItemPlayed`,
+    /// `markItemUnplayed` (`+Library`) and `reportPlaybackStopped` (`+Playback`)
+    /// — because a single toggle cascades across all of them: marking a series
+    /// played flips every episode's watched mark, changes each season's progress,
+    /// AND advances next-up. Declared once here rather than repeated as literals
+    /// at each site so a new cached userData-bearing endpoint is added in exactly
+    /// one place and can't be half-wired. `CinemaxKitTests.APICacheTests` asserts
+    /// the sweep of this list against the live key shapes.
+    ///
+    /// Adding an entry means adding a cache whose key uses that prefix; removing
+    /// one means that payload is no longer cached (or no longer userData-bearing).
+    internal static let userDataCachePrefixes: [String] = ["episodes-", "seasons-", "nextup-"]
+
     public init() {}
 
     internal func getClient() -> JellyfinClient? {

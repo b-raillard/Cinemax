@@ -244,10 +244,20 @@ extension JellyfinAPIClient {
     }
 
     public func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto] {
+        // Short-TTL cache mirroring `getEpisodes`: every series-detail open
+        // fetches the season list, and re-opening the same series (or bouncing
+        // in and out of the player) re-fetches it seconds later. A season's
+        // userData carries its watched/progress state, so this key rides the
+        // same invalidation as `episodes-` — see `markItemPlayed` /
+        // `markItemUnplayed` / `reportPlaybackStopped`.
+        let cacheKey = "seasons-\(seriesId)-\(userId)"
+        if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetSeasonsParameters(userID: userId, enableUserData: true)
         let response = try await client.send(Paths.getSeasons(seriesID: seriesId, parameters: params))
-        return response.value.items ?? []
+        let items = response.value.items ?? []
+        cache.set(cacheKey, value: items, ttl: 10)
+        return items
     }
 
     public func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto] {
@@ -270,15 +280,33 @@ extension JellyfinAPIClient {
     }
 
     public func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
-        guard let client = getClient() else { throw JellyfinError.notConnected }
-        let params = Paths.GetNextUpParameters(
-            userID: userId,
-            limit: 1,
-            seriesID: seriesId,
-            enableUserData: true
-        )
-        let response = try await client.send(Paths.getNextUp(parameters: params))
-        guard let next = response.value.items?.first else { return nil }
+        // Short-TTL cache mirroring `getEpisodes`: a series-detail open fires
+        // this alongside `getItem`/`getSeasons`, and the tvOS post-playback
+        // refresh re-fires it seconds later. The raw response is cached as an
+        // array (not the resolved optional) so a "nothing next" answer caches as
+        // an empty array rather than a double-optional, and the rating filter is
+        // applied on the way out so a mid-session content-age change is always
+        // honored. The payload is the next episode's userData, so this key rides
+        // the same invalidation as `episodes-`. Deliberately scoped to the
+        // per-series overload — the global `getNextUpEpisodes` rail stays
+        // uncached.
+        let cacheKey = "nextup-\(seriesId)-\(userId)"
+        let items: [BaseItemDto]
+        if let cached: [BaseItemDto] = cache.get(cacheKey) {
+            items = cached
+        } else {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            let params = Paths.GetNextUpParameters(
+                userID: userId,
+                limit: 1,
+                seriesID: seriesId,
+                enableUserData: true
+            )
+            let response = try await client.send(Paths.getNextUp(parameters: params))
+            items = response.value.items ?? []
+            cache.set(cacheKey, value: items, ttl: 10)
+        }
+        guard let next = items.first else { return nil }
         return ContentRatingClassifier.passes(rating: next.officialRating, maxAge: getMaxContentAge()) ? next : nil
     }
 
@@ -308,12 +336,13 @@ extension JellyfinAPIClient {
         // Only the resume list depends on play state — leave genres / latest /
         // serverInfo caches intact so the next navigation doesn't refetch them.
         // Also drop this item's short-TTL getItem entry so the detail screen
-        // reflects the new play state immediately rather than after 10s, and the
-        // cached episode lists (a series-level toggle cascades to every episode's
-        // watched mark; the mutator only knows the item id, so drop the lot).
+        // reflects the new play state immediately rather than after 10s, and every
+        // userData-bearing series cache (a series-level toggle cascades to every
+        // episode's watched mark, and clearing one moves the series' next-up
+        // pointer; the mutator only knows the item id, so drop the lot).
         cache.invalidate(prefix: "resume-")
         cache.invalidate(prefix: "item-\(itemId)-")
-        cache.invalidate(prefix: "episodes-")
+        for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
     }
 
     public func markItemPlayed(itemId: String, userId: String) async throws {
@@ -322,11 +351,13 @@ extension JellyfinAPIClient {
             _ = try await client.send(Paths.markPlayedItem(itemID: itemId, userID: userId))
             // Marking watched pulls the item out of Continue Watching — drop the
             // resume list so the row catches up, plus this item's short-TTL
-            // getItem entry and the cached episode lists (a series-level toggle
-            // cascades to every episode's watched mark). Other caches stay intact.
+            // getItem entry and every userData-bearing series cache (a
+            // series-level toggle cascades to every episode's watched mark, and
+            // marking one played advances the series' next-up pointer). Other
+            // caches stay intact.
             cache.invalidate(prefix: "resume-")
             cache.invalidate(prefix: "item-\(itemId)-")
-            cache.invalidate(prefix: "episodes-")
+            for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
         } catch {
             notifyIfUnauthorized(error)
             throw error
