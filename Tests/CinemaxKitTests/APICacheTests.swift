@@ -50,6 +50,59 @@ struct APICacheTests {
         #expect(library == ["movie"])
     }
 
+    /// Locks the cache-key contract the userData mutators depend on. Every
+    /// series-scoped payload carrying per-item userData is short-TTL cached —
+    /// `episodes-<seasonId>-<userId>`, `seasons-<seriesId>-<userId>`,
+    /// `nextup-<seriesId>-<userId>` — and `markItemPlayed` / `markItemUnplayed`
+    /// / `reportPlaybackStopped` must drop ALL THREE prefixes, or a watched
+    /// toggle re-serves stale checkmarks / a stale next-up episode for up to
+    /// 10s. The unrelated long-TTL caches must survive the same sweep.
+    @Test("The userData invalidation prefixes drop every series-scoped payload and nothing else")
+    func userDataPrefixesDropSeriesScopedPayloads() {
+        let cache = APICache()
+        cache.set("episodes-season1-user1", value: ["ep1", "ep2"], ttl: 10)
+        cache.set("seasons-series1-user1", value: ["s1", "s2"], ttl: 10)
+        cache.set("nextup-series1-user1", value: ["ep3"], ttl: 10)
+        // Unrelated caches the mutators deliberately leave alone.
+        cache.set("genres-user1-movie", value: ["Action"], ttl: 300)
+        cache.set("similar-item1-user1-12", value: ["other"], ttl: 300)
+
+        for prefix in ["episodes-", "seasons-", "nextup-"] {
+            cache.invalidate(prefix: prefix)
+        }
+
+        let episodes: [String]? = cache.get("episodes-season1-user1")
+        let seasons: [String]? = cache.get("seasons-series1-user1")
+        let nextUp: [String]? = cache.get("nextup-series1-user1")
+        let genres: [String]? = cache.get("genres-user1-movie")
+        let similar: [String]? = cache.get("similar-item1-user1-12")
+        #expect(episodes == nil)
+        #expect(seasons == nil)
+        #expect(nextUp == nil)
+        #expect(genres == ["Action"])
+        #expect(similar == ["other"])
+    }
+
+    /// The three series-scoped prefixes must not overlap each other: dropping
+    /// one may never take another's entries with it (a `nextup-` sweep that also
+    /// hit `seasons-` would silently widen every invalidation site).
+    @Test("Series-scoped prefixes are mutually non-overlapping")
+    func seriesScopedPrefixesDoNotOverlap() {
+        let cache = APICache()
+        cache.set("episodes-season1-user1", value: 1, ttl: 10)
+        cache.set("seasons-series1-user1", value: 2, ttl: 10)
+        cache.set("nextup-series1-user1", value: 3, ttl: 10)
+
+        cache.invalidate(prefix: "seasons-")
+
+        let episodes: Int? = cache.get("episodes-season1-user1")
+        let seasons: Int? = cache.get("seasons-series1-user1")
+        let nextUp: Int? = cache.get("nextup-series1-user1")
+        #expect(episodes == 1)
+        #expect(seasons == nil)
+        #expect(nextUp == 3)
+    }
+
     @Test("clear() removes all entries")
     func clearRemovesAll() {
         let cache = APICache()
