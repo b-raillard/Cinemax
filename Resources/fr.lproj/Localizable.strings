@@ -262,7 +262,6 @@
 "menu.maxReached" = "Maximum %d onglets actifs.";
 "menu.library.empty" = "Aucune bibliothèque vidéo disponible";
 "menu.library.empty.subtitle" = "Vérifiez votre connexion ou demandez à votre administrateur de partager une bibliothèque.";
-"menu.library.error" = "Impossible de charger les bibliothèques.";
 "settings.motionEffects" = "Effets de mouvement";
 "settings.fontSize" = "Taille du texte";
 "settings.4kRendering" = "Rendu 4K";

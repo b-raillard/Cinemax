@@ -660,7 +660,6 @@
 "menu.maxReached" = "Maximum %d enabled tabs.";
 "menu.library.empty" = "No video libraries available";
 "menu.library.empty.subtitle" = "Check your connection or ask your administrator to share a library.";
-"menu.library.error" = "Couldn't load libraries.";
 "settings.motionEffects" = "Motion Effects";
 "settings.fontSize" = "Text Size";
 "settings.4kRendering" = "4K UI Rendering";
