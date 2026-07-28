@@ -910,3 +910,5 @@
 "server.alreadyAdded" = "That server is already in your list.";
 "server.cancelAdd" = "Cancel";
 "login.myServers" = "My servers";
+"servers.checking" = "Checking…";
+"servers.alreadyCurrent" = "You're already connected to %@";

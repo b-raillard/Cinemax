@@ -12,6 +12,7 @@ struct ServerSetupScreen: View {
     @State private var viewModel = ServerSetupViewModel()
     @State private var showDiscoverySheet = false
     @State private var showHelpSheet = false
+    @State private var showServersSheet = false
     @State private var easterEggTaps: Int = 0
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -37,6 +38,7 @@ struct ServerSetupScreen: View {
         .fullScreenCover(isPresented: $showHelpSheet) {
             ServerHelpSheet()
         }
+        .fullScreenCover(isPresented: $showServersSheet) { serversModal }
         #else
         .sheet(isPresented: $showDiscoverySheet) {
             ServerDiscoverySheet { address in
@@ -46,6 +48,7 @@ struct ServerSetupScreen: View {
         .sheet(isPresented: $showHelpSheet) {
             ServerHelpSheet()
         }
+        .sheet(isPresented: $showServersSheet) { serversModal }
         #endif
     }
 
@@ -131,6 +134,9 @@ struct ServerSetupScreen: View {
                     if appState.isAddingServer {
                         helperDivider(height: 20)
                         cancelAddLink
+                    } else if showMyServersLink {
+                        helperDivider(height: 20)
+                        myServersLink
                     }
                 }
                 .padding(.bottom, CinemaSpacing.spacing6)
@@ -242,6 +248,8 @@ struct ServerSetupScreen: View {
                     // Second row so the three links never crowd a compact width.
                     if appState.isAddingServer {
                         cancelAddLink
+                    } else if showMyServersLink {
+                        myServersLink
                     }
                 }
                 .padding(.horizontal, CinemaSpacing.spacing4)
@@ -349,6 +357,29 @@ struct ServerSetupScreen: View {
         helperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
             Task { await appState.restorePreviousServer() }
         }
+    }
+
+    /// Reaching this screen with servers already registered means either a
+    /// logout with nothing to hop to, or a "change server" from `LoginScreen`.
+    /// Without this the only way back to a known server is retyping its URL —
+    /// and the dedup gate refuses one that is still signed in, which would be a
+    /// dead end. `ServersScreen` renders fine unauthenticated.
+    private var showMyServersLink: Bool {
+        !appState.servers.isEmpty
+    }
+
+    private var myServersLink: some View {
+        helperLink(icon: "server.rack", title: loc.localized("login.myServers")) {
+            showServersSheet = true
+        }
+    }
+
+    private var serversModal: some View {
+        ServersScreen()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
     }
 
     private func helperDivider(height: CGFloat) -> some View {

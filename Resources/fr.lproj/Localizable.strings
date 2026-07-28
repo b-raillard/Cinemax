@@ -912,3 +912,5 @@
 "server.alreadyAdded" = "Ce serveur figure déjà dans votre liste.";
 "server.cancelAdd" = "Annuler l'ajout";
 "login.myServers" = "Mes serveurs";
+"servers.checking" = "Vérification…";
+"servers.alreadyCurrent" = "Vous êtes déjà connecté à %@";

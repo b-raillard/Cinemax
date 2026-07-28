@@ -62,6 +62,19 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
         return !accessToken.isEmpty
     }
 
+    /// `true` when the entry can actually be *applied* as the active server.
+    ///
+    /// Mirrors `AppState.applyActiveServer`'s guard exactly: a session needs
+    /// BOTH a token and a user id. A token-without-user entry is reachable (a
+    /// migrated install whose `access_token` survived but whose `user_session`
+    /// didn't) and the app routes it to a fresh login instead of applying it —
+    /// so any UI that asks "is this server already signed in?" must ask THIS,
+    /// not `hasSession`, or it will refuse an action the app can't complete.
+    public var hasUsableSession: Bool {
+        guard hasSession, let userId else { return false }
+        return !userId.isEmpty
+    }
+
     /// Pure builder for the one-shot single-server → registry migration.
     ///
     /// Split out of `KeychainService.migrateToMultiServerIfNeeded()` so the

@@ -314,11 +314,18 @@ struct ServersScreen: View {
         Circle()
             .fill(statusColor(status))
             .frame(width: dotSize, height: dotSize)
-            .accessibilityLabel(
-                status == .online
-                    ? loc.localized("servers.online")
-                    : loc.localized("servers.offlineBadge")
-            )
+            // Three states, not two: while the probe is in flight (or was never
+            // run) the answer is unknown, and announcing "Offline" there made
+            // every row lie to VoiceOver on first paint.
+            .accessibilityLabel(statusLabel(status))
+    }
+
+    private func statusLabel(_ status: ServersViewModel.PingStatus?) -> String {
+        switch status {
+        case .online:  loc.localized("servers.online")
+        case .offline: loc.localized("servers.offlineBadge")
+        default:       loc.localized("servers.checking")
+        }
     }
 
     private func statusColor(_ status: ServersViewModel.PingStatus?) -> Color {
@@ -346,6 +353,11 @@ struct ServersScreen: View {
     /// Accent wash marking the server the app is actually on. Deliberately a
     /// tonal shift rather than a stroke — the design system's border exception
     /// list is closed (see `docs/design-system/conventions.md`).
+    ///
+    /// Applied as a `.background` UNDER the row content and ABOVE the card's
+    /// own surface (`.glassPanel` / `tvSettingsFocusable`, both of which are
+    /// applied after it). As an `.overlay` it tinted the text itself, costing
+    /// contrast, and it stacked on top of the tvOS focus treatment.
     @ViewBuilder
     private func activeWash(_ entry: ServerEntry) -> some View {
         if isActive(entry) {
@@ -437,8 +449,8 @@ struct ServersScreen: View {
             rowContent(entry)
                 .padding(CinemaSpacing.spacing4)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background { activeWash(entry) }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-                .overlay { activeWash(entry) }
                 .contentShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
         }
         .buttonStyle(.plain)
@@ -543,19 +555,27 @@ struct ServersScreen: View {
     private func tvRow(_ entry: ServerEntry) -> some View {
         let active = isActive(entry)
         Button {
-            guard !active, switchingId == nil else { return }
+            // The active card is focusable but not a switch target. Say so
+            // rather than swallowing the press: a select that does nothing at
+            // all reads as a broken row on tvOS, where there is no hover or
+            // disabled styling to explain it.
+            guard !active else {
+                toasts.info(loc.localized("servers.alreadyCurrent", entry.name))
+                return
+            }
+            guard switchingId == nil else { return }
             pendingSwitchId = entry.id
         } label: {
             rowContent(entry)
                 .padding(CinemaSpacing.spacing4)
                 .frame(maxWidth: .infinity, minHeight: 110)
+                .background { activeWash(entry) }
                 .tvSettingsFocusable(
                     isFocused: focusedItem == .server(entry.id),
                     accent: themeManager.accent,
                     animated: motionEffects,
                     colorScheme: themeManager.darkModeEnabled ? .dark : .light
                 )
-                .overlay { activeWash(entry) }
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()

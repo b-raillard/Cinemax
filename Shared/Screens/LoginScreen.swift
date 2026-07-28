@@ -63,14 +63,21 @@ struct LoginScreen: View {
             .environment(toasts)
     }
 
-    /// Escape hatch under the form. Three shapes, in priority order:
-    /// 1. an add / re-login is in flight (`pendingRollbackServer` holds the
-    ///    server we came from) → go back to it, fully signed in;
-    /// 2. otherwise, several registered servers → open the list right here;
-    /// 3. otherwise, the pre-multi-server behavior → back to `ServerSetupScreen`.
+    /// Escape hatch under the form. Four shapes, in priority order:
+    /// 1. an ADD is in flight → "cancel adding", which is what the action does
+    ///    (labelling it "change server" described the wrong operation and hid
+    ///    the only way out of the add);
+    /// 2. a re-login is in flight (`pendingRollbackServer` holds the server we
+    ///    came from) → go back to it, fully signed in;
+    /// 3. otherwise, several registered servers → open the list right here;
+    /// 4. otherwise, the pre-multi-server behavior → back to `ServerSetupScreen`.
     @ViewBuilder
     private var serverEscapeHatch: some View {
-        if appState.pendingRollbackServer != nil {
+        if appState.isAddingServer {
+            helperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
+                Task { await appState.restorePreviousServer() }
+            }
+        } else if appState.pendingRollbackServer != nil {
             helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
                 Task { await appState.restorePreviousServer() }
             }
