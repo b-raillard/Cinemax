@@ -336,15 +336,13 @@ extension JellyfinAPIClient {
         // Only the resume list depends on play state — leave genres / latest /
         // serverInfo caches intact so the next navigation doesn't refetch them.
         // Also drop this item's short-TTL getItem entry so the detail screen
-        // reflects the new play state immediately rather than after 10s, and the
-        // cached episode / season / next-up lists (a series-level toggle cascades
-        // to every episode's watched mark, and clearing one moves the series'
-        // next-up pointer; the mutator only knows the item id, so drop the lot).
+        // reflects the new play state immediately rather than after 10s, and every
+        // userData-bearing series cache (a series-level toggle cascades to every
+        // episode's watched mark, and clearing one moves the series' next-up
+        // pointer; the mutator only knows the item id, so drop the lot).
         cache.invalidate(prefix: "resume-")
         cache.invalidate(prefix: "item-\(itemId)-")
-        cache.invalidate(prefix: "episodes-")
-        cache.invalidate(prefix: "seasons-")
-        cache.invalidate(prefix: "nextup-")
+        for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
     }
 
     public func markItemPlayed(itemId: String, userId: String) async throws {
@@ -353,15 +351,13 @@ extension JellyfinAPIClient {
             _ = try await client.send(Paths.markPlayedItem(itemID: itemId, userID: userId))
             // Marking watched pulls the item out of Continue Watching — drop the
             // resume list so the row catches up, plus this item's short-TTL
-            // getItem entry and the cached episode / season / next-up lists (a
+            // getItem entry and every userData-bearing series cache (a
             // series-level toggle cascades to every episode's watched mark, and
             // marking one played advances the series' next-up pointer). Other
             // caches stay intact.
             cache.invalidate(prefix: "resume-")
             cache.invalidate(prefix: "item-\(itemId)-")
-            cache.invalidate(prefix: "episodes-")
-            cache.invalidate(prefix: "seasons-")
-            cache.invalidate(prefix: "nextup-")
+            for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
         } catch {
             notifyIfUnauthorized(error)
             throw error
