@@ -146,7 +146,8 @@ struct PosterRailProvider: TimelineProvider {
         var posters: [PosterRailEntry.Poster] = []
         for item in items {
             let data = await JellyfinLite.fetchImage(
-                JellyfinLite.posterURL(session: session, itemId: item.posterItemId, maxWidth: 300)
+                JellyfinLite.posterURL(session: session, itemId: item.posterItemId, maxWidth: 300),
+                token: session.accessToken
             )
             posters.append(.init(id: item.id, title: item.title, subtitle: item.subtitle, imageData: data))
         }
@@ -360,5 +361,10 @@ struct CinemaxWidgetBundle: WidgetBundle {
         CinemaxFavoritesWidget()
         CinemaxNextUpWidget()
         CinemaxRecentlyAddedWidget()
+        // Playback Live Activity (Lock Screen + Dynamic Island) — views and
+        // configuration live in PlaybackLiveActivityWidget.swift.
+        #if canImport(ActivityKit)
+        CinemaxPlaybackLiveActivity()
+        #endif
     }
 }

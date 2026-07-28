@@ -117,11 +117,13 @@ extension MenuSettingsScreen {
             .buttonStyle(.borderless)
             .disabled(store.isLoadingViews)
 
-            if store.lastFetchError != nil {
+            // `lastFetchError` holds the raw `Error`; map it here — never render
+            // an error description verbatim (CLAUDE.md localization RULE).
+            if let error = store.lastFetchError {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(CinemaColor.error)
-                    Text(loc.localized("menu.library.error"))
+                    Text(loc.userFacingMessage(for: error))
                         .font(CinemaFont.label(.medium))
                         .foregroundStyle(CinemaColor.error)
                 }

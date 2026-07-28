@@ -334,6 +334,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var reporter: PlaybackReporter?
     private let remoteCommands: RemoteCommandController
     private let nowPlaying: NowPlayingInfoController
+    /// iOS Lock Screen / Dynamic Island Live Activity. No-op stub on tvOS
+    /// (no ActivityKit) so the call sites below stay platform-free.
+    private let liveActivity: PlaybackLiveActivityController
     private var progressTimer: Timer?
     private var hideControlsWorkItem: DispatchWorkItem?
     private var didSeekToStart = false
@@ -472,6 +475,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             apiClient: apiClient, userId: userId,
             imageBuilder: imageBuilder, authToken: info.authToken
         )
+        self.liveActivity = PlaybackLiveActivityController(apiClient: apiClient, userId: userId)
         super.init(nibName: nil, bundle: nil)
         navTarget = { [weak self] ref in self?.navigateToEpisode(ref) }
         playPauseTarget = { [weak self] in self?.handleRemotePlayPause() }
@@ -517,6 +521,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         progressTimer = nil
         remoteCommands.detach()
         nowPlaying.detach()
+        liveActivity.detach()
         hideControlsWorkItem?.cancel()
         pendingTapWork?.cancel()
         cancelPendingSeekCommit()
@@ -562,6 +567,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// True only while actively playing (matches VLCKit's `isPlaying`, which
     /// was false during pause/stop/buffering).
     private var enginePlaying: Bool { player.state == .playing }
+
+    /// Real engine speed for the Live Activity: `0` while paused, otherwise
+    /// libVLC's current rate (the 0.5×–2× picker, or the iOS hold-to-boost).
+    /// The Now Playing info center wants a plain 0/1 and keeps its own literal.
+    private var liveActivityRate: Double { enginePlaying ? Double(player.rate) : 0 }
 
     private func engineSeek(ms: Int32) {
         let target = max(0, ms)
@@ -764,6 +774,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         )
         // Title / artwork / S×E× on the Lock Screen widget.
         nowPlaying.attach(itemId: itemId, title: titleText, durationSeconds: nil)
+        // Lock Screen / Dynamic Island Live Activity (iOS; no-op on tvOS).
+        // `startTime` seeds the resume position so the banner opens on the right
+        // playhead instead of anchoring at 0 and self-correcting a tick later.
+        liveActivity.attach(
+            itemId: itemId, title: titleText, subtitle: nil,
+            durationSeconds: nil, startAtSeconds: startTime
+        )
         reporter = PlaybackReporter(
             apiClient: apiClient,
             userId: userId,
@@ -796,6 +813,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let now = Double(currentMs) / 1000.0
         let dur: Double? = lengthMs > 0 ? Double(lengthMs) / 1000 : nil
         nowPlaying.update(elapsed: now, duration: dur, rate: enginePlaying ? 1.0 : 0.0)
+        // Same tick, no second timer: the controller itself decides whether this
+        // sample is a discontinuity worth an ActivityKit push. It gets the REAL
+        // rate (not 0/1) — at 2× the widget's client-side timer has to advance
+        // twice as fast, and the throttle's projection has to expect that.
+        liveActivity.update(elapsed: now, duration: dur, rate: liveActivityRate)
         updateSkipButton(currentTime: now)
         // Second chance to close a settling seek: if VLC went quiet on time
         // updates the heartbeat's own sampling still sees the playhead move.
@@ -2531,6 +2553,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 hasNavigator: true
             )
             self.nowPlaying.attach(itemId: ref.id, title: ref.title, durationSeconds: nil)
+            // Episode swap = end the old activity + start a fresh one (the
+            // attributes an activity carries are frozen for its lifetime).
+            // `attach` detaches first, and its generation guard drops a lookup
+            // still in flight from the episode we just left.
+            self.liveActivity.attach(
+                itemId: ref.id, title: ref.title, subtitle: nil,
+                durationSeconds: nil, startAtSeconds: nil
+            )
             self.showControls()
             self.scheduleHideControls()
         }
@@ -2902,6 +2932,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             duration: dur,
             rate: playing ? 1.0 : 0.0
         )
+        // A play/pause flip always crosses the Live Activity throttle, so this
+        // is the push that swaps the widget between a running timer and a
+        // frozen elapsed. Read the real rate off the engine — `.playing` also
+        // re-applies the user's speed just above, and the banner must re-anchor
+        // to it.
+        liveActivity.update(
+            elapsed: Double(currentMs) / 1000,
+            duration: dur,
+            rate: playing ? Double(player.rate) : 0
+        )
     }
 
     private func handlePlaybackEnded() {
@@ -2915,6 +2955,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
         reporter?.reportStop()
+        // Nothing is playing any more. Without this the end-of-series overlay
+        // path (which keeps the player on screen) would leave a banner reading
+        // "paused" at the very end of the episode until the user dismisses.
+        liveActivity.detach()
         if episodeNavigator != nil {
             showEndOfSeriesOverlay()
         } else {

@@ -126,12 +126,14 @@ extension MenuSettingsScreen {
         // No toast on success here — the user explicitly triggered the
         // refresh, the row's loading spinner + subtitle already convey
         // status, and a confirmation pill on every tap would be noisy.
-        // Errors still surface in the row's subtitle via `lastFetchError`.
+        // Errors still surface in the row's subtitle via `lastFetchError` —
+        // mapped through `userFacingMessage`, never rendered verbatim
+        // (CLAUDE.md localization RULE).
         tvMenuActionRow(
             id: "menu.refreshViews",
             icon: store.isLoadingViews ? "arrow.triangle.2.circlepath" : "arrow.clockwise",
             label: loc.localized("menu.refreshViews"),
-            subtitle: store.lastFetchError != nil ? loc.localized("menu.library.error") : nil,
+            subtitle: store.lastFetchError.map { loc.userFacingMessage(for: $0) },
             action: { Task { await store.refreshAvailableViews() } }
         )
         .disabled(store.isLoadingViews)

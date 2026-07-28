@@ -46,6 +46,8 @@
 	<string>Cinemax uses the microphone for voice search.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Cinemax uses speech recognition for voice search to find movies and shows.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

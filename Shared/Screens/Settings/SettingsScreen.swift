@@ -182,6 +182,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
+    @AppStorage(SettingsKey.playbackLiveActivity) var playbackLiveActivity: Bool = SettingsKey.Default.playbackLiveActivity
     @AppStorage(SettingsKey.homeShowContinueWatching) var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowNextUp) var showNextUp: Bool = SettingsKey.Default.homeShowNextUp
     @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
@@ -261,11 +262,17 @@ struct SettingsScreen: View {
     /// Playback toggles (4K rendering, auto-play next, native player). The
     /// sleep timer picker is a non-boolean row appended per platform.
     var playbackToggleRows: [SettingsToggleRow] {
-        [
+        var rows: [SettingsToggleRow] = [
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
             .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer)
         ]
+        // Live Activities are an iOS surface (Lock Screen + Dynamic Island);
+        // tvOS has no ActivityKit, so the row doesn't exist there.
+        #if os(iOS)
+        rows.append(.init(id: "playbackLiveActivity", icon: "platter.filled.top.iphone", label: loc.localized("settings.playback.liveActivity"), value: $playbackLiveActivity))
+        #endif
+        return rows
     }
 
     var homePageToggleRows: [SettingsToggleRow] {

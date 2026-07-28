@@ -819,6 +819,11 @@ struct AppNavigation: View {
             // downloads feature — purge the (potentially multi-GB) media tree
             // that no longer has any UI to clear it.
             Self.purgeLegacyDownloads()
+            // A crash / force-quit mid-playback leaves the playback Live
+            // Activity pinned to the Lock Screen with a timer that keeps
+            // running. Sweep any orphan at launch (the player also sweeps on
+            // every attach).
+            PlaybackLiveActivityController.endStaleActivities()
             #endif
             // Decide once, in the background, whether this server needs the
             // loopback stream proxy (dual-stack host with a black-holed IPv6
