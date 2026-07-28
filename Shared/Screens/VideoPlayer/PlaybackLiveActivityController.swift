@@ -304,13 +304,17 @@ final class PlaybackLiveActivityController {
     /// each call behind the previous one guarantees the widget observes the same
     /// order the player produced.
     ///
-    /// The closure is `@MainActor`-isolated on purpose: `Activity` is not
-    /// `Sendable`, so a plain `@Sendable` closure can't capture one. Keeping the
-    /// whole chain on the main actor is both correct and free (the awaits are
-    /// ActivityKit's own IPC, not work we're holding the actor for).
-    private func enqueue(_ operation: @escaping @MainActor () async -> Void) {
+    /// The parameter is `sending`, not `@MainActor`: `Activity` is not `Sendable`,
+    /// and CI's Xcode 26.5 region-isolation checker rejects capturing one into a
+    /// closure that escapes into a `Task` — even a main-actor-isolated one — with
+    /// "sending '…' risks causing data races" (local Xcode 26.2 doesn't; this is
+    /// the documented toolchain-divergence footgun). `sending` states the caller
+    /// hands the captured activity to the chain and never touches it again — which
+    /// every call site honours — so the transfer into the serialising `Task` is
+    /// provably race-free on both toolchains.
+    private func enqueue(_ operation: sending @escaping () async -> Void) {
         let previous = pushChain
-        pushChain = Task { @MainActor in
+        pushChain = Task {
             await previous?.value
             await operation()
         }
