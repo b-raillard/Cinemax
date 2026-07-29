@@ -196,7 +196,8 @@ extension JellyfinAPIClient {
                     subtitleTracks: subtitleTracks,
                     selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
                     selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
-                    authToken: nil // token already embedded in Jellyfin's HLS URL
+                    authToken: nil, // token already embedded in Jellyfin's HLS URL
+                    liveStreamId: mediaSource.liveStreamID
                 )
             }
         }
@@ -243,7 +244,8 @@ extension JellyfinAPIClient {
             selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
             selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
             authToken: token,
-            sourceContainer: mediaSource.container
+            sourceContainer: mediaSource.container,
+            liveStreamId: mediaSource.liveStreamID
         )
     }
 
@@ -446,10 +448,11 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.reportPlaybackProgress(body))
     }
 
-    public func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async {
+    public func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {
         guard let client = getClient() else { return }
         let body = PlaybackStopInfo(
             itemID: itemId,
+            liveStreamID: liveStreamId,
             mediaSourceID: mediaSourceId,
             playSessionID: playSessionId,
             positionTicks: positionTicks
@@ -466,6 +469,28 @@ extension JellyfinAPIClient {
         cache.invalidate(prefix: "item-\(itemId)-")
         cache.invalidate(prefix: "resume-")
         for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
+    }
+
+    /// Tears down the server's encoding job for this play session. `deviceID` is
+    /// resolved here rather than passed in — the caller (`PlaybackReporter`) has
+    /// no business knowing this device's identity.
+    public func stopEncoding(playSessionId: String) async {
+        guard let client = getClient() else { return }
+        _ = try? await client.send(
+            Paths.stopEncodingProcess(deviceID: deviceID, playSessionID: playSessionId)
+        )
+    }
+
+    /// Refreshes the server's activity clock for this play session, so it won't
+    /// reap an encoding job that's merely paused.
+    public func pingPlaybackSession(playSessionId: String) async {
+        guard let client = getClient() else { return }
+        _ = try? await client.send(Paths.pingPlaybackSession(playSessionID: playSessionId))
+    }
+
+    public func closeLiveStream(liveStreamId: String) async {
+        guard let client = getClient() else { return }
+        _ = try? await client.send(Paths.closeLiveStream(liveStreamID: liveStreamId))
     }
 
     /// Compact, single-tag diagnostic for the playback decision.

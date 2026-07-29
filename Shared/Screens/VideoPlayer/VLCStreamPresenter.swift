@@ -3075,6 +3075,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
         logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
+        releaseServerSessionAfterFailure()
         setLoading(false) // the error dialog now owns the screen
         let alert = UIAlertController(
             title: loc.localized("playback.error.title"),
@@ -3086,6 +3087,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         })
         present(alert, animated: true)
         errorAlert = alert
+    }
+
+    /// The PlaybackInfo negotiation succeeded but no playback will ever happen,
+    /// so nothing will send a stop report — this is the only chance to hand the
+    /// server's resources back. `stopEncoding` fires unconditionally: the engine
+    /// may have pulled enough segments for the server to have started a job
+    /// before failing.
+    private func releaseServerSessionAfterFailure() {
+        let client = apiClient
+        let liveStreamId = info.liveStreamId
+        let playSessionId = info.playSessionId
+        guard liveStreamId != nil || playSessionId != nil else { return }
+        Task.detached {
+            if let liveStreamId {
+                await client.closeLiveStream(liveStreamId: liveStreamId)
+            }
+            if let playSessionId {
+                await client.stopEncoding(playSessionId: playSessionId)
+            }
+        }
     }
 
     /// The open watchdog already surfaced the failure alert, but libVLC then

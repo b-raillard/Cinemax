@@ -732,6 +732,7 @@ final class NativeVideoPresenter {
     private func showPlaybackErrorAlert(error: Error?) {
         guard !isShowingErrorAlert, let vc = playerVC else { return }
         isShowingErrorAlert = true
+        releaseServerSessionAfterFailure()
 
         let message = errorMessage(for: error)
 
@@ -749,6 +750,27 @@ final class NativeVideoPresenter {
             }
         ))
         vc.present(alert, animated: true)
+    }
+
+    /// Reached only once `retryWithDirectURL` is exhausted: the PlaybackInfo
+    /// negotiation succeeded but no playback will happen, so no stop report will
+    /// ever be sent. Hand the server's resources back here instead.
+    /// `stopEncoding` fires unconditionally — enough of the stream may have been
+    /// pulled for the server to have started a job before failing.
+    private func releaseServerSessionAfterFailure() {
+        guard let info = playbackInfo else { return }
+        let client = apiClient
+        let liveStreamId = info.liveStreamId
+        let playSessionId = info.playSessionId
+        guard liveStreamId != nil || playSessionId != nil else { return }
+        Task.detached {
+            if let liveStreamId {
+                await client.closeLiveStream(liveStreamId: liveStreamId)
+            }
+            if let playSessionId {
+                await client.stopEncoding(playSessionId: playSessionId)
+            }
+        }
     }
 
     private func errorMessage(for error: Error?) -> String {
