@@ -28,6 +28,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedResumeItems: [BaseItemDto] = []
     var stubbedLatestItems: [BaseItemDto] = []
     var stubbedSearchResults: [BaseItemDto] = []
+    var stubbedPersonResults: [BaseItemDto] = []
     var stubbedItems: [BaseItemDto] = []
     var stubbedTotalCount = 0
     var stubbedGenres: [String] = []
@@ -41,6 +42,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// Called by `searchItems(userId:searchTerm:limit:)` when set, so tests can
     /// inject cancellation-sensitive delays. Falls back to `stubbedSearchResults`.
     var searchItemsHandler: (@Sendable (String) async throws -> [BaseItemDto])?
+
+    /// Called by `searchPersons(userId:searchTerm:limit:)` when set, so a test
+    /// can fail the person fetch independently of the title fetch. Falls back to
+    /// `stubbedPersonResults`.
+    var searchPersonsHandler: (@Sendable (String) async throws -> [BaseItemDto])?
 
     /// Called by `getItems(...)` when set, keyed on `startIndex`, so pagination
     /// tests can return a different page per call. Falls back to the flat
@@ -379,6 +385,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         }
         if shouldThrow { throw stubbedError }
         return stubbedSearchResults
+    }
+
+    private(set) var searchPersonsCallCount = 0
+    func searchPersons(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto] {
+        recordLock.withLock { searchPersonsCallCount += 1 }
+        if let handler = searchPersonsHandler {
+            return try await handler(searchTerm)
+        }
+        if shouldThrow { throw stubbedError }
+        return stubbedPersonResults
     }
 
     private(set) var getSeasonsCallCount = 0

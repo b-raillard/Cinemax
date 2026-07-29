@@ -408,6 +408,32 @@ extension JellyfinAPIClient {
         }
     }
 
+    /// Persons whose name matches `searchTerm`.
+    ///
+    /// Returns `BaseItemDto` — persons *are* Jellyfin items — so the same
+    /// scoring and image-URL machinery the title results use applies without
+    /// conversion. `/Search/Hints` would answer the same question with a
+    /// separate `SearchHint` model, forking the search pipeline for no gain.
+    ///
+    /// No rating filter: a person carries no official rating, and nothing about
+    /// a name or portrait reveals catalogue content. The filmography behind it
+    /// goes through `getPersonItems`, which is capped.
+    public func searchPersons(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto] {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            var params = Paths.GetPersonsParameters()
+            params.userID = userId
+            params.searchTerm = searchTerm
+            params.limit = limit
+            params.enableImages = true
+            let response = try await client.send(Paths.getPersons(parameters: params))
+            return response.value.items ?? []
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     // MARK: - Collections
 
     public func getCollections(containingItemId itemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] {

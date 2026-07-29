@@ -53,6 +53,78 @@ struct SearchViewModelTests {
         #expect(!vm.isSearching)
     }
 
+    // MARK: - Person row
+
+    @Test("Search in the All scope populates personResults")
+    func personsPopulatedInAllScope() async {
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
+        api.stubbedPersonResults = [makeItem(id: "p1", name: "Cillian Murphy")]
+        let vm = SearchViewModel()
+        vm.scope = .all
+        vm.searchText = "Cillian Murphy"
+
+        vm.search(using: makeAppState(api: api))
+        try? await Task.sleep(for: .milliseconds(700))
+
+        #expect(vm.personResults.map(\.id) == ["p1"])
+    }
+
+    /// A type filter that shows something other than the requested type isn't a
+    /// filter. Narrowing to Movies must not surface people — and must not spend
+    /// a request finding out.
+    @Test("Narrowed scopes skip the person fetch entirely")
+    func personsSkippedOutsideAllScope() async {
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
+        api.stubbedPersonResults = [makeItem(id: "p1", name: "Cillian Murphy")]
+        let vm = SearchViewModel()
+        vm.scope = .movies
+        vm.searchText = "Cillian Murphy"
+
+        vm.search(using: makeAppState(api: api))
+        try? await Task.sleep(for: .milliseconds(700))
+
+        #expect(vm.personResults.isEmpty)
+        #expect(api.searchPersonsCallCount == 0)
+    }
+
+    /// The person row is additive: losing it must never cost the user their
+    /// title results, nor raise the retryable error state.
+    @Test("A failing person fetch leaves title results and searchFailed intact")
+    func personFailureDoesNotBreakTitles() async {
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
+        api.searchPersonsHandler = { _ in throw MockError.genericFailure }
+        let vm = SearchViewModel()
+        vm.searchText = "Oppenheimer"
+
+        vm.search(using: makeAppState(api: api))
+        try? await Task.sleep(for: .milliseconds(700))
+
+        #expect(vm.results.count == 1)
+        #expect(!vm.searchFailed)
+        #expect(vm.personResults.isEmpty)
+    }
+
+    @Test("Emptying the query clears personResults too")
+    func emptyQueryClearsPersons() async {
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
+        api.stubbedPersonResults = [makeItem(id: "p1", name: "Cillian Murphy")]
+        let vm = SearchViewModel()
+        vm.searchText = "Cillian"
+        vm.search(using: makeAppState(api: api))
+        try? await Task.sleep(for: .milliseconds(700))
+        #expect(!vm.personResults.isEmpty)
+
+        vm.searchText = "  "
+        vm.search(using: makeAppState(api: api))
+        try? await Task.sleep(for: .milliseconds(500))
+
+        #expect(vm.personResults.isEmpty)
+    }
+
     /// Regression for the defer-guarded `isSearching = false` in `SearchViewModel.search`.
     /// When a new `search()` call cancels a task that was mid-await, the `defer` must
     /// still fire so the spinner flips off. Previously the flag could stay stuck at

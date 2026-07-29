@@ -245,6 +245,12 @@ final class SpeechRecognitionHelper {
 final class SearchViewModel {
     var searchText = ""
     var results: [BaseItemDto] = []
+
+    /// Persons matching the query, shown as a portrait row above the poster
+    /// grid. Populated only in the `.all` scope. The row is drawn only when this
+    /// is non-empty, which makes a failed person fetch degrade to "no row"
+    /// rather than to an error state — see `search(using:)`.
+    var personResults: [BaseItemDto] = []
     var isSearching = false
     var hasSearched = false
     /// True when the last search failed to reach the server (every term fetch
@@ -356,6 +362,7 @@ final class SearchViewModel {
 
         guard !query.isEmpty else {
             results = []
+            personResults = []
             hasSearched = false
             searchFailed = false
             return
@@ -363,6 +370,10 @@ final class SearchViewModel {
 
         let api = appState.apiClient
         let includeItemTypes = scope.includeItemTypes
+        // The person row belongs to the unfiltered scope only — a type filter
+        // that surfaces something other than the requested type isn't a filter.
+        // Narrowed scopes don't even spend the request.
+        let includePersons = scope == .all
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
@@ -374,9 +385,20 @@ final class SearchViewModel {
             // UI can remain stuck on the spinner after a quick text change.
             defer { self?.isSearching = false }
 
-            let outcome = await LibrarySearchRanker.rank(query: query, userId: userId, includeItemTypes: includeItemTypes, api: api)
+            // Two independent fetches, run concurrently. A failing person search
+            // must never degrade the main result, so `searchFailed` — which
+            // drives the retryable error screen — stays driven by the titles
+            // alone; `rankPersons` swallows its own error into an empty array.
+            async let titles = LibrarySearchRanker.rank(query: query, userId: userId, includeItemTypes: includeItemTypes, api: api)
+            async let persons: [BaseItemDto] = includePersons
+                ? LibrarySearchRanker.rankPersons(query: query, userId: userId, api: api)
+                : []
+
+            let outcome = await titles
+            let people = await persons
             guard !Task.isCancelled else { return }
             self?.results = outcome.items
+            self?.personResults = people
             self?.searchFailed = outcome.failed
             self?.hasSearched = true
             // Only remember queries that produced something — a typo midway

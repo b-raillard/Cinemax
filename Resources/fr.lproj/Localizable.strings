@@ -146,6 +146,7 @@
 "toast.dismiss" = "Fermer";
 "search.searchLibrary" = "Rechercher dans votre bibliothèque";
 "search.topMatches" = "Meilleurs résultats";
+"search.people" = "Personnes";
 "search.permissionRequired" = "Autorisation requise";
 "search.openSettings" = "Ouvrir les réglages";
 "search.voice.microphoneDenied" = "L'accès au micro est requis pour la recherche vocale. Activez-le dans Réglages > Confidentialité et sécurité > Microphone.";
