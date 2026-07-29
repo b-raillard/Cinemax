@@ -95,9 +95,31 @@ final class StreamTransportPolicy {
     /// to its IPv6 that *hangs* (neither `.ready` nor a fast `.failed` within the
     /// budget). A fast fail (IPv4-only network) means libVLC falls back fine too.
     nonisolated private static func shouldPreferProxy(host: String, port: UInt16, useTLS: Bool) async -> Bool {
+        // libVLC resolves through `getaddrinfo`. Where that fails, NOTHING it
+        // opens directly can work — so start on the proxy rather than rediscover
+        // it through a failed open plus a retry (~7s of dead time) on every
+        // single playback. Measured on one corporate Wi-Fi: `getaddrinfo`
+        // returns EAI_NONAME for the server host while URLSession fetches the
+        // very same URL with 200 in the same second, so the proxy (URLSession +
+        // a literal 127.0.0.1 peer, no DNS at all) is the only working path.
+        guard hostResolvesForLibVLC(host) else { return true }
         guard let v6 = firstIPv6(host: host) else { return false } // not dual-stack
         let resolvedQuickly = await ipv6ResolvesQuickly(address: v6, serverName: host, port: port, useTLS: useTLS)
         return !resolvedQuickly
+    }
+
+    /// Whether the BSD resolver — the one libVLC uses — can resolve `host` right
+    /// now. Deliberately not `URLSession`/Network.framework: the whole point is
+    /// that those two disagree on some networks, and libVLC only gets this one.
+    /// Internal so `StreamProxyTests` can pin both outcomes.
+    nonisolated static func hostResolvesForLibVLC(_ host: String) -> Bool {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_STREAM
+        var res: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, "443", &hints, &res) == 0 else { return false }
+        freeaddrinfo(res)
+        return true
     }
 
     nonisolated private static func firstIPv6(host: String) -> String? {

@@ -190,6 +190,18 @@ struct StreamProxyTests {
             == "https://h.example/a/b/stream")
     }
 
+    // MARK: - Transport policy
+
+    @Test("an unresolvable host pins the session to the proxy; a resolvable one doesn't")
+    func resolverDrivesProxyPreference() {
+        // This is the signal the corporate-Wi-Fi failure reduces to: libVLC only
+        // has the BSD resolver, so when it can't answer, the proxy is the only
+        // path — and we must know that BEFORE the first open, not after a failed
+        // one plus a retry.
+        #expect(StreamTransportPolicy.hostResolvesForLibVLC("localhost"))
+        #expect(StreamTransportPolicy.hostResolvesForLibVLC("cinemax-does-not-exist.invalid") == false)
+    }
+
     // MARK: - Request admission (pure)
 
     @Test("a normal loopback GET with a ported Host is accepted")
