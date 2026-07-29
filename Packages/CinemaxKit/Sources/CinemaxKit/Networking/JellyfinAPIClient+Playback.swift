@@ -488,6 +488,11 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.pingPlaybackSession(playSessionID: playSessionId))
     }
 
+    public func closeLiveStream(liveStreamId: String) async {
+        guard let client = getClient() else { return }
+        _ = try? await client.send(Paths.closeLiveStream(liveStreamID: liveStreamId))
+    }
+
     /// Compact, single-tag diagnostic for the playback decision.
     /// Filter the Xcode console / Console.app for `CINEMAX-PLAYBACK` to capture it.
     ///

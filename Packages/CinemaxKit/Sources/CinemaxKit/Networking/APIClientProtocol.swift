@@ -178,6 +178,11 @@ public protocol PlaybackAPI: Sendable {
     /// Keeps this play session's server-side encoding job alive. Only meaningful
     /// on a transcoding session — a no-op otherwise.
     func pingPlaybackSession(playSessionId: String) async
+
+    /// Releases a live stream opened by a PlaybackInfo negotiation whose
+    /// playback never started. The nominal path doesn't need this — the
+    /// `liveStreamId` handed to the stop report is enough.
+    func closeLiveStream(liveStreamId: String) async
 }
 
 /// Empty default implementations, same discipline as `SyncPlayAPI`: hand-written
@@ -186,6 +191,7 @@ public protocol PlaybackAPI: Sendable {
 public extension PlaybackAPI {
     func stopEncoding(playSessionId: String) async {}
     func pingPlaybackSession(playSessionId: String) async {}
+    func closeLiveStream(liveStreamId: String) async {}
 }
 
 /// Admin-only operations: user management, activity log, system info, media
