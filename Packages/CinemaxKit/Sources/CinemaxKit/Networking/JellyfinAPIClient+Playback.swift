@@ -481,6 +481,13 @@ extension JellyfinAPIClient {
         )
     }
 
+    /// Refreshes the server's activity clock for this play session, so it won't
+    /// reap an encoding job that's merely paused.
+    public func pingPlaybackSession(playSessionId: String) async {
+        guard let client = getClient() else { return }
+        _ = try? await client.send(Paths.pingPlaybackSession(playSessionID: playSessionId))
+    }
+
     /// Compact, single-tag diagnostic for the playback decision.
     /// Filter the Xcode console / Console.app for `CINEMAX-PLAYBACK` to capture it.
     ///

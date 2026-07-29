@@ -29,6 +29,10 @@ final class PlaybackReporter {
     private let context: ContextProvider
     private let timeSource: TimeSource?
     private var tickCounter = 0
+    /// Separate from `tickCounter`: the cadence differs (30 s vs 10 s) and the
+    /// keep-alive carries conditions progress reporting doesn't have.
+    private var pingCounter = 0
+    private static let pingTickInterval = 30
 
     init(
         apiClient: any PlaybackAPI,
@@ -130,15 +134,45 @@ final class PlaybackReporter {
 
     func resetTicking() {
         tickCounter = 0
+        pingCounter = 0
     }
 
     /// Call once per second from the presenter's shared time observer.
-    /// Reports progress every 10 ticks (~10 s).
+    /// Reports progress every 10 ticks (~10 s), and keeps a transcoding session
+    /// alive every 30 ticks while paused.
     func onTick() {
         tickCounter += 1
-        guard tickCounter >= 10 else { return }
-        tickCounter = 0
-        reportPeriodicProgress()
+        if tickCounter >= 10 {
+            tickCounter = 0
+            reportPeriodicProgress()
+        }
+        tickKeepAlive()
+    }
+
+    /// The server reaps an encoding job it believes idle. While the engine is
+    /// pulling segments the job stays active on its own, so the ping only earns
+    /// its keep while **paused** — and only on a **transcoding** session, since
+    /// a DirectPlay session has no job to keep alive. Net cost on ordinary
+    /// playback: zero requests.
+    ///
+    /// Any unmet condition resets the counter, so a resume can't leave a
+    /// residual ping to fire moments later.
+    private func tickKeepAlive() {
+        guard let ctx = context(),
+              ctx.info.playMethod == .transcode,
+              let playSessionId = ctx.info.playSessionId,
+              let state = currentState(ctx),
+              state.isPaused else {
+            pingCounter = 0
+            return
+        }
+        pingCounter += 1
+        guard pingCounter >= Self.pingTickInterval else { return }
+        pingCounter = 0
+        let client = apiClient
+        Task.detached {
+            await client.pingPlaybackSession(playSessionId: playSessionId)
+        }
     }
 
     private func reportPeriodicProgress() {

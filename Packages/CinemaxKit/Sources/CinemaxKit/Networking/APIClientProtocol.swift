@@ -174,6 +174,10 @@ public protocol PlaybackAPI: Sendable {
     /// server-side — a no-op when the session wasn't transcoding — so callers
     /// fire it unconditionally rather than trying to guess.
     func stopEncoding(playSessionId: String) async
+
+    /// Keeps this play session's server-side encoding job alive. Only meaningful
+    /// on a transcoding session — a no-op otherwise.
+    func pingPlaybackSession(playSessionId: String) async
 }
 
 /// Empty default implementations, same discipline as `SyncPlayAPI`: hand-written
@@ -181,6 +185,7 @@ public protocol PlaybackAPI: Sendable {
 /// don't exercise.
 public extension PlaybackAPI {
     func stopEncoding(playSessionId: String) async {}
+    func pingPlaybackSession(playSessionId: String) async {}
 }
 
 /// Admin-only operations: user management, activity log, system info, media

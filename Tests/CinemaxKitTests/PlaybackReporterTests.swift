@@ -17,14 +17,13 @@ import JellyfinAPI
 @Suite("PlaybackReporter throttle")
 struct PlaybackReporterTests {
 
-    // NB: Testing the 10-tick throttle end-to-end requires an AVPlayer in the
-    // Context struct, but AVPlayer construction under the test runner
-    // intermittently fails discovery (opaque AVFoundation init behaviour in an
-    // isolated test environment). The throttle itself is trivial (counter
-    // compared to 10), so we cover the surrounding behaviour — nil-context
-    // no-op, reset, and the start/stop paths — and rely on integration/QA for
-    // the counter increment. A future refactor could make `Context.player` a
-    // protocol to allow a pure-Swift mock.
+    // NB: `Context.player` stays unusable under the test runner (AVPlayer init
+    // intermittently fails discovery in an isolated test environment), but the
+    // `timeSource` closure — which the VLC path already injects in production —
+    // bypasses the player entirely inside `currentState`. The cadence tests
+    // drive position and paused state from the test through it, no AVFoundation
+    // involved. The 10-tick progress throttle itself still leans on
+    // integration/QA for its counter increment.
 
     @Test("resetTicking clears counter (nil-player path only triggers guard)")
     func resetClearsCounter() async throws {
@@ -244,6 +243,80 @@ struct PlaybackReporterTests {
         #expect(mock.stopEncodingCount == 1)
     }
 
+    // MARK: - Transcode keep-alive
+    //
+    // The server reaps an encoding job it believes idle. While the engine is
+    // pulling segments the job stays active on its own, so the ping only earns
+    // its keep while paused — and only on a transcoding session, since a
+    // DirectPlay session has no job to keep alive. Net cost on ordinary
+    // playback: zero requests.
+
+    @Test("pings every 30 ticks while paused on a transcode")
+    func pingFiresWhilePausedOnTranscode() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
+            timeSource: { (seconds: 42, isPaused: true) }
+        )
+
+        for _ in 0..<60 { reporter.onTick() }
+        for _ in 0..<200 where mock.pingCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.pingCount == 2)
+    }
+
+    @Test("never pings during active playback")
+    func noPingWhilePlaying() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        for _ in 0..<60 { reporter.onTick() }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mock.pingCount == 0)
+    }
+
+    @Test("never pings a DirectPlay session, even paused")
+    func noPingOnDirectPlay() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(playMethod: .directPlay), player: nil) },
+            timeSource: { (seconds: 42, isPaused: true) }
+        )
+
+        for _ in 0..<60 { reporter.onTick() }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mock.pingCount == 0)
+    }
+
+    @Test("resuming resets the ping counter")
+    func resumeResetsPingCounter() async throws {
+        let mock = CountingPlaybackAPI()
+        // 20 ticks paused, one playing, 20 paused. Without the reset the 40
+        // paused ticks would cross the 30-tick threshold and fire a ping.
+        nonisolated(unsafe) var paused = true
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
+            timeSource: { (seconds: 42, isPaused: paused) }
+        )
+
+        for _ in 0..<20 { reporter.onTick() }
+        paused = false
+        reporter.onTick()
+        paused = true
+        for _ in 0..<20 { reporter.onTick() }
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mock.pingCount == 0)
+    }
+
     @Test("a finite time source still reports the real position")
     func finiteTimeSourceReportsPosition() async throws {
         let mock = CountingPlaybackAPI()
@@ -276,6 +349,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         var lastStopTicks: Int?
         var lastStopLiveStreamId: String?
         var stopEncoding = 0
+        var ping = 0
         /// Call sequence, so a test can assert the stop report lands *before*
         /// the encoding job is killed.
         var order: [String] = []
@@ -290,6 +364,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     var lastStopTicks: Int? { state.withLock { $0.lastStopTicks } }
     var lastStopLiveStreamId: String? { state.withLock { $0.lastStopLiveStreamId } }
     var stopEncodingCount: Int { state.withLock { $0.stopEncoding } }
+    var pingCount: Int { state.withLock { $0.ping } }
     var callOrder: [String] { state.withLock { $0.order } }
 
     func reportPlaybackStart(
@@ -323,6 +398,10 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
 
     func stopEncoding(playSessionId: String) async {
         state.withLock { $0.stopEncoding += 1; $0.order.append("stopEncoding") }
+    }
+
+    func pingPlaybackSession(playSessionId: String) async {
+        state.withLock { $0.ping += 1 }
     }
 
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto] {
