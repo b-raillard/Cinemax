@@ -363,6 +363,33 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         task.resume()
     }
 
+    // MARK: Servable streams (pure — unit-tested)
+
+    /// Playlist/manifest extensions whose media is a *tree* of URLs.
+    private static let manifestExtensions: Set<String> = ["m3u8", "m3u", "mpd"]
+
+    /// Whether this proxy can serve `url` at all.
+    ///
+    /// The proxy is deliberately **single-target**: `localURL(for:)` registers
+    /// exactly ONE origin URL under `/s/<id>`, and every request to that path
+    /// re-fetches that same URL. That's right for a single media file (the
+    /// whole point — one file, many `Range` reads) and structurally wrong for a
+    /// manifest, whose children are *other* URLs: libVLC resolves them against
+    /// the loopback base `http://127.0.0.1:<port>/s/<id>`, so a relative child
+    /// (`main.m3u8?…`, what Jellyfin's HLS master emits) lands on an unknown id
+    /// → 502, and an absolute one (`/videos/…`) fails `admission` → 400. Either
+    /// way libVLC can't build the playlist and the open dies with
+    /// `Failed to create demuxer`. So a manifest must NEVER be proxied — the
+    /// direct URL is the only path that can work for it.
+    ///
+    /// Keyed on the URL rather than `PlaybackInfo.playMethod` because the URL is
+    /// what actually decides: Jellyfin's *progressive* transcode
+    /// (`/videos/<id>/stream.mp4?…`) is a single file and proxies fine, while
+    /// only its HLS transcode is a tree.
+    static func canServe(_ url: URL) -> Bool {
+        !manifestExtensions.contains(url.pathExtension.lowercased())
+    }
+
     // MARK: Request admission (pure — unit-tested)
 
     /// Whether a loopback request may be forwarded upstream, and if not, the

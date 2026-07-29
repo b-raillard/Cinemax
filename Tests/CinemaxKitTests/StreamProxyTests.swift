@@ -75,6 +75,45 @@ struct StreamProxyTests {
         #expect(revived.path.hasPrefix("/s/"))
     }
 
+    // MARK: - Servable streams (pure)
+
+    @Test("HLS/DASH manifests are refused — the single-target proxy can't serve a URL tree")
+    func manifestsAreNotServable() {
+        // The exact shape Jellyfin hands back for a forced transcode (AVI/XviD
+        // and friends). Proxying it made libVLC resolve the master's relative
+        // children against `http://127.0.0.1:<port>/s/<id>`, hitting an unknown
+        // id (502) — the "Failed to create demuxer 0x0 Unknown" freeze.
+        let hlsMaster = URL(string: """
+            https://movies.example.net/videos/e3415c16-9ad9-d61c-2928-c50a32900511/master.m3u8\
+            ?MediaSourceId=e3415c169ad9d61c2928c50a32900511&VideoCodec=hevc,h264&api_key=tok
+            """)!
+        #expect(CinemaxStreamProxy.canServe(hlsMaster) == false)
+        // Sub-playlist, uppercase extension, and DASH fail for the same reason.
+        for raw in [
+            "https://example.org/videos/abc/main.m3u8?api_key=tok",
+            "https://example.org/videos/abc/MASTER.M3U8",
+            "https://example.org/videos/abc/playlist.m3u",
+            "https://example.org/videos/abc/manifest.mpd?api_key=tok",
+        ] {
+            #expect(CinemaxStreamProxy.canServe(URL(string: raw)!) == false, "\(raw) must not be proxied")
+        }
+    }
+
+    @Test("single-file streams stay servable — the proxy's whole purpose")
+    func singleFileStreamsAreServable() {
+        for raw in [
+            // Direct stream: the seek-heavy-container case the proxy exists for.
+            "https://example.org/Videos/abc/stream?static=true&api_key=tok",
+            // Jellyfin's *progressive* transcode is one file, not a tree.
+            "https://example.org/videos/abc/stream.mp4?api_key=tok",
+            "https://example.org/videos/abc/file.mkv",
+            // No extension at all must not be mistaken for a manifest.
+            "https://example.org/Videos/abc/stream",
+        ] {
+            #expect(CinemaxStreamProxy.canServe(URL(string: raw)!), "\(raw) must stay proxyable")
+        }
+    }
+
     // MARK: - Request admission (pure)
 
     @Test("a normal loopback GET with a ported Host is accepted")

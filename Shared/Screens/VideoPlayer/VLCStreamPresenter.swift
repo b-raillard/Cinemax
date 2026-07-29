@@ -741,10 +741,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     let c = d.components
                     self.mediaLengthMs = Int32(clamping: Int(c.seconds) * 1000
                         + Int(c.attoseconds / 1_000_000_000_000_000))
-                    if self.mediaLengthMs > 0 {
-                        self.cancelOpenWatchdog()
-                        self.recoverFromErrorIfNeeded()
-                    }
+                    if self.mediaLengthMs > 0 { self.noteMediaOpened() }
                 case .timeChanged:
                     self.onEngineTimeChanged()
                 case .stateChanged(let state):
@@ -2338,6 +2335,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
     }
 
+    /// The ONE way this presenter obtains a loopback URL. Returns nil — meaning
+    /// "play the direct URL" — whenever the proxy couldn't serve the stream
+    /// anyway (`CinemaxStreamProxy.canServe`: HLS/DASH manifests are trees of
+    /// URLs the single-target proxy answers 400/502 for, so proxying one is a
+    /// guaranteed `Failed to create demuxer`). Every proxy decision — fresh
+    /// open, error retry, wake re-resolve, episode nav — funnels through here,
+    /// because the ones that also carry `usingProxy` forward would otherwise
+    /// bypass the check and inherit a proxy the new stream can't use.
+    private func proxiedURLIfUsable(for authed: URL, token: String?) -> URL? {
+        guard CinemaxStreamProxy.canServe(authed) else { return nil }
+        return StreamTransportPolicy.shared.proxiedURL(for: authed, token: token)
+    }
+
     private func startPlayback() {
         hasValidTime = false
         didApplyServerTrackDefaults = false
@@ -2356,7 +2366,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // failed this session, or a seek-heavy container (AVI…): route via
         // the loopback proxy; fall back to the direct URL if it can't start.
         if shouldRouteThroughProxy,
-           let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
+           let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
             url = proxied
             usingProxy = true
         } else {
@@ -2391,6 +2401,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func cancelOpenWatchdog() {
         openWatchdog?.invalidate()
         openWatchdog = nil
+    }
+
+    /// The media is CONFIRMED open — a real length or a moving playhead, the
+    /// only two signals libVLC gives that a demuxer actually exists. Stands the
+    /// watchdog down, drops a stale error alert, and renews the retry budget so
+    /// a later mid-stream drop still gets its one transparent reconnect.
+    ///
+    /// `didRetry` is renewed HERE and nowhere else on the success path: a bare
+    /// `.playing` proves nothing (see `onEngineStateChanged`), and renewing on
+    /// it turned "retry once" into an unbounded watchdog loop.
+    private func noteMediaOpened() {
+        cancelOpenWatchdog()
+        recoverFromErrorIfNeeded()
+        didRetry = false
     }
 
     /// Called by `RemoteCommandController` when the Siri Remote / Lock Screen /
@@ -2521,7 +2545,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let url: URL
             // Carry the proxy across episodes when the server needs it.
             if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: vlcInfo.authToken) {
+               let proxied = self.proxiedURLIfUsable(for: authed, token: vlcInfo.authToken) {
                 url = proxied
                 self.usingProxy = true
             } else {
@@ -2901,7 +2925,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // `.playing` can be reported while a seek is still re-buffering, so
             // defer to the settle window rather than clearing the spinner blindly.
             if !updateSeekLoading() { setLoading(false) }
-            didRetry = false
+            // NOTE: `.playing` deliberately does NOT clear the retry budget —
+            // `noteMediaOpened()` owns that. libVLC reports `.playing` as soon
+            // as the input starts, BEFORE a demuxer exists, so a stream that
+            // never opens still gets one. Clearing it here meant the "retry
+            // once" bound never held: every watchdog fire re-entered the retry
+            // branch, looping silently every 30s on a frozen 0:00 screen (HUD
+            // showing pause, i.e. "playing") instead of surfacing the error.
             // libVLC resets rate on media swap — re-apply the user's speed
             // (but never while a hold-boost owns the rate).
             #if os(iOS)
@@ -3005,14 +3035,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
-            // A direct attempt failed: pin the rest of the session to the
-            // proxy so we stop re-rolling the dice on the flaky direct path.
-            if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
             let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+            // A direct attempt failed: pin the rest of the session to the proxy
+            // so we stop re-rolling the dice on the flaky direct path. Only when
+            // the proxy could actually have served this stream, though —
+            // latching on a manifest failure (which the proxy can't help with)
+            // made one transient direct blip, e.g. a libVLC DNS timeout, route
+            // EVERY later playback of the session through a path that cannot
+            // work, until app relaunch.
+            if !usingProxy, CinemaxStreamProxy.canServe(authed) {
+                StreamTransportPolicy.shared.noteDirectPlaybackFailed()
+            }
             // Always retry via the proxy (direct is the path that stalls on
             // broken IPv6); fall back to direct only if it can't start.
             let url: URL
-            if let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: info.authToken) {
+            if let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
                 url = proxied
                 usingProxy = true
             } else {
@@ -3207,7 +3244,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
             let url: URL
             if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = StreamTransportPolicy.shared.proxiedURL(for: authed, token: fresh.authToken) {
+               let proxied = self.proxiedURLIfUsable(for: authed, token: fresh.authToken) {
                 url = proxied
                 self.usingProxy = true
             } else {
@@ -3242,7 +3279,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func onEngineTimeChanged() {
         refreshTimeUI()
         if currentMs > 0 {
-            hasValidTime = true; cancelOpenWatchdog(); recoverFromErrorIfNeeded()
+            hasValidTime = true; noteMediaOpened()
             // A settling seek echoes its target here before any frame is decoded —
             // only hide the spinner once the playhead is actually moving again.
             if !updateSeekLoading() { setLoading(false) }
