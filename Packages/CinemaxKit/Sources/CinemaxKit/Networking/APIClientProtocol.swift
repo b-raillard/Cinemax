@@ -136,6 +136,11 @@ public protocol LibraryAPI: Sendable {
     /// bio via `getItem` with the person id).
     func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
 
+    /// Persons matching `searchTerm`, for the search screen's person row.
+    /// Returns `BaseItemDto` (persons are Jellyfin items), so scoring and image
+    /// URLs work exactly as they do for titles — no second result model.
+    func searchPersons(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto]
+
     /// BoxSet collections containing the given item. Uses the server's
     /// reverse-lookup endpoint when available (post-10.11); older servers
     /// fall back to matching `tmdbCollectionId` against the boxset list.
