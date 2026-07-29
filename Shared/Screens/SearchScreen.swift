@@ -27,6 +27,19 @@ struct SearchScreen: View {
         let itemType: BaseItemKind
     }
 
+    /// Runs a search term raised by an App Intent, exactly once.
+    ///
+    /// Writing `searchText` also updates the visible field, so the user can see
+    /// and edit what Siri heard rather than facing an unexplained result set.
+    /// `search(using:)` cancels any in-flight task, so the write's own
+    /// `onChange` and this call collapse into one query.
+    private func consumeIntentSearchRequest() {
+        guard let query = appState.pendingIntentSearchQuery else { return }
+        appState.pendingIntentSearchQuery = nil
+        viewModel.searchText = query
+        viewModel.search(using: appState)
+    }
+
     private var columns: [GridItem] {
         #if os(tvOS)
         Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
@@ -73,6 +86,13 @@ struct SearchScreen: View {
         }
         .navigationDestination(item: $surpriseDestination) { dest in
             MediaDetailScreen(itemId: dest.id, itemType: dest.itemType)
+        }
+        // An App Intent can raise a term either before this screen exists (the
+        // tab is switched to afterwards) or while it's already on screen, so
+        // both arrival orders are covered.
+        .task { consumeIntentSearchRequest() }
+        .onChange(of: appState.pendingIntentSearchQuery) { _, _ in
+            consumeIntentSearchRequest()
         }
         #if os(iOS)
         .navigationTitle(loc.localized("search.title"))

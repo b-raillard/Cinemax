@@ -205,6 +205,25 @@ final class AppState {
     /// Consumed by `MainTabView`, which switches tabs and clears it.
     var pendingDeepLinkTabId: String?
 
+    /// Item an App Intent asked to **play**, as opposed to merely open.
+    ///
+    /// Deliberately separate from `pendingDeepLinkItemId`, and written only
+    /// in-process by an intent: the public `cinemax://` scheme has no play
+    /// verb, so no URL can ever reach this. Adding one would turn an
+    /// unauthenticated entry point into "start playing an arbitrary id".
+    ///
+    /// The intent sets BOTH this and `pendingDeepLinkItemId` — the latter
+    /// navigates, this one tells the detail screen to start playback on
+    /// arrival. Routing through the detail screen is what gives a
+    /// Siri-initiated playback the same fidelity as a tap: series → next-up
+    /// resolution, resume position, and the prev/next episode buttons.
+    /// `MediaDetailScreen` consumes it once, and only on the matching item.
+    var pendingIntentPlaybackItemId: String?
+
+    /// Search term raised by an App Intent. `SearchScreen` consumes it once and
+    /// runs the search; `pendingDeepLinkTabId` gets the user to that tab.
+    var pendingIntentSearchQuery: String?
+
     func handleDeepLink(_ url: URL) {
         guard url.scheme == "cinemax" else { return }
         switch url.host() {
@@ -225,7 +244,13 @@ final class AppState {
     /// Accepts the two Jellyfin item-id forms only: a 32-character undashed hex
     /// string (`a1b2…`) or a canonical dashed GUID (`UUID(uuidString:)`).
     /// Everything else is rejected.
-    static func isValidItemId(_ id: String) -> Bool {
+    ///
+    /// `nonisolated` (pure `String` in, `Bool` out — the documented escape hatch
+    /// for Sendable-in/Sendable-out statics on a `@MainActor` type) so this stays
+    /// the ONE definition of a well-formed item id. `MediaEntityID` validates
+    /// persisted shortcut identities against it from a non-isolated context;
+    /// a second copy would be free to drift from the deep-link check.
+    nonisolated static func isValidItemId(_ id: String) -> Bool {
         if id.count == 32, id.allSatisfy(\.isHexDigit) { return true }
         return UUID(uuidString: id) != nil
     }
@@ -704,7 +729,13 @@ struct AppNavigation: View {
     /// statics make the initial values process-singletons (same rationale as
     /// `configurePipeline`). The cheap stores (`ThemeManager`, etc.) stay
     /// inline — rebuilding them costs nothing.
-    private static let sharedAppState = AppState()
+    ///
+    /// `sharedAppState` is deliberately not `private`: an App Intent runs
+    /// outside the view hierarchy and has no environment to read from, so it
+    /// reaches this instance directly to post its pending navigation. Any other
+    /// access point would be a *second* `AppState` — a separate API client and
+    /// auth state that the UI would never observe.
+    static let sharedAppState = AppState()
     private static let sharedNetworkMonitor = NetworkMonitor()
     private static let sharedMenuConfig = MenuConfigStore()
 
