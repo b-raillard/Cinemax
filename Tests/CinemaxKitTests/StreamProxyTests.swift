@@ -27,7 +27,7 @@ struct StreamProxyTests {
         return proxy.localURL(for: Self.target, token: "tok")
     }
 
-    @Test("registrations return distinct unguessable /s/<uuid> loopback URLs")
+    @Test("registrations return distinct unguessable /s/<uuid>/<name> loopback URLs")
     func distinctUnguessableURLs() async throws {
         let proxy = CinemaxStreamProxy()
         proxy.prestart()
@@ -42,13 +42,18 @@ struct StreamProxyTests {
             #expect(url.host == "127.0.0.1")
             #expect(url.port != nil)
             #expect(url.path.hasPrefix("/s/"))
+            // The target's own name and query are PRESERVED — that is what lets
+            // libVLC resolve a playlist's relative children against this URL.
+            #expect(url.lastPathComponent == "stream")
+            #expect(url.query == "static=true&api_key=tok")
         }
 
         // Path ids must be unguessable UUIDs (not small sequential integers)
         // and unique per registration so a retry/episode swap can never read
-        // the wrong stream.
-        let id1 = url1.lastPathComponent
-        let id2 = url2.lastPathComponent
+        // the wrong stream. The id is the component AFTER `/s/`, not the last
+        // one — the last one is now the media's own name.
+        let id1 = try #require(CinemaxStreamProxy.route(path: url1.path)?.id)
+        let id2 = try #require(CinemaxStreamProxy.route(path: url2.path)?.id)
         #expect(UUID(uuidString: id1) != nil)
         #expect(UUID(uuidString: id2) != nil)
         #expect(id1 != id2)
@@ -101,41 +106,88 @@ struct StreamProxyTests {
 
     // MARK: - Servable streams (pure)
 
-    @Test("HLS/DASH manifests are refused — the single-target proxy can't serve a URL tree")
-    func manifestsAreNotServable() {
-        // The exact shape Jellyfin hands back for a forced transcode (AVI/XviD
-        // and friends). Proxying it made libVLC resolve the master's relative
-        // children against `http://127.0.0.1:<port>/s/<id>`, hitting an unknown
-        // id (502) — the "Failed to create demuxer 0x0 Unknown" freeze.
-        let hlsMaster = URL(string: """
+    @Test("an HLS tree round-trips: master, the variant VLC resolves from it, and a segment")
+    func hlsTreeRoundTrips() throws {
+        // The exact shape Jellyfin hands back for a forced AVI/XviD transcode.
+        let master = URL(string: """
             https://movies.example.net/videos/e3415c16-9ad9-d61c-2928-c50a32900511/master.m3u8\
             ?MediaSourceId=e3415c169ad9d61c2928c50a32900511&VideoCodec=hevc,h264&api_key=tok
             """)!
-        #expect(CinemaxStreamProxy.canServe(hlsMaster) == false)
-        // Sub-playlist, uppercase extension, and DASH fail for the same reason.
-        for raw in [
-            "https://example.org/videos/abc/main.m3u8?api_key=tok",
-            "https://example.org/videos/abc/MASTER.M3U8",
-            "https://example.org/videos/abc/playlist.m3u",
-            "https://example.org/videos/abc/manifest.mpd?api_key=tok",
+        let (origin, name) = try #require(OriginDirectory.split(master))
+        #expect(name == "master.m3u8")
+        #expect(origin.encodedDirectory == "/videos/e3415c16-9ad9-d61c-2928-c50a32900511")
+
+        // libVLC resolves the master's relative children against the loopback
+        // URL, so they arrive as /s/<id>/<child>. Each must map back onto the
+        // SAME origin directory — that is the whole fix.
+        let variant = try #require(CinemaxStreamProxy.route(path: "/s/ID/main.m3u8?PlaySessionId=abc"))
+        #expect(variant.id == "ID")
+        #expect(variant.rest == "main.m3u8")
+        #expect(try #require(origin.url(forRest: variant.rest, encodedQuery: variant.query)).absoluteString
+            == "https://movies.example.net/videos/e3415c16-9ad9-d61c-2928-c50a32900511/main.m3u8?PlaySessionId=abc")
+
+        // Segments sit several components deep — `rest` must keep its slashes.
+        let segment = try #require(CinemaxStreamProxy.route(path: "/s/ID/hls1/main/0.mp4?runtimeTicks=0"))
+        #expect(segment.rest == "hls1/main/0.mp4")
+        #expect(try #require(origin.url(forRest: segment.rest, encodedQuery: segment.query)).absoluteString
+            == "https://movies.example.net/videos/e3415c16-9ad9-d61c-2928-c50a32900511/hls1/main/0.mp4?runtimeTicks=0")
+    }
+
+    @Test("a sub-path-hosted server keeps its base path through the mapping")
+    func subPathServerPreserved() throws {
+        // Dropping `/jellyfin` would 404 every proxied request — the base-path
+        // rule applies here as everywhere.
+        let target = URL(string: "https://host.example/jellyfin/Videos/abc/stream?static=true")!
+        let (origin, name) = try #require(OriginDirectory.split(target))
+        #expect(name == "stream")
+        #expect(origin.encodedDirectory == "/jellyfin/Videos/abc")
+        let route = try #require(CinemaxStreamProxy.route(path: "/s/ID/stream?static=true"))
+        #expect(try #require(origin.url(forRest: route.rest, encodedQuery: route.query)).absoluteString
+            == "https://host.example/jellyfin/Videos/abc/stream?static=true")
+    }
+
+    @Test("path traversal out of the registered directory is refused, encoded or not")
+    func traversalRefused() {
+        // `rest` is fetched from the origin WITH the account's token attached,
+        // so climbing out of the directory would read arbitrary origin paths as
+        // the user. Percent-encoded dot-segments must not slip through either.
+        for path in [
+            "/s/ID/../../Users/Me",
+            "/s/ID/hls1/../../../System/Info",
+            "/s/ID/%2e%2e/Users/Me",           // percent-encoded dot-segment
+            "/s/ID/%2E%2E%2Fsecret",           // ONE component that decodes to `../secret`
+            "/s/ID/hls1/%2e%2E%2fmain",        // mixed case, encoded separator
+            "/s/ID/./main.m3u8",
         ] {
-            #expect(CinemaxStreamProxy.canServe(URL(string: raw)!) == false, "\(raw) must not be proxied")
+            #expect(CinemaxStreamProxy.route(path: path) == nil, "\(path) must not route")
+        }
+        // A name that merely CONTAINS dots is legitimate and must still route.
+        #expect(CinemaxStreamProxy.route(path: "/s/ID/..foo.mp4") != nil)
+        #expect(CinemaxStreamProxy.route(path: "/s/ID/main..m3u8") != nil)
+    }
+
+    @Test("malformed loopback paths route nowhere instead of guessing")
+    func malformedPathsRefused() {
+        for path in [
+            "/s/ID",          // no name to re-attach — the OLD form, now invalid
+            "/s/",
+            "/s",
+            "/",
+            "/other/ID/x",
+            "/s//main.m3u8",  // empty id
+            "/s/ID//x",       // empty component
+        ] {
+            #expect(CinemaxStreamProxy.route(path: path) == nil, "\(path) must not route")
         }
     }
 
-    @Test("single-file streams stay servable — the proxy's whole purpose")
-    func singleFileStreamsAreServable() {
-        for raw in [
-            // Direct stream: the seek-heavy-container case the proxy exists for.
-            "https://example.org/Videos/abc/stream?static=true&api_key=tok",
-            // Jellyfin's *progressive* transcode is one file, not a tree.
-            "https://example.org/videos/abc/stream.mp4?api_key=tok",
-            "https://example.org/videos/abc/file.mkv",
-            // No extension at all must not be mistaken for a manifest.
-            "https://example.org/Videos/abc/stream",
-        ] {
-            #expect(CinemaxStreamProxy.canServe(URL(string: raw)!), "\(raw) must stay proxyable")
-        }
+    @Test("a query-less request routes with a nil query rather than an empty one")
+    func queryLessRouting() throws {
+        let route = try #require(CinemaxStreamProxy.route(path: "/s/ID/stream"))
+        #expect(route.query == nil)
+        let origin = try #require(OriginDirectory.split(URL(string: "https://h.example/a/b/stream")!)).origin
+        #expect(try #require(origin.url(forRest: route.rest, encodedQuery: route.query)).absoluteString
+            == "https://h.example/a/b/stream")
     }
 
     // MARK: - Request admission (pure)

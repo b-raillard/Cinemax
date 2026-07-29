@@ -325,6 +325,60 @@ enum PlaybackNetworkDiagnostics {
 }
 #endif
 
+// MARK: - Origin directory mapping (pure — unit-tested)
+
+/// The origin side of one proxied stream: everything up to and including the
+/// directory that holds it, so any sibling name can be re-attached.
+///
+/// This is what makes the proxy serve a whole HLS tree from a single
+/// registration. `/s/<id>/<rest>?<query>` maps to `<scheme>://<host>/<dir>/<rest>?<query>`,
+/// so the master playlist, the variant playlist libVLC resolves from it, and
+/// every segment under it all resolve without ever rewriting a manifest body.
+///
+/// `dir` is taken from the target's OWN path, so a server hosted under a
+/// sub-path (`https://host/jellyfin/videos/…`) keeps it — the base-path rule in
+/// CLAUDE.md applies here as everywhere.
+struct OriginDirectory: Sendable, Equatable {
+    let scheme: String
+    let host: String
+    let port: Int?
+    /// Percent-encoded, leading slash, NO trailing slash (e.g. `/videos/<uuid>`).
+    let encodedDirectory: String
+
+    /// Splits an absolute origin URL into (directory, last path component).
+    /// Returns nil when there is no name to re-attach (empty or trailing-slash
+    /// path), which never happens for a Jellyfin stream URL but must not be
+    /// guessed at.
+    static func split(_ url: URL) -> (origin: OriginDirectory, name: String)? {
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = comps.scheme, let host = comps.host else { return nil }
+        let encodedPath = comps.percentEncodedPath
+        guard let slash = encodedPath.lastIndex(of: "/") else { return nil }
+        let name = String(encodedPath[encodedPath.index(after: slash)...])
+        guard !name.isEmpty else { return nil }
+        return (OriginDirectory(scheme: scheme, host: host, port: comps.port,
+                                encodedDirectory: String(encodedPath[..<slash])),
+                name)
+    }
+
+    /// Rebuilds the origin URL for a loopback sub-path and its query, both
+    /// taken verbatim off the wire (already percent-encoded).
+    ///
+    /// `rest` is validated by `CinemaxStreamProxy.route` before reaching here —
+    /// in particular it can contain no `..`, so a crafted loopback request can
+    /// never climb out of this directory and replay elsewhere on the origin
+    /// **with the account's token attached**.
+    func url(forRest rest: String, encodedQuery: String?) -> URL? {
+        var out = URLComponents()
+        out.scheme = scheme
+        out.host = host
+        out.port = port
+        out.percentEncodedPath = encodedDirectory + "/" + rest
+        out.percentEncodedQuery = encodedQuery
+        return out.url
+    }
+}
+
 // MARK: - Loopback HTTP → URLSession proxy
 
 /// Tiny on-device HTTP/1.1 proxy bound to `127.0.0.1`. libVLC connects to it in
@@ -341,12 +395,19 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     private var listener: NWListener?
     private var listenerPort: UInt16?
     private var listenerStarting = false
-    // Each loopback URL carries a unique UNGUESSABLE id → its own target, so an
+    // Each loopback URL carries a unique UNGUESSABLE id → its own origin, so an
     // in-flight request for a previous media (retry / episode swap) can't read
     // the wrong stream, and a co-resident app port-scanning loopback can't
     // enumerate `/s/<id>` paths to read the active stream. Bounded (see
     // localURL); `targetOrder` preserves insertion order for eviction.
-    private var targets: [String: (url: URL, token: String?)] = [:]
+    //
+    // The registered value is the origin's **directory**, not one URL: the
+    // loopback URL is `/s/<id>/<name>?<query>`, so libVLC resolves a playlist's
+    // relative children against it on its own and they arrive here as
+    // `/s/<id>/<child>?<their query>`. One registration therefore serves a whole
+    // HLS tree — master, variant, and every segment — with no manifest
+    // rewriting, and the 6-entry bound stays per-STREAM rather than per-segment.
+    private var targets: [String: (origin: OriginDirectory, token: String?)] = [:]
     private var targetOrder: [String] = []
     // Live per-request bridges, cancelled deterministically in stop() so a
     // server switch mid-stream doesn't keep pulling origin bytes.
@@ -375,22 +436,37 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         startListenerIfNeeded()
     }
 
-    /// Registers `target` and returns the loopback URL VLC should open, or nil
-    /// if the listener isn't up yet (caller uses the direct URL; the listener is
-    /// warmed for next time). Never blocks — safe on the MainActor hot path.
+    /// Registers `target`'s origin directory and returns the loopback URL VLC
+    /// should open, or nil if the listener isn't up yet (caller uses the direct
+    /// URL; the listener is warmed for next time) or the URL can't be split.
+    /// Never blocks — safe on the MainActor hot path.
+    ///
+    /// The returned URL **keeps the target's last path component and query**
+    /// (`/s/<id>/master.m3u8?…`) — that is what makes relative resolution work:
+    /// libVLC turns the master's `main.m3u8?…` into `/s/<id>/main.m3u8?…` by
+    /// itself. Dropping the name (the old `/s/<id>` form) is precisely why HLS
+    /// could not be proxied.
     func localURL(for target: URL, token: String?) -> URL? {
         let port: UInt16? = stateLock.withLock { listenerPort }
         guard let port else {
             startListenerIfNeeded()
             return nil
         }
+        guard let (origin, name) = OriginDirectory.split(target) else { return nil }
         let id = UUID().uuidString
         stateLock.withLock {
-            targets[id] = (target, token)
+            targets[id] = (origin, token)
             targetOrder.append(id)
             if targetOrder.count > 6 { targets[targetOrder.removeFirst()] = nil }
         }
-        return URL(string: "http://127.0.0.1:\(port)/s/\(id)")
+        var local = URLComponents()
+        local.scheme = "http"
+        local.host = "127.0.0.1"
+        local.port = Int(port)
+        local.percentEncodedPath = "/s/\(id)/\(name)"
+        local.percentEncodedQuery = URLComponents(url: target, resolvingAgainstBaseURL: false)?
+            .percentEncodedQuery
+        return local.url
     }
 
     func stop() {
@@ -490,24 +566,26 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         for line in lines.dropFirst() where line.lowercased().hasPrefix("range:") {
             range = line.dropFirst("range:".count).trimmingCharacters(in: .whitespaces)
         }
-        // Resolve THIS connection's target by the id baked into the path
-        // (/s/<id>) — never a shared "current target", so a retry/episode swap
-        // can't make an in-flight request read the wrong stream.
-        let id = path.split(separator: "/").last.map(String.init)
-        let entry = stateLock.withLock { id.flatMap { targets[$0] } }
-        guard let entry else {
+        // Resolve THIS connection's origin by the id baked into the path
+        // (/s/<id>/<rest>) — never a shared "current target", so a retry/episode
+        // swap can't make an in-flight request read the wrong stream. `rest` is
+        // re-attached to the registered directory, which is how one registration
+        // serves a whole HLS tree.
+        guard let route = Self.route(path: path),
+              let entry = stateLock.withLock({ targets[route.id] }),
+              let upstream = entry.origin.url(forRest: route.rest, encodedQuery: route.query) else {
             conn.send(content: Data("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n".utf8),
                       isComplete: true, completion: .contentProcessed { _ in conn.cancel() })
             return
         }
-        var req = URLRequest(url: entry.url)
+        var req = URLRequest(url: upstream)
         req.httpMethod = method
         if let range { req.setValue(range, forHTTPHeaderField: "Range") }
         if let t = entry.token { req.setValue("MediaBrowser Token=\(t)", forHTTPHeaderField: "Authorization") }
         let label = "\(method) \(range ?? "full")"
         let (rangeStart, rangeEnd) = Self.parseRange(range)
         let handler = UpstreamHandler(conn: conn, isHead: method == "HEAD", label: label,
-                                      session: session, url: entry.url, token: entry.token,
+                                      session: session, url: upstream, token: entry.token,
                                       rangeStart: rangeStart, rangeEnd: rangeEnd)
         let task = session.dataTask(with: req)
         handler.task = task
@@ -526,31 +604,55 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         task.resume()
     }
 
-    // MARK: Servable streams (pure — unit-tested)
+    // MARK: Request routing (pure — unit-tested)
 
-    /// Playlist/manifest extensions whose media is a *tree* of URLs.
-    private static let manifestExtensions: Set<String> = ["m3u8", "m3u", "mpd"]
+    /// Splits a loopback request-target `/s/<id>/<rest>?<query>` into its parts.
+    /// Returns nil for anything that isn't that exact shape — the caller answers
+    /// 502 rather than guessing.
+    ///
+    /// `rest` may contain slashes (HLS segments live under `hls1/main/0.mp4`),
+    /// but **never** a `..` component: `rest` is re-attached to the registered
+    /// origin directory and fetched WITH the account's token, so path traversal
+    /// would let a co-resident process read arbitrary origin paths as the user.
+    /// Percent-encoded dot-segments are rejected too — the check runs on the
+    /// lowercased raw text, so `%2e%2e` can't smuggle one past it.
+    static func route(path: String) -> (id: String, rest: String, query: String?)? {
+        let query: String?
+        let pathOnly: String
+        if let mark = path.firstIndex(of: "?") {
+            pathOnly = String(path[..<mark])
+            query = String(path[path.index(after: mark)...])
+        } else {
+            pathOnly = path
+            query = nil
+        }
+        let parts = pathOnly.split(separator: "/", omittingEmptySubsequences: false)
+        // ["", "s", "<id>", "<rest>"…] — at least one rest component, all non-empty.
+        guard parts.count >= 4, parts[0].isEmpty, parts[1] == "s" else { return nil }
+        let id = String(parts[2])
+        let restParts = parts.dropFirst(3)
+        guard !id.isEmpty, restParts.allSatisfy({ !$0.isEmpty }) else { return nil }
+        guard restParts.allSatisfy({ isSafeComponent($0) }) else { return nil }
+        return (id, restParts.joined(separator: "/"), query)
+    }
 
-    /// Whether this proxy can serve `url` at all.
+    /// Whether one path component of `rest` is safe to re-attach to the
+    /// registered origin directory.
     ///
-    /// The proxy is deliberately **single-target**: `localURL(for:)` registers
-    /// exactly ONE origin URL under `/s/<id>`, and every request to that path
-    /// re-fetches that same URL. That's right for a single media file (the
-    /// whole point — one file, many `Range` reads) and structurally wrong for a
-    /// manifest, whose children are *other* URLs: libVLC resolves them against
-    /// the loopback base `http://127.0.0.1:<port>/s/<id>`, so a relative child
-    /// (`main.m3u8?…`, what Jellyfin's HLS master emits) lands on an unknown id
-    /// → 502, and an absolute one (`/videos/…`) fails `admission` → 400. Either
-    /// way libVLC can't build the playlist and the open dies with
-    /// `Failed to create demuxer`. So a manifest must NEVER be proxied — the
-    /// direct URL is the only path that can work for it.
+    /// Refuses dot-segments AND any component that DECODES to something
+    /// containing a separator. The second half is not theoretical: checking only
+    /// for a decoded `".."` lets `%2E%2E%2Fsecret` — one component on the wire,
+    /// `../secret` once decoded — walk straight through, and origins differ on
+    /// whether they treat `%2F` as a separator. Since `rest` is fetched from the
+    /// origin **with the account's token attached**, the decision must not
+    /// depend on the origin's decoding quirks.
     ///
-    /// Keyed on the URL rather than `PlaybackInfo.playMethod` because the URL is
-    /// what actually decides: Jellyfin's *progressive* transcode
-    /// (`/videos/<id>/stream.mp4?…`) is a single file and proxies fine, while
-    /// only its HLS transcode is a tree.
-    static func canServe(_ url: URL) -> Bool {
-        !manifestExtensions.contains(url.pathExtension.lowercased())
+    /// Components that merely CONTAIN dots (`..foo.mp4`, `main..m3u8`) are
+    /// legitimate names and stay allowed.
+    private static func isSafeComponent(_ component: Substring) -> Bool {
+        let decoded = component.removingPercentEncoding ?? String(component)
+        if decoded == "." || decoded == ".." { return false }
+        return !decoded.contains("/") && !decoded.contains("\\")
     }
 
     // MARK: Request admission (pure — unit-tested)
@@ -568,7 +670,9 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     /// page doing DNS rebinding) can still reach it. Three rules, none of which
     /// touches the legitimate path — every real stream URL is
     /// `http://127.0.0.1:<port>/s/<uuid>` fetched with `GET`/`HEAD`:
-    ///   1. the path must be a well-formed `/s/<id>`;
+    ///   1. the path must be a well-formed `/s/<id>/<rest>` (`route` enforces
+    ///      the full shape, including refusing `..` traversal out of the
+    ///      registered origin directory);
     ///   2. the `Host`, **when present**, must be an EXACT loopback name — a
     ///      `hasPrefix` test is precisely what `localhost.evil.com` /
     ///      `127.evil.com` slip through, which is the rebinding case this
