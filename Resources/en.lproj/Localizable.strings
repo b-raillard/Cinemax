@@ -146,6 +146,7 @@
 "toast.dismiss" = "Dismiss";
 "search.searchLibrary" = "Search your library";
 "search.topMatches" = "Top Matches";
+"search.people" = "People";
 "search.permissionRequired" = "Permission Required";
 "search.openSettings" = "Open Settings";
 "search.voice.microphoneDenied" = "Microphone access is required for voice search. Enable it in Settings > Privacy & Security > Microphone.";

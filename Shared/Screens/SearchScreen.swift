@@ -292,7 +292,10 @@ struct SearchScreen: View {
                 viewModel.search(using: appState)
             }
             Spacer()
-        } else if viewModel.results.isEmpty && viewModel.hasSearched {
+        // Person matches alone are a result: typing an actor's name that matches
+        // no title is the primary use case for the row, so both collections have
+        // to be empty before this reads as "nothing found".
+        } else if viewModel.results.isEmpty && viewModel.personResults.isEmpty && viewModel.hasSearched {
             Spacer()
             VStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: "magnifyingglass")
@@ -304,7 +307,7 @@ struct SearchScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
             Spacer()
-        } else if viewModel.results.isEmpty {
+        } else if viewModel.results.isEmpty && viewModel.personResults.isEmpty {
             Spacer()
             VStack(spacing: CinemaSpacing.spacing4) {
                 Image(systemName: "sparkle.magnifyingglass")
@@ -327,11 +330,13 @@ struct SearchScreen: View {
         } else {
             SearchResultsGrid(
                 results: viewModel.results,
+                people: viewModel.personResults,
                 imageBuilder: appState.imageBuilder,
                 columns: columns,
                 gridPadding: gridPadding,
                 gridSpacing: gridSpacing,
-                headerTitle: loc.localized("search.topMatches")
+                headerTitle: loc.localized("search.topMatches"),
+                peopleTitle: loc.localized("search.people")
             )
         }
     }
@@ -605,30 +610,116 @@ private struct VoiceSearchButton: View {
 /// pulsing, etc.) changes but the results array itself hasn't.
 private struct SearchResultsGrid: View {
     let results: [BaseItemDto]
+    /// Person matches. Empty ⇒ no row at all: an orphan "People" heading over
+    /// nothing is a visual bug, and most searches target a title.
+    let people: [BaseItemDto]
     let imageBuilder: ImageURLBuilder
     let columns: [GridItem]
     let gridPadding: CGFloat
     let gridSpacing: CGFloat
     let headerTitle: String
+    let peopleTitle: String
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                Text(headerTitle)
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .padding(.horizontal, gridPadding)
-                    .accessibilityAddTraits(.isHeader)
-
-                LazyVGrid(columns: columns, spacing: gridSpacing) {
-                    ForEach(results, id: \.id) { item in
-                        SearchResultCard(item: item, imageBuilder: imageBuilder)
-                    }
+                // Inside the grid's own ScrollView, so the row scrolls away with
+                // the results instead of staying pinned above them.
+                if !people.isEmpty {
+                    SearchPersonRow(
+                        people: people,
+                        imageBuilder: imageBuilder,
+                        title: peopleTitle,
+                        horizontalPadding: gridPadding
+                    )
                 }
-                .padding(.horizontal, gridPadding)
+
+                // Symmetrical to the person row: a person-only match must not
+                // leave a "Top matches" heading standing over an empty grid.
+                if !results.isEmpty {
+                    Text(headerTitle)
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .padding(.horizontal, gridPadding)
+                        .accessibilityAddTraits(.isHeader)
+
+                    LazyVGrid(columns: columns, spacing: gridSpacing) {
+                        ForEach(results, id: \.id) { item in
+                            SearchResultCard(item: item, imageBuilder: imageBuilder)
+                        }
+                    }
+                    .padding(.horizontal, gridPadding)
+                }
 
                 Spacer(minLength: 80)
             }
+        }
+    }
+}
+
+/// Horizontal row of person matches, above the poster grid.
+///
+/// Hand-rolled rather than reusing `ContentRow`: that component hardcodes
+/// `spacing6` horizontal padding, while this screen's grid uses `gridPadding`
+/// (`spacing20` on tvOS) — the row would sit visibly out of line with the
+/// posters underneath it.
+private struct SearchPersonRow: View {
+    let people: [BaseItemDto]
+    let imageBuilder: ImageURLBuilder
+    let title: String
+    let horizontalPadding: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            // Matches the grid's own "Top matches" heading, not ContentRow's
+            // larger one — the two sit in the same visual context.
+            Text(title)
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .padding(.horizontal, horizontalPadding)
+                .accessibilityAddTraits(.isHeader)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+                    ForEach(people, id: \.id) { person in
+                        personLink(person)
+                    }
+                }
+                .padding(.horizontal, horizontalPadding)
+                #if os(tvOS)
+                .padding(.vertical, CinemaSpacing.spacing2)
+                #endif
+            }
+            // The focused portrait scales to 1.06 on tvOS — without this the
+            // edge card is clipped by the scroll view's bounds.
+            #if os(tvOS)
+            .scrollClipDisabled()
+            #endif
+        }
+    }
+
+    @ViewBuilder
+    private func personLink(_ person: BaseItemDto) -> some View {
+        if let id = person.id {
+            // Plain `NavigationLink` (not `navigationDestination(item:)`) — a
+            // lazy stack silently ignores the modifier form.
+            NavigationLink {
+                PersonDetailScreen(personId: id, personName: person.name ?? "")
+            } label: {
+                CastCircle(
+                    name: person.name ?? "",
+                    imageURL: imageBuilder.imageURL(
+                        itemId: id, imageType: .primary, maxWidth: 200,
+                        tag: person.primaryImageTagValue
+                    )
+                )
+            }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityLabel(person.name ?? "")
         }
     }
 }
