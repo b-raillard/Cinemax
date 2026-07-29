@@ -153,6 +153,7 @@ struct SettingsScreen: View {
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
+    @State var showServers = false
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
     /// "Quick Connect" (authorize) row so we never surface a flow the server
@@ -181,6 +182,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
+    @AppStorage(SettingsKey.playbackLiveActivity) var playbackLiveActivity: Bool = SettingsKey.Default.playbackLiveActivity
     @AppStorage(SettingsKey.homeShowContinueWatching) var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowNextUp) var showNextUp: Bool = SettingsKey.Default.homeShowNextUp
     @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
@@ -260,11 +262,17 @@ struct SettingsScreen: View {
     /// Playback toggles (4K rendering, auto-play next, native player). The
     /// sleep timer picker is a non-boolean row appended per platform.
     var playbackToggleRows: [SettingsToggleRow] {
-        [
+        var rows: [SettingsToggleRow] = [
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
             .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer)
         ]
+        // Live Activities are an iOS surface (Lock Screen + Dynamic Island);
+        // tvOS has no ActivityKit, so the row doesn't exist there.
+        #if os(iOS)
+        rows.append(.init(id: "playbackLiveActivity", icon: "platter.filled.top.iphone", label: loc.localized("settings.playback.liveActivity"), value: $playbackLiveActivity))
+        #endif
+        return rows
     }
 
     var homePageToggleRows: [SettingsToggleRow] {
@@ -357,11 +365,31 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
+        .sheet(isPresented: $showServers) { serversSheet }
         #else
         .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
+        .fullScreenCover(isPresented: $showServers) { serversSheet }
         #endif
+    }
+
+    /// Signs out of the active server and reports what happened. The auto-hop
+    /// to another registered server is invisible otherwise — the plan mandates
+    /// it always be accompanied by the toast.
+    func performLogout() async {
+        let outcome = await appState.logout(reason: .userInitiated)
+        if case .switchedTo(let entry) = outcome {
+            toasts.success(loc.localized("servers.switchedTo", entry.name))
+        }
+    }
+
+    private var serversSheet: some View {
+        ServersScreen()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
     }
 
     private var watchedHistorySheet: some View {

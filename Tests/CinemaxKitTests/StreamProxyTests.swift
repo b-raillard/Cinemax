@@ -74,4 +74,96 @@ struct StreamProxyTests {
         #expect(revived.host == "127.0.0.1")
         #expect(revived.path.hasPrefix("/s/"))
     }
+
+    // MARK: - Request admission (pure)
+
+    @Test("a normal loopback GET with a ported Host is accepted")
+    func normalGETAccepted() {
+        #expect(CinemaxStreamProxy.admission(
+            method: "GET", path: "/s/\(UUID().uuidString)", hostHeader: " 127.0.0.1:52341"
+        ) == .accept)
+        // libVLC doesn't always send a Host header — that stays allowed.
+        #expect(CinemaxStreamProxy.admission(
+            method: "GET", path: "/s/abc", hostHeader: nil
+        ) == .accept)
+        // HEAD is a legitimate probe for content length.
+        #expect(CinemaxStreamProxy.admission(
+            method: "HEAD", path: "/s/abc", hostHeader: "localhost:52341"
+        ) == .accept)
+        #expect(CinemaxStreamProxy.admission(
+            method: "GET", path: "/s/abc", hostHeader: "[::1]:52341"
+        ) == .accept)
+    }
+
+    @Test("DNS-rebinding style Host headers are rejected, not prefix-matched")
+    func rebindingHostRejected() {
+        // These are exactly the hosts a `hasPrefix("127.")` / `hasPrefix("localhost")`
+        // check waves through — the bug this validation exists to stop.
+        for host in ["localhost.evil.com", "127.evil.com", "127.0.0.1.evil.com",
+                     "evil.com", "[::1].evil.com", "localhost.evil.com:52341"] {
+            #expect(
+                CinemaxStreamProxy.admission(method: "GET", path: "/s/abc", hostHeader: host)
+                    == .reject(status: "400 Bad Request"),
+                "host \(host) must be rejected"
+            )
+            #expect(!CinemaxStreamProxy.isLoopbackHost(host))
+        }
+
+        // Precedence pin: the HOST check runs before the method check, so a
+        // rebinding probe that also uses a disallowed method is answered 400
+        // (bad host) — never 405, which would confirm to the caller that the
+        // host was accepted and only the verb was wrong.
+        #expect(
+            CinemaxStreamProxy.admission(method: "POST", path: "/s/abc", hostHeader: "localhost.evil.com")
+                == .reject(status: "400 Bad Request")
+        )
+
+        // A Host header that is PRESENT but empty/whitespace is malformed and
+        // rejected — only a genuinely ABSENT Host (nil) is waved through.
+        for empty in ["", " ", "\t "] {
+            #expect(
+                CinemaxStreamProxy.admission(method: "GET", path: "/s/abc", hostHeader: empty)
+                    == .reject(status: "400 Bad Request"),
+                "empty host \(empty.debugDescription) must be rejected"
+            )
+        }
+    }
+
+    @Test("only GET/HEAD are forwarded upstream — writes get 405")
+    func nonReadMethodsRejected() {
+        for method in ["POST", "PUT", "DELETE", "PATCH", "OPTIONS", "CONNECT"] {
+            #expect(
+                CinemaxStreamProxy.admission(method: method, path: "/s/abc", hostHeader: "127.0.0.1:1")
+                    == .reject(status: "405 Method Not Allowed"),
+                "method \(method) must be rejected"
+            )
+        }
+        // Case-insensitive on the method name.
+        #expect(CinemaxStreamProxy.admission(
+            method: "get", path: "/s/abc", hostHeader: "127.0.0.1"
+        ) == .accept)
+    }
+
+    @Test("paths outside /s/ are rejected before anything else")
+    func nonStreamPathsRejected() {
+        for path in ["/", "/admin", "/s", "//s/abc", "/S/abc"] {
+            #expect(
+                CinemaxStreamProxy.admission(method: "GET", path: path, hostHeader: "127.0.0.1")
+                    == .reject(status: "400 Bad Request"),
+                "path \(path) must be rejected"
+            )
+        }
+    }
+
+    @Test("loopback host matching accepts only the exact loopback names")
+    func loopbackHostMatching() {
+        for host in ["127.0.0.1", "127.0.0.1:8080", "LOCALHOST", "localhost:1",
+                     "::1", "[::1]", "[::1]:9", " 127.0.0.1 "] {
+            #expect(CinemaxStreamProxy.isLoopbackHost(host), "\(host) should be loopback")
+        }
+        for host in ["", "127.0.0.2", "0.0.0.0", "192.168.1.10", "127.0.0.1:",
+                     "127.0.0.1:port", "[::1", "[::2]", "example.com"] {
+            #expect(!CinemaxStreamProxy.isLoopbackHost(host), "\(host) should NOT be loopback")
+        }
+    }
 }

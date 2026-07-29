@@ -127,7 +127,7 @@ extension JellyfinAPIClient: SyncPlayAPI {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await Self.syncPlaySession.data(for: request)
             try Self.validate(response)
             return data
         } catch {
@@ -135,6 +135,22 @@ extension JellyfinAPIClient: SyncPlayAPI {
             throw error
         }
     }
+
+    /// Dedicated session for the hand-built SyncPlay calls. Deliberately NOT
+    /// `URLSession.shared`, which carries a disk-backed `URLCache`: these are
+    /// authenticated requests (including `GET /SyncPlay/List` and
+    /// `GET /GetUtcTime`), so their responses would be written to a cache file
+    /// in the app container — and a cached `GetUtcTime` would silently poison
+    /// the clock-offset math. Matches the `urlCache = nil` discipline of the
+    /// SDK clients' `fastFailSessionConfiguration`.
+    private static let syncPlaySession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 15
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
 
     /// Builds the same `MediaBrowser` auth header the SDK (and
     /// `rawPostPlaybackInfo`) uses.

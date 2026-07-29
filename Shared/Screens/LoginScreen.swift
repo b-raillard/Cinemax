@@ -12,6 +12,7 @@ struct LoginScreen: View {
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @State private var viewModel = LoginViewModel()
     @State private var showQuickConnect = false
+    @State private var showServers = false
     @State private var easterEggTaps: Int = 0
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -40,12 +41,55 @@ struct LoginScreen: View {
         .fullScreenCover(isPresented: $showQuickConnect) {
             QuickConnectSheet(viewModel: viewModel)
         }
+        .fullScreenCover(isPresented: $showServers) { serversModal }
         #else
         .sheet(isPresented: $showQuickConnect) {
             QuickConnectSheet(viewModel: viewModel)
                 .presentationDetents([.medium, .large])
         }
+        .sheet(isPresented: $showServers) { serversModal }
         #endif
+    }
+
+    /// The servers list works unauthenticated (it reads only the registry), so
+    /// it can be presented straight from here. Everything it needs is
+    /// root-injected; re-inject explicitly because a modal starts a new
+    /// environment branch.
+    private var serversModal: some View {
+        ServersScreen()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
+    }
+
+    /// Escape hatch under the form. Four shapes, in priority order:
+    /// 1. an ADD is in flight → "cancel adding", which is what the action does
+    ///    (labelling it "change server" described the wrong operation and hid
+    ///    the only way out of the add);
+    /// 2. a re-login is in flight (`pendingRollbackServer` holds the server we
+    ///    came from) → go back to it, fully signed in;
+    /// 3. otherwise, several registered servers → open the list right here;
+    /// 4. otherwise, the pre-multi-server behavior → back to `ServerSetupScreen`.
+    @ViewBuilder
+    private var serverEscapeHatch: some View {
+        if appState.isAddingServer {
+            helperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
+                Task { await appState.restorePreviousServer() }
+            }
+        } else if appState.pendingRollbackServer != nil {
+            helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
+                Task { await appState.restorePreviousServer() }
+            }
+        } else if appState.servers.count > 1 {
+            helperLink(icon: "server.rack", title: loc.localized("login.myServers")) {
+                showServers = true
+            }
+        } else {
+            helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
+                appState.disconnectServer()
+            }
+        }
     }
 
     /// Secondary CTA that opens the Quick Connect sheet. Hidden until the
@@ -137,6 +181,12 @@ struct LoginScreen: View {
                     .disabled(viewModel.isAuthenticating)
 
                     quickConnectButton
+
+                    // tvOS / iPad had no way off this screen before
+                    // multi-server: a switch that lands here (revoked token,
+                    // add-a-server) would otherwise be a dead end with no
+                    // affordance but signing in.
+                    serverEscapeHatch
                 }
                 .padding(CinemaSpacing.spacing10)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
@@ -257,10 +307,8 @@ struct LoginScreen: View {
 
                     quickConnectButton
 
-                    helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
-                        appState.disconnectServer()
-                    }
-                    .padding(.top, CinemaSpacing.spacing2)
+                    serverEscapeHatch
+                        .padding(.top, CinemaSpacing.spacing2)
                 }
                 .frame(maxWidth: formMaxWidth)
                 .padding(.bottom, CinemaSpacing.spacing6)

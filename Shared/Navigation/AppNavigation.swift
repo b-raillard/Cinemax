@@ -1,7 +1,10 @@
 import SwiftUI
 import CinemaxKit
 import Nuke
+import OSLog
 @preconcurrency import JellyfinAPI
+
+private let logger = Logger(subsystem: "com.cinemax", category: "Servers")
 
 @MainActor @Observable
 final class AppState {
@@ -52,6 +55,29 @@ final class AppState {
     /// reports offline — turning the box off/on must not disconnect the user.
     var isOnlineProvider: @MainActor () -> Bool = { true }
 
+    // MARK: - Multi-server state
+    //
+    // Plain stored properties with NO `didSet` (see the `@Observable` RULE):
+    // every mutation goes through one of the methods in the "Multi-server"
+    // section below, which mutate *and* persist.
+
+    /// Every registered server, Keychain-backed. Hydrated by `restoreSession`.
+    private(set) var servers: [ServerEntry] = []
+    /// Id of the entry currently mirrored into the legacy Keychain items.
+    private(set) var activeServerId: String?
+    /// Snapshot of the entry to fall back to when an add / re-login flow is
+    /// abandoned (the user backs out of `ServerSetupScreen` / `LoginScreen`).
+    private(set) var pendingRollbackServer: ServerEntry?
+    /// `true` while the pre-auth flow is being reused to ADD a server rather
+    /// than to configure the first one — drives the cancel affordance.
+    var isAddingServer = false
+
+    /// Bumped synchronously by every server-transition entry point. A transition
+    /// that awaits the network re-checks it before writing, so a slow one can
+    /// never overwrite the state a newer one already committed — same pattern as
+    /// `NowPlayingInfoController.generation`.
+    private var serverTransitionGeneration = 0
+
     let apiClient: any APIClientProtocol
     let keychain: any SecureStorageProtocol
 
@@ -83,6 +109,16 @@ final class AppState {
     /// each probe would otherwise eat a request timeout before the launch
     /// screen disappears.
     func restoreSession() async {
+        // Multi-server: seed the registry from the legacy single-server items
+        // (idempotent, non-destructive) and hydrate the observable copy. Both
+        // run BEFORE the guard below so a signed-out install still exposes its
+        // registered servers. Everything after this point is byte-identical to
+        // the single-server behavior — it still reads only the legacy trio, so
+        // an offline cold launch stays non-blocking and a failed migration
+        // cannot log anyone out.
+        keychain.migrateToMultiServerIfNeeded()
+        loadServersFromKeychain()
+
         guard let serverURL = keychain.getServerURL(),
               let session = keychain.getUserSession() else {
             return
@@ -198,23 +234,415 @@ final class AppState {
     /// server. Only clears server-side state — auth state is already empty at that point in
     /// the flow, so there's nothing user-related to wipe.
     func disconnectServer() {
+        // Multi-server: this is now reachable concurrently with a switch / an
+        // add (the `LoginScreen` escape hatch sits next to them), so it counts
+        // as a server transition — an in-flight `beginReLogin` handshake must
+        // not resurrect `hasServer` after the user backed out. Every method
+        // that mutates `hasServer` / `serverURL` bumps this.
+        serverTransitionGeneration &+= 1
         keychain.deleteServerURL()
         hasServer = false
         serverURL = nil
         serverInfo = nil
     }
 
-    func logout() {
-        keychain.clearAll()
-        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil)
+    // MARK: - Multi-server
+
+    /// Why the session is being torn down — the two reasons behave differently
+    /// on purpose. See `logout(reason:)`.
+    enum LogoutReason: Sendable {
+        /// The user tapped "Log out": revoke server-side, then hop to another
+        /// registered server if one still holds a token.
+        case userInitiated
+        /// `handlePossibleSessionExpiry` confirmed the token is revoked: no
+        /// revoke call (it would just 401) and **no auto-hop** — the user stays
+        /// on this server's `LoginScreen` behind the "session expired" toast.
+        case sessionExpired
+    }
+
+    /// What `logout(reason:)` ended up doing, so the calling screen can toast
+    /// without re-deriving the decision.
+    enum LogoutOutcome: Sendable, Equatable {
+        /// Signed out and switched to another registered server.
+        case switchedTo(ServerEntry)
+        /// Signed out; the app is now on `LoginScreen` (same server) or
+        /// `ServerSetupScreen` (nothing left to hop to).
+        case signedOut
+    }
+
+    /// The entry whose session is mirrored into the legacy Keychain items.
+    var currentActiveEntry: ServerEntry? {
+        ServerRegistry.activeEntry(in: servers, activeId: activeServerId)
+    }
+
+    /// Hydrates the observable registry from the Keychain. Called once from
+    /// `restoreSession`; every later change goes through a mutator here.
+    func loadServersFromKeychain() {
+        servers = keychain.getServers()
+        activeServerId = keychain.getActiveServerId()
+    }
+
+    private func persistRegistry() {
+        do {
+            try keychain.saveServers(servers)
+        } catch {
+            // In-memory state stays correct for this session; the next mutation
+            // retries. Logged because a silent failure here means the server
+            // list quietly reverts on relaunch.
+            logger.error("Persisting the server registry failed: \(error.localizedDescription, privacy: .public)")
+        }
+        keychain.saveActiveServerId(activeServerId)
+    }
+
+    /// **The single writer of the legacy Keychain mirror** (`server_url` /
+    /// `access_token` / `user_session`) — see the RULE on `KeychainService`.
+    /// Makes `entry` the active server end to end: mirror, registry, API
+    /// client, observable state, extensions, catalogue refresh.
+    func applyActiveServer(_ entry: ServerEntry) async {
+        // A usable session needs BOTH a token and a user id. A token-without-user
+        // entry is reachable (a migrated install whose `access_token` survived but
+        // whose `user_session` didn't) and applying it would persist a
+        // `UserSession(userID: "")` mirror and flip `isAuthenticated` with a nil
+        // `currentUserId` — a signed-in shell that can't load anything. Both
+        // incomplete shapes fall through to a real login instead.
+        guard let token = entry.accessToken, !token.isEmpty,
+              let userId = entry.userId, !userId.isEmpty else {
+            await beginReLogin(for: entry)
+            return
+        }
+        serverTransitionGeneration &+= 1
+
+        // 1. Legacy mirror. Every existing read path (`restoreSession`,
+        //    `SettingsScreen`, `ExtensionSessionBridge`) keeps working unchanged.
+        do {
+            try keychain.saveServerURL(entry.url)
+            try keychain.saveAccessToken(token)
+            try keychain.saveUserSession(UserSession(
+                userID: userId,
+                username: entry.username ?? "",
+                accessToken: token,
+                serverID: entry.serverID ?? ""
+            ))
+        } catch {
+            // The in-memory session below still works for this launch; the next
+            // relaunch would fall back to the previously mirrored server.
+            logger.error("Writing the active-session mirror failed: \(error.localizedDescription, privacy: .public)")
+        }
+
+        // 2. Registry: bump `lastUsedAt`, mark active, persist.
+        var used = entry
+        used.lastUsedAt = Date()
+        servers = ServerRegistry.upsert(used, into: servers)
+        activeServerId = used.id
+        persistRegistry()
+
+        // 3. API client. `reconnect` rebuilds the Jellyfin client and resets its
+        //    in-memory state, so the Privacy & Security rating cap MUST be
+        //    re-applied after it — same sequence as `restoreSession`, and easy
+        //    to forget. (`reconnect` already clears the cache; the explicit call
+        //    keeps the intent visible at this call site.)
+        apiClient.reconnect(url: used.url, accessToken: token)
+        apiClient.clearCache()
+        let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        apiClient.applyContentRatingLimit(maxAge: storedAge)
+
+        // 4. Observable state. `serverURL` FIRST, `currentUserId` LAST: a switch
+        //    changes both in the same transaction and `AppNavigation` depends on
+        //    its `serverURL` observer (invalidate) being delivered before its
+        //    `currentUserId` observer (refresh) — see the ordering comment there.
+        serverURL = used.url
+        serverInfo = nil
+        hasServer = true
+        accessToken = token
+        currentUserId = userId
+        isAuthenticated = true
+
+        // The switch committed — nothing left to roll back to.
+        pendingRollbackServer = nil
+        isAddingServer = false
+
+        // 5. Republish the session to the widget / Top Shelf + refresh the admin
+        //    flag for the new server's user.
+        await refreshCurrentUser()
+
+        // 6. Tier-1: every mounted screen reloads against the new server.
+        NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+
+        // 7. Background: the real name / version, written back into the entry so
+        //    the servers list stops showing the placeholder.
+        Task { [weak self] in
+            guard let self else { return }
+            guard let info = try? await self.apiClient.fetchServerInfo() else { return }
+            // Race guard: a slow fetch for server A must never land after a
+            // switch to B — it would paint A's name in B's chrome and, through
+            // `upsertActiveEntry`, persist A's identity onto B's entry.
+            guard self.activeServerId == used.id else { return }
+            self.serverInfo = info
+            self.updateServerMetadata(id: used.id, name: info.name, version: info.version, serverID: info.serverID)
+        }
+    }
+
+    /// Write-back for metadata discovered about a registered server — the
+    /// `fetchServerInfo` after a switch, or the servers list's reachability
+    /// ping. Empty / nil values never overwrite a known one.
+    func updateServerMetadata(id: String, name: String? = nil, version: String? = nil, serverID: String? = nil) {
+        guard let index = servers.firstIndex(where: { $0.id == id }) else { return }
+        var entry = servers[index]
+        if let name, !name.isEmpty { entry.name = name }
+        if let version, !version.isEmpty { entry.serverVersion = version }
+        if let serverID, !serverID.isEmpty { entry.serverID = serverID }
+        guard entry != servers[index] else { return }   // no spurious Observation cycle
+        servers[index] = entry
+        persistRegistry()
+    }
+
+    /// Switches the app to `entry`.
+    ///
+    /// Two-phase by design: a pre-flight `decideSwitch` short-circuits the cases
+    /// that must never reach the network (offline, no stored token), then the
+    /// token is validated against that server before anything is committed.
+    @discardableResult
+    func switchTo(_ entry: ServerEntry) async -> SwitchDecision {
+        guard entry.id != activeServerId else { return .commit }
+
+        // Captured BEFORE the client is repointed, and used explicitly on the
+        // rollback path. Resolving the previous server lazily via
+        // `currentActiveEntry` is unsafe here: its most-recently-used fallback
+        // (for a nil / stale `activeServerId`) can resolve to `entry` itself, so
+        // a refused switch would "roll back" onto the very server it just refused.
+        let previous = currentActiveEntry
+
+        switch ServerRegistry.decideSwitch(entry: entry, isOnline: isOnlineProvider(), validity: nil) {
+        case .offline:
+            return .offline                     // caller toasts; nothing mutated
+        case .needsLogin:
+            await beginReLogin(for: entry)
+            return .needsLogin
+        default:
+            break
+        }
+        guard let token = entry.accessToken else {
+            await beginReLogin(for: entry)
+            return .needsLogin
+        }
+
+        apiClient.reconnect(url: entry.url, accessToken: token)
+        switch await apiClient.validateSession() {
+        case .valid:
+            await applyActiveServer(entry)
+            return .commit
+        case .invalid:
+            // Server-confirmed revocation — drop THIS entry's credentials only.
+            clearSession(of: entry)
+            await beginReLogin(for: entry)
+            return .needsLogin
+        case .indeterminate:
+            // Unprovable failure: restore the previous client and KEEP the
+            // target's token (the "never destroy on indeterminate" rule).
+            await rollBackFailedSwitch(to: previous)
+            return .unreachable
+        }
+    }
+
+    /// Undoes the `reconnect` a refused switch performed, without any of the
+    /// side effects of a real switch.
+    ///
+    /// Deliberately NOT `applyActiveServer`: nothing about the current server
+    /// actually changed, so re-running the full path would post a tier-1 refresh,
+    /// re-fetch the user and bump `lastUsedAt` — i.e. a flaky network would blow
+    /// away the working server's loaded screens. Only the client is repointed
+    /// (and the rating cap re-applied, since `reconnect` drops it).
+    private func rollBackFailedSwitch(to previous: ServerEntry?) async {
+        guard let previous, let token = previous.accessToken, !token.isEmpty else {
+            // No usable server to fall back to — take the full path, which knows
+            // how to land on LoginScreen / ServerSetupScreen.
+            await restorePreviousServer()
+            return
+        }
+        apiClient.reconnect(url: previous.url, accessToken: token)
+        let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        apiClient.applyContentRatingLimit(maxAge: storedAge)
+    }
+
+    /// Points the shared client at `entry` without a token and leaves the app in
+    /// the `hasServer && !isAuthenticated` state, which `AppNavigation` already
+    /// renders as `LoginScreen` — password and Quick Connect both scoped to that
+    /// server for free. A successful login commits the entry through
+    /// `upsertActiveEntry(session:)`.
+    func beginReLogin(for entry: ServerEntry) async {
+        if pendingRollbackServer == nil, let current = currentActiveEntry, current.id != entry.id {
+            pendingRollbackServer = current
+        }
+        serverTransitionGeneration &+= 1
+        let generation = serverTransitionGeneration
+        let info = try? await apiClient.connectToServer(url: entry.url)
+        // Race guard: a newer transition (another switch, an add, a logout)
+        // started while this handshake was in flight — its state has already been
+        // committed and must not be overwritten by this stale one.
+        guard generation == serverTransitionGeneration else { return }
+        serverURL = entry.url
+        serverInfo = info
+        hasServer = true
         isAuthenticated = false
+        currentUserId = nil
+        accessToken = nil
+    }
+
+    /// Reuses the pre-auth flow (`ServerSetupScreen` → `LoginScreen`) to add a
+    /// server. Deliberately does NOT call `keychain.deleteServerURL()` /
+    /// `clearAll()`: the registry and the legacy mirror must both survive a
+    /// cancelled add, which `restorePreviousServer()` then replays.
+    func beginAddServer() {
+        serverTransitionGeneration &+= 1
+        pendingRollbackServer = currentActiveEntry
+        isAddingServer = true
         hasServer = false
+        isAuthenticated = false
         serverURL = nil
         serverInfo = nil
         currentUserId = nil
         accessToken = nil
+    }
+
+    /// Abandons an add / re-login and returns to the server the user came from.
+    /// Falls back to today's `disconnectServer()` behavior when there is no
+    /// previous server at all.
+    func restorePreviousServer() async {
+        serverTransitionGeneration &+= 1
+        let snapshot = pendingRollbackServer ?? currentActiveEntry
+        pendingRollbackServer = nil
+        isAddingServer = false
+        guard let snapshot else {
+            disconnectServer()
+            return
+        }
+        await applyActiveServer(snapshot)
+    }
+
+    /// Records a freshly authenticated session against the registry and marks it
+    /// active. One method, every login path: first-ever login, add-server login,
+    /// re-login after expiry (`LoginViewModel.completeSession`) and the quick
+    /// user switch (`UserSwitchSheet.performAuth`).
+    ///
+    /// Does NOT write the legacy mirror — those call sites already saved it,
+    /// which is exactly why they needed no other change.
+    func upsertActiveEntry(session: UserSession) {
+        guard let url = serverURL else { return }
+        let normalized = ServerURLNormalizer.normalize(url) ?? url
+        let existing = ServerRegistry.contains(url: normalized, in: servers)
+        // The id must match the one `upsert` will keep, otherwise `activeServerId`
+        // would point at nothing and resolution would silently fall back to MRU.
+        let entry = ServerEntry(
+            id: existing?.id ?? UUID().uuidString,
+            name: Self.firstNonEmpty(serverInfo?.name, existing?.name) ?? ServerEntry.fallbackName,
+            url: normalized,
+            serverID: Self.firstNonEmpty(session.serverID, serverInfo?.serverID, existing?.serverID),
+            accessToken: session.accessToken,
+            userId: session.userID,
+            username: session.username,
+            serverVersion: Self.firstNonEmpty(serverInfo?.version, existing?.serverVersion),
+            lastUsedAt: Date()
+        )
+        servers = ServerRegistry.upsert(entry, into: servers)
+        activeServerId = entry.id
+        persistRegistry()
+        pendingRollbackServer = nil
+        isAddingServer = false
+    }
+
+    /// Removes a NON-active server. The active one is never deletable — the user
+    /// has to switch away first (mirrors the "THIS DEVICE" rule in the connected
+    /// devices list).
+    func removeServer(_ entry: ServerEntry) async {
+        guard entry.id != activeServerId else { return }
+        revokeSessionInBackground(for: entry)
+        servers.removeAll { $0.id == entry.id }
+        persistRegistry()
+    }
+
+    /// Signs out of the ACTIVE server. See `LogoutReason` for the two behaviors.
+    @discardableResult
+    func logout(reason: LogoutReason = .userInitiated) async -> LogoutOutcome {
+        let active = currentActiveEntry
+
+        if reason == .userInitiated, let active {
+            revokeSessionInBackground(for: active)
+        }
+
+        // Keep the entry, drop its credentials: the card stays in the list ready
+        // for a re-login. ONLY the active entry is touched, so a confirmed-invalid
+        // session can never reach another server's token.
+        if let active { clearSession(of: active) }
+
+        keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
+        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil)
+        serverTransitionGeneration &+= 1
+        isAuthenticated = false
+        currentUserId = nil
+        accessToken = nil
         currentUser = nil
         isAdministrator = false
+        // A logout ends whatever add / re-login flow was pending: a stale
+        // snapshot would otherwise drive the LoginScreen's "go back to the
+        // server you came from" affordance toward a session that no longer exists.
+        pendingRollbackServer = nil
+        isAddingServer = false
+
+        switch reason {
+        case .userInitiated:
+            if let active, let candidate = ServerRegistry.nextCandidate(after: active.id, in: servers) {
+                if await switchTo(candidate) == .commit {
+                    return .switchedTo(candidate)
+                }
+                // The hop didn't commit. `hasServer` / `serverURL` are left
+                // pointing at the server we just signed out of, so the user
+                // lands on its `LoginScreen` — the same place a session-expiry
+                // logout leaves them, and the one screen that is correct for
+                // every failure here (`.offline` mutates nothing, `.needsLogin`
+                // already routed to the candidate's login, `.unreachable` only
+                // repointed the client back).
+                return .signedOut
+            }
+            // Nothing left to hop to → `ServerSetupScreen`. The tokenless entry
+            // stays in the registry so re-adding that server dedups onto it.
+            activeServerId = nil
+            persistRegistry()
+            hasServer = false
+            serverURL = nil
+            serverInfo = nil
+            return .signedOut
+        case .sessionExpired:
+            // `hasServer` + `serverURL` deliberately preserved so the user lands
+            // on `LoginScreen` for the SAME server behind the "session expired"
+            // toast instead of being bounced back to server setup. Other entries
+            // are untouched.
+            return .signedOut
+        }
+    }
+
+    /// Strips credentials from one entry, keeping the entry itself.
+    private func clearSession(of entry: ServerEntry) {
+        guard let index = servers.firstIndex(where: { $0.id == entry.id }) else { return }
+        servers[index].accessToken = nil
+        servers[index].userId = nil
+        servers[index].username = nil
+        persistRegistry()
+    }
+
+    /// Fire-and-forget server-side revocation. Deliberately not awaited: the
+    /// local entry is dropped either way, and a dead server must not freeze the
+    /// UI for the request timeout. Standalone helper — never the shared client.
+    private func revokeSessionInBackground(for entry: ServerEntry) {
+        guard let token = entry.accessToken, !token.isEmpty, isOnlineProvider() else { return }
+        let url = entry.url
+        let deviceId = KeychainService.getOrCreateDeviceID()
+        Task.detached(priority: .utility) {
+            await ServerSessionRevoker.revoke(url: url, accessToken: token, deviceId: deviceId)
+        }
+    }
+
+    private static func firstNonEmpty(_ values: String?...) -> String? {
+        values.compactMap { $0 }.first { !$0.isEmpty }
     }
 
     /// Confirm-before-logout. A single ambiguous 401 from a hot path (or a
@@ -250,7 +678,10 @@ final class AppState {
                 return
             case .invalid:
                 // Server-confirmed revocation — the one correct logout path.
-                logout()
+                // `.sessionExpired` keeps `hasServer`/`serverURL` so the user
+                // lands on this server's LoginScreen, never auto-hops to another
+                // server, and never touches another entry's token.
+                await logout(reason: .sessionExpired)
                 NotificationCenter.default.post(name: .cinemaxSessionConfirmedInvalid, object: nil)
                 return
             case .indeterminate:
@@ -342,7 +773,19 @@ struct AppNavigation: View {
                 } else if !appState.hasServer {
                     ServerSetupScreen()
                 } else if !appState.isAuthenticated {
+                    // Keyed on the target server so retargeting the pre-auth
+                    // flow at a DIFFERENT server (Servers sheet → "add", or
+                    // "Change server" from the login screen) rebuilds the view
+                    // instead of reusing it. `LoginViewModel` is owned by
+                    // `LoginScreen`'s own `@State`, so a new identity is what
+                    // discards the previous server's typed username/password,
+                    // its stale error message and its Quick Connect code — and
+                    // it re-fires `.task { checkQuickConnect }`, which is the
+                    // only thing that re-probes whether THIS server has Quick
+                    // Connect enabled (otherwise the CTA keeps the old
+                    // server's answer).
                     LoginScreen()
+                        .id(appState.serverURL)
                 } else {
                     MainTabView()
                 }
@@ -388,11 +831,37 @@ struct AppNavigation: View {
             // downloads feature — purge the (potentially multi-GB) media tree
             // that no longer has any UI to clear it.
             Self.purgeLegacyDownloads()
+            // A crash / force-quit mid-playback leaves the playback Live
+            // Activity pinned to the Lock Screen with a timer that keeps
+            // running. Sweep any orphan at launch (the player also sweeps on
+            // every attach).
+            PlaybackLiveActivityController.endStaleActivities()
             #endif
             // Decide once, in the background, whether this server needs the
             // loopback stream proxy (dual-stack host with a black-holed IPv6
             // that libVLC would stall on). Non-blocking; cached for the session.
             StreamTransportPolicy.shared.configure(serverURL: appState.serverURL)
+        }
+        // RULE — DECLARATION ORDER IS LOAD-BEARING: `serverURL` must be observed
+        // BEFORE `currentUserId`. A server switch mutates both in one
+        // transaction, and SwiftUI delivers same-transaction `onChange`
+        // handlers in declaration order. This one calls
+        // `menuConfig.invalidateViews()` (wipes the server-scoped library
+        // cache); the next one is the single owner of `refreshAvailableViews()`.
+        // Refresh-then-invalidate would throw away the views just fetched and
+        // resolve the tab bar to zero tabs — the historical black-screen bug.
+        // Do not reorder these two, and do not add a second refresh owner.
+        .onChange(of: appState.serverURL) { old, new in
+            // Library view IDs are server-scoped. Invalidate the cached menu
+            // entries only when switching to a *different* concrete server
+            // (both sides non-nil and not equal). Plain logouts (URL → nil)
+            // keep the cache so re-logging into the same server preserves
+            // the user's custom tab arrangement.
+            if let old, let new, old != new {
+                menuConfig.invalidateViews()
+            }
+            // Re-decide stream transport for the new server (or clear on logout).
+            StreamTransportPolicy.shared.configure(serverURL: new)
         }
         .onChange(of: appState.currentUserId) { oldId, newId in
             menuConfig.attach(apiClient: appState.apiClient, userId: newId)
@@ -410,18 +879,6 @@ struct AppNavigation: View {
                menuConfig.mode == .custom && menuConfig.customKind == .library {
                 Task { await menuConfig.refreshAvailableViews() }
             }
-        }
-        .onChange(of: appState.serverURL) { old, new in
-            // Library view IDs are server-scoped. Invalidate the cached menu
-            // entries only when switching to a *different* concrete server
-            // (both sides non-nil and not equal). Plain logouts (URL → nil)
-            // keep the cache so re-logging into the same server preserves
-            // the user's custom tab arrangement.
-            if let old, let new, old != new {
-                menuConfig.invalidateViews()
-            }
-            // Re-decide stream transport for the new server (or clear on logout).
-            StreamTransportPolicy.shared.configure(serverURL: new)
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {

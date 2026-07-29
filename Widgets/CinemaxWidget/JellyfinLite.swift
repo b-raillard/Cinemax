@@ -4,12 +4,10 @@ import Security
 // Minimal, dependency-free Jellyfin access for the widget. The extension
 // deliberately does NOT link CinemaxKit (widget memory budgets are tight and
 // the SDK pulls Nuke + generated entities); it reads the session snapshot the
-// app publishes to the App Group (`ExtensionSessionBridge` — keep the suite /
-// key / JSON shape in sync) and talks to two endpoints directly.
+// app publishes to the shared Keychain access group (`ExtensionSessionBridge`
+// — keep the service / account / group / JSON shape in sync) and talks to two
+// endpoints directly.
 enum JellyfinLite {
-    static let appGroupId = "group.com.cinemax.shared"
-    static let sessionKey = "extension.session"
-
     struct Session: Codable {
         let serverURL: URL
         let accessToken: String
@@ -31,14 +29,27 @@ enum JellyfinLite {
     private static let keychainService = "com.cinemax.jellyfin"
     private static let keychainAccount = "extension_session"
 
+    /// Every request goes through an EPHEMERAL session, never
+    /// `URLSession.shared`: the shared session carries a disk-backed
+    /// `URLCache`, so authenticated Jellyfin responses (and the poster bytes)
+    /// would be written to a cache file inside the extension container. The
+    /// widget refetches on its own timeline anyway, so there is nothing to
+    /// gain from an on-disk HTTP cache here.
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 10
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
+    /// Sole store: the shared, device-only Keychain group the app publishes
+    /// to. The legacy plaintext App Group fallback is gone — the app has
+    /// written the Keychain copy since 1.0.3, and the app scrubs the old
+    /// cleartext blob on its next `publish`.
     static func readSession() -> Session? {
-        // Primary: the shared, device-only Keychain group the app publishes to.
-        if let session = readSessionFromKeychain() { return session }
-        // Fallback: the legacy plaintext App Group copy (dropped a release after
-        // the Keychain migration ships).
-        guard let defaults = UserDefaults(suiteName: appGroupId),
-              let data = defaults.data(forKey: sessionKey) else { return nil }
-        return try? JSONDecoder().decode(Session.self, from: data)
+        readSessionFromKeychain()
     }
 
     private static func readSessionFromKeychain() -> Session? {
@@ -84,8 +95,7 @@ enum JellyfinLite {
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
             URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "mediaTypes", value: "Video"),
-            URLQueryItem(name: "api_key", value: session.accessToken)
+            URLQueryItem(name: "mediaTypes", value: "Video")
         ]
         return await fetchItems(comps: comps, token: session.accessToken)
     }
@@ -102,8 +112,7 @@ enum JellyfinLite {
             URLQueryItem(name: "isFavorite", value: "true"),
             URLQueryItem(name: "sortBy", value: "DateCreated"),
             URLQueryItem(name: "sortOrder", value: "Descending"),
-            URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "api_key", value: session.accessToken)
+            URLQueryItem(name: "limit", value: String(limit))
         ]
         return await fetchItems(comps: comps, token: session.accessToken)
     }
@@ -117,8 +126,7 @@ enum JellyfinLite {
         comps.path = endpointPath("/Shows/NextUp", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
-            URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "api_key", value: session.accessToken)
+            URLQueryItem(name: "limit", value: String(limit))
         ]
         return await fetchItems(comps: comps, token: session.accessToken)
     }
@@ -133,13 +141,12 @@ enum JellyfinLite {
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
             URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "api_key", value: session.accessToken)
+            URLQueryItem(name: "limit", value: String(limit))
         ]
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+        guard let (data, resp) = try? await Self.session.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode([Item].self, from: data) else { return nil }
         return decoded.map(makeResumeItem)
@@ -149,7 +156,7 @@ enum JellyfinLite {
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+        guard let (data, resp) = try? await Self.session.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
         return decoded.items.map(makeResumeItem)
@@ -176,20 +183,25 @@ enum JellyfinLite {
         )
     }
 
+    /// Token-free poster URL — auth is carried by the `Authorization` header in
+    /// `fetchImage`, which the widget always fetches through (unlike Top Shelf,
+    /// where the SYSTEM loads the URL and header auth is impossible). Mirrors
+    /// the app's `ImageURLBuilder` + `AuthenticatedImageFetch` split.
     static func posterURL(session: Session, itemId: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/Items/\(itemId)/Images/Primary", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "maxWidth", value: String(maxWidth)),
-            URLQueryItem(name: "quality", value: "85"),
-            URLQueryItem(name: "api_key", value: session.accessToken)
+            URLQueryItem(name: "quality", value: "85")
         ]
         return comps.url
     }
 
-    static func fetchImage(_ url: URL?) async -> Data? {
+    static func fetchImage(_ url: URL?, token: String) async -> Data? {
         guard let url else { return nil }
-        guard let (data, resp) = try? await URLSession.shared.data(from: url),
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await Self.session.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               !data.isEmpty else { return nil }
         return data

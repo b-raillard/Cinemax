@@ -297,6 +297,25 @@ extension JellyfinAPIClient {
         return (item, itemId)
     }
 
+    /// Dedicated session for the hand-built PlaybackInfo POST. Deliberately NOT
+    /// `URLSession.shared`, which carries a disk-backed `URLCache`: this request
+    /// is authenticated (`MediaBrowser Token=…` header) and its response body
+    /// contains the freshly-negotiated stream URL — including the `api_key`
+    /// query item — so a shared-session cache file would hold both at rest.
+    /// Mirrors `syncPlaySession` and the SDK clients'
+    /// `fastFailSessionConfiguration` (`urlCache = nil`, bounded timeouts,
+    /// `waitsForConnectivity = false`); the per-request `timeoutInterval = 20`
+    /// set by the caller still wins over the configuration default.
+    private static let playbackInfoSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     /// Raw HTTP POST to PlaybackInfo, captures the full response body for diagnosis.
     private func rawPostPlaybackInfo(
         serverURL: URL,
@@ -337,7 +356,7 @@ extension JellyfinAPIClient {
         // a spurious timeout, but still bounded so a dead server fails the Play
         // tap in reasonable time. (Was 8s — too tight for slow self-hosts.)
         request.timeoutInterval = 20
-        let (data, urlResponse) = try await URLSession.shared.data(for: request)
+        let (data, urlResponse) = try await Self.playbackInfoSession.data(for: request)
         let httpResponse = urlResponse as? HTTPURLResponse
 
         #if DEBUG
@@ -440,11 +459,13 @@ extension JellyfinAPIClient {
         // short-TTL getItem entry (and the resume list) so the detail screen's
         // immediate post-dismiss reload — tvOS reloads synchronously on dismiss —
         // paints the fresh resume bar instead of the pre-playback position. Also
-        // drop the cached episode lists so a season's per-episode progress bar
-        // reflects the just-watched episode.
+        // drop every userData-bearing series cache so a season's per-episode
+        // progress bar reflects the just-watched episode and the detail screen's
+        // post-playback refresh re-resolves the next episode instead of
+        // re-serving the one that just finished.
         cache.invalidate(prefix: "item-\(itemId)-")
         cache.invalidate(prefix: "resume-")
-        cache.invalidate(prefix: "episodes-")
+        for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
     }
 
     /// Compact, single-tag diagnostic for the playback decision.

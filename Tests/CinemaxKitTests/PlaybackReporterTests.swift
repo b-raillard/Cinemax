@@ -84,6 +84,111 @@ struct PlaybackReporterTests {
         try await Task.sleep(for: .milliseconds(30))
         #expect(mock.startCount == 0)
     }
+
+    // MARK: - Non-finite position guards
+    //
+    // `AVPlayer.currentTime()` is an invalid CMTime (`.seconds == NaN`) until a
+    // player item is attached, and `NativeVideoPresenter.present` creates the
+    // player before the async audio-session hop that attaches one. A dismiss or
+    // a background inside that window used to trap in `Int(seconds * 10_000_000)`.
+
+    @Test("ticks conversion is NaN/infinity-safe and clamps out-of-range values")
+    func ticksConversionIsSafe() {
+        #expect(PlaybackReporter.positionTicks(fromSeconds: .nan) == 0)
+        #expect(PlaybackReporter.positionTicks(fromSeconds: .infinity) == 0)
+        #expect(PlaybackReporter.positionTicks(fromSeconds: -.infinity) == 0)
+        #expect(PlaybackReporter.positionTicks(fromSeconds: .signalingNaN) == 0)
+        #expect(PlaybackReporter.positionTicks(fromSeconds: 0) == 0)
+        #expect(PlaybackReporter.positionTicks(fromSeconds: 12.5) == 125_000_000)
+        // Negative positions are meaningless to the server — floor at 0.
+        #expect(PlaybackReporter.positionTicks(fromSeconds: -3) == 0)
+        // Finite but astronomically large: the multiply itself overflows to
+        // +infinity, which must clamp rather than trap.
+        #expect(PlaybackReporter.positionTicks(fromSeconds: .greatestFiniteMagnitude) == Int.max)
+    }
+
+    @Test("reportStop with a NaN time source reports 0 ticks instead of trapping")
+    func stopWithNaNTimeSource() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: .nan, isPaused: false) }
+        )
+
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.stopCount == 1)
+        #expect(mock.lastStopTicks == 0)
+    }
+
+    @Test("reportBackgroundProgress with an infinite time source reports 0 ticks")
+    func backgroundProgressWithInfiniteTimeSource() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: .infinity, isPaused: false) }
+        )
+
+        reporter.reportBackgroundProgress()
+        for _ in 0..<200 where mock.progressCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.progressCount == 1)
+        #expect(mock.lastProgressTicks == 0)
+    }
+
+    @Test("periodic progress with a NaN time source reports 0 ticks")
+    func periodicProgressWithNaNTimeSource() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: .nan, isPaused: true) }
+        )
+
+        for _ in 0..<10 { reporter.onTick() }
+        for _ in 0..<200 where mock.progressCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.progressCount == 1)
+        #expect(mock.lastProgressTicks == 0)
+    }
+
+    @Test("reportStart with a NaN startTime reports 0 ticks")
+    func startWithNaNStartTime() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+        )
+
+        reporter.reportStart(startTime: .nan)
+        for _ in 0..<200 where mock.startCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.startCount == 1)
+        #expect(mock.lastStartTicks == 0)
+    }
+
+    @Test("a finite time source still reports the real position")
+    func finiteTimeSourceReportsPosition() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.lastStopTicks == 420_000_000)
+    }
 }
 
 // MARK: - Test helpers
@@ -96,19 +201,25 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         var start = 0
         var progress = 0
         var stop = 0
+        var lastStartTicks: Int?
+        var lastProgressTicks: Int?
+        var lastStopTicks: Int?
     }
     private let state = OSAllocatedUnfairLock(initialState: Counts())
 
     var startCount: Int { state.withLock { $0.start } }
     var progressCount: Int { state.withLock { $0.progress } }
     var stopCount: Int { state.withLock { $0.stop } }
+    var lastStartTicks: Int? { state.withLock { $0.lastStartTicks } }
+    var lastProgressTicks: Int? { state.withLock { $0.lastProgressTicks } }
+    var lastStopTicks: Int? { state.withLock { $0.lastStopTicks } }
 
     func reportPlaybackStart(
         itemId: String, userId: String,
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, playMethod: CinemaxKit.PlayMethod
     ) async {
-        state.withLock { $0.start += 1 }
+        state.withLock { $0.start += 1; $0.lastStartTicks = positionTicks }
     }
 
     func reportPlaybackProgress(
@@ -116,7 +227,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod
     ) async {
-        state.withLock { $0.progress += 1 }
+        state.withLock { $0.progress += 1; $0.lastProgressTicks = positionTicks }
     }
 
     func reportPlaybackStopped(
@@ -124,7 +235,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?
     ) async {
-        state.withLock { $0.stop += 1 }
+        state.withLock { $0.stop += 1; $0.lastStopTicks = positionTicks }
     }
 
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto] {

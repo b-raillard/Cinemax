@@ -49,6 +49,21 @@ public final class JellyfinAPIClient: Sendable {
     nonisolated(unsafe) private var _onUnauthorized: (@Sendable () -> Void)?
     internal let cache = APICache()
 
+    /// Every short-TTL cache key whose payload carries per-item **userData**
+    /// (watched marks, resume positions, the series' next-up pointer). All three
+    /// must be swept together by every userData mutator — `markItemPlayed`,
+    /// `markItemUnplayed` (`+Library`) and `reportPlaybackStopped` (`+Playback`)
+    /// — because a single toggle cascades across all of them: marking a series
+    /// played flips every episode's watched mark, changes each season's progress,
+    /// AND advances next-up. Declared once here rather than repeated as literals
+    /// at each site so a new cached userData-bearing endpoint is added in exactly
+    /// one place and can't be half-wired. `CinemaxKitTests.APICacheTests` asserts
+    /// the sweep of this list against the live key shapes.
+    ///
+    /// Adding an entry means adding a cache whose key uses that prefix; removing
+    /// one means that payload is no longer cached (or no longer userData-bearing).
+    internal static let userDataCachePrefixes: [String] = ["episodes-", "seasons-", "nextup-"]
+
     public init() {}
 
     internal func getClient() -> JellyfinClient? {
@@ -341,11 +356,19 @@ public final class JellyfinAPIClient: Sendable {
     /// slow API call fail and tore whole screens down to "Serveur injoignable".
     /// 30s idle / 60s total tolerates a slow server while still failing a truly
     /// dead one in bounded time.
+    ///
+    /// `urlCache = nil`: every request on this session is authenticated, and
+    /// `URLSessionConfiguration.default` otherwise writes those responses to a
+    /// disk-backed `URLCache` inside the app container. Jellyfin's JSON is
+    /// rarely cacheable to begin with, and freshness is already owned by the
+    /// app's own `APICache` (short TTLs + explicit invalidation) — so the HTTP
+    /// cache bought nothing and only widened the at-rest footprint.
     fileprivate static let fastFailSessionConfiguration: URLSessionConfiguration = {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 30
         c.timeoutIntervalForResource = 60
         c.waitsForConnectivity = false
+        c.urlCache = nil
         return c
     }()
 

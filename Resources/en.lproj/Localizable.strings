@@ -130,6 +130,8 @@
 "playback.error.network" = "The connection to your server was lost. Check your network and retry.";
 "playback.error.transcode" = "The server couldn't transcode this file. Check your server's transcoding settings.";
 "playback.error.close" = "Close";
+"player.episodeNav.failed" = "Episode unavailable";
+"player.episodeNav.failed.message" = "Couldn't load this episode. Check your connection and try again.";
 
 // MARK: - End of Series
 
@@ -170,7 +172,7 @@
 "settings.account" = "Account";
 "settings.privacySecurity" = "Privacy & Security";
 "settings.premiumMember" = "Premium Member \U2022 Managed Profile";
-"settings.logOutConfirm" = "You will be returned to the server setup screen.";
+"settings.logOutConfirm" = "You'll be signed out of this server.";
 
 // MARK: - Settings (tvOS)
 
@@ -660,12 +662,12 @@
 "menu.maxReached" = "Maximum %d enabled tabs.";
 "menu.library.empty" = "No video libraries available";
 "menu.library.empty.subtitle" = "Check your connection or ask your administrator to share a library.";
-"menu.library.error" = "Couldn't load libraries.";
 "settings.motionEffects" = "Motion Effects";
 "settings.fontSize" = "Text Size";
 "settings.4kRendering" = "4K UI Rendering";
 "settings.autoPlayNextEpisode" = "Auto-play Next Episode";
 "settings.forceNativeAVPlayer" = "Use Native Player";
+"settings.playback.liveActivity" = "Live Activity";
 "settings.systemSettings" = "System Settings";
 "settings.version" = "Version %@";
 "settings.deviceName" = "Device Name";
@@ -886,3 +888,27 @@
 "home.continueWatching.markedWatched" = "Marked as watched";
 "home.continueWatching.removed" = "Removed from Continue Watching";
 "accessibility.episode.watched" = "Watched";
+
+// MARK: - Multi-server (registered servers list)
+"settings.servers" = "Servers";
+"servers.title" = "My Servers";
+"servers.current" = "Current";
+"servers.add" = "Add a server";
+"servers.switch.confirm" = "Switch to “%@”? Your screens will reload from that server.";
+"servers.switch.action" = "Switch server";
+"servers.switchedTo" = "Connected to %@";
+"servers.offline" = "You're offline. Can't switch servers right now.";
+"servers.unreachable" = "That server is unreachable. Staying on the current one.";
+"servers.delete" = "Remove";
+"servers.delete.confirm" = "Remove “%@” from your servers? This device's session will be revoked there.";
+"servers.deleted" = "%@ removed";
+"servers.online" = "Online";
+"servers.offlineBadge" = "Offline";
+"servers.empty.title" = "No servers yet";
+"servers.empty.subtitle" = "Add a Jellyfin server to get started.";
+"servers.signedOut" = "Signed out";
+"server.alreadyAdded" = "That server is already in your list.";
+"server.cancelAdd" = "Cancel";
+"login.myServers" = "My servers";
+"servers.checking" = "Checking…";
+"servers.alreadyCurrent" = "You're already connected to %@";

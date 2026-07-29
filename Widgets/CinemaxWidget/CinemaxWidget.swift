@@ -3,7 +3,7 @@ import SwiftUI
 
 // Two home-screen widgets sharing one provider/view pipeline:
 // "Continue Watching" (resume items) and "Favorites" (hearted items). Both
-// read the session snapshot the app publishes to the App Group, fetch posters
+// read the session snapshot the app publishes to the shared Keychain group, fetch posters
 // over the network, and label themselves with a header so the user can tell
 // the rails apart. Layout is a 4-column poster grid whose LAST cell is a
 // "See all" tile deep-linking to the app's Home tab (cinemax://home); each
@@ -146,7 +146,8 @@ struct PosterRailProvider: TimelineProvider {
         var posters: [PosterRailEntry.Poster] = []
         for item in items {
             let data = await JellyfinLite.fetchImage(
-                JellyfinLite.posterURL(session: session, itemId: item.posterItemId, maxWidth: 300)
+                JellyfinLite.posterURL(session: session, itemId: item.posterItemId, maxWidth: 300),
+                token: session.accessToken
             )
             posters.append(.init(id: item.id, title: item.title, subtitle: item.subtitle, imageData: data))
         }
@@ -360,5 +361,10 @@ struct CinemaxWidgetBundle: WidgetBundle {
         CinemaxFavoritesWidget()
         CinemaxNextUpWidget()
         CinemaxRecentlyAddedWidget()
+        // Playback Live Activity (Lock Screen + Dynamic Island) — views and
+        // configuration live in PlaybackLiveActivityWidget.swift.
+        #if canImport(ActivityKit)
+        CinemaxPlaybackLiveActivity()
+        #endif
     }
 }

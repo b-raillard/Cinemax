@@ -51,6 +51,9 @@ final class NativeVideoPresenter {
     private var endOfSeries: EndOfSeriesOverlayController!
     private var remoteCommands: RemoteCommandController!
     private var nowPlaying: NowPlayingInfoController!
+    /// iOS Lock Screen / Dynamic Island Live Activity. No-op stub on tvOS
+    /// (no ActivityKit) so the call sites below stay platform-free.
+    private var liveActivity: PlaybackLiveActivityController!
 
     // Track state
     private var audioTracks: [MediaTrackInfo] = []
@@ -152,6 +155,7 @@ final class NativeVideoPresenter {
             apiClient: apiClient, userId: userId,
             imageBuilder: imageBuilder, authToken: nil
         )
+        self.liveActivity = PlaybackLiveActivityController(apiClient: apiClient, userId: userId)
     }
 
     /// Called by `RemoteCommandController` when the system play/pause command
@@ -170,6 +174,11 @@ final class NativeVideoPresenter {
             elapsed: player.currentTime().seconds,
             duration: currentItemDurationSeconds(),
             rate: player.rate > 0 ? 1.0 : 0.0
+        )
+        liveActivity.update(
+            elapsed: player.currentTime().seconds,
+            duration: currentItemDurationSeconds(),
+            rate: Double(player.rate)
         )
     }
 
@@ -226,6 +235,13 @@ final class NativeVideoPresenter {
         remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
         nowPlaying.setAuthToken(playbackInfo?.authToken)
         nowPlaying.attach(itemId: itemId, title: title, durationSeconds: nil)
+        // Lock Screen / Dynamic Island Live Activity (iOS; no-op on tvOS).
+        // `startTime` seeds the resume position so the banner opens on the right
+        // playhead instead of anchoring at 0 and self-correcting a tick later.
+        liveActivity.attach(
+            itemId: itemId, title: title, subtitle: nil,
+            durationSeconds: nil, startAtSeconds: startTime
+        )
         setupTrackMenus()
         setupBackgroundObserver()
 
@@ -501,7 +517,16 @@ final class NativeVideoPresenter {
         guard let navigator = episodeNavigator, let vc = playerVC else { return }
         Task {
             playbackReporter.reportStop()
-            guard let (info, prev, next) = await navigator(ep.id) else { return }
+            guard let (info, prev, next) = await navigator(ep.id) else {
+                // The session is already closed and the new episode never
+                // resolved, so this bail is terminal for the banner: without a
+                // detach the Live Activity strands on the Lock Screen showing
+                // the previous episode's playhead. (Recovering playback itself
+                // is deliberately out of scope here — see the VLC path's
+                // `handleFailedEpisodeNav`.)
+                liveActivity.detach()
+                return
+            }
             cleanupPlayer()
             self.hasRetriedDirectURL = false
             self.playbackInfo = info
@@ -540,6 +565,14 @@ final class NativeVideoPresenter {
             remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
             nowPlaying.setAuthToken(playbackInfo?.authToken)
             nowPlaying.attach(itemId: ep.id, title: ep.title, durationSeconds: nil)
+            // Episode swap = end the old activity + start a fresh one (an
+            // activity's attributes are frozen for its lifetime). `attach`
+            // detaches first, and its generation guard drops a lookup still in
+            // flight from the episode we just left.
+            liveActivity.attach(
+                itemId: ep.id, title: ep.title, subtitle: nil,
+                durationSeconds: nil, startAtSeconds: nil
+            )
             setupTrackMenus()              // refreshes native "..." menu for new episode
 
             playerObservation?.invalidate()
@@ -608,11 +641,21 @@ final class NativeVideoPresenter {
                 guard let self else { return }
                 self.skipSegments.onTick(currentTime: time.seconds)
                 self.playbackReporter.onTick()
-                let rate = (self.playerVC?.player?.rate ?? 0) > 0 ? 1.0 : 0.0
+                let engineRate = Double(self.playerVC?.player?.rate ?? 0)
                 self.nowPlaying.update(
                     elapsed: time.seconds,
                     duration: self.currentItemDurationSeconds(),
-                    rate: rate
+                    rate: engineRate > 0 ? 1.0 : 0.0
+                )
+                // Same tick, no second timer: the controller itself decides
+                // whether this sample is a discontinuity worth a push. It gets
+                // the REAL rate (not 0/1) — AVKit's speed menu can run the item
+                // at 2×, and both the widget's client-side timer and the
+                // throttle's projection have to expect that.
+                self.liveActivity.update(
+                    elapsed: time.seconds,
+                    duration: self.currentItemDurationSeconds(),
+                    rate: engineRate
                 )
             }
         }
@@ -630,8 +673,14 @@ final class NativeVideoPresenter {
                 let autoPlay = UserDefaults.standard.object(forKey: SettingsKey.autoPlayNextEpisode) as? Bool ?? SettingsKey.Default.autoPlayNextEpisode
                 if autoPlay, let next = self.nextEpisode, self.episodeNavigator != nil {
                     self.navigateToEpisode(next)
-                } else if autoPlay, self.episodeNavigator != nil, self.nextEpisode == nil,
-                          let seriesName = self.currentSeriesName {
+                    return
+                }
+                // Playback is over and nothing follows — end the Live Activity
+                // rather than leaving a banner stuck at the end of the item
+                // (the end-of-series overlay keeps the player on screen).
+                self.liveActivity.detach()
+                if autoPlay, self.episodeNavigator != nil, self.nextEpisode == nil,
+                   let seriesName = self.currentSeriesName {
                     // We just finished the last episode of a series while auto-play is on.
                     self.endOfSeries.show(seriesName: seriesName)
                 }
@@ -814,7 +863,15 @@ final class NativeVideoPresenter {
         return item
     }
 
+    /// Registered once per presentation and torn down in `cleanup()` — NOT in
+    /// `cleanupPlayer()`, which also runs on every episode navigation and used
+    /// to leave the 2nd episode onward of a native-path binge with no
+    /// background reporting at all. Remove-before-add keeps a second call
+    /// idempotent (today `present` is the only caller, and it runs once per
+    /// presenter instance — the PiP restore re-hosts the existing
+    /// `AVPlayerViewController` instead of re-presenting).
     private func setupBackgroundObserver() {
+        removeBackgroundObserver()
         backgroundObserver = NotificationCenter.default.addObserver(
             forName: .cinemaxDidEnterBackground, object: nil, queue: .main
         ) { [weak self] _ in
@@ -837,17 +894,21 @@ final class NativeVideoPresenter {
             NotificationCenter.default.removeObserver(obs)
             itemEndObserver = nil
         }
+        playerVC?.player?.pause()
+        playerVC?.player?.replaceCurrentItem(with: nil)
+    }
+
+    private func removeBackgroundObserver() {
         if let obs = backgroundObserver {
             NotificationCenter.default.removeObserver(obs)
             backgroundObserver = nil
         }
-        playerVC?.player?.pause()
-        playerVC?.player?.replaceCurrentItem(with: nil)
     }
 
     private func cleanup() {
         remoteCommands.detach()
         nowPlaying.detach()
+        liveActivity.detach()
         if let vc = playerVC { applyTransportBarItems([], to: vc) }
         #if os(tvOS)
         dismissDelegate = nil
@@ -856,6 +917,7 @@ final class NativeVideoPresenter {
         isInPictureInPicture = false
         didRestoreFromPiP = false
         #endif
+        removeBackgroundObserver()
         cleanupPlayer()
         playerVC = nil
         PlaybackAudioSession.deactivate()

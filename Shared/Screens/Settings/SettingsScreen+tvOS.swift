@@ -65,7 +65,11 @@ extension SettingsScreen {
         .task { await probeQuickConnect() }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
-                appState.logout()
+                // Revokes this device's session server-side, keeps the (now
+                // tokenless) registry entry, and hops to another registered
+                // server when one still holds a valid session — `performLogout`
+                // toasts that hop, which is otherwise unexplained.
+                Task { await performLogout() }
             }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
@@ -390,6 +394,14 @@ extension SettingsScreen {
                         RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
                             .fill(CinemaColor.surfaceVariant.opacity(0.6))
                     )
+            )
+
+            tvActionRow(
+                id: "servers",
+                icon: "server.rack",
+                label: loc.localized("settings.servers"),
+                showsChevron: true,
+                action: { showServers = true }
             )
 
             tvLicensesButton

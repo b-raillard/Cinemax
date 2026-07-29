@@ -30,6 +30,38 @@ struct SessionResilienceTests {
         #expect(kc.savedSession == nil)        // logout() → keychain.clearAll()
     }
 
+    /// Multi-server semantics, locked deliberately: an expired session lands the
+    /// user on THIS server's `LoginScreen`, never back on `ServerSetupScreen`,
+    /// and it must not touch any other registered server's credentials.
+    @Test("Session expiry keeps hasServer and spares the other servers")
+    func sessionExpiryKeepsServerAndOthers() async {
+        let api = MockAPIClient(); api.stubbedValidity = .invalid
+        let kc = MockKeychain()
+        let active = ServerEntry(
+            name: "A", url: URL(string: "https://a.local")!,
+            accessToken: "tok", userId: "user1", username: "U"
+        )
+        let other = ServerEntry(
+            name: "B", url: URL(string: "https://b.local")!,
+            accessToken: "other-tok", userId: "user2", username: "V"
+        )
+        kc.savedServers = [active, other]
+        kc.savedActiveServerId = active.id
+
+        let app = makeAuthedState(api, kc)
+        app.loadServersFromKeychain()
+        app.hasServer = true
+        app.serverURL = active.url
+
+        await app.handlePossibleSessionExpiry()
+
+        #expect(app.isAuthenticated == false)
+        #expect(app.hasServer)                                     // LoginScreen, not server setup
+        #expect(app.serverURL == active.url)
+        #expect(app.servers.first { $0.id == active.id }?.accessToken == nil)
+        #expect(app.servers.first { $0.id == other.id }?.accessToken == "other-tok")
+    }
+
     @Test("Valid token keeps the session (spurious 401 ignored)")
     func validKeepsSession() async {
         let api = MockAPIClient(); api.stubbedValidity = .valid

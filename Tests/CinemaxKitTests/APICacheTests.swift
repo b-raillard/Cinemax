@@ -50,6 +50,46 @@ struct APICacheTests {
         #expect(library == ["movie"])
     }
 
+    /// Locks the sweep that `markItemPlayed` / `markItemUnplayed` /
+    /// `reportPlaybackStopped` perform. Those three mutators each iterate
+    /// `JellyfinAPIClient.userDataCachePrefixes` rather than repeating literals,
+    /// so this test drives the **same symbol they do**: the three userData-bearing
+    /// payloads (`episodes-<seasonId>-<userId>`, `seasons-<seriesId>-<userId>`,
+    /// `nextup-<seriesId>-<userId>`, seeded here with their live key shapes) must
+    /// all be dropped, while the unrelated long-TTL caches survive.
+    ///
+    /// Dropping a prefix from that list — the plausible regression, since it is
+    /// now the single place the sweep is defined — fails this test. The mutators
+    /// themselves can't be exercised directly: each returns early at
+    /// `guard let client = getClient()`, so reaching the invalidation needs a
+    /// live server. The shared symbol is what makes this the real contract
+    /// rather than a restatement of it.
+    @Test("Every prefix in userDataCachePrefixes is swept, and only those")
+    func userDataCachePrefixesSweepEverySeriesScopedPayload() {
+        let cache = APICache()
+        cache.set("episodes-season1-user1", value: ["ep1", "ep2"], ttl: 10)
+        cache.set("seasons-series1-user1", value: ["s1", "s2"], ttl: 10)
+        cache.set("nextup-series1-user1", value: ["ep3"], ttl: 10)
+        // Unrelated caches the mutators deliberately leave alone.
+        cache.set("genres-user1-movie", value: ["Action"], ttl: 300)
+        cache.set("similar-item1-user1-12", value: ["other"], ttl: 300)
+
+        for prefix in JellyfinAPIClient.userDataCachePrefixes {
+            cache.invalidate(prefix: prefix)
+        }
+
+        let episodes: [String]? = cache.get("episodes-season1-user1")
+        let seasons: [String]? = cache.get("seasons-series1-user1")
+        let nextUp: [String]? = cache.get("nextup-series1-user1")
+        let genres: [String]? = cache.get("genres-user1-movie")
+        let similar: [String]? = cache.get("similar-item1-user1-12")
+        #expect(episodes == nil)
+        #expect(seasons == nil)
+        #expect(nextUp == nil)
+        #expect(genres == ["Action"])
+        #expect(similar == ["other"])
+    }
+
     @Test("clear() removes all entries")
     func clearRemovesAll() {
         let cache = APICache()

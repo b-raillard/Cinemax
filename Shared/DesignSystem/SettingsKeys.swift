@@ -25,6 +25,11 @@ enum SettingsKey {
     /// without a server transcode (no freezes); native is the escape hatch for
     /// edge cases. Default `false` ⇒ VLC.
     static let forceNativeAVPlayer = "forceNativeAVPlayer"
+    /// iOS only — publishes the current playback session as a Live Activity
+    /// (Lock Screen banner + Dynamic Island) via
+    /// `PlaybackLiveActivityController`. tvOS has no ActivityKit, so neither the
+    /// controller (a no-op stub there) nor its settings row exist.
+    static let playbackLiveActivity = "playback.liveActivity"
 
     // Home page sections
     static let homeShowContinueWatching = "home.showContinueWatching"
@@ -108,6 +113,7 @@ enum SettingsKey {
         static let autoPlayNextEpisode = true
         static let sleepTimerDefaultMinutes = 0
         static let forceNativeAVPlayer = false
+        static let playbackLiveActivity = true
 
         static let homeShowContinueWatching = true
         static let homeShowNextUp = true

@@ -255,7 +255,11 @@ extension SettingsScreen {
         }
         .alert(loc.localized("action.logOut"), isPresented: $showLogOutAlert) {
             Button(loc.localized("action.logOut"), role: .destructive) {
-                appState.logout()
+                // Revokes this device's session server-side, keeps the (now
+                // tokenless) registry entry, and hops to another registered
+                // server when one still holds a valid session — `performLogout`
+                // toasts that hop, which is otherwise unexplained.
+                Task { await performLogout() }
             }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
@@ -300,6 +304,14 @@ extension SettingsScreen {
                 .padding(CinemaSpacing.spacing4)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
+
+            // Servers (multi-server list)
+            VStack(spacing: 0) {
+                navigationRow(icon: "server.rack", label: loc.localized("settings.servers")) {
+                    showServers = true
+                }
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
 
             // Refresh Catalogue
             VStack(spacing: 0) {
