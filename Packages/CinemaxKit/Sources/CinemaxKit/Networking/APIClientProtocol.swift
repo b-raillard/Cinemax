@@ -171,7 +171,32 @@ public protocol PlaybackAPI: Sendable {
     /// Reports current playback position. Fire-and-forget; errors are silently ignored.
     func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async
     /// Reports that playback has stopped at the given position. Fire-and-forget; errors are silently ignored.
-    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async
+    /// `liveStreamId` — when non-nil, tells the server to release the live
+    /// stream it opened for this session.
+    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async
+
+    /// Kills the server-side encoding job backing this play session. Idempotent
+    /// server-side — a no-op when the session wasn't transcoding — so callers
+    /// fire it unconditionally rather than trying to guess.
+    func stopEncoding(playSessionId: String) async
+
+    /// Keeps this play session's server-side encoding job alive. Only meaningful
+    /// on a transcoding session — a no-op otherwise.
+    func pingPlaybackSession(playSessionId: String) async
+
+    /// Releases a live stream opened by a PlaybackInfo negotiation whose
+    /// playback never started. The nominal path doesn't need this — the
+    /// `liveStreamId` handed to the stop report is enough.
+    func closeLiveStream(liveStreamId: String) async
+}
+
+/// Empty default implementations, same discipline as `SyncPlayAPI`: hand-written
+/// conformances (test mocks) shouldn't have to stub session-lifecycle calls they
+/// don't exercise.
+public extension PlaybackAPI {
+    func stopEncoding(playSessionId: String) async {}
+    func pingPlaybackSession(playSessionId: String) async {}
+    func closeLiveStream(liveStreamId: String) async {}
 }
 
 /// Admin-only operations: user management, activity log, system info, media

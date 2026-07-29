@@ -440,7 +440,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     // signature refers to without the explicit module qualifier.
     func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: CinemaxKit.PlayMethod) async {}
     func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod) async {}
-    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async {}
+    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {}
 
     func getPlaybackInfo(
         itemId: String, userId: String, maxBitrate: Int,
