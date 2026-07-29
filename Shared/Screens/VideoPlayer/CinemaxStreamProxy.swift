@@ -191,6 +191,9 @@ final class StreamTransportPolicy {
 /// here may perturb the timing of the playback it is measuring.
 enum PlaybackNetworkDiagnostics {
     private static let queue = DispatchQueue(label: "com.cinemax.playbackdiag", qos: .utility)
+    /// Separate from `queue`: `pathSummary()` blocks on `queue` awaiting this
+    /// monitor's first callback, so they must never be the same queue.
+    private static let pathQueue = DispatchQueue(label: "com.cinemax.playbackdiag.path", qos: .utility)
 
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.ephemeral
@@ -218,6 +221,14 @@ enum PlaybackNetworkDiagnostics {
 
             var req = URLRequest(url: url)
             req.httpMethod = "GET"
+            // RANGE-LIMITED on purpose. The probed URL is whatever libVLC is
+            // about to open — which for a direct-play item is a multi-GB file.
+            // An unbounded GET downloads the movie: verified on the simulator,
+            // where a HEALTHY network reported `urlsession=FAIL … timed out`
+            // after 12.6s. That false negative would have landed on exactly the
+            // reading this probe exists to produce. 2 KB is enough to see
+            // `#EXTM3U` or a media header.
+            req.setValue("bytes=0-2047", forHTTPHeaderField: "Range")
             let started = Date()
             session.dataTask(with: req) { data, response, error in
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
@@ -227,20 +238,62 @@ enum PlaybackNetworkDiagnostics {
                 }
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 let bytes = data?.count ?? 0
-                // First line of the body: `#EXTM3U` confirms a real playlist came back.
-                let firstLine = String(decoding: (data ?? Data()).prefix(32), as: UTF8.self)
-                    .split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-                proxyLog.notice("NETDIAG [\(label, privacy: .public)] urlsession=OK status=\(code) bytes=\(bytes) in \(ms)ms firstLine=\(firstLine, privacy: .public)")
+                // 206 is the expected answer to our Range request; 200 means the
+                // origin ignored it. Anything else is NOT reachability and must
+                // not read as "OK" in the log.
+                let verdict = (code == 200 || code == 206) ? "OK" : "HTTP-\(code)"
+                // `#EXTM3U` confirms a real playlist came back. A media file's
+                // first bytes are binary — don't spray them into the log.
+                let body = String(decoding: (data ?? Data()).prefix(32), as: UTF8.self)
+                let firstLine = body.hasPrefix("#")
+                    ? (body.split(whereSeparator: \.isNewline).first.map(String.init) ?? "")
+                    : "<binary/opaque>"
+                proxyLog.notice("NETDIAG [\(label, privacy: .public)] urlsession=\(verdict, privacy: .public) status=\(code) bytes=\(bytes) in \(ms)ms body=\(firstLine, privacy: .public)")
             }.resume()
         }
     }
 
-    /// Interface + address-family + DNS support of the current path. `NWPath` is
-    /// readable synchronously off a fresh monitor (same trick as `NetworkMonitor`).
+    /// Interface + address-family + DNS support of the current path.
+    ///
+    /// MUST wait for the monitor's first update: reading `currentPath` off a
+    /// monitor that was never `start()`ed returns the empty default path, which
+    /// reports `unsatisfied / v4=false / v6=false / dns=false` on a perfectly
+    /// healthy network (verified on the simulator). Reporting `dns=false` while
+    /// DNS plainly works would be worse than reporting nothing at all.
+    /// The monitor runs on its OWN queue — delivering onto `queue`, which this
+    /// call is blocking, would deadlock.
     private static func pathSummary() -> String {
-        let path = NWPathMonitor().currentPath
-        let interfaces = path.availableInterfaces.map { "\($0.type)" }.joined(separator: ",")
-        return "path=\(path.status) ifaces=[\(interfaces)] v4=\(path.supportsIPv4) v6=\(path.supportsIPv6) dns=\(path.supportsDNS)"
+        let monitor = NWPathMonitor()
+        let box = FirstPathSummary()
+        let ready = DispatchSemaphore(value: 0)
+        monitor.pathUpdateHandler = { path in
+            // Status + interfaces ONLY. `supportsIPv4`/`supportsIPv6`/`supportsDNS`
+            // are deliberately omitted: on a plain (parameter-less) monitor they
+            // came back `false, false, false` on a path that was `satisfied` over
+            // wiredEthernet, in the same breath as getaddrinfo returning two IPv4
+            // addresses and a 57 ms HTTP round-trip. A reading that contradicts
+            // the two lines under it is worse than no reading. The real answer to
+            // "which families does this host offer here" is `addrs=` below, which
+            // is measured rather than advertised.
+            let interfaces = path.availableInterfaces.map { "\($0.type)" }.joined(separator: ",")
+            box.setIfEmpty("path=\(path.status) ifaces=[\(interfaces)]")
+            ready.signal()
+        }
+        monitor.start(queue: pathQueue)
+        defer { monitor.cancel() }
+        guard ready.wait(timeout: .now() + 2) == .success, let summary = box.value else {
+            return "path=<no update within 2s>"
+        }
+        return summary
+    }
+
+    /// One-shot, lock-guarded holder for the monitor's first path summary
+    /// (the handler fires on `pathQueue`, the reader blocks on `queue`).
+    private final class FirstPathSummary: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: String?
+        func setIfEmpty(_ summary: String) { lock.withLock { if stored == nil { stored = summary } } }
+        var value: String? { lock.withLock { stored } }
     }
 
     /// The same lookup libVLC performs, from our process. Returns every address
