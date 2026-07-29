@@ -7,14 +7,22 @@ import CinemaxKit
 /// `MenuConfigStore` persists through `UserDefaults.standard` under the
 /// `SettingsKey.menu*` keys, so the suite is `.serialized` and every test
 /// starts by wiping those keys — no leakage between tests or store instances.
+///
+/// Menu state is per-server: nothing persists until a profile is activated, so
+/// every test goes through `makeStore()` (which activates a single test server)
+/// or activates explicitly when it needs more than one.
 @MainActor
 @Suite("MenuConfigStore", .serialized)
 struct MenuConfigStoreTests {
+
+    /// Default server id used by `makeStore()`.
+    private static let testServer = "server-1"
 
     /// Removes every persisted menu key so each test starts from factory state.
     private func clearMenuDefaults() {
         let defaults = UserDefaults.standard
         for key in [
+            SettingsKey.menuProfiles,
             SettingsKey.menuMode,
             SettingsKey.menuCustomKind,
             SettingsKey.menuContentTypeEntries,
@@ -23,6 +31,29 @@ struct MenuConfigStoreTests {
         ] {
             defaults.removeObject(forKey: key)
         }
+    }
+
+    /// A store with one server's profile activated — the shape every screen
+    /// sees at runtime (`AppNavigation` activates before the tab bar renders).
+    private func makeStore(_ serverId: String = MenuConfigStoreTests.testServer) -> MenuConfigStore {
+        let created = MenuConfigStore()
+        created.activate(serverId: serverId, knownServerIds: [serverId])
+        return created
+    }
+
+    /// The profile dictionary as it sits on disk.
+    private func persistedProfiles() -> [String: MenuProfile] {
+        guard let data = UserDefaults.standard.data(forKey: SettingsKey.menuProfiles),
+              let decoded = try? JSONDecoder().decode([String: MenuProfile].self, from: data)
+        else { return [:] }
+        return decoded
+    }
+
+    /// Writes a profile dictionary straight to disk, simulating what a previous
+    /// launch left behind.
+    private func seedProfiles(_ profiles: [String: MenuProfile]) {
+        guard let data = try? JSONEncoder().encode(profiles) else { return }
+        UserDefaults.standard.set(data, forKey: SettingsKey.menuProfiles)
     }
 
     private func makeView(id: String, name: String) -> BaseItemDto {
@@ -38,7 +69,7 @@ struct MenuConfigStoreTests {
     @Test("enabling a 6th tab returns .refusedCapReached and mutates nothing")
     func sixthTabRefused() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         let seeded: [MenuEntry] = [
             .init(id: MenuEntry.homeID, enabled: true),
             .init(id: MenuEntry.libraryID(viewId: "a"), enabled: true),
@@ -49,14 +80,15 @@ struct MenuConfigStoreTests {
         ]
         store.libraryEntries = seeded
         store.setCustomKind(.library) // entries non-empty → not repopulated
+        let persistedBefore = persistedProfiles()
 
         let result = store.toggle(MenuEntry.searchID)
 
         #expect(result == .refusedCapReached)
         #expect(store.libraryEntries == seeded)
-        // A refused toggle must not persist anything either (direct seeding
-        // above bypassed persistence, so the key must still be absent).
-        #expect(UserDefaults.standard.data(forKey: SettingsKey.menuLibraryEntries) == nil)
+        // A refused toggle must not persist anything either — the stored
+        // profile is byte-for-byte what `setCustomKind` left behind.
+        #expect(persistedProfiles() == persistedBefore)
 
         // Cap is count-based, not sticky: freeing a slot lets the 6th in.
         #expect(store.toggle(MenuEntry.libraryID(viewId: "a")) == .disabled)
@@ -68,7 +100,7 @@ struct MenuConfigStoreTests {
     @Test("toggling the mandatory Settings entry is a silent no-op")
     func mandatoryToggleNoChange() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         let before = store.contentTypeEntries
 
         #expect(store.toggle(MenuEntry.settingsID) == .noChange)
@@ -80,7 +112,7 @@ struct MenuConfigStoreTests {
     @Test("move() persists and round-trips through a fresh store instance")
     func moveRoundTrips() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         // Defaults: [home, movies, series, search, settings].
         // Moving offset 0 to toOffset 3 lands "home" before the element
         // originally at index 3 → [movies, series, home, search, settings].
@@ -92,18 +124,18 @@ struct MenuConfigStoreTests {
         ]
         #expect(store.contentTypeEntries.map(\.id) == expected)
 
-        let fresh = MenuConfigStore()
+        let fresh = makeStore()
         #expect(fresh.contentTypeEntries.map(\.id) == expected)
     }
 
     @Test("toggle persists the enabled flag across store instances")
     func togglePersists() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
 
         #expect(store.toggle(MenuEntry.moviesID) == .disabled)
 
-        let fresh = MenuConfigStore()
+        let fresh = makeStore()
         #expect(fresh.contentTypeEntries.first { $0.id == MenuEntry.moviesID }?.enabled == false)
     }
 
@@ -116,7 +148,7 @@ struct MenuConfigStoreTests {
         // Server now has B (already known) and C (new); A vanished.
         api.stubbedUserViews = [makeView(id: "B", name: "Films"), makeView(id: "C", name: "Docs")]
 
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.attach(apiClient: api, userId: "user1")
         store.libraryEntries = [
             .init(id: MenuEntry.homeID, enabled: true),
@@ -146,7 +178,7 @@ struct MenuConfigStoreTests {
         #expect(store.libraryEntries.first { $0.id == MenuEntry.libraryID(viewId: "C") }?.enabled == true)
 
         // Merge result + view cache both round-trip through persistence.
-        let fresh = MenuConfigStore()
+        let fresh = makeStore()
         #expect(fresh.libraryEntries.map(\.id) == expectedIDs)
         #expect(fresh.availableViews.map(\.id) == ["B", "C"])
     }
@@ -156,7 +188,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: default mode yields the canonical 5 tabs")
     func resolvedDefault() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
 
         #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
     }
@@ -164,7 +196,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: custom content-type mode honors enabled flags; default mode ignores them")
     func resolvedCustomContentType() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.setMode(.custom)
 
         #expect(store.toggle(MenuEntry.moviesID) == .disabled)
@@ -186,7 +218,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: setMode flips the cached array between default and custom")
     func resolvedTabsReflectsModeFlip() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
 
         // Disable movies in the custom entries while still in default mode —
@@ -206,7 +238,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: setCustomKind switches the cached set between content-type and library")
     func resolvedTabsReflectsKindFlip() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.setMode(.custom)
         #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
 
@@ -229,7 +261,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: toggling a content-type entry updates the cache immediately")
     func resolvedTabsReflectsEntryToggle() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.setMode(.custom)
         #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
 
@@ -243,7 +275,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: reordering entries (move + moveBy) reorders the cache")
     func resolvedTabsReflectsReorder() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.setMode(.custom)
 
         // move offset 0 → 3: [movies, series, home, search, settings]
@@ -261,7 +293,7 @@ struct MenuConfigStoreTests {
         let api = MockAPIClient()
         api.stubbedUserViews = [makeView(id: "B", name: "Films")]
 
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.attach(apiClient: api, userId: "user1")
         store.setMode(.custom)
         store.setCustomKind(.library)
@@ -286,7 +318,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: reset restores the canonical 5 tabs")
     func resolvedTabsReflectsReset() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.setMode(.custom)
         #expect(store.toggle(MenuEntry.moviesID) == .disabled)
         #expect(!store.resolvedTabs.contains { $0.id == "movies" })
@@ -298,7 +330,7 @@ struct MenuConfigStoreTests {
     @Test("resolvedTabs: library mode maps views to tabs and skips ids without a cached view")
     func resolvedLibraryMode() {
         clearMenuDefaults()
-        let store = MenuConfigStore()
+        let store = makeStore()
         store.availableViews = [LibraryView(id: "v1", name: "Ciné", collectionType: "movies")]
         store.libraryEntries = [
             .init(id: MenuEntry.homeID, enabled: true),
@@ -322,47 +354,224 @@ struct MenuConfigStoreTests {
 
     // `MainTabView` renders whatever `resolvedTabs` holds; an empty array means
     // a `TabView` with zero tabs — a fully black screen with no recovery path.
-    // The real-world trigger: `.custom + .library` mode whose cache was wiped
-    // (server switch → `invalidateViews()`), then a fresh login that never
-    // re-fetches the views. The store must therefore NEVER publish an empty
+    // The real-world trigger: switching to a server whose profile is
+    // `.custom + .library` but whose views have never been fetched (fresh
+    // login, offline launch). The store must therefore NEVER publish an empty
     // list — it falls back to the canonical default 5.
 
-    @Test("resolvedTabs: library mode with an empty cache falls back to the default 5, never empty")
+    /// custom + library with nothing cached — a profile whose server hasn't
+    /// answered `getUserViews` yet. Resolution comes up empty and MUST fall
+    /// back rather than publish zero tabs.
+    private var emptyLibraryProfile: MenuProfile {
+        MenuProfile(
+            mode: .custom,
+            customKind: .library,
+            contentTypeEntries: MenuConfigStore.defaultContentTypeEntries,
+            libraryEntries: [],
+            availableViews: []
+        )
+    }
+
+    @Test("resolvedTabs: switching INTO an empty library profile falls back to the default 5, never empty")
     func resolvedTabsNeverEmptyInLibraryMode() {
         clearMenuDefaults()
         // These two tests persist the custom+library+empty combo — the exact
         // state that used to black-screen the app. Leaving it behind makes the
         // NEXT test run's live test-host boot into it, so scrub on exit.
         defer { clearMenuDefaults() }
-        let store = MenuConfigStore()
-        store.setMode(.custom)
-        // Force the pathological persisted state directly (entries emptied,
-        // as `invalidateViews` leaves them), then recompute via a mutator.
-        store.libraryEntries = []
-        store.availableViews = []
-        store.setCustomKind(.library)
-        // `ensureLibraryEntriesPopulated` seeds builtins when empty — wipe
-        // again through the public API to simulate the invalidated state.
-        store.invalidateViews()
+        seedProfiles(["B": emptyLibraryProfile])
+        let store = makeStore("A")
+        store.activate(serverId: "B", knownServerIds: ["A", "B"])
 
         #expect(!store.resolvedTabs.isEmpty)
         #expect(store.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
     }
 
-    @Test("resolvedTabs: a fresh store restoring an invalidated library config still resolves tabs")
+    @Test("resolvedTabs: a fresh store restoring an empty library profile still resolves tabs")
     func resolvedTabsNeverEmptyAfterRestore() {
         clearMenuDefaults()
         defer { clearMenuDefaults() }
-        // Persist the exact on-disk state a server switch leaves behind:
-        // custom+library mode with both arrays empty.
-        let seed = MenuConfigStore()
-        seed.setMode(.custom)
-        seed.setCustomKind(.library)
-        seed.invalidateViews()
+        seedProfiles([MenuConfigStoreTests.testServer: emptyLibraryProfile])
 
-        let fresh = MenuConfigStore()
+        let fresh = makeStore()
         #expect(!fresh.resolvedTabs.isEmpty)
         #expect(fresh.resolvedTabs.map(\.id) == ["home", "movies", "tvShows", "search", "settings"])
+    }
+
+    // MARK: - Per-server profiles
+
+    // Menu state is stored per registered server (`ServerEntry.id`). Switching
+    // servers swaps the whole profile in; it must never bleed one server's
+    // arrangement onto another, and must never destroy the one being left.
+
+    @Test("each server keeps its own mode, order and enabled flags, across switches and launches")
+    func contentTypeProfilesAreIsolatedPerServer() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        let known: Set<String> = ["A", "B"]
+
+        let store = MenuConfigStore()
+        store.activate(serverId: "A", knownServerIds: known)
+        store.setMode(.custom)
+        store.move(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+        #expect(store.toggle(MenuEntry.moviesID) == .disabled)
+        let orderA = store.contentTypeEntries
+        #expect(orderA.map(\.id) == [
+            MenuEntry.moviesID, MenuEntry.seriesID, MenuEntry.homeID,
+            MenuEntry.searchID, MenuEntry.settingsID
+        ])
+
+        // B has never been configured → factory defaults, not A's menu.
+        store.activate(serverId: "B", knownServerIds: known)
+        #expect(store.mode == .default)
+        #expect(store.contentTypeEntries == MenuConfigStore.defaultContentTypeEntries)
+
+        // Back to A → exactly what the user left there.
+        store.activate(serverId: "A", knownServerIds: known)
+        #expect(store.mode == .custom)
+        #expect(store.contentTypeEntries == orderA)
+
+        // …and it survives a relaunch.
+        let fresh = MenuConfigStore()
+        fresh.activate(serverId: "A", knownServerIds: known)
+        #expect(fresh.mode == .custom)
+        #expect(fresh.contentTypeEntries == orderA)
+        fresh.activate(serverId: "B", knownServerIds: known)
+        #expect(fresh.mode == .default)
+    }
+
+    @Test("switching servers preserves each server's library arrangement")
+    func libraryArrangementSurvivesServerSwitch() async {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        let api = MockAPIClient()
+        let known: Set<String> = ["A", "B"]
+        let a1 = MenuEntry.libraryID(viewId: "a1")
+        let a2 = MenuEntry.libraryID(viewId: "a2")
+
+        // Server A: two libraries; the user reorders them and drops Search.
+        api.stubbedUserViews = [makeView(id: "a1", name: "Films A"), makeView(id: "a2", name: "Séries A")]
+        let store = MenuConfigStore()
+        store.activate(serverId: "A", knownServerIds: known)
+        store.attach(apiClient: api, userId: "user")
+        store.setMode(.custom)
+        store.setCustomKind(.library)
+        await store.refreshAvailableViews()
+        store.moveBy(a2, delta: -1)
+        #expect(store.toggle(MenuEntry.searchID) == .disabled)
+
+        let arrangementA = store.libraryEntries
+        #expect(arrangementA.map(\.id) == [MenuEntry.homeID, MenuEntry.searchID, a2, a1, MenuEntry.settingsID])
+        #expect(arrangementA.first { $0.id == MenuEntry.searchID }?.enabled == false)
+
+        // Server B: its own libraries, none of A's.
+        api.stubbedUserViews = [makeView(id: "b1", name: "Films B")]
+        store.activate(serverId: "B", knownServerIds: known)
+        store.setMode(.custom)
+        store.setCustomKind(.library)
+        await store.refreshAvailableViews()
+        #expect(store.availableViews.map(\.id) == ["b1"])
+        #expect(!store.libraryEntries.contains { $0.id == a1 || $0.id == a2 })
+
+        // Back to A — the whole arrangement is intact, cached views included.
+        api.stubbedUserViews = [makeView(id: "a1", name: "Films A"), makeView(id: "a2", name: "Séries A")]
+        store.activate(serverId: "A", knownServerIds: known)
+        #expect(store.availableViews.map(\.id) == ["a1", "a2"])
+        #expect(store.libraryEntries == arrangementA)
+        #expect(store.resolvedTabs.map(\.id) == [MenuEntry.homeID, a2, a1, MenuEntry.settingsID])
+    }
+
+    @Test("the first activated server inherits the legacy global menu keys, and only it")
+    func legacyKeysSeedTheFirstProfileOnly() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        // Exactly what a pre-update install left behind.
+        let legacyEntries: [MenuEntry] = [
+            .init(id: MenuEntry.homeID, enabled: true),
+            .init(id: MenuEntry.libraryID(viewId: "v1"), enabled: true),
+            .init(id: MenuEntry.settingsID, enabled: true)
+        ]
+        let legacyViews = [LibraryView(id: "v1", name: "Ciné", collectionType: "movies")]
+        let defaults = UserDefaults.standard
+        defaults.set("custom", forKey: SettingsKey.menuMode)
+        defaults.set("library", forKey: SettingsKey.menuCustomKind)
+        if let data = try? JSONEncoder().encode(legacyEntries) {
+            defaults.set(data, forKey: SettingsKey.menuLibraryEntries)
+        }
+        if let data = try? JSONEncoder().encode(legacyViews) {
+            defaults.set(data, forKey: SettingsKey.menuCachedViews)
+        }
+
+        let store = MenuConfigStore()
+        store.activate(serverId: "A", knownServerIds: ["A", "B"])
+        #expect(store.mode == .custom)
+        #expect(store.customKind == .library)
+        #expect(store.libraryEntries == legacyEntries)
+        #expect(store.availableViews == legacyViews)
+        #expect(store.resolvedTabs.map(\.id) == [
+            MenuEntry.homeID, MenuEntry.libraryID(viewId: "v1"), MenuEntry.settingsID
+        ])
+        // The seed is written, so it survives without the legacy keys.
+        #expect(persistedProfiles()["A"]?.libraryEntries == legacyEntries)
+
+        // One-shot: a second server starts clean instead of re-consuming them.
+        store.activate(serverId: "B", knownServerIds: ["A", "B"])
+        #expect(store.mode == .default)
+        #expect(store.libraryEntries.isEmpty)
+    }
+
+    @Test("activate drops the profiles of servers that are no longer registered")
+    func pruneRemovesOrphanProfiles() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        seedProfiles(["A": MenuProfile.factoryDefault, "gone": emptyLibraryProfile])
+
+        let store = MenuConfigStore()
+        store.activate(serverId: "A", knownServerIds: ["A"])
+
+        #expect(persistedProfiles().keys.sorted() == ["A"])
+        #expect(store.activeProfileId == "A")
+    }
+
+    @Test("activate prunes nothing when the registry snapshot is empty")
+    func pruneSkippedWithEmptyRegistry() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        seedProfiles(["A": MenuProfile.factoryDefault, "B": emptyLibraryProfile])
+
+        let store = MenuConfigStore()
+        store.activate(serverId: "A", knownServerIds: [])
+
+        #expect(persistedProfiles().keys.sorted() == ["A", "B"])
+        #expect(store.activeProfileId == "A")
+    }
+
+    @Test("activate(nil) keeps the loaded profile, prunes nothing, and re-activating is a no-op")
+    func activateNoOps() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        seedProfiles(["B": emptyLibraryProfile])
+
+        let store = MenuConfigStore()
+        store.activate(serverId: "A", knownServerIds: ["A", "B"])
+        store.setMode(.custom)
+        #expect(store.toggle(MenuEntry.moviesID) == .disabled)
+        let entries = store.contentTypeEntries
+        let tabs = store.resolvedTabs
+
+        // Logout: no active server. The menu must not blank out, and B's
+        // profile must not be collected just because it isn't the target.
+        store.activate(serverId: nil, knownServerIds: ["A"])
+        #expect(store.activeProfileId == "A")
+        #expect(store.contentTypeEntries == entries)
+        #expect(store.resolvedTabs == tabs)
+        #expect(persistedProfiles()["B"] != nil)
+
+        // Re-activating the same server (cold launch fires `.task` AND the
+        // observer) changes nothing.
+        store.activate(serverId: "A", knownServerIds: ["A", "B"])
+        #expect(store.contentTypeEntries == entries)
+        #expect(store.resolvedTabs == tabs)
     }
 
     // MARK: - LibraryView filtering

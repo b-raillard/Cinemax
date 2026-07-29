@@ -1,6 +1,6 @@
 # Per-server menu configuration — design
 
-> Status: approved design, not yet implemented. Branch: `integration/audit-2026-07`.
+> Status: implemented on `integration/audit-2026-07`. Kept as the rationale record; the enforcing rules live in `CLAUDE.md` (*Custom menu / dynamic tabs*).
 
 ## Problem
 
