@@ -1,0 +1,27 @@
+/* Siri phrases for App Shortcuts.
+
+   RULE — App Shortcut phrases are localized in THIS table, never in
+   Localizable.strings. The system reads it on its own, outside
+   LocalizationManager, so a phrase placed in the wrong table simply never
+   resolves — a silent failure with no build error.
+
+   Keys are the base-language (fr) phrase literals declared in
+   `CinemaxShortcuts`; ${applicationName} is the app-name token and MUST be
+   present in every phrase. */
+
+"Reprendre ma lecture dans ${applicationName}" = "Reprendre ma lecture dans ${applicationName}";
+"Reprendre ${applicationName}" = "Reprendre ${applicationName}";
+"Continuer à regarder dans ${applicationName}" = "Continuer à regarder dans ${applicationName}";
+
+"Lire ${item} dans ${applicationName}" = "Lire ${item} dans ${applicationName}";
+"Regarder ${item} dans ${applicationName}" = "Regarder ${item} dans ${applicationName}";
+"Lance ${item} sur ${applicationName}" = "Lance ${item} sur ${applicationName}";
+
+"Lire le prochain épisode de ${series} dans ${applicationName}" = "Lire le prochain épisode de ${series} dans ${applicationName}";
+"Épisode suivant de ${series} dans ${applicationName}" = "Épisode suivant de ${series} dans ${applicationName}";
+
+"Ouvrir ${item} dans ${applicationName}" = "Ouvrir ${item} dans ${applicationName}";
+"Afficher ${item} dans ${applicationName}" = "Afficher ${item} dans ${applicationName}";
+
+"Rechercher dans ${applicationName}" = "Rechercher dans ${applicationName}";
+"Chercher dans ${applicationName}" = "Chercher dans ${applicationName}";

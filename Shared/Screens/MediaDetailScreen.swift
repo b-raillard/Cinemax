@@ -13,6 +13,16 @@ struct WatchTogetherIntent: Identifiable, Hashable {
     let startTime: Double?
 }
 
+/// Playback started by an App Intent rather than a tap. Same shape as
+/// `WatchTogetherIntent` because it drives the same programmatic route to the
+/// player — see `MediaDetailScreen.consumeIntentPlaybackRequest`.
+struct SiriPlaybackRoute: Identifiable, Hashable {
+    let id = UUID()
+    let itemId: String
+    let title: String
+    let startTime: Double?
+}
+
 struct MediaDetailScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -39,6 +49,8 @@ struct MediaDetailScreen: View {
     private static let watchTogetherEnabled = false
     #if os(iOS)
     @State private var watchTogetherPlay: WatchTogetherIntent?
+    /// Set once, on arrival, when an App Intent asked to play this item.
+    @State private var siriPlayback: SiriPlaybackRoute?
     #endif
     #if os(iOS)
     @Environment(\.dismiss) private var dismiss
@@ -94,6 +106,11 @@ struct MediaDetailScreen: View {
         #endif
         .task {
             await viewModel.load(using: appState, loc: loc)
+            #if os(iOS)
+            // After the load, so the series → next-up resolution and the resume
+            // position the request needs are already in place.
+            consumeIntentPlaybackRequest()
+            #endif
         }
         #if os(tvOS)
         .onChange(of: coordinator.lastDismissedAt) { _, _ in
@@ -118,6 +135,21 @@ struct MediaDetailScreen: View {
         #if os(iOS)
         .navigationDestination(item: $watchTogetherPlay) { intent in
             VideoPlayerView(itemId: intent.itemId, title: intent.title, startTime: intent.startTime)
+        }
+        .navigationDestination(item: $siriPlayback) { route in
+            // Episode navigation is resolved here rather than being carried in
+            // the route: `EpisodeNavigator` isn't `Hashable`, and by this point
+            // the view model holds the maps anyway.
+            let nav = episodeNavigation(for: route.itemId)
+            VideoPlayerView(
+                itemId: route.itemId,
+                title: route.title,
+                startTime: route.startTime,
+                previousEpisode: nav.previous,
+                nextEpisode: nav.next,
+                episodeNavigator: nav.navigator,
+                mediaSourceId: viewModel.item.flatMap { selectedSource($0)?.id }
+            )
         }
         #endif
     }
@@ -622,10 +654,24 @@ struct MediaDetailScreen: View {
 
     // MARK: - Action Buttons
 
-    /// Resolves the data `PlayActionButtonsSection` needs. Kept out of the
-    /// sub-view so the sub-view's dependencies stay narrow (and its
-    /// `Equatable` short-circuit can skip unrelated view-model updates).
-    private func actionButtons(_ item: BaseItemDto) -> some View {
+    /// What the Play button will actually open, and the resume chrome derived
+    /// from the same ticks.
+    ///
+    /// Single-sourced on purpose: a Siri-initiated playback goes through this
+    /// too, so "what gets played" has exactly one definition. A series resolves
+    /// to its next-up episode and a partly-watched item resumes, whether the
+    /// user tapped Play or spoke to their phone.
+    private struct ResolvedPlayTarget {
+        let itemId: String
+        let title: String
+        let startSeconds: Double?
+        let showResume: Bool
+        let progress: Double
+        let remainingMinutes: Int
+        let nextEpisode: BaseItemDto?
+    }
+
+    private func resolvedPlayTarget(for item: BaseItemDto) -> ResolvedPlayTarget {
         let isSeries = viewModel.resolvedType == .series
         let nextEp: BaseItemDto? = isSeries ? viewModel.nextUpEpisode : nil
 
@@ -640,12 +686,69 @@ struct MediaDetailScreen: View {
             : (item.userData?.isPlayed ?? false)
 
         let showResume = posTicks > 0 && !isPlayed && totalTicks > 0
-        let progress: Double = showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0
-        let remainingMinutes = max(0, totalTicks - posTicks).jellyfinMinutes
-        let startSeconds: Double? = showResume ? posTicks.jellyfinSeconds : nil
 
-        let playItemId: String = nextEp?.id ?? item.id ?? ""
-        let playTitle: String = nextEp?.name ?? item.name ?? ""
+        return ResolvedPlayTarget(
+            itemId: nextEp?.id ?? item.id ?? "",
+            title: nextEp?.name ?? item.name ?? "",
+            startSeconds: showResume ? posTicks.jellyfinSeconds : nil,
+            showResume: showResume,
+            progress: showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0,
+            remainingMinutes: max(0, totalTicks - posTicks).jellyfinMinutes,
+            nextEpisode: nextEp
+        )
+    }
+
+    #if os(iOS)
+    /// Starts playback when an App Intent named this item — exactly once.
+    ///
+    /// Guarded on the screen's own item id because the pending request is
+    /// visible to every detail screen still on the stack; only the one the
+    /// intent actually named may act on it. Cleared before any early return, so
+    /// a request that can't be honoured here doesn't fire on a later screen.
+    private func consumeIntentPlaybackRequest() {
+        guard appState.pendingIntentPlaybackItemId == viewModel.itemId else { return }
+        appState.pendingIntentPlaybackItemId = nil
+        guard let item = viewModel.item else { return }
+
+        // A request naming an episode plays THAT episode — the view model has
+        // resolved the screen up to the parent series, so the Play button's
+        // next-up target would be the wrong one here.
+        if let episode = viewModel.episodes.first(where: { $0.id == viewModel.itemId }) {
+            let ticks = episode.userData?.playbackPositionTicks ?? 0
+            let played = episode.userData?.isPlayed ?? false
+            siriPlayback = SiriPlaybackRoute(
+                itemId: viewModel.itemId,
+                title: episode.name ?? item.name ?? "",
+                startTime: (ticks > 0 && !played) ? ticks.jellyfinSeconds : nil
+            )
+            return
+        }
+
+        // Everything else goes through the Play button's own resolution.
+        let target = resolvedPlayTarget(for: item)
+        guard !target.itemId.isEmpty else { return }
+        siriPlayback = SiriPlaybackRoute(
+            itemId: target.itemId,
+            title: target.title,
+            startTime: target.startSeconds
+        )
+    }
+    #endif
+
+    /// Resolves the data `PlayActionButtonsSection` needs. Kept out of the
+    /// sub-view so the sub-view's dependencies stay narrow (and its
+    /// `Equatable` short-circuit can skip unrelated view-model updates).
+    private func actionButtons(_ item: BaseItemDto) -> some View {
+        let target = resolvedPlayTarget(for: item)
+        let nextEp = target.nextEpisode
+
+        let showResume = target.showResume
+        let progress = target.progress
+        let remainingMinutes = target.remainingMinutes
+        let startSeconds = target.startSeconds
+
+        let playItemId = target.itemId
+        let playTitle = target.title
 
         let nextEpisodeLabel: String? = {
             guard let ep = nextEp else { return nil }

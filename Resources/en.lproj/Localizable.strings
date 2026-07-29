@@ -912,3 +912,37 @@
 "login.myServers" = "My servers";
 "servers.checking" = "Checking…";
 "servers.alreadyCurrent" = "You're already connected to %@";
+
+/* MARK: - App Intents (Siri & Shortcuts)
+   Read by the system through LocalizedStringResource, outside
+   LocalizationManager — same class of exception as InfoPlist.strings. Siri
+   PHRASES are not here: they live in AppShortcuts.strings. */
+"intent.entity.mediaItem" = "Media";
+"intent.param.item" = "Title";
+"intent.param.series" = "Series";
+"intent.param.query" = "Search";
+
+"intent.resume.title" = "Resume watching";
+"intent.resume.description" = "Picks up the last title you started.";
+"intent.resume.shortTitle" = "Resume";
+
+"intent.play.title" = "Play a title";
+"intent.play.description" = "Starts playback of a movie or show from your library.";
+"intent.play.shortTitle" = "Play";
+
+"intent.nextEpisode.title" = "Play next episode";
+"intent.nextEpisode.description" = "Starts the next unwatched episode of a series.";
+"intent.nextEpisode.shortTitle" = "Next episode";
+
+"intent.open.title" = "Open a title";
+"intent.open.description" = "Shows a title's page without starting playback.";
+"intent.open.shortTitle" = "Open";
+
+"intent.search.title" = "Search the library";
+"intent.search.description" = "Opens search for a term.";
+"intent.search.shortTitle" = "Search";
+
+"intent.error.notSignedIn" = "Sign in to your server in Cinemax first.";
+"intent.error.nothingToResume" = "Nothing in progress to resume.";
+"intent.error.itemUnavailable" = "That title isn't available on the active server.";
+"intent.error.notEpisodic" = "That title isn't a series.";

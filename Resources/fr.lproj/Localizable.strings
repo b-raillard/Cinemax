@@ -914,3 +914,37 @@
 "login.myServers" = "Mes serveurs";
 "servers.checking" = "Vérification…";
 "servers.alreadyCurrent" = "Vous êtes déjà connecté à %@";
+
+/* MARK: - App Intents (Siri & Raccourcis)
+   Lus par le système via LocalizedStringResource, hors LocalizationManager —
+   même classe d'exception qu'InfoPlist.strings. Les PHRASES Siri ne sont pas
+   ici : elles vivent dans AppShortcuts.strings. */
+"intent.entity.mediaItem" = "Média";
+"intent.param.item" = "Titre";
+"intent.param.series" = "Série";
+"intent.param.query" = "Recherche";
+
+"intent.resume.title" = "Reprendre ma lecture";
+"intent.resume.description" = "Relance le dernier titre commencé.";
+"intent.resume.shortTitle" = "Reprendre";
+
+"intent.play.title" = "Lire un titre";
+"intent.play.description" = "Lance la lecture d'un film ou d'une série de votre médiathèque.";
+"intent.play.shortTitle" = "Lire";
+
+"intent.nextEpisode.title" = "Lire le prochain épisode";
+"intent.nextEpisode.description" = "Lance le prochain épisode non vu d'une série.";
+"intent.nextEpisode.shortTitle" = "Épisode suivant";
+
+"intent.open.title" = "Ouvrir une fiche";
+"intent.open.description" = "Affiche la fiche d'un titre sans lancer la lecture.";
+"intent.open.shortTitle" = "Ouvrir";
+
+"intent.search.title" = "Rechercher dans la médiathèque";
+"intent.search.description" = "Ouvre la recherche sur un terme.";
+"intent.search.shortTitle" = "Rechercher";
+
+"intent.error.notSignedIn" = "Connectez-vous à votre serveur dans Cinemax d'abord.";
+"intent.error.nothingToResume" = "Aucune lecture en cours à reprendre.";
+"intent.error.itemUnavailable" = "Ce titre est introuvable sur le serveur actif.";
+"intent.error.notEpisodic" = "Ce titre n'est pas une série.";
