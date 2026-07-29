@@ -2332,20 +2332,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// a probed black-hole, a prior direct failure this session, or a
     /// seek-heavy container that would otherwise flood the server.
     private var shouldRouteThroughProxy: Bool {
-        StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
+        #if DEBUG
+        // Lets the proxy path be exercised on a network where the direct path
+        // works — otherwise it is only reachable on a network that is already
+        // broken, i.e. never on a dev machine. Set via
+        // `simctl launch --setenv CINEMAX_FORCE_PROXY=1`.
+        if ProcessInfo.processInfo.environment["CINEMAX_FORCE_PROXY"] != nil { return true }
+        #endif
+        return StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
     }
 
-    /// The ONE way this presenter obtains a loopback URL. Returns nil — meaning
-    /// "play the direct URL" — whenever the proxy couldn't serve the stream
-    /// anyway (`CinemaxStreamProxy.canServe`: HLS/DASH manifests are trees of
-    /// URLs the single-target proxy answers 400/502 for, so proxying one is a
-    /// guaranteed `Failed to create demuxer`). Every proxy decision — fresh
-    /// open, error retry, wake re-resolve, episode nav — funnels through here,
-    /// because the ones that also carry `usingProxy` forward would otherwise
-    /// bypass the check and inherit a proxy the new stream can't use.
+    /// The ONE way this presenter obtains a loopback URL. Kept as a single choke
+    /// point (fresh open, error retry, wake re-resolve, episode nav) even though
+    /// it no longer filters: the proxy now registers the origin *directory*, so
+    /// it serves an HLS tree as readily as a single file, and the manifest
+    /// refusal that used to live here would defeat the only working path on a
+    /// network where `getaddrinfo` fails.
     private func proxiedURLIfUsable(for authed: URL, token: String?) -> URL? {
-        guard CinemaxStreamProxy.canServe(authed) else { return nil }
-        return StreamTransportPolicy.shared.proxiedURL(for: authed, token: token)
+        StreamTransportPolicy.shared.proxiedURL(for: authed, token: token)
     }
 
     private func startPlayback() {
@@ -2372,11 +2376,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         } else {
             url = authed
         }
-        #if DEBUG
-        // Probes the ORIGIN url (not `url`, which may be loopback) so the
-        // reading is comparable across direct-play and transcode opens.
-        PlaybackNetworkDiagnostics.probe("pre-open \(info.playMethod.rawValue)", url: authed)
-        #endif
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
         activateSessionThenPlay(media)
@@ -3037,29 +3036,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackError() {
         cancelOpenWatchdog()
         endSeekLoading() // the media is being reloaded (or given up on)
-        #if DEBUG
-        // Second reading, taken as close as possible to libVLC's own failure:
-        // separates "the process couldn't resolve either, right then" from
-        // "only libVLC couldn't".
-        PlaybackNetworkDiagnostics.probe(
-            "after-failure \(info.playMethod.rawValue)",
-            url: VLCStreamPresenter.authedURL(info.url, token: info.authToken)
-        )
-        #endif
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
             let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
             // A direct attempt failed: pin the rest of the session to the proxy
-            // so we stop re-rolling the dice on the flaky direct path. Only when
-            // the proxy could actually have served this stream, though —
-            // latching on a manifest failure (which the proxy can't help with)
-            // made one transient direct blip, e.g. a libVLC DNS timeout, route
-            // EVERY later playback of the session through a path that cannot
-            // work, until app relaunch.
-            if !usingProxy, CinemaxStreamProxy.canServe(authed) {
-                StreamTransportPolicy.shared.noteDirectPlaybackFailed()
-            }
+            // so we stop re-rolling the dice on the flaky direct path. This is
+            // unconditional again now that the proxy can serve a manifest —
+            // latching is exactly right on a network where `getaddrinfo` fails
+            // for every URL, since the proxy is then the ONLY path that works
+            // (measured: libVLC `cannot resolve` while URLSession returns 200).
+            if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
             // Always retry via the proxy (direct is the path that stalls on
             // broken IPv6); fall back to direct only if it can't start.
             let url: URL
