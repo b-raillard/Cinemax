@@ -196,7 +196,8 @@ extension JellyfinAPIClient {
                     subtitleTracks: subtitleTracks,
                     selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
                     selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
-                    authToken: nil // token already embedded in Jellyfin's HLS URL
+                    authToken: nil, // token already embedded in Jellyfin's HLS URL
+                    liveStreamId: mediaSource.liveStreamID
                 )
             }
         }
@@ -243,7 +244,8 @@ extension JellyfinAPIClient {
             selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
             selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
             authToken: token,
-            sourceContainer: mediaSource.container
+            sourceContainer: mediaSource.container,
+            liveStreamId: mediaSource.liveStreamID
         )
     }
 
@@ -446,10 +448,11 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.reportPlaybackProgress(body))
     }
 
-    public func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async {
+    public func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {
         guard let client = getClient() else { return }
         let body = PlaybackStopInfo(
             itemID: itemId,
+            liveStreamID: liveStreamId,
             mediaSourceID: mediaSourceId,
             playSessionID: playSessionId,
             positionTicks: positionTicks

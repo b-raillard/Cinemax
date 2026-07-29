@@ -174,6 +174,44 @@ struct PlaybackReporterTests {
         #expect(mock.lastStartTicks == 0)
     }
 
+    // MARK: - Live stream lifecycle
+    //
+    // The server opens a live stream for every PlaybackInfo negotiation
+    // (`isAutoOpenLiveStream=true`). Handing its id back on the stop report is
+    // what lets the server release it — without it the resource lingers.
+
+    @Test("reportStop carries the PlaybackInfo live stream id")
+    func stopCarriesLiveStreamId() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(liveStreamId: "ls-42"), player: nil) }
+        )
+
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.stopCount == 1)
+        #expect(mock.lastStopLiveStreamId == "ls-42")
+    }
+
+    @Test("reportStop tolerates a missing live stream id")
+    func stopWithoutLiveStreamId() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+        )
+
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.stopCount == 1)
+        #expect(mock.lastStopLiveStreamId == nil)
+    }
+
     @Test("a finite time source still reports the real position")
     func finiteTimeSourceReportsPosition() async throws {
         let mock = CountingPlaybackAPI()
@@ -204,6 +242,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         var lastStartTicks: Int?
         var lastProgressTicks: Int?
         var lastStopTicks: Int?
+        var lastStopLiveStreamId: String?
     }
     private let state = OSAllocatedUnfairLock(initialState: Counts())
 
@@ -213,6 +252,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     var lastStartTicks: Int? { state.withLock { $0.lastStartTicks } }
     var lastProgressTicks: Int? { state.withLock { $0.lastProgressTicks } }
     var lastStopTicks: Int? { state.withLock { $0.lastStopTicks } }
+    var lastStopLiveStreamId: String? { state.withLock { $0.lastStopLiveStreamId } }
 
     func reportPlaybackStart(
         itemId: String, userId: String,
@@ -233,9 +273,13 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     func reportPlaybackStopped(
         itemId: String, userId: String,
         mediaSourceId: String?, playSessionId: String?,
-        positionTicks: Int?
+        positionTicks: Int?, liveStreamId: String?
     ) async {
-        state.withLock { $0.stop += 1; $0.lastStopTicks = positionTicks }
+        state.withLock {
+            $0.stop += 1
+            $0.lastStopTicks = positionTicks
+            $0.lastStopLiveStreamId = liveStreamId
+        }
     }
 
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto] {
@@ -244,17 +288,21 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
 }
 
 private extension PlaybackInfo {
-    static func stubbed() -> PlaybackInfo {
+    static func stubbed(
+        playMethod: CinemaxKit.PlayMethod = .directStream,
+        liveStreamId: String? = nil
+    ) -> PlaybackInfo {
         PlaybackInfo(
             url: URL(string: "http://localhost/stream")!,
             playSessionId: "session1",
             mediaSourceId: "src1",
-            playMethod: .directStream,
+            playMethod: playMethod,
             audioTracks: [],
             subtitleTracks: [],
             selectedAudioIndex: nil,
             selectedSubtitleIndex: nil,
-            authToken: nil
+            authToken: nil,
+            liveStreamId: liveStreamId
         )
     }
 }

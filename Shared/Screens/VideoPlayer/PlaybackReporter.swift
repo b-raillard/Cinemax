@@ -97,7 +97,7 @@ final class PlaybackReporter {
             await client.reportPlaybackStopped(
                 itemId: itemId, userId: uid,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
-                positionTicks: positionTicks
+                positionTicks: positionTicks, liveStreamId: info.liveStreamId
             )
         }
     }

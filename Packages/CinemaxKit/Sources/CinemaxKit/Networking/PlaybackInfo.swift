@@ -31,6 +31,12 @@ public struct PlaybackInfo: Sendable {
     /// through the loopback proxy, which bounds concurrency. Nil ⇒ unknown / not
     /// applicable (transcode/HLS).
     public let sourceContainer: String?
+    /// Live stream the server opened for this session — every PlaybackInfo
+    /// negotiation asks for one (`isAutoOpenLiveStream=true`). Handed back in
+    /// the stop report so the server releases it; without that the resource
+    /// lingers until the server expires it on its own. Nil when no negotiation
+    /// took place (the direct-stream fallback never talks to the server).
+    public let liveStreamId: String?
 
     public init(
         url: URL,
@@ -42,7 +48,8 @@ public struct PlaybackInfo: Sendable {
         selectedAudioIndex: Int?,
         selectedSubtitleIndex: Int?,
         authToken: String?,
-        sourceContainer: String? = nil
+        sourceContainer: String? = nil,
+        liveStreamId: String? = nil
     ) {
         self.url = url
         self.playSessionId = playSessionId
@@ -54,5 +61,6 @@ public struct PlaybackInfo: Sendable {
         self.selectedSubtitleIndex = selectedSubtitleIndex
         self.authToken = authToken
         self.sourceContainer = sourceContainer
+        self.liveStreamId = liveStreamId
     }
 }

@@ -166,7 +166,9 @@ public protocol PlaybackAPI: Sendable {
     /// Reports current playback position. Fire-and-forget; errors are silently ignored.
     func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async
     /// Reports that playback has stopped at the given position. Fire-and-forget; errors are silently ignored.
-    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?) async
+    /// `liveStreamId` — when non-nil, tells the server to release the live
+    /// stream it opened for this session.
+    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async
 }
 
 /// Admin-only operations: user management, activity log, system info, media
