@@ -23,6 +23,12 @@ enum LibrarySearchRanker {
     /// payload sent in the URL.
     static let maxQueryLength = 200
 
+    /// Person search asks the server wide and filters locally, but the row only
+    /// shows the best few — it's a secondary affordance next to the title grid,
+    /// not the main answer.
+    static let personFetchLimit = 30
+    static let personRowLimit = 10
+
     /// FR/EN articles & conjunctions excluded from per-word search fetches and
     /// word-presence scoring (they'd match nearly everything).
     static let stopWords: Set<String> = [
@@ -169,5 +175,40 @@ enum LibrarySearchRanker {
             return best > 0 ? (item, best) : nil
         }
         return (scored.sorted { $0.score > $1.score }.map(\.item), failed)
+    }
+
+    /// Persons matching the query, ordered for display in the search screen's
+    /// person row.
+    ///
+    /// Unlike `rank`, this issues a **single** server call. The per-word fan-out
+    /// exists because Jellyfin's `searchTerm` is contiguous and
+    /// punctuation-sensitive, which breaks titles ("Mission Impossible" misses
+    /// "Mission : Impossible"). Person names don't have that problem — the
+    /// server's `contains` already finds "Cillian Murphy" from "murphy" — so the
+    /// local scoring here only decides the display order.
+    ///
+    /// A failure is swallowed and returns empty: an absent row IS the degraded
+    /// mode, and the main result (the titles) must not suffer for it.
+    static func rankPersons(
+        query: String,
+        userId: String,
+        api: any LibraryAPI
+    ) async -> [BaseItemDto] {
+        let normalizedQuery = normalize(query)
+        guard !normalizedQuery.isEmpty else { return [] }
+        let words = significantWords(in: normalizedQuery)
+
+        guard let people = try? await api.searchPersons(
+            userId: userId, searchTerm: query, limit: personFetchLimit
+        ) else { return [] }
+
+        let scored = people.compactMap { person -> (item: BaseItemDto, score: Double)? in
+            let value = Self.score(title: person.name ?? "", fullQuery: normalizedQuery, queryWords: words)
+            return value > 0 ? (person, value) : nil
+        }
+        return scored
+            .sorted { $0.score > $1.score }
+            .prefix(personRowLimit)
+            .map(\.item)
     }
 }

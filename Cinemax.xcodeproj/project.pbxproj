@@ -344,6 +344,7 @@
 		DFDBEF3D856DD4B602C58F59 /* CinemaGlassTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */; };
 		DFF8B9DA0232217CD1128E36 /* QuickConnectAuthorizeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8D608812AC294C43A35C14 /* QuickConnectAuthorizeSheet.swift */; };
 		E01BB78AC2D8F4002A09E253 /* AdminDevicesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410E2B368E14B0EE19701528 /* AdminDevicesScreen.swift */; };
+		E0CC38869663ED812B2CA030 /* LibrarySearchRankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57A1FF6A68786670C9AAFFA /* LibrarySearchRankerTests.swift */; };
 		E0F705B2946022AA8BDF92A5 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 8D7F6852C615693ED7D592BA /* SwiftVLC */; };
 		E47F32A6D835E3546B9E083C /* PrivacySecurityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B000BF38B945DD465445ED /* PrivacySecurityScreen.swift */; };
 		E4AF1097C891473701C8C2C9 /* LoadingStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863021FF6B842EE2A0E27CA /* LoadingStateView.swift */; };
@@ -612,6 +613,7 @@
 		B01CD5F39E429B665FA12B0C /* ServerSetupViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSetupViewModelTests.swift; sourceTree = "<group>"; };
 		B14D3FE509DDFB9EA6569161 /* VideoPlayerCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerCoordinator.swift; sourceTree = "<group>"; };
 		B171C71911F6E759AB1A0EDB /* MediaDetailViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailViewModelTests.swift; sourceTree = "<group>"; };
+		B57A1FF6A68786670C9AAFFA /* LibrarySearchRankerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySearchRankerTests.swift; sourceTree = "<group>"; };
 		B5C675F04EABA7C6F9C6292F /* CinemaxIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxIntents.swift; sourceTree = "<group>"; };
 		B66D79E78292DF655B3F508E /* SettingsScreen+iOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsScreen+iOS.swift"; sourceTree = "<group>"; };
 		BA0B2775D4776FF99A90FB12 /* WideCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WideCard.swift; sourceTree = "<group>"; };
@@ -907,6 +909,7 @@
 				69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */,
 				C52DC8ADE969884E1EA1A8F1 /* IntentSessionProviderTests.swift */,
 				FCB36F2BA2BA2F32157D2B57 /* LibraryLogicTests.swift */,
+				B57A1FF6A68786670C9AAFFA /* LibrarySearchRankerTests.swift */,
 				31D07FDBA8B067335CB393D9 /* LoginViewModelTests.swift */,
 				B171C71911F6E759AB1A0EDB /* MediaDetailViewModelTests.swift */,
 				8B34A20D825429EC76C315C5 /* MediaEntityIDTests.swift */,
@@ -1438,6 +1441,7 @@
 				CECD6F0550D4470ABD17BD82 /* HomeViewModelTests.swift in Sources */,
 				DCCA974731C2A0B6C772905D /* IntentSessionProviderTests.swift in Sources */,
 				3458D505038C4D7E28EADAD1 /* LibraryLogicTests.swift in Sources */,
+				E0CC38869663ED812B2CA030 /* LibrarySearchRankerTests.swift in Sources */,
 				8B0BC8C9E0D75F440ACBD95A /* LoginViewModelTests.swift in Sources */,
 				7E2D4D829FBE580AC7B23A9E /* MediaDetailViewModelTests.swift in Sources */,
 				440F1A1C85E6FD6EE6D99210 /* MediaEntityIDTests.swift in Sources */,
