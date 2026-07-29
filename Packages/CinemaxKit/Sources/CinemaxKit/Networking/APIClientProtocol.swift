@@ -169,6 +169,18 @@ public protocol PlaybackAPI: Sendable {
     /// `liveStreamId` — when non-nil, tells the server to release the live
     /// stream it opened for this session.
     func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async
+
+    /// Kills the server-side encoding job backing this play session. Idempotent
+    /// server-side — a no-op when the session wasn't transcoding — so callers
+    /// fire it unconditionally rather than trying to guess.
+    func stopEncoding(playSessionId: String) async
+}
+
+/// Empty default implementations, same discipline as `SyncPlayAPI`: hand-written
+/// conformances (test mocks) shouldn't have to stub session-lifecycle calls they
+/// don't exercise.
+public extension PlaybackAPI {
+    func stopEncoding(playSessionId: String) async {}
 }
 
 /// Admin-only operations: user management, activity log, system info, media

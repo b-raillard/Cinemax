@@ -471,6 +471,16 @@ extension JellyfinAPIClient {
         for prefix in Self.userDataCachePrefixes { cache.invalidate(prefix: prefix) }
     }
 
+    /// Tears down the server's encoding job for this play session. `deviceID` is
+    /// resolved here rather than passed in — the caller (`PlaybackReporter`) has
+    /// no business knowing this device's identity.
+    public func stopEncoding(playSessionId: String) async {
+        guard let client = getClient() else { return }
+        _ = try? await client.send(
+            Paths.stopEncodingProcess(deviceID: deviceID, playSessionID: playSessionId)
+        )
+    }
+
     /// Compact, single-tag diagnostic for the playback decision.
     /// Filter the Xcode console / Console.app for `CINEMAX-PLAYBACK` to capture it.
     ///

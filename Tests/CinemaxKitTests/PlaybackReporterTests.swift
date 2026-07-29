@@ -212,6 +212,38 @@ struct PlaybackReporterTests {
         #expect(mock.lastStopLiveStreamId == nil)
     }
 
+    @Test("reportStop reports the stop, then kills the encoding job")
+    func stopThenStopEncoding() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(liveStreamId: "ls-1"), player: nil) }
+        )
+
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopEncodingCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        // Order matters: the server must record the resume position before we
+        // tear the job down.
+        #expect(mock.callOrder == ["stopped", "stopEncoding"])
+    }
+
+    @Test("stopEncoding fires even on a DirectPlay session")
+    func stopEncodingIsUnconditional() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(playMethod: .directPlay), player: nil) }
+        )
+
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopEncodingCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.stopEncodingCount == 1)
+    }
+
     @Test("a finite time source still reports the real position")
     func finiteTimeSourceReportsPosition() async throws {
         let mock = CountingPlaybackAPI()
@@ -243,6 +275,10 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         var lastProgressTicks: Int?
         var lastStopTicks: Int?
         var lastStopLiveStreamId: String?
+        var stopEncoding = 0
+        /// Call sequence, so a test can assert the stop report lands *before*
+        /// the encoding job is killed.
+        var order: [String] = []
     }
     private let state = OSAllocatedUnfairLock(initialState: Counts())
 
@@ -253,6 +289,8 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     var lastProgressTicks: Int? { state.withLock { $0.lastProgressTicks } }
     var lastStopTicks: Int? { state.withLock { $0.lastStopTicks } }
     var lastStopLiveStreamId: String? { state.withLock { $0.lastStopLiveStreamId } }
+    var stopEncodingCount: Int { state.withLock { $0.stopEncoding } }
+    var callOrder: [String] { state.withLock { $0.order } }
 
     func reportPlaybackStart(
         itemId: String, userId: String,
@@ -279,7 +317,12 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
             $0.stop += 1
             $0.lastStopTicks = positionTicks
             $0.lastStopLiveStreamId = liveStreamId
+            $0.order.append("stopped")
         }
+    }
+
+    func stopEncoding(playSessionId: String) async {
+        state.withLock { $0.stopEncoding += 1; $0.order.append("stopEncoding") }
     }
 
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto] {

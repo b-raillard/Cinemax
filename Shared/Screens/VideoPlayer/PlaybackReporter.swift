@@ -99,6 +99,13 @@ final class PlaybackReporter {
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
                 positionTicks: positionTicks, liveStreamId: info.liveStreamId
             )
+            // Sequential, not concurrent: the server has to record the resume
+            // position before we tear the encoding job down. Unconditional —
+            // the call is a server-side no-op when nothing was transcoding, and
+            // the server can transcode without the client having deduced it.
+            if let playSessionId = info.playSessionId {
+                await client.stopEncoding(playSessionId: playSessionId)
+            }
         }
     }
 
