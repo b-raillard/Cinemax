@@ -162,6 +162,116 @@ final class StreamTransportPolicy {
     }
 }
 
+// MARK: - Playback network diagnostics (TEMPORARY, DEBUG-only)
+
+#if DEBUG
+/// **Temporary diagnostic — delete once the transcode-open failure is
+/// understood.** Adds no behavior; only logs.
+///
+/// The question it exists to answer: when libVLC reports
+/// `cannot resolve <host> port 443` while opening an HLS transcode, can THIS
+/// PROCESS resolve and fetch that exact URL at that exact instant? Observed so
+/// far on one corporate Wi-Fi: libVLC opens direct-play URLs fine and fails on
+/// `master.m3u8`, on the same host; on 5G both work. No mechanism established —
+/// hence measurement rather than another hypothesis.
+///
+/// Three readings per probe, deliberately chosen so ONE trip to that network
+/// settles it:
+///   1. `NWPath` — interface, and whether the path advertises IPv4 / IPv6 / DNS.
+///   2. `getaddrinfo(host, "443", AF_UNSPEC)` — the same call libVLC makes,
+///      from our process: return code + EVERY address, tagged v4/v6.
+///   3. A plain `URLSession` GET of the URL libVLC is about to open. This is a
+///      **dry run of the loopback proxy**: it does exactly what the proxy would
+///      do. A 200 with an `#EXTM3U` body while libVLC says "cannot resolve" is
+///      proof the proxy fix would work — and a failure here is proof it would
+///      not, saving the implementation.
+///
+/// Runs entirely on its own serial queue with the completion-handler API: the
+/// blocking `getaddrinfo` must not sit on a cooperative thread, and nothing
+/// here may perturb the timing of the playback it is measuring.
+enum PlaybackNetworkDiagnostics {
+    private static let queue = DispatchQueue(label: "com.cinemax.playbackdiag", qos: .utility)
+
+    private static let session: URLSession = {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.urlCache = nil
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        cfg.timeoutIntervalForRequest = 10
+        cfg.waitsForConnectivity = false
+        return URLSession(configuration: cfg)
+    }()
+
+    /// `label` distinguishes the call sites in the log, e.g.
+    /// `"pre-open Transcode"` / `"after-failure Transcode"`.
+    static func probe(_ label: String, url: URL) {
+        queue.async {
+            let host = url.host ?? "?"
+            proxyLog.notice("NETDIAG [\(label, privacy: .public)] host=\(host, privacy: .public) ext=\(url.pathExtension, privacy: .public) \(pathSummary(), privacy: .public)")
+
+            let (rc, addresses) = resolve(host: host)
+            if rc == 0 {
+                proxyLog.notice("NETDIAG [\(label, privacy: .public)] getaddrinfo=OK addrs=[\(addresses.joined(separator: " "), privacy: .public)]")
+            } else {
+                let reason = String(cString: gai_strerror(rc))
+                proxyLog.error("NETDIAG [\(label, privacy: .public)] getaddrinfo=FAIL rc=\(rc) (\(reason, privacy: .public))")
+            }
+
+            var req = URLRequest(url: url)
+            req.httpMethod = "GET"
+            let started = Date()
+            session.dataTask(with: req) { data, response, error in
+                let ms = Int(Date().timeIntervalSince(started) * 1000)
+                if let error {
+                    proxyLog.error("NETDIAG [\(label, privacy: .public)] urlsession=FAIL after \(ms)ms — \(error.localizedDescription, privacy: .public)")
+                    return
+                }
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                let bytes = data?.count ?? 0
+                // First line of the body: `#EXTM3U` confirms a real playlist came back.
+                let firstLine = String(decoding: (data ?? Data()).prefix(32), as: UTF8.self)
+                    .split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+                proxyLog.notice("NETDIAG [\(label, privacy: .public)] urlsession=OK status=\(code) bytes=\(bytes) in \(ms)ms firstLine=\(firstLine, privacy: .public)")
+            }.resume()
+        }
+    }
+
+    /// Interface + address-family + DNS support of the current path. `NWPath` is
+    /// readable synchronously off a fresh monitor (same trick as `NetworkMonitor`).
+    private static func pathSummary() -> String {
+        let path = NWPathMonitor().currentPath
+        let interfaces = path.availableInterfaces.map { "\($0.type)" }.joined(separator: ",")
+        return "path=\(path.status) ifaces=[\(interfaces)] v4=\(path.supportsIPv4) v6=\(path.supportsIPv6) dns=\(path.supportsDNS)"
+    }
+
+    /// The same lookup libVLC performs, from our process. Returns every address
+    /// so a v6-only / v4-only answer is visible rather than inferred.
+    /// Internal (not private) so `StreamProxyTests` can verify the C interop —
+    /// a pointer bug here would silently waste the one field trip this probe
+    /// exists to make count.
+    static func resolve(host: String) -> (rc: Int32, addresses: [String]) {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_STREAM
+        var res: UnsafeMutablePointer<addrinfo>?
+        let rc = getaddrinfo(host, "443", &hints, &res)
+        guard rc == 0, let head = res else { return (rc, []) }
+        defer { freeaddrinfo(head) }
+        var out: [String] = []
+        var buf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+        var cur: UnsafeMutablePointer<addrinfo>? = head
+        while let node = cur {
+            if getnameinfo(node.pointee.ai_addr, node.pointee.ai_addrlen,
+                           &buf, socklen_t(buf.count), nil, 0, NI_NUMERICHOST) == 0 {
+                let family = node.pointee.ai_family == AF_INET6 ? "v6" : "v4"
+                out.append(family + ":" + buf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) })
+            }
+            cur = node.pointee.ai_next
+        }
+        return (rc, out)
+    }
+}
+#endif
+
 // MARK: - Loopback HTTP → URLSession proxy
 
 /// Tiny on-device HTTP/1.1 proxy bound to `127.0.0.1`. libVLC connects to it in

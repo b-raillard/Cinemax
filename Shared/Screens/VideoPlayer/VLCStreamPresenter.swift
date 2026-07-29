@@ -2372,6 +2372,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         } else {
             url = authed
         }
+        #if DEBUG
+        // Probes the ORIGIN url (not `url`, which may be loopback) so the
+        // reading is comparable across direct-play and transcode opens.
+        PlaybackNetworkDiagnostics.probe("pre-open \(info.playMethod.rawValue)", url: authed)
+        #endif
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
         activateSessionThenPlay(media)
@@ -3032,6 +3037,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackError() {
         cancelOpenWatchdog()
         endSeekLoading() // the media is being reloaded (or given up on)
+        #if DEBUG
+        // Second reading, taken as close as possible to libVLC's own failure:
+        // separates "the process couldn't resolve either, right then" from
+        // "only libVLC couldn't".
+        PlaybackNetworkDiagnostics.probe(
+            "after-failure \(info.playMethod.rawValue)",
+            url: VLCStreamPresenter.authedURL(info.url, token: info.authToken)
+        )
+        #endif
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
