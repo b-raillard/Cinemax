@@ -75,6 +75,30 @@ struct StreamProxyTests {
         #expect(revived.path.hasPrefix("/s/"))
     }
 
+    // MARK: - Playback network diagnostics (temporary probe)
+
+    @Test("the diagnostic resolver reports loopback correctly (C interop sanity)")
+    func diagnosticResolverHandlesLoopback() {
+        // Not a network test — `localhost` resolves from /etc/hosts. It exists to
+        // catch a getaddrinfo/getnameinfo pointer bug BEFORE the probe is carried
+        // onto the one network where it has to produce a usable reading.
+        let (rc, addresses) = PlaybackNetworkDiagnostics.resolve(host: "localhost")
+        #expect(rc == 0)
+        #expect(!addresses.isEmpty)
+        // Every entry is family-tagged, and loopback resolves to a loopback literal.
+        #expect(addresses.allSatisfy { $0.hasPrefix("v4:") || $0.hasPrefix("v6:") })
+        #expect(addresses.contains { $0 == "v4:127.0.0.1" || $0 == "v6:::1" })
+    }
+
+    @Test("the diagnostic resolver reports failure instead of inventing addresses")
+    func diagnosticResolverReportsFailure() {
+        let (rc, addresses) = PlaybackNetworkDiagnostics.resolve(
+            host: "cinemax-does-not-exist.invalid" // .invalid is reserved, never resolves
+        )
+        #expect(rc != 0)
+        #expect(addresses.isEmpty)
+    }
+
     // MARK: - Servable streams (pure)
 
     @Test("HLS/DASH manifests are refused — the single-target proxy can't serve a URL tree")
