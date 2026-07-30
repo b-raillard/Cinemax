@@ -297,11 +297,10 @@ struct SettingsScreen: View {
         var rows: [SettingsToggleRow] = [
             .init(id: "detailQualityBadges", icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"), value: $showQualityBadges)
         ]
-        // The trailer button opens the URL in Safari — tvOS has no browser,
-        // so neither the button nor its toggle exist there.
-        #if os(iOS)
+        // Cross-platform since local trailers landed: a server-hosted trailer
+        // plays in the app's own engine, so tvOS has a trailer button too (it
+        // just has no Safari fallback when only a remote URL exists).
         rows.append(.init(id: "detailTrailerButton", icon: "movieclapper", label: loc.localized("settings.detailPage.trailerButton"), value: $showTrailerButton))
-        #endif
         return rows
     }
 

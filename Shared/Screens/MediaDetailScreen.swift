@@ -75,8 +75,11 @@ struct MediaDetailScreen: View {
     @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
 
     @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
-    #if os(iOS)
+    // Cross-platform since local trailers landed — tvOS shows the button too
+    // when the server hosts a trailer file. Only `openURL` (the Safari
+    // fallback) stays iOS-only.
     @AppStorage(SettingsKey.detailShowTrailerButton) private var showTrailerButton: Bool = SettingsKey.Default.detailShowTrailerButton
+    #if os(iOS)
     @Environment(\.openURL) private var openURL
     #endif
 
@@ -804,6 +807,11 @@ struct MediaDetailScreen: View {
             playSection
             favoriteButton
             watchedButton
+            // Only a server-hosted trailer earns a button here: tvOS has no
+            // browser, so the remote-URL fallback iOS uses has no equivalent.
+            if showTrailerButton, let localTrailer = viewModel.localTrailers.first {
+                trailerButton(localTrailer)
+            }
             if Self.watchTogetherEnabled && network.isOnline {
                 watchTogetherButton(for: item, nextEp: nextEp)
             }
@@ -857,6 +865,25 @@ struct MediaDetailScreen: View {
         .accessibilityLabel(loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"))
     }
 
+    /// Trailer button in the tvOS action row. Only ever shown for a
+    /// server-hosted trailer, which the app's own engine can play — tvOS has no
+    /// browser, so the remote-URL path iOS falls back to has no equivalent
+    /// here. This is why the button exists on tvOS at all now.
+    private func trailerButton(_ trailer: BaseItemDto) -> some View {
+        PlayLink(
+            itemId: trailer.id ?? "",
+            title: trailer.name ?? loc.localized("detail.trailer")
+        ) {
+            Image(systemName: "movieclapper")
+                .font(.system(size: buttonFontSize, weight: .bold))
+                .foregroundStyle(CinemaColor.onSurface)
+                .padding(.vertical, buttonVerticalPadding)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+        }
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        .accessibilityLabel(loc.localized("detail.trailer"))
+    }
+
     /// "Watch Together" (SyncPlay) toggle in the tvOS action row — opens the
     /// group sheet. Accent fill while already in a group.
     private func watchTogetherButton(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
@@ -903,14 +930,29 @@ struct MediaDetailScreen: View {
                 Task { await viewModel.togglePlayed(using: appState) }
             }
 
-            if showTrailerButton, let trailerURL = Self.firstTrailerURL(of: item) {
-                secondaryActionCell(
-                    systemImage: "movieclapper",
-                    active: false,
-                    accessibility: loc.localized("detail.trailer"),
-                    trigger: false
-                ) {
-                    openURL(trailerURL)
+            // A server-hosted trailer wins over the external URL: it plays in
+            // the app's own engine instead of throwing the user out to Safari.
+            // The remote fallback stays for libraries that carry only metadata
+            // trailers.
+            if showTrailerButton {
+                if let localTrailer = viewModel.localTrailers.first, let trailerId = localTrailer.id {
+                    PlayLink(
+                        itemId: trailerId,
+                        title: localTrailer.name ?? loc.localized("detail.trailer")
+                    ) {
+                        secondaryActionLabel(systemImage: "movieclapper", active: false)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(loc.localized("detail.trailer"))
+                } else if let trailerURL = Self.firstTrailerURL(of: item) {
+                    secondaryActionCell(
+                        systemImage: "movieclapper",
+                        active: false,
+                        accessibility: loc.localized("detail.trailer"),
+                        trigger: false
+                    ) {
+                        openURL(trailerURL)
+                    }
                 }
             }
 
@@ -940,18 +982,25 @@ struct MediaDetailScreen: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 44, height: 44)
-                Image(systemName: systemImage)
-                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
-                    .foregroundStyle(active ? themeManager.accent : CinemaColor.onSurface)
-            }
+            secondaryActionLabel(systemImage: systemImage, active: active)
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: trigger)
         .accessibilityLabel(accessibility)
+    }
+
+    /// The chip's visual, split out from `secondaryActionCell` so the trailer
+    /// can wear the same 44pt glass circle while being a `PlayLink` rather than
+    /// a plain `Button` — every play affordance goes through `PlayLink`.
+    private func secondaryActionLabel(systemImage: String, active: Bool) -> some View {
+        ZStack {
+            Circle()
+                .fill(.ultraThinMaterial)
+                .frame(width: 44, height: 44)
+            Image(systemName: systemImage)
+                .font(.system(size: CinemaScale.pt(22), weight: .semibold))
+                .foregroundStyle(active ? themeManager.accent : CinemaColor.onSurface)
+        }
     }
     #endif
 
