@@ -12,6 +12,13 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaDetail")
 final class MediaDetailViewModel {
     var item: BaseItemDto?
     var similarItems: [BaseItemDto] = []
+    /// Bonus content (deleted scenes, making-of…). Drives the "Bonus" row,
+    /// which isn't rendered at all when this is empty.
+    var specialFeatures: [BaseItemDto] = []
+    /// Server-hosted trailers. When non-empty the trailer button plays the
+    /// first one in-app on BOTH platforms, instead of sending iOS to Safari
+    /// and leaving tvOS with no button at all.
+    var localTrailers: [BaseItemDto] = []
     var seasons: [BaseItemDto] = []
     var episodes: [BaseItemDto] = []
     var selectedSeasonId: String?
@@ -122,6 +129,11 @@ final class MediaDetailViewModel {
         // so a slow boxset lookup never delays the detail render.
         if resolvedType == .movie, item != nil {
             Task { await loadCollection(using: appState) }
+        }
+        // Extras apply to every kind (a series can carry featurettes too), so
+        // this isn't gated on `resolvedType` the way collections are.
+        if item != nil {
+            Task { await loadExtras(using: appState, generation: generation) }
         }
 
         isLoading = false
@@ -319,6 +331,26 @@ final class MediaDetailViewModel {
             episodes = refreshed
             rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
         }
+    }
+
+    /// Bonus content and server-hosted trailers, fetched together after the main
+    /// render — same discipline as `loadCollection`: a slow extras lookup must
+    /// never hold the detail screen back.
+    ///
+    /// Both failures are non-fatal by construction (`try?`): an unreachable
+    /// extras endpoint drops the row and the trailer button, it never replaces
+    /// the visible detail screen with an error state. Older servers and items
+    /// with no extras both land here as an empty array, which is the same
+    /// outcome — nothing to show.
+    private func loadExtras(using appState: AppState, generation: Int) async {
+        guard let userId = appState.currentUserId, let id = item?.id else { return }
+        async let features = appState.apiClient.getSpecialFeatures(itemId: id, userId: userId)
+        async let trailers = appState.apiClient.getLocalTrailers(itemId: id, userId: userId)
+        let loadedFeatures = (try? await features) ?? []
+        let loadedTrailers = (try? await trailers) ?? []
+        guard loadGeneration == generation else { return }
+        specialFeatures = loadedFeatures
+        localTrailers = loadedTrailers
     }
 
     private func loadCollection(using appState: AppState) async {

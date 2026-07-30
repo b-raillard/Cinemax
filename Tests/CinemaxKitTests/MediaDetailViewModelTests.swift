@@ -289,6 +289,45 @@ struct MediaDetailViewModelTests {
         #expect(vm.isPlayed == true)
     }
 
+    // MARK: - Extras (bonus content + local trailers)
+
+    @Test("load populates special features and local trailers")
+    func loadPopulatesExtras() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { _ in makeMovie(id: "movie-1", played: false) }
+        api.stubbedSpecialFeatures = [makeEpisode(id: "sf-1", name: "Scènes coupées")]
+        api.stubbedLocalTrailers = [makeEpisode(id: "tr-1", name: "Bande-annonce")]
+
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        await vm.load(using: makeAppState(api: api), loc: LocalizationManager())
+        // Extras ride a follow-up Task so the main render isn't delayed — poll
+        // for their arrival rather than assuming it landed synchronously.
+        for _ in 0..<200 where vm.specialFeatures.isEmpty {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(vm.specialFeatures.map(\.id) == ["sf-1"])
+        #expect(vm.localTrailers.map(\.id) == ["tr-1"])
+    }
+
+    /// The bonus row is additive: an extras endpoint the server doesn't expose
+    /// (or that fails) must cost the row, never the detail screen.
+    @Test("an extras failure leaves the detail screen intact")
+    func extrasFailureIsNonFatal() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { _ in makeMovie(id: "movie-1", played: false) }
+        api.extrasShouldThrow = true
+
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        await vm.load(using: makeAppState(api: api), loc: LocalizationManager())
+        try? await Task.sleep(for: .milliseconds(120))
+
+        #expect(vm.specialFeatures.isEmpty)
+        #expect(vm.localTrailers.isEmpty)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.item?.id == "movie-1")
+    }
+
     @Test("selectSeason without userId short-circuits")
     func selectSeasonWithoutUserIdNoop() async {
         let api = MockAPIClient()
