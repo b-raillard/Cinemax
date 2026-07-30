@@ -844,6 +844,7 @@
 "detail.partOf" = "Fait partie de : %@";
 "detail.favorite.add" = "Ajouter aux favoris";
 "detail.trailer" = "Bande-annonce";
+"detail.extras" = "Bonus";
 "detail.favorite.remove" = "Retirer des favoris";
 "detail.watched.add" = "Marquer comme vu";
 "detail.watched.remove" = "Marquer comme non vu";

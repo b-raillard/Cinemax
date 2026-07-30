@@ -299,6 +299,16 @@ struct MediaDetailScreen: View {
             seasonsSection(item)
         }
 
+        // Bonus content. Sits before the collection/similar rails: extras are
+        // about THIS item, those two send the user elsewhere. Absent entirely
+        // when the server has none — most items don't.
+        if !viewModel.specialFeatures.isEmpty {
+            MediaDetailExtrasSection(
+                items: viewModel.specialFeatures,
+                cardWidth: similarCardWidth
+            ).equatable()
+        }
+
         // Collection ("Part of: …") — movies that share a BoxSet
         if !viewModel.collectionItems.isEmpty {
             MediaDetailSimilarSection(

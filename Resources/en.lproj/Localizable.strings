@@ -842,6 +842,7 @@
 "detail.partOf" = "Part of: %@";
 "detail.favorite.add" = "Add to favorites";
 "detail.trailer" = "Trailer";
+"detail.extras" = "Extras";
 "detail.favorite.remove" = "Remove from favorites";
 "detail.watched.add" = "Mark as watched";
 "detail.watched.remove" = "Mark as unwatched";
