@@ -376,6 +376,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // P3: end-of-series / error
     private var didReportEnd = false
     private var didRetry = false
+    // True once `noteMediaOpened()` has confirmed a demuxer exists. Until then
+    // the spinner stays up whatever libVLC says about the state — see
+    // `clearLoadingIfOpen()`.
+    private var mediaConfirmedOpen = false
     // Held weakly so a late-arriving successful open can tear down the failure
     // alert (libVLC's connection can complete after the watchdog gave up).
     private weak var errorAlert: UIAlertController?
@@ -715,6 +719,34 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         else { loadingIndicator.stopAnimating() }
     }
 
+    /// Arms the spinner for a **fresh open** and un-confirms the media.
+    ///
+    /// Distinct from a bare `setLoading(true)`, which mid-playback rebuffering
+    /// also does: only an open (initial play, error retry, wake re-resolve,
+    /// episode nav) invalidates "we know a demuxer exists".
+    private func beginOpenLoading() {
+        mediaConfirmedOpen = false
+        setLoading(true)
+    }
+
+    /// Hides the spinner only once the media is CONFIRMED open.
+    ///
+    /// **RULE — every "frames are flowing" path clears the spinner through this,
+    /// never through a bare `setLoading(false)`.** libVLC emits `.playing` as
+    /// soon as the input starts, *before* a demuxer is built, so a stream that
+    /// never opens still produces one — and clearing on it turned a dead open
+    /// into a black screen that reads as playing (HUD showing pause, 0:00/0:00,
+    /// no spinner, no error) until the watchdog eventually fired. The only two
+    /// signals that prove a demuxer exists are a real `lengthChanged > 0` and a
+    /// moving playhead, and both go through `noteMediaOpened()`.
+    ///
+    /// Teardown and the error dialog still call `setLoading(false)` directly:
+    /// they own the screen and must clear it whether or not anything opened.
+    private func clearLoadingIfOpen() {
+        guard mediaConfirmedOpen else { return }
+        setLoading(false)
+    }
+
     /// Builds the SwiftVLC `Media` for a streamed URL with `network-caching`
     /// (matches the VLCKit path).
     private func makeMedia(_ url: URL) -> Media? {
@@ -818,7 +850,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         updateSkipButton(currentTime: now)
         // Second chance to close a settling seek: if VLC went quiet on time
         // updates the heartbeat's own sampling still sees the playhead move.
-        if seekLoadingTargetMs != nil, !updateSeekLoading() { setLoading(false) }
+        if seekLoadingTargetMs != nil, !updateSeekLoading() { clearLoadingIfOpen() }
         if statsVisible { refreshStats() }
         if sleepActive {
             sleepRemaining -= 1
@@ -2356,7 +2388,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hasValidTime = false
         didApplyServerTrackDefaults = false
         cancelPendingSeekCommit()
-        setLoading(true)
+        beginOpenLoading()
         mediaLengthMs = 0
         firstPlayStart = Date()
         usingProxy = false
@@ -2419,6 +2451,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         cancelOpenWatchdog()
         recoverFromErrorIfNeeded()
         didRetry = false
+        // Releases the spinner gate — see `clearLoadingIfOpen()`. The engine
+        // state that follows (`.playing` / a time tick) does the actual hiding.
+        mediaConfirmedOpen = true
     }
 
     /// Called by `RemoteCommandController` when the Siri Remote / Lock Screen /
@@ -2557,7 +2592,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.usingProxy = false
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
-            self.setLoading(true)
+            self.beginOpenLoading()
             // The episode we're leaving can have died during a device sleep, which
             // also deactivated the session — re-assert it before opening the next
             // one, or libVLC's aout loops on `CannotStartPlaying` and the autoplay
@@ -2928,7 +2963,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         case .playing:
             // `.playing` can be reported while a seek is still re-buffering, so
             // defer to the settle window rather than clearing the spinner blindly.
-            if !updateSeekLoading() { setLoading(false) }
+            // …and defer to the open gate too: a bare `.playing` is exactly the
+            // signal that used to hide the spinner over a stream that never
+            // opened. See `clearLoadingIfOpen()`.
+            if !updateSeekLoading() { clearLoadingIfOpen() }
             // NOTE: `.playing` deliberately does NOT clear the retry budget —
             // `noteMediaOpened()` owns that. libVLC reports `.playing` as soon
             // as the input starts, BEFORE a demuxer exists, so a stream that
@@ -2953,7 +2991,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if syncPlayActive { syncPlay.reportReady(isPlaying: true) }
         case .paused:
             endSeekLoading()
-            setLoading(false)
+            clearLoadingIfOpen()
             #if os(iOS)
             setPlayPauseIcon(playing: false)
             #endif
@@ -3070,7 +3108,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     hasValidTime = false
                     mediaLengthMs = 0
                 }
-                setLoading(true)
+                beginOpenLoading()
                 activateSessionThenPlay(media)
             }
             return
@@ -3274,7 +3312,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.usingProxy = false
             }
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
-            self.setLoading(true)
+            self.beginOpenLoading()
             // Re-assert the playback session BEFORE replay: the system deactivated
             // it during sleep, and without this libVLC's aout loops forever on
             // `CannotStartPlaying` (the black-screen-after-wake bug). Already in an
@@ -3304,7 +3342,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             hasValidTime = true; noteMediaOpened()
             // A settling seek echoes its target here before any frame is decoded —
             // only hide the spinner once the playhead is actually moving again.
-            if !updateSeekLoading() { setLoading(false) }
+            if !updateSeekLoading() { clearLoadingIfOpen() }
             lastKnownPositionMs = currentMs
         }
         if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
