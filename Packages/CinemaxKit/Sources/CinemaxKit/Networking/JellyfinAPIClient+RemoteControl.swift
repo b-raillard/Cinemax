@@ -1,0 +1,70 @@
+import Foundation
+@preconcurrency import JellyfinAPI
+
+// MARK: - Remote control ("Play on…")
+//
+// The two calls that let this device drive another Jellyfin session. Both are
+// plain SDK-routed requests — no hand-built URLs — so the server's base path is
+// handled for us (see the `URLComponents+ServerPath` RULE in CLAUDE.md).
+
+// The conformance is declared here rather than in the aggregate list in
+// `APIClientProtocol.swift`, matching `JellyfinAPIClient+SyncPlay.swift`: a
+// feature slice whose implementation lives in one file declares its own
+// conformance there, so adding the slice to `APIClientProtocol` can't leave the
+// real client silently non-conforming.
+extension JellyfinAPIClient: RemoteControlAPI {
+    /// `GET /Sessions?controllableByUserId=…&activeWithinSeconds=300`
+    ///
+    /// `controllableByUserId` is what makes this callable by a regular user:
+    /// the server returns only sessions this account may drive, so the feature
+    /// needs none of the elevated rights the unfiltered `getActiveSessions`
+    /// implies. The caller still re-filters — see `RemotePlayTarget.resolve`.
+    ///
+    /// The 5-minute window bounds staleness explicitly rather than trusting the
+    /// server's own idea of "active": a device that checked in within five
+    /// minutes is realistically still there, and a stale entry costs only a
+    /// no-op command the server drops.
+    ///
+    /// Deliberately uncached: the whole point of a target list is that it
+    /// reflects which devices are awake *right now*, and a 10 s TTL would keep
+    /// hiding an Apple TV the user just switched on.
+    public func getControllableSessions(userId: String) async throws -> [SessionInfoDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.GetSessionsParameters(
+            controllableByUserID: userId,
+            activeWithinSeconds: 300
+        )
+        do {
+            let response = try await client.send(Paths.getSessions(parameters: params))
+            return response.value
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    /// `POST /Sessions/{id}/Playing?playCommand=PlayNow`
+    ///
+    /// One-shot: the target starts pulling the stream from the server itself and
+    /// this device is out of the loop from here on.
+    public func playOnSession(
+        sessionId: String,
+        itemIds: [String],
+        startPositionTicks: Int? = nil,
+        mediaSourceId: String? = nil
+    ) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.PlayParameters(
+            playCommand: .playNow,
+            itemIDs: itemIds,
+            startPositionTicks: startPositionTicks,
+            mediaSourceID: mediaSourceId
+        )
+        do {
+            _ = try await client.send(Paths.play(sessionID: sessionId, parameters: params))
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+}

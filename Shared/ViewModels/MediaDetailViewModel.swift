@@ -44,6 +44,13 @@ final class MediaDetailViewModel {
     var collectionName: String?
     var collectionItems: [BaseItemDto] = []
 
+    /// Jellyfin sessions this user can send the item to ("Play on…"). Resolved
+    /// after the main load, like `loadCollection`, so a slow or failing
+    /// `/Sessions` never delays the detail render. Empty ⇒ no affordance drawn,
+    /// which is the ordinary case: a session only exists while Jellyfin is
+    /// actually running on the other device.
+    var remoteTargets: [RemotePlayTarget] = []
+
     /// The version the user picked from the detail screen's version row, when
     /// the item carries several media sources. `nil` ⇒ play whatever
     /// `MediaSourceQuality` ranks highest.
@@ -123,6 +130,10 @@ final class MediaDetailViewModel {
         if resolvedType == .movie, item != nil {
             Task { await loadCollection(using: appState) }
         }
+        // Same discipline for the "Play on…" probe: a side task, so `/Sessions`
+        // being slow or unreachable costs the render nothing. Every item kind is
+        // sendable, so there's no type guard here.
+        Task { await loadRemoteTargets(using: appState) }
 
         isLoading = false
     }
@@ -340,6 +351,30 @@ final class MediaDetailViewModel {
         guard !others.isEmpty else { return }
         collectionName = boxset.name
         collectionItems = others
+    }
+
+    /// Discovers the sessions the "Play on…" affordance can target.
+    ///
+    /// **Deliberately silent on failure**: having no target is the ordinary case,
+    /// so a failed probe must degrade to "no button" — never to an error state
+    /// over an otherwise-fine detail screen. Logged at debug level only.
+    ///
+    /// Internal rather than private: the picker sheet re-runs the same probe
+    /// when it opens (its snapshot has to be fresh at the moment a command is
+    /// sent), and the tests exercise this path directly.
+    func loadRemoteTargets(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        do {
+            let sessions = try await appState.apiClient.getControllableSessions(userId: userId)
+            remoteTargets = RemotePlayTarget.resolve(
+                sessions: sessions,
+                currentUserId: userId,
+                excludingDeviceId: KeychainService.getOrCreateDeviceID()
+            )
+        } catch {
+            logger.debug("Remote targets probe failed: \(error.localizedDescription, privacy: .public)")
+            remoteTargets = []
+        }
     }
 
     /// Fans out the series-level fetches in parallel — similar, seasons, and next-up

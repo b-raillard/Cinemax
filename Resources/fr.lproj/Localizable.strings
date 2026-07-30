@@ -949,3 +949,13 @@
 "intent.error.nothingToResume" = "Aucune lecture en cours à reprendre.";
 "intent.error.itemUnavailable" = "Ce titre est introuvable sur le serveur actif.";
 "intent.error.notEpisodic" = "Ce titre n'est pas une série.";
+
+// MARK: - Remote control ("Play on…")
+
+"remote.title" = "Lire sur…";
+"remote.sent" = "Lecture lancée sur %@";
+"remote.unknownDevice" = "Appareil inconnu";
+"remote.idle" = "Prêt";
+"remote.nowPlaying" = "lit %@";
+"remote.noTargets.title" = "Aucun appareil disponible";
+"remote.noTargets.subtitle" = "Ouvre Jellyfin sur l'appareil cible : il doit être allumé et connecté au serveur pour apparaître ici.";
