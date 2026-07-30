@@ -434,6 +434,37 @@ extension JellyfinAPIClient {
         }
     }
 
+    // MARK: - Extras
+
+    /// Bonus content for an item (deleted scenes, making-of, featurettes).
+    public func getSpecialFeatures(itemId: String, userId: String) async throws -> [BaseItemDto] {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            let response = try await client.send(
+                Paths.getSpecialFeatures(itemID: itemId, userID: userId)
+            )
+            return response.value
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    /// Server-hosted trailers for an item. Unlike `remoteTrailers` (external
+    /// URLs) these are real media the app can play itself.
+    public func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto] {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            let response = try await client.send(
+                Paths.getLocalTrailers(itemID: itemId, userID: userId)
+            )
+            return response.value
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     // MARK: - Collections
 
     public func getCollections(containingItemId itemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] {

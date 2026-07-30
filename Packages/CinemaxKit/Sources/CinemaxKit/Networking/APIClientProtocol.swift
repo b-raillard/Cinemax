@@ -141,6 +141,16 @@ public protocol LibraryAPI: Sendable {
     /// URLs work exactly as they do for titles — no second result model.
     func searchPersons(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto]
 
+    /// Bonus content attached to an item — deleted scenes, making-of,
+    /// featurettes. Playable items in their own right, so they carry their own
+    /// media sources and go through `PlayLink` like anything else.
+    func getSpecialFeatures(itemId: String, userId: String) async throws -> [BaseItemDto]
+
+    /// Trailers stored on the server for this item, as opposed to the external
+    /// URLs in `BaseItemDto.remoteTrailers`. Being real media, these play in the
+    /// app's own engine — which is what lets tvOS have a trailer button at all.
+    func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto]
+
     /// BoxSet collections containing the given item. Uses the server's
     /// reverse-lookup endpoint when available (post-10.11); older servers
     /// fall back to matching `tmdbCollectionId` against the boxset list.

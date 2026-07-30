@@ -29,6 +29,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedLatestItems: [BaseItemDto] = []
     var stubbedSearchResults: [BaseItemDto] = []
     var stubbedPersonResults: [BaseItemDto] = []
+    var stubbedSpecialFeatures: [BaseItemDto] = []
+    var stubbedLocalTrailers: [BaseItemDto] = []
+    /// Set to fail ONLY the extras fetches, so a test can prove that losing the
+    /// bonus row leaves the rest of the detail screen intact.
+    var extrasShouldThrow = false
     var stubbedItems: [BaseItemDto] = []
     var stubbedTotalCount = 0
     var stubbedGenres: [String] = []
@@ -385,6 +390,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         }
         if shouldThrow { throw stubbedError }
         return stubbedSearchResults
+    }
+
+    func getSpecialFeatures(itemId: String, userId: String) async throws -> [BaseItemDto] {
+        if extrasShouldThrow || shouldThrow { throw stubbedError }
+        return stubbedSpecialFeatures
+    }
+
+    func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto] {
+        if extrasShouldThrow || shouldThrow { throw stubbedError }
+        return stubbedLocalTrailers
     }
 
     private(set) var searchPersonsCallCount = 0
