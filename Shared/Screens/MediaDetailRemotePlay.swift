@@ -175,7 +175,25 @@ struct RemotePlaySheet: View {
         }
     }
 
+    /// One device row. The tvOS treatment is the validated full-width-row
+    /// pattern (`TVFilterRowButtonStyle` + effects disabled, as in
+    /// `LibrarySortFilterSheet`), NOT the bare `.buttonStyle(.plain)` that
+    /// `WatchTogetherSheet` uses — that sheet is gated off, so its focus
+    /// rendering was never validated on a TV, and these rows are the only
+    /// interactive elements here besides Done.
+    @ViewBuilder
     private func targetRow(_ target: RemotePlayTarget) -> some View {
+        let row = rowButton(target)
+        #if os(tvOS)
+        row.buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+        #else
+        row.buttonStyle(.plain)
+        #endif
+    }
+
+    private func rowButton(_ target: RemotePlayTarget) -> some View {
         Button {
             send(to: target)
         } label: {
@@ -201,7 +219,6 @@ struct RemotePlaySheet: View {
             .padding(CinemaSpacing.spacing4)
             .glassPanel()
         }
-        .buttonStyle(.plain)
         .disabled(model.busy)
         .accessibilityLabel(displayName(target))
         .accessibilityHint(loc.localized("remote.title"))
