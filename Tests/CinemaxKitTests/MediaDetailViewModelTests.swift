@@ -304,6 +304,63 @@ struct MediaDetailViewModelTests {
 
         #expect(vm.episodes.isEmpty)
     }
+
+    // MARK: - Remote play targets ("Play on…")
+
+    @Test("loadRemoteTargets keeps only the sessions the user can drive")
+    func loadRemoteTargetsPopulates() async {
+        let api = MockAPIClient()
+        var mine = SessionInfoDto()
+        mine.id = "s1"
+        mine.userID = "user1"
+        mine.deviceID = "apple-tv"
+        mine.deviceName = "Salon"
+        mine.isSupportsRemoteControl = true
+        // Same server response, another account: must never be offered as a
+        // target (see the defense-in-depth RULE on `RemotePlayTarget.resolve`).
+        var other = SessionInfoDto()
+        other.id = "s2"
+        other.userID = "user2"
+        other.deviceID = "someone-else"
+        other.isSupportsRemoteControl = true
+        api.stubbedControllableSessions = [mine, other]
+
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+
+        await vm.loadRemoteTargets(using: appState)
+
+        #expect(api.controllableSessionsCallCount == 1)
+        #expect(vm.remoteTargets.map(\.id) == ["s1"])
+        #expect(vm.remoteTargets.first?.name == "Salon")
+    }
+
+    @Test("loadRemoteTargets swallows a failure — no targets, no error on screen")
+    func loadRemoteTargetsSwallowsFailure() async {
+        let api = MockAPIClient()
+        api.controllableSessionsError = MockError.genericFailure
+
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+
+        await vm.loadRemoteTargets(using: appState)
+
+        #expect(vm.remoteTargets.isEmpty)
+        #expect(vm.errorMessage == nil)
+    }
+
+    @Test("loadRemoteTargets without a signed-in user short-circuits")
+    func loadRemoteTargetsWithoutUserNoop() async {
+        let api = MockAPIClient()
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = nil
+
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        await vm.loadRemoteTargets(using: appState)
+
+        #expect(api.controllableSessionsCallCount == 0)
+        #expect(vm.remoteTargets.isEmpty)
+    }
 }
 
 // MARK: - MetadataEditorViewModel full-item gate

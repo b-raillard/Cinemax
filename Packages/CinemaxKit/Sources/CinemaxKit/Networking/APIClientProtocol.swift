@@ -424,13 +424,51 @@ public extension SyncPlayAPI {
     func makeSyncPlaySocket() -> SyncPlaySocket? { nil }
 }
 
+// MARK: - Remote control ("Play on…")
+
+/// Driving *another* Jellyfin session — the "Play on…" picker. Deliberately its
+/// own slice rather than an addition to `PlaybackAPI` (which reports on *local*
+/// playback) or `AuthAPI` (which owns session *listing*): this is the one place
+/// the app acts on a device other than itself, and keeping it nameable keeps
+/// that blast radius visible.
+///
+/// Both members carry empty default implementations, on the `SyncPlayAPI` model,
+/// so hand-written test mocks compile without stubbing calls they don't exercise.
+public protocol RemoteControlAPI: Sendable {
+    /// Sessions the given user is allowed to drive. Uses Jellyfin's
+    /// `controllableByUserId` filter, so **no elevated rights are needed** —
+    /// unlike the unfiltered `getActiveSessions`, which is admin-gated in this
+    /// app because it leaks every user's session on some servers.
+    func getControllableSessions(userId: String) async throws -> [SessionInfoDto]
+
+    /// Tells a session to play an item now (`PlayNow`). Fire-and-forget by
+    /// design: this app sends and stops there — see the "Remote control"
+    /// section in CLAUDE.md for why the sender keeps no controls.
+    func playOnSession(
+        sessionId: String,
+        itemIds: [String],
+        startPositionTicks: Int?,
+        mediaSourceId: String?
+    ) async throws
+}
+
+public extension RemoteControlAPI {
+    func getControllableSessions(userId: String) async throws -> [SessionInfoDto] { [] }
+    func playOnSession(
+        sessionId: String,
+        itemIds: [String],
+        startPositionTicks: Int?,
+        mediaSourceId: String?
+    ) async throws {}
+}
+
 // MARK: - Aggregate
 
 /// Umbrella protocol kept as the default dependency type — view models and
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI & RemoteControlAPI
 
 // MARK: - Default arguments
 

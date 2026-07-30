@@ -947,3 +947,13 @@
 "intent.error.nothingToResume" = "Nothing in progress to resume.";
 "intent.error.itemUnavailable" = "That title isn't available on the active server.";
 "intent.error.notEpisodic" = "That title isn't a series.";
+
+// MARK: - Remote control ("Play on…")
+
+"remote.title" = "Play on…";
+"remote.sent" = "Started playing on %@";
+"remote.unknownDevice" = "Unknown device";
+"remote.idle" = "Ready";
+"remote.nowPlaying" = "playing %@";
+"remote.noTargets.title" = "No device available";
+"remote.noTargets.subtitle" = "Open Jellyfin on the target device — it has to be awake and connected to the server to show up here.";

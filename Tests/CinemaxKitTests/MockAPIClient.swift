@@ -143,6 +143,34 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getDevices() async throws -> [DeviceInfoDto] { [] }
     func deleteDevice(id: String) async throws {}
 
+    // MARK: - Remote control ("Play on…")
+
+    var stubbedControllableSessions: [SessionInfoDto] = []
+    var controllableSessionsError: Error?
+    private(set) var controllableSessionsCallCount = 0
+    /// Every `playOnSession` call, in order. Read the fields individually — the
+    /// tuple isn't `Equatable`.
+    private(set) var playOnSessionCalls: [(sessionId: String, itemIds: [String], startPositionTicks: Int?, mediaSourceId: String?)] = []
+    var playOnSessionError: Error?
+
+    func getControllableSessions(userId: String) async throws -> [SessionInfoDto] {
+        recordLock.withLock { controllableSessionsCallCount += 1 }
+        if let controllableSessionsError { throw controllableSessionsError }
+        return stubbedControllableSessions
+    }
+
+    func playOnSession(
+        sessionId: String,
+        itemIds: [String],
+        startPositionTicks: Int?,
+        mediaSourceId: String?
+    ) async throws {
+        recordLock.withLock {
+            playOnSessionCalls.append((sessionId, itemIds, startPositionTicks, mediaSourceId))
+        }
+        if let playOnSessionError { throw playOnSessionError }
+    }
+
     // MARK: - Admin
 
     var stubbedUserByID: UserDto = UserDto()

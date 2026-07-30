@@ -41,6 +41,10 @@ struct MediaDetailScreen: View {
     /// Watch Together (SyncPlay): the item to present the group sheet for, and
     /// (iOS) the item to push into playback once a group is created/joined.
     @State private var watchTogetherSheet: WatchTogetherIntent?
+    /// "Play on…" (Jellyfin remote control): the item to present the device
+    /// picker for. Non-nil only while the sheet is up — the feature keeps no
+    /// state past the send.
+    @State private var remotePlaySheet: RemotePlayIntent?
     /// Watch Together (SyncPlay) is not production-ready yet. This kill-switch
     /// hides both UI entry points (iOS secondary-actions chip + tvOS action-row
     /// button) while keeping the whole implementation compiled and type-checked.
@@ -131,6 +135,13 @@ struct MediaDetailScreen: View {
             toast: toast,
             network: network,
             onStart: { intent in startWatchTogether(intent) }
+        ))
+        .modifier(RemotePlayPresentation(
+            sheet: $remotePlaySheet,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toast
         ))
         #if os(iOS)
         .navigationDestination(item: $watchTogetherPlay) { intent in
@@ -665,6 +676,10 @@ struct MediaDetailScreen: View {
         let itemId: String
         let title: String
         let startSeconds: Double?
+        /// The same resume point in Jellyfin ticks — what a remote `PlayNow`
+        /// command takes. Carried rather than derived from `startSeconds` so a
+        /// send doesn't round-trip through a `Double`.
+        let startTicks: Int?
         let showResume: Bool
         let progress: Double
         let remainingMinutes: Int
@@ -691,10 +706,27 @@ struct MediaDetailScreen: View {
             itemId: nextEp?.id ?? item.id ?? "",
             title: nextEp?.name ?? item.name ?? "",
             startSeconds: showResume ? posTicks.jellyfinSeconds : nil,
+            startTicks: showResume ? posTicks : nil,
             showResume: showResume,
             progress: showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0,
             remainingMinutes: max(0, totalTicks - posTicks).jellyfinMinutes,
             nextEpisode: nextEp
+        )
+    }
+
+    /// What "Play on…" sends: the same target the local Play button would open,
+    /// through the same single-sourced resolution — so a series sends its
+    /// next-up episode and a half-watched film resumes where it stopped.
+    private func remotePlayIntent(for item: BaseItemDto) -> RemotePlayIntent {
+        let target = resolvedPlayTarget(for: item)
+        return RemotePlayIntent(
+            itemId: target.itemId.isEmpty ? viewModel.itemId : target.itemId,
+            title: target.title,
+            startPositionTicks: target.startTicks,
+            // For a series the play target is an episode, whose media sources
+            // aren't the ones the version row ranked (those belong to the
+            // parent) — so the override only travels for the item itself.
+            mediaSourceId: target.nextEpisode == nil ? selectedSource(item)?.id : nil
         )
     }
 
@@ -807,6 +839,12 @@ struct MediaDetailScreen: View {
             if Self.watchTogetherEnabled && network.isOnline {
                 watchTogetherButton(for: item, nextEp: nextEp)
             }
+            // "Play on…" — appended last, so this late-arriving button (the
+            // session probe lands after the first render) can't steal focus from
+            // Play, which holds it by default.
+            if network.isOnline, !viewModel.remoteTargets.isEmpty {
+                remotePlayButton(for: item)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, contentPadding)
@@ -872,6 +910,23 @@ struct MediaDetailScreen: View {
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
         .accessibilityLabel(loc.localized("syncplay.title"))
     }
+
+    /// "Play on…" in the tvOS action row — the affordance for moving a film to
+    /// another room. Rendered only when a controllable session exists, so a
+    /// single-Apple-TV setup never sees it and the focus row stays as it was.
+    private func remotePlayButton(for item: BaseItemDto) -> some View {
+        Button {
+            remotePlaySheet = remotePlayIntent(for: item)
+        } label: {
+            Image(systemName: "tv.badge.wifi")
+                .font(.system(size: buttonFontSize, weight: .bold))
+                .foregroundStyle(CinemaColor.onSurface)
+                .padding(.vertical, buttonVerticalPadding)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+        }
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        .accessibilityLabel(loc.localized("remote.title"))
+    }
     #endif
 
     // MARK: - Secondary actions row (iOS)
@@ -923,6 +978,22 @@ struct MediaDetailScreen: View {
                     trigger: false
                 ) {
                     watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+                }
+            }
+
+            // "Play on…" — only when a controllable session actually exists (a
+            // Jellyfin session lives only while the app runs on the other
+            // device, so most of the time there is none and this stays hidden).
+            // Deliberately NOT the AirPlay glyph: this is not AirPlay, and the
+            // phone keeps no controls once the command is sent.
+            if network.isOnline, !viewModel.remoteTargets.isEmpty {
+                secondaryActionCell(
+                    systemImage: "tv.badge.wifi",
+                    active: false,
+                    accessibility: loc.localized("remote.title"),
+                    trigger: false
+                ) {
+                    remotePlaySheet = remotePlayIntent(for: item)
                 }
             }
 
