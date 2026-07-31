@@ -489,6 +489,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Redirect libVLC's stderr firehose into OSLog. Done here rather than at
+        // launch so `libvlc_new` (plugin scan) still happens on first playback.
+        VLCEngineLog.installOnce()
         view.backgroundColor = .black
         setupVideoView()
         setupControls()
