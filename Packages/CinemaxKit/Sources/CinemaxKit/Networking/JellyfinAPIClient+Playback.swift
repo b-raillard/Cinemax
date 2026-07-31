@@ -66,9 +66,25 @@ extension JellyfinAPIClient {
         #endif
 
         // Step 2: POST PlaybackInfo (matching Swiftfin exactly)
+
+        // The container is already known here — `getItem` carried it into
+        // `initialMediaSource` above — so the seek-heavy decision (see the
+        // fallback below for the why) is made BEFORE the first POST. It used to
+        // be read off the *response*, which cost an AVI two full PlaybackInfo
+        // round-trips: negotiate, discover the container, re-negotiate with the
+        // transcode profile. The post-response check stays as the fallback for
+        // items whose `getItem` carried no source or no container.
+        let forcedTranscode = forceTranscode
+            || (engine == .vlc && Self.isSeekHeavyContainer(initialMediaSource?.container))
+        #if DEBUG
+        if forcedTranscode, !forceTranscode {
+            debugLog("  seek-heavy container '\(initialMediaSource?.container ?? "?")' → forcing HLS transcode up front")
+        }
+        #endif
+
         let deviceProfile: DeviceProfile = (engine == .vlc)
-            ? (forceTranscode ? Self.buildVLCTranscodeProfile(maxBitrate: maxBitrate)
-                              : Self.buildVLCDeviceProfile(maxBitrate: maxBitrate))
+            ? (forcedTranscode ? Self.buildVLCTranscodeProfile(maxBitrate: maxBitrate)
+                               : Self.buildVLCDeviceProfile(maxBitrate: maxBitrate))
             : Self.buildAppleDeviceProfile(maxBitrate: maxBitrate)
         var body = PlaybackInfoDto(deviceProfile: deviceProfile)
         body.isAutoOpenLiveStream = true
@@ -157,7 +173,12 @@ extension JellyfinAPIClient {
         // regardless: it reports SupportsDirectStream=false / ContainerNotSupported
         // for mpeg4.) Falls through to the raw path only if the server can't
         // transcode at all.
-        if engine == .vlc, !forceTranscode,
+        //
+        // The decision normally fires BEFORE the POST above, off the container
+        // `getItem` reported. This re-negotiation is the fallback for the case
+        // that check can't cover: no media source (or no container) on the item,
+        // with the response revealing a seek-heavy one.
+        if engine == .vlc, !forcedTranscode,
            Self.isSeekHeavyContainer(mediaSource.container) {
             #if DEBUG
             debugLog("  seek-heavy container '\(mediaSource.container ?? "?")' → forcing HLS transcode")
@@ -700,7 +721,12 @@ extension JellyfinAPIClient {
             container: "mp4",
             context: .streaming,
             maxAudioChannels: "8",
-            minSegments: 2,
+            // 1, not 2: Jellyfin holds the playlist back until `minSegments`
+            // segments have actually been ENCODED (`WaitForMinimumSegmentCount`),
+            // so each one is real ffmpeg time added before the first frame can
+            // play — the dominant cost of starting a forced-transcode AVI. One
+            // segment is enough to start; `:network-caching` covers the rest.
+            minSegments: 1,
             protocol: .hls,
             type: .video,
             videoCodec: "hevc,h264"
