@@ -379,3 +379,32 @@ struct MenuConfigStoreTests {
         #expect(LibraryView(id: "6", name: "Listes", collectionType: "playlists").isVideoLibrary)
     }
 }
+
+// MARK: - Settings categories
+
+/// Verrouille la structure du landing Réglages après la réorganisation
+/// (Lecture promue au 1er niveau) : l'ordre de déclaration = l'ordre
+/// d'affichage, et `.playback` doit rester visible sur les deux plateformes
+/// pour tout utilisateur — ni admin-gated, ni platform-gated.
+@Suite("SettingsCategory")
+struct SettingsCategoryTests {
+    @Test("le landing non-admin résout les 5 catégories canoniques, dans l'ordre, sur les deux plateformes")
+    @MainActor func nonAdminOrder() {
+        let expected: [SettingsCategory] = [.appearance, .interface, .playback, .account, .server]
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: false) == expected)
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true) == expected)
+    }
+
+    @Test("l'admin iOS ajoute les deux catégories admin ; tvOS ne les montre jamais")
+    @MainActor func adminGating() {
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: false)
+                == [.appearance, .interface, .playback, .account, .server, .administration, .advancedAdmin])
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: true)
+                == [.appearance, .interface, .playback, .account, .server])
+    }
+
+    @Test("le hub Interface expose exactement les quatre sous-pages écran, dans l'ordre")
+    func interfaceSubPages() {
+        #expect(InterfaceSubcategory.allCases == [.menu, .homePage, .library, .detailPage])
+    }
+}

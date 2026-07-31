@@ -240,8 +240,9 @@
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
 "debug.skipToEnd" = "⏭ Aller à la fin (Debug)";
 "settings.interface" = "Interface";
-"settings.interface.playback" = "Lecture";
+"settings.playback" = "Lecture";
 "settings.interface.menu" = "Menu principal";
+"settings.interface.library" = "Bibliothèque";
 
 // MARK: - Menu customization
 
@@ -290,7 +291,7 @@
 "settings.detailPage" = "Page de détail";
 "settings.detailPage.qualityBadges" = "Badges de qualité";
 "settings.detailPage.trailerButton" = "Bouton Bande-annonce";
-"settings.libraryLayout" = "Bibliothèque";
+"settings.libraryLayout" = "Disposition";
 "settings.libraryLayout.browse" = "Par genre";
 "settings.libraryLayout.grid" = "Tout afficher";
 "settings.dimUnfocusedPosters" = "Estomper les affiches non sélectionnées";

@@ -135,8 +135,13 @@ extension SettingsScreen {
 
             Spacer()
 
-            // System Information bar
+            // System Information bar + about footer (open-source licences —
+            // reachable by pressing down past the last category pill; plain
+            // vertical stack, no .focusSection() needed)
             tvSystemInfoBar
+                .padding(.horizontal, CinemaSpacing.spacing10)
+
+            tvLicensesButton
                 .padding(.horizontal, CinemaSpacing.spacing10)
                 .padding(.bottom, CinemaSpacing.spacing8)
         }
@@ -261,6 +266,8 @@ extension SettingsScreen {
                     tvServerDetail
                 case .interface:
                     tvInterfaceDetail
+                case .playback:
+                    tvPlaybackDetail
                 case .administration, .advancedAdmin:
                     // Never selected on tvOS — admin categories are filtered
                     // out of the landing pill list. Render nothing as a
@@ -299,14 +306,6 @@ extension SettingsScreen {
             )
 
             tvFontSizeRow
-            tvLibraryLayoutRow
-
-            tvGlassToggle(
-                icon: "viewfinder",
-                label: loc.localized("settings.dimUnfocusedPosters"),
-                key: "dimUnfocusedPosters",
-                value: $dimUnfocusedPosters
-            )
         }
     }
 
@@ -403,8 +402,21 @@ extension SettingsScreen {
                 showsChevron: true,
                 action: { showServers = true }
             )
+        }
+    }
 
-            tvLicensesButton
+    // MARK: Playback Detail (tvOS)
+
+    /// Page Lecture top-level : réglages du player + section Débogage (outils
+    /// QA, toujours visibles — pas de gate #if DEBUG, voir CLAUDE.md).
+    var tvPlaybackDetail: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            tvToggleList(playbackToggleRows)
+            tvSleepTimerRow
+
+            tvSectionLabel(loc.localized("settings.debug"))
+                .padding(.top, CinemaSpacing.spacing4)
+            tvToggleList(debugToggleRows)
         }
     }
 
@@ -474,9 +486,8 @@ extension SettingsScreen {
                 switch sub {
                 case .menu:       tvMenuSection
                 case .homePage:   tvHomePageSection
+                case .library:    tvLibrarySection
                 case .detailPage: tvDetailPageSection
-                case .playback:   tvPlaybackSection
-                case .debug:      tvDebugSection
                 }
             }
             .padding(.horizontal, CinemaSpacing.spacing20)
@@ -493,10 +504,16 @@ extension SettingsScreen {
         }
     }
 
-    var tvPlaybackSection: some View {
+    var tvLibrarySection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            tvToggleList(playbackToggleRows)
-            tvSleepTimerRow
+            tvLibraryLayoutRow
+
+            tvGlassToggle(
+                icon: "viewfinder",
+                label: loc.localized("settings.dimUnfocusedPosters"),
+                key: "dimUnfocusedPosters",
+                value: $dimUnfocusedPosters
+            )
         }
     }
 
@@ -511,12 +528,6 @@ extension SettingsScreen {
     /// ScrollView; no extra wrapping needed.
     var tvMenuSection: some View {
         MenuSettingsScreen()
-    }
-
-    var tvDebugSection: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            tvToggleList(debugToggleRows)
-        }
     }
 
     /// Renders a `SettingsToggleRow` list as tvOS focused rows. tvOS currently
@@ -608,10 +619,11 @@ extension SettingsScreen {
     /// are ≥ 720pt tall, so this safely fills the viewport without forcing scroll.
     var tvLandingMinHeight: CGFloat { 720 }
 
-    // MARK: - Sleep Timer Row (tvOS)
+    // MARK: - Library Layout + Sleep Timer Rows (tvOS)
 
-    /// Library landing layout ("By genre" browse vs "Show all" flat grid). The
-    /// iOS equivalent is an inline segmented control in `IOSAppearanceDetailView`.
+    /// Library landing layout ("By genre" browse vs "Show all" flat grid).
+    /// Rendered inside Interface → Library on both platforms; the iOS
+    /// equivalent lives in `iOSLibrarySection`.
     var tvLibraryLayoutRow: some View {
         let isFocused = focusedItem == .toggle("libraryLayout")
         let selected = LibraryBrowseLayout(rawValue: libraryBrowseLayout) ?? .browse

@@ -14,12 +14,12 @@ import SwiftUI
 /// symmetry and to avoid platform-specific state plumbing.
 @MainActor @Observable
 final class SettingsNavCoordinator {
-    /// Currently-pushed top-level Settings category (Appearance / Account /
-    /// Server / Interface / Admin landings). `nil` ⇒ landing page.
+    /// Currently-pushed top-level Settings category (Appearance / Interface /
+    /// Playback / Account / Server / Admin landings). `nil` ⇒ landing page.
     var selectedCategory: SettingsCategory?
 
-    /// Currently-pushed Interface sub-page (Main Menu / Home page / Detail
-    /// page / Playback / Debug). `nil` ⇒ Interface hub.
+    /// Currently-pushed Interface sub-page (Main Menu / Home page / Library /
+    /// Detail page). `nil` ⇒ Interface hub.
     var selectedInterfaceSub: InterfaceSubcategory?
 
     init() {}

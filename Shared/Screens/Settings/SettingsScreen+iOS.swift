@@ -23,6 +23,7 @@ extension SettingsScreen {
                 iOSHeader
                 iOSNavigationList
                 iOSDeviceInfo
+                iOSLicensesFooter
             }
         }
         .background(CinemaColor.surfaceContainerLowest)
@@ -155,7 +156,23 @@ extension SettingsScreen {
         }
         .opacity(0.4)
         .padding(.top, CinemaSpacing.spacing8)
-        .padding(.bottom, CinemaSpacing.spacing6)
+        .padding(.bottom, CinemaSpacing.spacing3)
+    }
+
+    /// Pied de page « À propos » du landing : lien discret vers les licences
+    /// open source, sous le bloc appareil/version. Reste un `@State` de
+    /// `SettingsScreen` (`showLicenses`) — la `.sheet` est déjà attachée au
+    /// `body` partagé.
+    var iOSLicensesFooter: some View {
+        Button {
+            showLicenses = true
+        } label: {
+            Text(loc.localized("settings.licenses"))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, CinemaSpacing.spacing8)
     }
 
     // MARK: - iOS Detail Views
@@ -182,6 +199,8 @@ extension SettingsScreen {
                         iOSServerDetail
                     case .interface:
                         iOSInterfaceDetail
+                    case .playback:
+                        iOSPlaybackDetail
                     case .administration, .advancedAdmin:
                         EmptyView() // handled above
                     }
@@ -335,14 +354,6 @@ extension SettingsScreen {
                 }
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-
-            // Licenses
-            VStack(spacing: 0) {
-                navigationRow(icon: "doc.text", label: loc.localized("settings.licenses")) {
-                    showLicenses = true
-                }
-            }
-            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
         }
     }
 
@@ -424,9 +435,8 @@ extension SettingsScreen {
                     switch sub {
                     case .menu:       EmptyView() // handled above
                     case .homePage:   iOSHomePageSection
+                    case .library:    iOSLibrarySection
                     case .detailPage: iOSDetailPageSection
-                    case .playback:   iOSPlaybackSection
-                    case .debug:      iOSDebugSection
                     }
                 }
                 .padding(.horizontal, CinemaSpacing.spacing3)
@@ -468,13 +478,54 @@ extension SettingsScreen {
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
-    var iOSPlaybackSection: some View {
+    var iOSLibrarySection: some View {
         VStack(spacing: 0) {
-            iOSToggleRowsJoined(playbackToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
-            iOSSettingsDivider
-            iOSSleepTimerRow
+            iOSSettingsRow {
+                // Label on its own line, the two-option control full-width
+                // below it — side-by-side gets squeezed to "Par…/Tout…" once
+                // the label + buttons can't share one row (e.g. FR @ 100%).
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+                    HStack {
+                        iOSRowIcon(systemName: "square.grid.2x2", color: themeManager.accent)
+                        Text(loc.localized("settings.libraryLayout"))
+                            .font(CinemaFont.dynamicLabel(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                    }
+                    libraryLayoutPicker
+                }
+            }
         }
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+    }
+
+    /// Full-width two-option control. "By genre" = browse (hero + genre rows);
+    /// "Show all" = flat grid. Each button takes half the row so the full FR
+    /// labels ("Par genre" / "Tout afficher") fit without truncation.
+    var libraryLayoutPicker: some View {
+        HStack(spacing: CinemaSpacing.spacing2) {
+            libraryLayoutButton(.browse, label: loc.localized("settings.libraryLayout.browse"))
+            libraryLayoutButton(.grid, label: loc.localized("settings.libraryLayout.grid"))
+        }
+    }
+
+    func libraryLayoutButton(_ option: LibraryBrowseLayout, label: String) -> some View {
+        let isSelected = (LibraryBrowseLayout(rawValue: libraryBrowseLayout) ?? .browse) == option
+        return Button {
+            libraryBrowseLayout = option.rawValue
+        } label: {
+            Text(label)
+                .font(.system(size: CinemaScale.pt(15), weight: .semibold))
+                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                        .fill(isSelected ? themeManager.accent : CinemaColor.surfaceContainerHigh)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     var iOSDetailPageSection: some View {
@@ -484,11 +535,26 @@ extension SettingsScreen {
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
-    var iOSDebugSection: some View {
-        VStack(spacing: 0) {
-            iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
+    /// Page Lecture top-level : réglages du player + section Débogage (outils
+    /// QA, toujours visibles — pas de gate #if DEBUG, voir CLAUDE.md).
+    var iOSPlaybackDetail: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            VStack(spacing: 0) {
+                iOSToggleRowsJoined(playbackToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
+                iOSSettingsDivider
+                iOSSleepTimerRow
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                iOSSettingsSectionHeader(loc.localized("settings.debug"))
+
+                VStack(spacing: 0) {
+                    iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
+                }
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
         }
-        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
     // MARK: - iOS Reusable Components

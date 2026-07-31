@@ -638,8 +638,9 @@
 "settings.debug.skipToEnd" = "Skip-to-end button";
 "debug.skipToEnd" = "⏭ Skip to end (Debug)";
 "settings.interface" = "Interface";
-"settings.interface.playback" = "Playback";
+"settings.playback" = "Playback";
 "settings.interface.menu" = "Main Menu";
+"settings.interface.library" = "Library";
 
 // MARK: - Menu customization
 
@@ -688,7 +689,7 @@
 "settings.detailPage" = "Detail Page";
 "settings.detailPage.qualityBadges" = "Quality badges";
 "settings.detailPage.trailerButton" = "Trailer button";
-"settings.libraryLayout" = "Library";
+"settings.libraryLayout" = "Layout";
 "settings.libraryLayout.browse" = "By genre";
 "settings.libraryLayout.grid" = "Show all";
 "settings.dimUnfocusedPosters" = "Dim unfocused posters";
