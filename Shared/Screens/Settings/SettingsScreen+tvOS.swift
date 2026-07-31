@@ -619,7 +619,7 @@ extension SettingsScreen {
     /// are ≥ 720pt tall, so this safely fills the viewport without forcing scroll.
     var tvLandingMinHeight: CGFloat { 720 }
 
-    // MARK: - Sleep Timer Row (tvOS)
+    // MARK: - Library Layout + Sleep Timer Rows (tvOS)
 
     /// Library landing layout ("By genre" browse vs "Show all" flat grid).
     /// Rendered inside Interface → Library on both platforms; the iOS
