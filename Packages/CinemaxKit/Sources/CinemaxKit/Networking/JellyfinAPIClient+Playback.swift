@@ -710,15 +710,30 @@ extension JellyfinAPIClient {
     // remux) we keep an HLS path so playback isn't impossible.
     nonisolated(unsafe) fileprivate static let _vlcTranscodingProfiles: [TranscodingProfile] = [
         TranscodingProfile(
-            // NO mp1/mp2/mp3 here on purpose. When the video is transcoded but a
-            // source MPEG-audio track is COPIED into fMP4 HLS segments, MP3's
+            // NO mp1/mp2/mp3 here on purpose. MPEG audio is legal in the TS
+            // segments below (that's what TS was built for), so the original
+            // reason is narrower than it was — but it is NOT re-litigated here
+            // without a measurement: when the video is transcoded and a source
+            // MPEG-audio track is COPIED into the segments, MP3's
             // encoder delay/priming isn't re-timed against the new video → a
             // constant audio offset (the "son décalé" on transcoded AVI/XviD).
-            // Leaving these out forces the server to re-encode audio to AAC, which
-            // muxes cleanly into fMP4 and stays locked to the transcoded video.
+            // Leaving these out forces the server to re-encode audio to AAC,
+            // which stays locked to the transcoded video whatever the segment
+            // container.
             audioCodec: "aac,ac3,alac,dts,eac3,flac,opus,vorbis",
             isBreakOnNonKeyFrames: true,
-            container: "mp4",
+            // MPEG-TS segments, NOT fMP4. libVLC's MP4 demuxer inspects the fMP4
+            // init segment, finds no chunk table (`no chunk defined`, `STTS table
+            // of 0 entries` — normal for fragmented MP4, where samples live in
+            // each media segment's moof), concludes `that media doesn't look
+            // interleaved, will need to seek`, and then random-accesses inside
+            // every segment. Over HTTP/2 that becomes one cancelled stream after
+            // another (`local stream N error: Cancellation (0x8)`, hundreds of
+            // them) and playback crawls — measured at ~9s of picture in ~3min on
+            // a server that had already finished encoding the whole episode.
+            // TS is a linear byte stream with no such structure to probe, so the
+            // seek behaviour disappears by construction.
+            container: "ts",
             context: .streaming,
             maxAudioChannels: "8",
             // 1, not 2: Jellyfin holds the playlist back until `minSegments`
