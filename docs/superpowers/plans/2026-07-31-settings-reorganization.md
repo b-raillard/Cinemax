@@ -19,7 +19,7 @@
 - Commits : convention du dépôt (`refactor(settings): …` en français) + trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
 - Le worktree est `/Users/braillard/projets/perso/jellyfin/Cinemax/.claude/worktrees/settings-reorg` — tous les chemins ci-dessous y sont relatifs.
 
-**Ordre d'exécution : Task 1 (fondations) → Tasks 2 et 3 en parallèle (fichiers disjoints) → Task 4 (commit intégration) → Task 5 (CLAUDE.md + revues) → Task 6 (PR).** Les Tasks 1–3 ne committent pas : l'état n'est vert qu'une fois les trois réunies (couplage de compilation trans-fichiers assumé) ; le commit unique est la Task 4.
+**Ordre d'exécution : Task 1 (fondations, commit par l'agent) → Tasks 2 et 3 en parallèle (fichiers disjoints) → Task 4 (intégration par l'orchestrateur) → Task 5 (CLAUDE.md + revues) → Task 6 (PR).** Règle des tasks parallèles : les agents 2 et 3 ne lancent **aucune commande git ni xcodebuild** — deux stagings entrelacés corrompraient l'attribution des commits, et deux builds simultanés se heurtent au verrou DerivedData. L'orchestrateur committe leurs fichiers séparément puis builde en série (Task 4). L'état n'est vert qu'une fois les trois tasks réunies (couplage de compilation trans-fichiers assumé — le commit de la Task 1 laisse volontairement les fichiers plateforme non compilables).
 
 ---
 
@@ -156,9 +156,16 @@ et actualiser le commentaire de tête de l'enum (« The Interface detail page is
 - ajouter sous `"settings.interface.menu" = "Main Menu";` : `"settings.interface.library" = "Library";`
 - remplacer `"settings.libraryLayout" = "Library";` par `"settings.libraryLayout" = "Layout";`
 
-- [ ] **Step 4 : Vérifier l'état rouge attendu (pas de commit)**
+- [ ] **Step 4 : Vérifier puis committer**
 
-`grep -c "settings.interface.playback" Resources/*/Localizable.strings` → 0 occurrence. Un build iOS à ce stade DOIT échouer avec des erreurs d'exhaustivité/cases inconnus dans `SettingsScreen+iOS.swift` uniquement (c'est le « rouge » attendu ; Tasks 2-3 le rendent vert). Ne pas builder pour « voir » — l'erreur est certaine, économiser le cycle.
+`grep -c "settings.interface.playback" Resources/*/Localizable.strings` → 0 occurrence ; `grep -c '"settings.playback"' Resources/fr.lproj/Localizable.strings Resources/en.lproj/Localizable.strings` → 1 dans chaque. Ne PAS builder : les fichiers plateforme ne compilent pas encore (rouge attendu, Tasks 2-3 le rendent vert). Committer :
+
+```bash
+git add Shared/Screens/Settings/SettingsScreen.swift Resources/fr.lproj/Localizable.strings Resources/en.lproj/Localizable.strings Tests/CinemaxKitTests/MenuConfigStoreTests.swift
+git commit -m "refactor(settings): fondations de la réorganisation — enums + localisations
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
 
 ---
 
@@ -369,12 +376,9 @@ et réduire le `.padding(.bottom, CinemaSpacing.spacing6)` d'`iOSDeviceInfo` à 
 
 Supprimer : la ligne `@AppStorage(SettingsKey.libraryBrowseLayout) private var libraryBrowseLayout…` ; le bloc `iOSSettingsDivider` + `iOSSettingsRow { … libraryLayoutPicker … }` en fin de panneau (lignes ~153-169) ; les helpers `libraryLayoutPicker` et `libraryLayoutButton` (lignes ~176-204, ils vivent désormais sur l'extension iOS de `SettingsScreen`). Le commentaire de tête (« All rows here are Appearance-only (dark mode, accent, language) ») reste juste.
 
-- [ ] **Step 8 : Vérification (pas de commit — le commit est la Task 4)**
+- [ ] **Step 8 : Relecture finale du diff (AUCUNE commande git ni xcodebuild)**
 
-```bash
-set -o pipefail; xcodebuild build -project Cinemax.xcodeproj -scheme Cinemax -destination 'platform=iOS Simulator,name=iPhone 17 Pro' 2>&1 | tail -20
-```
-Attendu : `** BUILD SUCCEEDED **` (le fichier tvOS ne compile pas sur cette destination — le build iOS est vert même si la Task 3 n'est pas passée).
+Cette task s'exécute en parallèle de la Task 3 dans le même worktree : ne lancer **aucun** `git add`/`git commit` (entrelacement de staging) ni **aucun** `xcodebuild` (verrou DerivedData). Se relire, vérifier que chaque référence à `iOSPlaybackSection`/`iOSDebugSection`/`.playback`/`.debug` a disparu du fichier iOS (`grep -n "iOSPlaybackSection\|iOSDebugSection" Shared/Screens/Settings/SettingsScreen+iOS.swift` → 0), et rapporter DONE. L'orchestrateur committe et builde (Task 4).
 
 ---
 
@@ -520,21 +524,31 @@ par :
 
 (`tvLicensesButton` existe déjà — `tvActionRow(id: "licenses", …)`, focus `.toggle("licenses")` — seul son site d'appel change.)
 
-- [ ] **Step 7 : Vérification (pas de commit — le commit est la Task 4)**
+- [ ] **Step 7 : Relecture finale du diff (AUCUNE commande git ni xcodebuild)**
 
-```bash
-set -o pipefail; xcodebuild build -project Cinemax.xcodeproj -scheme CinemaxTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' 2>&1 | tail -20
-```
-Attendu : `** BUILD SUCCEEDED **`. **Ne pas lancer ce build tant qu'un build iOS de la Task 2 tourne** (verrou DerivedData) — l'orchestrateur sérialise.
+Cette task s'exécute en parallèle de la Task 2 dans le même worktree : ne lancer **aucun** `git add`/`git commit` (entrelacement de staging) ni **aucun** `xcodebuild` (verrou DerivedData). Se relire, vérifier `grep -n "tvPlaybackSection\|tvDebugSection" Shared/Screens/Settings/SettingsScreen+tvOS.swift` → 0, et rapporter DONE. L'orchestrateur committe et builde (Task 4).
 
 ---
 
-### Task 4: Intégration — builds sériels, suite complète, commit unique
+### Task 4: Intégration (orchestrateur) — commits séparés Tasks 2/3, builds sériels, suite complète
 
-**Files:** aucun nouveau — commit de l'ensemble Tasks 1-3.
+**Files:** aucun nouveau — commits des fichiers des Tasks 2 et 3, vérifications.
 
-- [ ] **Step 1 :** Build iOS (commande Task 2 Step 8) → `** BUILD SUCCEEDED **`.
-- [ ] **Step 2 :** Build tvOS (commande Task 3 Step 7) → `** BUILD SUCCEEDED **`.
+- [ ] **Step 0 :** Deux commits séparés (attribution par task) :
+
+```bash
+git add Shared/Screens/Settings/SettingsScreen+iOS.swift Shared/Screens/Settings/SettingsAppearanceView+iOS.swift
+git commit -m "refactor(settings): rendu iOS de la nouvelle arborescence
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+git add Shared/Screens/Settings/SettingsScreen+tvOS.swift
+git commit -m "refactor(settings): rendu tvOS de la nouvelle arborescence
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 1 :** Build iOS : `set -o pipefail; xcodebuild build -project Cinemax.xcodeproj -scheme Cinemax -destination 'platform=iOS Simulator,name=iPhone 17 Pro' 2>&1 | tail -20` → `** BUILD SUCCEEDED **`.
+- [ ] **Step 2 :** Build tvOS : `set -o pipefail; xcodebuild build -project Cinemax.xcodeproj -scheme CinemaxTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' 2>&1 | tail -20` → `** BUILD SUCCEEDED **`.
 - [ ] **Step 3 :** Suite complète :
 
 ```bash
@@ -542,21 +556,7 @@ set -o pipefail; xcodebuild test -project Cinemax.xcodeproj -scheme Cinemax -des
 ```
 Attendu : `** TEST SUCCEEDED **` et « Test run with **380** tests in **45** suites passed » (377 + les 3 de `SettingsCategoryTests`).
 
-- [ ] **Step 4 :** Commit :
-
-```bash
-git add Shared/Screens/Settings/ Resources/ Tests/CinemaxKitTests/MenuConfigStoreTests.swift
-git commit -m "refactor(settings): réorganisation de l'arborescence des réglages
-
-Lecture promue au 1er niveau (4K, enchaînement, lecteur natif, activité en
-direct, minuteur de veille) avec la section Débogage en bas ; hub Interface
-recentré sur les écrans (Menu principal / Page d'accueil / Bibliothèque /
-Page de détail) — la disposition de bibliothèque et l'estompage des affiches
-(tvOS) quittent Apparence ; Licences open source au pied du landing.
-Aucune clé @AppStorage modifiée — pure réorganisation du rendu.
-
-Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
-```
+- [ ] **Step 4 :** En cas d'échec build/tests : boucle de correction vers l'agent propriétaire du fichier fautif (fix rounds du skill), jamais de correctif orchestrateur.
 
 ---
 
