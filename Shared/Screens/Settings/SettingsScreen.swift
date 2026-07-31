@@ -13,11 +13,13 @@ import Network
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
     // Declaration order = display order on both platforms (consumed by
-    // `visibleCases` which preserves `allCases` order). Interface sits
-    // second because it's the most-used category after Apparence — the
-    // main-menu / playback / debug toggles all live there.
+    // `visibleCases` which preserves `allCases` order). Apparence stays
+    // first (its pill is the accented hero on the iOS landing); Lecture
+    // sits right after Interface — it hosts the most-consulted playback
+    // toggles, promoted out of the Interface hub in the 2026-07 reorg.
     case appearance
     case interface
+    case playback
     case account
     case server
     // Admin-only categories — gated by `AppState.isAdministrator` at the
@@ -31,9 +33,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .appearance:     "paintpalette"
+        case .interface:      "tv"
+        case .playback:       "play.rectangle"
         case .account:        "person"
         case .server:         "server.rack"
-        case .interface:      "tv"
         case .administration: "shield.lefthalf.filled"
         case .advancedAdmin:  "wrench.and.screwdriver"
         }
@@ -42,9 +45,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     @MainActor func localizedName(_ loc: LocalizationManager) -> String {
         switch self {
         case .appearance:     loc.localized("settings.appearance")
+        case .interface:      loc.localized("settings.interface")
+        case .playback:       loc.localized("settings.playback")
         case .account:        loc.localized("settings.account")
         case .server:         loc.localized("settings.server")
-        case .interface:      loc.localized("settings.interface")
         case .administration: loc.localized("admin.landing.title")
         case .advancedAdmin:  loc.localized("admin.advanced.title")
         }
@@ -82,17 +86,15 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
 // MARK: - Interface Subcategory
 //
-// The Interface detail page is itself a hub of sub-pages — keeps each surface
-// short and lets us add a "Menu" sub-page (custom main-tab layout) without
-// piling more toggles into a single scroll. Order = display order on both
-// platforms; rendering lives in `SettingsScreen+{iOS,tvOS}.swift`.
+// The Interface detail page is itself a hub of sub-pages — one per configurable
+// screen: main menu, Home, Library, Detail. Playback and Debug moved to the
+// top-level `.playback` category in the 2026-07 reorg.
 
 enum InterfaceSubcategory: String, CaseIterable, Identifiable {
     case menu
     case homePage
+    case library
     case detailPage
-    case playback
-    case debug
 
     var id: String { rawValue }
 
@@ -100,9 +102,8 @@ enum InterfaceSubcategory: String, CaseIterable, Identifiable {
         switch self {
         case .menu:       "rectangle.grid.2x2"
         case .homePage:   "house"
+        case .library:    "books.vertical"
         case .detailPage: "info.square"
-        case .playback:   "play.rectangle"
-        case .debug:      "ladybug"
         }
     }
 
@@ -110,9 +111,8 @@ enum InterfaceSubcategory: String, CaseIterable, Identifiable {
         switch self {
         case .menu:       loc.localized("settings.interface.menu")
         case .homePage:   loc.localized("settings.homePage")
+        case .library:    loc.localized("settings.interface.library")
         case .detailPage: loc.localized("settings.detailPage")
-        case .playback:   loc.localized("settings.interface.playback")
-        case .debug:      loc.localized("settings.debug")
         }
     }
 }
