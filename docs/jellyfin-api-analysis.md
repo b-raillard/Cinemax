@@ -137,18 +137,24 @@ Légende — **Priorité** : P0 (à faire) · P1 (fort intérêt) · P2 (opportu
 
 ### 3.1 Tableau de synthèse
 
+> **Statut** — les propositions **3, 6, 9 et 10** ont été retenues et implémentées (PR #103).
+> Le détail de ce qui a réellement été livré, et de ce qui a été volontairement laissé de côté
+> (pas d'UI de retrait/réordonnancement des playlists, pas de file d'attente dans le lecteur,
+> `Playstate` entrant non traité), est dans les sections correspondantes de `CLAUDE.md`.
+> Les autres lignes du tableau restent des propositions non engagées.
+
 | # | Proposition | Priorité | Faisab. | Apport client | Inconvénient principal |
 |---|---|:--:|:--:|---|---|
 | 1 | Segments `recap` / `preview` / `commercial` | **P0** | ⭐⭐⭐ | « Passer le résumé » sur les séries | Dépend du plugin qui les génère |
 | 2 | Bonus & bandes-annonces locales | **P0** | ⭐⭐⭐ | Contenu déjà sur le serveur, invisible ; débloque la BA sur tvOS | Rangée vide sur la plupart des biblios |
-| 3 | Devenir cible de télécommande | **P0** | ⭐⭐ | « Lire sur… » marche enfin iPhone → Apple TV Cinemax | Session persistante, surface de contrôle distant |
+| 3 | Devenir cible de télécommande ✅ | **P0** | ⭐⭐ | « Lire sur… » marche enfin iPhone → Apple TV Cinemax | Session persistante, surface de contrôle distant |
 | 4 | Préférences audio/sous-titres du compte | **P0** | ⭐⭐ | Bonne piste au 1er coup, cohérence avec les autres clients | L'écriture modifie un réglage global partagé |
 | 5 | Débit adaptatif (BitrateTest) | **P0** | ⭐⭐ | Moins de buffering hors LAN, moins de transcodes en LAN | Consomme de la data ; heuristique imparfaite |
-| 6 | Migration SyncPlay → SDK (dette) | **P0** | ⭐⭐⭐ | Aucun (interne) | Zéro visible ; à faire pendant le kill-switch |
+| 6 | Migration SyncPlay → SDK (dette) ✅ | **P0** | ⭐⭐⭐ | Aucun (interne) | Zéro visible ; à faire pendant le kill-switch |
 | 7 | WebSocket session général | **P1** | ⭐⭐ | État vu/favori synchro temps réel entre appareils | Socket permanent = batterie/reconnexions |
 | 8 | Rangées de recommandation serveur | **P1** | ⭐⭐ | Home vivante, découverte | Coûteux pour un serveur auto-hébergé |
-| 9 | Playlists en écriture + file d'attente | **P1** | ⭐⭐ | « Ajouter à une playlist », lecture en file | Nouvelle machine d'état à côté d'`EpisodeNavigator` |
-| 10 | userData ciblé (`/UserItems/{id}/UserData`) | **P1** | ⭐⭐⭐ | Rails plus réactifs, moins de trafic | Gating de version + chemin de repli à maintenir |
+| 9 | Playlists en écriture ✅ (file d'attente non retenue) | **P1** | ⭐⭐ | « Ajouter à une playlist », lecture en file | Nouvelle machine d'état à côté d'`EpisodeNavigator` |
+| 10 | userData ciblé (`/UserItems/{id}/UserData`) ✅ | **P1** | ⭐⭐⭐ | Rails plus réactifs, moins de trafic | Gating de version + chemin de repli à maintenir |
 | 11 | Note utilisateur (pouce ↑/↓) | **P1** | ⭐⭐⭐ | Signal personnel, alimente les recos | Confusion possible avec le cœur/favori |
 | 12 | Sous-titres distants (admin) | **P1** | ⭐⭐ | Réparer un film sans ST sans quitter l'app | Écriture serveur + dépend d'un plugin |
 | 13 | Thème musical & intros « cinema mode » | **P2** | ⭐⭐ | Ambiance tvOS très « Apple TV+ » | Audio auto = intrusif s'il n'est pas réglable |
