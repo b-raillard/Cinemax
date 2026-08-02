@@ -1,23 +1,32 @@
 name: Regenerate Xcode project
 
-# Maintenance utility, manual-trigger only: regenerates project.pbxproj with
-# the same xcodegen CI uses and exposes it (gzip+base64) in the job log so a
-# machine without xcodegen (e.g. a Linux remote session) can commit the
-# canonical bytes. Useful whenever files were added from an environment that
-# can't run `xcodegen generate` locally.
+# Maintenance utility, manual-trigger only: regenerates project.pbxproj with the
+# same xcodegen CI uses, then COMMITS it back to the branch it ran on. Needed
+# whenever files were added from an environment that can't run
+# `xcodegen generate` locally (a Linux remote session) — without it the
+# committed project goes stale and ci.yml's "Verify committed project.pbxproj"
+# step fails the PR.
+#
+# It used to only echo the bytes as gzip+base64 for a human (or an agent) to
+# decode and commit by hand. That still works and is kept as a fallback, but
+# round-tripping ~40 KB of base64 through a job log is a poor default, so the
+# workflow now does the commit itself.
 on:
   workflow_dispatch:
-  # Push trigger scoped to this maintenance branch: workflow_dispatch only
-  # works once the workflow exists on the default branch, so first use needs
-  # a push trigger. Harmless to keep — it only fires on this branch name.
+  # Push trigger scoped to one maintenance branch: workflow_dispatch only works
+  # once the workflow exists on the default branch, so first use needs a push
+  # trigger. Harmless to keep — it only fires on this branch name.
   push:
     branches: [claude/app-audit-security-performance-cbdyqp]
 
 jobs:
   regen:
-    name: Generate & export pbxproj
+    name: Generate & commit pbxproj
     runs-on: macos-26
     timeout-minutes: 10
+    # Required for the commit step below; the default token is read-only.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +45,31 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      # Never push to the default branch from here: a regen there should go
+      # through a normal PR like any other change.
+      - name: Commit regenerated pbxproj
+        if: github.ref_name != github.event.repository.default_branch
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Cinemax.xcodeproj/project.pbxproj; then
+            echo "project.pbxproj already up to date — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cinemax.xcodeproj/project.pbxproj
+          git commit -m "chore: regenerate project.pbxproj
+
+          Produced by the regen-project workflow with the pinned xcodegen
+          (same version ci.yml verifies against), because the branch was
+          authored in an environment without xcodegen."
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      # Fallback for the case above being skipped (a run against the default
+      # branch) or the push being rejected: the canonical bytes are still
+      # recoverable straight from the log.
       - name: Export regenerated pbxproj (gzip+base64)
+        if: always()
         run: |
           echo "PBXPROJ_B64_BEGIN"
           gzip -9 -c Cinemax.xcodeproj/project.pbxproj | base64
