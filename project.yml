@@ -150,7 +150,18 @@ targets:
     sources:
       - path: tvOS
       - path: Shared
+      # AppShortcuts.strings carries the Siri phrases, and App Intents are
+      # iOS-only here (every file in Shared/Intents/ is #if os(iOS) — none of
+      # the surfaces they feed exist on tvOS). Bundling the phrases anyway is
+      # dead weight AND makes Xcode run ValidateAppShortcutStringsMetadata on
+      # this target, which then can't find the Metadata.appintents/
+      # extract.actionsdata this target never produces:
+      #   warning: Unable to find extract.actionsdata in '--input-data-path' …
+      #   warning: Unable to read App Intents metadata. AppShortcuts phrases …
+      # Excluding the file drops the phase, and with it both warnings.
       - path: Resources
+        excludes:
+          - "**/AppShortcuts.strings"
     dependencies:
       - package: CinemaxKit
       - package: SwiftVLC
