@@ -198,17 +198,27 @@ struct ServerVersionTests {
         let nine = try #require(ServerVersion("10.9.0"))
         let ten = try #require(ServerVersion("10.10.0"))
         #expect(nine < ten)
-        #expect(try #require(ServerVersion("10.10.2")) < #require(ServerVersion("10.10.10")))
-        #expect(try #require(ServerVersion("9.99.99")) < #require(ServerVersion("10.0.0")))
+
+        let patchTwo = try #require(ServerVersion("10.10.2"))
+        let patchTen = try #require(ServerVersion("10.10.10"))
+        #expect(patchTwo < patchTen)
+
+        let older = try #require(ServerVersion("9.99.99"))
+        let newer = try #require(ServerVersion("10.0.0"))
+        #expect(older < newer)
     }
 
     @Test("supports() is inclusive of the threshold")
     func supportsThreshold() throws {
         let exact = try #require(ServerVersion("10.10.0"))
+        let patch = try #require(ServerVersion("10.10.7"))
+        let minor = try #require(ServerVersion("10.11.0"))
+        let below = try #require(ServerVersion("10.9.11"))
+
         #expect(exact.supports(.itemUserDataEndpoint))
-        #expect(try #require(ServerVersion("10.10.7")).supports(.itemUserDataEndpoint))
-        #expect(try #require(ServerVersion("10.11.0")).supports(.itemUserDataEndpoint))
-        #expect(!(try #require(ServerVersion("10.9.11")).supports(.itemUserDataEndpoint)))
+        #expect(patch.supports(.itemUserDataEndpoint))
+        #expect(minor.supports(.itemUserDataEndpoint))
+        #expect(below.supports(.itemUserDataEndpoint) == false)
     }
 }
 
