@@ -140,12 +140,18 @@ final class MediaDetailViewModel {
 
     /// Targeted refresh after the player dismisses (tvOS dismiss path). Unlike
     /// `load()` it flips NO `isLoading` (so the screen never flashes back to a
-    /// spinner) and re-fetches ONLY the userData-bearing slices: a movie's own
-    /// item, or a series' item (userData) + next-up + the visible season's
+    /// spinner) and re-fetches ONLY the userData-bearing slices: a movie's
+    /// userData, or a series' item (userData) + next-up + the visible season's
     /// episodes — fetched concurrently. Similar items and seasons are NOT
     /// re-fetched (watching doesn't change them). All fetches hit the caches
     /// `reportPlaybackStopped` just invalidated, so they return fresh data.
     /// Shares `loadGeneration` with `load()` so the two can't interleave.
+    ///
+    /// The movie branch goes through `fetchUserData`, which on Jellyfin ≥ 10.10
+    /// reads `GET /UserItems/{id}/UserData` instead of the whole item — playback
+    /// changes nothing else about a movie, and the full DTO carries overview,
+    /// people, chapters and media sources we already have. Older servers fall
+    /// back to `getItem` inside that helper, so this branch is version-agnostic.
     func refreshAfterPlayback(using appState: AppState) async {
         guard let userId = appState.currentUserId, let id = item?.id else { return }
         loadGeneration += 1
@@ -196,12 +202,16 @@ final class MediaDetailViewModel {
             isFavorite = item?.userData?.isFavorite ?? false
             isPlayed = item?.userData?.isPlayed ?? false
         } else {
-            let refreshedItem = try? await apiClient.getItem(userId: userId, itemId: id)
+            let refreshedUserData = try? await apiClient.fetchUserData(itemId: id, userId: userId)
             guard loadGeneration == generation else { return }
-            if let refreshedItem {
-                item = refreshedItem
-                isFavorite = refreshedItem.userData?.isFavorite ?? false
-                isPlayed = refreshedItem.userData?.isPlayed ?? false
+            if let refreshedUserData {
+                // Splice onto the item we already hold rather than replacing it:
+                // `fetchUserData` returns only the userData slice on servers that
+                // support the lightweight read, so there is no fresh item to
+                // assign — and nothing else about a movie changed anyway.
+                item?.userData = refreshedUserData
+                isFavorite = refreshedUserData.isFavorite ?? false
+                isPlayed = refreshedUserData.isPlayed ?? false
             }
         }
 

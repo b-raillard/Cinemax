@@ -42,6 +42,13 @@ public final class JellyfinAPIClient: Sendable {
     nonisolated(unsafe) private var _jellyfinClient: JellyfinClient?
     nonisolated(unsafe) private var _serverURL: URL?
     nonisolated(unsafe) private var _maxContentAge: Int = 0
+    /// Version of the server currently pointed at, parsed from
+    /// `/System/Info/Public`. `nil` means "not learned yet" — every capability
+    /// gate MUST read that as "unsupported" and stay on the path that works
+    /// everywhere, because the window exists on every cold launch (the version
+    /// probe is dispatched in the background by `AppState.restoreSession` while
+    /// the UI is already live).
+    nonisolated(unsafe) private var _serverVersion: ServerVersion?
     /// Fired by `notifyIfUnauthorized` whenever the Jellyfin SDK surfaces an
     /// HTTP 401 from any session-scoped call. Set once at app launch by
     /// `AppState.init()`; the closure must be `@Sendable` because it's
@@ -89,6 +96,30 @@ public final class JellyfinAPIClient: Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _maxContentAge
+    }
+
+    /// The server's version, or `nil` while it hasn't been learned. See
+    /// `_serverVersion` for why `nil` must gate *off*.
+    internal func getServerVersion() -> ServerVersion? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _serverVersion
+    }
+
+    /// Records the version reported by `/System/Info/Public`. An unparseable
+    /// string clears it rather than keeping the previous value — a stale higher
+    /// version would enable an endpoint the current server may not have.
+    internal func setServerVersion(_ raw: String?) {
+        let parsed = raw.flatMap(ServerVersion.init)
+        lock.lock()
+        defer { lock.unlock() }
+        _serverVersion = parsed
+    }
+
+    /// Whether the connected server is known to be at least `required`.
+    /// Conservative by construction: an unknown version answers `false`.
+    internal func serverSupports(_ required: ServerVersion) -> Bool {
+        getServerVersion()?.supports(required) ?? false
     }
 
     public func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void) {
@@ -172,6 +203,7 @@ public final class JellyfinAPIClient: Sendable {
         let info = response.value
 
         setClient(client, url: url)
+        setServerVersion(info.version)
 
         return ServerInfo(
             name: info.serverName ?? "Jellyfin Server",
@@ -184,7 +216,14 @@ public final class JellyfinAPIClient: Sendable {
     /// Fetches server info using the existing client (does NOT replace it).
     public func fetchServerInfo() async throws -> ServerInfo {
         let cacheKey = "serverInfo"
-        if let cached: ServerInfo = cache.get(cacheKey) { return cached }
+        if let cached: ServerInfo = cache.get(cacheKey) {
+            // Re-seed the version on the cache-hit path too, so "we have server
+            // info" and "we know the version" can never disagree — `reconnect`
+            // clears the version but a caller could otherwise repopulate the
+            // cache entry without it.
+            setServerVersion(cached.version)
+            return cached
+        }
 
         guard let client = getClient(),
               let url = getServerURL() else {
@@ -193,6 +232,7 @@ public final class JellyfinAPIClient: Sendable {
 
         let response = try await client.send(Paths.getPublicSystemInfo)
         let info = response.value
+        setServerVersion(info.version)
 
         let result = ServerInfo(
             name: info.serverName ?? "Jellyfin Server",
@@ -333,6 +373,12 @@ public final class JellyfinAPIClient: Sendable {
 
     public func reconnect(url: URL, accessToken: String) {
         cache.clear()
+        // A reconnect can repoint the client at a DIFFERENT server (multi-server
+        // switch), so the learned version stops being true here. Clearing sends
+        // every capability gate back to its conservative path until the
+        // `fetchServerInfo` that follows re-learns it; keeping the old value
+        // would let a 10.11 feature fire against a 10.8 box.
+        setServerVersion(nil)
         let client = JellyfinClient(
             configuration: .init(
                 url: url,

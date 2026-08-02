@@ -150,3 +150,146 @@ struct SyncPlayDateParserTests {
         #expect(SyncPlayDateParser.date(from: "not-a-date") == nil)
     }
 }
+
+// MARK: - Server version gating
+
+@Suite("ServerVersion")
+struct ServerVersionTests {
+
+    @Test("Parses the 2-to-4 component forms Jellyfin reports")
+    func parsesComponentForms() throws {
+        let two = try #require(ServerVersion("10.10"))
+        #expect(two == ServerVersion(10, 10, 0, 0))
+
+        let three = try #require(ServerVersion("10.10.7"))
+        #expect(three == ServerVersion(10, 10, 7, 0))
+
+        let four = try #require(ServerVersion("10.8.13.0"))
+        #expect(four == ServerVersion(10, 8, 13, 0))
+    }
+
+    @Test("Truncates a pre-release suffix rather than rejecting it")
+    func parsesPreRelease() throws {
+        // A release candidate carries the capabilities of its release; refusing
+        // to parse it would silently disable every gated feature for testers.
+        #expect(try #require(ServerVersion("10.11.0-rc1")) == ServerVersion(10, 11, 0))
+        #expect(try #require(ServerVersion("10.11.0+build.5")) == ServerVersion(10, 11, 0))
+        #expect(try #require(ServerVersion("v10.11.2")) == ServerVersion(10, 11, 2))
+        #expect(try #require(ServerVersion("  10.10.7  ")) == ServerVersion(10, 10, 7))
+    }
+
+    @Test("Keeps the components read before an unparseable tail")
+    func keepsLeadingComponents() throws {
+        // `10.10.beta` → the suffix strip leaves `10.10.`, whose trailing empty
+        // component must not throw away the two real ones.
+        #expect(try #require(ServerVersion("10.10.beta")) == ServerVersion(10, 10, 0))
+    }
+
+    @Test("Rejects input with no leading integer")
+    func rejectsGarbage() {
+        #expect(ServerVersion("") == nil)
+        #expect(ServerVersion("unknown") == nil)
+        #expect(ServerVersion("...") == nil)
+    }
+
+    @Test("Orders numerically, not lexicographically")
+    func ordersNumerically() throws {
+        // The whole reason this type exists: as strings, "10.9" > "10.10".
+        let nine = try #require(ServerVersion("10.9.0"))
+        let ten = try #require(ServerVersion("10.10.0"))
+        #expect(nine < ten)
+        #expect(try #require(ServerVersion("10.10.2")) < #require(ServerVersion("10.10.10")))
+        #expect(try #require(ServerVersion("9.99.99")) < #require(ServerVersion("10.0.0")))
+    }
+
+    @Test("supports() is inclusive of the threshold")
+    func supportsThreshold() throws {
+        let exact = try #require(ServerVersion("10.10.0"))
+        #expect(exact.supports(.itemUserDataEndpoint))
+        #expect(try #require(ServerVersion("10.10.7")).supports(.itemUserDataEndpoint))
+        #expect(try #require(ServerVersion("10.11.0")).supports(.itemUserDataEndpoint))
+        #expect(!(try #require(ServerVersion("10.9.11")).supports(.itemUserDataEndpoint)))
+    }
+}
+
+// MARK: - Remote control, receiving side
+
+@Suite("SessionSocket frame parsing")
+struct SessionSocketParsingTests {
+
+    @Test("Parses a Play message")
+    func parsesPlay() throws {
+        let request = try #require(SessionSocket.parsePlay([
+            "ItemIds": ["abc"],
+            "PlayCommand": "PlayNow",
+            "StartPositionTicks": NSNumber(value: 1_200_000_000),
+            "MediaSourceId": "src-1"
+        ]))
+        #expect(request.itemIds == ["abc"])
+        #expect(request.isPlayNow)
+        #expect(request.startPositionTicks == 1_200_000_000)
+        #expect(request.mediaSourceId == "src-1")
+    }
+
+    @Test("Drops a Play message with no items")
+    func dropsEmptyPlay() {
+        #expect(SessionSocket.parsePlay(["ItemIds": [String](), "PlayCommand": "PlayNow"]) == nil)
+        #expect(SessionSocket.parsePlay(["PlayCommand": "PlayNow"]) == nil)
+    }
+
+    @Test("An unknown play command parses but is not PlayNow")
+    func unknownCommandIsNotPlayNow() throws {
+        // Kept as a raw string precisely so a future value is ignored rather
+        // than mis-mapped onto PlayNow — the queue-less client can only honor
+        // "start this now".
+        let next = try #require(SessionSocket.parsePlay(["ItemIds": ["a"], "PlayCommand": "PlayNext"]))
+        #expect(!next.isPlayNow)
+        let missing = try #require(SessionSocket.parsePlay(["ItemIds": ["a"]]))
+        #expect(!missing.isPlayNow)
+    }
+
+    @Test("PlayNow matching is case-insensitive")
+    func playNowCaseInsensitive() throws {
+        let request = try #require(SessionSocket.parsePlay(["ItemIds": ["a"], "PlayCommand": "playnow"]))
+        #expect(request.isPlayNow)
+    }
+
+    @Test("Parses a DisplayMessage general command")
+    func parsesDisplayMessage() throws {
+        let message = try #require(SessionSocket.parseDisplayMessage([
+            "Name": "DisplayMessage",
+            "Arguments": ["Header": "Cinemax", "Text": "Bonjour"]
+        ]))
+        #expect(message.header == "Cinemax")
+        #expect(message.text == "Bonjour")
+    }
+
+    @Test("Ignores general commands the capability post never advertised")
+    func ignoresUnadvertisedCommands() {
+        // The app declares only DisplayMessage; anything else must be dropped
+        // rather than surfaced as an empty toast.
+        #expect(SessionSocket.parseDisplayMessage([
+            "Name": "SetVolume",
+            "Arguments": ["Volume": "50"]
+        ]) == nil)
+    }
+
+    @Test("Drops a DisplayMessage with no usable text")
+    func dropsEmptyDisplayMessage() {
+        #expect(SessionSocket.parseDisplayMessage(["Name": "DisplayMessage"]) == nil)
+        #expect(SessionSocket.parseDisplayMessage([
+            "Name": "DisplayMessage",
+            "Arguments": ["Text": "   "]
+        ]) == nil)
+    }
+
+    @Test("A blank header collapses to nil rather than an empty toast title")
+    func blankHeaderBecomesNil() throws {
+        let message = try #require(SessionSocket.parseDisplayMessage([
+            "Name": "DisplayMessage",
+            "Arguments": ["Header": "  ", "Text": "Hello"]
+        ]))
+        #expect(message.header == nil)
+        #expect(message.text == "Hello")
+    }
+}

@@ -132,6 +132,16 @@ public protocol LibraryAPI: Sendable {
     /// Marks/unmarks the item as a user favorite (heart).
     func setFavorite(itemId: String, userId: String, favorite: Bool) async throws
 
+    /// Fresh userData for one item via the lightweight
+    /// `GET /UserItems/{id}/UserData`, or `nil` when the server predates it
+    /// (< 10.10) or its version isn't known yet. **Prefer `fetchUserData`** —
+    /// it owns the fallback, so a call site can't accidentally ship the
+    /// "returns nil on old servers" branch as "no refresh happened".
+    ///
+    /// Carries a default implementation returning `nil` so hand-written mocks
+    /// keep compiling and transparently exercise the full-item fallback.
+    func getItemUserData(itemId: String, userId: String) async throws -> UserItemDataDto?
+
     /// Filmography for a person (persons are items — fetch the person's own
     /// bio via `getItem` with the person id).
     func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
@@ -450,6 +460,17 @@ public protocol RemoteControlAPI: Sendable {
         startPositionTicks: Int?,
         mediaSourceId: String?
     ) async throws
+
+    /// Declares this device's capabilities so the server marks the session
+    /// remote-controllable. The receiving counterpart of `playOnSession`, and a
+    /// prerequisite for this app appearing in ANY client's target list —
+    /// including its own. Pass `false` to withdraw (the user's opt-out).
+    func publishCapabilities(supportsMediaControl: Bool) async throws
+
+    /// Opens the realtime socket carrying inbound session commands, or `nil`
+    /// when unauthenticated. Capabilities make the device *visible*; this socket
+    /// is what makes a command *arrive* — Jellyfin delivers them nowhere else.
+    func makeSessionSocket() -> SessionSocket?
 }
 
 public extension RemoteControlAPI {
@@ -460,6 +481,43 @@ public extension RemoteControlAPI {
         startPositionTicks: Int?,
         mediaSourceId: String?
     ) async throws {}
+    func publishCapabilities(supportsMediaControl: Bool) async throws {}
+    func makeSessionSocket() -> SessionSocket? { nil }
+}
+
+// MARK: - Playlists
+
+/// Creating playlists and changing their contents. Its own slice rather than an
+/// addition to `LibraryAPI` because everything here **writes** to the user's
+/// library, where `LibraryAPI` reads it — the same reason `RemoteControlAPI` is
+/// separate from `AuthAPI`'s session listing.
+///
+/// Every member carries a default implementation (the `SyncPlayAPI` model) so
+/// the many hand-written `APIClientProtocol` mocks keep compiling without
+/// stubbing playlist calls they don't exercise.
+public protocol PlaylistAPI: Sendable {
+    /// Playlists visible to the user, sorted by name.
+    func getPlaylists(userId: String) async throws -> [BaseItemDto]
+    /// Creates a playlist seeded with `itemIds`, returning the new playlist id.
+    func createPlaylist(name: String, itemIds: [String], userId: String) async throws -> String
+    func addToPlaylist(playlistId: String, itemIds: [String], userId: String) async throws
+    /// `entryIds` are playlist ENTRY ids (`BaseItemDto.playlistItemID`), not item
+    /// ids — an item can appear twice and each occurrence is addressed
+    /// separately. Only `getPlaylistItems` populates them.
+    func removeFromPlaylist(playlistId: String, entryIds: [String]) async throws
+    /// Moves an entry to `newIndex` (0-based). Entry id, as above.
+    func movePlaylistItem(playlistId: String, entryId: String, newIndex: Int) async throws
+    /// A playlist's contents in playlist order, each carrying its entry id.
+    func getPlaylistItems(playlistId: String, userId: String) async throws -> [BaseItemDto]
+}
+
+public extension PlaylistAPI {
+    func getPlaylists(userId: String) async throws -> [BaseItemDto] { [] }
+    func createPlaylist(name: String, itemIds: [String], userId: String) async throws -> String { "" }
+    func addToPlaylist(playlistId: String, itemIds: [String], userId: String) async throws {}
+    func removeFromPlaylist(playlistId: String, entryIds: [String]) async throws {}
+    func movePlaylistItem(playlistId: String, entryId: String, newIndex: Int) async throws {}
+    func getPlaylistItems(playlistId: String, userId: String) async throws -> [BaseItemDto] { [] }
 }
 
 // MARK: - Aggregate
@@ -468,11 +526,30 @@ public extension RemoteControlAPI {
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI & RemoteControlAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI & RemoteControlAPI & PlaylistAPI
 
 // MARK: - Default arguments
 
 public extension LibraryAPI {
+    /// Default: pretend the lightweight endpoint doesn't exist. Every mock
+    /// inherits this and therefore exercises `fetchUserData`'s fallback, which
+    /// is the branch that must keep working on every supported server.
+    func getItemUserData(itemId: String, userId: String) async throws -> UserItemDataDto? { nil }
+
+    /// Fresh userData for `itemId`, whatever the server supports: the
+    /// lightweight read when available, a full `getItem` otherwise.
+    ///
+    /// Takes ids and returns a DTO rather than accepting the item and handing
+    /// back an updated copy: passing a non-`Sendable` `BaseItemDto` *into* a
+    /// nonisolated async call from a `@MainActor` view model is a region
+    /// transfer of a value the main actor still holds. Returning one is fine
+    /// (freshly decoded, disconnected region) — which is why the splice happens
+    /// at the call site, on the actor that owns the item.
+    func fetchUserData(itemId: String, userId: String) async throws -> UserItemDataDto? {
+        if let light = try await getItemUserData(itemId: itemId, userId: userId) { return light }
+        return try await getItem(userId: userId, itemId: itemId).userData
+    }
+
     func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
         try await getResumeItems(userId: userId, limit: limit)
     }
@@ -563,3 +640,5 @@ public extension PlaybackAPI {
 
 extension JellyfinAPIClient: ServerAPI, AuthAPI, LibraryAPI, PlaybackAPI, AdminAPI {}
 // `SyncPlayAPI` conformance is declared in `JellyfinAPIClient+SyncPlay.swift`.
+// `RemoteControlAPI` in `JellyfinAPIClient+RemoteControl.swift`.
+// `PlaylistAPI` in `JellyfinAPIClient+Playlists.swift`.

@@ -30,6 +30,13 @@ enum SettingsKey {
     /// `PlaybackLiveActivityController`. tvOS has no ActivityKit, so neither the
     /// controller (a no-op stub there) nor its settings row exist.
     static let playbackLiveActivity = "playback.liveActivity"
+    /// Whether this device advertises itself as a remote-control target, so
+    /// another Jellyfin session can start playback here ("Lire sur…" from an
+    /// iPhone onto this Apple TV). Drives `RemoteControlListener`: on ⇒ publish
+    /// `supportsMediaControl` + hold the inbound session socket open; off ⇒
+    /// re-publish with the flag cleared, which removes the device from every
+    /// picker, and close the socket.
+    static let remoteControlEnabled = "playback.remoteControl"
 
     // Home page sections
     static let homeShowContinueWatching = "home.showContinueWatching"
@@ -114,6 +121,7 @@ enum SettingsKey {
         static let sleepTimerDefaultMinutes = 0
         static let forceNativeAVPlayer = false
         static let playbackLiveActivity = true
+        static let remoteControlEnabled = true
 
         static let homeShowContinueWatching = true
         static let homeShowNextUp = true

@@ -401,6 +401,18 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return BaseItemDto()
     }
 
+    /// When set, `getItemUserData` returns it — simulating a server new enough
+    /// to expose `GET /UserItems/{id}/UserData`. Left nil, this type inherits
+    /// `LibraryAPI`'s default (`nil` = unsupported), so every pre-existing test
+    /// keeps exercising the full-item fallback inside `fetchUserData`.
+    var stubbedItemUserData: UserItemDataDto?
+    private(set) var getItemUserDataCallCount = 0
+    func getItemUserData(itemId: String, userId: String) async throws -> UserItemDataDto? {
+        recordLock.withLock { getItemUserDataCallCount += 1 }
+        if shouldThrow { throw stubbedError }
+        return stubbedItemUserData
+    }
+
     private(set) var getSimilarItemsCallCount = 0
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock { getSimilarItemsCallCount += 1 }

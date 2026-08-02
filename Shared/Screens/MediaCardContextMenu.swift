@@ -27,6 +27,14 @@ private struct MediaCardContextMenu: ViewModifier {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toast
+    /// Optional on purpose. `@Environment(Type.self)` for an `@Observable`
+    /// **traps at runtime** when the value is absent, and this menu is attached
+    /// to cards that also live inside modally-presented hosts, which have to
+    /// re-inject the environment by hand (see `WatchedHistoryScreen`'s sheet
+    /// builder — the same reason `ToastCenter` is re-injected there). An
+    /// optional read degrades a forgotten injection into a missing menu entry
+    /// instead of a crash.
+    @Environment(AddToPlaylistPresenter.self) private var playlists: AddToPlaylistPresenter?
 
     let item: BaseItemDto
 
@@ -61,6 +69,16 @@ private struct MediaCardContextMenu: ViewModifier {
                     loc.localized(isFavorite ? "detail.favorite.remove" : "detail.favorite.add"),
                     systemImage: isFavorite ? "heart.fill" : "heart"
                 )
+            }
+            // Raises the root-hosted sheet rather than presenting one here: this
+            // menu hangs off cards inside `LazyVGrid`s, and a presentation
+            // attached to a lazy child dies with the recycled cell.
+            if let playlists {
+                Button {
+                    playlists.present(itemId: item.id, title: item.name)
+                } label: {
+                    Label(loc.localized("playlist.add.action"), systemImage: "text.badge.plus")
+                }
             }
         }
     }

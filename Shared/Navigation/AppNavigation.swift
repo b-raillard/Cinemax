@@ -738,6 +738,11 @@ struct AppNavigation: View {
     static let sharedAppState = AppState()
     private static let sharedNetworkMonitor = NetworkMonitor()
     private static let sharedMenuConfig = MenuConfigStore()
+    /// Owns the inbound remote-control socket. A process singleton for the same
+    /// reason as the three above — scene-event struct recreation must not open a
+    /// second `/socket` connection, which the server would treat as the same
+    /// session and feed duplicate commands.
+    private static let sharedRemoteControl = RemoteControlListener()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -745,6 +750,11 @@ struct AppNavigation: View {
     @State private var toasts = ToastCenter()
     @State private var network = AppNavigation.sharedNetworkMonitor
     @State private var menuConfig = AppNavigation.sharedMenuConfig
+    /// Read straight off the static rather than through `@State`: nothing here
+    /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
+    /// property wrapper would only add semantics without a purpose.
+    private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
+    @State private var playlistPresenter = AddToPlaylistPresenter()
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
     /// When the app last entered the background — drives Part E foreground
@@ -753,6 +763,10 @@ struct AppNavigation: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
+    /// Drives `RemoteControlListener`. Read here rather than inside the listener
+    /// so flipping the toggle in Settings re-runs `onChange` and withdraws (or
+    /// re-publishes) the capability declaration immediately.
+    @AppStorage(SettingsKey.remoteControlEnabled) private var remoteControlEnabled: Bool = SettingsKey.Default.remoteControlEnabled
 
     /// SwiftUI may recreate the root `AppNavigation` struct on scene events;
     /// guard the one-time `ImagePipeline.shared` replacement so we don't throw
@@ -833,6 +847,18 @@ struct AppNavigation: View {
         .environment(network)
         .environment(menuConfig)
         .environment(settingsNav)
+        .environment(playlistPresenter)
+        // "Add to a playlist" is raised from poster context menus inside lazy
+        // grids, where a presentation attached to the cell dies when it scrolls
+        // out. Hosting it once at the root also lets every grid, the search
+        // results and the detail screen share one sheet with no plumbing.
+        .modifier(AddToPlaylistPresentation(
+            request: $playlistPresenter.request,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toasts
+        ))
         .environment(\.motionEffectsEnabled, motionEffects)
         // Respect the user's OS Dynamic Type setting while capping at a size
         // that won't collapse layouts (hero titles, tab bar). The app also has
@@ -872,6 +898,10 @@ struct AppNavigation: View {
             // loopback stream proxy (dual-stack host with a black-holed IPv6
             // that libVLC would stall on). Non-blocking; cached for the session.
             StreamTransportPolicy.shared.configure(serverURL: appState.serverURL)
+            // Advertise this device as a remote-control target and start
+            // listening. Idempotent — `apply` no-ops when nothing changed, so
+            // the observers below can call it freely.
+            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
         }
         // RULE — DECLARATION ORDER IS LOAD-BEARING: `serverURL` must be observed
         // BEFORE `currentUserId`. A server switch mutates both in one
@@ -910,11 +940,25 @@ struct AppNavigation: View {
                menuConfig.mode == .custom && menuConfig.customKind == .library {
                 Task { await menuConfig.refreshAvailableViews() }
             }
+            // Capabilities are per-session, so a login / user switch has to
+            // re-declare them; a logout tears the socket down (`apply` sees
+            // `isAuthenticated == false`).
+            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+        }
+        .onChange(of: remoteControlEnabled) { _, enabled in
+            // Withdrawing re-posts with `supportsMediaControl: false`, which is
+            // what actually removes this device from other clients' pickers —
+            // just closing the socket would leave the stale declaration standing.
+            remoteControl.apply(appState: appState, toasts: toasts, enabled: enabled)
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 lastBackgroundedAt = Date()
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)
+                // Drop the remote-control socket: a backgrounded app can't act
+                // on a play command anyway, and holding a WebSocket open is a
+                // standing battery / radio-wake cost. Re-established on `.active`.
+                remoteControl.stop()
             } else if newPhase == .active {
                 // Network conditions may have changed while backgrounded —
                 // re-evaluate whether the proxy is needed for this server.
@@ -930,6 +974,9 @@ struct AppNavigation: View {
                     lastBackgroundedAt = nil
                     Task { await appState.handlePossibleSessionExpiry() }
                 }
+                // Re-open the socket dropped on background and re-declare the
+                // capabilities, since the session may have been reaped while away.
+                remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
             }
         }
         .onChange(of: network.isOnline) { _, online in

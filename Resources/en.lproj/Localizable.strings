@@ -958,3 +958,18 @@
 "remote.nowPlaying" = "playing %@";
 "remote.noTargets.title" = "No device available";
 "remote.noTargets.subtitle" = "Open Jellyfin on the target device — it has to be awake and connected to the server to show up here.";
+
+/* Remote control — receiving side (this device as a "Play on…" target) */
+"settings.playback.remoteControl" = "Remote control";
+
+/* Playlists — write surface */
+"playlist.add.action" = "Add to a playlist";
+"playlist.add.title" = "Add to a playlist";
+"playlist.new.label" = "New playlist";
+"playlist.new.placeholder" = "Playlist name";
+"playlist.new.create" = "Create and add";
+"playlist.added" = "Added to %@";
+"playlist.untitled" = "Untitled playlist";
+"playlist.itemCount" = "%d item(s)";
+"playlist.empty.title" = "No playlists yet";
+"playlist.empty.subtitle" = "Create one above — this title gets added to it straight away.";

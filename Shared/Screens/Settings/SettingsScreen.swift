@@ -140,6 +140,10 @@ struct SettingsScreen: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) var toasts
+    /// Forwarded into `watchedHistorySheet`, whose cards raise the "add to a
+    /// playlist" sheet. Optional so a preview / test host without the root
+    /// injection doesn't trap (see `MediaCardContextMenu`).
+    @Environment(AddToPlaylistPresenter.self) var playlists: AddToPlaylistPresenter?
     /// Hoisted out of this view's `@State` because tvOS's `UITabBarController`-
     /// backed `TabView` recreates the hosting controller (and resets `@State`)
     /// whenever the Settings tab's position-index in the bar shifts — toggle
@@ -183,6 +187,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
     @AppStorage(SettingsKey.playbackLiveActivity) var playbackLiveActivity: Bool = SettingsKey.Default.playbackLiveActivity
+    @AppStorage(SettingsKey.remoteControlEnabled) var remoteControlEnabled: Bool = SettingsKey.Default.remoteControlEnabled
     @AppStorage(SettingsKey.homeShowContinueWatching) var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowNextUp) var showNextUp: Bool = SettingsKey.Default.homeShowNextUp
     @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
@@ -259,13 +264,17 @@ struct SettingsScreen: View {
     // consume these arrays via `iOSToggleRowsJoined` / inline `ForEach`.
     // Adding or renaming a toggle is now a single-file change.
 
-    /// Playback toggles (4K rendering, auto-play next, native player). The
-    /// sleep timer picker is a non-boolean row appended per platform.
+    /// Playback toggles (4K rendering, auto-play next, native player, remote
+    /// control). The sleep timer picker is a non-boolean row appended per
+    /// platform.
     var playbackToggleRows: [SettingsToggleRow] {
         var rows: [SettingsToggleRow] = [
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
-            .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer)
+            .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer),
+            // Both platforms: an iPhone is a legitimate (if rarer) target too,
+            // and the opt-out has to exist wherever the capability is published.
+            .init(id: "remoteControl", icon: "tv.badge.wifi", label: loc.localized("settings.playback.remoteControl"), value: $remoteControlEnabled)
         ]
         // Live Activities are an iOS surface (Lock Screen + Dynamic Island);
         // tvOS has no ActivityKit, so the row doesn't exist there.
@@ -398,6 +407,10 @@ struct SettingsScreen: View {
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+            // Its cards carry `mediaCardContextMenu`, whose "add to a playlist"
+            // entry reads this presenter. A modal doesn't inherit the root's
+            // environment here — same reason `toasts` is re-injected above.
+            .environment(playlists)
     }
 
     private var privacySecuritySheet: some View {
