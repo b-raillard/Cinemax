@@ -1,6 +1,7 @@
 import SwiftUI
 import OSLog
 import CinemaxKit
+import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Playlists")
 
