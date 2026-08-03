@@ -201,6 +201,30 @@ extension JellyfinAPIClient {
         }
     }
 
+    /// Lightweight per-item userData read (`GET /UserItems/{id}/UserData`).
+    ///
+    /// Deliberately **uncached**: its only callers want server truth right after
+    /// a mutation, which is exactly the window the 10 s `item-` TTL exists to
+    /// serve stale. It is also the reason this isn't just `getItem().userData` —
+    /// the response is a handful of scalars instead of a full `BaseItemDto`
+    /// carrying overview, genres, people, chapters and media sources.
+    ///
+    /// Returns `nil` — without touching the network — when the server is older
+    /// than `ServerVersion.itemUserDataEndpoint` or its version hasn't been
+    /// learned yet. Callers must treat `nil` as "ask for the whole item
+    /// instead"; `LibraryAPI.fetchUserData` does exactly that, and is what call
+    /// sites should use.
+    public func getItemUserData(itemId: String, userId: String) async throws -> UserItemDataDto? {
+        guard serverSupports(.itemUserDataEndpoint) else { return nil }
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        do {
+            return try await client.send(Paths.getItemUserData(itemID: itemId, userID: userId)).value
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     public func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
         // "More like this" is stable per item — cache 5 min so re-opening a
         // detail screen (or bouncing in/out of the player) doesn't re-fetch it

@@ -67,4 +67,66 @@ extension JellyfinAPIClient: RemoteControlAPI {
             throw error
         }
     }
+
+    // MARK: - Receiving side
+
+    /// `POST /Sessions/Capabilities/Full`
+    ///
+    /// Declares what this device can do, which is the **only** thing that sets
+    /// `SessionInfoDto.supportsRemoteControl` server-side. Without it a Cinemax
+    /// session is filtered out of every picker — including this app's own, since
+    /// `RemotePlayTarget.resolve` requires that flag — so "Lire sur…" could
+    /// never target Cinemax on the Apple TV, the feature's main use case.
+    ///
+    /// **No `deviceProfile` is sent, deliberately.** The profile this app plays
+    /// with is engine-dependent (`buildVLCDeviceProfile` vs
+    /// `buildAppleDeviceProfile`, chosen from `forceNativeAVPlayer` at playback
+    /// time) and this app always negotiates its own `PlaybackInfo` when playback
+    /// actually starts. A profile pinned here would be a second, staler copy of
+    /// that decision — the exact incoherence that makes a server pre-transcode
+    /// for the wrong engine.
+    ///
+    /// `supportedCommands` lists only `DisplayMessage`, and that restraint is
+    /// the point: `Play` (the "start this now" message) is not a
+    /// `GeneralCommandType` and needs no declaration, while advertising
+    /// transport commands the app doesn't execute would render dead controls in
+    /// the sender's UI. `SessionSocket` honors exactly what is promised here.
+    /// `supportsMediaControl: false` is how the user's opt-out is expressed:
+    /// re-posting with the flag cleared removes this device from every picker
+    /// immediately, whereas simply not posting would leave the session's
+    /// previously-declared capabilities standing until it expires.
+    public func publishCapabilities(supportsMediaControl: Bool) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let body = ClientCapabilitiesDto(
+            playableMediaTypes: [.video],
+            supportedCommands: supportsMediaControl ? [.displayMessage] : [],
+            isSupportsMediaControl: supportsMediaControl,
+            isSupportsPersistentIdentifier: true
+        )
+        do {
+            _ = try await client.send(Paths.postFullCapabilities(body))
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    /// Opens the realtime socket that carries inbound session commands. Returns
+    /// `nil` when unauthenticated. Mirrors `makeSyncPlaySocket` — including the
+    /// `setEndpointPath` base-path preservation, without which a sub-path-hosted
+    /// server (`https://host/jellyfin`) gets a socket URL that 404s.
+    public func makeSessionSocket() -> SessionSocket? {
+        guard let client = getClient(),
+              let serverURL = getServerURL(),
+              let token = client.accessToken else { return nil }
+        guard var comps = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.setEndpointPath("/socket", preservingBasePathOf: serverURL)
+        comps.scheme = (serverURL.scheme?.lowercased() == "https") ? "wss" : "ws"
+        comps.queryItems = [
+            URLQueryItem(name: "api_key", value: token),
+            URLQueryItem(name: "deviceId", value: deviceID)
+        ]
+        guard let url = comps.url else { return nil }
+        return SessionSocket(url: url)
+    }
 }

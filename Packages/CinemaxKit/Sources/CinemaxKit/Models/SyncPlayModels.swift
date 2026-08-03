@@ -1,4 +1,5 @@
 import Foundation
+import JellyfinAPI
 
 // MARK: - SyncPlay ("Watch Together") models
 //
@@ -8,8 +9,16 @@ import Foundation
 // deliberately narrow to the v1 feature scope: list / join / create groups and
 // broadcast play / pause / seek across participants.
 
-/// A SyncPlay group as returned by `GET /SyncPlay/List` (Jellyfin
-/// `GroupInfoDto`). `participants` are display usernames, not user ids.
+/// A SyncPlay group (Jellyfin `GroupInfoDto`). `participants` are display
+/// usernames, not user ids.
+///
+/// Reached by two paths that must both keep working:
+/// - **REST** (`GET /SyncPlay/List`) hands back the SDK's typed `GroupInfoDto`,
+///   mapped by `init(dto:)`.
+/// - **Socket** (`GroupJoined` / `GroupLeft` updates) carries an untyped JSON
+///   blob that `SyncPlaySocket` decodes directly into this type — which is why
+///   the hand-written `Decodable` conformance below survived the migration of
+///   the REST layer onto the SDK. Do not drop it.
 public struct SyncPlayGroup: Sendable, Identifiable, Decodable, Equatable {
     public let id: String
     public let name: String
@@ -44,6 +53,18 @@ public struct SyncPlayGroup: Sendable, Identifiable, Decodable, Equatable {
         } else {
             self.lastUpdatedAt = nil
         }
+    }
+
+    /// Maps the SDK's `GroupInfoDto` onto this app-facing value. Every field is
+    /// optional in the generated DTO, so the same "absent ⇒ empty" defaults the
+    /// JSON path applies are repeated here — a group with no id is still
+    /// rendered (and refused at join time) rather than silently dropped.
+    public init(dto: GroupInfoDto) {
+        self.id = dto.groupID ?? ""
+        self.name = dto.groupName ?? ""
+        self.participants = dto.participants ?? []
+        self.state = dto.state?.rawValue
+        self.lastUpdatedAt = dto.lastUpdatedAt
     }
 }
 

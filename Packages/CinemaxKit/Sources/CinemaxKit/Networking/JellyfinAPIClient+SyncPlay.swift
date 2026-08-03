@@ -1,84 +1,113 @@
 import Foundation
+import Get
 import JellyfinAPI
 
 // MARK: - SyncPlay ("Watch Together")
 //
-// The Jellyfin SDK doesn't model the SyncPlay endpoints, so we hand-build the
-// requests via `URLSession` — the same pattern as `rawPostPlaybackInfo`
-// (`+Playback.swift`): the `MediaBrowser` auth header assembled from the
-// client's configuration, `setEndpointPath` to preserve a reverse-proxy base
-// path, a bounded timeout, and `notifyIfUnauthorized` on failure so a revoked
-// token drives the shared session-expiry flow like every other call site.
+// Routed through the SDK's generated `Paths.syncPlay*` operations. This file
+// used to hand-build every request over a private `URLSession` on the premise
+// that "the SDK doesn't model the SyncPlay endpoints" — that premise was wrong
+// for jellyfin-sdk-swift 0.6.0, which ships all of them (`SyncPlayGetGroups`,
+// `SyncPlayCreateGroup`, `SyncPlayJoinGroup`, `SyncPlayLeaveGroup`,
+// `SyncPlayPause/Unpause/Stop/Seek/Ready/Buffering/SetNewQueue`) plus
+// `Paths.getUtcTime` with a typed `UtcTimeResponse`.
+//
+// The two properties the hand-built path existed to guarantee are preserved by
+// the SDK client itself:
+//   - **No response caching.** `GET /SyncPlay/List` and `GET /GetUtcTime` are
+//     authenticated, and a cached `GetUtcTime` would silently poison the
+//     clock-offset math. Every `JellyfinClient` we hand out is built with
+//     `fastFailSessionConfiguration`, whose `urlCache = nil` makes an HTTP
+//     cache entry structurally impossible.
+//   - **401 handling.** Each call keeps the `notifyIfUnauthorized` + rethrow
+//     discipline of every other session-scoped method, so a revoked token
+//     drives the shared session-expiry flow.
+//
+// One property is deliberately NOT preserved: the old private session set a
+// 15 s per-request leash ("SyncPlay commands are latency-sensitive"), where the
+// shared client uses 30 s idle / 60 s total. `Get` has no per-request timeout
+// hook, and standing up a second session just for that would re-introduce the
+// duplication this migration removes. The practical effect is bounded — a dead
+// server stalls a transport action for 30 s instead of 15 s before surfacing.
+//
+// `makeSyncPlaySocket()` stays hand-built: the SDK models REST only, and the
+// realtime `/socket` endpoint has no generated counterpart.
 
 extension JellyfinAPIClient: SyncPlayAPI {
     public func syncPlayListGroups() async throws -> [SyncPlayGroup] {
-        let data = try await syncPlayRequest(path: "/SyncPlay/List", method: "GET")
-        return (try? JSONDecoder().decode([SyncPlayGroup].self, from: data)) ?? []
+        try await syncPlaySend(Paths.syncPlayGetGroups).map(SyncPlayGroup.init(dto:))
     }
 
     public func syncPlayNewGroup(name: String) async throws {
-        _ = try await syncPlayRequest(path: "/SyncPlay/New", method: "POST", jsonBody: ["GroupName": name])
+        // The response carries the authoritative `GroupInfoDto`, but it is
+        // deliberately discarded: `SyncPlayController` brings the socket up
+        // FIRST and treats the server's `GroupJoined` echo as the single source
+        // of truth for group identity (see the SyncPlay section in CLAUDE.md).
+        // Consuming the REST result here would create a second, racing writer.
+        _ = try await syncPlaySend(Paths.syncPlayCreateGroup(NewGroupRequestDto(groupName: name)))
     }
 
     public func syncPlayJoinGroup(groupId: String) async throws {
-        _ = try await syncPlayRequest(path: "/SyncPlay/Join", method: "POST", jsonBody: ["GroupId": groupId])
+        try await syncPlaySend(Paths.syncPlayJoinGroup(JoinGroupRequestDto(groupID: groupId)))
     }
 
     public func syncPlayLeaveGroup() async throws {
-        _ = try await syncPlayRequest(path: "/SyncPlay/Leave", method: "POST")
+        try await syncPlaySend(Paths.syncPlayLeaveGroup)
     }
 
     public func syncPlayPause() async throws {
-        _ = try await syncPlayRequest(path: "/SyncPlay/Pause", method: "POST")
+        try await syncPlaySend(Paths.syncPlayPause)
     }
 
     public func syncPlayUnpause() async throws {
-        _ = try await syncPlayRequest(path: "/SyncPlay/Unpause", method: "POST")
+        try await syncPlaySend(Paths.syncPlayUnpause)
     }
 
     public func syncPlayStop() async throws {
-        _ = try await syncPlayRequest(path: "/SyncPlay/Stop", method: "POST")
+        try await syncPlaySend(Paths.syncPlayStop)
     }
 
     public func syncPlaySeek(positionTicks: Int) async throws {
-        _ = try await syncPlayRequest(path: "/SyncPlay/Seek", method: "POST", jsonBody: ["PositionTicks": positionTicks])
+        try await syncPlaySend(Paths.syncPlaySeek(SeekRequestDto(positionTicks: positionTicks)))
     }
 
     public func syncPlayReady(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {
-        _ = try await syncPlayRequest(
-            path: "/SyncPlay/Ready", method: "POST",
-            jsonBody: Self.readyBody(positionTicks: positionTicks, isPlaying: isPlaying, playlistItemId: playlistItemId)
-        )
+        try await syncPlaySend(Paths.syncPlayReady(ReadyRequestDto(
+            isPlaying: isPlaying,
+            playlistItemID: playlistItemId,
+            positionTicks: positionTicks,
+            when: Date()
+        )))
     }
 
     public func syncPlayBuffering(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {
-        _ = try await syncPlayRequest(
-            path: "/SyncPlay/Buffering", method: "POST",
-            jsonBody: Self.readyBody(positionTicks: positionTicks, isPlaying: isPlaying, playlistItemId: playlistItemId)
-        )
+        try await syncPlaySend(Paths.syncPlayBuffering(BufferRequestDto(
+            isPlaying: isPlaying,
+            playlistItemID: playlistItemId,
+            positionTicks: positionTicks,
+            when: Date()
+        )))
     }
 
     public func syncPlaySetNewQueue(itemIds: [String], startPositionTicks: Int) async throws {
         // v1: a single-item queue built by the group creator when they start
-        // playback. `Mode: "Play"` matches the web client's `PlayRequestDto`;
-        // Jellyfin ignores unknown JSON keys so it's harmless on older servers.
-        let body: [String: Any] = [
-            "PlayingQueue": itemIds,
-            "PlayingItemPosition": 0,
-            "StartPositionTicks": startPositionTicks,
-            "Mode": "Play"
-        ]
-        _ = try await syncPlayRequest(path: "/SyncPlay/SetNewQueue", method: "POST", jsonBody: body)
+        // playback. The hand-built body also sent `Mode: "Play"`; `PlayRequestDto`
+        // has no such field in the official schema, and Jellyfin defaults the
+        // mode server-side — so the key was decorative and is dropped here.
+        try await syncPlaySend(Paths.syncPlaySetNewQueue(PlayRequestDto(
+            playingItemPosition: 0,
+            playingQueue: itemIds,
+            startPositionTicks: startPositionTicks
+        )))
     }
 
     public func syncPlayGetUtcTime() async throws -> SyncPlayUtcTime {
-        let data = try await syncPlayRequest(path: "/GetUtcTime", method: "GET")
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let recv = (obj["RequestReceptionTime"] as? String).flatMap(SyncPlayDateParser.date(from:)),
-              let trans = (obj["ResponseTransmissionTime"] as? String).flatMap(SyncPlayDateParser.date(from:)) else {
+        let response = try await syncPlaySend(Paths.getUtcTime)
+        guard let received = response.requestReceptionTime,
+              let transmitted = response.responseTransmissionTime else {
             throw JellyfinError.playbackFailed("Invalid GetUtcTime response")
         }
-        return SyncPlayUtcTime(requestReceptionTime: recv, responseTransmissionTime: trans)
+        return SyncPlayUtcTime(requestReceptionTime: received, responseTransmissionTime: transmitted)
     }
 
     public func makeSyncPlaySocket() -> SyncPlaySocket? {
@@ -99,91 +128,29 @@ extension JellyfinAPIClient: SyncPlayAPI {
         return SyncPlaySocket(url: url)
     }
 
-    // MARK: - Raw request plumbing
+    // MARK: - Send helpers
 
-    /// Issues a hand-built SyncPlay request and returns the response body.
-    /// Mirrors `rawPostPlaybackInfo`'s auth + validation discipline.
-    @discardableResult
-    private func syncPlayRequest(path: String, method: String, jsonBody: [String: Any]? = nil) async throws -> Data {
-        guard let client = getClient(), let serverURL = getServerURL() else {
-            throw JellyfinError.notConnected
-        }
-        guard var comps = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
-            throw JellyfinError.invalidURL
-        }
-        comps.setEndpointPath(path, preservingBasePathOf: serverURL)
-        guard let url = comps.url else { throw JellyfinError.invalidURL }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(Self.authorizationHeader(for: client), forHTTPHeaderField: "Authorization")
-        // Short leash: SyncPlay commands are latency-sensitive and small; a
-        // dead server should fail the action fast rather than stall the HUD.
-        request.timeoutInterval = 15
-        if let jsonBody {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: jsonBody)
-        }
-
+    /// Sends a value-returning SyncPlay request, keeping the shared 401
+    /// discipline. Two overloads because `Get` types empty-bodied operations as
+    /// `Request<Void>` and `Void` is not `Decodable`, so one generic can't cover
+    /// both.
+    private func syncPlaySend<T: Decodable>(_ request: Request<T>) async throws -> T {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
         do {
-            let (data, response) = try await Self.syncPlaySession.data(for: request)
-            try Self.validate(response)
-            return data
+            return try await client.send(request).value
         } catch {
             notifyIfUnauthorized(error)
             throw error
         }
     }
 
-    /// Dedicated session for the hand-built SyncPlay calls. Deliberately NOT
-    /// `URLSession.shared`, which carries a disk-backed `URLCache`: these are
-    /// authenticated requests (including `GET /SyncPlay/List` and
-    /// `GET /GetUtcTime`), so their responses would be written to a cache file
-    /// in the app container — and a cached `GetUtcTime` would silently poison
-    /// the clock-offset math. Matches the `urlCache = nil` discipline of the
-    /// SDK clients' `fastFailSessionConfiguration`.
-    private static let syncPlaySession: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.urlCache = nil
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        config.timeoutIntervalForRequest = 15
-        config.waitsForConnectivity = false
-        return URLSession(configuration: config)
-    }()
-
-    /// Builds the same `MediaBrowser` auth header the SDK (and
-    /// `rawPostPlaybackInfo`) uses.
-    private static func authorizationHeader(for client: JellyfinClient) -> String {
-        var fields = [
-            "DeviceId": client.configuration.deviceID,
-            "Device": client.configuration.deviceName,
-            "Client": client.configuration.client,
-            "Version": client.configuration.version,
-        ]
-        if let token = client.accessToken { fields["Token"] = token }
-        let joined = fields.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
-        return "MediaBrowser \(joined)"
-    }
-
-    private static func validate(_ response: URLResponse) throws {
-        guard let http = response as? HTTPURLResponse else {
-            throw JellyfinError.playbackFailed("SyncPlay: no HTTP response")
+    private func syncPlaySend(_ request: Request<Void>) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        do {
+            _ = try await client.send(request)
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
         }
-        guard (200..<300).contains(http.statusCode) else {
-            // Surface a structured 401 so `isUnauthorized` matches it precisely.
-            if http.statusCode == 401 { throw JellyfinError.unauthorized }
-            throw JellyfinError.playbackFailed("SyncPlay returned \(http.statusCode)")
-        }
-    }
-
-    private static func readyBody(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) -> [String: Any] {
-        var body: [String: Any] = [
-            "When": SyncPlayDateParser.string(from: Date()),
-            "PositionTicks": positionTicks,
-            "IsPlaying": isPlaying,
-        ]
-        if let playlistItemId { body["PlaylistItemId"] = playlistItemId }
-        return body
     }
 }

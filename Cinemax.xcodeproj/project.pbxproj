@@ -117,6 +117,7 @@
 		44929C0B213F8238949E0721 /* AdminLandingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25DBC840D04F02A6587A96D6 /* AdminLandingScreen.swift */; };
 		44BE323B7818EFDC38BBBF64 /* SettingsTVAccentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF45837A14E93AA0A9739F5 /* SettingsTVAccentPicker.swift */; };
 		456D3029E556DF1761B9CCAC /* HLSManifestLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25B07319865E0C6A31D44ED /* HLSManifestLoader.swift */; };
+		45719ED14139C973DE7C3681 /* RemoteControlListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31F5013676DD3F552285849 /* RemoteControlListener.swift */; };
 		46D104E5722F6E2E7CB24B27 /* PlaybackLiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBC186E640142D8D47F4DA0 /* PlaybackLiveActivityController.swift */; };
 		46DE7DE3EA918C65B2CB2920 /* CinemaxWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC195F26167266BFFE287F1 /* CinemaxWidget.swift */; };
 		46E0FC9041E6B386190D5B6C /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C346F0B7AFF504DA6593370E /* HomeViewModel.swift */; };
@@ -142,6 +143,7 @@
 		4FF8A7EB4524A12010906B3D /* LibraryPosterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EB193219DC7306139A95B60 /* LibraryPosterCard.swift */; };
 		5115EECDD47EEF8054E73643 /* AccentOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6972E29F4227F16D517B124A /* AccentOption.swift */; };
 		5161F45BA36B61BBB1648ADA /* PlayerEngineSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15453ED6A1F2D12B3E0F09DE /* PlayerEngineSurface.swift */; };
+		5268C36D803C151025ABFF22 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */; };
 		52F51831022AFCDC5833B695 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */; };
 		53C1963BDCD2235326155AE6 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5F40A4DB82730AD3871CB7 /* SettingsScreen.swift */; };
 		54ABC261EA095B616920C206 /* MediaItemQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC029829C85BBFD16FF3B63F /* MediaItemQuery.swift */; };
@@ -209,6 +211,7 @@
 		79D5D2069D273B8F869EAB67 /* VideoResumeSeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EF0DA1A754825C8A1CE6C2 /* VideoResumeSeekTests.swift */; };
 		7A87DBDBFBB8645F373C66EB /* AdvancedAdminLandingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13082AD25DB233BD0E63DB1C /* AdvancedAdminLandingScreen.swift */; };
 		7AE0754EFCA26F6B9EF3E3A5 /* CinemaxWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7B95F6AD4D4FADB0685A8A81 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */; };
 		7CF24A796713A4992BC74C3B /* RatingBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C632FC97E86299EBCAA2CA /* RatingBadge.swift */; };
 		7D2D1CAAA138FF339ED93EFF /* SleepTimerOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */; };
 		7E2D4D829FBE580AC7B23A9E /* MediaDetailViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B171C71911F6E759AB1A0EDB /* MediaDetailViewModelTests.swift */; };
@@ -282,6 +285,7 @@
 		A8C1C7C4A4E243D4F959D865 /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */; };
 		A931903AADD015C680539D9E /* MetadataBrowserScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F10EC9288051CE15DC9B29 /* MetadataBrowserScreen.swift */; };
 		A9D6725E2CCEBE03D23B82CA /* ChapterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA375893B142E24F3FA77C9E /* ChapterController.swift */; };
+		AA4DDAF31F9D034643D75B42 /* RemoteControlListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31F5013676DD3F552285849 /* RemoteControlListener.swift */; };
 		AB379BDB42B5C1F4D687B681 /* SearchRelevanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E7EF991448FA04C0201CBBD /* SearchRelevanceTests.swift */; };
 		AB4E35033CD55AD0E8067BEB /* MetadataEditorScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D083F5B426B3BAA9F95AB35F /* MetadataEditorScreen.swift */; };
 		ACD8797639561A3D0B499B49 /* LibraryFolderBrowseScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E10A15CDEB97FA76C37B4A /* LibraryFolderBrowseScreen.swift */; };
@@ -579,6 +583,7 @@
 		8B34A20D825429EC76C315C5 /* MediaEntityIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaEntityIDTests.swift; sourceTree = "<group>"; };
 		8C731784E29632A4E153A2CE /* AdminActivityViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminActivityViewModel.swift; sourceTree = "<group>"; };
 		8C78DE5E6487FF7D0204D485 /* PlayerTimeFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTimeFormatTests.swift; sourceTree = "<group>"; };
+		8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToPlaylistSheet.swift; sourceTree = "<group>"; };
 		8D219D83E0BF87FF74FAE367 /* DestructiveConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveConfirmSheet.swift; sourceTree = "<group>"; };
 		8E9B086604524FCFB71F0E15 /* AlphabeticalJumpBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlphabeticalJumpBar.swift; sourceTree = "<group>"; };
 		8F3F5E9E871E48C07DB53691 /* MetadataEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataEditorViewModel.swift; sourceTree = "<group>"; };
@@ -671,6 +676,7 @@
 		EFF999321A455C6A950736CB /* AdminApiKeysScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminApiKeysScreen.swift; sourceTree = "<group>"; };
 		F2101C4E32EEC83662C75D00 /* AdminScheduledTasksScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminScheduledTasksScreen.swift; sourceTree = "<group>"; };
 		F31BE49E5CAB346FED9224CE /* AdminPlaybackViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPlaybackViewModel.swift; sourceTree = "<group>"; };
+		F31F5013676DD3F552285849 /* RemoteControlListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlListener.swift; sourceTree = "<group>"; };
 		F4EBD3E46649C6D2B2201E5F /* SettingsTVLanguagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTVLanguagePicker.swift; sourceTree = "<group>"; };
 		F5015BA3559E63C6E9845F2B /* PlayMethodTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayMethodTests.swift; sourceTree = "<group>"; };
 		F6C670CED5BEE59F6B8C2B69 /* PlaybackAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackAudioSession.swift; sourceTree = "<group>"; };
@@ -950,6 +956,7 @@
 				966BE0EA92A03684308CA6FA /* Admin */,
 				617BA33C992B13701372DF33 /* Settings */,
 				B047DC9BB4F744ACF2542679 /* VideoPlayer */,
+				8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */,
 				06DF659E53C9DB219FB06A7F /* FavoritesScreen.swift */,
 				A25B07319865E0C6A31D44ED /* HLSManifestLoader.swift */,
 				25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */,
@@ -979,6 +986,7 @@
 				09B000BF38B945DD465445ED /* PrivacySecurityScreen.swift */,
 				1A8D608812AC294C43A35C14 /* QuickConnectAuthorizeSheet.swift */,
 				AC42C362F41E0ACF6999C404 /* QuickConnectSheet.swift */,
+				F31F5013676DD3F552285849 /* RemoteControlListener.swift */,
 				C144D0A57021E0A0A783977B /* SearchScreen.swift */,
 				5392E5D6360E4430456477E9 /* ServerDiscoverySheet.swift */,
 				C23376A2C6A25FD3A7A74DBE /* ServerHelpSheet.swift */,
@@ -1484,6 +1492,7 @@
 			files = (
 				2F4C51078FC6EFB427650A5F /* AccentOption.swift in Sources */,
 				28607C1A48373994CB677989 /* AdaptiveLayout.swift in Sources */,
+				7B95F6AD4D4FADB0685A8A81 /* AddToPlaylistSheet.swift in Sources */,
 				2C598521E34C029BD36C4A3C /* AdminActivityScreen.swift in Sources */,
 				3D5515368F95047F54F0B2C8 /* AdminActivityViewModel.swift in Sources */,
 				47AAE19354260E42C8163D70 /* AdminApiKeysScreen.swift in Sources */,
@@ -1615,6 +1624,7 @@
 				98526AA346210A3A7B10374F /* RainbowAccentSwatch.swift in Sources */,
 				8408A487C19DAB3D82498B24 /* RatingBadge.swift in Sources */,
 				15B101DB7D9B770EAD24E7CA /* RemoteCommandController.swift in Sources */,
+				AA4DDAF31F9D034643D75B42 /* RemoteControlListener.swift in Sources */,
 				72281CF32299F9545AA48ED7 /* SearchScreen.swift in Sources */,
 				B80500609E8D56844738FB4A /* SearchViewModel.swift in Sources */,
 				CCA01F1FD9DF944BFDEBD578 /* SeekCoalescer.swift in Sources */,
@@ -1670,6 +1680,7 @@
 			files = (
 				5115EECDD47EEF8054E73643 /* AccentOption.swift in Sources */,
 				A8C1C7C4A4E243D4F959D865 /* AdaptiveLayout.swift in Sources */,
+				5268C36D803C151025ABFF22 /* AddToPlaylistSheet.swift in Sources */,
 				648763482602FDCD12A8DC88 /* AdminActivityScreen.swift in Sources */,
 				6A46F7EBE56BA673FDCEE561 /* AdminActivityViewModel.swift in Sources */,
 				68FC8177202CADE3F7AEBF47 /* AdminApiKeysScreen.swift in Sources */,
@@ -1802,6 +1813,7 @@
 				F659036207BF0E0CA1DF4E8A /* RainbowAccentSwatch.swift in Sources */,
 				7CF24A796713A4992BC74C3B /* RatingBadge.swift in Sources */,
 				B54B725BA68563ACADEC4B8C /* RemoteCommandController.swift in Sources */,
+				45719ED14139C973DE7C3681 /* RemoteControlListener.swift in Sources */,
 				A38CC2D23545EA9986CB053F /* SearchScreen.swift in Sources */,
 				1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */,
 				F9A891C275B494CA3A05BF0C /* SeekCoalescer.swift in Sources */,

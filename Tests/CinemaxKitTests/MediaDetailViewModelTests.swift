@@ -162,6 +162,10 @@ struct MediaDetailViewModelTests {
     /// A movie's post-playback refresh re-fetches ONLY the item (for fresh
     /// userData) — never the similar/seasons/next-up fan-out a full `load()`
     /// would run.
+    ///
+    /// This is the **fallback** path: the mock inherits `LibraryAPI`'s default
+    /// `getItemUserData` (nil = server too old), so `fetchUserData` falls
+    /// through to a full `getItem`. The lightweight path is covered below.
     @Test("refreshAfterPlayback for a movie fetches item once, skips similar/seasons/nextUp")
     func refreshAfterPlaybackMovieTargeted() async {
         let api = MockAPIClient()
@@ -183,6 +187,42 @@ struct MediaDetailViewModelTests {
         // Fresh userData is reflected without an isLoading spinner flash.
         #expect(vm.isPlayed == true)
         #expect(vm.isLoading == false)
+    }
+
+    /// On a server exposing `GET /UserItems/{id}/UserData`, the movie refresh
+    /// must take the lightweight read and NOT pull the whole `BaseItemDto`
+    /// (overview, people, chapters, media sources) just to learn a resume
+    /// position. The item already on screen keeps its other fields.
+    @Test("refreshAfterPlayback for a movie uses the lightweight userData read when the server supports it")
+    func refreshAfterPlaybackMovieUsesLightweightUserData() async {
+        let api = MockAPIClient()
+        var fresh = UserItemDataDto()
+        fresh.isPlayed = true
+        fresh.isFavorite = true
+        fresh.playbackPositionTicks = 42
+        api.stubbedItemUserData = fresh
+        api.getItemHandler = { _ in makeMovie(id: "movie-1", played: true) }
+        let appState = makeAppState(api: api)
+
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        var existing = makeMovie(id: "movie-1", played: false)
+        existing.overview = "kept"
+        vm.item = existing
+        vm.resolvedType = .movie
+        vm.isPlayed = false
+        vm.isFavorite = false
+        vm.isLoading = false
+
+        await vm.refreshAfterPlayback(using: appState)
+
+        #expect(api.getItemUserDataCallCount == 1)
+        #expect(api.getItemCallCount == 0)
+        #expect(vm.isPlayed == true)
+        #expect(vm.isFavorite == true)
+        #expect(vm.item?.userData?.playbackPositionTicks == 42)
+        // Spliced onto the held item rather than replacing it — the lightweight
+        // response carries no other field to restore.
+        #expect(vm.item?.overview == "kept")
     }
 
     /// A series' post-playback refresh re-fetches the item (userData), next-up,

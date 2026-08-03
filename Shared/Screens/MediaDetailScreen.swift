@@ -38,6 +38,11 @@ struct MediaDetailScreen: View {
     @State private var showMarkSeasonWatchedConfirm = false
     @Environment(NetworkMonitor.self) private var network
     @Environment(ToastCenter.self) private var toast
+    /// Raises the root-hosted "add to a playlist" sheet. Optional because
+    /// `@Environment(Type.self)` for an `@Observable` traps when absent, and this
+    /// screen is also presented modally (`MainTabView`'s deep-link fallback) —
+    /// a host that forgets the injection must lose the button, not crash.
+    @Environment(AddToPlaylistPresenter.self) private var playlists: AddToPlaylistPresenter?
     /// Watch Together (SyncPlay): the item to present the group sheet for, and
     /// (iOS) the item to push into playback once a group is created/joined.
     @State private var watchTogetherSheet: WatchTogetherIntent?
@@ -845,6 +850,11 @@ struct MediaDetailScreen: View {
             if network.isOnline, !viewModel.remoteTargets.isEmpty {
                 remotePlayButton(for: item)
             }
+            // Writing to a playlist needs the server — hidden offline, like the
+            // two buttons above.
+            if network.isOnline, playlists != nil {
+                addToPlaylistButton(for: item)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, contentPadding)
@@ -893,6 +903,24 @@ struct MediaDetailScreen: View {
         }
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
         .accessibilityLabel(loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"))
+    }
+
+    /// "Add to a playlist" in the tvOS action row — raises the root-hosted
+    /// sheet. Adds the item the fiche is showing (a series or a movie), NOT the
+    /// resolved play target: a playlist holds what the user is looking at, where
+    /// Play resolves down to a next-up episode.
+    private func addToPlaylistButton(for item: BaseItemDto) -> some View {
+        Button {
+            playlists?.present(itemId: item.id, title: item.name)
+        } label: {
+            Image(systemName: "text.badge.plus")
+                .font(.system(size: buttonFontSize, weight: .bold))
+                .foregroundStyle(CinemaColor.onSurface)
+                .padding(.vertical, buttonVerticalPadding)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+        }
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        .accessibilityLabel(loc.localized("playlist.add.action"))
     }
 
     /// "Watch Together" (SyncPlay) toggle in the tvOS action row — opens the
@@ -994,6 +1022,19 @@ struct MediaDetailScreen: View {
                     trigger: false
                 ) {
                     remotePlaySheet = remotePlayIntent(for: item)
+                }
+            }
+
+            // "Add to a playlist" — the item on screen, not the resolved play
+            // target (a playlist holds the series, not its next-up episode).
+            if network.isOnline, let playlists {
+                secondaryActionCell(
+                    systemImage: "text.badge.plus",
+                    active: false,
+                    accessibility: loc.localized("playlist.add.action"),
+                    trigger: false
+                ) {
+                    playlists.present(itemId: item.id, title: item.name)
                 }
             }
 
