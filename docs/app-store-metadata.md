@@ -93,71 +93,43 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
 
-#### iOS — 1.1.0
+#### iOS — 1.1.1
 ```
-Plusieurs serveurs et une lecture nettement plus solide.
+Envoyez la lecture vers votre Apple TV, et rangez vos titres dans des playlists.
 
-— PLUSIEURS SERVEURS
-• Enregistrez plusieurs serveurs Jellyfin et basculez de l'un à l'autre depuis Réglages › Serveur › Serveurs
-• Ajoutez un serveur sans être déconnecté de celui que vous utilisez déjà
-• L'état de chaque serveur (en ligne, injoignable) est affiché dans la liste
+— LIRE SUR VOTRE APPLE TV
+• Cinemax devient lui-même une destination : votre Apple TV apparaît maintenant dans la liste des appareils, aux côtés des autres clients Jellyfin
+• Le titre s'ouvre là-bas exactement comme si vous l'aviez lancé depuis l'appareil : reprise à la bonne position, bon épisode pour une série, version choisie respectée
+• Désactivable dans Réglages › Lecture si vous préférez que cet appareil ne soit pas pilotable à distance
 
-— ACTIVITÉ EN DIRECT
-• Le titre en cours s'affiche sur l'écran verrouillé et dans la Dynamic Island
-• Progression et pause suivies en temps réel, y compris en lecture accélérée
-• Désactivable dans Réglages › Lecture
+— PLAYLISTS
+• « Ajouter à une playlist » par appui long sur une affiche, dans la bibliothèque, la recherche et l'historique
+• Également accessible depuis la fiche d'un film ou d'une série
+• Créez une playlist et ajoutez-y le titre en une seule fois
 
-— LIRE SUR UN AUTRE APPAREIL
-• Depuis la fiche d'un titre, envoyez la lecture vers un autre appareil connecté à votre serveur Jellyfin
-
-— RECHERCHE
-• Nouvelle rangée « Personnes » : trouvez un acteur ou un réalisateur et parcourez sa filmographie
-
-— RÉGLAGES RÉORGANISÉS
-• « Lecture » devient une section à part entière
-• « Interface » regroupe désormais Menu principal, Accueil, Bibliothèque et Fiche
-
-— LECTURE PLUS FIABLE
-• Fichiers AVI et XviD : démarrage nettement plus rapide et lecture enfin fluide, même quand le serveur doit les convertir à la volée
-• L'indicateur de chargement reste affiché tant que le flux n'est pas réellement ouvert — fini l'écran noir qui semblait figé
-• Meilleure résistance aux réseaux capricieux : serveurs derrière un reverse proxy, IPv6 défaillant, résolution DNS incomplète
-• Les sessions de transcodage sont correctement libérées sur le serveur en fin de lecture
-• Quick Connect ne s'interrompt plus sur une coupure réseau passagère
-
-— SÉCURITÉ
-• Stockage de session renforcé et durcissement des échanges avec votre serveur
+— DÉTAILS
+• Après une lecture, la position de reprise se met à jour plus rapidement sur la fiche
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
-#### tvOS — 1.1.0
+#### tvOS — 1.1.1
 ```
-Plusieurs serveurs et une lecture nettement plus solide.
+Recevez la lecture envoyée depuis votre iPhone, et rangez vos titres dans des playlists.
 
-— PLUSIEURS SERVEURS
-• Enregistrez plusieurs serveurs Jellyfin et basculez de l'un à l'autre depuis Réglages › Serveur › Serveurs
-• Ajoutez un serveur sans être déconnecté de celui que vous utilisez déjà
-• L'état de chaque serveur (en ligne, injoignable) est affiché dans la liste
+— LIRE SUR CETTE APPLE TV
+• Cette Apple TV apparaît maintenant dans la liste « Lire sur… » de votre iPhone, de votre iPad et des autres clients Jellyfin
+• Le titre envoyé s'ouvre ici exactement comme si vous l'aviez lancé à la télécommande : reprise à la bonne position, bon épisode pour une série, version choisie respectée
+• Il suffit que Cinemax soit ouvert sur l'Apple TV
+• Désactivable dans Réglages › Lecture si vous préférez que cet appareil ne soit pas pilotable à distance
 
-— LIRE SUR UN AUTRE APPAREIL
-• Depuis la fiche d'un titre, envoyez la lecture vers un autre appareil connecté à votre serveur Jellyfin
+— PLAYLISTS
+• « Ajouter à une playlist » en maintenant le bouton central sur une affiche, dans la bibliothèque, la recherche et l'historique
+• Également accessible depuis la fiche d'un film ou d'une série
+• Créez une playlist et ajoutez-y le titre en une seule fois
 
-— RECHERCHE
-• Nouvelle rangée « Personnes » : trouvez un acteur ou un réalisateur et parcourez sa filmographie
-
-— RÉGLAGES RÉORGANISÉS
-• « Lecture » devient une section à part entière
-• « Interface » regroupe désormais Menu principal, Accueil, Bibliothèque et Fiche
-
-— LECTURE PLUS FIABLE
-• Fichiers AVI et XviD : démarrage nettement plus rapide et lecture enfin fluide, même quand le serveur doit les convertir à la volée
-• L'indicateur de chargement reste affiché tant que le flux n'est pas réellement ouvert — fini l'écran noir qui semblait figé
-• Meilleure résistance aux réseaux capricieux : serveurs derrière un reverse proxy, IPv6 défaillant, résolution DNS incomplète
-• Les sessions de transcodage sont correctement libérées sur le serveur en fin de lecture
-• Quick Connect ne s'interrompt plus sur une coupure réseau passagère
-
-— SÉCURITÉ
-• Stockage de session renforcé et durcissement des échanges avec votre serveur
+— DÉTAILS
+• Après une lecture, la position de reprise se met à jour plus rapidement sur la fiche
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -234,71 +206,43 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 > Two separate texts: Live Activity is iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
 
-#### iOS — 1.1.0
+#### iOS — 1.1.1
 ```
-Multiple servers and much more dependable playback.
+Send playback to your Apple TV, and organise titles into playlists.
 
-— MULTIPLE SERVERS
-• Register several Jellyfin servers and switch between them from Settings › Server › Servers
-• Add a server without being signed out of the one you are already using
-• Each server's status (online, unreachable) is shown in the list
+— PLAY ON YOUR APPLE TV
+• Cinemax is now a destination itself: your Apple TV shows up in the device list alongside other Jellyfin clients
+• The title opens over there exactly as if you had started it on that device: right resume position, right episode for a series, chosen version respected
+• Can be turned off in Settings › Playback if you would rather this device not be controllable remotely
 
-— LIVE ACTIVITY
-• What you are watching now appears on the Lock Screen and in the Dynamic Island
-• Progress and pause tracked in real time, including at faster playback speeds
-• Can be turned off in Settings › Playback
+— PLAYLISTS
+• "Add to a playlist" from a long press on any poster, in the library, in search and in your watch history
+• Also available from a film's or series' page
+• Create a playlist and add the title to it in one step
 
-— PLAY ON ANOTHER DEVICE
-• From a title's page, send playback to another device signed in to your Jellyfin server
-
-— SEARCH
-• New "People" row: find an actor or a director and browse their filmography
-
-— REORGANIZED SETTINGS
-• "Playback" is now a section of its own
-• "Interface" now groups Main Menu, Home, Library and Detail page
-
-— MORE DEPENDABLE PLAYBACK
-• AVI and XviD files: much faster startup and finally smooth playback, even when your server has to convert them on the fly
-• The loading indicator now stays up until the stream is genuinely open — no more black screen that looks frozen
-• Better resilience on awkward networks: servers behind a reverse proxy, broken IPv6, incomplete DNS resolution
-• Transcoding sessions are properly released on the server when playback ends
-• Quick Connect no longer gives up on a brief network hiccup
-
-— SECURITY
-• Hardened session storage and tightened communication with your server
+— DETAILS
+• After playback, the resume position updates faster on the title's page
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
-#### tvOS — 1.1.0
+#### tvOS — 1.1.1
 ```
-Multiple servers and much more dependable playback.
+Receive playback sent from your iPhone, and organise titles into playlists.
 
-— MULTIPLE SERVERS
-• Register several Jellyfin servers and switch between them from Settings › Server › Servers
-• Add a server without being signed out of the one you are already using
-• Each server's status (online, unreachable) is shown in the list
+— PLAY ON THIS APPLE TV
+• This Apple TV now shows up in the "Play on…" list on your iPhone, your iPad and other Jellyfin clients
+• The title you send opens here exactly as if you had started it with the remote: right resume position, right episode for a series, chosen version respected
+• Cinemax just needs to be open on the Apple TV
+• Can be turned off in Settings › Playback if you would rather this device not be controllable remotely
 
-— PLAY ON ANOTHER DEVICE
-• From a title's page, send playback to another device signed in to your Jellyfin server
+— PLAYLISTS
+• "Add to a playlist" by holding the select button on any poster, in the library, in search and in your watch history
+• Also available from a film's or series' page
+• Create a playlist and add the title to it in one step
 
-— SEARCH
-• New "People" row: find an actor or a director and browse their filmography
-
-— REORGANIZED SETTINGS
-• "Playback" is now a section of its own
-• "Interface" now groups Main Menu, Home, Library and Detail page
-
-— MORE DEPENDABLE PLAYBACK
-• AVI and XviD files: much faster startup and finally smooth playback, even when your server has to convert them on the fly
-• The loading indicator now stays up until the stream is genuinely open — no more black screen that looks frozen
-• Better resilience on awkward networks: servers behind a reverse proxy, broken IPv6, incomplete DNS resolution
-• Transcoding sessions are properly released on the server when playback ends
-• Quick Connect no longer gives up on a brief network hiccup
-
-— SECURITY
-• Hardened session storage and tightened communication with your server
+— DETAILS
+• After playback, the resume position updates faster on the title's page
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
@@ -357,7 +301,12 @@ ASC → Pricing and Availability → Edit Countries or Regions → cocher unique
 
 ## 6. Build à sélectionner
 
-iOS : dernière build TestFlight (1.0 build N)
-tvOS : dernière build TestFlight (1.0 build N)
+iOS : dernière build TestFlight (1.1.1)
+tvOS : dernière build TestFlight (1.1.1)
+
+> Le numéro de build suit la version marketing (`MARKETING_VERSION` et
+> `CURRENT_PROJECT_VERSION` sont tenus à l'identique dans `project.yml`), donc
+> le build s'affiche « 1.1.1 (1.1.1) » dans App Store Connect. Un second envoi
+> pour la même version demande de bumper `CURRENT_PROJECT_VERSION` seul.
 
 ASC → Distribution → iOS App / tvOS App → Build → Select Build → choisir le build le plus récent processé.
