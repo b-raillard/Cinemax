@@ -95,10 +95,11 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 
 #### iOS — 1.1.1
 ```
-Envoyez la lecture vers votre Apple TV, et rangez vos titres dans des playlists.
+Envoyez la lecture vers n'importe lequel de vos appareils, et rangez vos titres dans des playlists.
 
-— LIRE SUR VOTRE APPLE TV
-• Cinemax devient lui-même une destination : votre Apple TV apparaît maintenant dans la liste des appareils, aux côtés des autres clients Jellyfin
+— LIRE SUR TOUS VOS APPAREILS
+• « Lire sur… » est maintenant compatible avec l'ensemble de vos appareils de destination : une Apple TV sous Cinemax, un navigateur ouvert sur Jellyfin, ou tout autre client Jellyfin connecté à votre serveur
+• Cinemax devient lui-même une destination : vos appareils sous Cinemax apparaissent désormais dans la liste, au même titre que les autres
 • Le titre s'ouvre là-bas exactement comme si vous l'aviez lancé depuis l'appareil : reprise à la bonne position, bon épisode pour une série, version choisie respectée
 • Désactivable dans Réglages › Lecture si vous préférez que cet appareil ne soit pas pilotable à distance
 
@@ -115,10 +116,11 @@ Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b
 
 #### tvOS — 1.1.1
 ```
-Recevez la lecture envoyée depuis votre iPhone, et rangez vos titres dans des playlists.
+« Lire sur… » compatible avec tous vos appareils, et des playlists.
 
-— LIRE SUR CETTE APPLE TV
-• Cette Apple TV apparaît maintenant dans la liste « Lire sur… » de votre iPhone, de votre iPad et des autres clients Jellyfin
+— LIRE SUR TOUS VOS APPAREILS
+• « Lire sur… » est maintenant compatible avec l'ensemble de vos appareils de destination : une autre Apple TV ou un iPhone sous Cinemax, un navigateur ouvert sur Jellyfin, ou tout autre client Jellyfin connecté à votre serveur
+• Cette Apple TV devient elle-même une destination : elle apparaît désormais dans la liste « Lire sur… » de vos autres appareils
 • Le titre envoyé s'ouvre ici exactement comme si vous l'aviez lancé à la télécommande : reprise à la bonne position, bon épisode pour une série, version choisie respectée
 • Il suffit que Cinemax soit ouvert sur l'Apple TV
 • Désactivable dans Réglages › Lecture si vous préférez que cet appareil ne soit pas pilotable à distance
@@ -208,10 +210,11 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 
 #### iOS — 1.1.1
 ```
-Send playback to your Apple TV, and organise titles into playlists.
+Send playback to any of your devices, and organise titles into playlists.
 
-— PLAY ON YOUR APPLE TV
-• Cinemax is now a destination itself: your Apple TV shows up in the device list alongside other Jellyfin clients
+— PLAY ON ANY OF YOUR DEVICES
+• "Play on…" now works with every destination device you have: an Apple TV running Cinemax, a browser open on Jellyfin, or any other Jellyfin client signed in to your server
+• Cinemax is now a destination itself: your Cinemax devices show up in that list too, alongside the rest
 • The title opens over there exactly as if you had started it on that device: right resume position, right episode for a series, chosen version respected
 • Can be turned off in Settings › Playback if you would rather this device not be controllable remotely
 
@@ -228,10 +231,11 @@ Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-rail
 
 #### tvOS — 1.1.1
 ```
-Receive playback sent from your iPhone, and organise titles into playlists.
+"Play on…" works with all your devices, plus playlists.
 
-— PLAY ON THIS APPLE TV
-• This Apple TV now shows up in the "Play on…" list on your iPhone, your iPad and other Jellyfin clients
+— PLAY ON ANY OF YOUR DEVICES
+• "Play on…" now works with every destination device you have: another Apple TV or an iPhone running Cinemax, a browser open on Jellyfin, or any other Jellyfin client signed in to your server
+• This Apple TV is now a destination itself: it shows up in the "Play on…" list on your other devices
 • The title you send opens here exactly as if you had started it with the remote: right resume position, right episode for a series, chosen version respected
 • Cinemax just needs to be open on the Apple TV
 • Can be turned off in Settings › Playback if you would rather this device not be controllable remotely
