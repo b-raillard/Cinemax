@@ -13,9 +13,11 @@ struct WatchTogetherIntent: Identifiable, Hashable {
     let startTime: Double?
 }
 
-/// Playback started by an App Intent rather than a tap. Same shape as
-/// `WatchTogetherIntent` because it drives the same programmatic route to the
-/// player — see `MediaDetailScreen.consumeIntentPlaybackRequest`.
+/// Playback started programmatically rather than by a tap — an App Intent
+/// (iOS) or an inbound remote-control `Play` from another Jellyfin session
+/// (both platforms). Same shape as `WatchTogetherIntent` because it drives the
+/// same route to the player — see
+/// `MediaDetailScreen.consumeIntentPlaybackRequest`.
 struct SiriPlaybackRoute: Identifiable, Hashable {
     let id = UUID()
     let itemId: String
@@ -115,11 +117,12 @@ struct MediaDetailScreen: View {
         #endif
         .task {
             await viewModel.load(using: appState, loc: loc)
-            #if os(iOS)
             // After the load, so the series → next-up resolution and the resume
-            // position the request needs are already in place.
+            // position the request needs are already in place. Runs on BOTH
+            // platforms: App Intents are iOS-only, but an inbound remote-control
+            // `Play` raises the same request, and the Apple TV is that feature's
+            // primary target.
             consumeIntentPlaybackRequest()
-            #endif
         }
         #if os(tvOS)
         .onChange(of: coordinator.lastDismissedAt) { _, _ in
@@ -735,8 +738,15 @@ struct MediaDetailScreen: View {
         )
     }
 
-    #if os(iOS)
-    /// Starts playback when an App Intent named this item — exactly once.
+    /// Starts playback when an App Intent — or an inbound remote-control `Play`
+    /// from another Jellyfin session — named this item, exactly once.
+    ///
+    /// **Cross-platform on purpose.** This was iOS-only while App Intents were
+    /// its only producer; `RemoteControlListener` now raises the same request on
+    /// tvOS, and leaving the consumer gated meant the Apple TV navigated to the
+    /// detail screen and then just sat there — "Lire sur…" appeared to do
+    /// nothing. Any new producer of `pendingIntentPlaybackItemId` inherits this
+    /// consumer; do not re-gate it.
     ///
     /// Guarded on the screen's own item id because the pending request is
     /// visible to every detail screen still on the stack; only the one the
@@ -753,24 +763,47 @@ struct MediaDetailScreen: View {
         if let episode = viewModel.episodes.first(where: { $0.id == viewModel.itemId }) {
             let ticks = episode.userData?.playbackPositionTicks ?? 0
             let played = episode.userData?.isPlayed ?? false
-            siriPlayback = SiriPlaybackRoute(
+            startIntentPlayback(SiriPlaybackRoute(
                 itemId: viewModel.itemId,
                 title: episode.name ?? item.name ?? "",
                 startTime: (ticks > 0 && !played) ? ticks.jellyfinSeconds : nil
-            )
+            ))
             return
         }
 
         // Everything else goes through the Play button's own resolution.
         let target = resolvedPlayTarget(for: item)
         guard !target.itemId.isEmpty else { return }
-        siriPlayback = SiriPlaybackRoute(
+        startIntentPlayback(SiriPlaybackRoute(
             itemId: target.itemId,
             title: target.title,
             startTime: target.startSeconds
-        )
+        ))
     }
-    #endif
+
+    /// Routes a resolved request to whichever player entry point the platform
+    /// uses — the same split as `startWatchTogether` and `PlayLink`: tvOS drives
+    /// `VideoPlayerCoordinator`, iOS pushes `VideoPlayerView` through
+    /// `navigationDestination`. Episode navigation and the version override are
+    /// resolved here for tvOS because the coordinator takes them up front,
+    /// whereas the iOS destination closure resolves them at push time.
+    private func startIntentPlayback(_ route: SiriPlaybackRoute) {
+        #if os(tvOS)
+        let nav = episodeNavigation(for: route.itemId)
+        coordinator.play(
+            itemId: route.itemId,
+            title: route.title,
+            startTime: route.startTime,
+            previousEpisode: nav.previous,
+            nextEpisode: nav.next,
+            episodeNavigator: nav.navigator,
+            mediaSourceId: viewModel.item.flatMap { selectedSource($0)?.id },
+            using: appState
+        )
+        #else
+        siriPlayback = route
+        #endif
+    }
 
     /// Resolves the data `PlayActionButtonsSection` needs. Kept out of the
     /// sub-view so the sub-view's dependencies stay narrow (and its
