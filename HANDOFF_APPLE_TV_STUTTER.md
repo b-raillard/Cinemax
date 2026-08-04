@@ -126,4 +126,12 @@ On shippe aujourd'hui un moteur qui évalue des centaines d'assertions dans les 
 ## 8. Journal de branche
 
 - `ed0713f` — instrumentation Modules/Demux (VLCEngineLog `.debug` + `VLCEngineFacts` + HUD + tests + clés fr/en + CLAUDE.md).
-- (ce commit) — ce document.
+- `e5c65d3` — ce document.
+- `2b9cdb2` — fix : contrainte trailing manquante sur l'overlay stats (la ligne Modules sortait de l'écran sans wrapper — vu au smoke-test sim iPhone).
+- `460c5d8` — **étape 2 faite** (2026-08-04, local, Xcode 26.6/SDK 26.5) : SwiftVLC 1.0.0. Migration réelle plus large que la carte §5 : `rate` get-only (`try setPlaybackRate(PlaybackRate)`, 4 sites dont hold-to-2×) et `seek(to:)` throws (`engineSeek`), en plus des delays et de `managesAudioSession: false`. 402 tests OK. **Validation runtime OK** : « 72 heures » DirectStream sur sim tvOS 26.5, chaîne complète assemblée. Baseline 0.3.0 device signée : `~/projets/perso/jellyfin/_artifacts/CinemaxTV-swiftvlc-0.3.0-baseline.app`.
+
+## 9. Acquis simulateur (2026-08-04) — à confronter au device
+
+Chaîne tvOS **simulateur** (26.2 et 26.5, 0.3.0 et 1.0.0 identiques) sur « 72 heures » : `demux mkv · vdec avcodec · adec avcodec · vout samplebufferdisplay · vconv cvpx/swscale/chain`. Deux lignes discriminantes pour l'étape 1 sur la VRAIE TV (toutes deux miroir en OSLog, `log collect` possible) :
+- **`libVLC [libvlc] device doesn't support HEVC`** — c'est ELLE qui force `vdec avcodec` sur le sim. Si elle apparaît sur l'Apple TV physique, théorie confirmée d'un coup.
+- `vout display = samplebufferdisplay` — le §7 supposait un vout OpenGL sur tvOS ; le sim choisit samplebufferdisplay. À vérifier sur device.
