@@ -1272,6 +1272,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         NSLayoutConstraint.activate([
             statsContainer.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            // Without a trailing bound the multi-line label never wraps and the
+            // Modules line runs off-screen.
+            statsContainer.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor),
             statsLabel.topAnchor.constraint(equalTo: statsContainer.topAnchor, constant: 10),
             statsLabel.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10),
             statsLabel.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 14),
