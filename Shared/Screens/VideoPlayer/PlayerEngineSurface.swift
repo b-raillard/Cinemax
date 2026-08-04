@@ -22,10 +22,12 @@ struct PlayerEngineSurface: View {
         // black bars on all 4 sides." `AVPlayerViewController` is unaffected
         // because it's pure UIKit and never traverses SwiftUI layout.
         #if os(iOS)
+        // managesAudioSession must stay false: PlaybackAudioSession is the
+        // app's single AVAudioSession owner (see CLAUDE.md).
         PiPVideoView(player, controller: Binding(
             get: { controller },
             set: { controller = $0; onController($0) }
-        ))
+        ), managesAudioSession: false)
         .ignoresSafeArea()
         #else
         VideoView(player)

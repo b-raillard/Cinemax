@@ -583,7 +583,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func engineSeek(ms: Int32) {
         let target = max(0, ms)
         beginSeekLoading(target: target)
-        player.seek(to: .milliseconds(Int(target)))
+        try? player.seek(to: .milliseconds(Int(target)))
     }
 
     // MARK: Post-seek loading state
@@ -2225,7 +2225,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
-        player.rate = rate
+        try? player.setPlaybackRate(PlaybackRate(rate))
     }
 
     @objc private func openAudioDelayMenu() { presentDelayPicker(isAudio: true) }
@@ -2257,10 +2257,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let clamped = max(-5000, min(5000, ms))
         if isAudio {
             audioDelayMsState = clamped
-            player.audioDelay = .milliseconds(clamped)
+            try? player.setAudioDelay(.milliseconds(clamped))
         } else {
             subtitleDelayMsState = clamped
-            player.subtitleDelay = .milliseconds(clamped)
+            try? player.setSubtitleDelay(.milliseconds(clamped))
         }
     }
 
@@ -2700,7 +2700,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `AVPictureInPictureController` pipeline (works for all content incl.
     /// MKV/Dolby-Vision — no AVPlayer handoff needed).
     @objc private func pipTapped() {
-        guard let pip = pipController, pip.isPossible else { return }
+        guard let pip = pipController else { return }
         pip.toggle()
     }
 
@@ -2813,14 +2813,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         case .began:
             guard enginePlaying else { return }
             isHoldBoosting = true
-            player.rate = 2.0
+            try? player.setPlaybackRate(.double)
             skipHUDHide?.cancel()
             skipHUD.text = "  2× ▸▸  "
             skipHUD.alpha = 1
         case .ended, .cancelled, .failed:
             guard isHoldBoosting else { return }
             isHoldBoosting = false
-            player.rate = playbackRate
+            try? player.setPlaybackRate(PlaybackRate(playbackRate))
             UIView.animate(withDuration: 0.25) { self.skipHUD.alpha = 0 }
         default:
             break
@@ -3000,7 +3000,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let boosting = false
             #endif
             if !boosting, abs(player.rate - playbackRate) > 0.01 {
-                player.rate = playbackRate
+                try? player.setPlaybackRate(PlaybackRate(playbackRate))
             }
             #if os(iOS)
             setPlayPauseIcon(playing: true)
