@@ -31,19 +31,87 @@ enum VLCEngineLog {
     private static let installed: Bool = {
         // The stream must be consumed for the process's lifetime: its
         // `onTermination` calls `libvlc_log_unset`, which would hand stderr back.
+        //
+        // Subscribed at `.debug`, not `.warning`: the core's module-selection
+        // lines (`using video decoder module "videotoolbox"`) are debug-level,
+        // and they are the only ground truth for whether playback runs on the
+        // hardware path (videotoolbox vs avcodec, which vout, which interop).
+        // The C shim formats every message before the level filter anyway (see
+        // header note), so the widened subscription only adds the Swift-side
+        // triage below — two `hasPrefix` checks on the fast path.
         Task.detached(priority: .utility) {
-            for await entry in VLCInstance.shared.logStream(minimumLevel: .warning) {
-                let module = entry.module ?? "?"
-                let message = scrubbed(entry.message)
-                if entry.level == .error {
-                    logger.error("libVLC [\(module, privacy: .public)] \(message, privacy: .public)")
-                } else {
-                    logger.notice("libVLC [\(module, privacy: .public)] \(message, privacy: .public)")
+            for await entry in VLCInstance.shared.logStream(minimumLevel: .debug) {
+                if entry.level >= .warning {
+                    let module = entry.module ?? "?"
+                    let message = scrubbed(entry.message)
+                    if entry.level == .error {
+                        logger.error("libVLC [\(module, privacy: .public)] \(message, privacy: .public)")
+                    } else {
+                        logger.notice("libVLC [\(module, privacy: .public)] \(message, privacy: .public)")
+                    }
+                    continue
+                }
+                // Debug/notice tier: only the module-selection lines matter.
+                guard let selection = parseModuleSelection(entry.message) else { continue }
+                // Mirror to OSLog so a Console.app capture answers "which
+                // decoder ran" without the on-screen HUD. Module names are
+                // plugin identifiers — nothing to scrub.
+                logger.notice("libVLC module ▸ \(selection.capability, privacy: .public) = \(selection.module, privacy: .public)")
+                Task { @MainActor in
+                    VLCEngineFacts.shared.record(capability: selection.capability, module: selection.module)
                 }
             }
         }
         return true
     }()
+
+    /// Parses the core's module-selection lines:
+    /// `using video decoder module "videotoolbox"` → `("video decoder", "videotoolbox")`
+    /// `no vout display modules matched` → `("vout display", "∅")`
+    /// Anything else → nil. Pure + static for unit testing.
+    static func parseModuleSelection(_ message: String) -> (capability: String, module: String)? {
+        if message.hasPrefix("using ") {
+            guard let quoteStart = message.firstIndex(of: "\"") else { return nil }
+            let head = message[message.index(message.startIndex, offsetBy: "using ".count)..<quoteStart]
+            guard head.hasSuffix("module ") else { return nil }
+            let capability = head.dropLast("module ".count).trimmingCharacters(in: .whitespaces)
+            let tail = message[message.index(after: quoteStart)...]
+            guard let quoteEnd = tail.firstIndex(of: "\"") else { return nil }
+            let module = String(tail[..<quoteEnd])
+            guard !capability.isEmpty, !module.isEmpty, isTrackedCapability(capability) else { return nil }
+            return (capability, module)
+        }
+        if message.hasPrefix("no "), message.hasSuffix(" modules matched") {
+            let capability = String(message.dropFirst("no ".count).dropLast(" modules matched".count))
+            guard !capability.isEmpty, isTrackedCapability(capability) else { return nil }
+            return (capability, "∅")
+        }
+        return nil
+    }
+
+    /// Which capabilities are worth surfacing. Video-side selections plus the
+    /// demuxer and every decoder tier; deliberately not audio filters/outputs
+    /// (chatty, and the audio path is not what stutter diagnosis needs).
+    static func isTrackedCapability(_ capability: String) -> Bool {
+        if capability.hasPrefix("vout window") { return false } // windowing noise, not rendering
+        return capability.hasPrefix("video") || capability.hasPrefix("vout")
+            || capability == "demux" || capability.contains("decoder") || capability.contains("interop")
+    }
+
+    /// Compact per-capability label for the stats HUD line.
+    static func shortLabel(for capability: String) -> String {
+        switch capability {
+        case "video decoder": "vdec"
+        case "audio decoder": "adec"
+        case "spu decoder": "sdec"
+        case "decoder device": "dev"
+        case "vout display": "vout"
+        case "glinterop": "interop"
+        case "video converter": "vconv"
+        case "video filter": "vfilt"
+        default: capability
+        }
+    }
 
     /// libVLC logs the URLs it opens, and ours carry the account token as an
     /// `api_key` query item (libVLC can't reliably inject the auth header), so a
@@ -73,4 +141,48 @@ enum VLCEngineLog {
         "&", "#", " ", "\t", "\n", "\r", "'", "\"", "`",
         "(", ")", "[", "]", "{", "}", "<", ">", ",", ";", "|", "\\",
     ]
+}
+
+/// The engine facts the log stream has learned about the CURRENT media: which
+/// module libVLC actually selected per capability (hardware `videotoolbox` vs
+/// software `avcodec` decode, which vout, whether a CPU converter was inserted).
+/// Rendered as the `Modules` line of the player's stats HUD; reset by
+/// `VLCStreamPresenter.beginOpenLoading()` at every fresh open so facts from
+/// the previous media can't linger. Plain stored state, tick-repainted by
+/// `refreshStats` — no @Observable needed.
+@MainActor
+final class VLCEngineFacts {
+    static let shared = VLCEngineFacts()
+    private init() {}
+
+    private(set) var modules: [String: String] = [:]
+
+    func record(capability: String, module: String) {
+        modules[capability] = module
+    }
+
+    func reset() {
+        modules = [:]
+    }
+
+    /// Fixed presentation order — decode chain first, render chain last —
+    /// then any untabled capability alphabetically.
+    private static let displayOrder = [
+        "demux", "video decoder", "decoder device", "audio decoder", "spu decoder",
+        "vout display", "glinterop", "video converter", "video filter",
+    ]
+
+    var summary: String? {
+        guard !modules.isEmpty else { return nil }
+        let ordered = Self.displayOrder.compactMap { cap in
+            modules[cap].map { (cap, $0) }
+        }
+        let rest = modules.keys
+            .filter { !Self.displayOrder.contains($0) }
+            .sorted()
+            .map { ($0, modules[$0]!) }
+        return (ordered + rest)
+            .map { "\(VLCEngineLog.shortLabel(for: $0.0)) \($0.1)" }
+            .joined(separator: " · ")
+    }
 }

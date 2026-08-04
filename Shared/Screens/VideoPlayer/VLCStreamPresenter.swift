@@ -729,6 +729,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// episode nav) invalidates "we know a demuxer exists".
     private func beginOpenLoading() {
         mediaConfirmedOpen = false
+        // Fresh open ⇒ libVLC re-selects every module; drop facts learned from
+        // the previous media so the stats HUD can't show a stale decode chain.
+        VLCEngineFacts.shared.reset()
         setLoading(true)
     }
 
@@ -2296,6 +2299,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 loc.localized("player.stats.bitrate"), s.inputBitrate * 8000, s.demuxBitrate * 8000
             ))
             lines.append("\(loc.localized("player.stats.dropped")) : \(s.lostPictures) · \(s.latePictures) late · \(s.lostAudioBuffers) audio")
+            // Container-level trouble (bad interleave, resync storms) shows up
+            // here while throughput still looks healthy.
+            lines.append("\(loc.localized("player.stats.demux")) : \(s.demuxCorrupted) corrupt · \(s.demuxDiscontinuity) discont")
+        }
+        // The decode/render chain libVLC actually selected (hardware
+        // videotoolbox vs software avcodec, vout, interop, any CPU converter)
+        // — parsed from the engine's own module-selection log lines.
+        if let engineModules = VLCEngineFacts.shared.summary {
+            lines.append("\(loc.localized("player.stats.modules")) : \(engineModules)")
         }
         statsLabel.text = lines.joined(separator: "\n")
     }

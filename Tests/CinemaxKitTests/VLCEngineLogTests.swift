@@ -56,3 +56,59 @@ struct VLCEngineLogTests {
         #expect(VLCEngineLog.scrubbed("s?api_key=&x=1") == "s?api_key=***&x=1")
     }
 }
+
+/// `parseModuleSelection` is what turns libVLC's debug stream into the stats
+/// HUD's `Modules` line — the on-device answer to "is this decode hardware or
+/// software". It must accept exactly the core's selection lines and nothing
+/// else: a false positive would paint a bogus decode chain over a real one.
+@Suite("VLCEngineLog.parseModuleSelection")
+struct VLCEngineModuleParsingTests {
+
+    @Test("video decoder selection is parsed")
+    func videoDecoder() {
+        let parsed = VLCEngineLog.parseModuleSelection("using video decoder module \"videotoolbox\"")
+        #expect(parsed?.capability == "video decoder")
+        #expect(parsed?.module == "videotoolbox")
+    }
+
+    @Test("vout display selection is parsed")
+    func voutDisplay() {
+        let parsed = VLCEngineLog.parseModuleSelection("using vout display module \"vout_ios\"")
+        #expect(parsed?.capability == "vout display")
+        #expect(parsed?.module == "vout_ios")
+    }
+
+    @Test("demux selection is parsed")
+    func demux() {
+        let parsed = VLCEngineLog.parseModuleSelection("using demux module \"mkv\"")
+        #expect(parsed?.capability == "demux")
+        #expect(parsed?.module == "mkv")
+    }
+
+    @Test("a failed match surfaces as ∅")
+    func noModulesMatched() {
+        let parsed = VLCEngineLog.parseModuleSelection("no vout display modules matched")
+        #expect(parsed?.capability == "vout display")
+        #expect(parsed?.module == "∅")
+    }
+
+    @Test("untracked capabilities are dropped even in selection shape")
+    func untrackedCapability() {
+        #expect(VLCEngineLog.parseModuleSelection("using audio filter module \"scaletempo\"") == nil)
+        #expect(VLCEngineLog.parseModuleSelection("using vout window module \"uiview\"") == nil)
+    }
+
+    @Test("non-selection debug lines are rejected")
+    func rejectsOtherLines() {
+        #expect(VLCEngineLog.parseModuleSelection("using 4 threads for decoding") == nil)
+        #expect(VLCEngineLog.parseModuleSelection("main debug: creating audio output") == nil)
+        #expect(VLCEngineLog.parseModuleSelection("no access modules matched with name \"foo\"") == nil)
+        #expect(VLCEngineLog.parseModuleSelection("") == nil)
+    }
+
+    @Test("audio and subtitle decoders stay tracked — they complete the chain")
+    func audioAndSpuDecoders() {
+        #expect(VLCEngineLog.parseModuleSelection("using audio decoder module \"avcodec\"")?.module == "avcodec")
+        #expect(VLCEngineLog.parseModuleSelection("using spu decoder module \"subsdec\"")?.capability == "spu decoder")
+    }
+}

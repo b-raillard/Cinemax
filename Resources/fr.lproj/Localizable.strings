@@ -398,6 +398,8 @@
 "player.stats.dropped" = "Images perdues";
 "player.stats.direct" = "Lecture directe";
 "player.stats.proxy" = "Via proxy";
+"player.stats.modules" = "Modules";
+"player.stats.demux" = "Demux";
 "player.nextUp.countdown" = "Épisode suivant dans %d s";
 "player.nextUp.play" = "Lire maintenant";
 
