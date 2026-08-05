@@ -130,6 +130,20 @@ On shippe aujourd'hui un moteur qui évalue des centaines d'assertions dans les 
 - `2b9cdb2` — fix : contrainte trailing manquante sur l'overlay stats (la ligne Modules sortait de l'écran sans wrapper — vu au smoke-test sim iPhone).
 - `460c5d8` — **étape 2 faite** (2026-08-04, local, Xcode 26.6/SDK 26.5) : SwiftVLC 1.0.0. Migration réelle plus large que la carte §5 : `rate` get-only (`try setPlaybackRate(PlaybackRate)`, 4 sites dont hold-to-2×) et `seek(to:)` throws (`engineSeek`), en plus des delays et de `managesAudioSession: false`. 402 tests OK. **Validation runtime OK** : « 72 heures » DirectStream sur sim tvOS 26.5, chaîne complète assemblée. Baseline 0.3.0 device signée : `~/projets/perso/jellyfin/_artifacts/CinemaxTV-swiftvlc-0.3.0-baseline.app`.
 
+## 10. ROOT CAUSE PROUVÉE (2026-08-05, mesures sur l'Apple TV physique)
+
+**Le CodecPrivate MKV de « 72 heures » est un hvcC NU de 23 octets (`numOfArrays = 0` — aucun VPS/SPS/PPS, les parameter sets sont in-band).** Chaîne causale, chaque maillon mesuré sur la TV (tvOS 26.5, `VTIsHardwareDecodeSupported(HEVC) = true`) :
+
+1. `CopyDecoderExtradataHEVC` (libVLC decoder.c, rev c833c4be0) passe ce hvcC **verbatim** à `VTDecompressionSessionCreate` → **OSStatus -4 (`unimpErr`)** → `VTSESSION_STATUS_ABORT` → le module videotoolbox abandonne. Preuve : sonde in-app (`VTDecodeProbe`) — la même création avec un hvcC Main10 4K HDR10 **complet** répond `noErr` sur la même TV (toutes variantes : spec dict fidèle, GLES on/off, chroma forcé x420/BGRA) ; avec le hvcC réel de 23 o → `-4` systématique. Ni GLES, ni HDR, ni le spec-dict, ni les asserts (la montée 1.0.0 n'y change rien), ni l'app state (`-19431` = bruit connu).
+2. Repli `avcodec` : décodage **logiciel** 4K HEVC Main10 20 Mbps (6 threads) sur l'A15.
+3. Le vout ne prend pas l'I0AL : chaîne `I0AL→CVPP` échoue (« Failed to create video converter ») → repli **`I0AL→BGRA` par swscale Bicubic**, une conversion 4K logicielle PAR TRAME en plus du décodage.
+4. Budget A15 explosé → `picture is too late to be displayed (missing 47-224 ms)` en boucle = la saccade. L'iPhone 17 Pro encaisse le même chemin logiciel par force brute (A19 Pro).
+5. Avatar/Toy Story fluides ⇒ leurs MKV portent vraisemblablement un hvcC complet (VT s'engage). Aussi cohérent : pas de « forcing output chroma » dans les logs (sans SPS le helper ignore la chroma), et le sim répond `-8971` sans hvcC vs `-4` avec hvcC nu.
+
+**Fixes possibles** : (a) **remux serveur** du fichier (mkvmerge reconstruit le CodecPrivate avec les parameter sets → VT s'engage → matériel) — soulagement immédiat, généralisable en inventaire « hvcC nu » dans l'esprit de `scripts/remux-seek-heavy.sh` ; (b) **bug upstream libVLC** : le module videotoolbox devrait late-starter quand l'extradata n'a pas de parameter sets (`LateStartHEVC` ne teste que `i_extra == 0` ; `CopyDecoderExtradataHEVC` devrait préférer l'extradata reconstruite par le helper quand `hxxx_helper_has_config`) — patch ~2 conditions, à reporter chez VideoLAN/SwiftVLC ; (c) fork SwiftVLC patché si l'upstream traîne.
+
+Outils de diagnostic sur la branche (DEBUG-only, à retirer avant merge) : `VTDecodeProbe.swift` (auto-run au launch — sert encore à valider un remux) + miroir stderr complet dans `VLCEngineLog`.
+
 ## 9. Acquis simulateur (2026-08-04) — à confronter au device
 
 Chaîne tvOS **simulateur** (26.2 et 26.5, 0.3.0 et 1.0.0 identiques) sur « 72 heures » : `demux mkv · vdec avcodec · adec avcodec · vout samplebufferdisplay · vconv cvpx/swscale/chain`. Deux lignes discriminantes pour l'étape 1 sur la VRAIE TV (toutes deux miroir en OSLog, `log collect` possible) :

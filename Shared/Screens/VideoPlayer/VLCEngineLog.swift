@@ -41,6 +41,13 @@ enum VLCEngineLog {
         // triage below — two `hasPrefix` checks on the fast path.
         Task.detached(priority: .utility) {
             for await entry in VLCInstance.shared.logStream(minimumLevel: .debug) {
+                #if DEBUG
+                // Diagnostic (HANDOFF étape 3) : full libVLC trail to stderr so
+                // `devicectl launch --console` captures the videotoolbox open
+                // sequence around the vt session error. Debug builds only.
+                FileHandle.standardError.write(
+                    Data("vlc[\(entry.module ?? "?")] \(scrubbed(entry.message))\n".utf8))
+                #endif
                 if entry.level >= .warning {
                     let module = entry.module ?? "?"
                     let message = scrubbed(entry.message)

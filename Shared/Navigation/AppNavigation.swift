@@ -871,6 +871,11 @@ struct AppNavigation: View {
             appState.handleDeepLink(url)
         }
         .task {
+            #if DEBUG
+            // Diagnostic for the tvOS VideoToolbox refusal (HANDOFF étape 3);
+            // no-op in release builds.
+            VTDecodeProbe.runOnce()
+            #endif
             // Let the confirm-before-logout coordinator see real connectivity
             // (captured weakly so the closure can't extend NetworkMonitor's life).
             appState.isOnlineProvider = { [weak network] in network?.isOnline ?? true }
