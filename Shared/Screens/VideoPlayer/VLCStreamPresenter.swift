@@ -583,7 +583,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func engineSeek(ms: Int32) {
         let target = max(0, ms)
         beginSeekLoading(target: target)
-        player.seek(to: .milliseconds(Int(target)))
+        try? player.seek(to: .milliseconds(Int(target)))
     }
 
     // MARK: Post-seek loading state
@@ -729,6 +729,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// episode nav) invalidates "we know a demuxer exists".
     private func beginOpenLoading() {
         mediaConfirmedOpen = false
+        // Fresh open ⇒ libVLC re-selects every module; drop facts learned from
+        // the previous media so the stats HUD can't show a stale decode chain.
+        VLCEngineFacts.shared.reset()
         setLoading(true)
     }
 
@@ -1269,6 +1272,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         NSLayoutConstraint.activate([
             statsContainer.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            // Without a trailing bound the multi-line label never wraps and the
+            // Modules line runs off-screen.
+            statsContainer.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor),
             statsLabel.topAnchor.constraint(equalTo: statsContainer.topAnchor, constant: 10),
             statsLabel.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10),
             statsLabel.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 14),
@@ -2219,7 +2225,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
-        player.rate = rate
+        try? player.setPlaybackRate(PlaybackRate(rate))
     }
 
     @objc private func openAudioDelayMenu() { presentDelayPicker(isAudio: true) }
@@ -2251,10 +2257,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let clamped = max(-5000, min(5000, ms))
         if isAudio {
             audioDelayMsState = clamped
-            player.audioDelay = .milliseconds(clamped)
+            try? player.setAudioDelay(.milliseconds(clamped))
         } else {
             subtitleDelayMsState = clamped
-            player.subtitleDelay = .milliseconds(clamped)
+            try? player.setSubtitleDelay(.milliseconds(clamped))
         }
     }
 
@@ -2296,6 +2302,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 loc.localized("player.stats.bitrate"), s.inputBitrate * 8000, s.demuxBitrate * 8000
             ))
             lines.append("\(loc.localized("player.stats.dropped")) : \(s.lostPictures) · \(s.latePictures) late · \(s.lostAudioBuffers) audio")
+            // Container-level trouble (bad interleave, resync storms) shows up
+            // here while throughput still looks healthy.
+            lines.append("\(loc.localized("player.stats.demux")) : \(s.demuxCorrupted) corrupt · \(s.demuxDiscontinuity) discont")
+        }
+        // The decode/render chain libVLC actually selected (hardware
+        // videotoolbox vs software avcodec, vout, interop, any CPU converter)
+        // — parsed from the engine's own module-selection log lines.
+        if let engineModules = VLCEngineFacts.shared.summary {
+            lines.append("\(loc.localized("player.stats.modules")) : \(engineModules)")
         }
         statsLabel.text = lines.joined(separator: "\n")
     }
@@ -2685,7 +2700,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `AVPictureInPictureController` pipeline (works for all content incl.
     /// MKV/Dolby-Vision — no AVPlayer handoff needed).
     @objc private func pipTapped() {
-        guard let pip = pipController, pip.isPossible else { return }
+        guard let pip = pipController else { return }
         pip.toggle()
     }
 
@@ -2798,14 +2813,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         case .began:
             guard enginePlaying else { return }
             isHoldBoosting = true
-            player.rate = 2.0
+            try? player.setPlaybackRate(.double)
             skipHUDHide?.cancel()
             skipHUD.text = "  2× ▸▸  "
             skipHUD.alpha = 1
         case .ended, .cancelled, .failed:
             guard isHoldBoosting else { return }
             isHoldBoosting = false
-            player.rate = playbackRate
+            try? player.setPlaybackRate(PlaybackRate(playbackRate))
             UIView.animate(withDuration: 0.25) { self.skipHUD.alpha = 0 }
         default:
             break
@@ -2985,7 +3000,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let boosting = false
             #endif
             if !boosting, abs(player.rate - playbackRate) > 0.01 {
-                player.rate = playbackRate
+                try? player.setPlaybackRate(PlaybackRate(playbackRate))
             }
             #if os(iOS)
             setPlayPauseIcon(playing: true)

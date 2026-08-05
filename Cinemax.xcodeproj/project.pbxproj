@@ -1348,7 +1348,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					148D1FF36DA64F2D2D56B082 = {
 						ProvisioningStyle = Automatic;
@@ -2298,7 +2298,7 @@
 			repositoryURL = "https://github.com/harflabs/SwiftVLC";
 			requirement = {
 				kind = exactVersion;
-				version = 0.3.0;
+				version = 1.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
