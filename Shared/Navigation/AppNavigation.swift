@@ -948,6 +948,14 @@ struct AppNavigation: View {
             }
             // Re-decide stream transport for the new server (or clear on logout).
             StreamTransportPolicy.shared.configure(serverURL: new)
+            // The "Play on…" poll result is per-server (a different server has
+            // different — possibly zero — controllable sessions). A stale
+            // non-zero count from the server we just left would keep the entry
+            // visible against the new one's sessions, and a stale zero would
+            // hide it after switching to a server that DOES have a target;
+            // both read as fresh even though neither is. Back to "unknown"
+            // until a real probe runs again (`MediaDetailViewModel.loadRemoteTargets`).
+            cardActions.knownRemoteTargetCount = nil
         }
         .onChange(of: appState.currentUserId) { oldId, newId in
             menuConfig.attach(apiClient: appState.apiClient, userId: newId)
@@ -969,6 +977,11 @@ struct AppNavigation: View {
             // re-declare them; a logout tears the socket down (`apply` sees
             // `isAuthenticated == false`).
             remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            // Same rationale as the `serverURL` reset above: a different
+            // signed-in user (switch, or logout → nil) may see a different
+            // controllable-session landscape, so the last poll's count can't
+            // be trusted for them either.
+            cardActions.knownRemoteTargetCount = nil
         }
         .onChange(of: remoteControlEnabled) { _, enabled in
             // Withdrawing re-posts with `supportsMediaControl: false`, which is
