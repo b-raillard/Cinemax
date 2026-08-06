@@ -125,6 +125,36 @@ struct PosterRailProvider: TimelineProvider {
         family == .systemLarge ? 7 : 3
     }
 
+    /// "Recently Added" from two sources, matching the app's Home row.
+    ///
+    /// New titles alone (`includeItemTypes=Movie,Series`) can never surface a
+    /// long-owned show that just got a new season: a series carries its own
+    /// creation date, not the date of the episode that made it interesting. So
+    /// shows-with-new-episodes lead, capped to roughly a third of the grid, and
+    /// new titles fill the rest.
+    ///
+    /// The cap is what keeps this a signal rather than the content — an active
+    /// TV library produces new episodes far faster than new titles, and this
+    /// grid only holds 3 or 7 posters.
+    ///
+    /// Returns nil only when BOTH sources fail, so one unreachable query still
+    /// renders a populated widget instead of the "unreachable" state.
+    private static func loadRecentlyAdded(session: JellyfinLite.Session, maxPosters: Int) async -> [JellyfinLite.ResumeItem]? {
+        let showsCap = max(1, maxPosters / 3)
+        let newTitles = await JellyfinLite.fetchRecentlyAdded(session: session, limit: maxPosters)
+        let showsWithNewEpisodes = await JellyfinLite.fetchSeriesWithRecentEpisodes(session: session, limit: showsCap)
+        if newTitles == nil && showsWithNewEpisodes == nil { return nil }
+
+        var seen = Set<String>()
+        var merged: [JellyfinLite.ResumeItem] = []
+        for item in (showsWithNewEpisodes ?? []).prefix(showsCap) + (newTitles ?? []) {
+            guard seen.insert(item.id).inserted else { continue }
+            merged.append(item)
+            if merged.count == maxPosters { break }
+        }
+        return merged
+    }
+
     private static func loadEntry(kind: CinemaxRailKind, maxPosters: Int) async -> PosterRailEntry {
         guard let session = JellyfinLite.readSession() else {
             return PosterRailEntry(date: .now, kind: kind, posters: [], state: .notConnected)
@@ -138,7 +168,7 @@ struct PosterRailProvider: TimelineProvider {
         case .nextUp:
             fetched = await JellyfinLite.fetchNextUp(session: session, limit: maxPosters)
         case .recentlyAdded:
-            fetched = await JellyfinLite.fetchRecentlyAdded(session: session, limit: maxPosters)
+            fetched = await loadRecentlyAdded(session: session, maxPosters: maxPosters)
         }
         guard let items = fetched else {
             return PosterRailEntry(date: .now, kind: kind, posters: [], state: .unreachable)

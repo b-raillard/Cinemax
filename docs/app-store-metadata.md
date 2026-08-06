@@ -93,6 +93,52 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
 
+#### iOS — 1.2.0
+```
+Un appui long sur une affiche fait désormais tout, sans ouvrir la fiche.
+
+— MENU D'APPUI LONG
+• Lancez la lecture, ou reprenez où vous en étiez, directement depuis une affiche
+• « Lire depuis le début » quand une reprise est en cours
+• Envoyez le titre sur un autre appareil sans passer par sa fiche
+• Depuis un épisode, rejoignez la fiche de sa série en un geste
+• Marquez comme vu, ajoutez aux favoris ou à une playlist
+• Retirez un titre de « Reprendre »
+
+— DISPONIBLE PARTOUT
+• Le menu est maintenant sur toutes les affiches : accueil, bibliothèque, recherche, favoris, filmographies, titres similaires et historique
+• L'aperçu ne soulève plus que la jaquette, sans texte qui déborde sur la rangée voisine
+
+— AJOUTS RÉCENTS
+• La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
+• Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
+• Même correction dans le widget
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 1.2.0
+```
+Un appui long sur une affiche fait désormais tout, sans ouvrir la fiche.
+
+— MENU D'APPUI LONG
+• Lancez la lecture, ou reprenez où vous en étiez, directement depuis une affiche
+• « Lire depuis le début » quand une reprise est en cours
+• Envoyez le titre sur un autre appareil sans passer par sa fiche
+• Depuis un épisode, rejoignez la fiche de sa série en un geste
+• Marquez comme vu, ajoutez aux favoris ou à une playlist
+• Retirez un titre de « Reprendre »
+
+— DISPONIBLE PARTOUT
+• Le menu est maintenant sur toutes les affiches : accueil, bibliothèque, recherche, favoris, filmographies, titres similaires et historique
+
+— AJOUTS RÉCENTS
+• La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
+• Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 1.1.0
 ```
 Plusieurs serveurs et une lecture nettement plus solide.
@@ -233,6 +279,52 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 
 > Two separate texts: Live Activity is iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
+
+#### iOS — 1.2.0
+```
+Long-press a poster and it now does everything, without opening the title.
+
+— LONG-PRESS MENU
+• Start playback, or resume where you left off, straight from a poster
+• "Play from beginning" whenever a resume point exists
+• Send a title to another device without opening its page first
+• Jump from an episode to its series page in one gesture
+• Mark as watched, add to favorites, add to a playlist
+• Remove a title from "Continue Watching"
+
+— EVERYWHERE
+• The menu is now on every poster: home, library, search, favorites, filmographies, similar titles and watch history
+• The preview lifts the artwork alone — no more text spilling over the row below
+
+— RECENTLY ADDED
+• One show can no longer take over the row: importing a full season used to fill it entirely
+• Series that just received episodes now surface there, alongside new movies and shows
+• Same fix in the widget
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 1.2.0
+```
+Long-press a poster and it now does everything, without opening the title.
+
+— LONG-PRESS MENU
+• Start playback, or resume where you left off, straight from a poster
+• "Play from beginning" whenever a resume point exists
+• Send a title to another device without opening its page first
+• Jump from an episode to its series page in one gesture
+• Mark as watched, add to favorites, add to a playlist
+• Remove a title from "Continue Watching"
+
+— EVERYWHERE
+• The menu is now on every poster: home, library, search, favorites, filmographies, similar titles and watch history
+
+— RECENTLY ADDED
+• One show can no longer take over the row: importing a full season used to fill it entirely
+• Series that just received episodes now surface there, alongside new movies and shows
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
 
 #### iOS — 1.1.0
 ```

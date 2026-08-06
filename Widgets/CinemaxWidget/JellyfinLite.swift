@@ -77,12 +77,13 @@ enum JellyfinLite {
     private struct Item: Decodable {
         let id: String
         let name: String?
+        let type: String?
         let seriesName: String?
         let seriesId: String?
         let parentIndexNumber: Int?
         let indexNumber: Int?
         enum CodingKeys: String, CodingKey {
-            case id = "Id", name = "Name", seriesName = "SeriesName"
+            case id = "Id", name = "Name", type = "Type", seriesName = "SeriesName"
             case seriesId = "SeriesId", parentIndexNumber = "ParentIndexNumber", indexNumber = "IndexNumber"
         }
     }
@@ -150,6 +151,34 @@ enum JellyfinLite {
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode([Item].self, from: data) else { return nil }
         return decoded.map(makeResumeItem)
+    }
+
+    /// Shows that just received episodes, most recent first.
+    ///
+    /// Mirrors the app's `getSeriesWithRecentEpisodes`. `/Items/Latest` over
+    /// episodes with grouping ON: the server replaces each episode by its
+    /// series, which is what lets a long-owned show resurface when a new season
+    /// lands — `fetchRecentlyAdded` alone can't, since it filters episodes out
+    /// and a series carries its own (old) creation date.
+    ///
+    /// Filtered to `Series` because a server that ignores `groupItems` would
+    /// otherwise put episode stills in a poster grid.
+    static func fetchSeriesWithRecentEpisodes(session: Session, limit: Int) async -> [ResumeItem]? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = endpointPath("/Items/Latest", serverURL: session.serverURL)
+        comps.queryItems = [
+            URLQueryItem(name: "userId", value: session.userId),
+            URLQueryItem(name: "includeItemTypes", value: "Episode"),
+            URLQueryItem(name: "groupItems", value: "true"),
+            URLQueryItem(name: "limit", value: String(limit))
+        ]
+        guard let url = comps.url else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await Self.session.data(for: request),
+              (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
+              let decoded = try? JSONDecoder().decode([Item].self, from: data) else { return nil }
+        return decoded.filter { $0.type == "Series" }.map(makeResumeItem)
     }
 
     private static func fetchItems(comps: URLComponents, token: String) async -> [ResumeItem]? {
