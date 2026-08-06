@@ -52,6 +52,46 @@ final class HomeViewModel {
     var isFullyLoaded = false
     var errorMessage: String?
 
+    /// How many cards "Recently Added" shows, and how many of them may be
+    /// shows-that-just-got-episodes. The cap is what keeps the second source a
+    /// *signal* rather than the row's content — an active TV library produces
+    /// new episodes far faster than new titles, and letting it fill the row
+    /// would recreate the crowding this split exists to fix.
+    /// `nonisolated` because `mergeRecentlyAdded` is, and a nonisolated function
+    /// can't read a main-actor-isolated `static let` — safe here, both are `Int`.
+    nonisolated static let recentlyAddedLimit = 20
+    nonisolated static let newEpisodeShowsLimit = 6
+
+    /// Interleaves the two "Recently Added" sources.
+    ///
+    /// **The union cannot be sorted into one timeline.** A grouped series
+    /// carries its OWN creation date, not the date of the episode that made it
+    /// surface — so sorting by `dateCreated` would bury every long-owned show
+    /// that just got a new season, which is precisely the signal the second
+    /// source exists to carry. Shows with new episodes therefore lead (capped),
+    /// new titles fill the rest, and a show present in both keeps its lead
+    /// position.
+    ///
+    /// `nonisolated` + pure so the ordering rule is unit-testable without a
+    /// view model or an API — same treatment as `buildNavigationMap`.
+    nonisolated static func mergeRecentlyAdded(
+        showsWithNewEpisodes: [BaseItemDto],
+        newTitles: [BaseItemDto]
+    ) -> [BaseItemDto] {
+        var seen = Set<String>()
+        var merged: [BaseItemDto] = []
+        merged.reserveCapacity(recentlyAddedLimit)
+        for item in showsWithNewEpisodes.prefix(newEpisodeShowsLimit) + newTitles {
+            // An id-less item can't be deduplicated, but it is still shown:
+            // dropping it would silently shrink the row, and the card layer
+            // already degrades gracefully without an id.
+            if let id = item.id, !seen.insert(id).inserted { continue }
+            merged.append(item)
+            if merged.count == recentlyAddedLimit { break }
+        }
+        return merged
+    }
+
     /// Guards `loadInitial` so tab remounts (tvOS recreates hosting controllers
     /// when the bar layout shifts) don't re-hit the API and re-shuffle the
     /// genre rows. Same pattern as `MediaLibraryViewModel.hasLoaded`.
@@ -92,29 +132,41 @@ final class HomeViewModel {
                 }
             }
             group.addTask {
-                do {
-                    // Date-added order over movies and series, NOT `/Items/Latest`.
-                    //
-                    // That endpoint scans raw items — episodes included — and
-                    // groups them under their series (`groupItems` defaults to
-                    // true). A library that ingests one series' back catalogue
-                    // therefore fills the whole scan with its episodes, which
-                    // collapse into a SINGLE card: the row looked empty while
-                    // faithfully reporting that the newest N items on the server
-                    // were all episodes of one show. Filtering by type instead
-                    // makes the row's contents independent of how many episodes
-                    // landed recently.
-                    return .latest(try await appState.apiClient.getItems(
-                        userId: userId,
-                        includeItemTypes: [.movie, .series],
-                        sortBy: [.dateCreated],
-                        sortOrder: [.descending],
-                        limit: 20
-                    ).items)
-                } catch {
-                    logger.warning("Home latest fetch failed: \(error.localizedDescription, privacy: .public)")
+                // "Recently added" has TWO sources, because no single query
+                // expresses both halves of what the row means.
+                //
+                // `/Items/Latest` alone was the bug: it scans raw items —
+                // episodes included — and groups them under their series, so a
+                // library ingesting one show's back catalogue filled the whole
+                // scan with its episodes and they collapsed into a SINGLE card.
+                // But that grouping is also the *feature*: it's what makes a
+                // long-owned series resurface when a new season lands.
+                //
+                // So: new titles by date added, plus shows that just received
+                // episodes, each fetched with its own budget. No single show can
+                // crowd the row out, and that holds regardless of whether the
+                // server applies its limit before or after grouping.
+                //
+                // Each source degrades on its own — one failing leaves the other
+                // populating the row rather than blanking it.
+                let newTitles = try? await appState.apiClient.getItems(
+                    userId: userId,
+                    includeItemTypes: [.movie, .series],
+                    sortBy: [.dateCreated],
+                    sortOrder: [.descending],
+                    limit: Self.recentlyAddedLimit
+                ).items
+                let showsWithNewEpisodes = try? await appState.apiClient.getSeriesWithRecentEpisodes(
+                    userId: userId, limit: Self.newEpisodeShowsLimit
+                )
+                if newTitles == nil && showsWithNewEpisodes == nil {
+                    logger.warning("Home latest fetch failed: both sources errored")
                     return nil
                 }
+                return .latest(HomeViewModel.mergeRecentlyAdded(
+                    showsWithNewEpisodes: showsWithNewEpisodes ?? [],
+                    newTitles: newTitles ?? []
+                ))
             }
             group.addTask {
                 do {

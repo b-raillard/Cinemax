@@ -369,6 +369,24 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedLatestItems
     }
 
+    /// Shows that just received episodes — the second source of Home's
+    /// "Recently Added" row.
+    var stubbedSeriesWithRecentEpisodes: [BaseItemDto] = []
+    /// Dedicated flag, never `shouldThrow`: several suites turn that on while
+    /// expecting this source to keep succeeding, and the row's whole point is
+    /// that its two sources fail independently.
+    var seriesWithRecentEpisodesShouldThrow = false
+    private(set) var seriesWithRecentEpisodesCallCount = 0
+    private(set) var seriesWithRecentEpisodesLimits: [Int] = []
+    func getSeriesWithRecentEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] {
+        recordLock.withLock {
+            seriesWithRecentEpisodesCallCount += 1
+            seriesWithRecentEpisodesLimits.append(limit)
+        }
+        if seriesWithRecentEpisodesShouldThrow { throw stubbedError }
+        return stubbedSeriesWithRecentEpisodes
+    }
+
     func getItems(
         userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?,
         sortBy: [ItemSortBy]?, sortOrder: [JellyfinAPI.SortOrder]?,

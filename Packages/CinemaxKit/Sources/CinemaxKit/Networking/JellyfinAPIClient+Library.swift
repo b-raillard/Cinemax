@@ -50,16 +50,53 @@ extension JellyfinAPIClient {
         }
     }
 
+    /// Series that have just received episodes, most recent first.
+    ///
+    /// `/Items/Latest` restricted to episodes with grouping explicitly ON: the
+    /// server replaces each episode by its series, so this answers "which shows
+    /// got new episodes" rather than "which episodes landed" — a row of posters
+    /// wants the show, not an episode still.
+    ///
+    /// Results are filtered to `.series` deliberately. `isGroupItems` is passed
+    /// rather than left to its default so the intent is explicit, and the filter
+    /// is the guard for a server that ignores it: better to contribute nothing
+    /// than to drop raw episode cards into a poster row.
+    public func getSeriesWithRecentEpisodes(userId: String, limit: Int = 8) async throws -> [BaseItemDto] {
+        let cacheKey = "latest-episodes-\(userId)-\(limit)-\(getMaxContentAge())"
+        if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
+
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            let params = Paths.GetLatestMediaParameters(
+                userID: userId,
+                includeItemTypes: [.episode],
+                enableImages: true,
+                imageTypeLimit: 1,
+                enableUserData: true,
+                limit: limit,
+                isGroupItems: true
+            )
+            let response = try await client.send(Paths.getLatestMedia(parameters: params))
+            let result = applyRatingFilter(response.value).filter { $0.type == .series }
+            cache.set(cacheKey, value: result, ttl: 60)
+            return result
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     /// **Home's "Recently Added" rail deliberately does NOT use this.** This
     /// endpoint scans raw items — episodes included — and groups them under
     /// their series (`groupItems` defaults to true, and no `includeItemTypes`
     /// is sent). A library that ingests one series' back catalogue therefore
     /// fills the whole scan with its episodes, which collapse into a SINGLE
     /// card: the row looks empty while faithfully reporting that the newest N
-    /// items on the server all belong to one show. `HomeViewModel` asks for a
-    /// date-added `getItems` over `[.movie, .series]` instead, whose contents
-    /// don't depend on how many episodes happened to land recently. Kept for
-    /// callers that genuinely want the server's own "latest" semantics.
+    /// items on the server all belong to one show. `HomeViewModel` combines a
+    /// date-added `getItems` over `[.movie, .series]` with
+    /// `getSeriesWithRecentEpisodes` instead — two sources, each with its own
+    /// budget, so no single show can crowd the row out. Kept for callers that
+    /// genuinely want the server's own unfiltered "latest" semantics.
     public func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
         let cacheKey = "latest-\(userId)-\(parentId ?? "all")-\(limit)-\(getMaxContentAge())"
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }

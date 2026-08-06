@@ -90,6 +90,10 @@ public protocol AuthAPI: Sendable {
 public protocol LibraryAPI: Sendable {
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto]
     func getLatestMedia(userId: String, parentId: String?, limit: Int) async throws -> [BaseItemDto]
+    /// Shows that just received episodes (grouped `/Items/Latest` over
+    /// `[.episode]`). Distinct from `getLatestMedia`, which mixes every kind
+    /// and lets one show's episode import swamp the result.
+    func getSeriesWithRecentEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
     func getItems(
         userId: String,
         parentId: String?,
@@ -555,6 +559,9 @@ public extension LibraryAPI {
     }
     func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
         try await getLatestMedia(userId: userId, parentId: parentId, limit: limit)
+    }
+    func getSeriesWithRecentEpisodes(userId: String, limit: Int = 8) async throws -> [BaseItemDto] {
+        try await getSeriesWithRecentEpisodes(userId: userId, limit: limit)
     }
     func getItems(
         userId: String,

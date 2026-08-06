@@ -44,6 +44,73 @@ struct HomeViewModelTests {
         #expect(vm.latestItems.isEmpty)
     }
 
+    @Test("Recently Added leads with shows that got new episodes, then new titles")
+    func recentlyAddedMergesBothSources() async {
+        let shows = [makeItem(name: "Arrow"), makeItem(name: "Severance")]
+        let titles = [makeItem(name: "Dune"), makeItem(name: "Sinners")]
+
+        let merged = HomeViewModel.mergeRecentlyAdded(
+            showsWithNewEpisodes: shows, newTitles: titles
+        )
+
+        // A long-owned show that just got a season carries its OWN (old)
+        // creation date, so it can only be surfaced by leading — sorting the
+        // union by date would bury it.
+        #expect(merged.map(\.name) == ["Arrow", "Severance", "Dune", "Sinners"])
+    }
+
+    @Test("A show present in both sources appears once, keeping its lead position")
+    func recentlyAddedDedupesAcrossSources() async {
+        var arrow = makeItem(name: "Arrow")
+        arrow.id = "series-arrow"
+        var arrowAgain = makeItem(name: "Arrow")
+        arrowAgain.id = "series-arrow"
+        var dune = makeItem(name: "Dune")
+        dune.id = "movie-dune"
+
+        let merged = HomeViewModel.mergeRecentlyAdded(
+            showsWithNewEpisodes: [arrow], newTitles: [arrowAgain, dune]
+        )
+
+        #expect(merged.map(\.name) == ["Arrow", "Dune"])
+    }
+
+    @Test("New-episode shows are capped so an active TV library can't fill the row")
+    func recentlyAddedCapsEpisodeShows() async {
+        // The crowding this split exists to fix: episodes arrive far faster
+        // than new titles, so an uncapped second source would recreate it.
+        let shows = (0..<20).map { idx -> BaseItemDto in
+            var item = makeItem(name: "Show \(idx)")
+            item.id = "show-\(idx)"
+            return item
+        }
+        let titles = (0..<20).map { idx -> BaseItemDto in
+            var item = makeItem(name: "Title \(idx)")
+            item.id = "title-\(idx)"
+            return item
+        }
+
+        let merged = HomeViewModel.mergeRecentlyAdded(
+            showsWithNewEpisodes: shows, newTitles: titles
+        )
+
+        #expect(merged.count == HomeViewModel.recentlyAddedLimit)
+        #expect(merged.prefix(HomeViewModel.newEpisodeShowsLimit).allSatisfy { $0.name?.hasPrefix("Show") == true })
+        #expect(merged.dropFirst(HomeViewModel.newEpisodeShowsLimit).allSatisfy { $0.name?.hasPrefix("Title") == true })
+    }
+
+    @Test("One failing source still populates Recently Added from the other")
+    func recentlyAddedSurvivesOneSourceFailing() async {
+        let api = MockAPIClient()
+        api.seriesWithRecentEpisodesShouldThrow = true
+        api.stubbedLatestItems = [makeItem(name: "Dune")]
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(vm.latestItems.count == 1)
+    }
+
     @Test("Recently Added asks for movies and series by date added — never raw episodes")
     func recentlyAddedQueriesMoviesAndSeriesByDateAdded() async {
         let api = MockAPIClient()
