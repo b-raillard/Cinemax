@@ -252,24 +252,6 @@ final class HomeViewModel {
 
     // MARK: - Continue Watching context-menu mutations
 
-    /// Marks a Continue Watching item fully played. Jellyfin clears its resume
-    /// position when an item is played, so it also drops out of the resume
-    /// rail. Optimistically removes the card, shows a success toast, and
-    /// re-fetches the rail in the background; on failure the item is restored
-    /// and a user-facing error toast is shown.
-    func markResumeItemPlayed(
-        _ item: BaseItemDto,
-        using appState: AppState,
-        toast: ToastCenter,
-        loc: LocalizationManager
-    ) async {
-        await mutateResumeItem(
-            item, markPlayed: true,
-            successKey: "home.continueWatching.markedWatched",
-            using: appState, toast: toast, loc: loc
-        )
-    }
-
     /// Removes an item from Continue Watching. There is no dedicated
     /// "hide from resume" endpoint in Jellyfin — the standard client mechanism
     /// is to clear the item's played/progress state (`markItemUnplayed`), which

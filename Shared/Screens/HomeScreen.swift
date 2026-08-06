@@ -764,22 +764,19 @@ struct HomeScreen: View {
             #else
             .buttonStyle(.plain)
             #endif
-            // Long-press (iOS) / long-press-select (tvOS) context menu — kept
-            // on the PlayLink button, not the label, so focus behavior is
-            // untouched. Both actions optimistically drop the card and refresh
-            // the rail in the background (see HomeViewModel).
-            .contextMenu {
-                Button {
-                    Task { await viewModel.markResumeItemPlayed(item, using: appState, toast: toast, loc: loc) }
-                } label: {
-                    Label(loc.localized("detail.watched.add"), systemImage: "checkmark.circle")
-                }
-                Button(role: .destructive) {
+            // Shared menu (`MediaCardContextMenu`): play, « Play on… »,
+            // watched, favorite, playlist — plus "Remove from Resume", specific
+            // to this row and supplied via the callback below. Attached to the
+            // PlayLink, not its label, so tvOS focus behavior is untouched.
+            .mediaCardContextMenu(
+                item: item,
+                navigation: CardPlaybackNavigation(
+                    previous: nav?.previous, next: nav?.next, navigator: nav?.navigator
+                ),
+                onRemoveFromResume: {
                     Task { await viewModel.removeResumeItem(item, using: appState, toast: toast, loc: loc) }
-                } label: {
-                    Label(loc.localized("home.continueWatching.remove"), systemImage: "minus.circle")
                 }
-            }
+            )
             .accessibilityLabel(item.name ?? "")
             .accessibilityValue(resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) } ?? "")
         }

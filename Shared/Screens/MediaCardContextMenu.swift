@@ -20,9 +20,12 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaCardContex
 extension View {
     func mediaCardContextMenu(
         item: BaseItemDto,
-        navigation: CardPlaybackNavigation? = nil
+        navigation: CardPlaybackNavigation? = nil,
+        onRemoveFromResume: (() -> Void)? = nil
     ) -> some View {
-        modifier(MediaCardContextMenu(item: item, navigation: navigation))
+        modifier(MediaCardContextMenu(
+            item: item, navigation: navigation, onRemoveFromResume: onRemoveFromResume
+        ))
     }
 }
 
@@ -46,6 +49,7 @@ private struct MediaCardContextMenu: ViewModifier {
 
     let item: BaseItemDto
     let navigation: CardPlaybackNavigation?
+    let onRemoveFromResume: (() -> Void)?
 
     // Optimistic mirrors of the toggle state. The menu label is derived from
     // the item's `userData`, but that value is a snapshot captured when the
@@ -126,6 +130,18 @@ private struct MediaCardContextMenu: ViewModifier {
                     playlists.present(itemId: item.id, title: item.name)
                 } label: {
                     Label(loc.localized("playlist.add.action"), systemImage: "text.badge.plus")
+                }
+            }
+            // The presence of the callback proves the host screen knows how to
+            // drop the card from its own row — only Home's Continue Watching
+            // rail provides it. The resume position is the business condition:
+            // without one, the item isn't in that row.
+            if let onRemoveFromResume, (item.userData?.playbackPositionTicks ?? 0) > 0 {
+                Divider()
+                Button(role: .destructive) {
+                    onRemoveFromResume()
+                } label: {
+                    Label(loc.localized("home.continueWatching.remove"), systemImage: "minus.circle")
                 }
             }
         }
