@@ -16,6 +16,7 @@ Spec de référence : [docs/superpowers/specs/2026-08-06-card-context-menus-desi
 - **`@Observable` sans `didSet`/`willSet`** sur les propriétés stockées.
 - **Menu contextuel accroché au bouton focusable, jamais à son label** — sinon le focus tvOS casse.
 - **Aucune chaîne en dur** : tout passe par `loc.localized("clé")`, clés présentes dans `Resources/fr.lproj/Localizable.strings` **et** `Resources/en.lproj/Localizable.strings`.
+- **Les commentaires de code s'écrivent en ANGLAIS** — convention du projet, vérifiée sur `LibrarySearchRanker`, `HomeViewModel`, `MediaDetailViewModel`, `AppNavigation`. Les commentaires français des blocs de code de ce plan sont **illustratifs** : les traduire en anglais au moment de les écrire, en gardant le même contenu et le même niveau de détail. Seules les chaînes destinées à l'utilisateur restent françaises, et uniquement dans `fr.lproj/Localizable.strings`.
 - **Jamais de `error.localizedDescription` à l'écran** : `loc.userFacingMessage(for: error)`. L'erreur brute part dans le `Logger`.
 - **`@Environment` d'un `@Observable` lu en optionnel** dans `MediaCardContextMenu` — un lecture non-optionnelle **piège à l'exécution** quand la valeur est absente, et ces cartes vivent aussi dans des hôtes modaux qui réinjectent l'environnement à la main.
 - **Ajout d'un fichier sous `Shared/`** ⇒ relancer `cd Cinemax && xcodegen generate` avant de compiler, sinon « cannot find type X in scope ».
@@ -1226,6 +1227,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: tout le lot.
 - Produces: rien.
+
+- [ ] **Step 0 : traduire les commentaires de `CardPlayTarget.swift` en anglais**
+
+Le fichier a été écrit en Task 1 avant que la contrainte « commentaires en anglais » ne soit explicitée dans ce plan, et il est le seul du lot à y déroger. Traduire chaque bloc `///` et chaque commentaire inline de `Shared/ViewModels/CardPlayTarget.swift` en anglais, **sans changer le contenu ni le niveau de détail** — les explications sur la non-isolation, sur le fait de ne PAS choisir l'épisode, et sur la règle de reprise sont la valeur du fichier, pas de la décoration. Aucune ligne de code exécutable ne change.
 
 - [ ] **Step 1 : parité de localisation**
 
