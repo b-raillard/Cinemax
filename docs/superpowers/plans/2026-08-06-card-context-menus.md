@@ -1232,6 +1232,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Le fichier a été écrit en Task 1 avant que la contrainte « commentaires en anglais » ne soit explicitée dans ce plan, et il est le seul du lot à y déroger. Traduire chaque bloc `///` et chaque commentaire inline de `Shared/ViewModels/CardPlayTarget.swift` en anglais, **sans changer le contenu ni le niveau de détail** — les explications sur la non-isolation, sur le fait de ne PAS choisir l'épisode, et sur la règle de reprise sont la valeur du fichier, pas de la décoration. Aucune ligne de code exécutable ne change.
 
+- [ ] **Step 0b : nettoyer les deux résidus de la suppression de `markResumeItemPlayed` (Task 4)**
+
+La suppression a laissé deux orphelins que la revue de Task 4 a relevés :
+
+1. **Clé de localisation orpheline** — `home.continueWatching.markedWatched` n'a plus aucun appelant Swift (son seul consommateur était la méthode supprimée). La retirer de `Resources/fr.lproj/Localizable.strings` **et** de `Resources/en.lproj/Localizable.strings`. Vérifier d'abord par `grep -rn "home.continueWatching.markedWatched" Shared Widgets TopShelf Tests` que le résultat est bien vide — si une référence existe, ne pas supprimer et le signaler.
+2. **`HomeViewModel.mutateResumeItem`** — son commentaire (« Shared body for both Continue Watching mutations ») est devenu faux : `removeResumeItem` en est le seul appelant et passe toujours `markPlayed: false`, si bien que la branche `if markPlayed { markItemPlayed }` est morte. Supprimer le paramètre `markPlayed` et sa branche, et réécrire le commentaire pour décrire ce que la méthode fait réellement maintenant. La suite de tests doit rester verte (`HomeViewModelTests` couvre `removeResumeItem`).
+
 - [ ] **Step 1 : parité de localisation**
 
 Run: invoquer la skill `localize-check`.
