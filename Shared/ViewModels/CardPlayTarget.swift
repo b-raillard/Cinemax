@@ -122,10 +122,20 @@ enum CardPlayTargetResolver {
         }
     }
 
+    /// Whether a stored position counts as a resume point.
+    ///
     /// Same rule as `MediaDetailScreen.resolvedPlayTarget`: a residual position
-    /// on a media already marked played does not count as a resume.
+    /// on a media already marked played does not count. Exposed rather than
+    /// kept private because the context menu needs the *predicate* — to decide
+    /// whether to label its entry "Resume" and offer "Play from beginning" —
+    /// while the resolver needs the *offset*. Two expressions of one business
+    /// rule would drift the first time it gains a condition.
+    static func isResumable(positionTicks: Int, isPlayed: Bool) -> Bool {
+        positionTicks > 0 && !isPlayed
+    }
+
     private static func resumeSeconds(positionTicks: Int, isPlayed: Bool) -> Double? {
-        guard positionTicks > 0, !isPlayed else { return nil }
+        guard isResumable(positionTicks: positionTicks, isPlayed: isPlayed) else { return nil }
         return positionTicks.jellyfinSeconds
     }
 

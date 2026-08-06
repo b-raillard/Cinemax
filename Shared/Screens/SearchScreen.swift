@@ -94,9 +94,7 @@ struct SearchScreen: View {
         }
         // "Go to series" from an episode result card's context menu. Hoisted
         // to the screen root, same reason as `surpriseDestination` above.
-        .navigationDestination(item: $seriesDestination) { destination in
-            MediaDetailScreen(itemId: destination.id, itemType: .series)
-        }
+        .seriesDestinationHost($seriesDestination)
         // An App Intent can raise a term either before this screen exists (the
         // tab is switched to afterwards) or while it's already on screen, so
         // both arrival orders are covered.
@@ -778,6 +776,7 @@ private struct SearchResultCard: View {
         // `mediaCardContextMenu`.
         .mediaCardContextMenu(
             item: item,
+            artwork: .poster,
             onGoToSeries: onGoToSeries
         )
     }

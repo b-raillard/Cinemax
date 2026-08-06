@@ -20,7 +20,13 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaCardContex
 extension View {
     func mediaCardContextMenu(
         item: BaseItemDto,
-        artwork: CardArtwork = .poster,
+        // Deliberately NOT defaulted, unlike every other parameter here. The
+        // others default to "feature off", so omitting one loses an entry and
+        // nothing more. Omitting this one would be silently WRONG on a wide
+        // card — it would lift a portrait poster instead of the backdrop the
+        // finger is on. Required, so a future wide-card surface gets a compile
+        // error instead of a mismatched preview.
+        artwork: CardArtwork,
         navigation: CardPlaybackNavigation? = nil,
         onRemoveFromResume: (() -> Void)? = nil,
         onGoToSeries: ((String) -> Void)? = nil
@@ -51,6 +57,21 @@ enum CardArtwork {
 /// Search, Watched History) consume it.
 struct SeriesDestination: Identifiable, Hashable {
     let id: String
+}
+
+extension View {
+    /// Hosts the "Go to series" destination. Each host screen owned a
+    /// byte-identical copy of this three-line body; the token type is already
+    /// shared, so the wiring around it had no reason not to be.
+    ///
+    /// **Apply this OUTSIDE every lazy container** — SwiftUI silently ignores
+    /// `navigationDestination(item:)` inside a `LazyVGrid`/`LazyHStack`, and the
+    /// menu entry then does nothing with no error anywhere.
+    func seriesDestinationHost(_ destination: Binding<SeriesDestination?>) -> some View {
+        navigationDestination(item: destination) { series in
+            MediaDetailScreen(itemId: series.id, itemType: .series)
+        }
+    }
 }
 
 private struct MediaCardContextMenu: ViewModifier {
@@ -113,8 +134,10 @@ private struct MediaCardContextMenu: ViewModifier {
         // "Play" and "Play from beginning" doesn't show.
         let localResume: Bool = {
             guard item.type == .movie || item.type == .episode else { return false }
-            guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return false }
-            return !(item.userData?.isPlayed ?? false)
+            return CardPlayTargetResolver.isResumable(
+                positionTicks: item.userData?.playbackPositionTicks ?? 0,
+                isPlayed: item.userData?.isPlayed ?? false
+            )
         }()
         // Same presence discipline as the "Play on…" entry below, applied to
         // the LOCAL play entries too: `startPlayback` calls `coordinator?.play`
@@ -135,7 +158,11 @@ private struct MediaCardContextMenu: ViewModifier {
                         Task { await startPlayback(fromStart: false) }
                     } label: {
                         Label(
-                            loc.localized(localResume ? "card.resume" : "card.play"),
+                            // `detail.*` rather than a card-scoped twin: these are
+                            // the same two labels the detail screen's Play buttons
+                            // use, word for word. A second key would be a second
+                            // translation to keep in sync for no gain.
+                            loc.localized(localResume ? "card.resume" : "detail.play"),
                             systemImage: "play.fill"
                         )
                     }
@@ -143,7 +170,7 @@ private struct MediaCardContextMenu: ViewModifier {
                         Button {
                             Task { await startPlayback(fromStart: true) }
                         } label: {
-                            Label(loc.localized("card.playFromStart"), systemImage: "gobackward")
+                            Label(loc.localized("detail.playFromBeginning"), systemImage: "gobackward")
                         }
                     }
                 }
@@ -294,7 +321,10 @@ private struct MediaCardContextMenu: ViewModifier {
         cardActions?.present(remotePlay: RemotePlayIntent(
             itemId: target.itemId,
             title: target.title,
-            startPositionTicks: target.startSeconds.map { Int($0 * 10_000_000) },
+            // Never a bare `Int(seconds * 10_000_000)`: that conversion TRAPS on
+            // non-finite or overflowing input, which is exactly why
+            // `PlaybackReporter` owns a guarded version of it.
+            startPositionTicks: target.startSeconds.map { PlaybackReporter.positionTicks(fromSeconds: $0) },
             // A card carries no version choice — that's the detail screen's
             // "Version" row's decision.
             mediaSourceId: nil

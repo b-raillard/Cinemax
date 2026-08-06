@@ -99,9 +99,7 @@ struct WatchedHistoryScreen: View {
                 iOSChrome
                 #endif
             }
-            .navigationDestination(item: $seriesDestination) { destination in
-                MediaDetailScreen(itemId: destination.id, itemType: .series)
-            }
+            .seriesDestinationHost($seriesDestination)
         }
         .task {
             await viewModel.loadInitial(using: appState)
@@ -292,6 +290,7 @@ struct WatchedHistoryScreen: View {
         // screen reloads off `.cinemaxShouldRefreshCatalogue`), favorite too.
         .mediaCardContextMenu(
             item: item,
+            artwork: .poster,
             onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
         )
     }

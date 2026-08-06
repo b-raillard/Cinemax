@@ -26,6 +26,19 @@ struct CardPlaybackNavigation {
     let navigator: EpisodeNavigator?
 }
 
+extension CardPlaybackNavigation {
+    /// Lifts the tuple `HomeViewModel` already stores in `resumeNavigation` /
+    /// `nextUpNavigation`. Spelling the three fields out at the call site made
+    /// the same field list appear three times per rail — the tuple's own
+    /// declaration, the `PlayLink` arguments, and the menu's — so a field added
+    /// to the trio would silently skip whichever copy nobody remembered.
+    /// Declared in an extension so the memberwise initializer survives.
+    init?(_ nav: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)?) {
+        guard let nav else { return nil }
+        self.init(previous: nav.previous, next: nav.next, navigator: nav.navigator)
+    }
+}
+
 /// Carries requests a context menu can't present by itself.
 ///
 /// A `contextMenu` hangs off a card living inside a `LazyVGrid` / `LazyHStack`:

@@ -112,9 +112,7 @@ struct HomeScreen: View {
         }
         // "Go to series" from an episode card's context menu. Hoisted to the
         // screen root for the same reason as `favoritesDestination` above.
-        .navigationDestination(item: $seriesDestination) { destination in
-            MediaDetailScreen(itemId: destination.id, itemType: .series)
-        }
+        .seriesDestinationHost($seriesDestination)
         .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
             consumeDeepLink(newValue)
         }
@@ -784,9 +782,7 @@ struct HomeScreen: View {
                 // backdrop — lifting a portrait poster would show a different
                 // image than the card the finger is on.
                 artwork: .backdrop,
-                navigation: CardPlaybackNavigation(
-                    previous: nav?.previous, next: nav?.next, navigator: nav?.navigator
-                ),
+                navigation: CardPlaybackNavigation(nav),
                 onRemoveFromResume: {
                     Task { await viewModel.removeResumeItem(item, using: appState, toast: toast, loc: loc) }
                 },
@@ -876,9 +872,7 @@ struct HomeScreen: View {
                 item: item,
                 // `WideCard` rail — same reason as Continue Watching above.
                 artwork: .backdrop,
-                navigation: CardPlaybackNavigation(
-                    previous: nav?.previous, next: nav?.next, navigator: nav?.navigator
-                ),
+                navigation: CardPlaybackNavigation(nav),
                 onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
         }
@@ -962,7 +956,7 @@ struct HomeScreen: View {
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
         // On the NavigationLink (the focusable button), never its label, so
         // tvOS focus is untouched.
-        .mediaCardContextMenu(item: item)
+        .mediaCardContextMenu(item: item, artwork: .poster)
     }
 
     // MARK: - Helpers

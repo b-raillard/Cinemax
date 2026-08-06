@@ -218,7 +218,7 @@ struct FavoritesScreen: View {
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
         // On the NavigationLink (the focusable button), never its label,
         // so tvOS focus is untouched.
-        .mediaCardContextMenu(item: item)
+        .mediaCardContextMenu(item: item, artwork: .poster)
     }
 
     /// Warms Nuke for every card — URLs mirror the card's own request exactly

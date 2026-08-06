@@ -256,26 +256,15 @@ final class HomeViewModel {
     /// "hide from resume" endpoint in Jellyfin — the standard client mechanism
     /// is to clear the item's played/progress state (`markItemUnplayed`), which
     /// resets its resume position so `/UserItems/Resume` stops returning it.
+    /// Optimistic removal → server call → success toast, restoring the card on
+    /// failure.
+    ///
+    /// This was two functions, a wrapper passing a `successKey` into a shared
+    /// body, back when a "mark as watched" sibling existed. That sibling moved
+    /// into the shared card menu, leaving one caller and one constant key — so
+    /// the indirection is gone with it.
     func removeResumeItem(
         _ item: BaseItemDto,
-        using appState: AppState,
-        toast: ToastCenter,
-        loc: LocalizationManager
-    ) async {
-        await mutateResumeItem(
-            item,
-            successKey: "home.continueWatching.removed",
-            using: appState, toast: toast, loc: loc
-        )
-    }
-
-    /// Removes an item from the Continue Watching rail: optimistic removal →
-    /// server call (`markItemUnplayed`, resetting the resume position) →
-    /// success toast + background rail refresh, restoring the card on
-    /// failure. `removeResumeItem` is currently its only caller.
-    private func mutateResumeItem(
-        _ item: BaseItemDto,
-        successKey: String,
         using appState: AppState,
         toast: ToastCenter,
         loc: LocalizationManager
@@ -289,7 +278,7 @@ final class HomeViewModel {
 
         do {
             try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
-            toast.success(loc.localized(successKey))
+            toast.success(loc.localized("home.continueWatching.removed"))
             // One item's userData changed — post the lighter tier-2 notification.
             // Home's own `.cinemaxItemUserDataChanged` handler re-fetches the
             // resume rail exactly once (via `refreshUserDataRails`), which also

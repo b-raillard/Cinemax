@@ -60,7 +60,7 @@ struct MediaDetailSimilarSection: View, Equatable {
             .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
             // On the NavigationLink (the focusable button), never its label,
             // so tvOS focus is untouched.
-            .mediaCardContextMenu(item: item)
+            .mediaCardContextMenu(item: item, artwork: .poster)
         }
     }
 }
