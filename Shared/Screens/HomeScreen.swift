@@ -866,6 +866,8 @@ struct HomeScreen: View {
             .buttonStyle(.plain)
             #endif
             .accessibilityLabel(item.seriesName ?? item.name ?? "")
+            // On the PlayLink (the focusable button), never its label, so
+            // tvOS focus is untouched.
             .mediaCardContextMenu(
                 item: item,
                 navigation: CardPlaybackNavigation(
@@ -952,6 +954,8 @@ struct HomeScreen: View {
         .buttonStyle(.plain)
         #endif
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        // On the NavigationLink (the focusable button), never its label, so
+        // tvOS focus is untouched.
         .mediaCardContextMenu(item: item)
     }
 

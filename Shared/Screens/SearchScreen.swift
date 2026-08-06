@@ -630,8 +630,9 @@ private struct SearchResultsGrid: View {
     let gridSpacing: CGFloat
     let headerTitle: String
     let peopleTitle: String
-    /// Bubbled up to `SearchResultCard`, then to `SearchScreen`'s
-    /// screen-level destination — see the "Go to series" state above.
+    /// Passed down to `SearchResultCard`, which invokes it to bubble the
+    /// event up to `SearchScreen`'s screen-level destination — see the
+    /// "Go to series" state above.
     let onGoToSeries: (String) -> Void
 
     var body: some View {
@@ -741,7 +742,8 @@ private struct SearchPersonRow: View {
 private struct SearchResultCard: View {
     let item: BaseItemDto
     let imageBuilder: ImageURLBuilder
-    /// Bubbled up from `SearchResultsGrid` — see `mediaCardContextMenu`'s
+    /// Passed down from `SearchResultsGrid`; invoked here to bubble the
+    /// event up to `SearchScreen` — see `mediaCardContextMenu`'s
     /// "Go to series" contract.
     let onGoToSeries: (String) -> Void
 

@@ -893,7 +893,6 @@
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Remove from Continue Watching";
-"home.continueWatching.markedWatched" = "Marked as watched";
 "home.continueWatching.removed" = "Removed from Continue Watching";
 "accessibility.episode.watched" = "Watched";
 

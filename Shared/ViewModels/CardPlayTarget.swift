@@ -2,30 +2,31 @@ import Foundation
 import CinemaxKit
 import JellyfinAPI
 
-/// Ce qu'une carte doit connaître pour lancer une lecture : quoi ouvrir, sous
-/// quel titre, et à quelle seconde reprendre.
+/// What a card needs to know to start playback: what to open, under what
+/// title, and at what second to resume.
 struct CardPlayTarget: Sendable, Equatable {
     let itemId: String
     let title: String
-    /// `nil` ⇒ lecture depuis le début.
+    /// `nil` ⇒ play from the beginning.
     let startSeconds: Double?
 }
 
-/// Résout la cible de lecture d'une vignette.
+/// Resolves the play target for a poster card.
 ///
-/// **Ce que ce résolveur ne fait PAS** : choisir l'épisode d'une série quand
-/// l'information manque. `getPlaybackInfo` résout déjà Series/Season → Episode
-/// côté CinemaxKit (`resolvePlayableEpisode` — next-up d'abord, sinon premier
-/// épisode de la première saison), et dupliquer cette décision créerait deux
-/// autorités qui peuvent diverger. Il ne sert qu'à récupérer **la position de
-/// reprise**, plus l'id de l'épisode quand le sondage next-up le donne — auquel
-/// cas on cible directement l'épisode, pour que l'offset et l'item décrivent
-/// forcément le même média.
+/// **What this resolver deliberately does NOT do**: pick the episode of a
+/// series when that information is missing. `getPlaybackInfo` already
+/// resolves Series/Season → Episode server-side in CinemaxKit
+/// (`resolvePlayableEpisode` — next-up first, else the first episode of the
+/// first season), and duplicating that decision would create two authorities
+/// that can diverge. It exists only to fetch **the resume position**, plus
+/// the episode id when the next-up probe hands one over — in which case the
+/// target points at the episode directly, so the offset and the item always
+/// describe the same media.
 ///
-/// Volontairement `nonisolated` et paramétré par des **scalaires** : passer un
-/// `BaseItemDto` (non-`Sendable`) dans un appel async nonisolated depuis le
-/// `@MainActor` est un transfert de région d'une valeur que l'acteur principal
-/// détient toujours. L'appelant extrait les champs côté main actor.
+/// Deliberately `nonisolated` and parameterized by **scalars**: passing a
+/// `BaseItemDto` (non-`Sendable`) into a nonisolated async call from the
+/// `@MainActor` would be a region transfer of a value the main actor still
+/// holds. The caller extracts the fields on the main actor side.
 enum CardPlayTargetResolver {
 
     static func resolve(
@@ -45,10 +46,10 @@ enum CardPlayTargetResolver {
             )
         }
 
-        // Une carte de série ne porte pas la userData de son épisode next-up :
-        // c'est le seul cas qui coûte un aller-retour. L'appel est mis en cache
-        // 10 s côté client (préfixe `nextup-`), donc il est le plus souvent servi
-        // localement juste après un affichage de fiche.
+        // A series card doesn't carry its next-up episode's userData: this is
+        // the only case that costs a round-trip. The call is cached client-side
+        // for 10s (prefix `nextup-`), so it is most often served locally right
+        // after a detail-screen view.
         guard let episode = try? await api.getNextUp(seriesId: itemId, userId: userId),
               let episodeId = episode.id else {
             return CardPlayTarget(itemId: itemId, title: title, startSeconds: nil)
@@ -64,8 +65,8 @@ enum CardPlayTargetResolver {
         )
     }
 
-    /// Même règle que `MediaDetailScreen.resolvedPlayTarget` : une position
-    /// résiduelle sur un média déjà marqué vu ne vaut pas reprise.
+    /// Same rule as `MediaDetailScreen.resolvedPlayTarget`: a residual position
+    /// on a media already marked played does not count as a resume.
     private static func resumeSeconds(positionTicks: Int, isPlayed: Bool) -> Double? {
         guard positionTicks > 0, !isPlayed else { return nil }
         return positionTicks.jellyfinSeconds

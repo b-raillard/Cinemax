@@ -263,18 +263,18 @@ final class HomeViewModel {
         loc: LocalizationManager
     ) async {
         await mutateResumeItem(
-            item, markPlayed: false,
+            item,
             successKey: "home.continueWatching.removed",
             using: appState, toast: toast, loc: loc
         )
     }
 
-    /// Shared body for both Continue Watching mutations: optimistic removal →
-    /// server call → success toast + background rail refresh, restoring the
-    /// card on failure.
+    /// Removes an item from the Continue Watching rail: optimistic removal →
+    /// server call (`markItemUnplayed`, resetting the resume position) →
+    /// success toast + background rail refresh, restoring the card on
+    /// failure. `removeResumeItem` is currently its only caller.
     private func mutateResumeItem(
         _ item: BaseItemDto,
-        markPlayed: Bool,
         successKey: String,
         using appState: AppState,
         toast: ToastCenter,
@@ -288,11 +288,7 @@ final class HomeViewModel {
         resumeNavigation[id] = nil
 
         do {
-            if markPlayed {
-                try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
-            } else {
-                try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
-            }
+            try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             toast.success(loc.localized(successKey))
             // One item's userData changed — post the lighter tier-2 notification.
             // Home's own `.cinemaxItemUserDataChanged` handler re-fetches the
