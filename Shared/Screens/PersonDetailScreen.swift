@@ -130,6 +130,7 @@ struct PersonDetailScreen: View {
             .buttonStyle(.plain)
             #endif
             .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
+            .mediaCardContextMenu(item: item)
         }
     }
 

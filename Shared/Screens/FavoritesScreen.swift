@@ -216,6 +216,7 @@ struct FavoritesScreen: View {
         .buttonStyle(.plain)
         #endif
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        .mediaCardContextMenu(item: item)
     }
 
     /// Warms Nuke for every card — URLs mirror the card's own request exactly

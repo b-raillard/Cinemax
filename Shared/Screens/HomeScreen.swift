@@ -855,6 +855,12 @@ struct HomeScreen: View {
             .buttonStyle(.plain)
             #endif
             .accessibilityLabel(item.seriesName ?? item.name ?? "")
+            .mediaCardContextMenu(
+                item: item,
+                navigation: CardPlaybackNavigation(
+                    previous: nav?.previous, next: nav?.next, navigator: nav?.navigator
+                )
+            )
         }
     }
 
@@ -934,6 +940,7 @@ struct HomeScreen: View {
         .buttonStyle(.plain)
         #endif
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        .mediaCardContextMenu(item: item)
     }
 
     // MARK: - Helpers
