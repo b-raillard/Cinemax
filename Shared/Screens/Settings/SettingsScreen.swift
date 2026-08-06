@@ -146,9 +146,11 @@ struct SettingsScreen: View {
     @Environment(AddToPlaylistPresenter.self) var playlists: AddToPlaylistPresenter?
     /// Forwarded into `watchedHistorySheet` for the same reason as `playlists`
     /// above — its cards' menu now also carries play / "play on…" entries.
-    @Environment(CardActionPresenter.self) private var cardActions
+    /// Optional for the same reason as `playlists`: a preview / test host
+    /// without the root injection would otherwise trap.
+    @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
     #if os(tvOS)
-    @Environment(VideoPlayerCoordinator.self) private var playerCoordinator
+    @Environment(VideoPlayerCoordinator.self) private var playerCoordinator: VideoPlayerCoordinator?
     #endif
     /// Hoisted out of this view's `@State` because tvOS's `UITabBarController`-
     /// backed `TabView` recreates the hosting controller (and resets `@State`)

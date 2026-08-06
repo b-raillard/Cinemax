@@ -84,22 +84,35 @@ private struct MediaCardContextMenu: ViewModifier {
             guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return false }
             return !(item.userData?.isPlayed ?? false)
         }()
+        // Same presence discipline as the "Play on…" entry below, applied to
+        // the LOCAL play entries too: `startPlayback` calls `coordinator?.play`
+        // on tvOS and `cardActions?.present` on iOS (see the platform split
+        // there), so an absent presenter on either platform must hide the
+        // button rather than render a silent no-op — the file's own design
+        // promise is that a dead button is not possible.
+        #if os(tvOS)
+        let canPlayLocally = coordinator != nil
+        #else
+        let canPlayLocally = cardActions != nil
+        #endif
 
         content.contextMenu {
             if isPlayable {
-                Button {
-                    Task { await startPlayback(fromStart: false) }
-                } label: {
-                    Label(
-                        loc.localized(localResume ? "card.resume" : "card.play"),
-                        systemImage: "play.fill"
-                    )
-                }
-                if localResume {
+                if canPlayLocally {
                     Button {
-                        Task { await startPlayback(fromStart: true) }
+                        Task { await startPlayback(fromStart: false) }
                     } label: {
-                        Label(loc.localized("card.playFromStart"), systemImage: "gobackward")
+                        Label(
+                            loc.localized(localResume ? "card.resume" : "card.play"),
+                            systemImage: "play.fill"
+                        )
+                    }
+                    if localResume {
+                        Button {
+                            Task { await startPlayback(fromStart: true) }
+                        } label: {
+                            Label(loc.localized("card.playFromStart"), systemImage: "gobackward")
+                        }
                     }
                 }
                 // Cold cache ⇒ show the entry (optimistic). That's what avoids a
