@@ -93,7 +93,7 @@ private struct MediaCardContextMenu: ViewModifier {
                 // adding a probe on every menu open — a `contextMenu` builds
                 // synchronously and can't await one. The sheet re-probes on
                 // open and already has its own empty state (`remote.noTargets.*`).
-                if let cardActions, cardActions.knownRemoteTargetCount ?? 1 > 0 {
+                if let cardActions, (cardActions.knownRemoteTargetCount ?? 1) > 0 {
                     Button {
                         Task { await startRemotePlay() }
                     } label: {
@@ -136,20 +136,7 @@ private struct MediaCardContextMenu: ViewModifier {
     /// `fullScreenCover` hosted by `AppNavigation`, because a menu button
     /// inside a lazy container can't push a `NavigationLink`.
     private func startPlayback(fromStart: Bool) async {
-        guard let userId = appState.currentUserId, let id = item.id else { return }
-
-        // Scalars extracted here, on the main actor: `resolve` is nonisolated
-        // and `BaseItemDto` is not Sendable.
-        let type = item.type
-        let title = item.name ?? ""
-        let ticks = item.userData?.playbackPositionTicks ?? 0
-        let played = item.userData?.isPlayed ?? false
-
-        let target = await CardPlayTargetResolver.resolve(
-            itemId: id, type: type, title: title,
-            positionTicks: ticks, isPlayed: played,
-            api: appState.apiClient, userId: userId
-        )
+        guard let target = await resolvedCardPlayTarget() else { return }
         let startTime = fromStart ? nil : target.startSeconds
 
         #if os(tvOS)
@@ -172,17 +159,7 @@ private struct MediaCardContextMenu: ViewModifier {
     /// through the same resolver — so a series sends its next-up episode and a
     /// half-watched movie resumes where it left off.
     private func startRemotePlay() async {
-        guard let userId = appState.currentUserId, let id = item.id else { return }
-        let type = item.type
-        let title = item.name ?? ""
-        let ticks = item.userData?.playbackPositionTicks ?? 0
-        let played = item.userData?.isPlayed ?? false
-
-        let target = await CardPlayTargetResolver.resolve(
-            itemId: id, type: type, title: title,
-            positionTicks: ticks, isPlayed: played,
-            api: appState.apiClient, userId: userId
-        )
+        guard let target = await resolvedCardPlayTarget() else { return }
         cardActions?.present(remotePlay: RemotePlayIntent(
             itemId: target.itemId,
             title: target.title,
@@ -191,6 +168,28 @@ private struct MediaCardContextMenu: ViewModifier {
             // "Version" row's decision.
             mediaSourceId: nil
         ))
+    }
+
+    /// Shared by `startPlayback` and `startRemotePlay`: resolves what either
+    /// "play locally" or "play on…" should open for the item on this card,
+    /// via the same resolver so both stay in lockstep with a series' next-up
+    /// episode / a movie's resume position. `nil` when there's no signed-in
+    /// user or the item carries no id — both callers no-op in that case.
+    private func resolvedCardPlayTarget() async -> CardPlayTarget? {
+        guard let userId = appState.currentUserId, let id = item.id else { return nil }
+
+        // Scalars extracted here, on the main actor: `resolve` is nonisolated
+        // and `BaseItemDto` is not Sendable.
+        let type = item.type
+        let title = item.name ?? ""
+        let ticks = item.userData?.playbackPositionTicks ?? 0
+        let played = item.userData?.isPlayed ?? false
+
+        return await CardPlayTargetResolver.resolve(
+            itemId: id, type: type, title: title,
+            positionTicks: ticks, isPlayed: played,
+            api: appState.apiClient, userId: userId
+        )
     }
 
     private func toggleWatched(isPlayed: Bool) async {
