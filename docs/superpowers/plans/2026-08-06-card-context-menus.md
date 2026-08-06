@@ -10,6 +10,8 @@
 
 Spec de référence : [docs/superpowers/specs/2026-08-06-card-context-menus-design.md](../specs/2026-08-06-card-context-menus-design.md)
 
+> **Statut (2026-08-06, revue finale de branche) :** toutes les tâches ont été exécutées — voir l'historique de commits `feat(cards)`/`feat(home)`/`chore(cards)`/`docs` sur `feat/card-context-menus`. Les cases sont cochées en conséquence, **sauf** les étapes de vérification manuelle sur simulateur/matériel (le dernier "vérifier à la main" / "vérifier le focus tvOS" de chaque tâche, et l'étape 4 du scénario PiP en Task 7), qui restent non cochées et sont **reportées à une vérification humaine sur matériel réel** — aucun outil automatisé de cette session ne pilote un simulateur interactif.
+
 ## Global Constraints
 
 - **Swift 6 strict concurrency.** `BaseItemDto` n'est **pas** `Sendable` : ne jamais le passer en paramètre d'un appel `async` nonisolated depuis le `@MainActor` (transfert de région d'une valeur que l'acteur principal détient encore). Extraire les scalaires côté main actor, puis appeler.
@@ -54,7 +56,7 @@ set -o pipefail; xcodebuild test -project Cinemax.xcodeproj -scheme Cinemax -des
 
 Le résolveur est **nonisolated** et prend des scalaires, jamais un `BaseItemDto` — c'est la contrainte Swift 6 énoncée plus haut. Il ne choisit **pas** quel épisode lire quand l'information manque : `getPlaybackInfo` résout déjà Série → Épisode côté CinemaxKit ([JellyfinAPIClient+Playback.swift:277](../../../Packages/CinemaxKit/Sources/CinemaxKit/Networking/JellyfinAPIClient+Playback.swift)). Il ne sert qu'à connaître l'offset de reprise, et l'id d'épisode quand il l'a sous la main.
 
-- [ ] **Step 1 : ajouter le drapeau d'erreur dédié au mock**
+- [x] **Step 1 : ajouter le drapeau d'erreur dédié au mock**
 
 Dans `Tests/CinemaxKitTests/MockAPIClient.swift`, remplacer la déclaration existante de `getNextUp` (vers la ligne 453) par :
 
@@ -72,7 +74,7 @@ Dans `Tests/CinemaxKitTests/MockAPIClient.swift`, remplacer la déclaration exis
     }
 ```
 
-- [ ] **Step 2 : écrire les tests qui échouent**
+- [x] **Step 2 : écrire les tests qui échouent**
 
 Créer `Tests/CinemaxKitTests/CardPlayTargetTests.swift` :
 
@@ -208,7 +210,7 @@ struct CardPlayTargetTests {
 }
 ```
 
-- [ ] **Step 3 : vérifier que les tests échouent**
+- [x] **Step 3 : vérifier que les tests échouent**
 
 Run:
 ```bash
@@ -216,7 +218,7 @@ set -o pipefail; xcodebuild test -project Cinemax.xcodeproj -scheme Cinemax -des
 ```
 Expected: échec de compilation, `cannot find 'CardPlayTargetResolver' in scope`.
 
-- [ ] **Step 4 : écrire l'implémentation**
+- [x] **Step 4 : écrire l'implémentation**
 
 Créer `Shared/ViewModels/CardPlayTarget.swift` :
 
@@ -296,7 +298,7 @@ enum CardPlayTargetResolver {
 }
 ```
 
-- [ ] **Step 5 : régénérer le projet Xcode**
+- [x] **Step 5 : régénérer le projet Xcode**
 
 Le fichier est nouveau sous `Shared/`, donc il n'existe pas encore dans la cible.
 
@@ -305,7 +307,7 @@ Run:
 cd /Users/braillard/projets/perso/jellyfin/Cinemax && xcodegen generate
 ```
 
-- [ ] **Step 6 : vérifier que les tests passent**
+- [x] **Step 6 : vérifier que les tests passent**
 
 Run:
 ```bash
@@ -313,7 +315,7 @@ set -o pipefail; xcodebuild test -project Cinemax.xcodeproj -scheme Cinemax -des
 ```
 Expected: `Suite "CardPlayTarget" passed with 8 tests.`, aucun `✘`, aucune suite préexistante en échec.
 
-- [ ] **Step 7 : commit**
+- [x] **Step 7 : commit**
 
 ```bash
 git add Shared/ViewModels/CardPlayTarget.swift Tests/CinemaxKitTests/CardPlayTargetTests.swift Tests/CinemaxKitTests/MockAPIClient.swift Cinemax.xcodeproj/project.pbxproj
@@ -347,7 +349,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   - `struct CardPlaybackPresentation: ViewModifier`.
   - `mediaCardContextMenu(item:navigation:)` — le paramètre `navigation` a pour défaut `nil`, donc les 3 appels existants ne bougent pas.
 
-- [ ] **Step 1 : créer le présentateur et sa présentation racine**
+- [x] **Step 1 : créer le présentateur et sa présentation racine**
 
 Créer `Shared/Screens/CardActionPresenter.swift` :
 
@@ -441,7 +443,7 @@ struct CardPlaybackPresentation: ViewModifier {
 #endif
 ```
 
-- [ ] **Step 2 : héberger le présentateur à la racine**
+- [x] **Step 2 : héberger le présentateur à la racine**
 
 Dans `Shared/Navigation/AppNavigation.swift`, après la ligne 757 (`@State private var playlistPresenter = AddToPlaylistPresenter()`), ajouter :
 
@@ -468,7 +470,7 @@ Puis, juste après le bloc `.modifier(AddToPlaylistPresentation(...))` (qui se t
         #endif
 ```
 
-- [ ] **Step 3 : réinjecter dans la feuille « Historique de visionnage »**
+- [x] **Step 3 : réinjecter dans la feuille « Historique de visionnage »**
 
 `WatchedHistoryScreen` est présenté modalement depuis les réglages et **ne reçoit pas** l'environnement racine — c'est déjà pourquoi `toasts` et `playlists` y sont réinjectés à la main. Sans cet ajout, la nouvelle entrée « Lecture » disparaîtrait silencieusement de ses cartes (et sur tvOS, faute de coordinator, aussi).
 
@@ -502,7 +504,7 @@ Puis étendre `watchedHistorySheet` (ligne 404) :
     }
 ```
 
-- [ ] **Step 4 : ajouter les entrées de lecture au menu**
+- [x] **Step 4 : ajouter les entrées de lecture au menu**
 
 Dans `Shared/Screens/MediaCardContextMenu.swift`, remplacer l'extension et l'en-tête du `ViewModifier` :
 
@@ -602,7 +604,7 @@ Enfin, ajouter la méthode. Les scalaires sont extraits **avant** l'`await` : le
     }
 ```
 
-- [ ] **Step 5 : ajouter les clés de localisation**
+- [x] **Step 5 : ajouter les clés de localisation**
 
 Dans `Resources/fr.lproj/Localizable.strings`, à côté du bloc `card.*` existant (vers la ligne 858) :
 
@@ -620,7 +622,7 @@ Dans `Resources/en.lproj/Localizable.strings`, au même endroit relatif :
 "card.playFromStart" = "Play from beginning";
 ```
 
-- [ ] **Step 6 : amender la RULE dans CLAUDE.md**
+- [x] **Step 6 : amender la RULE dans CLAUDE.md**
 
 Sans cet amendement, le prochain lecteur de CLAUDE.md prendra ce lot pour une violation. Dans la section « Navigation », remplacer la ligne :
 
@@ -634,7 +636,7 @@ par :
 - **RULE — All play buttons use `PlayLink<Label>`** (Button+coordinator on tvOS, `NavigationLink` on iOS) — never direct `NavigationLink` to `VideoPlayerView`. **One exception: context-menu playback**, which cannot push a `NavigationLink` (the menu hangs off a card inside a lazy container — see the lazy-container RULE). It routes through `CardActionPresenter` instead: tvOS calls the same `VideoPlayerCoordinator` `PlayLink` would, iOS raises a root-hosted `.fullScreenCover` onto the same `VideoPlayerView`. Both engines and every controller are therefore identical; only the SwiftUI host differs.
 ```
 
-- [ ] **Step 7 : régénérer et compiler les deux plateformes**
+- [x] **Step 7 : régénérer et compiler les deux plateformes**
 
 Run:
 ```bash
@@ -653,7 +655,7 @@ Expected: `** BUILD SUCCEEDED **` pour les deux, lancées **séquentiellement** 
 Lancer l'app, aller dans la bibliothèque Films, appui long sur une affiche.
 Attendu : « Lecture » en tête du menu ; le toucher ouvre le lecteur en plein écran ; le fermer ramène **sur la grille**, pas sur un écran intermédiaire. Sur un film à demi vu, le libellé est « Reprendre » et « Lire depuis le début » apparaît juste dessous.
 
-- [ ] **Step 9 : commit**
+- [x] **Step 9 : commit**
 
 ```bash
 git add Shared/Screens/CardActionPresenter.swift Shared/Screens/MediaCardContextMenu.swift Shared/Navigation/AppNavigation.swift Shared/Screens/Settings/SettingsScreen.swift Resources/fr.lproj/Localizable.strings Resources/en.lproj/Localizable.strings CLAUDE.md Cinemax.xcodeproj/project.pbxproj
@@ -680,7 +682,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `CardActionPresenter.remotePlay` / `.knownRemoteTargetCount` / `present(remotePlay:)` (Task 2), `RemotePlayIntent(itemId:title:startPositionTicks:mediaSourceId:)`, `RemotePlayPresentation(sheet:appState:themeManager:loc:toast:)`.
 - Produces: `MediaDetailViewModel.loadRemoteTargets(using:cardActions:)` — nouveau second paramètre optionnel `CardActionPresenter?`.
 
-- [ ] **Step 1 : monter `RemotePlayPresentation` à la racine**
+- [x] **Step 1 : monter `RemotePlayPresentation` à la racine**
 
 Dans `Shared/Navigation/AppNavigation.swift`, juste après le bloc `CardPlaybackPresentation` ajouté en Task 2 (et **hors** de son `#if os(iOS)` — celui-ci est cross-plateforme) :
 
@@ -698,7 +700,7 @@ Dans `Shared/Navigation/AppNavigation.swift`, juste après le bloc `CardPlayback
         ))
 ```
 
-- [ ] **Step 2 : faire adopter le présentateur par la fiche détail**
+- [x] **Step 2 : faire adopter le présentateur par la fiche détail**
 
 Dans `Shared/Screens/MediaDetailScreen.swift`, supprimer la ligne 54 :
 
@@ -724,7 +726,7 @@ par :
                     cardActions?.present(remotePlay: remotePlayIntent(for: item))
 ```
 
-- [ ] **Step 3 : publier le compteur de cibles**
+- [x] **Step 3 : publier le compteur de cibles**
 
 Dans `Shared/ViewModels/MediaDetailViewModel.swift`, changer la signature de `loadRemoteTargets` (ligne 375) et publier le compteur après la résolution :
 
@@ -764,7 +766,7 @@ Répercuter l'appelant ligne 136 :
 
 `load(using:)` doit donc recevoir le présentateur. Ajouter le paramètre à sa signature (`func load(using appState: AppState, cardActions: CardActionPresenter? = nil) async`) et le passer depuis `MediaDetailScreen` à ses appels de `load` : `await viewModel.load(using: appState, cardActions: cardActions)`.
 
-- [ ] **Step 4 : ajouter l'entrée au menu**
+- [x] **Step 4 : ajouter l'entrée au menu**
 
 Dans `Shared/Screens/MediaCardContextMenu.swift`, à l'intérieur du bloc `if isPlayable { … }`, après le bouton « Lire depuis le début » et **avant** le `Divider()` :
 
@@ -813,7 +815,7 @@ Et la méthode, qui réutilise le même résolveur pour envoyer **ce que Lecture
     }
 ```
 
-- [ ] **Step 5 : compiler les deux plateformes**
+- [x] **Step 5 : compiler les deux plateformes**
 
 Run:
 ```bash
@@ -828,7 +830,7 @@ Expected: `** BUILD SUCCEEDED **` pour les deux.
 
 Sur simulateur iOS : ouvrir une fiche de film, toucher la puce « Lire sur… » du bloc d'actions secondaires. La feuille doit s'ouvrir exactement comme avant le déplacement (liste ou état vide `remote.noTargets.*`). C'est le seul chemin que ce lot déplace.
 
-- [ ] **Step 7 : commit**
+- [x] **Step 7 : commit**
 
 ```bash
 git add Shared/Screens/MediaCardContextMenu.swift Shared/Navigation/AppNavigation.swift Shared/Screens/MediaDetailScreen.swift Shared/ViewModels/MediaDetailViewModel.swift
@@ -855,7 +857,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Le rail « Reprendre » possède aujourd'hui son **propre** menu (marquer vu + retirer), sans favori ni playlist. Lui donner le menu partagé sans reprendre « Retirer de Reprendre » serait une **régression** : c'est pourquoi l'entrée arrive ici.
 
-- [ ] **Step 1 : ajouter le rappel et l'entrée destructive au menu**
+- [x] **Step 1 : ajouter le rappel et l'entrée destructive au menu**
 
 Dans `Shared/Screens/MediaCardContextMenu.swift`, étendre l'extension :
 
@@ -896,7 +898,7 @@ Puis, **en queue** du `contextMenu { … }` (après « Ajouter à une playlist �
             }
 ```
 
-- [ ] **Step 2 : basculer le rail Reprendre sur le menu partagé**
+- [x] **Step 2 : basculer le rail Reprendre sur le menu partagé**
 
 Dans `Shared/Screens/HomeScreen.swift`, remplacer le bloc `.contextMenu { … }` de `continueWatchingPlayLink` (lignes ~764-786, du commentaire « Long-press (iOS) / long-press-select (tvOS) context menu » jusqu'à la fermeture du `.contextMenu`) par :
 
@@ -918,7 +920,7 @@ Dans `Shared/Screens/HomeScreen.swift`, remplacer le bloc `.contextMenu { … }`
 
 `markResumeItemPlayed` n'est plus appelé depuis ici — le menu partagé fait le marquage vu et publie la notification tier-2 `.cinemaxItemUserDataChanged`, que l'accueil consomme déjà via `refreshUserDataRails()`. Vérifier avec un `grep -rn "markResumeItemPlayed" Shared` si la méthode devient orpheline ; si oui, la supprimer de `HomeViewModel` dans le même commit.
 
-- [ ] **Step 3 : compiler les deux plateformes**
+- [x] **Step 3 : compiler les deux plateformes**
 
 Run:
 ```bash
@@ -929,7 +931,7 @@ set -o pipefail; xcodebuild build -project Cinemax.xcodeproj -scheme CinemaxTV -
 ```
 Expected: `** BUILD SUCCEEDED **` pour les deux.
 
-- [ ] **Step 4 : lancer la suite de tests**
+- [x] **Step 4 : lancer la suite de tests**
 
 `HomeViewModelTests` couvre `removeResumeItem` et les rails ; une suppression de méthode orpheline peut le casser.
 
@@ -944,7 +946,7 @@ Expected: aucune ligne `✘`.
 Sur simulateur iOS, appui long sur une carte « Reprendre » de l'accueil.
 Attendu : « Reprendre » en tête (la carte a une position), « Lire depuis le début », « Lire sur… », puis vu / favori / playlist, puis « Retirer de Reprendre » en rouge tout en bas. Le toucher retire la carte de la rangée.
 
-- [ ] **Step 6 : commit**
+- [x] **Step 6 : commit**
 
 ```bash
 git add Shared/Screens/MediaCardContextMenu.swift Shared/Screens/HomeScreen.swift Shared/ViewModels/HomeViewModel.swift
@@ -972,7 +974,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 `recentlyAddedCard` est partagé par **trois** rangées de l'accueil (Ajouts récents, Favoris, genres) : une seule édition les couvre toutes. `LibraryFolderBrowseScreen` reste volontairement exclu — il liste des dossiers, pas des médias.
 
-- [ ] **Step 1 : rail Next Up**
+- [x] **Step 1 : rail Next Up**
 
 Dans `Shared/Screens/HomeScreen.swift`, dans `nextUpPlayLink`, après la ligne `.accessibilityLabel(item.seriesName ?? item.name ?? "")` :
 
@@ -985,7 +987,7 @@ Dans `Shared/Screens/HomeScreen.swift`, dans `nextUpPlayLink`, après la ligne `
             )
 ```
 
-- [ ] **Step 2 : Ajouts récents / Favoris / genres**
+- [x] **Step 2 : Ajouts récents / Favoris / genres**
 
 Dans `recentlyAddedCard`, après la ligne `.accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))` :
 
@@ -993,7 +995,7 @@ Dans `recentlyAddedCard`, après la ligne `.accessibilityLabel([item.name, subti
         .mediaCardContextMenu(item: item)
 ```
 
-- [ ] **Step 3 : écran Favoris**
+- [x] **Step 3 : écran Favoris**
 
 Dans `Shared/Screens/FavoritesScreen.swift`, sur le `NavigationLink` de la carte (ligne ~202), après son `.accessibilityLabel(...)` :
 
@@ -1003,7 +1005,7 @@ Dans `Shared/Screens/FavoritesScreen.swift`, sur le `NavigationLink` de la carte
 
 Accroché au `NavigationLink`, jamais à son `label` — règle de focus tvOS.
 
-- [ ] **Step 4 : filmographie**
+- [x] **Step 4 : filmographie**
 
 Dans `Shared/Screens/PersonDetailScreen.swift`, sur le `NavigationLink` de la carte (ligne ~113), après son `.accessibilityLabel(...)` :
 
@@ -1011,7 +1013,7 @@ Dans `Shared/Screens/PersonDetailScreen.swift`, sur le `NavigationLink` de la ca
             .mediaCardContextMenu(item: item)
 ```
 
-- [ ] **Step 5 : titres similaires**
+- [x] **Step 5 : titres similaires**
 
 Dans `Shared/Screens/MediaDetailSimilarSection.swift`, sur le `NavigationLink` (ligne ~40), après son `.accessibilityLabel(...)` :
 
@@ -1019,7 +1021,7 @@ Dans `Shared/Screens/MediaDetailSimilarSection.swift`, sur le `NavigationLink` (
             .mediaCardContextMenu(item: item)
 ```
 
-- [ ] **Step 6 : compiler les deux plateformes**
+- [x] **Step 6 : compiler les deux plateformes**
 
 Run:
 ```bash
@@ -1034,7 +1036,7 @@ Expected: `** BUILD SUCCEEDED **` pour les deux.
 
 Sur simulateur Apple TV : parcourir l'accueil, appui long (select maintenu) sur une carte de chaque rangée. Le menu s'ouvre et, **à sa fermeture, le focus revient sur la carte d'origine** — pas sur la pastille d'onglet actif en haut. Un focus qui saute signale que le menu a été accroché au label au lieu du bouton.
 
-- [ ] **Step 8 : commit**
+- [x] **Step 8 : commit**
 
 ```bash
 git add Shared/Screens/HomeScreen.swift Shared/Screens/FavoritesScreen.swift Shared/Screens/PersonDetailScreen.swift Shared/Screens/MediaDetailSimilarSection.swift
@@ -1064,7 +1066,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 C'est l'approche C : la destination est hébergée par l'écran, hors du conteneur lazy, exactement comme `AdminItemMenu.onSelectDestination`. La présence du rappel est ce qui **fait apparaître** l'entrée — une grille qui oublie la plomberie n'affiche simplement rien, au lieu d'offrir un bouton mort.
 
-- [ ] **Step 1 : ajouter le paramètre et l'entrée au menu**
+- [x] **Step 1 : ajouter le paramètre et l'entrée au menu**
 
 Dans `Shared/Screens/MediaCardContextMenu.swift`, étendre l'extension :
 
@@ -1119,7 +1121,7 @@ Puis, **après** le `Divider()` du groupe lecture et **avant** « Marquer comme 
             }
 ```
 
-- [ ] **Step 2 : clés de localisation**
+- [x] **Step 2 : clés de localisation**
 
 `Resources/fr.lproj/Localizable.strings` :
 
@@ -1133,7 +1135,7 @@ Puis, **après** le `Divider()` du groupe lecture et **avant** « Marquer comme 
 "card.goToSeries" = "Go to series";
 ```
 
-- [ ] **Step 3 : hôte de l'accueil**
+- [x] **Step 3 : hôte de l'accueil**
 
 Dans `Shared/Screens/HomeScreen.swift`, ajouter le jeton d'état à côté des autres `@State` de l'écran :
 
@@ -1163,7 +1165,7 @@ Passer le rappel dans les deux rails à épisodes. Dans `continueWatchingPlayLin
 
 et dans `nextUpPlayLink`, compléter l'appel posé en Task 5 avec le même argument.
 
-- [ ] **Step 4 : hôte de la recherche**
+- [x] **Step 4 : hôte de la recherche**
 
 Dans `Shared/Screens/SearchScreen.swift`, ajouter le même `@State private var seriesDestination: SeriesDestination?` sur l'écran, le même `.navigationDestination(item:)` sur son corps (hors du `LazyVGrid` des résultats), puis compléter l'appel ligne ~760 :
 
@@ -1176,7 +1178,7 @@ Dans `Shared/Screens/SearchScreen.swift`, ajouter le même `@State private var s
 
 La recherche renvoie des épisodes (`includeItemTypes` par défaut `[.movie, .series, .episode]`), donc l'entrée y est utile.
 
-- [ ] **Step 5 : hôte de l'historique**
+- [x] **Step 5 : hôte de l'historique**
 
 Dans `Shared/Screens/WatchedHistoryScreen.swift`, même triptyque — `@State`, `.navigationDestination(item:)` sur le corps hors de la grille, puis ligne ~283 :
 
@@ -1189,7 +1191,7 @@ Dans `Shared/Screens/WatchedHistoryScreen.swift`, même triptyque — `@State`, 
 
 L'écran est présenté modalement avec son propre `NavigationStack` (iOS `.sheet` / tvOS `.fullScreenCover`), donc la destination se pousse à l'intérieur de la feuille — comportement voulu.
 
-- [ ] **Step 6 : compiler les deux plateformes**
+- [x] **Step 6 : compiler les deux plateformes**
 
 Run:
 ```bash
@@ -1204,7 +1206,7 @@ Expected: `** BUILD SUCCEEDED **` pour les deux.
 
 Sur simulateur iOS : appui long sur une carte « Reprendre » **d'épisode** → « Aller à la série » est présent et pousse la fiche de la série. Appui long sur une carte de **film** → l'entrée est absente. Dans la bibliothèque Films (aucun rappel fourni) → absente aussi, même pour un épisode.
 
-- [ ] **Step 8 : commit**
+- [x] **Step 8 : commit**
 
 ```bash
 git add Shared/Screens/MediaCardContextMenu.swift Shared/Screens/HomeScreen.swift Shared/Screens/SearchScreen.swift Shared/Screens/WatchedHistoryScreen.swift Resources/fr.lproj/Localizable.strings Resources/en.lproj/Localizable.strings
@@ -1228,36 +1230,36 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: tout le lot.
 - Produces: rien.
 
-- [ ] **Step 0 : traduire les commentaires de `CardPlayTarget.swift` en anglais**
+- [x] **Step 0 : traduire les commentaires de `CardPlayTarget.swift` en anglais**
 
 Le fichier a été écrit en Task 1 avant que la contrainte « commentaires en anglais » ne soit explicitée dans ce plan, et il est le seul du lot à y déroger. Traduire chaque bloc `///` et chaque commentaire inline de `Shared/ViewModels/CardPlayTarget.swift` en anglais, **sans changer le contenu ni le niveau de détail** — les explications sur la non-isolation, sur le fait de ne PAS choisir l'épisode, et sur la règle de reprise sont la valeur du fichier, pas de la décoration. Aucune ligne de code exécutable ne change.
 
-- [ ] **Step 0b : nettoyer les deux résidus de la suppression de `markResumeItemPlayed` (Task 4)**
+- [x] **Step 0b : nettoyer les deux résidus de la suppression de `markResumeItemPlayed` (Task 4)**
 
 La suppression a laissé deux orphelins que la revue de Task 4 a relevés :
 
 1. **Clé de localisation orpheline** — `home.continueWatching.markedWatched` n'a plus aucun appelant Swift (son seul consommateur était la méthode supprimée). La retirer de `Resources/fr.lproj/Localizable.strings` **et** de `Resources/en.lproj/Localizable.strings`. Vérifier d'abord par `grep -rn "home.continueWatching.markedWatched" Shared Widgets TopShelf Tests` que le résultat est bien vide — si une référence existe, ne pas supprimer et le signaler.
 2. **`HomeViewModel.mutateResumeItem`** — son commentaire (« Shared body for both Continue Watching mutations ») est devenu faux : `removeResumeItem` en est le seul appelant et passe toujours `markPlayed: false`, si bien que la branche `if markPlayed { markItemPlayed }` est morte. Supprimer le paramètre `markPlayed` et sa branche, et réécrire le commentaire pour décrire ce que la méthode fait réellement maintenant. La suite de tests doit rester verte (`HomeViewModelTests` couvre `removeResumeItem`).
 
-- [ ] **Step 0c : commenter les cinq accroches ajoutées en Task 5**
+- [x] **Step 0c : commenter les cinq accroches ajoutées en Task 5**
 
 Les quatre points d'accroche antérieurs au lot portent tous un commentaire court rappelant que le modificateur est posé sur la vue focusable et **non** sur son label (voir `LibraryPosterCard.swift`, `SearchScreen.swift`, `WatchedHistoryScreen.swift`). Les cinq ajouts de Task 5 n'en ont pas. Ce commentaire n'est pas décoratif : le placement est un invariant que **le compilateur ne vérifie pas** et dont la violation ne se voit qu'à l'usage, sur le focus tvOS. Ajouter une ligne ou deux, en anglais, au-dessus de chacun de : `HomeScreen.swift` (`nextUpPlayLink` et `recentlyAddedCard`), `FavoritesScreen.swift`, `PersonDetailScreen.swift`, `MediaDetailSimilarSection.swift`.
 
-- [ ] **Step 0d : corriger le sens de deux commentaires dans `SearchScreen.swift`**
+- [x] **Step 0d : corriger le sens de deux commentaires dans `SearchScreen.swift`**
 
 Aux deux propriétés `onGoToSeries` (une sur `SearchResultsGrid`, une sur `SearchResultCard`), le commentaire dit « bubbled up » alors que c'est la **fermeture qui descend** l'arbre de vues ; seul l'**événement** remonte. Reformuler les deux pour décrire ce qui circule dans quel sens (par exemple « passed down to … » sur le conteneur, « invoked to bubble the event up to … » sur la carte). Un mot chacun.
 
-- [ ] **Step 1 : parité de localisation**
+- [x] **Step 1 : parité de localisation**
 
 Run: invoquer la skill `localize-check`.
 Expected: parité FR/EN sur les quatre nouvelles clés (`card.play`, `card.resume`, `card.playFromStart`, `card.goToSeries`), aucune chaîne en dur signalée dans les fichiers touchés.
 
-- [ ] **Step 2 : revue design system**
+- [x] **Step 2 : revue design system**
 
 Run: invoquer la skill `design-system-review`.
 Expected: aucune violation. Points de vigilance de ce lot : pas de `.font(.system(size: N))` nu (aucun ajouté ici), libellés de menu via `Label(loc.localized(...), systemImage:)`.
 
-- [ ] **Step 3 : suite de tests complète**
+- [x] **Step 3 : suite de tests complète**
 
 Run:
 ```bash
@@ -1277,7 +1279,7 @@ Sur simulateur iOS (ou appareil) :
 
 Attendu : le lecteur plein écran revient et la lecture continue au même endroit. Attendu en cas d'échec : rien ne se restaure, ou l'app revient sur une vue vide — auquel cas **arrêter et remonter le problème**, ne pas le contourner en catimini. Le repli documenté serait de router la lecture depuis les menus via l'approche C (rappel + `navigationDestination` par écran) au lieu du cover racine.
 
-- [ ] **Step 5 : mettre CLAUDE.md à jour**
+- [x] **Step 5 : mettre CLAUDE.md à jour**
 
 Dans la section « Media Library », remplacer la RULE « Poster context menus » par une version décrivant le menu tel qu'il est désormais :
 
@@ -1288,7 +1290,7 @@ Dans la section « Media Library », remplacer la RULE « Poster context menus �
   - **RULE — a series card's play entry is always labelled "Play", never "Resume"**: a `contextMenu` builds synchronously and cannot await the `getNextUp` that would reveal the offset. The resume is still applied at launch. Movie and episode cards carry their own `userData`, so they label correctly and additionally show "Play from beginning". Same reason "Play on…" reads `CardActionPresenter.knownRemoteTargetCount` (written only by real probes — detail-screen load, sheet open) instead of probing: a cold cache renders the entry optimistically, and the sheet re-probes with its own `remote.noTargets.*` empty state.
 ```
 
-- [ ] **Step 6 : commit**
+- [x] **Step 6 : commit**
 
 ```bash
 git add CLAUDE.md
