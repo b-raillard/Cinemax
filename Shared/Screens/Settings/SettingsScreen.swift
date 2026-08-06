@@ -144,6 +144,12 @@ struct SettingsScreen: View {
     /// playlist" sheet. Optional so a preview / test host without the root
     /// injection doesn't trap (see `MediaCardContextMenu`).
     @Environment(AddToPlaylistPresenter.self) var playlists: AddToPlaylistPresenter?
+    /// Forwarded into `watchedHistorySheet` for the same reason as `playlists`
+    /// above — its cards' menu now also carries play / "play on…" entries.
+    @Environment(CardActionPresenter.self) private var cardActions
+    #if os(tvOS)
+    @Environment(VideoPlayerCoordinator.self) private var playerCoordinator
+    #endif
     /// Hoisted out of this view's `@State` because tvOS's `UITabBarController`-
     /// backed `TabView` recreates the hosting controller (and resets `@State`)
     /// whenever the Settings tab's position-index in the bar shifts — toggle
@@ -411,6 +417,11 @@ struct SettingsScreen: View {
             // entry reads this presenter. A modal doesn't inherit the root's
             // environment here — same reason `toasts` is re-injected above.
             .environment(playlists)
+            // Same reason, for the menu's play / "play on…" entries.
+            .environment(cardActions)
+            #if os(tvOS)
+            .environment(playerCoordinator)
+            #endif
     }
 
     private var privacySecuritySheet: some View {

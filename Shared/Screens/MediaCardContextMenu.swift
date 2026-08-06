@@ -18,8 +18,11 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaCardContex
 /// catalogue-wide fan-out. A failure surfaces a user-facing error toast
 /// (`userFacingMessage(for:)`) and leaves server state untouched.
 extension View {
-    func mediaCardContextMenu(item: BaseItemDto) -> some View {
-        modifier(MediaCardContextMenu(item: item))
+    func mediaCardContextMenu(
+        item: BaseItemDto,
+        navigation: CardPlaybackNavigation? = nil
+    ) -> some View {
+        modifier(MediaCardContextMenu(item: item, navigation: navigation))
     }
 }
 
@@ -35,8 +38,14 @@ private struct MediaCardContextMenu: ViewModifier {
     /// optional read degrades a forgotten injection into a missing menu entry
     /// instead of a crash.
     @Environment(AddToPlaylistPresenter.self) private var playlists: AddToPlaylistPresenter?
+    /// Same optionality rationale as `playlists` above.
+    @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
+    #if os(tvOS)
+    @Environment(VideoPlayerCoordinator.self) private var coordinator: VideoPlayerCoordinator?
+    #endif
 
     let item: BaseItemDto
+    let navigation: CardPlaybackNavigation?
 
     // Optimistic mirrors of the toggle state. The menu label is derived from
     // the item's `userData`, but that value is a snapshot captured when the
@@ -52,8 +61,35 @@ private struct MediaCardContextMenu: ViewModifier {
     func body(content: Content) -> some View {
         let isPlayed = playedOverride ?? item.userData?.isPlayed ?? false
         let isFavorite = favoriteOverride ?? item.userData?.isFavorite ?? false
+        let isPlayable = item.type == .movie || item.type == .series || item.type == .episode
+        // Only computed for the types whose card carries the useful userData —
+        // a series card doesn't know its next-up episode's, so its label stays
+        // "Play" and "Play from beginning" doesn't show.
+        let localResume: Bool = {
+            guard item.type == .movie || item.type == .episode else { return false }
+            guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return false }
+            return !(item.userData?.isPlayed ?? false)
+        }()
 
         content.contextMenu {
+            if isPlayable {
+                Button {
+                    Task { await startPlayback(fromStart: false) }
+                } label: {
+                    Label(
+                        loc.localized(localResume ? "card.resume" : "card.play"),
+                        systemImage: "play.fill"
+                    )
+                }
+                if localResume {
+                    Button {
+                        Task { await startPlayback(fromStart: true) }
+                    } label: {
+                        Label(loc.localized("card.playFromStart"), systemImage: "gobackward")
+                    }
+                }
+                Divider()
+            }
             Button {
                 Task { await toggleWatched(isPlayed: isPlayed) }
             } label: {
@@ -81,6 +117,43 @@ private struct MediaCardContextMenu: ViewModifier {
                 }
             }
         }
+    }
+
+    /// Starts playback. tvOS goes through `VideoPlayerCoordinator` (already a
+    /// root presenter, exactly what `PlayLink` does); iOS goes through the
+    /// `fullScreenCover` hosted by `AppNavigation`, because a menu button
+    /// inside a lazy container can't push a `NavigationLink`.
+    private func startPlayback(fromStart: Bool) async {
+        guard let userId = appState.currentUserId, let id = item.id else { return }
+
+        // Scalars extracted here, on the main actor: `resolve` is nonisolated
+        // and `BaseItemDto` is not Sendable.
+        let type = item.type
+        let title = item.name ?? ""
+        let ticks = item.userData?.playbackPositionTicks ?? 0
+        let played = item.userData?.isPlayed ?? false
+
+        let target = await CardPlayTargetResolver.resolve(
+            itemId: id, type: type, title: title,
+            positionTicks: ticks, isPlayed: played,
+            api: appState.apiClient, userId: userId
+        )
+        let startTime = fromStart ? nil : target.startSeconds
+
+        #if os(tvOS)
+        coordinator?.play(
+            itemId: target.itemId, title: target.title, startTime: startTime,
+            previousEpisode: navigation?.previous, nextEpisode: navigation?.next,
+            episodeNavigator: navigation?.navigator,
+            using: appState
+        )
+        #else
+        cardActions?.present(playback: CardPlaybackRequest(
+            itemId: target.itemId, title: target.title, startTime: startTime,
+            previousEpisode: navigation?.previous, nextEpisode: navigation?.next,
+            episodeNavigator: navigation?.navigator
+        ))
+        #endif
     }
 
     private func toggleWatched(isPlayed: Bool) async {

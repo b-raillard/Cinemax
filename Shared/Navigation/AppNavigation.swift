@@ -755,6 +755,7 @@ struct AppNavigation: View {
     /// property wrapper would only add semantics without a purpose.
     private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
     @State private var playlistPresenter = AddToPlaylistPresenter()
+    @State private var cardActions = CardActionPresenter()
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
     /// When the app last entered the background — drives Part E foreground
@@ -859,6 +860,20 @@ struct AppNavigation: View {
             loc: loc,
             toast: toasts
         ))
+        .environment(cardActions)
+        // Same reason as the playlist sheet: playback is launched from context
+        // menus inside lazy grids, where a presentation attached to the cell
+        // dies with it. Nothing to host here on tvOS — the menu calls
+        // `VideoPlayerCoordinator` directly.
+        #if os(iOS)
+        .modifier(CardPlaybackPresentation(
+            request: $cardActions.playback,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toasts
+        ))
+        #endif
         .environment(\.motionEffectsEnabled, motionEffects)
         // Respect the user's OS Dynamic Type setting while capping at a size
         // that won't collapse layouts (hero titles, tab bar). The app also has

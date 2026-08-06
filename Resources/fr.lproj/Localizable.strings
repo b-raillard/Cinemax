@@ -859,6 +859,9 @@
 "card.markedUnwatched" = "Marqué comme non vu";
 "card.favorited" = "Ajouté aux favoris";
 "card.unfavorited" = "Retiré des favoris";
+"card.play" = "Lecture";
+"card.resume" = "Reprendre";
+"card.playFromStart" = "Lire depuis le début";
 "detail.season.markWatched" = "Marquer la saison comme vue";
 "detail.season.markWatched.message" = "Tous les épisodes de cette saison seront marqués comme vus.";
 "detail.season.markedWatched" = "Saison marquée comme vue";
