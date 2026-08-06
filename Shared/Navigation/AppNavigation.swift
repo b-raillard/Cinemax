@@ -874,6 +874,16 @@ struct AppNavigation: View {
             toast: toasts
         ))
         #endif
+        // "Play on…" is now also raised from context menus, so the sheet is
+        // hosted here rather than by the detail screen. The modifier already
+        // takes a binding: this is a relocation, not a rewrite.
+        .modifier(RemotePlayPresentation(
+            sheet: $cardActions.remotePlay,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toasts
+        ))
         .environment(\.motionEffectsEnabled, motionEffects)
         // Respect the user's OS Dynamic Type setting while capping at a size
         // that won't collapse layouts (hero titles, tab bar). The app also has

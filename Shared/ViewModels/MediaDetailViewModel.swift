@@ -81,7 +81,7 @@ final class MediaDetailViewModel {
         self.itemType = itemType
     }
 
-    func load(using appState: AppState, loc: LocalizationManager) async {
+    func load(using appState: AppState, loc: LocalizationManager, cardActions: CardActionPresenter? = nil) async {
         guard let userId = appState.currentUserId else { return }
         loadGeneration += 1
         let generation = loadGeneration
@@ -133,7 +133,7 @@ final class MediaDetailViewModel {
         // Same discipline for the "Play on…" probe: a side task, so `/Sessions`
         // being slow or unreachable costs the render nothing. Every item kind is
         // sendable, so there's no type guard here.
-        Task { await loadRemoteTargets(using: appState) }
+        Task { await loadRemoteTargets(using: appState, cardActions: cardActions) }
 
         isLoading = false
     }
@@ -372,7 +372,7 @@ final class MediaDetailViewModel {
     /// Internal rather than private: the picker sheet re-runs the same probe
     /// when it opens (its snapshot has to be fresh at the moment a command is
     /// sent), and the tests exercise this path directly.
-    func loadRemoteTargets(using appState: AppState) async {
+    func loadRemoteTargets(using appState: AppState, cardActions: CardActionPresenter? = nil) async {
         guard let userId = appState.currentUserId else { return }
         do {
             let sessions = try await appState.apiClient.getControllableSessions(userId: userId)
@@ -381,7 +381,16 @@ final class MediaDetailViewModel {
                 currentUserId: userId,
                 excludingDeviceId: KeychainService.getOrCreateDeviceID()
             )
+            // The context menu can't probe before it draws: it reads this
+            // count, written only by a real probe. No speculative request is
+            // added here.
+            cardActions?.knownRemoteTargetCount = remoteTargets.count
         } catch {
+            // Unchanged: having no target is the ordinary case, a failed probe
+            // degrades to "no button", never to an error screen.
+            // `knownRemoteTargetCount` is deliberately NOT reset to 0 here — a
+            // network failure doesn't prove there's no target, and overwriting
+            // it would make the menu entry disappear after a mere hiccup.
             logger.debug("Remote targets probe failed: \(error.localizedDescription, privacy: .public)")
             remoteTargets = []
         }

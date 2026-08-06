@@ -88,6 +88,18 @@ private struct MediaCardContextMenu: ViewModifier {
                         Label(loc.localized("card.playFromStart"), systemImage: "gobackward")
                     }
                 }
+                // Cold cache ⇒ show the entry (optimistic). That's what avoids a
+                // permanently dead entry for someone with no Apple TV without
+                // adding a probe on every menu open — a `contextMenu` builds
+                // synchronously and can't await one. The sheet re-probes on
+                // open and already has its own empty state (`remote.noTargets.*`).
+                if let cardActions, cardActions.knownRemoteTargetCount ?? 1 > 0 {
+                    Button {
+                        Task { await startRemotePlay() }
+                    } label: {
+                        Label(loc.localized("remote.title"), systemImage: "tv.badge.wifi")
+                    }
+                }
                 Divider()
             }
             Button {
@@ -154,6 +166,31 @@ private struct MediaCardContextMenu: ViewModifier {
             episodeNavigator: navigation?.navigator
         ))
         #endif
+    }
+
+    /// Sends to another session what "Play" would have started here, going
+    /// through the same resolver — so a series sends its next-up episode and a
+    /// half-watched movie resumes where it left off.
+    private func startRemotePlay() async {
+        guard let userId = appState.currentUserId, let id = item.id else { return }
+        let type = item.type
+        let title = item.name ?? ""
+        let ticks = item.userData?.playbackPositionTicks ?? 0
+        let played = item.userData?.isPlayed ?? false
+
+        let target = await CardPlayTargetResolver.resolve(
+            itemId: id, type: type, title: title,
+            positionTicks: ticks, isPlayed: played,
+            api: appState.apiClient, userId: userId
+        )
+        cardActions?.present(remotePlay: RemotePlayIntent(
+            itemId: target.itemId,
+            title: target.title,
+            startPositionTicks: target.startSeconds.map { Int($0 * 10_000_000) },
+            // A card carries no version choice — that's the detail screen's
+            // "Version" row's decision.
+            mediaSourceId: nil
+        ))
     }
 
     private func toggleWatched(isPlayed: Bool) async {
