@@ -1243,6 +1243,10 @@ La suppression a laissé deux orphelins que la revue de Task 4 a relevés :
 
 Les quatre points d'accroche antérieurs au lot portent tous un commentaire court rappelant que le modificateur est posé sur la vue focusable et **non** sur son label (voir `LibraryPosterCard.swift`, `SearchScreen.swift`, `WatchedHistoryScreen.swift`). Les cinq ajouts de Task 5 n'en ont pas. Ce commentaire n'est pas décoratif : le placement est un invariant que **le compilateur ne vérifie pas** et dont la violation ne se voit qu'à l'usage, sur le focus tvOS. Ajouter une ligne ou deux, en anglais, au-dessus de chacun de : `HomeScreen.swift` (`nextUpPlayLink` et `recentlyAddedCard`), `FavoritesScreen.swift`, `PersonDetailScreen.swift`, `MediaDetailSimilarSection.swift`.
 
+- [ ] **Step 0d : corriger le sens de deux commentaires dans `SearchScreen.swift`**
+
+Aux deux propriétés `onGoToSeries` (une sur `SearchResultsGrid`, une sur `SearchResultCard`), le commentaire dit « bubbled up » alors que c'est la **fermeture qui descend** l'arbre de vues ; seul l'**événement** remonte. Reformuler les deux pour décrire ce qui circule dans quel sens (par exemple « passed down to … » sur le conteneur, « invoked to bubble the event up to … » sur la carte). Un mot chacun.
+
 - [ ] **Step 1 : parité de localisation**
 
 Run: invoquer la skill `localize-check`.
