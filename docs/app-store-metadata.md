@@ -95,19 +95,24 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 
 #### iOS — 1.2.0
 ```
-Un appui long sur une affiche fait désormais tout, sans ouvrir la fiche.
+Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 
 — MENU D'APPUI LONG
-• Lancez la lecture, ou reprenez où vous en étiez, directement depuis une affiche
+• Lancez la lecture, ou reprenez où vous en étiez, sans quitter la page où vous êtes
 • « Lire depuis le début » quand une reprise est en cours
-• Envoyez le titre sur un autre appareil sans passer par sa fiche
-• Depuis un épisode, rejoignez la fiche de sa série en un geste
+• Depuis un épisode, rejoignez la page de sa série en un geste
 • Marquez comme vu, ajoutez aux favoris ou à une playlist
 • Retirez un titre de « Reprendre »
 
 — DISPONIBLE PARTOUT
-• Le menu est maintenant sur toutes les affiches : accueil, bibliothèque, recherche, favoris, filmographies, titres similaires et historique
-• L'aperçu ne soulève plus que la jaquette, sans texte qui déborde sur la rangée voisine
+• Le menu est maintenant sur toutes les pages : accueil, bibliothèque, recherche, favoris, filmographies, titres similaires et historique
+• L'aperçu montre l'image du titre seule, sans texte qui déborde sur la rangée voisine
+
+— LIRE SUR UN AUTRE APPAREIL
+• Cinemax reçoit maintenant la lecture : choisissez un film sur votre iPhone, il démarre sur votre Apple TV
+• Déclenchable depuis n'importe quel titre, et plus seulement depuis sa page
+• La reprise et la version choisie sont respectées, exactement comme une lecture locale
+• Désactivable dans Réglages › Lecture
 
 — AJOUTS RÉCENTS
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
@@ -119,18 +124,23 @@ Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b
 
 #### tvOS — 1.2.0
 ```
-Un appui long sur une affiche fait désormais tout, sans ouvrir la fiche.
+Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 
 — MENU D'APPUI LONG
-• Lancez la lecture, ou reprenez où vous en étiez, directement depuis une affiche
+• Lancez la lecture, ou reprenez où vous en étiez, sans quitter la page où vous êtes
 • « Lire depuis le début » quand une reprise est en cours
-• Envoyez le titre sur un autre appareil sans passer par sa fiche
-• Depuis un épisode, rejoignez la fiche de sa série en un geste
+• Depuis un épisode, rejoignez la page de sa série en un geste
 • Marquez comme vu, ajoutez aux favoris ou à une playlist
 • Retirez un titre de « Reprendre »
 
 — DISPONIBLE PARTOUT
-• Le menu est maintenant sur toutes les affiches : accueil, bibliothèque, recherche, favoris, filmographies, titres similaires et historique
+• Le menu est maintenant sur toutes les pages : accueil, bibliothèque, recherche, favoris, filmographies, titres similaires et historique
+
+— LIRE SUR UN AUTRE APPAREIL
+• Votre Apple TV reçoit maintenant la lecture : choisissez un film sur votre iPhone, il démarre ici
+• Depuis le tvOS aussi, envoyez un titre vers un autre appareil connecté à votre serveur
+• La reprise et la version choisie sont respectées, exactement comme une lecture locale
+• Désactivable dans Réglages › Lecture
 
 — AJOUTS RÉCENTS
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
@@ -282,19 +292,24 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 
 #### iOS — 1.2.0
 ```
-Long-press a poster and it now does everything, without opening the title.
+Long-press a title and it now does everything, without opening its page.
 
 — LONG-PRESS MENU
-• Start playback, or resume where you left off, straight from a poster
+• Start playback, or resume where you left off, without leaving the page you are on
 • "Play from beginning" whenever a resume point exists
-• Send a title to another device without opening its page first
 • Jump from an episode to its series page in one gesture
 • Mark as watched, add to favorites, add to a playlist
 • Remove a title from "Continue Watching"
 
 — EVERYWHERE
-• The menu is now on every poster: home, library, search, favorites, filmographies, similar titles and watch history
-• The preview lifts the artwork alone — no more text spilling over the row below
+• The menu is now on every page: home, library, search, favorites, filmographies, similar titles and watch history
+• The preview shows the title's artwork alone — no more text spilling over the row below
+
+— PLAY ON ANOTHER DEVICE
+• Cinemax now receives playback: pick a film on your iPhone and it starts on your Apple TV
+• Available from any title, not just from its page
+• Resume point and chosen version are honored, exactly like local playback
+• Can be turned off in Settings › Playback
 
 — RECENTLY ADDED
 • One show can no longer take over the row: importing a full season used to fill it entirely
@@ -306,18 +321,23 @@ Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-rail
 
 #### tvOS — 1.2.0
 ```
-Long-press a poster and it now does everything, without opening the title.
+Long-press a title and it now does everything, without opening its page.
 
 — LONG-PRESS MENU
-• Start playback, or resume where you left off, straight from a poster
+• Start playback, or resume where you left off, without leaving the page you are on
 • "Play from beginning" whenever a resume point exists
-• Send a title to another device without opening its page first
 • Jump from an episode to its series page in one gesture
 • Mark as watched, add to favorites, add to a playlist
 • Remove a title from "Continue Watching"
 
 — EVERYWHERE
-• The menu is now on every poster: home, library, search, favorites, filmographies, similar titles and watch history
+• The menu is now on every page: home, library, search, favorites, filmographies, similar titles and watch history
+
+— PLAY ON ANOTHER DEVICE
+• Your Apple TV now receives playback: pick a film on your iPhone and it starts here
+• From tvOS too, send a title to another device signed in to your server
+• Resume point and chosen version are honored, exactly like local playback
+• Can be turned off in Settings › Playback
 
 — RECENTLY ADDED
 • One show can no longer take over the row: importing a full season used to fill it entirely
