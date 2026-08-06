@@ -44,6 +44,32 @@ struct HomeViewModelTests {
         #expect(vm.latestItems.isEmpty)
     }
 
+    @Test("Recently Added asks for movies and series by date added — never raw episodes")
+    func recentlyAddedQueriesMoviesAndSeriesByDateAdded() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        // The row used to call `/Items/Latest`, which scans raw items — episodes
+        // included — and groups them under their series. One show's back-catalogue
+        // import then filled the whole scan and collapsed into a SINGLE card, so
+        // the row looked empty while faithfully reporting the newest items.
+        #expect(api.getLatestMediaCallCount == 0)
+
+        let recentlyAdded = api.getItemsQueries.first {
+            $0.includeItemTypes == [.movie, .series] && $0.isFavorite == nil
+        }
+        #expect(recentlyAdded != nil)
+        #expect(recentlyAdded?.sortBy == [.dateCreated])
+        #expect(recentlyAdded?.sortOrder == [.descending])
+        #expect(recentlyAdded?.limit == 20)
+        // Episodes must not be requestable into this row at all — excluding them
+        // by type is what makes the row's contents independent of how many
+        // episodes happened to land recently.
+        #expect(recentlyAdded?.includeItemTypes?.contains(.episode) == false)
+    }
+
     @Test("load() populates resumeItems and latestItems from API")
     func loadPopulatesItems() async {
         let api = MockAPIClient()

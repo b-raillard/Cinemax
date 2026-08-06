@@ -93,7 +93,24 @@ final class HomeViewModel {
             }
             group.addTask {
                 do {
-                    return .latest(try await appState.apiClient.getLatestMedia(userId: userId, limit: 20))
+                    // Date-added order over movies and series, NOT `/Items/Latest`.
+                    //
+                    // That endpoint scans raw items — episodes included — and
+                    // groups them under their series (`groupItems` defaults to
+                    // true). A library that ingests one series' back catalogue
+                    // therefore fills the whole scan with its episodes, which
+                    // collapse into a SINGLE card: the row looked empty while
+                    // faithfully reporting that the newest N items on the server
+                    // were all episodes of one show. Filtering by type instead
+                    // makes the row's contents independent of how many episodes
+                    // landed recently.
+                    return .latest(try await appState.apiClient.getItems(
+                        userId: userId,
+                        includeItemTypes: [.movie, .series],
+                        sortBy: [.dateCreated],
+                        sortOrder: [.descending],
+                        limit: 20
+                    ).items)
                 } catch {
                     logger.warning("Home latest fetch failed: \(error.localizedDescription, privacy: .public)")
                     return nil

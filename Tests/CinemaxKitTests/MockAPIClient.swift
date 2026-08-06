@@ -346,6 +346,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// tests assert the loader requested the right page (`PaginatedLoader`
     /// passes `items.count` as `startIndex`).
     private(set) var getItemsCalls: [(startIndex: Int?, limit: Int?)] = []
+    /// Full query shape of every `getItems` call, so a test can assert WHAT was
+    /// asked for and not just how it was paginated. Kept separate from
+    /// `getItemsCalls` so existing pagination assertions stay untouched.
+    private(set) var getItemsQueries: [(
+        includeItemTypes: [BaseItemKind]?,
+        sortBy: [ItemSortBy]?,
+        sortOrder: [JellyfinAPI.SortOrder]?,
+        isFavorite: Bool?,
+        limit: Int?
+    )] = []
 
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock { getResumeItemsCallCount += 1 }
@@ -368,10 +378,22 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         recordLock.withLock {
             if isFavorite == true { favoriteFetchCount += 1 }
             getItemsCalls.append((startIndex: startIndex, limit: limit))
+            getItemsQueries.append((
+                includeItemTypes: includeItemTypes, sortBy: sortBy,
+                sortOrder: sortOrder, isFavorite: isFavorite, limit: limit
+            ))
         }
         if shouldThrow { throw stubbedError }
         if let handler = getItemsHandler {
             return try await handler(startIndex)
+        }
+        // Home's "Recently Added" rail is a date-added query over movies and
+        // series (it used to be `/Items/Latest`, which let one show's episode
+        // import collapse the whole row into a single grouped card). Routed by
+        // query shape so it keeps its own stub — the favorites rail issues the
+        // same query plus `isFavorite`, which is what tells the two apart.
+        if includeItemTypes == [.movie, .series], isFavorite == nil {
+            return (stubbedLatestItems, stubbedLatestItems.count)
         }
         return (stubbedItems, stubbedTotalCount)
     }

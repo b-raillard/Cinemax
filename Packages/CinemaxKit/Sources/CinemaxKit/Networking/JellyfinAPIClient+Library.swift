@@ -50,6 +50,16 @@ extension JellyfinAPIClient {
         }
     }
 
+    /// **Home's "Recently Added" rail deliberately does NOT use this.** This
+    /// endpoint scans raw items — episodes included — and groups them under
+    /// their series (`groupItems` defaults to true, and no `includeItemTypes`
+    /// is sent). A library that ingests one series' back catalogue therefore
+    /// fills the whole scan with its episodes, which collapse into a SINGLE
+    /// card: the row looks empty while faithfully reporting that the newest N
+    /// items on the server all belong to one show. `HomeViewModel` asks for a
+    /// date-added `getItems` over `[.movie, .series]` instead, whose contents
+    /// don't depend on how many episodes happened to land recently. Kept for
+    /// callers that genuinely want the server's own "latest" semantics.
     public func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
         let cacheKey = "latest-\(userId)-\(parentId ?? "all")-\(limit)-\(getMaxContentAge())"
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
