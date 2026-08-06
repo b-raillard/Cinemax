@@ -20,15 +20,30 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaCardContex
 extension View {
     func mediaCardContextMenu(
         item: BaseItemDto,
+        artwork: CardArtwork = .poster,
         navigation: CardPlaybackNavigation? = nil,
         onRemoveFromResume: (() -> Void)? = nil,
         onGoToSeries: ((String) -> Void)? = nil
     ) -> some View {
         modifier(MediaCardContextMenu(
-            item: item, navigation: navigation,
+            item: item, artwork: artwork, navigation: navigation,
             onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries
         ))
     }
+}
+
+/// Which image the iOS long-press preview lifts — the card's OWN artwork, so
+/// the preview reads as the card growing rather than as a different object.
+///
+/// The modifier can't infer this: `.movie` and `.series` items appear both as
+/// portrait posters (library, search, Home's Recently Added) and as landscape
+/// wide cards (Home's Continue Watching and Next Up), so the shape is a
+/// property of the call site, not of the item.
+enum CardArtwork {
+    /// `.primary`, 2:3 — every `PosterCard` / `LibraryPosterCard` surface.
+    case poster
+    /// `.backdrop`, 16:9 — the two `WideCard` rails on Home.
+    case backdrop
 }
 
 /// Destination token for "Go to series". Declared here, alongside the
@@ -57,6 +72,7 @@ private struct MediaCardContextMenu: ViewModifier {
     #endif
 
     let item: BaseItemDto
+    let artwork: CardArtwork
     let navigation: CardPlaybackNavigation?
     let onRemoveFromResume: (() -> Void)?
     let onGoToSeries: ((String) -> Void)?
@@ -73,6 +89,22 @@ private struct MediaCardContextMenu: ViewModifier {
     @State private var favoriteOverride: Bool?
 
     func body(content: Content) -> some View {
+        #if os(iOS)
+        // An explicit preview lifts the ARTWORK ALONE. The default one lifts the
+        // whole attached view, and on a `PosterCard` that view is the poster
+        // *plus* its title and subtitle — text with no background of its own,
+        // which ends up floating over the next row's header. `LibraryPosterCard`
+        // never showed the bug because its link wraps only the poster; this makes
+        // every surface behave the way that one already did.
+        content.contextMenu { menuItems } preview: { artworkPreview }
+        #else
+        // tvOS has no `preview:` overload, and no lift to correct.
+        content.contextMenu { menuItems }
+        #endif
+    }
+
+    @ViewBuilder
+    private var menuItems: some View {
         let isPlayed = playedOverride ?? item.userData?.isPlayed ?? false
         let isFavorite = favoriteOverride ?? item.userData?.isFavorite ?? false
         let isPlayable = item.type == .movie || item.type == .series || item.type == .episode
@@ -96,7 +128,7 @@ private struct MediaCardContextMenu: ViewModifier {
         let canPlayLocally = cardActions != nil
         #endif
 
-        content.contextMenu {
+        Group {
             if isPlayable {
                 if canPlayLocally {
                     Button {
@@ -182,6 +214,53 @@ private struct MediaCardContextMenu: ViewModifier {
             }
         }
     }
+
+    #if os(iOS)
+    /// The lifted artwork, and nothing else.
+    ///
+    /// **The URL must be byte-identical to the one the card itself requested**
+    /// — same `maxWidth`, same `tag`. Nuke keys its cache on the URL, so a
+    /// near-miss doesn't reuse the image the card already decoded: it starts a
+    /// fresh download and the preview appears blank for a beat. Every poster
+    /// surface requests `.primary` at 300 with `primaryImageTagValue`, and both
+    /// wide rails request `.backdrop` at 600 with `backdropImageTagValue` off
+    /// `backdropItemID`, so these two branches cover all nine call sites
+    /// exactly. Same discipline as `PosterPrefetcher`.
+    @ViewBuilder
+    private var artworkPreview: some View {
+        switch artwork {
+        case .poster:
+            previewArtwork(
+                url: item.id.map {
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
+                },
+                width: Self.previewPosterWidth,
+                height: Self.previewPosterWidth * 3 / 2
+            )
+        case .backdrop:
+            previewArtwork(
+                url: item.backdropItemID.map {
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue)
+                },
+                width: Self.previewBackdropWidth,
+                height: Self.previewBackdropWidth * 9 / 16
+            )
+        }
+    }
+
+    /// No `clipShape` here on purpose — the system platter already rounds the
+    /// preview, and a second corner radius inside it reads as a double border.
+    private func previewArtwork(url: URL?, width: CGFloat, height: CGFloat) -> some View {
+        Color.clear
+            .frame(width: width, height: height)
+            .background(CinemaColor.surfaceContainerLow)
+            .overlay { CinemaLazyImage(url: url, fallbackIcon: "film") }
+            .clipped()
+    }
+
+    private static let previewPosterWidth: CGFloat = 220
+    private static let previewBackdropWidth: CGFloat = 320
+    #endif
 
     /// Starts playback. tvOS goes through `VideoPlayerCoordinator` (already a
     /// root presenter, exactly what `PlayLink` does); iOS goes through the

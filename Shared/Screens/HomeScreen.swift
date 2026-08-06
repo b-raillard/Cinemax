@@ -780,6 +780,10 @@ struct HomeScreen: View {
             // PlayLink, not its label, so tvOS focus behavior is untouched.
             .mediaCardContextMenu(
                 item: item,
+                // This rail draws a `WideCard`, so its own artwork is the
+                // backdrop — lifting a portrait poster would show a different
+                // image than the card the finger is on.
+                artwork: .backdrop,
                 navigation: CardPlaybackNavigation(
                     previous: nav?.previous, next: nav?.next, navigator: nav?.navigator
                 ),
@@ -870,6 +874,8 @@ struct HomeScreen: View {
             // tvOS focus is untouched.
             .mediaCardContextMenu(
                 item: item,
+                // `WideCard` rail — same reason as Continue Watching above.
+                artwork: .backdrop,
                 navigation: CardPlaybackNavigation(
                     previous: nav?.previous, next: nav?.next, navigator: nav?.navigator
                 ),
