@@ -126,4 +126,25 @@ struct CardPlayTargetTests {
         #expect(target.itemId == "s1")
         #expect(target.startSeconds == nil)
     }
+
+    // MARK: - Série : sondage lent (course contre le délai)
+
+    @Test("Série dont le sondage next-up est trop lent : dégrade au délai, sans attendre la réponse")
+    func seriesNextUpTimesOut() async {
+        let api = MockAPIClient()
+        // Slower than the (short, test-only) probe deadline below, but the
+        // mock still eventually resolves — proving the resolver returns on
+        // the deadline rather than waiting for this to complete.
+        api.nextUpDelay = .milliseconds(300)
+        api.stubbedNextUp = makeEpisode(id: "e7", name: "Épisode 7", positionTicks: 1_200_000_000, isPlayed: false)
+        let target = await CardPlayTargetResolver.resolve(
+            itemId: "s1", type: .series, title: "Ma série",
+            positionTicks: 0, isPlayed: false,
+            api: api, userId: "u1",
+            probeDeadline: .milliseconds(50)
+        )
+        #expect(target.itemId == "s1")
+        #expect(target.title == "Ma série")
+        #expect(target.startSeconds == nil)
+    }
 }
