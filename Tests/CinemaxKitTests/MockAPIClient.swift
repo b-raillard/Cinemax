@@ -451,9 +451,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return []
     }
     var stubbedNextUp: BaseItemDto?
+    /// Drapeau **dédié**, distinct de `shouldThrow` : plusieurs suites existantes
+    /// activent `shouldThrow` tout en laissant `getNextUp` réussir, et les faire
+    /// basculer d'un coup changerait leur comportement sans rapport avec ce lot.
+    var nextUpShouldThrow = false
     private(set) var getNextUpCallCount = 0
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
         recordLock.withLock { getNextUpCallCount += 1 }
+        if nextUpShouldThrow { throw stubbedError }
         return stubbedNextUp
     }
     var stubbedNextUpItems: [BaseItemDto] = []
