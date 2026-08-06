@@ -1239,6 +1239,10 @@ La suppression a laissé deux orphelins que la revue de Task 4 a relevés :
 1. **Clé de localisation orpheline** — `home.continueWatching.markedWatched` n'a plus aucun appelant Swift (son seul consommateur était la méthode supprimée). La retirer de `Resources/fr.lproj/Localizable.strings` **et** de `Resources/en.lproj/Localizable.strings`. Vérifier d'abord par `grep -rn "home.continueWatching.markedWatched" Shared Widgets TopShelf Tests` que le résultat est bien vide — si une référence existe, ne pas supprimer et le signaler.
 2. **`HomeViewModel.mutateResumeItem`** — son commentaire (« Shared body for both Continue Watching mutations ») est devenu faux : `removeResumeItem` en est le seul appelant et passe toujours `markPlayed: false`, si bien que la branche `if markPlayed { markItemPlayed }` est morte. Supprimer le paramètre `markPlayed` et sa branche, et réécrire le commentaire pour décrire ce que la méthode fait réellement maintenant. La suite de tests doit rester verte (`HomeViewModelTests` couvre `removeResumeItem`).
 
+- [ ] **Step 0c : commenter les cinq accroches ajoutées en Task 5**
+
+Les quatre points d'accroche antérieurs au lot portent tous un commentaire court rappelant que le modificateur est posé sur la vue focusable et **non** sur son label (voir `LibraryPosterCard.swift`, `SearchScreen.swift`, `WatchedHistoryScreen.swift`). Les cinq ajouts de Task 5 n'en ont pas. Ce commentaire n'est pas décoratif : le placement est un invariant que **le compilateur ne vérifie pas** et dont la violation ne se voit qu'à l'usage, sur le focus tvOS. Ajouter une ligne ou deux, en anglais, au-dessus de chacun de : `HomeScreen.swift` (`nextUpPlayLink` et `recentlyAddedCard`), `FavoritesScreen.swift`, `PersonDetailScreen.swift`, `MediaDetailSimilarSection.swift`.
+
 - [ ] **Step 1 : parité de localisation**
 
 Run: invoquer la skill `localize-check`.
