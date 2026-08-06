@@ -860,6 +860,7 @@
 "card.play" = "Play";
 "card.resume" = "Resume";
 "card.playFromStart" = "Play from beginning";
+"card.goToSeries" = "Go to series";
 "detail.season.markWatched" = "Mark season as watched";
 "detail.season.markWatched.message" = "All episodes in this season will be marked as watched.";
 "detail.season.markedWatched" = "Season marked as watched";

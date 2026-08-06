@@ -84,14 +84,24 @@ struct WatchedHistoryScreen: View {
     #endif
     @State private var viewModel = WatchedHistoryViewModel()
     @State private var prefetcher = PosterPrefetcher()
+    /// "Go to series" target raised from a history card's context menu. State
+    /// lives here and the destination is hoisted to the body, inside this
+    /// screen's own `NavigationStack` but outside the results `LazyVGrid`,
+    /// where the cards that fire it live.
+    @State private var seriesDestination: SeriesDestination?
 
     var body: some View {
         NavigationStack {
-            #if os(tvOS)
-            tvOSChrome
-            #else
-            iOSChrome
-            #endif
+            Group {
+                #if os(tvOS)
+                tvOSChrome
+                #else
+                iOSChrome
+                #endif
+            }
+            .navigationDestination(item: $seriesDestination) { destination in
+                MediaDetailScreen(itemId: destination.id, itemType: .series)
+            }
         }
         .task {
             await viewModel.loadInitial(using: appState)
@@ -280,7 +290,10 @@ struct WatchedHistoryScreen: View {
         .accessibilityLabel([cardTitle, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
         // Long-press / long-press-select: un-watch removes the item here (the
         // screen reloads off `.cinemaxShouldRefreshCatalogue`), favorite too.
-        .mediaCardContextMenu(item: item)
+        .mediaCardContextMenu(
+            item: item,
+            onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
+        )
     }
 
     private func prefetchPosters() {

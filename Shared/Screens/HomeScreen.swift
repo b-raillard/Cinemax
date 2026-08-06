@@ -29,6 +29,11 @@ struct HomeScreen: View {
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
     /// hoisted to the screen root per the lazy-container navigation RULE.
     @State private var favoritesDestination: FavoritesDestination?
+    /// "Go to series" target raised from a card's context menu. State lives
+    /// here and the destination is hoisted to the screen body: SwiftUI
+    /// ignores `navigationDestination(item:)` inside a `LazyHStack`, where the
+    /// cards that fire it live.
+    @State private var seriesDestination: SeriesDestination?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     /// Raw JSON of the user's picked genres. Held here only to observe changes
@@ -104,6 +109,11 @@ struct HomeScreen: View {
         // screen root (NOT inside the lazy scroll content — lazy-container RULE).
         .navigationDestination(item: $favoritesDestination) { _ in
             FavoritesScreen()
+        }
+        // "Go to series" from an episode card's context menu. Hoisted to the
+        // screen root for the same reason as `favoritesDestination` above.
+        .navigationDestination(item: $seriesDestination) { destination in
+            MediaDetailScreen(itemId: destination.id, itemType: .series)
         }
         .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
             consumeDeepLink(newValue)
@@ -775,7 +785,8 @@ struct HomeScreen: View {
                 ),
                 onRemoveFromResume: {
                     Task { await viewModel.removeResumeItem(item, using: appState, toast: toast, loc: loc) }
-                }
+                },
+                onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
             .accessibilityLabel(item.name ?? "")
             .accessibilityValue(resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) } ?? "")
@@ -859,7 +870,8 @@ struct HomeScreen: View {
                 item: item,
                 navigation: CardPlaybackNavigation(
                     previous: nav?.previous, next: nav?.next, navigator: nav?.navigator
-                )
+                ),
+                onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
         }
     }

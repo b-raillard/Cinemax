@@ -21,12 +21,21 @@ extension View {
     func mediaCardContextMenu(
         item: BaseItemDto,
         navigation: CardPlaybackNavigation? = nil,
-        onRemoveFromResume: (() -> Void)? = nil
+        onRemoveFromResume: (() -> Void)? = nil,
+        onGoToSeries: ((String) -> Void)? = nil
     ) -> some View {
         modifier(MediaCardContextMenu(
-            item: item, navigation: navigation, onRemoveFromResume: onRemoveFromResume
+            item: item, navigation: navigation,
+            onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries
         ))
     }
+}
+
+/// Destination token for "Go to series". Declared here, alongside the
+/// callback that produces its id, because all three host screens (Home,
+/// Search, Watched History) consume it.
+struct SeriesDestination: Identifiable, Hashable {
+    let id: String
 }
 
 private struct MediaCardContextMenu: ViewModifier {
@@ -50,6 +59,7 @@ private struct MediaCardContextMenu: ViewModifier {
     let item: BaseItemDto
     let navigation: CardPlaybackNavigation?
     let onRemoveFromResume: (() -> Void)?
+    let onGoToSeries: ((String) -> Void)?
 
     // Optimistic mirrors of the toggle state. The menu label is derived from
     // the item's `userData`, but that value is a snapshot captured when the
@@ -103,6 +113,19 @@ private struct MediaCardContextMenu: ViewModifier {
                     } label: {
                         Label(loc.localized("remote.title"), systemImage: "tv.badge.wifi")
                     }
+                }
+                Divider()
+            }
+            // The callback is supplied only by the screens that host the
+            // destination outside their lazy container (SwiftUI would
+            // silently ignore `navigationDestination` there) — same contract
+            // as `AdminItemMenu.onSelectDestination`. Its presence is what
+            // makes the entry appear, so a dead button is not possible.
+            if let onGoToSeries, item.type == .episode, let seriesId = item.seriesID {
+                Button {
+                    onGoToSeries(seriesId)
+                } label: {
+                    Label(loc.localized("card.goToSeries"), systemImage: "rectangle.stack")
                 }
                 Divider()
             }

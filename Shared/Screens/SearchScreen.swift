@@ -21,6 +21,11 @@ struct SearchScreen: View {
     @State private var surpriseDestination: SurpriseDestination?
     @State private var isPickingSurpriseMovie = false
     @State private var isPickingSurpriseSeries = false
+    /// "Go to series" target raised from a result card's context menu. State
+    /// lives here and the destination is hoisted to the screen body: SwiftUI
+    /// ignores `navigationDestination(item:)` inside the results `LazyVGrid`,
+    /// where the cards that fire it live.
+    @State private var seriesDestination: SeriesDestination?
 
     private struct SurpriseDestination: Identifiable, Hashable {
         let id: String
@@ -86,6 +91,11 @@ struct SearchScreen: View {
         }
         .navigationDestination(item: $surpriseDestination) { dest in
             MediaDetailScreen(itemId: dest.id, itemType: dest.itemType)
+        }
+        // "Go to series" from an episode result card's context menu. Hoisted
+        // to the screen root, same reason as `surpriseDestination` above.
+        .navigationDestination(item: $seriesDestination) { destination in
+            MediaDetailScreen(itemId: destination.id, itemType: .series)
         }
         // An App Intent can raise a term either before this screen exists (the
         // tab is switched to afterwards) or while it's already on screen, so
@@ -336,7 +346,8 @@ struct SearchScreen: View {
                 gridPadding: gridPadding,
                 gridSpacing: gridSpacing,
                 headerTitle: loc.localized("search.topMatches"),
-                peopleTitle: loc.localized("search.people")
+                peopleTitle: loc.localized("search.people"),
+                onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
         }
     }
@@ -619,6 +630,9 @@ private struct SearchResultsGrid: View {
     let gridSpacing: CGFloat
     let headerTitle: String
     let peopleTitle: String
+    /// Bubbled up to `SearchResultCard`, then to `SearchScreen`'s
+    /// screen-level destination — see the "Go to series" state above.
+    let onGoToSeries: (String) -> Void
 
     var body: some View {
         ScrollView {
@@ -645,7 +659,7 @@ private struct SearchResultsGrid: View {
 
                     LazyVGrid(columns: columns, spacing: gridSpacing) {
                         ForEach(results, id: \.id) { item in
-                            SearchResultCard(item: item, imageBuilder: imageBuilder)
+                            SearchResultCard(item: item, imageBuilder: imageBuilder, onGoToSeries: onGoToSeries)
                         }
                     }
                     .padding(.horizontal, gridPadding)
@@ -727,6 +741,9 @@ private struct SearchPersonRow: View {
 private struct SearchResultCard: View {
     let item: BaseItemDto
     let imageBuilder: ImageURLBuilder
+    /// Bubbled up from `SearchResultsGrid` — see `mediaCardContextMenu`'s
+    /// "Go to series" contract.
+    let onGoToSeries: (String) -> Void
 
     var body: some View {
         let subtitle = Self.subtitle(for: item)
@@ -757,7 +774,10 @@ private struct SearchResultCard: View {
         // Long-press / long-press-select watched + favorite actions, on the
         // NavigationLink (the focusable button) not its label — see
         // `mediaCardContextMenu`.
-        .mediaCardContextMenu(item: item)
+        .mediaCardContextMenu(
+            item: item,
+            onGoToSeries: onGoToSeries
+        )
     }
 
     private static func subtitle(for item: BaseItemDto) -> String {
