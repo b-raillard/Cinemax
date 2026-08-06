@@ -1,0 +1,70 @@
+#!/bin/sh
+#
+# Keeps the committed project.pbxproj a pristine XcodeGen output while letting
+# you keep whatever Xcode injects locally.
+#
+# Why this exists: building to a physical device requires DEVELOPMENT_TEAM in
+# the project, and Xcode writes it into project.pbxproj (it also rewrites some
+# settings into a different but equivalent syntax, e.g. OTHER_LDFLAGS as an
+# array instead of a string). CI's "Verify committed project.pbxproj is up to
+# date" step regenerates the project and diffs it, so any of that churn fails
+# the build — it has done so once already, 8 seconds into a run.
+#
+# What it does: when project.pbxproj is STAGED, it normalizes the version going
+# into the commit and leaves your working tree untouched. Your team id survives,
+# your device builds keep working, and the commit is what CI expects.
+#
+# Consequence, by design: project.pbxproj will usually show as modified in
+# `git status`. That is the local churn, and it is now harmless — it is
+# normalized every time it is committed. Do not "fix" it by committing it.
+#
+# Install (once per clone):
+#   git config core.hooksPath scripts/git-hooks
+
+set -e
+
+PBXPROJ="Cinemax.xcodeproj/project.pbxproj"
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Nothing to do unless the project file is actually part of this commit.
+git diff --cached --name-only | grep -qx "$PBXPROJ" || exit 0
+
+if command -v xcodegen >/dev/null 2>&1; then
+    # Preferred path: regenerate and stage that. Catches every flavour of Xcode
+    # rewrite, not just the team id — which a line filter cannot do.
+    BACKUP="$(mktemp)"
+    cp "$PBXPROJ" "$BACKUP"
+    # Restore the working copy whatever happens next, so a failed generate can
+    # never cost you the team id you need to build on device.
+    trap 'cp "$BACKUP" "$PBXPROJ"; rm -f "$BACKUP"' EXIT
+
+    if ! xcodegen generate >/dev/null 2>&1; then
+        echo "pre-commit: 'xcodegen generate' failed — commit aborted." >&2
+        echo "  Fix project.yml, or commit without staging $PBXPROJ." >&2
+        exit 1
+    fi
+
+    git add "$PBXPROJ"
+    echo "pre-commit: staged a pristine $PBXPROJ (your local copy is untouched)."
+    exit 0
+fi
+
+# Fallback for environments without XcodeGen (Linux / remote sessions): strip
+# the team id from the staged blob only, via the index. Best effort — it cannot
+# undo Xcode's syntax rewrites, so CI may still object.
+STAGED="$(mktemp)"
+git show ":$PBXPROJ" | sed '/^[[:space:]]*DEVELOPMENT_TEAM = /d' > "$STAGED"
+
+if git show ":$PBXPROJ" | cmp -s - "$STAGED"; then
+    rm -f "$STAGED"
+    exit 0
+fi
+
+HASH="$(git hash-object -w "$STAGED")"
+git update-index --cacheinfo "100644,$HASH,$PBXPROJ"
+rm -f "$STAGED"
+
+echo "pre-commit: stripped DEVELOPMENT_TEAM from the staged $PBXPROJ." >&2
+echo "  XcodeGen isn't installed here, so other Xcode rewrites are NOT undone." >&2
+echo "  If CI's pbxproj check fails, regenerate on a Mac and commit that." >&2
