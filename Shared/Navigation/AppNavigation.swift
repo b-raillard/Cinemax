@@ -755,6 +755,7 @@ struct AppNavigation: View {
     /// property wrapper would only add semantics without a purpose.
     private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
     @State private var playlistPresenter = AddToPlaylistPresenter()
+    @State private var cardActions = CardActionPresenter()
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
     /// When the app last entered the background — drives Part E foreground
@@ -859,6 +860,30 @@ struct AppNavigation: View {
             loc: loc,
             toast: toasts
         ))
+        .environment(cardActions)
+        // Same reason as the playlist sheet: playback is launched from context
+        // menus inside lazy grids, where a presentation attached to the cell
+        // dies with it. Nothing to host here on tvOS — the menu calls
+        // `VideoPlayerCoordinator` directly.
+        #if os(iOS)
+        .modifier(CardPlaybackPresentation(
+            request: $cardActions.playback,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toasts
+        ))
+        #endif
+        // "Play on…" is now also raised from context menus, so the sheet is
+        // hosted here rather than by the detail screen. The modifier already
+        // takes a binding: this is a relocation, not a rewrite.
+        .modifier(RemotePlayPresentation(
+            sheet: $cardActions.remotePlay,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toast: toasts
+        ))
         .environment(\.motionEffectsEnabled, motionEffects)
         // Respect the user's OS Dynamic Type setting while capping at a size
         // that won't collapse layouts (hero titles, tab bar). The app also has
@@ -923,6 +948,14 @@ struct AppNavigation: View {
             }
             // Re-decide stream transport for the new server (or clear on logout).
             StreamTransportPolicy.shared.configure(serverURL: new)
+            // The "Play on…" poll result is per-server (a different server has
+            // different — possibly zero — controllable sessions). A stale
+            // non-zero count from the server we just left would keep the entry
+            // visible against the new one's sessions, and a stale zero would
+            // hide it after switching to a server that DOES have a target;
+            // both read as fresh even though neither is. Back to "unknown"
+            // until a real probe runs again (`MediaDetailViewModel.loadRemoteTargets`).
+            cardActions.knownRemoteTargetCount = nil
         }
         .onChange(of: appState.currentUserId) { oldId, newId in
             menuConfig.attach(apiClient: appState.apiClient, userId: newId)
@@ -944,6 +977,11 @@ struct AppNavigation: View {
             // re-declare them; a logout tears the socket down (`apply` sees
             // `isAuthenticated == false`).
             remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            // Same rationale as the `serverURL` reset above: a different
+            // signed-in user (switch, or logout → nil) may see a different
+            // controllable-session landscape, so the last poll's count can't
+            // be trusted for them either.
+            cardActions.knownRemoteTargetCount = nil
         }
         .onChange(of: remoteControlEnabled) { _, enabled in
             // Withdrawing re-posts with `supportsMediaControl: false`, which is

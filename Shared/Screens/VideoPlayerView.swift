@@ -72,6 +72,19 @@ struct VideoPlayerView: View {
             #endif
         }
         #if os(iOS)
+        .overlay(alignment: .topTrailing) {
+            // Escape hatch, not a feature: this loading shell is normally
+            // covered by the presented player within a beat, but on the
+            // opt-in native-AVPlayer path, starting PiP makes
+            // `PlayerHostingVC.shouldFireOnDismiss` return `false` — `dismiss()`
+            // is never called, and this `fullScreenCover` shell (no toolbar,
+            // no swipe) is what the user is left looking at. Shown whenever
+            // there's no error to keep it unobtrusive rather than reasoning
+            // about which loading moment is "the stuck one".
+            if errorMessage == nil {
+                iosLoadingCloseButton
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .task { await startIOSPlayback() }
@@ -138,6 +151,25 @@ struct VideoPlayerView: View {
             logger.error("iOS playback error: \(error.localizedDescription)")
             errorMessage = loc.userFacingMessage(for: error)
         }
+    }
+
+    /// Matches the player HUD's own close control
+    /// (`VLCStreamPresenter.buildIOSTransport`'s `closeButton`) — white glyph
+    /// on a translucent black capsule, `.white` hardcoded because the video
+    /// player is one of the few surfaces allowed to (see design-system RULE).
+    private var iosLoadingCloseButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: CinemaScale.pt(14), weight: .bold))
+                .foregroundStyle(.white)
+                .padding(CinemaScale.pt(9))
+                .background(Color.black.opacity(0.45), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(CinemaSpacing.spacing4)
+        .accessibilityLabel(loc.localized("action.done"))
     }
 
     private func iOSErrorView(error: String) -> some View {

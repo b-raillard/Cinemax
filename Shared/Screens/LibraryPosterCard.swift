@@ -143,7 +143,7 @@ private struct PosterCardContent: View {
                 // On the NavigationLink (the focusable button), never its label,
                 // so tvOS focus is untouched; coexists with the admin ellipsis
                 // ZStack sibling below (taps hit the menu, long-press hits this).
-                .mediaCardContextMenu(item: item)
+                .mediaCardContextMenu(item: item, artwork: .poster)
 
                 #if os(iOS)
                 if appState.isAdministrator {

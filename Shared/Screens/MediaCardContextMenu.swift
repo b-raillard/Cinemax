@@ -18,8 +18,59 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaCardContex
 /// catalogue-wide fan-out. A failure surfaces a user-facing error toast
 /// (`userFacingMessage(for:)`) and leaves server state untouched.
 extension View {
-    func mediaCardContextMenu(item: BaseItemDto) -> some View {
-        modifier(MediaCardContextMenu(item: item))
+    func mediaCardContextMenu(
+        item: BaseItemDto,
+        // Deliberately NOT defaulted, unlike every other parameter here. The
+        // others default to "feature off", so omitting one loses an entry and
+        // nothing more. Omitting this one would be silently WRONG on a wide
+        // card — it would lift a portrait poster instead of the backdrop the
+        // finger is on. Required, so a future wide-card surface gets a compile
+        // error instead of a mismatched preview.
+        artwork: CardArtwork,
+        navigation: CardPlaybackNavigation? = nil,
+        onRemoveFromResume: (() -> Void)? = nil,
+        onGoToSeries: ((String) -> Void)? = nil
+    ) -> some View {
+        modifier(MediaCardContextMenu(
+            item: item, artwork: artwork, navigation: navigation,
+            onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries
+        ))
+    }
+}
+
+/// Which image the iOS long-press preview lifts — the card's OWN artwork, so
+/// the preview reads as the card growing rather than as a different object.
+///
+/// The modifier can't infer this: `.movie` and `.series` items appear both as
+/// portrait posters (library, search, Home's Recently Added) and as landscape
+/// wide cards (Home's Continue Watching and Next Up), so the shape is a
+/// property of the call site, not of the item.
+enum CardArtwork {
+    /// `.primary`, 2:3 — every `PosterCard` / `LibraryPosterCard` surface.
+    case poster
+    /// `.backdrop`, 16:9 — the two `WideCard` rails on Home.
+    case backdrop
+}
+
+/// Destination token for "Go to series". Declared here, alongside the
+/// callback that produces its id, because all three host screens (Home,
+/// Search, Watched History) consume it.
+struct SeriesDestination: Identifiable, Hashable {
+    let id: String
+}
+
+extension View {
+    /// Hosts the "Go to series" destination. Each host screen owned a
+    /// byte-identical copy of this three-line body; the token type is already
+    /// shared, so the wiring around it had no reason not to be.
+    ///
+    /// **Apply this OUTSIDE every lazy container** — SwiftUI silently ignores
+    /// `navigationDestination(item:)` inside a `LazyVGrid`/`LazyHStack`, and the
+    /// menu entry then does nothing with no error anywhere.
+    func seriesDestinationHost(_ destination: Binding<SeriesDestination?>) -> some View {
+        navigationDestination(item: destination) { series in
+            MediaDetailScreen(itemId: series.id, itemType: .series)
+        }
     }
 }
 
@@ -35,8 +86,17 @@ private struct MediaCardContextMenu: ViewModifier {
     /// optional read degrades a forgotten injection into a missing menu entry
     /// instead of a crash.
     @Environment(AddToPlaylistPresenter.self) private var playlists: AddToPlaylistPresenter?
+    /// Same optionality rationale as `playlists` above.
+    @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
+    #if os(tvOS)
+    @Environment(VideoPlayerCoordinator.self) private var coordinator: VideoPlayerCoordinator?
+    #endif
 
     let item: BaseItemDto
+    let artwork: CardArtwork
+    let navigation: CardPlaybackNavigation?
+    let onRemoveFromResume: (() -> Void)?
+    let onGoToSeries: ((String) -> Void)?
 
     // Optimistic mirrors of the toggle state. The menu label is derived from
     // the item's `userData`, but that value is a snapshot captured when the
@@ -50,10 +110,97 @@ private struct MediaCardContextMenu: ViewModifier {
     @State private var favoriteOverride: Bool?
 
     func body(content: Content) -> some View {
+        #if os(iOS)
+        // An explicit preview lifts the ARTWORK ALONE. The default one lifts the
+        // whole attached view, and on a `PosterCard` that view is the poster
+        // *plus* its title and subtitle — text with no background of its own,
+        // which ends up floating over the next row's header. `LibraryPosterCard`
+        // never showed the bug because its link wraps only the poster; this makes
+        // every surface behave the way that one already did.
+        content.contextMenu { menuItems } preview: { artworkPreview }
+        #else
+        // tvOS has no `preview:` overload, and no lift to correct.
+        content.contextMenu { menuItems }
+        #endif
+    }
+
+    @ViewBuilder
+    private var menuItems: some View {
         let isPlayed = playedOverride ?? item.userData?.isPlayed ?? false
         let isFavorite = favoriteOverride ?? item.userData?.isFavorite ?? false
+        let isPlayable = item.type == .movie || item.type == .series || item.type == .episode
+        // Only computed for the types whose card carries the useful userData —
+        // a series card doesn't know its next-up episode's, so its label stays
+        // "Play" and "Play from beginning" doesn't show.
+        let localResume: Bool = {
+            guard item.type == .movie || item.type == .episode else { return false }
+            return CardPlayTargetResolver.isResumable(
+                positionTicks: item.userData?.playbackPositionTicks ?? 0,
+                isPlayed: item.userData?.isPlayed ?? false
+            )
+        }()
+        // Same presence discipline as the "Play on…" entry below, applied to
+        // the LOCAL play entries too: `startPlayback` calls `coordinator?.play`
+        // on tvOS and `cardActions?.present` on iOS (see the platform split
+        // there), so an absent presenter on either platform must hide the
+        // button rather than render a silent no-op — the file's own design
+        // promise is that a dead button is not possible.
+        #if os(tvOS)
+        let canPlayLocally = coordinator != nil
+        #else
+        let canPlayLocally = cardActions != nil
+        #endif
 
-        content.contextMenu {
+        Group {
+            if isPlayable {
+                if canPlayLocally {
+                    Button {
+                        Task { await startPlayback(fromStart: false) }
+                    } label: {
+                        Label(
+                            // `detail.*` rather than a card-scoped twin: these are
+                            // the same two labels the detail screen's Play buttons
+                            // use, word for word. A second key would be a second
+                            // translation to keep in sync for no gain.
+                            loc.localized(localResume ? "card.resume" : "detail.play"),
+                            systemImage: "play.fill"
+                        )
+                    }
+                    if localResume {
+                        Button {
+                            Task { await startPlayback(fromStart: true) }
+                        } label: {
+                            Label(loc.localized("detail.playFromBeginning"), systemImage: "gobackward")
+                        }
+                    }
+                }
+                // Cold cache ⇒ show the entry (optimistic). That's what avoids a
+                // permanently dead entry for someone with no Apple TV without
+                // adding a probe on every menu open — a `contextMenu` builds
+                // synchronously and can't await one. The sheet re-probes on
+                // open and already has its own empty state (`remote.noTargets.*`).
+                if let cardActions, (cardActions.knownRemoteTargetCount ?? 1) > 0 {
+                    Button {
+                        Task { await startRemotePlay() }
+                    } label: {
+                        Label(loc.localized("remote.title"), systemImage: "tv.badge.wifi")
+                    }
+                }
+                Divider()
+            }
+            // The callback is supplied only by the screens that host the
+            // destination outside their lazy container (SwiftUI would
+            // silently ignore `navigationDestination` there) — same contract
+            // as `AdminItemMenu.onSelectDestination`. Its presence is what
+            // makes the entry appear, so a dead button is not possible.
+            if let onGoToSeries, item.type == .episode, let seriesId = item.seriesID {
+                Button {
+                    onGoToSeries(seriesId)
+                } label: {
+                    Label(loc.localized("card.goToSeries"), systemImage: "rectangle.stack")
+                }
+                Divider()
+            }
             Button {
                 Task { await toggleWatched(isPlayed: isPlayed) }
             } label: {
@@ -80,7 +227,130 @@ private struct MediaCardContextMenu: ViewModifier {
                     Label(loc.localized("playlist.add.action"), systemImage: "text.badge.plus")
                 }
             }
+            // The presence of the callback proves the host screen knows how to
+            // drop the card from its own row — only Home's Continue Watching
+            // rail provides it. The resume position is the business condition:
+            // without one, the item isn't in that row.
+            if let onRemoveFromResume, (item.userData?.playbackPositionTicks ?? 0) > 0 {
+                Divider()
+                Button(role: .destructive) {
+                    onRemoveFromResume()
+                } label: {
+                    Label(loc.localized("home.continueWatching.remove"), systemImage: "minus.circle")
+                }
+            }
         }
+    }
+
+    #if os(iOS)
+    /// The lifted artwork, and nothing else.
+    ///
+    /// **The URL must be byte-identical to the one the card itself requested**
+    /// — same `maxWidth`, same `tag`. Nuke keys its cache on the URL, so a
+    /// near-miss doesn't reuse the image the card already decoded: it starts a
+    /// fresh download and the preview appears blank for a beat. Every poster
+    /// surface requests `.primary` at 300 with `primaryImageTagValue`, and both
+    /// wide rails request `.backdrop` at 600 with `backdropImageTagValue` off
+    /// `backdropItemID`, so these two branches cover all nine call sites
+    /// exactly. Same discipline as `PosterPrefetcher`.
+    @ViewBuilder
+    private var artworkPreview: some View {
+        switch artwork {
+        case .poster:
+            previewArtwork(
+                url: item.id.map {
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
+                },
+                width: Self.previewPosterWidth,
+                height: Self.previewPosterWidth * 3 / 2
+            )
+        case .backdrop:
+            previewArtwork(
+                url: item.backdropItemID.map {
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue)
+                },
+                width: Self.previewBackdropWidth,
+                height: Self.previewBackdropWidth * 9 / 16
+            )
+        }
+    }
+
+    /// No `clipShape` here on purpose — the system platter already rounds the
+    /// preview, and a second corner radius inside it reads as a double border.
+    private func previewArtwork(url: URL?, width: CGFloat, height: CGFloat) -> some View {
+        Color.clear
+            .frame(width: width, height: height)
+            .background(CinemaColor.surfaceContainerLow)
+            .overlay { CinemaLazyImage(url: url, fallbackIcon: "film") }
+            .clipped()
+    }
+
+    private static let previewPosterWidth: CGFloat = 220
+    private static let previewBackdropWidth: CGFloat = 320
+    #endif
+
+    /// Starts playback. tvOS goes through `VideoPlayerCoordinator` (already a
+    /// root presenter, exactly what `PlayLink` does); iOS goes through the
+    /// `fullScreenCover` hosted by `AppNavigation`, because a menu button
+    /// inside a lazy container can't push a `NavigationLink`.
+    private func startPlayback(fromStart: Bool) async {
+        guard let target = await resolvedCardPlayTarget() else { return }
+        let startTime = fromStart ? nil : target.startSeconds
+
+        #if os(tvOS)
+        coordinator?.play(
+            itemId: target.itemId, title: target.title, startTime: startTime,
+            previousEpisode: navigation?.previous, nextEpisode: navigation?.next,
+            episodeNavigator: navigation?.navigator,
+            using: appState
+        )
+        #else
+        cardActions?.present(playback: CardPlaybackRequest(
+            itemId: target.itemId, title: target.title, startTime: startTime,
+            previousEpisode: navigation?.previous, nextEpisode: navigation?.next,
+            episodeNavigator: navigation?.navigator
+        ))
+        #endif
+    }
+
+    /// Sends to another session what "Play" would have started here, going
+    /// through the same resolver — so a series sends its next-up episode and a
+    /// half-watched movie resumes where it left off.
+    private func startRemotePlay() async {
+        guard let target = await resolvedCardPlayTarget() else { return }
+        cardActions?.present(remotePlay: RemotePlayIntent(
+            itemId: target.itemId,
+            title: target.title,
+            // Never a bare `Int(seconds * 10_000_000)`: that conversion TRAPS on
+            // non-finite or overflowing input, which is exactly why
+            // `PlaybackReporter` owns a guarded version of it.
+            startPositionTicks: target.startSeconds.map { PlaybackReporter.positionTicks(fromSeconds: $0) },
+            // A card carries no version choice — that's the detail screen's
+            // "Version" row's decision.
+            mediaSourceId: nil
+        ))
+    }
+
+    /// Shared by `startPlayback` and `startRemotePlay`: resolves what either
+    /// "play locally" or "play on…" should open for the item on this card,
+    /// via the same resolver so both stay in lockstep with a series' next-up
+    /// episode / a movie's resume position. `nil` when there's no signed-in
+    /// user or the item carries no id — both callers no-op in that case.
+    private func resolvedCardPlayTarget() async -> CardPlayTarget? {
+        guard let userId = appState.currentUserId, let id = item.id else { return nil }
+
+        // Scalars extracted here, on the main actor: `resolve` is nonisolated
+        // and `BaseItemDto` is not Sendable.
+        let type = item.type
+        let title = item.name ?? ""
+        let ticks = item.userData?.playbackPositionTicks ?? 0
+        let played = item.userData?.isPlayed ?? false
+
+        return await CardPlayTargetResolver.resolve(
+            itemId: id, type: type, title: title,
+            positionTicks: ticks, isPlayed: played,
+            api: appState.apiClient, userId: userId
+        )
     }
 
     private func toggleWatched(isPlayed: Bool) async {

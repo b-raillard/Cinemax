@@ -857,6 +857,8 @@
 "card.markedUnwatched" = "Marked as unwatched";
 "card.favorited" = "Added to favorites";
 "card.unfavorited" = "Removed from favorites";
+"card.resume" = "Resume";
+"card.goToSeries" = "Go to series";
 "detail.season.markWatched" = "Mark season as watched";
 "detail.season.markWatched.message" = "All episodes in this season will be marked as watched.";
 "detail.season.markedWatched" = "Season marked as watched";
@@ -889,7 +891,6 @@
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Remove from Continue Watching";
-"home.continueWatching.markedWatched" = "Marked as watched";
 "home.continueWatching.removed" = "Removed from Continue Watching";
 "accessibility.episode.watched" = "Watched";
 

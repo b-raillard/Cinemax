@@ -451,9 +451,22 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return []
     }
     var stubbedNextUp: BaseItemDto?
+    /// Drapeau **dédié**, distinct de `shouldThrow` : plusieurs suites existantes
+    /// activent `shouldThrow` tout en laissant `getNextUp` réussir, et les faire
+    /// basculer d'un coup changerait leur comportement sans rapport avec ce lot.
+    var nextUpShouldThrow = false
+    /// When set, `getNextUp` sleeps this long before returning — simulates a
+    /// cold-cache / slow-server next-up probe so `CardPlayTargetResolver`'s
+    /// deadline race is testable, without touching `nextUpShouldThrow`'s error
+    /// path (same "dedicated flag" rationale as that one).
+    var nextUpDelay: Duration?
     private(set) var getNextUpCallCount = 0
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
         recordLock.withLock { getNextUpCallCount += 1 }
+        if let nextUpDelay {
+            try? await Task.sleep(for: nextUpDelay)
+        }
+        if nextUpShouldThrow { throw stubbedError }
         return stubbedNextUp
     }
     var stubbedNextUpItems: [BaseItemDto] = []

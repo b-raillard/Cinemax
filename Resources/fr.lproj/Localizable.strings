@@ -859,6 +859,8 @@
 "card.markedUnwatched" = "Marqué comme non vu";
 "card.favorited" = "Ajouté aux favoris";
 "card.unfavorited" = "Retiré des favoris";
+"card.resume" = "Reprendre";
+"card.goToSeries" = "Aller à la série";
 "detail.season.markWatched" = "Marquer la saison comme vue";
 "detail.season.markWatched.message" = "Tous les épisodes de cette saison seront marqués comme vus.";
 "detail.season.markedWatched" = "Saison marquée comme vue";
@@ -891,7 +893,6 @@
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";
-"home.continueWatching.markedWatched" = "Marqué comme vu";
 "home.continueWatching.removed" = "Retiré de Reprendre";
 "accessibility.episode.watched" = "Vu";
 

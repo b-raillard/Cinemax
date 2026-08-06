@@ -252,48 +252,19 @@ final class HomeViewModel {
 
     // MARK: - Continue Watching context-menu mutations
 
-    /// Marks a Continue Watching item fully played. Jellyfin clears its resume
-    /// position when an item is played, so it also drops out of the resume
-    /// rail. Optimistically removes the card, shows a success toast, and
-    /// re-fetches the rail in the background; on failure the item is restored
-    /// and a user-facing error toast is shown.
-    func markResumeItemPlayed(
-        _ item: BaseItemDto,
-        using appState: AppState,
-        toast: ToastCenter,
-        loc: LocalizationManager
-    ) async {
-        await mutateResumeItem(
-            item, markPlayed: true,
-            successKey: "home.continueWatching.markedWatched",
-            using: appState, toast: toast, loc: loc
-        )
-    }
-
     /// Removes an item from Continue Watching. There is no dedicated
     /// "hide from resume" endpoint in Jellyfin — the standard client mechanism
     /// is to clear the item's played/progress state (`markItemUnplayed`), which
     /// resets its resume position so `/UserItems/Resume` stops returning it.
+    /// Optimistic removal → server call → success toast, restoring the card on
+    /// failure.
+    ///
+    /// This was two functions, a wrapper passing a `successKey` into a shared
+    /// body, back when a "mark as watched" sibling existed. That sibling moved
+    /// into the shared card menu, leaving one caller and one constant key — so
+    /// the indirection is gone with it.
     func removeResumeItem(
         _ item: BaseItemDto,
-        using appState: AppState,
-        toast: ToastCenter,
-        loc: LocalizationManager
-    ) async {
-        await mutateResumeItem(
-            item, markPlayed: false,
-            successKey: "home.continueWatching.removed",
-            using: appState, toast: toast, loc: loc
-        )
-    }
-
-    /// Shared body for both Continue Watching mutations: optimistic removal →
-    /// server call → success toast + background rail refresh, restoring the
-    /// card on failure.
-    private func mutateResumeItem(
-        _ item: BaseItemDto,
-        markPlayed: Bool,
-        successKey: String,
         using appState: AppState,
         toast: ToastCenter,
         loc: LocalizationManager
@@ -306,12 +277,8 @@ final class HomeViewModel {
         resumeNavigation[id] = nil
 
         do {
-            if markPlayed {
-                try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
-            } else {
-                try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
-            }
-            toast.success(loc.localized(successKey))
+            try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            toast.success(loc.localized("home.continueWatching.removed"))
             // One item's userData changed — post the lighter tier-2 notification.
             // Home's own `.cinemaxItemUserDataChanged` handler re-fetches the
             // resume rail exactly once (via `refreshUserDataRails`), which also

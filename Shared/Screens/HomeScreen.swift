@@ -29,6 +29,11 @@ struct HomeScreen: View {
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
     /// hoisted to the screen root per the lazy-container navigation RULE.
     @State private var favoritesDestination: FavoritesDestination?
+    /// "Go to series" target raised from a card's context menu. State lives
+    /// here and the destination is hoisted to the screen body: SwiftUI
+    /// ignores `navigationDestination(item:)` inside a `LazyHStack`, where the
+    /// cards that fire it live.
+    @State private var seriesDestination: SeriesDestination?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     /// Raw JSON of the user's picked genres. Held here only to observe changes
@@ -105,6 +110,9 @@ struct HomeScreen: View {
         .navigationDestination(item: $favoritesDestination) { _ in
             FavoritesScreen()
         }
+        // "Go to series" from an episode card's context menu. Hoisted to the
+        // screen root for the same reason as `favoritesDestination` above.
+        .seriesDestinationHost($seriesDestination)
         .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
             consumeDeepLink(newValue)
         }
@@ -764,22 +772,22 @@ struct HomeScreen: View {
             #else
             .buttonStyle(.plain)
             #endif
-            // Long-press (iOS) / long-press-select (tvOS) context menu — kept
-            // on the PlayLink button, not the label, so focus behavior is
-            // untouched. Both actions optimistically drop the card and refresh
-            // the rail in the background (see HomeViewModel).
-            .contextMenu {
-                Button {
-                    Task { await viewModel.markResumeItemPlayed(item, using: appState, toast: toast, loc: loc) }
-                } label: {
-                    Label(loc.localized("detail.watched.add"), systemImage: "checkmark.circle")
-                }
-                Button(role: .destructive) {
+            // Shared menu (`MediaCardContextMenu`): play, « Play on… »,
+            // watched, favorite, playlist — plus "Remove from Resume", specific
+            // to this row and supplied via the callback below. Attached to the
+            // PlayLink, not its label, so tvOS focus behavior is untouched.
+            .mediaCardContextMenu(
+                item: item,
+                // This rail draws a `WideCard`, so its own artwork is the
+                // backdrop — lifting a portrait poster would show a different
+                // image than the card the finger is on.
+                artwork: .backdrop,
+                navigation: CardPlaybackNavigation(nav),
+                onRemoveFromResume: {
                     Task { await viewModel.removeResumeItem(item, using: appState, toast: toast, loc: loc) }
-                } label: {
-                    Label(loc.localized("home.continueWatching.remove"), systemImage: "minus.circle")
-                }
-            }
+                },
+                onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
+            )
             .accessibilityLabel(item.name ?? "")
             .accessibilityValue(resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) } ?? "")
         }
@@ -858,6 +866,15 @@ struct HomeScreen: View {
             .buttonStyle(.plain)
             #endif
             .accessibilityLabel(item.seriesName ?? item.name ?? "")
+            // On the PlayLink (the focusable button), never its label, so
+            // tvOS focus is untouched.
+            .mediaCardContextMenu(
+                item: item,
+                // `WideCard` rail — same reason as Continue Watching above.
+                artwork: .backdrop,
+                navigation: CardPlaybackNavigation(nav),
+                onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
+            )
         }
     }
 
@@ -937,6 +954,9 @@ struct HomeScreen: View {
         .buttonStyle(.plain)
         #endif
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        // On the NavigationLink (the focusable button), never its label, so
+        // tvOS focus is untouched.
+        .mediaCardContextMenu(item: item, artwork: .poster)
     }
 
     // MARK: - Helpers

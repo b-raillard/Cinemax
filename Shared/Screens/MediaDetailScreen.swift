@@ -48,10 +48,10 @@ struct MediaDetailScreen: View {
     /// Watch Together (SyncPlay): the item to present the group sheet for, and
     /// (iOS) the item to push into playback once a group is created/joined.
     @State private var watchTogetherSheet: WatchTogetherIntent?
-    /// "Play on…" (Jellyfin remote control): the item to present the device
-    /// picker for. Non-nil only while the sheet is up — the feature keeps no
-    /// state past the send.
-    @State private var remotePlaySheet: RemotePlayIntent?
+    /// Raises the root-hosted "Play on…" sheet. A context menu can raise it too
+    /// (`MediaCardContextMenu`), so the presentation itself now lives on
+    /// `AppNavigation` — same optionality rationale as `playlists` above.
+    @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
     /// Watch Together (SyncPlay) is not production-ready yet. This kill-switch
     /// hides both UI entry points (iOS secondary-actions chip + tvOS action-row
     /// button) while keeping the whole implementation compiled and type-checked.
@@ -116,7 +116,7 @@ struct MediaDetailScreen: View {
         }
         #endif
         .task {
-            await viewModel.load(using: appState, loc: loc)
+            await viewModel.load(using: appState, loc: loc, cardActions: cardActions)
             // After the load, so the series → next-up resolution and the resume
             // position the request needs are already in place. Runs on BOTH
             // platforms: App Intents are iOS-only, but an inbound remote-control
@@ -143,13 +143,6 @@ struct MediaDetailScreen: View {
             toast: toast,
             network: network,
             onStart: { intent in startWatchTogether(intent) }
-        ))
-        .modifier(RemotePlayPresentation(
-            sheet: $remotePlaySheet,
-            appState: appState,
-            themeManager: themeManager,
-            loc: loc,
-            toast: toast
         ))
         #if os(iOS)
         .navigationDestination(item: $watchTogetherPlay) { intent in
@@ -977,7 +970,7 @@ struct MediaDetailScreen: View {
     /// single-Apple-TV setup never sees it and the focus row stays as it was.
     private func remotePlayButton(for item: BaseItemDto) -> some View {
         Button {
-            remotePlaySheet = remotePlayIntent(for: item)
+            cardActions?.present(remotePlay: remotePlayIntent(for: item))
         } label: {
             Image(systemName: "tv.badge.wifi")
                 .font(.system(size: buttonFontSize, weight: .bold))
@@ -1054,7 +1047,7 @@ struct MediaDetailScreen: View {
                     accessibility: loc.localized("remote.title"),
                     trigger: false
                 ) {
-                    remotePlaySheet = remotePlayIntent(for: item)
+                    cardActions?.present(remotePlay: remotePlayIntent(for: item))
                 }
             }
 
@@ -1335,7 +1328,7 @@ struct MediaDetailScreen: View {
 
     private func errorView(_ message: String) -> some View {
         ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
-            Task { await viewModel.load(using: appState, loc: loc) }
+            Task { await viewModel.load(using: appState, loc: loc, cardActions: cardActions) }
         }
     }
 
