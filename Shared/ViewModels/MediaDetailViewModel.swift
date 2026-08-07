@@ -374,6 +374,7 @@ final class MediaDetailViewModel {
     /// sent), and the tests exercise this path directly.
     func loadRemoteTargets(using appState: AppState, cardActions: CardActionPresenter? = nil) async {
         guard let userId = appState.currentUserId else { return }
+        let generation = loadGeneration
         do {
             let sessions = try await appState.apiClient.getControllableSessions(userId: userId)
             remoteTargets = RemotePlayTarget.resolve(
@@ -384,7 +385,24 @@ final class MediaDetailViewModel {
             // The context menu can't probe before it draws: it reads this
             // count, written only by a real probe. No speculative request is
             // added here.
-            cardActions?.knownRemoteTargetCount = remoteTargets.count
+            //
+            // **Guarded on change.** This is root-hosted state that every live
+            // card's menu reads, and `@Observable` fires `withMutation` even
+            // when the value is identical — so an unguarded write on every
+            // detail-screen open (and every retry) invalidated the menu
+            // modifier of every card still mounted behind it, each of which
+            // then rebuilt. The equality guard is what actually removes that.
+            //
+            // The generation check covers the narrower case the rest of this
+            // view model guards: a superseded pass on THIS instance (a retry, a
+            // `refreshAfterPlayback`) must not write. It deliberately does not
+            // claim to catch a popped screen — that screen's view model never
+            // bumps its generation again, and its `Task` holds `self` alive
+            // until the await returns.
+            if loadGeneration == generation,
+               cardActions?.knownRemoteTargetCount != remoteTargets.count {
+                cardActions?.knownRemoteTargetCount = remoteTargets.count
+            }
         } catch {
             // Unchanged: having no target is the ordinary case, a failed probe
             // degrades to "no button", never to an error screen.
