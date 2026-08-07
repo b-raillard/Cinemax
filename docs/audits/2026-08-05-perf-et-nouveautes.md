@@ -1,11 +1,27 @@
-# Cinemax — Check performance & propositions de nouveautés (2026-08-05, v1.1.1)
+# Cinemax — Check performance & propositions de nouveautés (2026-08-05, v1.2.0)
 
-Périmètre : audit de performance frais du code actuel (post-1.1.1 : multi-serveur,
-« Lire sur… », playlists, Live Activity, App Intents, recherche de personnes, proxy
+Périmètre : audit de performance frais du code actuel (multi-serveur, « Lire
+sur… », playlists, Live Activity, App Intents, recherche de personnes, proxy
 loopback, SwiftVLC 1.0.0), plus un listing de nouveautés candidates avec
 avantages/inconvénients. CLAUDE.md a servi de vérité terrain : les décisions
 documentées comme délibérées ne sont pas re-signalées ; les écarts aux contrats
 documentés le sont.
+
+> **Note de révision (rebase sur `main` @ `fd1a817`, release 1.2.0).** L'audit a
+> été mené sur `4f80870` ; `main` a depuis avancé de 32 commits (lot « menus
+> contextuels sur vignettes » + « Ajouts récents » multi-sources + release 1.2.0),
+> touchant 20 des fichiers audités. **Les 45 constats ont été revérifiés : aucun
+> n'est invalidé, aucun n'a été corrigé entre-temps.** Les références
+> `fichier:ligne` ci-dessous sont à jour pour 1.2.0. Deux évolutions à signaler :
+> - **F-7 a empiré** : `loadRecentlyAdded` ajoute désormais **deux** fetches JSON
+>   séquentiels avant la boucle d'images série (pire cas du widget « Ajouts
+>   récents » : 2 JSON + 7 images en série).
+> - **Angle mort assumé** : les 642 lignes du nouveau lot cartes
+>   (`CardActionPresenter` 99 l., `CardPlayTarget` 158 l.,
+>   `MediaCardContextMenu` passé de 109 à 385 l.) sont **postérieures à l'audit
+>   et n'ont pas été analysées**. Ce lot ajoute des `Task` de résolution de cible
+>   de lecture sur sept surfaces de vignettes — un passage perf dédié serait
+>   pertinent avant d'empiler des features dessus.
 
 **Verdict global :** la base est saine. Décodage JSON hors main actor partout,
 caches TTL avec single-flight sur `getItem`, fan-outs bornés à 6, prefetch
@@ -36,9 +52,9 @@ visibles sur Apple TV A15 et sur serveur auto-hébergé.
 ### 1.2 Sévérité haute — à corriger en premier
 
 #### F-1 · Recherche tvOS : `ScrollView` imbriqué → la grille perd toute laziness
-`Shared/Screens/SearchScreen.swift:61` (ScrollView externe tvOS) enveloppe
-`SearchResultsGrid` (`:624`) qui contient son **propre** `ScrollView` +
-`LazyVGrid`. Le scroll externe propose une hauteur non bornée → le scroll interne
+`Shared/Screens/SearchScreen.swift:66` (ScrollView externe tvOS) enveloppe
+`SearchResultsGrid` (`:637`, `LazyVGrid` `:659`) qui contient son **propre**
+`ScrollView`. Le scroll externe propose une hauteur non bornée → le scroll interne
 prend la hauteur totale de son contenu → **toutes** les cellules se matérialisent
 d'un coup. `LibrarySearchRanker.rank` fan-out jusqu'à 5 × 30 résultats : une
 requête large construit ~150 `SearchResultCard`, ~150 URLs, ~150 requêtes Nuke
@@ -120,11 +136,15 @@ l'utiliser côté VLC ; le chemin natif garde le navigator actuel.
 orphelin par transition.
 
 #### F-7 · Widget iOS : posters téléchargés en série → widget « mort » sur serveur lent
-`Widgets/CinemaxWidget/CinemaxWidget.swift:146-153` — boucle `for` séquentielle,
-jusqu'à 7 posters × timeout 10 s sur une session sans cache. Pire cas ≈ 80 s :
-WidgetKit tue l'extension avant, le handler ne rend jamais la timeline, le widget
-garde son ancienne entrée indéfiniment, sans erreur visible.
-**Fix :** `withTaskGroup` borné à 4 + timeout requête ~5 s (même octets, juste
+`Widgets/CinemaxWidget/CinemaxWidget.swift:177-183` — boucle `for` séquentielle,
+jusqu'à 7 posters × timeout 10 s (`JellyfinLite.swift:42`) sur une session sans
+cache. Pire cas ≈ 80 s : WidgetKit tue l'extension avant, le handler ne rend jamais
+la timeline, le widget garde son ancienne entrée indéfiniment, sans erreur visible.
+**Aggravé en 1.2.0** : `loadRecentlyAdded` (`:142-156`) enchaîne désormais
+`fetchRecentlyAdded` **puis** `fetchSeriesWithRecentEpisodes` en séquentiel avant
+la boucle d'images — ce widget paie 2 JSON + 7 images, tous en série.
+**Fix :** `withTaskGroup` borné à 4 pour les images + `async let` pour les deux
+fetches JSON d'« Ajouts récents » + timeout requête ~5 s (même octets, juste
 parallèles). Idem `getSnapshot`.
 
 #### F-8 · Bibliothèque : « marquer vu » déclenche le fan-out complet (9-10 requêtes) par onglet visité
@@ -141,8 +161,9 @@ branche tier-2 (tier-1 inchangé).
 par autre onglet bibliothèque visité, et un remaniement visible de 1-3 s.
 
 #### F-9 · `getItems` — l'endpoint le plus chaud de l'app — n'a aucun cache
-`JellyfinAPIClient+Library.swift:77-119` — zéro `cache.get`/`set`, contrairement à
-ses 8 voisins du même fichier. Il alimente : rangées Home (favoris + genres), hero
+`JellyfinAPIClient+Library.swift:124-166` — zéro `cache.get`/`set`, contrairement à
+ses 9 voisins du même fichier (le `getSeriesWithRecentEpisodes` ajouté en 1.2.0
+prend, lui, un TTL de 60 s — `getItems` reste le seul non caché). Il alimente : rangées Home (favoris + genres), hero
 + 8 genres + grille filtrée de chaque bibliothèque, Favoris, Historique, Surprise
 Me, membres de collection. Chaque reload repaye plein pot des rangées de genre
 byte-identiques ; combiné à F-8, un toggle « vu » re-télécharge 8 rangées qui
@@ -163,15 +184,15 @@ userData/favoris. C'est aussi ce qui rend F-8 totalement sûr.
 | F-13 | `connectToServer`/`authenticate` ne vident pas `APICache` et la clé `serverInfo` n'est pas scopée serveur → info/version du serveur A servies pendant l'ajout du serveur B (latent mais à un call-site près : gating de version pointé sur le mauvais serveur) — *reliquat de l'audit de juillet* | `JellyfinAPIClient.swift:190-284,218` | `cache.clear()` dans `connectToServer` après `setClient` ; clé `serverInfo-<url>` |
 | F-14 | `validateSession` jette le `UserDto` qu'il vient de recevoir, puis `refreshCurrentUser` re-fetch le même document → 2 aller-retours à chaque retour premier plan >60 s et chaque récupération de 401 | `JellyfinAPIClient+Session.swift:26` + `AppNavigation.swift:702` | `.valid(UserDto)` ou variante retournant le DTO |
 | F-15 | Hero bibliothèque : `limit: 20` pour n'utiliser que `items.first` + `totalCount` (identique avec `limit: 1`) — 19 items avec overview complet jetés, sur la requête qui gate le skeleton | `MediaLibraryViewModel.swift:167-181` | `limit: 1` |
-| F-16 | `getItems` sur-fetch `.overview` (300-1500 o/item) pour toutes les grilles/rangées alors que seul le hero le lit → ~60-170 Ko de JSON jetés par chargement de bibliothèque | `JellyfinAPIClient+Library.swift:108` | Paramètre `fields:` avec défaut maigre ; `.overview` réservé aux 2 requêtes hero |
-| F-17 | `getCollections` : requête spéculative hand-built (violation de la RULE « capability gating via `ServerVersion` » → 404 garanti sur serveurs <10.11 à chaque ouverture de film) + fallback scan boxsets récursif **sans `limit`** ni rating cap, non caché | `JellyfinAPIClient+Library.swift:463-496` | Seuil `ServerVersion.itemCollectionsEndpoint = 10.11` ; `limit` sur le fallback ; cache `collections-` 300 s |
-| F-18 | iOS : chaque pop-back vers un détail relance `load()` complet (pas de latch `hasLoaded`, contrairement aux 4 autres VMs) → spinner plein écran sur du contenu déjà rendu + ~5-7 requêtes, y compris `loadCollection`/`loadRemoteTargets` jamais nécessaires en ré-entrée | `MediaDetailScreen.swift:118-119`, `MediaDetailViewModel.swift:88` | Latch `hasLoaded` + hook de dismiss iOS vers `refreshAfterPlayback` (le tvOS l'a déjà) |
+| F-16 | `getItems` sur-fetch `.overview` (300-1500 o/item) pour toutes les grilles/rangées alors que seul le hero le lit → ~60-170 Ko de JSON jetés par chargement de bibliothèque | `JellyfinAPIClient+Library.swift:155` | Paramètre `fields:` avec défaut maigre ; `.overview` réservé aux 2 requêtes hero |
+| F-17 | `getCollections` : requête spéculative hand-built (violation de la RULE « capability gating via `ServerVersion` » → 404 garanti sur serveurs <10.11 à chaque ouverture de film) + fallback scan boxsets récursif **sans `limit`** ni rating cap, non caché | `JellyfinAPIClient+Library.swift:510-540` | Seuil `ServerVersion.itemCollectionsEndpoint = 10.11` ; `limit` sur le fallback ; cache `collections-` 300 s |
+| F-18 | iOS : chaque pop-back vers un détail relance `load()` complet (pas de latch `hasLoaded`, contrairement aux 4 autres VMs) → spinner plein écran sur du contenu déjà rendu + ~5-7 requêtes, y compris `loadCollection`/`loadRemoteTargets` jamais nécessaires en ré-entrée | `MediaDetailScreen.swift:119`, `MediaDetailViewModel.swift:84-88` | Latch `hasLoaded` + hook de dismiss iOS vers `refreshAfterPlayback` (le tvOS l'a déjà) |
 | F-19 | Recherche : chaque tap sur un chip de scope re-fan-out jusqu'à 5 `searchItems` sans cache (All→Films→Séries→All = ~20 requêtes pour des sous-ensembles stricts) | `SearchViewModel.swift:392`, ranker `:127-178` | TTL 60 s sur `searchItems` keyé terme+types+cap |
-| F-20 | Home : aucune extraction `Equatable` sur les rangées → les ~8-10 tranches du rendu progressif re-rendent toutes les rangées + cartes matérialisées à chaque passe ; idem à chaque tier-2 | `HomeScreen.swift:282-323` | Extraire les rangées en `View, Equatable` (recette `MediaDetail*Section` existante) |
-| F-21 | Home : `refreshUserDataRails` refait le fetch favoris à chaque événement tier-2 (un changement vu/position ne peut pas changer les favoris, la rangée n'affiche rien d'userData) ; et l'observer `.cinemaxFavoritesChanged` n'a pas de déferral `isVisible` (N cœurs togglés depuis une grille = N fetches Home cachée) | `HomeViewModel.swift:368-373`, `HomeScreen.swift:90-92` | Retirer favoris du tier-2 ; ajouter le `pendingFavoritesRefresh` gaté `isVisible` |
+| F-20 | Home : aucune extraction `Equatable` sur les rangées (0 occurrence de `View, Equatable` dans le fichier) → les ~8-10 tranches du rendu progressif re-rendent toutes les rangées + cartes matérialisées à chaque passe ; idem à chaque tier-2 | `HomeScreen.swift:232-330` | Extraire les rangées en `View, Equatable` (recette `MediaDetail*Section` existante) |
+| F-21 | Home : `refreshUserDataRails` refait le fetch favoris à chaque événement tier-2 (un changement vu/position ne peut pas changer les favoris, la rangée n'affiche rien d'userData) ; et l'observer `.cinemaxFavoritesChanged` n'a pas de déferral `isVisible` (N cœurs togglés depuis une grille = N fetches Home cachée) | `HomeViewModel.swift:404-409`, `HomeScreen.swift:95-97` | Retirer favoris du tier-2 ; ajouter le `pendingFavoritesRefresh` gaté `isVisible` |
 | F-22 | Bibliothèque browse : 8 écritures dict incrémentales × rangées non-`Equatable` + closures fraîches par passe → jusqu'à ~512 évaluations de body de carte + 512 constructions d'URL pendant un chargement browse tvOS | `MediaLibraryViewModel.swift:257`, `MovieLibraryScreen.swift:254-276` | `LibraryGenreRow`/`LibraryPosterCard` `Equatable` + `.equatable()` ; écrire le dict par chunk |
-| F-23 | `MediaDetailScreen` : le classement multi-versions (`MediaSourceQuality.ranked`) est recalculé 4-6× par passe de body (badges, versionRow, actionButtons, badges re-rank si `source == nil`) | `MediaDetailScreen.swift:503-521,282,550,857` | Résoudre une fois dans `detailContent` et threader |
-| F-24 | `MediaDetail` : le `LazyVStack` n'a que 2 enfants (backdrop + tout-le-reste en `VStack` eager) → cast, épisodes, collection, similaires se construisent et lancent leurs images immédiatement | `MediaDetailScreen.swift:199-211,251-258` | Émettre les sections comme enfants directs du `LazyVStack` (pattern `HomeScreen.content`) |
+| F-23 | `MediaDetailScreen` : le classement multi-versions (`MediaSourceQuality.ranked`) est recalculé 4-6× par passe de body (badges, versionRow, actionButtons, badges re-rank si `source == nil`) | `MediaDetailScreen.swift:496-514,275` | Résoudre une fois dans `detailContent` et threader |
+| F-24 | `MediaDetail` : le `LazyVStack` n'a que 2 enfants (backdrop + tout-le-reste en `VStack` eager) → cast, épisodes, collection, similaires se construisent et lancent leurs images immédiatement | `MediaDetailScreen.swift:194-198` | Émettre les sections comme enfants directs du `LazyVStack` (pattern `HomeScreen.content`) |
 | F-25 | `MPNowPlayingInfoCenter` republié **chaque seconde** (XPC vers mediaremoted, ~7 200 fois par film) alors que le système extrapole via elapsed+rate — la Live Activity d'à côté ne pousse que sur discontinuité | `NowPlayingInfoController.swift:75-84` | Même forme de throttle que `PlaybackActivityThrottle` (rate flip, seek, durée connue, sinon ~5 s) |
 | F-26 | Trickplay : la planche JPEG (≈5,7 MP) est stockée non décodée ; le crop se fait **sur le main actor à chaque frame de geste** de scrub → décodage complet livré sur le thread principal pendant le drag | `TrickplayController.swift:103-146` | `preparingForDisplay()` hors main à l'insertion en cache ; mémoïser le dernier crop |
 | F-27 | `SleepTimerController` : boucle 1 s à soi (violation de la RULE « un seul tick, les sous-contrôleurs n'ajoutent jamais le leur » — le chemin VLC fait correct) + `UIVisualEffectView` blur **vivant au-dessus de la vidéo** pendant toute la fenêtre (≤90 min) = re-blur GPU à chaque frame | `SleepTimerController.swift:67-80,129` | Brancher sur le tick partagé ; fill translucide plat (les deux patterns corrects existent déjà dans le repo) |
@@ -179,9 +200,9 @@ userData/favoris. C'est aussi ce qui rend F-8 totalement sûr.
 | F-29 | Event-stream VLC : le `guard let self` promeut la capture en forte pour toute la boucle `for await`, et `teardown()` n'a qu'un déclencheur (`viewWillDisappear` + `isBeingDismissed`) → tout dismissal atypique fuit le graphe entier + un heartbeat 1 s zombie qui continue de reporter au serveur | `VLCStreamPresenter.swift:774-776,513-560` | Ré-acquérir `self` faiblement par itération ; filet `deinit` (annuler eventsTask + timers) |
 | F-30 | `reconnect`/`setClient` ne fait jamais `invalidateAndCancel()` sur l'ancien client — un switch serveur en construit 2-3, chacun avec son pool de connexions retenu jusqu'à la fin du process | `JellyfinAPIClient.swift:374-394` | Invalider la session sortante dans `setClient` |
 | F-31 | Images surdimensionnées : `CastCircle` 80 pt demande `maxWidth: 200` (6,25× les pixels utiles sur tvOS, ×20 portraits) ; rangées de genre/similaires 200 pt demandent 300 | `MediaDetailCastSection.swift:47`, `LibraryGenreRow.swift:46`… | Threader la largeur réelle (buckets 200/300/400 pour rester cache-friendly + byte-identical au prefetch) |
-| F-32 | Carrousel hero iOS : les candidats 2-5 ne sont jamais préchargés → flash du fallback gris à la rotation 8 s (le pixel le plus regardé de l'app) exactement ce que la condition `hasBackdropImage` voulait éviter | `HomeScreen.swift:162-178,405-416` | Précharger les URLs hero (byte-identical, `backdropPixelWidth` inclus) |
+| F-32 | Carrousel hero iOS : `prefetchCardImages` ne précharge que posters/300 et backdrops/600 — les candidats hero 2-5 (backdrop à `backdropPixelWidth`) ne le sont jamais → flash du fallback gris à la rotation 8 s (le pixel le plus regardé de l'app), exactement ce que la condition `hasBackdropImage` voulait éviter | `HomeScreen.swift:170-187,413` | Précharger les URLs hero (byte-identical, `backdropPixelWidth` inclus) |
 | F-33 | `ImageURLBuilder.screenPixelWidth` énumère `UIApplication.connectedScenes` à chaque passe de body des 3 heroes les plus chauds | `ImageURLBuilder.swift:54-75` | Mémoïser, invalider sur `.active` |
-| F-34 | `PosterCardContent` instancie un `@AppStorage` (= un observer UserDefaults) **par carte** tvOS pour `dimUnfocusedPosters` → des centaines d'observers vivants pour un Bool quasi immuable | `LibraryPosterCard.swift:113` | Promouvoir en `EnvironmentValues` injecté une fois à la racine (pattern `motionEffectsEnabled`) |
+| F-34 | `PosterCardContent` instancie un `@AppStorage` (= un observer UserDefaults) **par carte** tvOS pour `dimUnfocusedPosters` → des centaines d'observers vivants pour un Bool quasi immuable | `LibraryPosterCard.swift:113` (inchangé en 1.2.0) | Promouvoir en `EnvironmentValues` injecté une fois à la racine (pattern `motionEffectsEnabled`) |
 
 ### 1.4 Sévérité basse (hygiène, par ordre d'intérêt)
 
@@ -203,7 +224,10 @@ userData/favoris. C'est aussi ce qui rend F-8 totalement sûr.
 2. **Lot « rendu »** : F-2 + F-3 (accents/racine — petits diffs, gain global), F-1 (recherche tvOS), F-22/F-20 (Equatable Library/Home).
 3. **Lot « réseau »** : F-9 (`getItems` cache) + F-8 (gate tier-2) ensemble, F-16/F-15 (payloads), F-13 (reliquat juillet), F-19 (chips recherche).
 4. **Lot « infra »** : F-7 (widget), F-10/F-11/F-12 (sondes/monitor), F-14, F-29/F-30.
-5. Le reste opportuniste.
+5. **Passe dédiée sur le lot cartes 1.2.0** (non audité — voir la note de révision
+   en tête) : les sept surfaces de vignettes lancent désormais des `Task` de
+   résolution de cible de lecture ; à profiler avant d'empiler des features dessus.
+6. Le reste opportuniste.
 
 ---
 
