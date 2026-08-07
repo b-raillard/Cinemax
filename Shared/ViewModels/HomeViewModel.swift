@@ -225,12 +225,8 @@ final class HomeViewModel {
         let seasonEpisodes = await fetchSeasonEpisodes(
             for: resumeEpisodes + nextUpEpisodes, userId: userId, appState: appState
         )
-        resumeNavigation = buildNavigationMap(
-            for: resumeEpisodes, seasonEpisodes: seasonEpisodes, userId: userId, appState: appState
-        )
-        nextUpNavigation = buildNavigationMap(
-            for: nextUpEpisodes, seasonEpisodes: seasonEpisodes, userId: userId, appState: appState
-        )
+        resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
+        nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
 
         _ = await (genreRowsDone, sessionsDone)
 
@@ -292,9 +288,7 @@ final class HomeViewModel {
     /// resolved once up front by `fetchSeasonEpisodes`.
     private func buildNavigationMap(
         for episodeItems: [BaseItemDto],
-        seasonEpisodes: [String: [BaseItemDto]],
-        userId: String,
-        appState: AppState
+        seasonEpisodes: [String: [BaseItemDto]]
     ) -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
         guard !episodeItems.isEmpty else { return [:] }
 
@@ -312,8 +306,7 @@ final class HomeViewModel {
                   let seasonId = item.seasonID,
                   let pre = precomputed[seasonId] else { continue }
             navigation[id] = buildEpisodeNavigation(
-                for: id, refs: pre.refs, indexByID: pre.indexByID,
-                apiClient: appState.apiClient, userId: userId
+                for: id, refs: pre.refs, indexByID: pre.indexByID
             )
         }
         return navigation

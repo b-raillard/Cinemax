@@ -195,6 +195,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // swap / dismiss cancels the previous episode's in-flight image downloads
     // instead of letting them race the new stream's open on slow links.
     private var chapterThumbTasks: [Task<Void, Never>] = []
+
+    /// Chapter-thumbnail fetches held back until the media is confirmed open, so
+    /// they can't compete with the stream's own bytes during the open window.
+    /// Fired (and cleared) by `noteMediaOpened`, re-queued and cleared by
+    /// `fetchChapters` — the only thing that rebuilds the chip list the closure
+    /// indexes into. Notably NOT cleared by `beginOpenLoading`: the error-retry
+    /// and wake re-resolve paths go through it without re-running
+    /// `fetchChapters`, so dropping it there loses the thumbnails for good.
+    private var pendingChapterThumbnails: (@MainActor () -> Void)?
     private var chapterStartTicks: [Int] = []
     private var chapterHeightConstraint: NSLayoutConstraint?
     private let centerGlyph = UIImageView()
@@ -352,6 +361,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Explicit HUD state so single-tap toggling never depends on mid-animation
     /// `alpha` reads.
     private var controlsVisible = true
+
+    /// The position currently shown by the time labels, as (whole seconds, media
+    /// length). Every writer of those labels goes through `writeTimeLabels` so
+    /// this stays an accurate mirror of what's on screen — which is what lets
+    /// `paintPosition` skip a redundant repaint. `nil` ⇒ unknown, repaint next
+    /// time; reset by `beginOpenLoading()` so fresh media always repaints.
+    private var lastPaintedPosition: (seconds: Int32, lengthMs: Int32)?
     /// Debounce for the Menu button: a single press can be delivered to both
     /// the press gesture recognizer and `pressesBegan`; this collapses them to
     /// one peel action so it never hides-then-dismisses on a single press.
@@ -541,6 +557,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterFetchTask?.cancel()
         chapterThumbTasks.forEach { $0.cancel() }
         chapterThumbTasks = []
+        pendingChapterThumbnails = nil
         trickplay.reset()
         eventsTask?.cancel()
         eventsTask = nil
@@ -718,6 +735,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// off), and the post-seek settle window (`beginSeekLoading`); also
     /// force-cleared once real frames flow.
     private func setLoading(_ loading: Bool) {
+        // `clearLoadingIfOpen` rides the ~4×/s engine tick for the whole film, so
+        // without this guard `stopAnimating()` is re-sent thousands of times to an
+        // indicator that is already stopped and hidden.
+        guard loading != loadingIndicator.isAnimating else { return }
         if loading { loadingIndicator.startAnimating() }
         else { loadingIndicator.stopAnimating() }
     }
@@ -732,6 +753,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Fresh open ⇒ libVLC re-selects every module; drop facts learned from
         // the previous media so the stats HUD can't show a stale decode chain.
         VLCEngineFacts.shared.reset()
+        // A new media's first position must always repaint, even if it lands on
+        // the same whole second as the outgoing one's last painted position.
+        lastPaintedPosition = nil
+        // NOTE: deliberately does NOT drop `pendingChapterThumbnails`. Two of
+        // this method's four callers (the error retry and the wake re-resolve)
+        // reopen the SAME item and never call `fetchChapters()` again, so the
+        // parked queue is the only thing that will ever load those thumbnails —
+        // and its chip indices stay valid because the strip isn't rebuilt.
+        // `fetchChapters()` owns that clear, next to its chip teardown.
         setLoading(true)
     }
 
@@ -1669,8 +1699,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let len = self.lengthMs
             guard len > 0 else { return }
             let target = Int32(Float(len) * progress)
-            self.timeLabel.text = PlayerTimeFormat.ms(target)
-            self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
+            self.writeTimeLabels(position: target, lengthMs: len)
             self.updateTVScrubPreview(progress: progress, targetMs: target)
         }
         tvScrub.onScrubCommit = { [weak self] progress in
@@ -1684,8 +1713,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // showing it (not the stale pre-seek currentMs) until VLC's
             // position actually reaches it — no snap-back flicker.
             self.pendingScrubTargetMs = target
-            self.timeLabel.text = PlayerTimeFormat.ms(target)
-            self.durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, len - target))
+            self.writeTimeLabels(position: target, lengthMs: len)
             self.updateScrubBar(progress: progress)
             self.userEngineSeek(ms: target)
             self.scheduleHideControls()
@@ -1896,6 +1924,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterFetchTask?.cancel()
         chapterThumbTasks.forEach { $0.cancel() }
         chapterThumbTasks = []
+        // The parked closure indexes into `chapterStack.arrangedSubviews`, which
+        // this method is the only thing that rebuilds — so this is where a stale
+        // queue must be dropped, NOT in `beginOpenLoading()`. Only the two
+        // media-SWAP paths (`startPlayback`, `navigateToEpisode`) come through
+        // here; the error-retry and wake re-resolve paths also call
+        // `beginOpenLoading()` but reuse these very chips, so clearing there
+        // would strand them on their icon placeholders for the rest of the
+        // session with nothing to re-queue the fetch.
+        pendingChapterThumbnails = nil
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
         chapterScroll.isHidden = true
@@ -1931,23 +1968,37 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #endif
             self.chapterScroll.isHidden = false
             self.view.layoutIfNeeded()
-            // Thumbnails load lazily so the strip appears instantly. Skip the
-            // request entirely when the server has no chapter image for this
-            // chapter (no `imageTag`) — the chip keeps its icon placeholder.
-            for (i, ch) in chapters.enumerated() {
-                guard let tag = ch.imageTag, !tag.isEmpty else { continue }
-                let url = builder.chapterImageURL(itemId: id, imageIndex: i, tag: tag, maxWidth: 320)
-                let thumbTask = Task { @MainActor [weak self] in
-                    guard let data = await Self.loadImage(url: url, token: token),
-                          !Task.isCancelled,
-                          let img = UIImage(data: data), let self,
-                          i < self.chapterStack.arrangedSubviews.count,
-                          let chip = self.chapterStack.arrangedSubviews[i] as? UIButton,
-                          let iv = chip.viewWithTag(99) as? UIImageView else { return }
-                    iv.image = img
-                    iv.contentMode = .scaleAspectFill
+            // The strip itself is already on screen with icon placeholders; the
+            // thumbnails are pure garnish, so they must NOT compete with the
+            // stream's own bytes. `fetchChapters` runs from `startPlayback`, i.e.
+            // exactly while libVLC is opening — firing one request per chapter
+            // there put ~30 image GETs against the origin during the open window,
+            // which on a self-hosted / reverse-proxied server is time-to-first-
+            // frame the user waits through. Deferred until a demuxer provably
+            // exists (`noteMediaOpened`), or run straight away when chapters
+            // resolve after the media already opened.
+            let startThumbnails: @MainActor () -> Void = { [weak self] in
+                guard let self else { return }
+                for (i, ch) in chapters.enumerated() {
+                    guard let tag = ch.imageTag, !tag.isEmpty else { continue }
+                    let url = builder.chapterImageURL(itemId: id, imageIndex: i, tag: tag, maxWidth: 320)
+                    let thumbTask = Task { @MainActor [weak self] in
+                        guard let data = await Self.loadImage(url: url, token: token),
+                              !Task.isCancelled,
+                              let img = UIImage(data: data), let self,
+                              i < self.chapterStack.arrangedSubviews.count,
+                              let chip = self.chapterStack.arrangedSubviews[i] as? UIButton,
+                              let iv = chip.viewWithTag(99) as? UIImageView else { return }
+                        iv.image = img
+                        iv.contentMode = .scaleAspectFill
+                    }
+                    self.chapterThumbTasks.append(thumbTask)
                 }
-                self.chapterThumbTasks.append(thumbTask)
+            }
+            if self.mediaConfirmedOpen {
+                startThumbnails()
+            } else {
+                self.pendingChapterThumbnails = startThumbnails
             }
         }
     }
@@ -2472,6 +2523,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Releases the spinner gate — see `clearLoadingIfOpen()`. The engine
         // state that follows (`.playing` / a time tick) does the actual hiding.
         mediaConfirmedOpen = true
+        // A demuxer provably exists now, so the chapter-strip garnish can have
+        // the network.
+        if let startThumbnails = pendingChapterThumbnails {
+            pendingChapterThumbnails = nil
+            startThumbnails()
+        }
     }
 
     /// Called by `RemoteCommandController` when the Siri Remote / Lock Screen /
@@ -2565,9 +2622,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         progressTimer?.invalidate()
         Task { [weak self] in
             guard let self else { return }
-            // Navigator yields the new prev/next graph (its PlaybackInfo is
-            // negotiated for the native engine, so we re-negotiate for VLC).
-            let nav = await navigator(ref.id)
+            // Navigator yields the new prev/next graph synchronously (pure index
+            // lookups, no network) — this presenter owns the negotiation, with
+            // the VLC device profile.
+            let nav = navigator(ref.id)
             guard let vlcInfo = try? await self.apiClient.getPlaybackInfo(
                 itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else {
@@ -2595,8 +2653,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.resolvedSeriesName = nil // fetchChapters re-resolves for the new episode
             self.audioDelayMsState = 0
             self.subtitleDelayMsState = 0
-            self.previousEpisode = nav?.1
-            self.nextEpisode = nav?.2
+            self.previousEpisode = nav?.0
+            self.nextEpisode = nav?.1
             self.titleLabel.text = ref.title
             let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
             let url: URL
@@ -2881,6 +2939,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let length = lengthMs
         guard length > 0 else { return }
         timeLabel.text = PlayerTimeFormat.ms(Int32(Float(length) * slider.value))
+        // Only `timeLabel` is written here, so the mirror no longer describes the
+        // screen — drop it rather than record a half-truth.
+        lastPaintedPosition = nil
         updateScrubPreview()
     }
 
@@ -2948,6 +3009,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func showControls() {
         controlsVisible = true
+        // Paints of the hidden HUD were skipped, so catch the labels up before
+        // they fade in — otherwise they show the position as of the last time
+        // the HUD was visible until the next engine tick lands.
+        refreshTimeUI()
         UIView.animate(withDuration: 0.2) { self.controlsContainer.alpha = 1 }
         controlsContainer.isUserInteractionEnabled = true
         #if os(tvOS)
@@ -3152,9 +3217,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// may have pulled enough segments for the server to have started a job
     /// before failing.
     private func releaseServerSessionAfterFailure() {
+        releaseServerSession(info)
+    }
+
+    /// Hands back the server resources held by a `PlaybackInfo` this presenter
+    /// is abandoning without a stop report. Takes the info explicitly so it can
+    /// release a *superseded* negotiation (the wake re-resolve replaces `info`
+    /// wholesale) as well as the current one.
+    private func releaseServerSession(_ stale: PlaybackInfo) {
         let client = apiClient
-        let liveStreamId = info.liveStreamId
-        let playSessionId = info.playSessionId
+        let liveStreamId = stale.liveStreamId
+        let playSessionId = stale.playSessionId
         guard liveStreamId != nil || playSessionId != nil else { return }
         Task.detached {
             if let liveStreamId {
@@ -3310,6 +3383,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else { return }
             guard !self.isTearingDown, gen == self.navGeneration else { return }
+            // The negotiation we're replacing holds its own play session AND a
+            // live stream the server opened for it (`isAutoOpenLiveStream`), and
+            // no stop report will ever reference them once `info` is overwritten
+            // — this is the only chance to hand them back. On a transcoding item
+            // that is the difference between one ffmpeg job and two competing for
+            // the server's CPU, which makes the *new* stream stutter.
+            self.releaseServerSession(self.info)
             self.info = fresh
             self.startTime = resumeSeconds > 1 ? resumeSeconds : nil
             self.didSeekToStart = (self.startTime == nil)   // re-arm seek-to-resume
@@ -3397,10 +3477,35 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         paintPosition(currentMs, lengthMs: lengthMs)
     }
 
-    /// Writes one position to the time labels and the platform scrub control.
-    private func paintPosition(_ ms: Int32, lengthMs: Int32) {
+    /// Sole writer of the two time labels — records what it painted so
+    /// `paintPosition`'s skip-if-unchanged gate can trust `lastPaintedPosition`
+    /// as a mirror of the screen. Scrub previews paint a *target* position
+    /// through here too, which is exactly the value the labels then show.
+    private func writeTimeLabels(position ms: Int32, lengthMs: Int32) {
         timeLabel.text = PlayerTimeFormat.ms(ms)
         durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - ms))
+        lastPaintedPosition = (ms / 1000, lengthMs)
+    }
+
+    /// Writes one position to the time labels and the platform scrub control.
+    ///
+    /// Two gates, both invisible to the user and both load-bearing for frame
+    /// time — libVLC ticks ~4×/s for the whole film, and every write here
+    /// invalidates two `UILabel` intrinsic content sizes (layout pass + CoreText
+    /// re-render) plus, on tvOS, relays the scrub bar's three frames:
+    ///
+    /// 1. **HUD hidden.** `controlsContainer` is faded with `alpha`, never
+    ///    `isHidden`, so it stays in the layout path and none of this work is
+    ///    skipped by the compositor in the ordinary viewing state (the HUD
+    ///    auto-hides after 4 s). `showControls()` repaints on the way back in.
+    /// 2. **Same whole second.** `PlayerTimeFormat.ms` truncates to seconds, so
+    ///    three of every four ticks produced byte-identical strings. `lengthMs`
+    ///    is part of the key so the paint that reveals a newly-known duration
+    ///    is never swallowed.
+    private func paintPosition(_ ms: Int32, lengthMs: Int32) {
+        guard controlsVisible else { return }
+        if let last = lastPaintedPosition, last.seconds == ms / 1000, last.lengthMs == lengthMs { return }
+        writeTimeLabels(position: ms, lengthMs: lengthMs)
         guard lengthMs > 0 else { return }
         #if os(iOS)
         slider.value = Float(ms) / Float(lengthMs)

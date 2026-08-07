@@ -589,10 +589,14 @@ struct HomeScreen: View {
                     HStack(spacing: 12) {
                         if let id = item.id {
                             let heroNav = viewModel.resumeNavigation[id]
-                            let heroStart: Double? = {
-                                guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
-                                return Double(ticks) / 10_000_000
-                            }()
+                            // Through the resolver, not a local expression: it is
+                            // the SSOT of "a residual position on a played item
+                            // isn't a resume", and this card's context menu reads
+                            // the same rule for its Resume / Play label.
+                            let heroStart = CardPlayTargetResolver.resumeSeconds(
+                                positionTicks: item.userData?.playbackPositionTicks ?? 0,
+                                isPlayed: item.userData?.isPlayed ?? false
+                            )
                             PlayLink(
                                 itemId: id, title: item.name ?? "",
                                 startTime: heroStart,
@@ -749,10 +753,11 @@ struct HomeScreen: View {
     private func continueWatchingPlayLink(_ item: BaseItemDto) -> some View {
         if let id = item.id {
             let nav = viewModel.resumeNavigation[id]
-            let startSeconds: Double? = {
-                guard let ticks = item.userData?.playbackPositionTicks, ticks > 0 else { return nil }
-                return Double(ticks) / 10_000_000
-            }()
+            // Same SSOT as the hero above and as this card's own context menu.
+            let startSeconds = CardPlayTargetResolver.resumeSeconds(
+                positionTicks: item.userData?.playbackPositionTicks ?? 0,
+                isPlayed: item.userData?.isPlayed ?? false
+            )
             let resumePercent: Int? = {
                 guard let position = item.userData?.playbackPositionTicks,
                       let total = item.runTimeTicks, total > 0, position > 0 else { return nil }

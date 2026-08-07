@@ -198,7 +198,7 @@ final class MediaDetailViewModel {
                 nextUpEpisodes = []
             }
 
-            rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+            rebuildNavigationMaps()
             isFavorite = item?.userData?.isFavorite ?? false
             isPlayed = item?.userData?.isPlayed ?? false
         } else {
@@ -338,7 +338,7 @@ final class MediaDetailViewModel {
         guard let userId = appState.currentUserId, let seasonId = selectedSeasonId else { return }
         if let refreshed = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId) {
             episodes = refreshed
-            rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
+            rebuildNavigationMaps()
         }
     }
 
@@ -374,6 +374,7 @@ final class MediaDetailViewModel {
     /// sent), and the tests exercise this path directly.
     func loadRemoteTargets(using appState: AppState, cardActions: CardActionPresenter? = nil) async {
         guard let userId = appState.currentUserId else { return }
+        let generation = loadGeneration
         do {
             let sessions = try await appState.apiClient.getControllableSessions(userId: userId)
             remoteTargets = RemotePlayTarget.resolve(
@@ -384,7 +385,24 @@ final class MediaDetailViewModel {
             // The context menu can't probe before it draws: it reads this
             // count, written only by a real probe. No speculative request is
             // added here.
-            cardActions?.knownRemoteTargetCount = remoteTargets.count
+            //
+            // **Guarded on change.** This is root-hosted state that every live
+            // card's menu reads, and `@Observable` fires `withMutation` even
+            // when the value is identical — so an unguarded write on every
+            // detail-screen open (and every retry) invalidated the menu
+            // modifier of every card still mounted behind it, each of which
+            // then rebuilt. The equality guard is what actually removes that.
+            //
+            // The generation check covers the narrower case the rest of this
+            // view model guards: a superseded pass on THIS instance (a retry, a
+            // `refreshAfterPlayback`) must not write. It deliberately does not
+            // claim to catch a popped screen — that screen's view model never
+            // bumps its generation again, and its `Task` holds `self` alive
+            // until the await returns.
+            if loadGeneration == generation,
+               cardActions?.knownRemoteTargetCount != remoteTargets.count {
+                cardActions?.knownRemoteTargetCount = remoteTargets.count
+            }
         } catch {
             // Unchanged: having no target is the ordinary case, a failed probe
             // degrades to "no button", never to an error screen.
@@ -419,7 +437,7 @@ final class MediaDetailViewModel {
         nextUpEpisode = loadedNextUp
 
         guard let seasonId = loadedSeasons.first?.id else {
-            rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+            rebuildNavigationMaps()
             return
         }
         selectedSeasonId = seasonId
@@ -439,7 +457,7 @@ final class MediaDetailViewModel {
             episodes = loadedEpisodes
         }
 
-        rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+        rebuildNavigationMaps()
     }
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {
@@ -451,7 +469,7 @@ final class MediaDetailViewModel {
             let newEpisodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
             guard seasonGeneration == expectedGeneration else { return }
             episodes = newEpisodes
-            rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
+            rebuildNavigationMaps()
         } catch {
             // Keep existing episodes on error
         }
@@ -461,19 +479,13 @@ final class MediaDetailViewModel {
     /// Precomputes the refs + id→index pair once per list so per-episode
     /// population is O(1) instead of re-running compactMap+firstIndex inside
     /// `buildEpisodeNavigation` on every call.
-    private func rebuildNavigationMaps(apiClient: any APIClientProtocol, userId: String) {
-        episodeNavigationMap = Self.makeNavigationMap(
-            from: episodes, apiClient: apiClient, userId: userId
-        )
-        nextUpNavigationMap = Self.makeNavigationMap(
-            from: nextUpEpisodes, apiClient: apiClient, userId: userId
-        )
+    private func rebuildNavigationMaps() {
+        episodeNavigationMap = Self.makeNavigationMap(from: episodes)
+        nextUpNavigationMap = Self.makeNavigationMap(from: nextUpEpisodes)
     }
 
     private static func makeNavigationMap(
-        from episodes: [BaseItemDto],
-        apiClient: any APIClientProtocol,
-        userId: String
+        from episodes: [BaseItemDto]
     ) -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
         guard !episodes.isEmpty else { return [:] }
         let (refs, indexByID) = precomputeEpisodeRefs(episodes)
@@ -481,8 +493,7 @@ final class MediaDetailViewModel {
         map.reserveCapacity(refs.count)
         for ref in refs {
             map[ref.id] = buildEpisodeNavigation(
-                for: ref.id, refs: refs, indexByID: indexByID,
-                apiClient: apiClient, userId: userId
+                for: ref.id, refs: refs, indexByID: indexByID
             )
         }
         return map

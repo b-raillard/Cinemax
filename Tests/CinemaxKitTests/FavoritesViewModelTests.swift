@@ -465,6 +465,110 @@ struct PaginatedLoaderTests {
         #expect(loader.hasLoadedAll)
         #expect(!loader.isLoadingMore)
     }
+
+    // MARK: refreshLoadedSpan
+    //
+    // The point of this method is that a notification-driven refresh must NOT
+    // collapse a deeply-scrolled grid back to one page — that visibly jumped the
+    // user to the top, and it became a live regression once the cards in these
+    // grids gained a context menu raising those very notifications.
+
+    @Test("refreshLoadedSpan re-requests the whole loaded span as one page from index 0")
+    func refreshRequestsLoadedSpan() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 10) }
+        await loader.loadMore { _ in (items: [3, 4], total: 10) }
+        #expect(loader.items == [1, 2, 3, 4])
+
+        await loader.refreshLoadedSpan { startIndex, limit in
+            #expect(startIndex == 0)
+            #expect(limit == 4) // the span already on screen, not the page size
+            return (items: [1, 2, 3, 9], total: 10)
+        }
+
+        #expect(loader.items == [1, 2, 3, 9])
+        #expect(loader.totalCount == 10)
+        #expect(!loader.hasLoadedAll)
+        #expect(!loader.isLoadingMore)
+    }
+
+    @Test("refreshLoadedSpan re-derives hasLoadedAll, so a shrunken set stops asking for more")
+    func refreshRederivesHasLoadedAll() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 3) }
+        #expect(!loader.hasLoadedAll)
+
+        // An un-favorited item: the span comes back one short, and the total with it.
+        await loader.refreshLoadedSpan { _, _ in (items: [1], total: 1) }
+
+        #expect(loader.items == [1])
+        #expect(loader.totalCount == 1)
+        #expect(loader.hasLoadedAll)
+    }
+
+    @Test("refreshLoadedSpan is a no-op before anything is paged in, and while a loadMore is in flight")
+    func refreshGuards() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+
+        var fetchCalled = false
+        await loader.refreshLoadedSpan { _, _ in
+            fetchCalled = true
+            return (items: [1], total: 1)
+        }
+        #expect(!fetchCalled) // nothing loaded yet — the caller must do a full load
+        #expect(loader.items.isEmpty)
+
+        await loader.loadMore { _ in (items: [1, 2], total: 10) }
+        loader.isLoadingMore = true
+        await loader.refreshLoadedSpan { _, _ in
+            fetchCalled = true
+            return (items: [9], total: 9)
+        }
+        #expect(!fetchCalled)
+        #expect(loader.items == [1, 2])
+    }
+
+    @Test("a thrown refreshLoadedSpan leaves the visible page intact")
+    func refreshSwallowsErrors() async {
+        struct Boom: Error {}
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 10) }
+
+        await loader.refreshLoadedSpan { _, _ in throw Boom() }
+
+        #expect(loader.items == [1, 2])
+        #expect(loader.totalCount == 10)
+        #expect(!loader.isLoadingMore)
+    }
+
+    @Test("reset discards a stale in-flight refreshLoadedSpan")
+    func resetDiscardsStaleRefresh() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 10) }
+
+        let fetchStarted = PaginatedLoaderGate()
+        let releaseStaleFetch = PaginatedLoaderGate()
+
+        let staleTask = Task { @MainActor in
+            await loader.refreshLoadedSpan { _, _ in
+                await fetchStarted.signal()
+                await releaseStaleFetch.wait()
+                return (items: [999, 998], total: 999)
+            }
+        }
+        await fetchStarted.wait()
+
+        loader.reset()
+        await loader.loadMore { _ in (items: [7, 8], total: 2) }
+
+        await releaseStaleFetch.signal()
+        await staleTask.value
+
+        #expect(loader.items == [7, 8])
+        #expect(loader.totalCount == 2)
+        #expect(loader.hasLoadedAll)
+        #expect(!loader.isLoadingMore)
+    }
 }
 
 /// One-shot async gate used to deterministically interleave a stale in-flight

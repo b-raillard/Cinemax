@@ -87,19 +87,17 @@ struct EpisodeNavigationTests {
 
     @Test("first episode has no previous, last has no next, middle has both")
     func neighbors() {
-        let api = MockAPIClient()
-
-        let first = buildEpisodeNavigation(for: "ep-1", in: episodes, apiClient: api, userId: "u1")
+        let first = buildEpisodeNavigation(for: "ep-1", in: episodes)
         #expect(first.previous == nil)
         #expect(first.next?.id == "ep-2")
         #expect(first.navigator != nil)
 
-        let middle = buildEpisodeNavigation(for: "ep-2", in: episodes, apiClient: api, userId: "u1")
+        let middle = buildEpisodeNavigation(for: "ep-2", in: episodes)
         #expect(middle.previous?.id == "ep-1")
         #expect(middle.next?.id == "ep-3")
         #expect(middle.navigator != nil)
 
-        let last = buildEpisodeNavigation(for: "ep-3", in: episodes, apiClient: api, userId: "u1")
+        let last = buildEpisodeNavigation(for: "ep-3", in: episodes)
         #expect(last.previous?.id == "ep-2")
         #expect(last.next == nil)
         #expect(last.navigator != nil)
@@ -107,8 +105,7 @@ struct EpisodeNavigationTests {
 
     @Test("unknown episode id yields nils")
     func unknownID() {
-        let api = MockAPIClient()
-        let nav = buildEpisodeNavigation(for: "nope", in: episodes, apiClient: api, userId: "u1")
+        let nav = buildEpisodeNavigation(for: "nope", in: episodes)
         #expect(nav.previous == nil)
         #expect(nav.next == nil)
         #expect(nav.navigator == nil)
@@ -116,9 +113,8 @@ struct EpisodeNavigationTests {
 
     @Test("single-episode season yields nil/nil even for the present episode")
     func singleEpisode() {
-        let api = MockAPIClient()
         let only = [makeEpisode(id: "ep-1", name: "One")]
-        let nav = buildEpisodeNavigation(for: "ep-1", in: only, apiClient: api, userId: "u1")
+        let nav = buildEpisodeNavigation(for: "ep-1", in: only)
         #expect(nav.previous == nil)
         #expect(nav.next == nil)
         #expect(nav.navigator == nil)
@@ -137,18 +133,29 @@ struct EpisodeNavigationTests {
         #expect(indexByID == ["ep-1": 0, "ep-2": 1])
     }
 
-    @Test("navigator resolves a target's playback info and neighbors, nil for unknown ids")
-    func navigatorResolvesTarget() async {
-        let api = MockAPIClient()
-        let nav = buildEpisodeNavigation(for: "ep-1", in: episodes, apiClient: api, userId: "u1").navigator
+    /// The navigator is a PURE neighbor lookup — and that is enforced by its
+    /// type, not by this test: `EpisodeNavigator` is non-`async` and
+    /// `buildEpisodeNavigation` takes no API client, so no negotiation can
+    /// happen here even by accident. It used to negotiate `PlaybackInfo` with
+    /// the default (`.native`) device profile, which can only ever be right for
+    /// one engine — the VLC path discarded that result and re-negotiated,
+    /// paying an extra `getItem` + PlaybackInfo round-trip on every episode
+    /// transition AND orphaning the live stream that negotiation opened
+    /// (`isAutoOpenLiveStream`, never referenced by any stop report). Each
+    /// presenter owns its own negotiation now.
+    @Test("navigator resolves a target's neighbors, nil for unknown ids")
+    func navigatorResolvesTarget() {
+        let nav = buildEpisodeNavigation(for: "ep-1", in: episodes).navigator
 
-        let resolved = await nav?("ep-3")
-        // MockAPIClient echoes the requested itemId as mediaSourceId.
-        #expect(resolved?.0.mediaSourceId == "ep-3")
-        #expect(resolved?.1?.id == "ep-2") // new previous
-        #expect(resolved?.2 == nil)        // last episode → no next
+        let resolved = nav?("ep-3")
+        #expect(resolved?.0?.id == "ep-2") // new previous
+        #expect(resolved?.1 == nil)        // last episode → no next
 
-        let unknown = await nav?("nope")
+        let middle = nav?("ep-2")
+        #expect(middle?.0?.id == "ep-1")
+        #expect(middle?.1?.id == "ep-3")
+
+        let unknown = nav?("nope")
         #expect(unknown == nil)
     }
 }

@@ -113,16 +113,28 @@ final class MediaLibraryViewModel {
     /// User-driven reload (pull-to-refresh, Retry, catalogue refresh). Bypasses
     /// the `hasLoaded` latch and supersedes any background initial load.
     func reload(using appState: AppState, loc: LocalizationManager) async {
-        // Drain (cancel AND await) any background initial load before taking
-        // over. `cancel()` only *requests* cancellation, so without the await
-        // the old load would keep running and its writes (isLoading / heroItem
-        // / itemsByGenre, plus its trailing `loadTask = nil`) could interleave
+        // Drain (cancel AND await) any load already running before taking over.
+        // `cancel()` only *requests* cancellation, so without the await the old
+        // load would keep running and its writes (isLoading / heroItem /
+        // itemsByGenre, plus its trailing `loadTask = nil`) could interleave
         // with — and clobber — ours as last-writer-wins. The cancelled load
         // early-returns without touching state, so draining it is cheap.
-        let inFlight = loadTask
-        inFlight?.cancel()
-        await inFlight?.value
-        loadTask = nil
+        //
+        // **A LOOP, not a single drain.** Two reloads can suspend on the SAME
+        // in-flight task; when they wake (in order) the first registers its own
+        // task, and a straight-line drain then had the second null that fresh
+        // registration out and start a *parallel* `performLoad` — two heroes and
+        // two 8-row genre fan-outs racing last-writer-wins on `itemsByGenre`,
+        // i.e. exactly the race this registration exists to close. Re-reading
+        // `loadTask` after each await makes the second reload observe the
+        // sibling's task and drain that instead. The identity check is what
+        // guarantees termination: a task body clears the slot itself, so a value
+        // still equal to the one we just awaited would otherwise loop forever.
+        while let inFlight = loadTask {
+            inFlight.cancel()
+            await inFlight.value
+            if loadTask == inFlight { loadTask = nil }
+        }
 
         // Every explicit refresh funnels through here (pull-to-refresh, Retry,
         // and both `.cinemaxShouldRefreshCatalogue` / `.cinemaxItemUserDataChanged`
@@ -132,11 +144,30 @@ final class MediaLibraryViewModel {
         // guard — clearing the stamp here keeps that explicit.
         appliedGenreSortFilter = nil
 
-        let succeeded = await performLoad(using: appState, loc: loc)
-        if succeeded { hasLoaded = true }
-        if sortFilter.isFiltered {
-            await applyFilter(using: appState)
+        // Register OUR pass in `loadTask` too, not just the initial load's.
+        // Without this a second `reload` arriving while this one is in flight
+        // found `loadTask == nil`, sailed past the drain above and ran a
+        // *parallel* `performLoad` — two heroes and two 8-row genre fan-outs
+        // (~18 requests) racing to last-writer-wins on `itemsByGenre`. Easy to
+        // reach now that a card's own context menu raises the tier-2
+        // notification this answers: toggle one card, then another.
+        loadTask = Task { [weak self] in
+            guard let self else { return }
+            let succeeded = await self.performLoad(using: appState, loc: loc)
+            if succeeded { self.hasLoaded = true }
+            // Unchanged for a *failed* load (the error screen owns the state
+            // either way), but skipped for a superseded one: a newer reload has
+            // already drained us and is about to fetch this itself.
+            if !Task.isCancelled, self.sortFilter.isFiltered {
+                await self.applyFilter(using: appState)
+            }
+            // Safe to clear unconditionally: a successor only registers after
+            // draining us to completion, so at this point the slot still holds
+            // this task (and its drain loop's identity check tolerates either
+            // ordering anyway).
+            self.loadTask = nil
         }
+        await loadTask?.value
     }
 
     /// Returns `true` only on a clean load. A real error sets `errorMessage`

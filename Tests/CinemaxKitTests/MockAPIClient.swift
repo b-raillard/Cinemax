@@ -501,12 +501,23 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// path (same "dedicated flag" rationale as that one).
     var nextUpDelay: Duration?
     private(set) var getNextUpCallCount = 0
+    /// Incremented only when the call runs all the way through — so a test can
+    /// tell "the probe was started" from "the probe was allowed to finish". The
+    /// distinction is the whole point of not cancelling the deadline's loser:
+    /// `getNextUp` warms its 10 s cache on completion, not on entry.
+    ///
+    /// Note the `try?` on the sleep below deliberately swallows
+    /// `CancellationError`, mirroring a non-cancellable await inside a real
+    /// implementation — which is what makes this counter meaningful rather than
+    /// a restatement of the cancellation.
+    private(set) var getNextUpCompletedCount = 0
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
         recordLock.withLock { getNextUpCallCount += 1 }
         if let nextUpDelay {
             try? await Task.sleep(for: nextUpDelay)
         }
         if nextUpShouldThrow { throw stubbedError }
+        recordLock.withLock { getNextUpCompletedCount += 1 }
         return stubbedNextUp
     }
     var stubbedNextUpItems: [BaseItemDto] = []

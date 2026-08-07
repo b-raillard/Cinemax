@@ -47,6 +47,45 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
         }
     }
 
+    /// Re-pulls everything the user has already paged in — as ONE request of
+    /// `items.count` — and replaces the list in place.
+    ///
+    /// Distinct from `reset()` + a page-0 `loadMore`, which is what a
+    /// notification-driven reload used to do: that collapsed a grid the user had
+    /// scrolled deep into back to a single page, **visibly jumping to the top
+    /// under their finger**. It became a live regression once the cards in these
+    /// grids gained a context menu whose own watched/favorite toggles raise
+    /// those very notifications — the reload now fires while the user is looking
+    /// at the list, not only after they navigate away and back.
+    ///
+    /// Item identity is preserved for everything still present, so scroll
+    /// position and per-card `@State` survive. `hasLoadedAll` is re-derived from
+    /// the fresh total, so a set that shrank (an un-favorited item) correctly
+    /// stops asking for more.
+    ///
+    /// No-op when nothing has been paged in yet (the caller should do a normal
+    /// load) or while a `loadMore` is in flight — same discipline as `loadMore`
+    /// itself, and it keeps the two from interleaving writes.
+    public func refreshLoadedSpan(
+        fetch: (_ startIndex: Int, _ limit: Int) async throws -> (items: [T], total: Int)
+    ) async {
+        guard !items.isEmpty, !isLoadingMore else { return }
+        isLoadingMore = true
+        let generationAtStart = generation
+        let span = items.count
+        do {
+            let result = try await fetch(0, span)
+            guard generationAtStart == generation else { return }
+            items = result.items
+            totalCount = result.total
+            hasLoadedAll = items.count >= result.total
+            isLoadingMore = false
+        } catch {
+            guard generationAtStart == generation else { return }
+            isLoadingMore = false
+        }
+    }
+
     public func reset() {
         generation += 1
         items = []
