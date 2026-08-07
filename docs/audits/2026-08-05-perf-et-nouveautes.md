@@ -225,7 +225,7 @@ hébergé à la racine, lectures `@Environment` optionnelles, résolveur ids-et-
 carte de série toujours étiquetée « Lecture », aperçu iOS explicite) ne sont pas
 re-signalées.
 
-#### F-46 · Tout l'arbre du menu ET l'aperçu iOS sont construits **par carte**, avidement — Haute
+#### F-46 · Tout l'arbre du menu ET l'aperçu iOS sont construits **par carte**, avidement — Haute — ✅ corrigé (le menu contextuel ne se construit plus par carte)
 `MediaCardContextMenu.swift:112-125,127-243,256-276`. La prémisse « SwiftUI construit
 le `contextMenu` paresseusement » ne tient pas pour cette forme : les deux surcharges
 prennent des `@ViewBuilder` **non-échappants**, donc SwiftUI les invoque
@@ -248,7 +248,7 @@ l'appui long ; (c) passer au paramètre `artwork:` l'URL **déjà construite** p
 — ce qui transforme la règle « byte-identique » d'un commentaire audité à la main sur
 neuf sites en garantie structurelle, et supprime la construction en double.
 
-#### F-47 · Chaque carte observe `knownRemoteTargetCount`, et chaque chargement de détail l'écrit sans garde → invalidation globale des cartes — Haute
+#### F-47 · Chaque carte observe `knownRemoteTargetCount`, et chaque chargement de détail l'écrit sans garde → invalidation globale des cartes — Haute — ✅ corrigé (garde d'égalité + contrôle de génération)
 `MediaCardContextMenu.swift:182` + `MediaDetailViewModel.swift:387` (`:136`).
 Parce que `menuItems` est évalué avidement (F-46), la lecture ligne 182 enregistre une
 dépendance Observation dans le body du modificateur de **chaque** carte. L'écrivain
@@ -263,7 +263,7 @@ vivante), et chacune repaie le coût complet de F-46.
 `@Observable` séparé pour qu'il ne partage jamais une portée d'invalidation avec
 `playback`/`remotePlay`.
 
-#### F-48 · Le délai de 1,5 s du sondage next-up est **indicatif, pas appliqué** — et le test censé le verrouiller ne peut pas voir la différence — Moyenne
+#### F-48 · Le délai de 1,5 s du sondage next-up est **indicatif, pas appliqué** — et le test censé le verrouiller ne peut pas voir la différence — Moyenne — ✅ corrigé (vrai délai (Task non structurées + continuation à reprise unique) + test d'horloge)
 `CardPlayTarget.swift:98-108`. `withTaskGroup` garantit le groupe vide au retour : il
 **attend chaque enfant restant** après le corps. Donc `group.next()` + `cancelAll()`
 rend la *décision* tout de suite, mais `resolve` ne retourne qu'une fois le sondage
@@ -284,7 +284,7 @@ seul `await` non annulable sous `getNextUp` restaurerait le timeout client de 30
 un chemin qui, de son propre commentaire (`:73`), n'a « aucune affordance de
 chargement ».
 
-#### F-49 · `loader.reset()` sur notification → un toggle depuis une grille paginée **renvoie l'utilisateur page 1** — Moyenne (régression visible)
+#### F-49 · `loader.reset()` sur notification → un toggle depuis une grille paginée **renvoie l'utilisateur page 1** — Moyenne (régression visible) — ✅ corrigé (refreshLoadedSpan, plus de retour page 1)
 `FavoritesScreen.swift:33-40` + `:102-115`, idem `WatchedHistoryScreen.swift:113-123`.
 `load()` fait `loader.reset()` puis récupère la page 0, et l'écran observe les
 notifications que **ses propres cartes** postent désormais. Défiler 400 favoris jusqu'à
@@ -294,7 +294,7 @@ mais l'attachement du menu sur la grille le rend immédiat et en place.
 **Fix :** le patch en place de F-51 le résout ; sinon re-demander
 `startIndex: 0, limit: loader.items.count` et diffuser dans le tableau existant.
 
-#### F-50 · `SearchResultsGrid`/`SearchResultCard` deviennent définitivement non-court-circuitables — Moyenne
+#### F-50 · `SearchResultsGrid`/`SearchResultCard` deviennent définitivement non-court-circuitables — Moyenne — ✅ corrigé (Equatable + .equatable())
 `SearchScreen.swift:628-631,658,740-746`. Les deux ont gagné un `let onGoToSeries:
 (String) -> Void` ; SwiftUI traite toute propriété de type fonction comme
 systématiquement inégale, donc l'optimisation « même valeur ⇒ pas de `body` » ne peut
@@ -320,7 +320,7 @@ chemin de patch en place (épisser l'élément), avec repli sur rechargement seu
 l'id est absent ou qu'un filtre sensible à l'état vu est actif. `LibraryAPI.fetchUserData`
 établit déjà le motif « ids en entrée, DTO en sortie ».
 
-#### F-52 · `playedOverride`/`favoriteOverride` ne s'invalident jamais et masquent les données serveur fraîches — Moyenne
+#### F-52 · `playedOverride`/`favoriteOverride` ne s'invalident jamais et masquent les données serveur fraîches — Moyenne — ✅ corrigé (OptimisticFlag auto-invalidant)
 `MediaCardContextMenu.swift:109-110,129-130`. Rien ne les remet à `nil`, et l'identité de
 vue survit aux rechargements (mêmes ids via `ForEach`). Marquer vu depuis la grille
 (override = `true`), puis non-vu depuis l'écran de détail : la grille recharge avec
@@ -332,7 +332,7 @@ notifications) ; sur les cinq autres ils doublonnent un rafraîchissement déjà
 **Fix :** stocker l'override **avec la valeur serveur dont il dérive** et l'écarter dès
 qu'elle change (`(base: Bool, value: Bool)?`, ou `.onChange(of: item.userData?.isPlayed)`).
 
-#### F-53 · Aucune coalescence des rechargements : deux toggles rapides lancent deux fan-outs concurrents — Basse-Moyenne
+#### F-53 · Aucune coalescence des rechargements : deux toggles rapides lancent deux fan-outs concurrents — Basse-Moyenne — ✅ corrigé (reload s'enregistre dans loadTask)
 `MovieLibraryScreen.swift:152-164`. `performReload` enveloppe `reload` dans une `Task`
 nue sans dédup ; `MediaLibraryViewModel.reload` draine un `loadTask` en vol mais ne
 s'y **enregistre pas**, donc un second `reload` voit `loadTask == nil` et les deux
@@ -341,7 +341,7 @@ s'y **enregistre pas**, donc un second `reload` voit `loadTask == nil` et les de
 le risque est compris ; `reload` n'est juste pas couvert.
 **Fix :** affecter aussi le rechargement à `loadTask`, ou debouncer à l'observateur.
 
-#### F-54 · `cancelAll()` jette le `getNextUp` en vol, donc le cache 10 s ne se réchauffe jamais après un dépassement — Basse
+#### F-54 · `cancelAll()` jette le `getNextUp` en vol, donc le cache 10 s ne se réchauffe jamais après un dépassement — Basse — ✅ corrigé (le perdant n'est plus annulé)
 `CardPlayTarget.swift:106` + `JellyfinAPIClient+Library.swift:364-379` (le cache est
 peuplé **après** le retour de `client.send`). Annuler le sondage jette la réponse avant
 sa mise en cache : le prochain tap sur la même carte re-sonde à froid et redépassera
@@ -349,7 +349,7 @@ probablement — exactement quand l'offset de reprise est le plus voulu.
 **Fix :** ne pas annuler le perdant ; le laisser finir en fond pour réchauffer
 `nextup-`. Coût nul, transforme un dépassement répété en dépassement unique.
 
-#### F-55 · La règle de reprise est ré-exprimée en ligne sur Home, contournant le SSOT — Basse
+#### F-55 · La règle de reprise est ré-exprimée en ligne sur Home, contournant le SSOT — Basse — ✅ corrigé (resumeSeconds promu, deux sites Home branchés)
 `HomeScreen.swift:752-755` vs `CardPlayTarget.swift:133-140`.
 `continueWatchingPlayLink` calcule `startSeconds` avec son propre `guard let ticks…` et
 sa propre division par 10 000 000, **omettant la moitié `!isPlayed`** de la règle. Sans
@@ -358,7 +358,7 @@ carte et l'entrée « Reprendre » de son menu dérivent l'offset de deux expres
 même règle — la dérive exacte que le SSOT existe pour empêcher.
 **Fix :** promouvoir et appeler `CardPlayTargetResolver.resumeSeconds(positionTicks:isPlayed:)`.
 
-#### F-56 · Le sondage de cibles distantes écrit un état global sans contrôle de génération — Basse
+#### F-56 · Le sondage de cibles distantes écrit un état global sans contrôle de génération — Basse — ✅ corrigé (contrôle de génération (portée réelle documentée))
 `MediaDetailViewModel.swift:136,387`. Le `Task` fire-and-forget n'honore pas
 `loadGeneration` (que le reste du fichier respecte), et il écrit désormais dans le
 `cardActions` **hébergé à la racine**, pas seulement dans l'état de son écran. Un détail
@@ -391,20 +391,22 @@ quitté depuis plusieurs secondes peut donc encore basculer le compteur qui gate
    F-28 (fuite session réveil), F-26 (trickplay decode).~~ ✅ **Fait** — implémenté sur
    cette branche (`perf(player): lot lecteur`). Non compilé localement (runner Linux
    sans toolchain Swift) : vérification par la CI.
-2. **Lot « cartes »** (§1.5, le plus rentable maintenant) : F-46 + F-47 ensemble (le
-   coût par carte et l'invalidation globale sont le même problème — sortir les builders
-   dans des `View` dédiées règle les deux), puis F-49 (régression de pagination
-   visible), F-52 (override qui masque le serveur), F-50 (`Equatable` recherche).
+2. ~~**Lot « cartes »** (§1.5) : F-46 + F-47 + F-52, puis F-49, F-50, F-48, F-53,
+   F-54, F-55, F-56.~~ ✅ **Fait** — 10 des 11 constats du lot sont corrigés sur
+   cette branche. **Reste F-51**, seul item non traité, et volontairement : il
+   change un contrat documenté (la RULE du rafraîchissement à deux niveaux, dont
+   les notifications ne portent aucun payload) et son « patch en place » n'est pas
+   un splice générique — sur Favoris et Historique, dé-cocher doit *retirer* la
+   carte, pas la mettre à jour, donc la logique est par écran. Son symptôme le plus
+   douloureux (le retour page 1) est déjà supprimé par F-49 ; ce qui reste est du
+   volume de requêtes en arrière-plan. À décider explicitement.
 3. **Lot « rendu »** : F-2 + F-3 (accents/racine — petits diffs, gain global), F-1
    (recherche tvOS), F-22/F-20 (Equatable Library/Home).
 4. **Lot « réseau »** : F-9 (`getItems` cache) + F-8 (gate tier-2) + F-51 (payload de
    notification + patch en place) ensemble — les trois attaquent la même tempête de
    rechargements ; puis F-16/F-15 (payloads), F-13 (reliquat juillet), F-19 (chips).
 5. **Lot « infra »** : F-7 (widget), F-10/F-11/F-12 (sondes/monitor), F-14, F-29/F-30.
-6. Le reste opportuniste. Note : **F-48 mérite d'être traité tôt malgré sa sévérité
-   moyenne** — le correctif inclut un test qui doit d'abord échouer, et laisser un
-   invariant documenté non appliqué se paiera au prochain `await` non annulable ajouté
-   sous `getNextUp`.
+6. Le reste opportuniste.
 
 ---
 
