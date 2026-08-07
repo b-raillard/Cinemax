@@ -517,7 +517,12 @@ final class NativeVideoPresenter {
         guard let navigator = episodeNavigator, let vc = playerVC else { return }
         Task {
             playbackReporter.reportStop()
-            guard let (info, prev, next) = await navigator(ep.id) else {
+            // Neighbors resolve synchronously (pure index lookups); this
+            // presenter owns the negotiation, with the Apple device profile.
+            guard let (prev, next) = navigator(ep.id),
+                  let info = try? await apiClient.getPlaybackInfo(
+                      itemId: ep.id, userId: userId, maxBitrate: maxBitrate
+                  ) else {
                 // The session is already closed and the new episode never
                 // resolved, so this bail is terminal for the banner: without a
                 // detach the Live Activity strands on the Lock Screen showing

@@ -312,8 +312,7 @@ final class HomeViewModel {
                   let seasonId = item.seasonID,
                   let pre = precomputed[seasonId] else { continue }
             navigation[id] = buildEpisodeNavigation(
-                for: id, refs: pre.refs, indexByID: pre.indexByID,
-                apiClient: appState.apiClient, userId: userId
+                for: id, refs: pre.refs, indexByID: pre.indexByID
             )
         }
         return navigation

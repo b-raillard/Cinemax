@@ -136,10 +136,10 @@ final class TrickplayController {
         let token = token
         let gen = generation
         let task = Task { @MainActor [weak self] in
-            let data = await Self.loadTile(url: url, token: token)
+            let image = await Self.loadTile(url: url, token: token)
             guard let self, self.generation == gen else { return }
             self.inflightTiles.remove(index)
-            guard let data, let image = UIImage(data: data) else { return }
+            guard let image else { return }
             let cost = self.estimatedDecodedBytes(for: image)
             self.tileCache.setObject(image, forKey: NSNumber(value: index), cost: cost)
             self.onTileLoaded?()
@@ -149,8 +149,19 @@ final class TrickplayController {
 
     /// Same dual-auth pattern as the chapter thumbnails: `api_key` query param
     /// (what image endpoints accept) plus the Authorization header.
-    nonisolated private static func loadTile(url: URL, token: String?) async -> Data? {
+    ///
+    /// Returns a **decoded, bitmap-backed** image. `UIImage(data:)` alone is
+    /// JPEG-backed and decodes lazily on first draw — and a tile sheet's first
+    /// draw is the `cropping(to:)` in `thumbnail(atMs:)`, which the scrub
+    /// gesture drives on the main actor up to once per frame. A 10×10 sheet of
+    /// 320×180 thumbs is ~5.7 MP, so that decode landed on the same thread that
+    /// delivers video. Forcing it here moves it off the main actor, and crops
+    /// off a decoded bitmap are near-free. Scale (1 for raw JPEG data) is
+    /// preserved, so `thumbnail(atMs:)`'s pixel-space crop rect stays valid.
+    nonisolated private static func loadTile(url: URL, token: String?) async -> UIImage? {
         let authed = VLCStreamPresenter.authedURL(url, token: token)
-        return await AuthenticatedImageFetch.data(from: authed, token: token)
+        guard let data = await AuthenticatedImageFetch.data(from: authed, token: token),
+              let image = UIImage(data: data) else { return nil }
+        return image.preparingForDisplay() ?? image
     }
 }

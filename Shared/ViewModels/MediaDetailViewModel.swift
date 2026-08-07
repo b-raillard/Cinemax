@@ -198,7 +198,7 @@ final class MediaDetailViewModel {
                 nextUpEpisodes = []
             }
 
-            rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+            rebuildNavigationMaps()
             isFavorite = item?.userData?.isFavorite ?? false
             isPlayed = item?.userData?.isPlayed ?? false
         } else {
@@ -338,7 +338,7 @@ final class MediaDetailViewModel {
         guard let userId = appState.currentUserId, let seasonId = selectedSeasonId else { return }
         if let refreshed = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId) {
             episodes = refreshed
-            rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
+            rebuildNavigationMaps()
         }
     }
 
@@ -419,7 +419,7 @@ final class MediaDetailViewModel {
         nextUpEpisode = loadedNextUp
 
         guard let seasonId = loadedSeasons.first?.id else {
-            rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+            rebuildNavigationMaps()
             return
         }
         selectedSeasonId = seasonId
@@ -439,7 +439,7 @@ final class MediaDetailViewModel {
             episodes = loadedEpisodes
         }
 
-        rebuildNavigationMaps(apiClient: apiClient, userId: userId)
+        rebuildNavigationMaps()
     }
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {
@@ -451,7 +451,7 @@ final class MediaDetailViewModel {
             let newEpisodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
             guard seasonGeneration == expectedGeneration else { return }
             episodes = newEpisodes
-            rebuildNavigationMaps(apiClient: appState.apiClient, userId: userId)
+            rebuildNavigationMaps()
         } catch {
             // Keep existing episodes on error
         }
@@ -461,19 +461,13 @@ final class MediaDetailViewModel {
     /// Precomputes the refs + id→index pair once per list so per-episode
     /// population is O(1) instead of re-running compactMap+firstIndex inside
     /// `buildEpisodeNavigation` on every call.
-    private func rebuildNavigationMaps(apiClient: any APIClientProtocol, userId: String) {
-        episodeNavigationMap = Self.makeNavigationMap(
-            from: episodes, apiClient: apiClient, userId: userId
-        )
-        nextUpNavigationMap = Self.makeNavigationMap(
-            from: nextUpEpisodes, apiClient: apiClient, userId: userId
-        )
+    private func rebuildNavigationMaps() {
+        episodeNavigationMap = Self.makeNavigationMap(from: episodes)
+        nextUpNavigationMap = Self.makeNavigationMap(from: nextUpEpisodes)
     }
 
     private static func makeNavigationMap(
-        from episodes: [BaseItemDto],
-        apiClient: any APIClientProtocol,
-        userId: String
+        from episodes: [BaseItemDto]
     ) -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
         guard !episodes.isEmpty else { return [:] }
         let (refs, indexByID) = precomputeEpisodeRefs(episodes)
@@ -481,8 +475,7 @@ final class MediaDetailViewModel {
         map.reserveCapacity(refs.count)
         for ref in refs {
             map[ref.id] = buildEpisodeNavigation(
-                for: ref.id, refs: refs, indexByID: indexByID,
-                apiClient: apiClient, userId: userId
+                for: ref.id, refs: refs, indexByID: indexByID
             )
         }
         return map
