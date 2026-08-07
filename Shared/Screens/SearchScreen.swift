@@ -643,8 +643,17 @@ private struct SearchResultsGrid: View, Equatable {
                   lhs.peopleTitle == rhs.peopleTitle,
                   lhs.results.count == rhs.results.count,
                   lhs.people.count == rhs.people.count else { return false }
+            // Must be at least as fine-grained as `SearchResultCard.==`. The grid
+            // is the OUTER `.equatable()`: if it compares equal its body is
+            // skipped, the cards are never re-created, and the card's own `==` is
+            // never consulted — so a results array differing only in userData
+            // would leave every card holding a stale DTO, and its context menu
+            // offering "mark as watched" on an already-watched item.
             for (a, b) in zip(lhs.results, rhs.results) {
-                if a.id != b.id || a.name != b.name || a.primaryImageTagValue != b.primaryImageTagValue { return false }
+                if a.id != b.id || a.name != b.name
+                    || a.primaryImageTagValue != b.primaryImageTagValue
+                    || a.userData?.isPlayed != b.userData?.isPlayed
+                    || a.userData?.isFavorite != b.userData?.isFavorite { return false }
             }
             for (a, b) in zip(lhs.people, rhs.people) {
                 if a.id != b.id || a.name != b.name { return false }

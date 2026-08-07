@@ -113,16 +113,28 @@ final class MediaLibraryViewModel {
     /// User-driven reload (pull-to-refresh, Retry, catalogue refresh). Bypasses
     /// the `hasLoaded` latch and supersedes any background initial load.
     func reload(using appState: AppState, loc: LocalizationManager) async {
-        // Drain (cancel AND await) any background initial load before taking
-        // over. `cancel()` only *requests* cancellation, so without the await
-        // the old load would keep running and its writes (isLoading / heroItem
-        // / itemsByGenre, plus its trailing `loadTask = nil`) could interleave
+        // Drain (cancel AND await) any load already running before taking over.
+        // `cancel()` only *requests* cancellation, so without the await the old
+        // load would keep running and its writes (isLoading / heroItem /
+        // itemsByGenre, plus its trailing `loadTask = nil`) could interleave
         // with — and clobber — ours as last-writer-wins. The cancelled load
         // early-returns without touching state, so draining it is cheap.
-        let inFlight = loadTask
-        inFlight?.cancel()
-        await inFlight?.value
-        loadTask = nil
+        //
+        // **A LOOP, not a single drain.** Two reloads can suspend on the SAME
+        // in-flight task; when they wake (in order) the first registers its own
+        // task, and a straight-line drain then had the second null that fresh
+        // registration out and start a *parallel* `performLoad` — two heroes and
+        // two 8-row genre fan-outs racing last-writer-wins on `itemsByGenre`,
+        // i.e. exactly the race this registration exists to close. Re-reading
+        // `loadTask` after each await makes the second reload observe the
+        // sibling's task and drain that instead. The identity check is what
+        // guarantees termination: a task body clears the slot itself, so a value
+        // still equal to the one we just awaited would otherwise loop forever.
+        while let inFlight = loadTask {
+            inFlight.cancel()
+            await inFlight.value
+            if loadTask == inFlight { loadTask = nil }
+        }
 
         // Every explicit refresh funnels through here (pull-to-refresh, Retry,
         // and both `.cinemaxShouldRefreshCatalogue` / `.cinemaxItemUserDataChanged`
@@ -149,9 +161,10 @@ final class MediaLibraryViewModel {
             if !Task.isCancelled, self.sortFilter.isFiltered {
                 await self.applyFilter(using: appState)
             }
-            // Safe to clear unconditionally: `reload` awaits an outgoing task to
-            // completion *before* registering its own, so this can never null out
-            // a successor's registration.
+            // Safe to clear unconditionally: a successor only registers after
+            // draining us to completion, so at this point the slot still holds
+            // this task (and its drain loop's identity check tolerates either
+            // ordering anyway).
             self.loadTask = nil
         }
         await loadTask?.value
