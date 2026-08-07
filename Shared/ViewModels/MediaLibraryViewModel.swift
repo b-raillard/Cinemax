@@ -132,11 +132,29 @@ final class MediaLibraryViewModel {
         // guard — clearing the stamp here keeps that explicit.
         appliedGenreSortFilter = nil
 
-        let succeeded = await performLoad(using: appState, loc: loc)
-        if succeeded { hasLoaded = true }
-        if sortFilter.isFiltered {
-            await applyFilter(using: appState)
+        // Register OUR pass in `loadTask` too, not just the initial load's.
+        // Without this a second `reload` arriving while this one is in flight
+        // found `loadTask == nil`, sailed past the drain above and ran a
+        // *parallel* `performLoad` — two heroes and two 8-row genre fan-outs
+        // (~18 requests) racing to last-writer-wins on `itemsByGenre`. Easy to
+        // reach now that a card's own context menu raises the tier-2
+        // notification this answers: toggle one card, then another.
+        loadTask = Task { [weak self] in
+            guard let self else { return }
+            let succeeded = await self.performLoad(using: appState, loc: loc)
+            if succeeded { self.hasLoaded = true }
+            // Unchanged for a *failed* load (the error screen owns the state
+            // either way), but skipped for a superseded one: a newer reload has
+            // already drained us and is about to fetch this itself.
+            if !Task.isCancelled, self.sortFilter.isFiltered {
+                await self.applyFilter(using: appState)
+            }
+            // Safe to clear unconditionally: `reload` awaits an outgoing task to
+            // completion *before* registering its own, so this can never null out
+            // a successor's registration.
+            self.loadTask = nil
         }
+        await loadTask?.value
     }
 
     /// Returns `true` only on a clean load. A real error sets `errorMessage`

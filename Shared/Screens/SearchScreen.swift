@@ -347,6 +347,9 @@ struct SearchScreen: View {
                 peopleTitle: loc.localized("search.people"),
                 onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
+            // Without this the `Equatable` conformance is inert — SwiftUI only
+            // consults a custom `==` when the view is wrapped in `.equatable()`.
+            .equatable()
         }
     }
 
@@ -617,7 +620,39 @@ private struct VoiceSearchButton: View {
 /// LazyVGrid of search results. Kept as a standalone `View` so SwiftUI's
 /// diff can skip re-rendering the grid when parent state (surprise-me flags,
 /// pulsing, etc.) changes but the results array itself hasn't.
-private struct SearchResultsGrid: View {
+/// Equatable so a keystroke that leaves the result set unchanged doesn't rebuild
+/// every visible card.
+///
+/// Without this, the `onGoToSeries` closure below made both this view and
+/// `SearchResultCard` permanently un-skippable: SwiftUI treats a function-typed
+/// stored property as unconditionally unequal, so "same value ⇒ skip `body`"
+/// could never fire again. `SearchScreen.body` re-evaluates on every keystroke
+/// (it reads `searchText`), which meant every visible card re-ran its body — a
+/// poster URL build plus, before the menu was split into its own views, an
+/// entire context-menu tree. The `==` ignores the closure, exactly as
+/// `MediaDetailSimilarSection` and `PlayActionButtonsSection` do.
+private struct SearchResultsGrid: View, Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        // SwiftUI diffs on the main actor — `assumeIsolated` lets us read the
+        // non-Sendable `BaseItemDto` payload here (escape hatch #4).
+        MainActor.assumeIsolated {
+            guard lhs.columns.count == rhs.columns.count,
+                  lhs.gridPadding == rhs.gridPadding,
+                  lhs.gridSpacing == rhs.gridSpacing,
+                  lhs.headerTitle == rhs.headerTitle,
+                  lhs.peopleTitle == rhs.peopleTitle,
+                  lhs.results.count == rhs.results.count,
+                  lhs.people.count == rhs.people.count else { return false }
+            for (a, b) in zip(lhs.results, rhs.results) {
+                if a.id != b.id || a.name != b.name || a.primaryImageTagValue != b.primaryImageTagValue { return false }
+            }
+            for (a, b) in zip(lhs.people, rhs.people) {
+                if a.id != b.id || a.name != b.name { return false }
+            }
+            return true
+        }
+    }
+
     let results: [BaseItemDto]
     /// Person matches. Empty ⇒ no row at all: an orphan "People" heading over
     /// nothing is a visual bug, and most searches target a title.
@@ -659,6 +694,7 @@ private struct SearchResultsGrid: View {
                     LazyVGrid(columns: columns, spacing: gridSpacing) {
                         ForEach(results, id: \.id) { item in
                             SearchResultCard(item: item, imageBuilder: imageBuilder, onGoToSeries: onGoToSeries)
+                                .equatable()
                         }
                     }
                     .padding(.horizontal, gridPadding)
@@ -737,7 +773,20 @@ private struct SearchPersonRow: View {
     }
 }
 
-private struct SearchResultCard: View {
+/// Equatable for the same reason as `SearchResultsGrid` — see the note there.
+private struct SearchResultCard: View, Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        MainActor.assumeIsolated {
+            lhs.item.id == rhs.item.id
+                && lhs.item.name == rhs.item.name
+                && lhs.item.type == rhs.item.type
+                && lhs.item.productionYear == rhs.item.productionYear
+                && lhs.item.primaryImageTagValue == rhs.item.primaryImageTagValue
+                && lhs.item.userData?.isPlayed == rhs.item.userData?.isPlayed
+                && lhs.item.userData?.isFavorite == rhs.item.userData?.isFavorite
+        }
+    }
+
     let item: BaseItemDto
     let imageBuilder: ImageURLBuilder
     /// Passed down from `SearchResultsGrid`; invoked here to bubble the

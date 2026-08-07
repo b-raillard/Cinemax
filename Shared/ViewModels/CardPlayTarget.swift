@@ -72,39 +72,27 @@ enum CardPlayTargetResolver {
         // timeout, fall through to the series id with no resume offset —
         // `getPlaybackInfo` resolves the episode server-side regardless, so
         // the only thing lost is the resume position on a slow server.
-        let outcome = await withTaskGroup(of: ProbeOutcome.self) { group in
-            group.addTask {
-                do {
-                    guard let episode = try await api.getNextUp(seriesId: itemId, userId: userId),
-                          let episodeId = episode.id else {
-                        return .noNextUp
-                    }
-                    return .episode(NextUpProbeResult(
-                        episodeId: episodeId,
-                        title: episode.name,
-                        positionTicks: episode.userData?.playbackPositionTicks ?? 0,
-                        isPlayed: episode.userData?.isPlayed ?? false
-                    ))
-                } catch {
-                    // Cancellation is the expected shape of "the deadline won
-                    // the race" (see `group.cancelAll()` below) — only log
-                    // genuine failures, the timeout itself is logged once.
-                    if !Task.isCancelled {
-                        logger.debug("Card next-up probe failed for series \(itemId, privacy: .public): \(String(describing: error), privacy: .public)")
-                    }
-                    return .failed
-                }
+        // **Deliberately NOT a `withTaskGroup`.** A group awaits every remaining
+        // child after its body returns, so `group.next()` + `cancelAll()` yields
+        // the deadline's *decision* immediately but only *returns* once the probe
+        // has actually finished — the deadline was advisory, not enforced. Two
+        // unstructured tasks racing onto one single-resume continuation is the
+        // shape that actually bounds the wait, and it is the same one
+        // `PlaybackLiveActivityController.attach` uses for its enrich deadline.
+        let outcome = await withCheckedContinuation { (continuation: CheckedContinuation<ProbeOutcome, Never>) in
+            let race = ProbeRace(continuation)
+            // The loser is **not** cancelled, on purpose: `getNextUp` populates
+            // its 10s `nextup-` cache only once the response lands, so cancelling
+            // threw away exactly what would make the next tap on this card fast —
+            // turning a one-off timeout into a repeated one, in the situation
+            // where the resume offset is most wanted. It finishes unobserved.
+            Task {
+                race.resume(await probeNextUp(itemId: itemId, api: api, userId: userId))
             }
-            group.addTask {
+            Task {
                 try? await Task.sleep(for: probeDeadline)
-                return .timedOut
+                race.resume(.timedOut)
             }
-            // First task to finish wins; the other is cancelled and its
-            // (discarded) result still gets joined by the group's implicit
-            // structured-concurrency teardown.
-            let first = await group.next() ?? .failed
-            group.cancelAll()
-            return first
         }
 
         switch outcome {
@@ -134,14 +122,70 @@ enum CardPlayTargetResolver {
         positionTicks > 0 && !isPlayed
     }
 
-    private static func resumeSeconds(positionTicks: Int, isPlayed: Bool) -> Double? {
+    /// The resume offset in seconds, or `nil` to play from the beginning.
+    ///
+    /// Exposed for the same reason as `isResumable`: Home's hero and its
+    /// Continue Watching rail each hand a `startTime` to `PlayLink`, and both
+    /// used to compute it inline — re-deriving the tick conversion **and dropping
+    /// the `!isPlayed` half of the rule**. Harmless while the resume rail only
+    /// returns unplayed items, but it meant one card's `PlayLink` and that same
+    /// card's menu entry derived the offset from two different expressions of one
+    /// rule, which is exactly the drift this type exists to prevent.
+    static func resumeSeconds(positionTicks: Int, isPlayed: Bool) -> Double? {
         guard isResumable(positionTicks: positionTicks, isPlayed: isPlayed) else { return nil }
         return positionTicks.jellyfinSeconds
     }
 
+    /// The next-up lookup, as a value. Split out of the race so the racing code
+    /// reads as a race and this reads as a fetch.
+    private static func probeNextUp(
+        itemId: String, api: any LibraryAPI, userId: String
+    ) async -> ProbeOutcome {
+        do {
+            guard let episode = try await api.getNextUp(seriesId: itemId, userId: userId),
+                  let episodeId = episode.id else {
+                return .noNextUp
+            }
+            return .episode(NextUpProbeResult(
+                episodeId: episodeId,
+                title: episode.name,
+                positionTicks: episode.userData?.playbackPositionTicks ?? 0,
+                isPlayed: episode.userData?.isPlayed ?? false
+            ))
+        } catch {
+            // No `Task.isCancelled` special-case any more: nothing cancels this
+            // probe, so every error reaching here is a genuine failure.
+            logger.debug("Card next-up probe failed for series \(itemId, privacy: .public): \(String(describing: error), privacy: .public)")
+            return .failed
+        }
+    }
+
+    /// Guards a continuation so exactly one of the two racers resumes it —
+    /// resuming a `CheckedContinuation` twice is a crash, and both racers can
+    /// land near-simultaneously on a deadline this short.
+    private final class ProbeRace: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<ProbeOutcome, Never>?
+
+        init(_ continuation: CheckedContinuation<ProbeOutcome, Never>) {
+            self.continuation = continuation
+        }
+
+        /// First caller wins; every later one is a no-op. The continuation is
+        /// resumed OUTSIDE the lock so the awaiting task can't be scheduled while
+        /// this thread still holds it.
+        func resume(_ outcome: ProbeOutcome) {
+            let pending: CheckedContinuation<ProbeOutcome, Never>? = lock.withLock {
+                defer { continuation = nil }
+                return continuation
+            }
+            pending?.resume(returning: outcome)
+        }
+    }
+
     /// Only the scalars pulled off the next-up episode inside the probing
-    /// child task — never the `BaseItemDto` itself, which is not `Sendable`
-    /// and cannot cross the `TaskGroup` boundary.
+    /// task — never the `BaseItemDto` itself, which is not `Sendable`
+    /// and cannot cross the task boundary.
     private struct NextUpProbeResult: Sendable {
         let episodeId: String
         let title: String?
