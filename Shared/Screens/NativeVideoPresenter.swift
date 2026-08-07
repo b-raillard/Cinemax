@@ -556,7 +556,8 @@ final class NativeVideoPresenter {
             // but can't reach the `vc`/`avPlayer` captured here, so resuming after a
             // dismiss would resurrect playback — and checking before the hop keeps the
             // activation from being enqueued behind that teardown's `deactivate()`
-            // (a dismiss can already have landed during the `navigator` await above).
+            // (a dismiss can already have landed during the `getPlaybackInfo`
+            // await above — the navigator itself no longer awaits anything).
             guard self.playerVC != nil else { return }
             await PlaybackAudioSession.activate()
             guard self.playerVC != nil else { return }
