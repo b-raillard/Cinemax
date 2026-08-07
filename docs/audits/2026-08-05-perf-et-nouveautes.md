@@ -16,12 +16,10 @@ documentés le sont.
 > - **F-7 a empiré** : `loadRecentlyAdded` ajoute désormais **deux** fetches JSON
 >   séquentiels avant la boucle d'images série (pire cas du widget « Ajouts
 >   récents » : 2 JSON + 7 images en série).
-> - **Angle mort assumé** : les 642 lignes du nouveau lot cartes
->   (`CardActionPresenter` 99 l., `CardPlayTarget` 158 l.,
->   `MediaCardContextMenu` passé de 109 à 385 l.) sont **postérieures à l'audit
->   et n'ont pas été analysées**. Ce lot ajoute des `Task` de résolution de cible
->   de lecture sur sept surfaces de vignettes — un passage perf dédié serait
->   pertinent avant d'empiler des features dessus.
+> - **Angle mort comblé** : les 642 lignes du nouveau lot cartes
+>   (`CardActionPresenter`, `CardPlayTarget`, `MediaCardContextMenu`) ont fait
+>   l'objet d'une passe dédiée — voir **§1.5**, 11 constats supplémentaires
+>   (F-46 à F-56) dont 2 hauts et une régression utilisateur réelle.
 
 **Verdict global :** la base est saine. Décodage JSON hors main actor partout,
 caches TTL avec single-flight sur `getItem`, fan-outs bornés à 6, prefetch
@@ -46,7 +44,7 @@ visibles sur Apple TV A15 et sur serveur auto-hébergé.
 | P8 — publish extensions à chaque revalidation | ✅ Corrigé (`isCurrent` early-return) |
 | B2 — poll QuickConnect tué par une erreur transitoire | ✅ Corrigé (budget de 5 échecs consécutifs) |
 | B3 — `connectToServer`/`authenticate` ne vident pas `APICache` | ❌ **Toujours ouvert** (voir F-13) |
-| P6 — vignettes de chapitres chargées en rafale à l'ouverture | ❌ **Toujours ouvert** (voir F-4) |
+| P6 — vignettes de chapitres chargées en rafale à l'ouverture | ✅ Corrigé sur cette branche (F-5) |
 | P2/P3/P4/P7 — DownloadManager | N/A — la feature offline a été retirée (App Review 5.2.3) |
 
 ### 1.2 Sévérité haute — à corriger en premier
@@ -92,7 +90,7 @@ sa portée *racine* qui ne l'est pas.) Attention : `uiScale` bump aussi
 **Fix :** scinder le compteur — `_accentRevision` pour l'accent/rainbow,
 `_globalRevision` (bumpé par `darkModeEnabled`/`uiScale`) lu par `colorScheme`.
 
-#### F-4 · Lecteur : le HUD est repeint ~4×/s même masqué, pendant tout le film
+#### F-4 · Lecteur : le HUD est repeint ~4×/s même masqué, pendant tout le film — ✅ corrigé sur cette branche
 `VLCStreamPresenter.swift:3357-3410` — chaque `.timeChanged` libVLC (~4 Hz) exécute
 `paintPosition` : 2 `String(format:)`, 2 écritures `UILabel.text` (invalidation
 layout + CoreText), écriture slider/`TVScrubBar.setProgress` (relayout de 3 frames
@@ -108,7 +106,7 @@ fait déjà).
 **Impact :** temps main-thread continu en 4K — en concurrence directe avec la
 livraison d'images sur A15 (le cas hvcC/logiciel documenté) ; batterie iOS.
 
-#### F-5 · Vignettes de chapitres : rafale de requêtes au moment exact de l'ouverture du flux
+#### F-5 · Vignettes de chapitres : rafale de requêtes au moment exact de l'ouverture du flux — ✅ corrigé sur cette branche (chemin VLC ; le chemin natif `ChapterController` reste à faire)
 `VLCStreamPresenter.swift:1934-1951` (VLC) et `ChapterController.swift:58-78`
 (natif) : une `Task` par chapitre, immédiatement, au `startPlayback` — un film à
 30 chapitres = 30 requêtes `AuthenticatedImageFetch` pendant que libVLC ouvre le
@@ -121,7 +119,7 @@ fetch fenêtré sur les chips visibles (le delegate de scroll est déjà câblé
 côté natif, cap à ~4 en vol + application incrémentale.
 **Impact :** time-to-first-frame sur serveur auto-hébergé/reverse-proxy.
 
-#### F-6 · Navigation épisode VLC : une négociation PlaybackInfo entière jetée + session serveur orpheline
+#### F-6 · Navigation épisode VLC : une négociation PlaybackInfo entière jetée + session serveur orpheline — ✅ corrigé sur cette branche
 `VLCStreamPresenter.swift:2570-2571` — `navigateToEpisode` await d'abord
 `navigator(ref.id)` (`PlayLink.swift:66-72`) qui fait un `getPlaybackInfo` complet
 **moteur natif**… dont seul le couple prev/next (de purs lookups de tableau) est
@@ -194,9 +192,9 @@ userData/favoris. C'est aussi ce qui rend F-8 totalement sûr.
 | F-23 | `MediaDetailScreen` : le classement multi-versions (`MediaSourceQuality.ranked`) est recalculé 4-6× par passe de body (badges, versionRow, actionButtons, badges re-rank si `source == nil`) | `MediaDetailScreen.swift:496-514,275` | Résoudre une fois dans `detailContent` et threader |
 | F-24 | `MediaDetail` : le `LazyVStack` n'a que 2 enfants (backdrop + tout-le-reste en `VStack` eager) → cast, épisodes, collection, similaires se construisent et lancent leurs images immédiatement | `MediaDetailScreen.swift:194-198` | Émettre les sections comme enfants directs du `LazyVStack` (pattern `HomeScreen.content`) |
 | F-25 | `MPNowPlayingInfoCenter` republié **chaque seconde** (XPC vers mediaremoted, ~7 200 fois par film) alors que le système extrapole via elapsed+rate — la Live Activity d'à côté ne pousse que sur discontinuité | `NowPlayingInfoController.swift:75-84` | Même forme de throttle que `PlaybackActivityThrottle` (rate flip, seek, durée connue, sinon ~5 s) |
-| F-26 | Trickplay : la planche JPEG (≈5,7 MP) est stockée non décodée ; le crop se fait **sur le main actor à chaque frame de geste** de scrub → décodage complet livré sur le thread principal pendant le drag | `TrickplayController.swift:103-146` | `preparingForDisplay()` hors main à l'insertion en cache ; mémoïser le dernier crop |
+| F-26 ✅ | Trickplay : la planche JPEG (≈5,7 MP) est stockée non décodée ; le crop se fait **sur le main actor à chaque frame de geste** de scrub → décodage complet livré sur le thread principal pendant le drag | `TrickplayController.swift:103-146` | `preparingForDisplay()` hors main à l'insertion en cache ; mémoïser le dernier crop |
 | F-27 | `SleepTimerController` : boucle 1 s à soi (violation de la RULE « un seul tick, les sous-contrôleurs n'ajoutent jamais le leur » — le chemin VLC fait correct) + `UIVisualEffectView` blur **vivant au-dessus de la vidéo** pendant toute la fenêtre (≤90 min) = re-blur GPU à chaque frame | `SleepTimerController.swift:67-80,129` | Brancher sur le tick partagé ; fill translucide plat (les deux patterns corrects existent déjà dans le repo) |
-| F-28 | `reResolveAndResume` (réveil) écrase `info` sans libérer l'ancienne session (`playSessionId`/`liveStreamId` jetés, pas de `closeLiveStream`/`stopEncoding`) → sur un transcode, l'ancien job ffmpeg reste en vie à côté du nouveau → contention CPU serveur → le nouveau flux saccade | `VLCStreamPresenter.swift:3309-3313` | Libérer l'ancienne session comme le fait le chemin d'échec (`releaseServerSessionAfterFailure`) |
+| F-28 ✅ | `reResolveAndResume` (réveil) écrase `info` sans libérer l'ancienne session (`playSessionId`/`liveStreamId` jetés, pas de `closeLiveStream`/`stopEncoding`) → sur un transcode, l'ancien job ffmpeg reste en vie à côté du nouveau → contention CPU serveur → le nouveau flux saccade | `VLCStreamPresenter.swift:3309-3313` | Libérer l'ancienne session comme le fait le chemin d'échec (`releaseServerSessionAfterFailure`) |
 | F-29 | Event-stream VLC : le `guard let self` promeut la capture en forte pour toute la boucle `for await`, et `teardown()` n'a qu'un déclencheur (`viewWillDisappear` + `isBeingDismissed`) → tout dismissal atypique fuit le graphe entier + un heartbeat 1 s zombie qui continue de reporter au serveur | `VLCStreamPresenter.swift:774-776,513-560` | Ré-acquérir `self` faiblement par itération ; filet `deinit` (annuler eventsTask + timers) |
 | F-30 | `reconnect`/`setClient` ne fait jamais `invalidateAndCancel()` sur l'ancien client — un switch serveur en construit 2-3, chacun avec son pool de connexions retenu jusqu'à la fin du process | `JellyfinAPIClient.swift:374-394` | Invalider la session sortante dans `setClient` |
 | F-31 | Images surdimensionnées : `CastCircle` 80 pt demande `maxWidth: 200` (6,25× les pixels utiles sur tvOS, ×20 portraits) ; rangées de genre/similaires 200 pt demandent 300 | `MediaDetailCastSection.swift:47`, `LibraryGenreRow.swift:46`… | Threader la largeur réelle (buckets 200/300/400 pour rester cache-friendly + byte-identical au prefetch) |
@@ -218,16 +216,195 @@ userData/favoris. C'est aussi ce qui rend F-8 totalement sûr.
 - **F-44** `persistRegistry` réécrit `active_server_id` même inchangé (4 opérations SecItem par appel) et le sweep de reachability le déclenche par entrée — `AppNavigation.swift:310-320`.
 - **F-45** Divers micro : `Task` par tick du heartbeat VLC au lieu d'`assumeIsolated` (le natif fait correct) ; publishers `NotificationCenter` recréés par body racine ; regex VTT recompilée par segment (`HLSManifestLoader.swift:130`) ; `Date.formatted` par ligne d'épisode ; fermeture socket au background dispatchée en `Task` non structurée (close frame best-effort) ; `.id(item.id)` redondant sur les cartes de grille (ancre `Optional<String>` vs `scrollTo(String)` — la jump bar A→Z peut être un no-op, à vérifier sur device).
 
-### 1.5 Ordre de travail suggéré
+### 1.5 Lot « menus contextuels de vignettes » (1.2.0) — passe dédiée
 
-1. **Lot « lecteur »** (le plus visible sur A15) : F-4 (HUD gate), F-6 (double négociation), F-5 (chapitres), F-28 (fuite session réveil), F-26 (trickplay decode).
-2. **Lot « rendu »** : F-2 + F-3 (accents/racine — petits diffs, gain global), F-1 (recherche tvOS), F-22/F-20 (Equatable Library/Home).
-3. **Lot « réseau »** : F-9 (`getItems` cache) + F-8 (gate tier-2) ensemble, F-16/F-15 (payloads), F-13 (reliquat juillet), F-19 (chips recherche).
-4. **Lot « infra »** : F-7 (widget), F-10/F-11/F-12 (sondes/monitor), F-14, F-29/F-30.
-5. **Passe dédiée sur le lot cartes 1.2.0** (non audité — voir la note de révision
-   en tête) : les sept surfaces de vignettes lancent désormais des `Task` de
-   résolution de cible de lecture ; à profiler avant d'empiler des features dessus.
-6. Le reste opportuniste.
+Ce lot est postérieur à l'audit principal. Il attache un menu contextuel à **neuf**
+sites d'appel via `MediaCardContextMenu`, avec `CardActionPresenter` (hôte racine)
+et `CardPlayTarget` (résolveur de cible). Les décisions documentées (présentateur
+hébergé à la racine, lectures `@Environment` optionnelles, résolveur ids-et-scalaires,
+carte de série toujours étiquetée « Lecture », aperçu iOS explicite) ne sont pas
+re-signalées.
+
+#### F-46 · Tout l'arbre du menu ET l'aperçu iOS sont construits **par carte**, avidement — Haute
+`MediaCardContextMenu.swift:112-125,127-243,256-276`. La prémisse « SwiftUI construit
+le `contextMenu` paresseusement » ne tient pas pour cette forme : les deux surcharges
+prennent des `@ViewBuilder` **non-échappants**, donc SwiftUI les invoque
+synchroniquement pour produire les *valeurs* de vue. Pour chaque carte instanciée par
+le conteneur lazy, on paie donc : `CardPlayTargetResolver.isResumable` (`:137`), une
+lecture de `knownRemoteTargetCount` (`:182`), **5-6 `loc.localized(...)`** (8 sur une
+carte Reprendre) puisque les closures `label:` sont aussi non-échappantes, **5-7 boîtes
+de closure échappantes capturant `self`** — donc une copie du `BaseItemDto`, la
+structure la plus large du SDK — et un `imageURL(...)` complet (`:262`/`:270`,
+`URLComponents` + 3 `URLQueryItem` + re-sérialisation) **byte-identique à celui que la
+carte vient de construire une ligne plus haut**. Rien de tout cela n'est montré sans
+appui long. Sur la grille tvOS 6 colonnes (48 cartes visibles) : ~300 lookups localisés,
+~300 boîtes de closure, 48 constructions d'URL redondantes par matérialisation
+(≈1,5-3 ms, soit ~19 % d'une frame à 60 Hz).
+**Fix :** (a) ne pas stocker le `BaseItemDto` — tous les champs lus sont des scalaires,
+extraire un `CardMenuItem` au site d'appel (même discipline que le résolveur) ; (b)
+déplacer les deux builders dans des `View` dédiées (`CardMenuContent`,
+`CardArtworkPreview`) pour que `localized`/`imageURL` migrent dans `body`, évalué à
+l'appui long ; (c) passer au paramètre `artwork:` l'URL **déjà construite** par la carte
+— ce qui transforme la règle « byte-identique » d'un commentaire audité à la main sur
+neuf sites en garantie structurelle, et supprime la construction en double.
+
+#### F-47 · Chaque carte observe `knownRemoteTargetCount`, et chaque chargement de détail l'écrit sans garde → invalidation globale des cartes — Haute
+`MediaCardContextMenu.swift:182` + `MediaDetailViewModel.swift:387` (`:136`).
+Parce que `menuItems` est évalué avidement (F-46), la lecture ligne 182 enregistre une
+dépendance Observation dans le body du modificateur de **chaque** carte. L'écrivain
+(`cardActions?.knownRemoteTargetCount = remoteTargets.count`) n'a **aucune garde
+d'égalité** — vérifié — et part d'un `Task` fire-and-forget à chaque `load()`, donc à
+chaque ouverture de détail et chaque retry. `withMutation` se déclenche même à valeur
+inchangée : ouvrir un film depuis Home invalide le modificateur de toutes les cartes
+encore montées derrière (5 rails Home + Favoris poussé + toute `MediaLibraryScreen`
+vivante), et chacune repaie le coût complet de F-46.
+**Fix :** garder l'écriture (`if … != …`) ; mieux, faire migrer la lecture dans le
+`body` de la vue dédiée de F-46 ; idéalement isoler le compteur dans un petit
+`@Observable` séparé pour qu'il ne partage jamais une portée d'invalidation avec
+`playback`/`remotePlay`.
+
+#### F-48 · Le délai de 1,5 s du sondage next-up est **indicatif, pas appliqué** — et le test censé le verrouiller ne peut pas voir la différence — Moyenne
+`CardPlayTarget.swift:98-108`. `withTaskGroup` garantit le groupe vide au retour : il
+**attend chaque enfant restant** après le corps. Donc `group.next()` + `cancelAll()`
+rend la *décision* tout de suite, mais `resolve` ne retourne qu'une fois le sondage
+réellement terminé — le commentaire du code l'admet (« still gets joined by the group's
+implicit structured-concurrency teardown ») alors que CLAUDE.md décrit un vrai délai.
+Le précédent cité (`PlaybackLiveActivityController:150-157`) a une forme *différente* :
+deux `Task` non structurées + sentinelle de génération, donc un délai réel. La preuve
+est déjà dans la suite : `MockAPIClient.getNextUp` dort avec `try? await Task.sleep`
+(`:507`) — le `try?` avale `CancellationError`, donc le mock ignore `cancelAll()` et
+dort les 300 ms complètes ; `seriesNextUpTimesOut` (`CardPlayTargetTests.swift:132-149`)
+n'assert que le *résultat*, sans horloge, et ne distingue donc pas 50 ms de 300 ms —
+or c'est 300 ms aujourd'hui.
+**Fix :** ajouter une mesure `ContinuousClock` au test (il doit échouer, c'est le but),
+puis adopter la forme du précédent (sondage + délai en `Task` non structurées,
+continuation à reprise unique sous verrou). Exposition réelle limitée car
+`URLSession` annule promptement — mais l'invariant n'est ni appliqué ni testé, et un
+seul `await` non annulable sous `getNextUp` restaurerait le timeout client de 30 s sur
+un chemin qui, de son propre commentaire (`:73`), n'a « aucune affordance de
+chargement ».
+
+#### F-49 · `loader.reset()` sur notification → un toggle depuis une grille paginée **renvoie l'utilisateur page 1** — Moyenne (régression visible)
+`FavoritesScreen.swift:33-40` + `:102-115`, idem `WatchedHistoryScreen.swift:113-123`.
+`load()` fait `loader.reset()` puis récupère la page 0, et l'écran observe les
+notifications que **ses propres cartes** postent désormais. Défiler 400 favoris jusqu'à
+la page 4, marquer une carte comme vue → la grille s'effondre à 40 éléments **sous le
+doigt**, offset de scroll perdu. C'était atteignable avant (aller au détail, revenir),
+mais l'attachement du menu sur la grille le rend immédiat et en place.
+**Fix :** le patch en place de F-51 le résout ; sinon re-demander
+`startIndex: 0, limit: loader.items.count` et diffuser dans le tableau existant.
+
+#### F-50 · `SearchResultsGrid`/`SearchResultCard` deviennent définitivement non-court-circuitables — Moyenne
+`SearchScreen.swift:628-631,658,740-746`. Les deux ont gagné un `let onGoToSeries:
+(String) -> Void` ; SwiftUI traite toute propriété de type fonction comme
+systématiquement inégale, donc l'optimisation « même valeur ⇒ pas de `body` » ne peut
+plus jamais s'appliquer. `SearchScreen.body` se réévalue à **chaque frappe** → chaque
+`SearchResultCard.body` → `imageURL` + tout l'arbre de menu avide de F-46. Avant ce lot,
+la carte ne portait aucun champ fonction.
+**Fix :** `Equatable` + `nonisolated static func ==` ignorant la closure (recette
+`MediaDetailSimilarSection`) + `.equatable()` ; ou mieux, remplacer le callback par un
+`@Observable SeriesNavigator` injecté — ce qui supprimerait `onGoToSeries` de
+`SearchScreen`, `HomeScreen` et `WatchedHistoryScreen` d'un coup.
+
+#### F-51 · Un toggle déclenche jusqu'à 4 rechargements complets non coordonnés, et la notification ne porte **aucun id** — Moyenne
+`MediaCardContextMenu.swift:366,379`. Les deux posts sont `object: nil`, donc le seul
+recours d'un observateur est un re-fetch complet. Le menu étant désormais sur neuf
+surfaces, un toggle depuis une filmographie d'acteur ou « Plus comme ça » salit : Home
+(3 fetches), **les deux** `MediaLibraryScreen` vivantes (hero + 8 genres chacune),
+Favoris et Historique s'ils vivent — jusqu'à ~25 requêtes et ~1000 décodages de DTO pour
+une seule coche. Deux des quatre observateurs n'ont pas le déferral `isVisible`
+documenté (`FavoritesScreen:102-115`, `WatchedHistoryScreen:113-123`), et la branche
+favoris de Home (`HomeScreen:95-97`) non plus (déjà F-21).
+**Fix :** porter l'id + la valeur dans le `userInfo` et donner à chaque observateur un
+chemin de patch en place (épisser l'élément), avec repli sur rechargement seulement si
+l'id est absent ou qu'un filtre sensible à l'état vu est actif. `LibraryAPI.fetchUserData`
+établit déjà le motif « ids en entrée, DTO en sortie ».
+
+#### F-52 · `playedOverride`/`favoriteOverride` ne s'invalident jamais et masquent les données serveur fraîches — Moyenne
+`MediaCardContextMenu.swift:109-110,129-130`. Rien ne les remet à `nil`, et l'identité de
+vue survit aux rechargements (mêmes ids via `ForEach`). Marquer vu depuis la grille
+(override = `true`), puis non-vu depuis l'écran de détail : la grille recharge avec
+`isPlayed == false` mais le menu résout encore `true`, propose « Retirer des vus » sur un
+item non vu, et un tap émet un `markItemUnplayed` redondant + une nouvelle tempête de
+notifications. Les overrides sont réellement porteurs sur **deux** surfaces seulement
+(`PersonDetailScreen`, `MediaDetailSimilarSection`, qui n'observent aucune des deux
+notifications) ; sur les cinq autres ils doublonnent un rafraîchissement déjà en cours.
+**Fix :** stocker l'override **avec la valeur serveur dont il dérive** et l'écarter dès
+qu'elle change (`(base: Bool, value: Bool)?`, ou `.onChange(of: item.userData?.isPlayed)`).
+
+#### F-53 · Aucune coalescence des rechargements : deux toggles rapides lancent deux fan-outs concurrents — Basse-Moyenne
+`MovieLibraryScreen.swift:152-164`. `performReload` enveloppe `reload` dans une `Task`
+nue sans dédup ; `MediaLibraryViewModel.reload` draine un `loadTask` en vol mais ne
+s'y **enregistre pas**, donc un second `reload` voit `loadTask == nil` et les deux
+`performLoad` tournent en parallèle (~18 requêtes, dernier écrivain gagne sur
+`itemsByGenre`). Le raisonnement d'annulation-et-drain du chargement initial montre que
+le risque est compris ; `reload` n'est juste pas couvert.
+**Fix :** affecter aussi le rechargement à `loadTask`, ou debouncer à l'observateur.
+
+#### F-54 · `cancelAll()` jette le `getNextUp` en vol, donc le cache 10 s ne se réchauffe jamais après un dépassement — Basse
+`CardPlayTarget.swift:106` + `JellyfinAPIClient+Library.swift:364-379` (le cache est
+peuplé **après** le retour de `client.send`). Annuler le sondage jette la réponse avant
+sa mise en cache : le prochain tap sur la même carte re-sonde à froid et redépassera
+probablement — exactement quand l'offset de reprise est le plus voulu.
+**Fix :** ne pas annuler le perdant ; le laisser finir en fond pour réchauffer
+`nextup-`. Coût nul, transforme un dépassement répété en dépassement unique.
+
+#### F-55 · La règle de reprise est ré-exprimée en ligne sur Home, contournant le SSOT — Basse
+`HomeScreen.swift:752-755` vs `CardPlayTarget.swift:133-140`.
+`continueWatchingPlayLink` calcule `startSeconds` avec son propre `guard let ticks…` et
+sa propre division par 10 000 000, **omettant la moitié `!isPlayed`** de la règle. Sans
+effet aujourd'hui (le rail Reprendre ne renvoie que du non-vu), mais le `PlayLink` d'une
+carte et l'entrée « Reprendre » de son menu dérivent l'offset de deux expressions d'une
+même règle — la dérive exacte que le SSOT existe pour empêcher.
+**Fix :** promouvoir et appeler `CardPlayTargetResolver.resumeSeconds(positionTicks:isPlayed:)`.
+
+#### F-56 · Le sondage de cibles distantes écrit un état global sans contrôle de génération — Basse
+`MediaDetailViewModel.swift:136,387`. Le `Task` fire-and-forget n'honore pas
+`loadGeneration` (que le reste du fichier respecte), et il écrit désormais dans le
+`cardActions` **hébergé à la racine**, pas seulement dans l'état de son écran. Un détail
+quitté depuis plusieurs secondes peut donc encore basculer le compteur qui gate
+« Lire sur… » sur toutes les cartes vivantes.
+**Fix :** capturer `generation` et le revérifier avant l'écriture, + la garde d'égalité de F-47.
+
+#### Vérifié sain dans ce lot
+- **Aucun sondage ni `Task` à la construction du menu** : `resolvedCardPlayTarget()` n'est
+  atteignable que depuis `startPlayback`/`startRemotePlay`, appelés uniquement depuis des
+  actions de `Button`. Ouvrir un menu coûte zéro réseau sur film/épisode, un appel
+  (souvent caché) sur série.
+- **Clé de cache `nextup-{seriesId}-{userId}` correcte** et le filtre de classification est
+  ré-appliqué sur le chemin caché ; les invalidations des mutateurs restent étroites.
+- **Aucune fuite dans la course** et rien de non-`Sendable` ne traverse la frontière du
+  groupe (`NextUpProbeResult` ne porte que des scalaires — pas de transfert de région d'un
+  `BaseItemDto`).
+- **`.equatable()` de `MediaDetailSimilarSection` n'est pas défait** : le modificateur est
+  attaché sans argument closure, le `==` custom compare les mêmes champs qu'avant.
+- **`AddToPlaylistPresenter` et le `VideoPlayerCoordinator` tvOS sont lus en
+  présence seule** (`if let` / `!= nil`), donc aucune carte n'enregistre de dépendance sur
+  eux — c'est précisément la discipline que `knownRemoteTargetCount` casse (F-47), et le
+  contraste dans un même fichier rend le constat sans ambiguïté.
+- **`knownRemoteTargetCount` est bien invalidé** aux deux changements d'identité
+  (URL serveur, id utilisateur).
+
+### 1.6 Ordre de travail suggéré
+
+1. ~~**Lot « lecteur »** : F-4 (HUD gate), F-6 (double négociation), F-5 (chapitres),
+   F-28 (fuite session réveil), F-26 (trickplay decode).~~ ✅ **Fait** — implémenté sur
+   cette branche (`perf(player): lot lecteur`). Non compilé localement (runner Linux
+   sans toolchain Swift) : vérification par la CI.
+2. **Lot « cartes »** (§1.5, le plus rentable maintenant) : F-46 + F-47 ensemble (le
+   coût par carte et l'invalidation globale sont le même problème — sortir les builders
+   dans des `View` dédiées règle les deux), puis F-49 (régression de pagination
+   visible), F-52 (override qui masque le serveur), F-50 (`Equatable` recherche).
+3. **Lot « rendu »** : F-2 + F-3 (accents/racine — petits diffs, gain global), F-1
+   (recherche tvOS), F-22/F-20 (Equatable Library/Home).
+4. **Lot « réseau »** : F-9 (`getItems` cache) + F-8 (gate tier-2) + F-51 (payload de
+   notification + patch en place) ensemble — les trois attaquent la même tempête de
+   rechargements ; puis F-16/F-15 (payloads), F-13 (reliquat juillet), F-19 (chips).
+5. **Lot « infra »** : F-7 (widget), F-10/F-11/F-12 (sondes/monitor), F-14, F-29/F-30.
+6. Le reste opportuniste. Note : **F-48 mérite d'être traité tôt malgré sa sévérité
+   moyenne** — le correctif inclut un test qui doit d'abord échouer, et laisser un
+   invariant documenté non appliqué se paiera au prochain `await` non annulable ajouté
+   sous `getNextUp`.
 
 ---
 
