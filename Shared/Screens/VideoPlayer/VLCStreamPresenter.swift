@@ -198,8 +198,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Chapter-thumbnail fetches held back until the media is confirmed open, so
     /// they can't compete with the stream's own bytes during the open window.
-    /// Fired (and cleared) by `noteMediaOpened`; dropped by `beginOpenLoading`
-    /// so a superseded open's thumbnails never load against a new media.
+    /// Fired (and cleared) by `noteMediaOpened`, re-queued and cleared by
+    /// `fetchChapters` — the only thing that rebuilds the chip list the closure
+    /// indexes into. Notably NOT cleared by `beginOpenLoading`: the error-retry
+    /// and wake re-resolve paths go through it without re-running
+    /// `fetchChapters`, so dropping it there loses the thumbnails for good.
     private var pendingChapterThumbnails: (@MainActor () -> Void)?
     private var chapterStartTicks: [Int] = []
     private var chapterHeightConstraint: NSLayoutConstraint?
@@ -753,10 +756,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // A new media's first position must always repaint, even if it lands on
         // the same whole second as the outgoing one's last painted position.
         lastPaintedPosition = nil
-        // Thumbnails queued for an open that is being superseded belong to the
-        // outgoing media's chip list — drop them rather than fire them at the
-        // new one. `fetchChapters` re-queues for whatever opens next.
-        pendingChapterThumbnails = nil
+        // NOTE: deliberately does NOT drop `pendingChapterThumbnails`. Two of
+        // this method's four callers (the error retry and the wake re-resolve)
+        // reopen the SAME item and never call `fetchChapters()` again, so the
+        // parked queue is the only thing that will ever load those thumbnails —
+        // and its chip indices stay valid because the strip isn't rebuilt.
+        // `fetchChapters()` owns that clear, next to its chip teardown.
         setLoading(true)
     }
 
@@ -1919,6 +1924,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterFetchTask?.cancel()
         chapterThumbTasks.forEach { $0.cancel() }
         chapterThumbTasks = []
+        // The parked closure indexes into `chapterStack.arrangedSubviews`, which
+        // this method is the only thing that rebuilds — so this is where a stale
+        // queue must be dropped, NOT in `beginOpenLoading()`. Only the two
+        // media-SWAP paths (`startPlayback`, `navigateToEpisode`) come through
+        // here; the error-retry and wake re-resolve paths also call
+        // `beginOpenLoading()` but reuse these very chips, so clearing there
+        // would strand them on their icon placeholders for the rest of the
+        // session with nothing to re-queue the fetch.
+        pendingChapterThumbnails = nil
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
         chapterScroll.isHidden = true
