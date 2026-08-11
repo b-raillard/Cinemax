@@ -18,6 +18,19 @@ struct PosterCard: View {
                 }
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                // RULE — a clipped `CinemaLazyImage` MUST be followed by
+                // `.contentShape(Rectangle())`. `CinemaLazyImage` scales to
+                // FILL, so any source whose aspect ratio differs from the box
+                // overflows it — a 16:9 episode still stands in this 2:3 poster
+                // slot on the search and library grids, sticking out ~94 pt on
+                // each side of a 112 pt card. `clipped()`/`clipShape()` clip the
+                // DRAWING only; the overflow stays hit-testable, and the next
+                // card in the grid — drawn after this one, hence on top — then
+                // swallows long presses aimed at this one's right half and opens
+                // ITS menu. Measured before the fix: a touch at x=96, inside the
+                // card spanning x=16→128.7, built the menu of the card at
+                // x=144.7. Applies to every card that clips a filled image.
+                .contentShape(Rectangle())
                 .cinemaFocus()
 
             Text("M\nM")

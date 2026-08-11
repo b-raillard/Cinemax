@@ -130,6 +130,11 @@ private struct PosterCardContent: View {
                         }
                         .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                        // Same reason as `PosterCard` — see the RULE there. A
+                        // filled image overflows this 2:3 box and stays
+                        // hit-testable past the clip, so the neighbouring card
+                        // steals long presses aimed at this one's right half.
+                        .contentShape(Rectangle())
                         .cinemaFocus()
                 }
                 #if os(tvOS)

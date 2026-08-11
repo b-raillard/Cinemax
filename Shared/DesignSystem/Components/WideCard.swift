@@ -23,6 +23,10 @@ struct WideCard: View {
                 }
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                // Same reason as `PosterCard` — see the RULE there. Less acute
+                // here (a backdrop usually matches this 16:9 box), but a source
+                // that doesn't still overflows and stays hit-testable.
+                .contentShape(Rectangle())
                 .cinemaFocus()
                 .accessibilityHidden(true)
 
