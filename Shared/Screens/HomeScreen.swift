@@ -148,6 +148,12 @@ struct HomeScreen: View {
     /// fetched item.
     private func consumeDeepLink(_ itemId: String?) {
         guard let itemId else { return }
+        // An inbound playback request belongs to `MainTabView`'s modal route —
+        // pushing it here silently fails whenever this stack already has a
+        // detail on top. Same predicate on both sides, so exactly one of the
+        // two observers acts. See the note on `MainTabView`'s deep-link
+        // `onChange`.
+        guard !appState.isPendingIntentPlayback(itemId) else { return }
         appState.pendingDeepLinkItemId = nil
         deepLinkTarget = DeepLinkTarget(id: itemId)
     }
