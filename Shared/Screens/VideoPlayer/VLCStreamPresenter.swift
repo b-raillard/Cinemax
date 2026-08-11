@@ -1227,6 +1227,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
         loadingIndicator.color = .white
         loadingIndicator.hidesWhenStopped = true
+        // Purely decorative — it must never hit-test. `UIActivityIndicatorView`
+        // defaults to `isUserInteractionEnabled = true` (unlike `UILabel` /
+        // `UIImageView`), and this one sits dead centre of the screen, so while
+        // a seek settled the spinner swallowed the touch: `shouldReceive` only
+        // admits the dismiss pan for `touch.view === videoView`, so a
+        // swipe-down started in the middle simply never began, for as long as
+        // the spinner was up.
+        loadingIndicator.isUserInteractionEnabled = false
         view.addSubview(loadingIndicator)
         NSLayoutConstraint.activate([
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
