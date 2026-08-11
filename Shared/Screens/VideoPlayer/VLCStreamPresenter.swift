@@ -368,6 +368,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `paintPosition` skip a redundant repaint. `nil` ⇒ unknown, repaint next
     /// time; reset by `beginOpenLoading()` so fresh media always repaints.
     private var lastPaintedPosition: (seconds: Int32, lengthMs: Int32)?
+
     /// Debounce for the Menu button: a single press can be delivered to both
     /// the press gesture recognizer and `pressesBegan`; this collapses them to
     /// one peel action so it never hides-then-dismisses on a single press.
@@ -2973,6 +2974,23 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func scrubberChanged() {
+        // `UISlider` delivers a final `.valueChanged` AFTER `.touchUpInside` —
+        // measured on device: same millisecond, `isTracking` already false,
+        // whereas every in-drag event has it true. That trailing event must not
+        // touch ANY state, so bail before the two writes below.
+        //
+        // Letting it through was a session-killer, and one cause of three
+        // symptoms: it re-armed `isScrubbing` — which only `scrubberDone` ever
+        // clears, and which had just run — so `refreshTimeUI()` bailed on its
+        // first line for every subsequent tick (labels and bar frozen while the
+        // film played on) and `gestureRecognizerShouldBegin` kept refusing the
+        // swipe-down-to-dismiss; and it cancelled the `hideControlsWorkItem`
+        // that `scrubberDone` had just scheduled, so the HUD never auto-hid
+        // again either.
+        //
+        // Testing `isTracking` and still falling through is NOT enough: that
+        // fixes the flag but keeps the cancel, which leaves the HUD up for good.
+        guard slider.isTracking else { return }
         isScrubbing = true
         hideControlsWorkItem?.cancel()
         let length = lengthMs
