@@ -202,7 +202,7 @@ private struct MediaCardContextMenu: ViewModifier {
             // being laid out is precisely the moment it has to be live, and the
             // launch-time install alone was measurably lost to a window swap.
             CardHitLog.installTouchProbe()
-            CardHitLog.noteCardFrame(frame, name: item.name)
+            CardHitLog.noteCardFrame(frame, name: item.name, id: item.id)
         }
     }
 

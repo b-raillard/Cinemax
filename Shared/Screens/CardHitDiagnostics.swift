@@ -64,11 +64,23 @@ enum CardHitLog {
 
     // MARK: - Emitters
 
+    /// The order the grid actually builds, as (index, id, name). Titles alone
+    /// are ambiguous — a search can return several items with the SAME name —
+    /// so position↔id is the only way to say whether the menu's item is the one
+    /// at the touched position or its neighbour.
+    static func noteGridOrder(_ entries: [(id: String?, name: String?)]) {
+        let rendered = entries.enumerated()
+            .map { "\($0.offset)=\($0.element.id ?? "<nil>") \"\($0.element.name ?? "")\"" }
+            .joined(separator: " | ")
+        log.notice("grid order (\(entries.count, privacy: .public)) \(rendered, privacy: .public)")
+    }
+
     /// One card's frame in the global coordinate space. Emitted on change only
     /// (`onGeometryChange` already dedups), so a settled grid stays quiet.
-    static func noteCardFrame(_ frame: CGRect, name: String?) {
+    static func noteCardFrame(_ frame: CGRect, name: String?, id: String?) {
         log.notice("""
-            frame "\(name ?? "<sans nom>", privacy: .public)" \
+            frame id=\(id ?? "<nil>", privacy: .public) \
+            "\(name ?? "<sans nom>", privacy: .public)" \
             x=\(frame.minX, format: .fixed(precision: 1), privacy: .public) \
             y=\(frame.minY, format: .fixed(precision: 1), privacy: .public) \
             w=\(frame.width, format: .fixed(precision: 1), privacy: .public) \
