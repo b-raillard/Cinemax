@@ -264,6 +264,7 @@
 		98F03484481331F2C77AF646 /* QuickConnectAuthorizeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F1A68472889D5AC4CE030A /* QuickConnectAuthorizeViewModel.swift */; };
 		994A2F644CC4E532760D0A0D /* FocusScaleModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */; };
 		996E53AD3A8D2C9666E42DC5 /* FavoritesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06DF659E53C9DB219FB06A7F /* FavoritesScreen.swift */; };
+		997A2EC8C612CDC0A58F6D9F /* CardHitDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EADC866B3E5A2F055734700 /* CardHitDiagnostics.swift */; };
 		99AD4FD1823DDEAE384019A4 /* CinemaxTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C6E1A74D6EE64FD563385D /* CinemaxTVApp.swift */; };
 		99FE54389A1DDF246352EB73 /* AdminNetworkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952BA3312C0EC62F0CF9ACBE /* AdminNetworkViewModel.swift */; };
 		9ADB93CF96FC56519CD58D62 /* AdminDevicesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410E2B368E14B0EE19701528 /* AdminDevicesScreen.swift */; };
@@ -337,6 +338,7 @@
 		D18BC3D9D5BA81F6EBB57830 /* HLSManifestLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25B07319865E0C6A31D44ED /* HLSManifestLoader.swift */; };
 		D204B5A74016A5CBB00FE986 /* MediaLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */; };
 		D28F8E1BE381E23C09859A6C /* MediaDetailButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554633B7F0AE3A72EE4B56BB /* MediaDetailButtonStyles.swift */; };
+		D2F616274ABFE948A7B5D2E9 /* CardHitDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EADC866B3E5A2F055734700 /* CardHitDiagnostics.swift */; };
 		D3097808B1EC4C5F4F4DE1A6 /* AdminDashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1A9840C693FD9D46644B69 /* AdminDashboardViewModel.swift */; };
 		D3BAE11501833552BCAC705A /* SettingsAppearanceView+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4368B442E0B7FC8828AB76E /* SettingsAppearanceView+iOS.swift */; };
 		D64C3AD31EC5F1CC8C2197F7 /* PlayLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA4717DCFEE46C5BE3F4787 /* PlayLink.swift */; };
@@ -490,6 +492,7 @@
 		19C632FC97E86299EBCAA2CA /* RatingBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatingBadge.swift; sourceTree = "<group>"; };
 		1A17484ECAEA652B7D37B7EB /* EndOfSeriesOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndOfSeriesOverlayController.swift; sourceTree = "<group>"; };
 		1A8D608812AC294C43A35C14 /* QuickConnectAuthorizeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickConnectAuthorizeSheet.swift; sourceTree = "<group>"; };
+		1EADC866B3E5A2F055734700 /* CardHitDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardHitDiagnostics.swift; sourceTree = "<group>"; };
 		21750E7690B40CFD3168FACA /* LicensesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicensesView.swift; sourceTree = "<group>"; };
 		223258AFA0F2668369423520 /* CinemaxKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxKitTests.swift; sourceTree = "<group>"; };
 		25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminUserDetailViewModel.swift; sourceTree = "<group>"; };
@@ -967,6 +970,7 @@
 				B047DC9BB4F744ACF2542679 /* VideoPlayer */,
 				8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */,
 				C683E40EA41CFFB115C0AD25 /* CardActionPresenter.swift */,
+				1EADC866B3E5A2F055734700 /* CardHitDiagnostics.swift */,
 				06DF659E53C9DB219FB06A7F /* FavoritesScreen.swift */,
 				A25B07319865E0C6A31D44ED /* HLSManifestLoader.swift */,
 				25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */,
@@ -1543,6 +1547,7 @@
 				FB0B24DF085E61FD16E5F70A /* BackdropFallbackView.swift in Sources */,
 				A5BDB9B097C212892B4AEB36 /* BaseItemDto+Metadata.swift in Sources */,
 				22936040699583C5F2D4E834 /* CardActionPresenter.swift in Sources */,
+				997A2EC8C612CDC0A58F6D9F /* CardHitDiagnostics.swift in Sources */,
 				3D0E046C8271F43AF4140A28 /* CardPlayTarget.swift in Sources */,
 				8BEED9AD5A4971DD030806F0 /* CastCircle.swift in Sources */,
 				27A0E4768C9B9FBFAEB53C0A /* ChapterController.swift in Sources */,
@@ -1733,6 +1738,7 @@
 				1508DA79998A9C93F3A4C64A /* BackdropFallbackView.swift in Sources */,
 				E71BC25CBB98F5DF97065B98 /* BaseItemDto+Metadata.swift in Sources */,
 				E283DEC1BE44B3671AEF1E74 /* CardActionPresenter.swift in Sources */,
+				D2F616274ABFE948A7B5D2E9 /* CardHitDiagnostics.swift in Sources */,
 				4D3A0363BBAF768FB4D88343 /* CardPlayTarget.swift in Sources */,
 				DDE0943D46488F809421872D /* CastCircle.swift in Sources */,
 				A9D6725E2CCEBE03D23B82CA /* ChapterController.swift in Sources */,

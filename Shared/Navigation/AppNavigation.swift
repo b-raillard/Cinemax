@@ -914,6 +914,9 @@ struct AppNavigation: View {
             appState.handleDeepLink(url)
         }
         .task {
+            // DIAGNOSTIC ONLY (recette point 3) — observer-only touch probe on
+            // the key window. Remove with `CardHitDiagnostics.swift`.
+            CardHitLog.installTouchProbe()
             // Let the confirm-before-logout coordinator see real connectivity
             // (captured weakly so the closure can't extend NetworkMonitor's life).
             appState.isOnlineProvider = { [weak network] in network?.isOnline ?? true }
