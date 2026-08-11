@@ -1396,11 +1396,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         configureIOS(nextButton, "forward.end.fill", pt: 24, loc.localized("player.nextEpisode"))
         nextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
 
-        if previousEpisode != nil { transportRow.addArrangedSubview(prevButton) }
+        // Both episode buttons stay in the row for the player's lifetime and are
+        // shown/hidden by `refreshEpisodeButtons()`. They used to be added here
+        // only when the matching neighbour existed AT OPEN, and nothing ever
+        // revisited that decision — so a button absent then stayed absent for
+        // the whole session: stepping back from the last episode left "next"
+        // missing even though a next episode now existed.
+        transportRow.addArrangedSubview(prevButton)
         transportRow.addArrangedSubview(skipBackButton)
         transportRow.addArrangedSubview(playPauseButton)
         transportRow.addArrangedSubview(skipFwdButton)
-        if nextEpisode != nil { transportRow.addArrangedSubview(nextButton) }
+        transportRow.addArrangedSubview(nextButton)
+        refreshEpisodeButtons()
 
         chapterScroll.translatesAutoresizingMaskIntoConstraints = false
         chapterScroll.showsHorizontalScrollIndicator = false
@@ -1735,8 +1742,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         configureTV(tvNextButton, "forward.end.fill", loc.localized("player.nextEpisode"))
         tvNextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .primaryActionTriggered)
 
-        if previousEpisode != nil { controlBar.addArrangedSubview(tvPrevButton) }
-        if nextEpisode != nil { controlBar.addArrangedSubview(tvNextButton) }
+        // Same contract as the iOS transport row — see the note there.
+        controlBar.addArrangedSubview(tvPrevButton)
+        controlBar.addArrangedSubview(tvNextButton)
+        refreshEpisodeButtons()
         controlBar.addArrangedSubview(tvAudioButton)
         controlBar.addArrangedSubview(tvSubtitleButton)
         configureTV(tvSpeedButton, "gauge.with.needle", loc.localized("player.speed"))
@@ -2140,6 +2149,35 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     @objc private func prevEpisodeTapped() { if let p = previousEpisode { navigateToEpisode(p) } }
     @objc private func nextEpisodeTapped() { if let n = nextEpisode { navigateToEpisode(n) } }
+
+    /// Syncs the prev/next episode buttons with the CURRENT neighbours.
+    ///
+    /// Must be called after every write to `previousEpisode`/`nextEpisode` —
+    /// `navigateToEpisode` is the only other one. Visibility rides `isHidden`
+    /// rather than stack membership so the buttons can come back: a `UIStackView`
+    /// drops a hidden arranged subview from the layout (and, on tvOS, from the
+    /// focus chain), which is exactly the wanted behaviour, whereas re-adding a
+    /// removed view would also have to re-establish its position in the row.
+    private func refreshEpisodeButtons() {
+        #if os(iOS)
+        prevButton.isHidden = previousEpisode == nil
+        nextButton.isHidden = nextEpisode == nil
+        #else
+        let prevHidden = previousEpisode == nil
+        let nextHidden = nextEpisode == nil
+        // Hiding the button the user just clicked drops it out of the focus
+        // chain with nothing focused; ask the engine to re-home focus onto a
+        // sibling instead of leaving the control bar unreachable.
+        let losesFocus = (prevHidden && tvPrevButton.isFocused)
+            || (nextHidden && tvNextButton.isFocused)
+        tvPrevButton.isHidden = prevHidden
+        tvNextButton.isHidden = nextHidden
+        if losesFocus {
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+        }
+        #endif
+    }
 
     #if os(tvOS)
     private func updateScrubBar(progress: Float) {
@@ -2655,6 +2693,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.subtitleDelayMsState = 0
             self.previousEpisode = nav?.0
             self.nextEpisode = nav?.1
+            self.refreshEpisodeButtons()
             self.titleLabel.text = ref.title
             let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
             let url: URL
