@@ -178,32 +178,15 @@ private struct MediaCardContextMenu: ViewModifier {
         // which ends up floating over the next row's header. `LibraryPosterCard`
         // never showed the bug because its link wraps only the poster; this makes
         // every surface behave the way that one already did.
-        diagnosticFrameProbe(content).contextMenu {
+        content.contextMenu {
             forwardingEnvironment(menuContent)
         } preview: {
             forwardingEnvironment(CardArtworkPreview(item: item, artwork: artwork))
         }
         #else
         // tvOS has no `preview:` overload, and no lift to correct.
-        diagnosticFrameProbe(content).contextMenu { forwardingEnvironment(menuContent) }
+        content.contextMenu { forwardingEnvironment(menuContent) }
         #endif
-    }
-
-    /// **DIAGNOSTIC ONLY (recette point 3)** — reports this card's real frame in
-    /// global coordinates so a touch point can be attributed to a card without
-    /// guessing. `onGeometryChange` reads geometry without inserting a view, so
-    /// it adds nothing hit-testable: instrumenting hit testing must not itself
-    /// change hit testing. Remove with `CardHitDiagnostics.swift`.
-    private func diagnosticFrameProbe(_ view: Content) -> some View {
-        view.onGeometryChange(for: CGRect.self) { proxy in
-            proxy.frame(in: .global)
-        } action: { frame in
-            // Re-assert the window probe here rather than only at launch: cards
-            // being laid out is precisely the moment it has to be live, and the
-            // launch-time install alone was measurably lost to a window swap.
-            CardHitLog.installTouchProbe()
-            CardHitLog.noteCardFrame(frame, name: item.name, id: item.id)
-        }
     }
 
     /// Re-injects the objects the menu's own presentation context drops.
@@ -258,9 +241,6 @@ private struct CardMenuContent: View {
 
     @ViewBuilder
     var body: some View {
-        // DIAGNOSTIC ONLY (recette point 3) — this body runs when the menu is
-        // actually displayed, so it names the item the long press resolved to.
-        let _ = CardHitLog.noteMenuOpened(name: item.name, id: item.id)
         let isPlayed = playedOverride?.resolved(against: item.isPlayed) ?? item.isPlayed
         let isFavorite = favoriteOverride?.resolved(against: item.isFavorite) ?? item.isFavorite
         let isPlayable = item.type == .movie || item.type == .series || item.type == .episode

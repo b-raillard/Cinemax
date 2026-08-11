@@ -3104,15 +3104,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if syncPlayActive { syncPlay.reportBuffering() }
         case .stopped:
             endSeekLoading() // no frames are coming — a pending settle is moot
-            // DIAG (recette A7) — libVLC has no distinct `.ended`, so every
-            // teardown, error and real EOF arrives here. Log the four gate
-            // inputs so a missing end-of-series card can be attributed to the
-            // gate rather than guessed at.
-            logger.notice("""
-                end-gate .stopped tearingDown=\(self.isTearingDown, privacy: .public) \
-                sincePlay=\(Date().timeIntervalSince(self.lastPlayStart), format: .fixed(precision: 2), privacy: .public) \
-                currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public)
-                """)
             guard !isTearingDown,
                   Date().timeIntervalSince(lastPlayStart) > 1.0,
                   lengthMs > 0, currentMs >= lengthMs - 2000 else { return }
@@ -3182,14 +3173,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackEnded() {
         guard !didReportEnd else { return }
         didReportEnd = true
-        // DIAG (recette A7) — the three inputs that decide between autoplay,
-        // the end-of-series card and a bare dismiss.
-        logger.notice("""
-            end-branch autoPlayNext=\(self.autoPlayNext, privacy: .public) \
-            nextUpCancelled=\(self.nextUpCancelledForThisItem, privacy: .public) \
-            hasNext=\(self.nextEpisode != nil, privacy: .public) \
-            hasNavigator=\(self.episodeNavigator != nil, privacy: .public)
-            """)
         cancelOpenWatchdog()
         nextUpCard?.hide()
         if autoPlayNext, !nextUpCancelledForThisItem, let next = nextEpisode, episodeNavigator != nil {
