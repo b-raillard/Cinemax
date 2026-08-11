@@ -197,9 +197,15 @@ final class AppState {
         return (try? await apiClient.getPublicUsers()) ?? []
     }
 
-    /// Item id from a `cinemax://item/{id}` deep link (widget tap / Top Shelf
-    /// selection). Consumed by `HomeScreen`, which pushes the detail screen
-    /// and clears it; `MainTabView` switches to the Home tab when it appears.
+    /// Item id to navigate to — from a `cinemax://item/{id}` deep link (widget
+    /// tap / Top Shelf selection), or set alongside `pendingIntentPlaybackItemId`
+    /// by an intent / inbound remote-control command.
+    ///
+    /// Two consumers, split by `isPendingIntentPlayback(_:)`: a plain deep link
+    /// goes to `HomeScreen`, which pushes the detail and clears it (`MainTabView`
+    /// switches to the Home tab first); a playback request goes to
+    /// `MainTabView`'s modal fallback instead, which is the only route that
+    /// survives Home already having a detail pushed.
     var pendingDeepLinkItemId: String?
     /// Tab id from a `cinemax://home` deep link (widget "See all" tile).
     /// Consumed by `MainTabView`, which switches tabs and clears it.
@@ -219,6 +225,18 @@ final class AppState {
     /// resolution, resume position, and the prev/next episode buttons.
     /// `MediaDetailScreen` consumes it once, and only on the matching item.
     var pendingIntentPlaybackItemId: String?
+
+    /// True when `itemId` is the item a pending **playback** request names.
+    ///
+    /// The routing SSOT for that request: `MainTabView` sends these to its
+    /// modal fallback and `HomeScreen.consumeDeepLink` skips them, so exactly
+    /// one of the two acts on a given id whichever order SwiftUI delivers the
+    /// two `onChange` handlers in. Both sides must keep asking THIS — an
+    /// inlined `pendingIntentPlaybackItemId == id` in one of them is how the
+    /// two drift apart into either a double navigation or a dropped command.
+    func isPendingIntentPlayback(_ itemId: String) -> Bool {
+        pendingIntentPlaybackItemId == itemId
+    }
 
     /// Search term raised by an App Intent. `SearchScreen` consumes it once and
     /// runs the search; `pendingDeepLinkTabId` gets the user to that tab.

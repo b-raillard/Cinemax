@@ -46,25 +46,49 @@ final class FavoritesViewModel {
         await fetchNextPage(using: appState, userId: userId)
     }
 
+    /// Notification-driven refresh — re-pulls the span already on screen instead
+    /// of collapsing to page 0. The cards in this grid carry a context menu whose
+    /// watched / favorite toggles raise the very notifications this answers, so a
+    /// `load()` here yanked the user back to the top of their own list. Falls
+    /// back to a full load when nothing has been paged in yet.
+    func refresh(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        guard !loader.items.isEmpty else {
+            await load(using: appState)
+            return
+        }
+        await loader.refreshLoadedSpan { startIndex, limit in
+            try await self.page(using: appState, userId: userId, startIndex: startIndex, limit: limit)
+        }
+    }
+
     private func fetchNextPage(using appState: AppState, userId: String) async {
         await loader.loadMore { startIndex in
-            do {
-                let result = try await appState.apiClient.getItems(
-                    userId: userId,
-                    includeItemTypes: [.movie, .series],
-                    sortBy: [.sortName],
-                    sortOrder: [.ascending],
-                    isFavorite: true,
-                    limit: 40,
-                    startIndex: startIndex
-                )
-                self.loadFailed = false
-                return (items: result.items, total: result.totalCount)
-            } catch {
-                logger.warning("Favorites load failed: \(error.localizedDescription, privacy: .public)")
-                self.loadFailed = true
-                throw error
-            }
+            try await self.page(using: appState, userId: userId, startIndex: startIndex, limit: 40)
+        }
+    }
+
+    /// The one query, shared by pagination and by `refresh` so the two can never
+    /// disagree on sort/filter.
+    private func page(
+        using appState: AppState, userId: String, startIndex: Int, limit: Int
+    ) async throws -> (items: [BaseItemDto], total: Int) {
+        do {
+            let result = try await appState.apiClient.getItems(
+                userId: userId,
+                includeItemTypes: [.movie, .series],
+                sortBy: [.sortName],
+                sortOrder: [.ascending],
+                isFavorite: true,
+                limit: limit,
+                startIndex: startIndex
+            )
+            self.loadFailed = false
+            return (items: result.items, total: result.totalCount)
+        } catch {
+            logger.warning("Favorites load failed: \(error.localizedDescription, privacy: .public)")
+            self.loadFailed = true
+            throw error
         }
     }
 }
@@ -99,8 +123,10 @@ struct FavoritesScreen: View {
         .onChange(of: viewModel.loader.items.count) {
             prefetchPosters()
         }
+        // Raised by this grid's OWN card menus, among others — so refresh the
+        // span on screen rather than collapsing to page 0 under the user's finger.
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxFavoritesChanged)) { _ in
-            Task { await viewModel.load(using: appState) }
+            Task { await viewModel.refresh(using: appState) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             Task {
@@ -108,10 +134,11 @@ struct FavoritesScreen: View {
                 await viewModel.load(using: appState)
             }
         }
-        // A per-item watched/resume toggle (tier-2) — reload immediately so an
-        // un-watch drops the item while this grid is on screen.
+        // A per-item watched/resume toggle (tier-2) — refresh immediately so an
+        // un-watch drops the item while this grid is on screen. Same span-preserving
+        // path as above: the toggle usually comes from a card in this very grid.
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
-            Task { await viewModel.load(using: appState) }
+            Task { await viewModel.refresh(using: appState) }
         }
     }
 

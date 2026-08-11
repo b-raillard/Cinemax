@@ -9,8 +9,19 @@ struct EpisodeRef: Sendable {
     let title: String
 }
 
-/// Returns (new PlaybackInfo, new previousEpisode, new nextEpisode) for a given episode ID.
-typealias EpisodeNavigator = @Sendable (String) async -> (PlaybackInfo, EpisodeRef?, EpisodeRef?)?
+/// Returns the (previous, next) refs around a given episode ID — pure index
+/// lookups over the season's ref list, **no network**.
+///
+/// This deliberately does NOT negotiate `PlaybackInfo`. Each presenter owns
+/// that call because the device profile is engine-dependent
+/// (`buildVLCDeviceProfile` vs `buildAppleDeviceProfile`, chosen from
+/// `forceNativeAVPlayer`), so a negotiation made here could only be right for
+/// one of the two engines. It used to happen here with the default (`.native`)
+/// profile: the VLC path threw that result away and re-negotiated, paying an
+/// extra `getItem` + `POST /Items/{id}/PlaybackInfo` per episode transition on
+/// the critical path — and leaking the live stream that negotiation opened
+/// (`isAutoOpenLiveStream`), since no stop report ever referenced it.
+typealias EpisodeNavigator = @Sendable (String) -> (EpisodeRef?, EpisodeRef?)?
 
 /// Builds prev/next episode refs and a navigator from a flat episode list.
 /// Returns `(nil, nil, nil)` when the episode isn't found or the season has only one episode.
@@ -21,15 +32,10 @@ typealias EpisodeNavigator = @Sendable (String) async -> (PlaybackInfo, EpisodeR
 /// instead of a fresh `compactMap` + `firstIndex` on every call.
 func buildEpisodeNavigation(
     for episodeId: String,
-    in episodes: [BaseItemDto],
-    apiClient: any APIClientProtocol,
-    userId: String
+    in episodes: [BaseItemDto]
 ) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
     let (refs, indexByID) = precomputeEpisodeRefs(episodes)
-    return buildEpisodeNavigation(
-        for: episodeId, refs: refs, indexByID: indexByID,
-        apiClient: apiClient, userId: userId
-    )
+    return buildEpisodeNavigation(for: episodeId, refs: refs, indexByID: indexByID)
 }
 
 /// Precomputes the refs array and id→index map for a season. Amortises the
@@ -54,9 +60,7 @@ func precomputeEpisodeRefs(_ episodes: [BaseItemDto]) -> (refs: [EpisodeRef], in
 func buildEpisodeNavigation(
     for episodeId: String,
     refs: [EpisodeRef],
-    indexByID: [String: Int],
-    apiClient: any APIClientProtocol,
-    userId: String
+    indexByID: [String: Int]
 ) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
     guard refs.count > 1, let idx = indexByID[episodeId] else {
         return (nil, nil, nil)
@@ -65,10 +69,9 @@ func buildEpisodeNavigation(
     let next: EpisodeRef? = idx < refs.count - 1 ? refs[idx + 1] : nil
     let navigator: EpisodeNavigator = { @Sendable targetId in
         guard let targetIdx = indexByID[targetId] else { return nil }
-        guard let info = try? await apiClient.getPlaybackInfo(itemId: refs[targetIdx].id, userId: userId) else { return nil }
         let newPrev: EpisodeRef? = targetIdx > 0 ? refs[targetIdx - 1] : nil
         let newNext: EpisodeRef? = targetIdx < refs.count - 1 ? refs[targetIdx + 1] : nil
-        return (info, newPrev, newNext)
+        return (newPrev, newNext)
     }
     return (prev, next, navigator)
 }

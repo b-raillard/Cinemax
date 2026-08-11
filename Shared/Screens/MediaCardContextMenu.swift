@@ -32,7 +32,7 @@ extension View {
         onGoToSeries: ((String) -> Void)? = nil
     ) -> some View {
         modifier(MediaCardContextMenu(
-            item: item, artwork: artwork, navigation: navigation,
+            item: CardMenuItem(item), artwork: artwork, navigation: navigation,
             onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries
         ))
     }
@@ -74,7 +74,147 @@ extension View {
     }
 }
 
+/// The scalars the menu and its preview actually read off a card's item.
+///
+/// Extracted once per card, deliberately: every escaping `Button` action closure
+/// in the menu captures the enclosing value, and when that value held a
+/// `BaseItemDto` — the SDK's widest model, with dozens of reference-counted
+/// members — each of the ~7 closures meant a DTO copy and its retain traffic,
+/// per card, on a grid where nobody had opened a menu. Same ids-and-scalars
+/// discipline as `CardPlayTargetResolver`.
+private struct CardMenuItem {
+    let id: String?
+    let type: BaseItemKind?
+    let name: String?
+    let seriesId: String?
+    let isPlayed: Bool
+    let isFavorite: Bool
+    let positionTicks: Int
+    let primaryImageTag: String?
+    let backdropItemId: String?
+    let backdropImageTag: String?
+
+    init(_ item: BaseItemDto) {
+        id = item.id
+        type = item.type
+        name = item.name
+        seriesId = item.seriesID
+        isPlayed = item.userData?.isPlayed ?? false
+        isFavorite = item.userData?.isFavorite ?? false
+        positionTicks = item.userData?.playbackPositionTicks ?? 0
+        primaryImageTag = item.primaryImageTagValue
+        backdropItemId = item.backdropItemID
+        backdropImageTag = item.backdropImageTagValue
+    }
+}
+
+/// An optimistic toggle result, paired with the server value it was derived
+/// from.
+///
+/// Storing the base is what keeps the override from *shadowing* fresh server
+/// data: nothing ever reset these mirrors, and `@State` outlives a grid reload
+/// (same ids ⇒ same view identity), so toggling watched here and then unwatched
+/// from the detail screen left the menu offering "Remove from watched" on an
+/// unwatched item — and acting on it issued a redundant write plus a redundant
+/// notification fan-out.
+private struct OptimisticFlag {
+    let base: Bool
+    let value: Bool
+
+    /// The override, or `nil` once the server value it was derived from has
+    /// moved on — in which case the caller falls back to server truth.
+    func resolved(against serverValue: Bool) -> Bool? {
+        base == serverValue ? value : nil
+    }
+}
+
 private struct MediaCardContextMenu: ViewModifier {
+    // Read HERE, in the attached view's own hierarchy, and forwarded onto the
+    // menu/preview below. SwiftUI hosts `contextMenu` content in a separate
+    // presentation context that does NOT carry these injected `@Observable`
+    // objects, so a child `View` reading them itself resolves nothing and a
+    // non-optional read traps ("No Observable object of type AppState found").
+    @Environment(AppState.self) private var appState
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(ToastCenter.self) private var toast
+    @Environment(AddToPlaylistPresenter.self) private var playlists: AddToPlaylistPresenter?
+    @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
+    #if os(tvOS)
+    @Environment(VideoPlayerCoordinator.self) private var coordinator: VideoPlayerCoordinator?
+    #endif
+
+    let item: CardMenuItem
+    let artwork: CardArtwork
+    let navigation: CardPlaybackNavigation?
+    let onRemoveFromResume: (() -> Void)?
+    let onGoToSeries: ((String) -> Void)?
+
+    // Optimistic mirrors of the toggle state. The menu label is derived from
+    // the item's `userData`, but that value is a snapshot captured when the
+    // owning grid built the card — and the library browse grid does NOT reload
+    // its genre-row cards on `.cinemaxFavoritesChanged`, so without these the
+    // menu re-opens showing a stale "add to favorites" after the item was
+    // already favorited. Each toggle updates its mirror so the label reflects
+    // the action immediately, with no extra server round-trip / catalogue
+    // reload. `@State` is per-card-identity, so it never leaks across items;
+    // it lives here rather than in `CardMenuContent` so it survives the menu
+    // being dismissed and re-opened.
+    @State private var playedOverride: OptimisticFlag?
+    @State private var favoriteOverride: OptimisticFlag?
+
+    /// **Both closures below must stay cheap to CONSTRUCT.** `contextMenu`'s
+    /// builders are non-escaping, so SwiftUI invokes them synchronously for
+    /// every card the lazy container instantiates — it cannot defer them. What
+    /// it *does* defer is a child view's `body`, which is why the menu and the
+    /// preview are `View` types rather than `@ViewBuilder` properties here: the
+    /// localized lookups, the `imageURL` build and the `knownRemoteTargetCount`
+    /// read all moved into their `body`, i.e. onto the long-press, instead of
+    /// being paid ~48× per tvOS grid fill for a menu nobody opened.
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        // An explicit preview lifts the ARTWORK ALONE. The default one lifts the
+        // whole attached view, and on a `PosterCard` that view is the poster
+        // *plus* its title and subtitle — text with no background of its own,
+        // which ends up floating over the next row's header. `LibraryPosterCard`
+        // never showed the bug because its link wraps only the poster; this makes
+        // every surface behave the way that one already did.
+        content.contextMenu {
+            forwardingEnvironment(menuContent)
+        } preview: {
+            forwardingEnvironment(CardArtworkPreview(item: item, artwork: artwork))
+        }
+        #else
+        // tvOS has no `preview:` overload, and no lift to correct.
+        content.contextMenu { forwardingEnvironment(menuContent) }
+        #endif
+    }
+
+    /// Re-injects the objects the menu's own presentation context drops.
+    private func forwardingEnvironment(_ view: some View) -> some View {
+        view
+            .environment(appState)
+            .environment(loc)
+            .environment(toast)
+            .environment(playlists)
+            .environment(cardActions)
+        #if os(tvOS)
+            .environment(coordinator)
+        #endif
+    }
+
+    private var menuContent: CardMenuContent {
+        CardMenuContent(
+            item: item, navigation: navigation,
+            onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries,
+            playedOverride: $playedOverride, favoriteOverride: $favoriteOverride
+        )
+    }
+}
+
+/// The menu's entries. A `View` rather than a `@ViewBuilder` property on the
+/// modifier so SwiftUI evaluates all of this on long-press — see the note on
+/// `MediaCardContextMenu.body(content:)`.
+private struct CardMenuContent: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toast
@@ -92,42 +232,17 @@ private struct MediaCardContextMenu: ViewModifier {
     @Environment(VideoPlayerCoordinator.self) private var coordinator: VideoPlayerCoordinator?
     #endif
 
-    let item: BaseItemDto
-    let artwork: CardArtwork
+    let item: CardMenuItem
     let navigation: CardPlaybackNavigation?
     let onRemoveFromResume: (() -> Void)?
     let onGoToSeries: ((String) -> Void)?
-
-    // Optimistic mirrors of the toggle state. The menu label is derived from
-    // the item's `userData`, but that value is a snapshot captured when the
-    // owning grid built the card — and the library browse grid does NOT reload
-    // its genre-row cards on `.cinemaxFavoritesChanged`, so without these the
-    // menu re-opens showing a stale "add to favorites" after the item was
-    // already favorited. Each toggle updates its mirror so the label reflects
-    // the action immediately, with no extra server round-trip / catalogue
-    // reload. `@State` is per-card-identity, so it never leaks across items.
-    @State private var playedOverride: Bool?
-    @State private var favoriteOverride: Bool?
-
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        // An explicit preview lifts the ARTWORK ALONE. The default one lifts the
-        // whole attached view, and on a `PosterCard` that view is the poster
-        // *plus* its title and subtitle — text with no background of its own,
-        // which ends up floating over the next row's header. `LibraryPosterCard`
-        // never showed the bug because its link wraps only the poster; this makes
-        // every surface behave the way that one already did.
-        content.contextMenu { menuItems } preview: { artworkPreview }
-        #else
-        // tvOS has no `preview:` overload, and no lift to correct.
-        content.contextMenu { menuItems }
-        #endif
-    }
+    @Binding var playedOverride: OptimisticFlag?
+    @Binding var favoriteOverride: OptimisticFlag?
 
     @ViewBuilder
-    private var menuItems: some View {
-        let isPlayed = playedOverride ?? item.userData?.isPlayed ?? false
-        let isFavorite = favoriteOverride ?? item.userData?.isFavorite ?? false
+    var body: some View {
+        let isPlayed = playedOverride?.resolved(against: item.isPlayed) ?? item.isPlayed
+        let isFavorite = favoriteOverride?.resolved(against: item.isFavorite) ?? item.isFavorite
         let isPlayable = item.type == .movie || item.type == .series || item.type == .episode
         // Only computed for the types whose card carries the useful userData —
         // a series card doesn't know its next-up episode's, so its label stays
@@ -135,8 +250,8 @@ private struct MediaCardContextMenu: ViewModifier {
         let localResume: Bool = {
             guard item.type == .movie || item.type == .episode else { return false }
             return CardPlayTargetResolver.isResumable(
-                positionTicks: item.userData?.playbackPositionTicks ?? 0,
-                isPlayed: item.userData?.isPlayed ?? false
+                positionTicks: item.positionTicks,
+                isPlayed: item.isPlayed
             )
         }()
         // Same presence discipline as the "Play on…" entry below, applied to
@@ -193,7 +308,7 @@ private struct MediaCardContextMenu: ViewModifier {
             // silently ignore `navigationDestination` there) — same contract
             // as `AdminItemMenu.onSelectDestination`. Its presence is what
             // makes the entry appear, so a dead button is not possible.
-            if let onGoToSeries, item.type == .episode, let seriesId = item.seriesID {
+            if let onGoToSeries, item.type == .episode, let seriesId = item.seriesId {
                 Button {
                     onGoToSeries(seriesId)
                 } label: {
@@ -231,7 +346,7 @@ private struct MediaCardContextMenu: ViewModifier {
             // drop the card from its own row — only Home's Continue Watching
             // rail provides it. The resume position is the business condition:
             // without one, the item isn't in that row.
-            if let onRemoveFromResume, (item.userData?.playbackPositionTicks ?? 0) > 0 {
+            if let onRemoveFromResume, item.positionTicks > 0 {
                 Divider()
                 Button(role: .destructive) {
                     onRemoveFromResume()
@@ -242,52 +357,6 @@ private struct MediaCardContextMenu: ViewModifier {
         }
     }
 
-    #if os(iOS)
-    /// The lifted artwork, and nothing else.
-    ///
-    /// **The URL must be byte-identical to the one the card itself requested**
-    /// — same `maxWidth`, same `tag`. Nuke keys its cache on the URL, so a
-    /// near-miss doesn't reuse the image the card already decoded: it starts a
-    /// fresh download and the preview appears blank for a beat. Every poster
-    /// surface requests `.primary` at 300 with `primaryImageTagValue`, and both
-    /// wide rails request `.backdrop` at 600 with `backdropImageTagValue` off
-    /// `backdropItemID`, so these two branches cover all nine call sites
-    /// exactly. Same discipline as `PosterPrefetcher`.
-    @ViewBuilder
-    private var artworkPreview: some View {
-        switch artwork {
-        case .poster:
-            previewArtwork(
-                url: item.id.map {
-                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
-                },
-                width: Self.previewPosterWidth,
-                height: Self.previewPosterWidth * 3 / 2
-            )
-        case .backdrop:
-            previewArtwork(
-                url: item.backdropItemID.map {
-                    appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue)
-                },
-                width: Self.previewBackdropWidth,
-                height: Self.previewBackdropWidth * 9 / 16
-            )
-        }
-    }
-
-    /// No `clipShape` here on purpose — the system platter already rounds the
-    /// preview, and a second corner radius inside it reads as a double border.
-    private func previewArtwork(url: URL?, width: CGFloat, height: CGFloat) -> some View {
-        Color.clear
-            .frame(width: width, height: height)
-            .background(CinemaColor.surfaceContainerLow)
-            .overlay { CinemaLazyImage(url: url, fallbackIcon: "film") }
-            .clipped()
-    }
-
-    private static let previewPosterWidth: CGFloat = 220
-    private static let previewBackdropWidth: CGFloat = 320
-    #endif
 
     /// Starts playback. tvOS goes through `VideoPlayerCoordinator` (already a
     /// root presenter, exactly what `PlayLink` does); iOS goes through the
@@ -339,16 +408,13 @@ private struct MediaCardContextMenu: ViewModifier {
     private func resolvedCardPlayTarget() async -> CardPlayTarget? {
         guard let userId = appState.currentUserId, let id = item.id else { return nil }
 
-        // Scalars extracted here, on the main actor: `resolve` is nonisolated
-        // and `BaseItemDto` is not Sendable.
-        let type = item.type
-        let title = item.name ?? ""
-        let ticks = item.userData?.playbackPositionTicks ?? 0
-        let played = item.userData?.isPlayed ?? false
-
+        // `CardMenuItem` is already scalars-only, which is what lets this hand
+        // straight to a `nonisolated` resolver — the extraction that used to
+        // happen here (because `BaseItemDto` is not Sendable) now happens once
+        // per card at the modifier's entry point instead of once per call.
         return await CardPlayTargetResolver.resolve(
-            itemId: id, type: type, title: title,
-            positionTicks: ticks, isPlayed: played,
+            itemId: id, type: item.type, title: item.name ?? "",
+            positionTicks: item.positionTicks, isPlayed: item.isPlayed,
             api: appState.apiClient, userId: userId
         )
     }
@@ -361,7 +427,7 @@ private struct MediaCardContextMenu: ViewModifier {
             } else {
                 try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
             }
-            playedOverride = !isPlayed
+            playedOverride = OptimisticFlag(base: item.isPlayed, value: !isPlayed)
             toast.success(loc.localized(isPlayed ? "card.markedUnwatched" : "card.markedWatched"))
             NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
         } catch {
@@ -374,7 +440,7 @@ private struct MediaCardContextMenu: ViewModifier {
         guard let userId = appState.currentUserId, let id = item.id else { return }
         do {
             try await appState.apiClient.setFavorite(itemId: id, userId: userId, favorite: !isFavorite)
-            favoriteOverride = !isFavorite
+            favoriteOverride = OptimisticFlag(base: item.isFavorite, value: !isFavorite)
             toast.success(loc.localized(isFavorite ? "card.unfavorited" : "card.favorited"))
             NotificationCenter.default.post(name: .cinemaxFavoritesChanged, object: nil)
         } catch {
@@ -383,3 +449,60 @@ private struct MediaCardContextMenu: ViewModifier {
         }
     }
 }
+
+#if os(iOS)
+/// The lifted artwork, and nothing else.
+///
+/// A `View` rather than a `@ViewBuilder` property on the modifier so the URL is
+/// built on long-press instead of once per card during a grid fill — see the
+/// note on `MediaCardContextMenu.body(content:)`.
+///
+/// **The URL must be byte-identical to the one the card itself requested**
+/// — same `maxWidth`, same `tag`. Nuke keys its cache on the URL, so a
+/// near-miss doesn't reuse the image the card already decoded: it starts a
+/// fresh download and the preview appears blank for a beat. Every poster
+/// surface requests `.primary` at 300 with `primaryImageTagValue`, and both
+/// wide rails request `.backdrop` at 600 with `backdropImageTagValue` off
+/// `backdropItemID`, so these two branches cover all nine call sites
+/// exactly. Same discipline as `PosterPrefetcher`.
+private struct CardArtworkPreview: View {
+    @Environment(AppState.self) private var appState
+
+    let item: CardMenuItem
+    let artwork: CardArtwork
+
+    var body: some View {
+        switch artwork {
+        case .poster:
+            previewArtwork(
+                url: item.id.map {
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTag)
+                },
+                width: Self.previewPosterWidth,
+                height: Self.previewPosterWidth * 3 / 2
+            )
+        case .backdrop:
+            previewArtwork(
+                url: item.backdropItemId.map {
+                    appState.imageBuilder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTag)
+                },
+                width: Self.previewBackdropWidth,
+                height: Self.previewBackdropWidth * 9 / 16
+            )
+        }
+    }
+
+    /// No `clipShape` here on purpose — the system platter already rounds the
+    /// preview, and a second corner radius inside it reads as a double border.
+    private func previewArtwork(url: URL?, width: CGFloat, height: CGFloat) -> some View {
+        Color.clear
+            .frame(width: width, height: height)
+            .background(CinemaColor.surfaceContainerLow)
+            .overlay { CinemaLazyImage(url: url, fallbackIcon: "film") }
+            .clipped()
+    }
+
+    private static let previewPosterWidth: CGFloat = 220
+    private static let previewBackdropWidth: CGFloat = 320
+}
+#endif

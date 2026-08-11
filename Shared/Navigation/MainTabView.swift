@@ -83,7 +83,24 @@ struct MainTabView: View {
         // there is no double-navigation when a Home tab is present.
         .onChange(of: appState.pendingDeepLinkItemId, initial: true) { _, newValue in
             guard let newValue else { return }
-            if menuConfig.resolvedTabs.contains(where: { $0.id == "home" }) {
+            // An inbound PLAYBACK request (remote control « Lire sur… », or an
+            // App Intent) always takes the modal route, Home tab or not.
+            //
+            // Routing it through Home's `navigationDestination(item:)` drops it
+            // whenever a detail is ALREADY pushed there: re-assigning that
+            // binding does not swap the top of the stack, and Home cannot pop a
+            // `NavigationLink` push because the stack belongs to this view. The
+            // symptom was a command that arrived, cleared its state, and did
+            // nothing visible — no navigation, no playback, no error. The modal
+            // is independent of that stack, so it lands under any condition.
+            //
+            // `HomeScreen.consumeDeepLink` tests the SAME predicate and skips
+            // these, so exactly one of the two observers ever acts on a given
+            // id, whichever order SwiftUI delivers them in.
+            if appState.isPendingIntentPlayback(newValue) {
+                appState.pendingDeepLinkItemId = nil
+                deepLinkFallback = DeepLinkFallback(id: newValue)
+            } else if menuConfig.resolvedTabs.contains(where: { $0.id == "home" }) {
                 selectedTabID = "home"
             } else {
                 appState.pendingDeepLinkItemId = nil
