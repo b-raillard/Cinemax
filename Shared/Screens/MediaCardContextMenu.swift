@@ -129,6 +129,20 @@ private struct OptimisticFlag {
 }
 
 private struct MediaCardContextMenu: ViewModifier {
+    // Read HERE, in the attached view's own hierarchy, and forwarded onto the
+    // menu/preview below. SwiftUI hosts `contextMenu` content in a separate
+    // presentation context that does NOT carry these injected `@Observable`
+    // objects, so a child `View` reading them itself resolves nothing and a
+    // non-optional read traps ("No Observable object of type AppState found").
+    @Environment(AppState.self) private var appState
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(ToastCenter.self) private var toast
+    @Environment(AddToPlaylistPresenter.self) private var playlists: AddToPlaylistPresenter?
+    @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
+    #if os(tvOS)
+    @Environment(VideoPlayerCoordinator.self) private var coordinator: VideoPlayerCoordinator?
+    #endif
+
     let item: CardMenuItem
     let artwork: CardArtwork
     let navigation: CardPlaybackNavigation?
@@ -165,13 +179,26 @@ private struct MediaCardContextMenu: ViewModifier {
         // never showed the bug because its link wraps only the poster; this makes
         // every surface behave the way that one already did.
         content.contextMenu {
-            menuContent
+            forwardingEnvironment(menuContent)
         } preview: {
-            CardArtworkPreview(item: item, artwork: artwork)
+            forwardingEnvironment(CardArtworkPreview(item: item, artwork: artwork))
         }
         #else
         // tvOS has no `preview:` overload, and no lift to correct.
-        content.contextMenu { menuContent }
+        content.contextMenu { forwardingEnvironment(menuContent) }
+        #endif
+    }
+
+    /// Re-injects the objects the menu's own presentation context drops.
+    private func forwardingEnvironment(_ view: some View) -> some View {
+        view
+            .environment(appState)
+            .environment(loc)
+            .environment(toast)
+            .environment(playlists)
+            .environment(cardActions)
+        #if os(tvOS)
+            .environment(coordinator)
         #endif
     }
 
