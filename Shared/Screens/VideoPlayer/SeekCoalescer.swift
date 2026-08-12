@@ -39,3 +39,41 @@ enum SeekCoalescer {
         return Int32(clamping: base + deltaSeconds * 1000)
     }
 }
+
+/// Decides whether the playhead has really started moving again after a seek.
+///
+/// **The baseline only advances once progress is confirmed**, which is what
+/// makes the test independent of how often it is sampled. The previous version
+/// rewrote it on every call, and `onEngineTimeChanged` follows libVLC's time
+/// updates (several per 100 ms) — so each comparison spanned 0–30 ms, never the
+/// 120 ms threshold, and a seek that had *already* resumed at full speed was
+/// never recognised as landed. Measured on device 2026-08-12: playback back at
+/// 1× within 0.5 s of the seek, spinner held to the backstop at 20.2 s and
+/// 30.0 s, HUD pinned to the scrub target throughout — which reads as "the
+/// player froze after a fast-forward". Locked by `SeekSettleTrackerTests`.
+struct SeekSettleTracker {
+    private var baselineMs: Int32?
+
+    /// Reports whether the playhead has advanced at least `thresholdMs` since
+    /// the last confirmed baseline.
+    mutating func noteProgress(positionMs: Int32, thresholdMs: Int32) -> Bool {
+        guard let baseline = baselineMs else {
+            baselineMs = positionMs
+            return false
+        }
+        // A backward jump is a fresh seek, not progress: re-baseline on it.
+        guard positionMs >= baseline else {
+            baselineMs = positionMs
+            return false
+        }
+        guard Int(positionMs) - Int(baseline) >= Int(thresholdMs) else {
+            return false // keep the baseline so small samples accumulate
+        }
+        baselineMs = positionMs
+        return true
+    }
+
+    mutating func reset() {
+        baselineMs = nil
+    }
+}

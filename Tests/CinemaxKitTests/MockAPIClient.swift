@@ -478,8 +478,12 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     private(set) var getSeasonsCallCount = 0
+    var getSeasonsHandler: (@Sendable (String) async throws -> [BaseItemDto])?
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto] {
         recordLock.withLock { getSeasonsCallCount += 1 }
+        if let handler = getSeasonsHandler {
+            return try await handler(seriesId)
+        }
         return []
     }
     private(set) var getEpisodesCallCount = 0

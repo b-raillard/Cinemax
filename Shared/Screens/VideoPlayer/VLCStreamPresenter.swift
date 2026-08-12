@@ -321,7 +321,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// between two consecutive reports. Comparing against the target instead
     /// would misfire on sparse-keyframe files, where VLC legitimately resumes
     /// seconds *before* the requested position.
-    private var seekLoadingLastMs: Int32?
+    private var seekSettle = SeekSettleTracker()
     /// Consecutive samples that showed forward progress. While the engine still
     /// reports `.opening`/`.buffering` two in a row are required before the seek
     /// counts as landed (one jump alone can be the demuxer resettling).
@@ -600,6 +600,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func engineSeek(ms: Int32) {
         let target = max(0, ms)
+        // DIAG (recette loader) — every seek path funnels here.
+        logger.notice("""
+            seek-fire target=\(target, privacy: .public) \
+            from=\(self.currentMs, privacy: .public) \
+            state=\(String(describing: self.player.state), privacy: .public)
+            """)
         beginSeekLoading(target: target)
         try? player.seek(to: .milliseconds(Int(target)))
     }
@@ -616,7 +622,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// if the seek hasn't produced real frames within `seekSpinnerDelay`.
     private func beginSeekLoading(target: Int32) {
         seekLoadingTargetMs = target
-        seekLoadingLastMs = nil
+        seekSettle.reset()
         seekLoadingProgressTicks = 0
         seekLoadingStartedAt = Date()
         seekLoadingWork?.cancel()
@@ -636,7 +642,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         seekLoadingWork?.cancel()
         seekLoadingWork = nil
         seekLoadingTargetMs = nil
-        seekLoadingLastMs = nil
+        seekSettle.reset()
         seekLoadingProgressTicks = 0
     }
 
@@ -649,11 +655,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func updateSeekLoading() -> Bool {
         guard seekLoadingTargetMs != nil else { return false }
         let now = currentMs
-        let moved = seekLoadingLastMs.map {
-            Int(now) - Int($0) >= Int(Self.seekLandedProgressMs)
-        } ?? false
+        // The tracker keeps its baseline until progress is actually confirmed.
+        // Comparing against the PREVIOUS sample instead made this dependent on
+        // how often we are called: `onEngineTimeChanged` fires several times
+        // per 100 ms, so every comparison spanned far less than the threshold
+        // and a seek that had already resumed at full speed never counted as
+        // landed — the spinner then sat there until the 30 s backstop.
+        let moved = seekSettle.noteProgress(positionMs: now, thresholdMs: Self.seekLandedProgressMs)
         seekLoadingProgressTicks = moved ? seekLoadingProgressTicks + 1 : 0
-        seekLoadingLastMs = now
 
         let landed: Bool
         switch player.state {
@@ -669,6 +678,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         default:
             landed = moved // the playhead is moving again: real frames
         }
+        // DIAG (recette loader) — the inputs that decide whether the settle
+        // window keeps holding the spinner. Only ever logged while a window is
+        // open (the guard above returns early otherwise), so volume is bounded.
+        logger.notice("""
+            seek-settle state=\(String(describing: self.player.state), privacy: .public) \
+            now=\(now, privacy: .public) moved=\(moved, privacy: .public) \
+            ticks=\(self.seekLoadingProgressTicks, privacy: .public) \
+            landed=\(landed, privacy: .public) \
+            since=\(Date().timeIntervalSince(self.seekLoadingStartedAt), format: .fixed(precision: 2), privacy: .public)
+            """)
         // Backstop: a missed engine signal must never strand the spinner.
         if landed || Date().timeIntervalSince(seekLoadingStartedAt) > Self.seekLoadingMaxHold {
             endSeekLoading()
@@ -740,6 +759,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // without this guard `stopAnimating()` is re-sent thousands of times to an
         // indicator that is already stopped and hidden.
         guard loading != loadingIndicator.isAnimating else { return }
+        // DIAG (recette loader) — only real transitions reach here.
+        logger.notice("spinner \(loading ? "ON" : "OFF", privacy: .public)")
         if loading { loadingIndicator.startAnimating() }
         else { loadingIndicator.stopAnimating() }
     }
@@ -3051,6 +3072,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func scheduleHideControls() {
         hideControlsWorkItem?.cancel()
+        // DIAG (recette) — the 4 s auto-hide is shorter than one automated UI
+        // round-trip, so no synthetic gesture can ever reach a HUD control (the
+        // reason A3–A7 were "out of automation reach"). Pinning the HUD open
+        // makes the scrub bar drivable from a test harness.
+        if ProcessInfo.processInfo.environment["CINEMAX_HUD_NO_AUTOHIDE"] == "1" { return }
         // Never auto-hide while a track/chapter picker is up — the controls must
         // stay put behind it so focus returns somewhere sensible.
         if pickerPresented { return }
@@ -3093,6 +3119,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// from teardown / media-swap via the tear-down flag + a near-end / not-
     /// just-started guard.
     private func onEngineStateChanged(_ state: PlayerState) {
+        // DIAG (recette loader) — libVLC's own view of the seek, next to the
+        // settle window's. `.buffering` while frames flow is the suspect.
+        logger.notice("engine-state \(String(describing: state), privacy: .public)")
         switch state {
         case .error:
             handlePlaybackError()
@@ -3104,10 +3133,37 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if syncPlayActive { syncPlay.reportBuffering() }
         case .stopped:
             endSeekLoading() // no frames are coming — a pending settle is moot
-            guard !isTearingDown,
-                  Date().timeIntervalSince(lastPlayStart) > 1.0,
-                  lengthMs > 0, currentMs >= lengthMs - 2000 else { return }
-            handlePlaybackEnded()
+            // DIAG (recette A7) — libVLC has no distinct `.ended`, so every
+            // teardown, error and real EOF arrives here. Log the four gate
+            // inputs so a missing end-of-series card can be attributed to the
+            // gate rather than guessed at.
+            logger.notice("""
+                end-gate .stopped tearingDown=\(self.isTearingDown, privacy: .public) \
+                sincePlay=\(Date().timeIntervalSince(self.lastPlayStart), format: .fixed(precision: 2), privacy: .public) \
+                currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public)
+                """)
+            switch PlaybackEndPolicy.decide(
+                isTearingDown: isTearingDown,
+                secondsSincePlayStart: Date().timeIntervalSince(lastPlayStart),
+                currentMs: Int64(currentMs), lengthMs: Int64(lengthMs),
+                mediaConfirmedOpen: mediaConfirmedOpen
+            ) {
+            case .ended:
+                handlePlaybackEnded()
+            case .unexpectedStop:
+                // The stream died mid-film and libVLC reported a CLEAN EOF, so
+                // `.error` never fires and the recovery below was unreachable:
+                // the old `else { return }` left a black screen with no retry,
+                // no alert and no spinner (95 s measured in recette). Route it
+                // to the same one-shot retry the error path uses.
+                logger.error("""
+                    VLC stopped \(Int64(self.lengthMs) - Int64(self.currentMs), privacy: .public)ms short of the end \
+                    for \(self.itemId, privacy: .public) — treating as a stream failure
+                    """)
+                handlePlaybackError()
+            case .ignore:
+                break
+            }
         case .playing:
             // `.playing` can be reported while a seek is still re-buffering, so
             // defer to the settle window rather than clearing the spinner blindly.
@@ -3173,6 +3229,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackEnded() {
         guard !didReportEnd else { return }
         didReportEnd = true
+        // DIAG (recette A7) — the three inputs that decide between autoplay,
+        // the end-of-series card and a bare dismiss.
+        logger.notice("""
+            end-branch autoPlayNext=\(self.autoPlayNext, privacy: .public) \
+            nextUpCancelled=\(self.nextUpCancelledForThisItem, privacy: .public) \
+            hasNext=\(self.nextEpisode != nil, privacy: .public) \
+            hasNavigator=\(self.episodeNavigator != nil, privacy: .public)
+            """)
         cancelOpenWatchdog()
         nextUpCard?.hide()
         if autoPlayNext, !nextUpCancelledForThisItem, let next = nextEpisode, episodeNavigator != nil {

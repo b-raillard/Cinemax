@@ -39,6 +39,9 @@ struct MediaLibraryScreen: View {
     /// A refresh notification (tier-1 or tier-2) arrived while hidden — run one
     /// reload on next appear. Several while hidden collapse into one.
     @State private var pendingReload = false
+    /// Tier-2 counterpart of `pendingReload`. A pending full reload subsumes
+    /// this one, and repeated tier-2 events while hidden coalesce into one.
+    @State private var pendingUserDataRefresh = false
 
     /// `nil` for library tabs of Other / Mixed kind — disables the
     /// `includeItemTypes` filter at query time so every item in the parent
@@ -128,20 +131,27 @@ struct MediaLibraryScreen: View {
         .onChange(of: viewModel.filteredLoader.items.count) {
             prefetchPosters(for: viewModel.filteredLoader.items)
         }
-        // Both refresh tiers reload the library the same way while visible (a
-        // toggle from the grid's own context menu must still be reflected, e.g.
-        // under the unwatched-only filter); both defer while hidden.
+        // The two tiers refresh DIFFERENTLY, and both defer while hidden.
+        // Tier-1 is an explicit "the catalogue changed" — a full reload is what
+        // the user asked for. Tier-2 is one item's userData, raised by this
+        // grid's OWN context menu, so it must refresh in place: a full reload
+        // resets the paginated loader to page 0 and yanks a deeply-scrolled
+        // grid back to the top under the user's finger.
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             reloadOrDefer()
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
-            reloadOrDefer()
+            refreshUserDataOrDefer()
         }
         .onAppear {
             isVisible = true
             if pendingReload {
                 pendingReload = false
+                pendingUserDataRefresh = false // subsumed by the full reload
                 performReload()
+            } else if pendingUserDataRefresh {
+                pendingUserDataRefresh = false
+                performUserDataRefresh()
             }
         }
         .onDisappear { isVisible = false }
@@ -151,6 +161,33 @@ struct MediaLibraryScreen: View {
     /// to reload on next appear.
     private func reloadOrDefer() {
         if isVisible { performReload() } else { pendingReload = true }
+    }
+
+    /// Tier-2 sibling of `reloadOrDefer`.
+    ///
+    /// Falls back to a full reload when nothing has been paged in: that means
+    /// the browse layout (hero + genre rows), which has no paginated span to
+    /// refresh in place, so its previous behaviour is preserved exactly. Only
+    /// the filtered grid — the one surface that could be scrolled deep — takes
+    /// the in-place path.
+    private func refreshUserDataOrDefer() {
+        guard isVisible else {
+            pendingUserDataRefresh = true
+            return
+        }
+        if viewModel.filteredLoader.items.isEmpty {
+            performReload()
+        } else {
+            performUserDataRefresh()
+        }
+    }
+
+    /// In-place refresh of the filtered grid's loaded span. No prefetch reset:
+    /// item identity is preserved, so the posters already warmed stay valid.
+    private func performUserDataRefresh() {
+        Task {
+            await viewModel.refreshUserData(using: appState)
+        }
     }
 
     /// Full library reload + poster re-prefetch. Shared by the refresh observers
@@ -247,7 +284,7 @@ struct MediaLibraryScreen: View {
             #endif
 
             if let hero = viewModel.heroItem {
-                LibraryHeroSection(item: hero, itemType: displayKind)
+                LibraryHeroSection(item: hero, itemType: displayKind, heroPlay: viewModel.heroPlay)
                     .padding(.bottom, CinemaSpacing.spacing6)
             }
 
