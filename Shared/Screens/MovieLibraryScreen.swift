@@ -284,7 +284,7 @@ struct MediaLibraryScreen: View {
             #endif
 
             if let hero = viewModel.heroItem {
-                LibraryHeroSection(item: hero, itemType: displayKind)
+                LibraryHeroSection(item: hero, itemType: displayKind, heroPlay: viewModel.heroPlay)
                     .padding(.bottom, CinemaSpacing.spacing6)
             }
 

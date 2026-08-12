@@ -15,6 +15,16 @@ struct LibraryHeroSection: View {
 
     let item: BaseItemDto
     let itemType: BaseItemKind
+    /// The resolved episode + its navigation, for a series hero.
+    ///
+    /// Without it the player receives no `episodeNavigator`, and
+    /// `handlePlaybackEnded` dismisses silently instead of showing the
+    /// end-of-series card — this hero was the ONE surface missing that
+    /// plumbing (Home, the detail screen and the card menus all thread it),
+    /// which is why the card appeared everywhere except here. `nil` for movie
+    /// heroes and while the probe is still in flight; the hero then behaves
+    /// exactly as before.
+    var heroPlay: MediaLibraryViewModel.HeroPlay?
 
     var body: some View {
         // A `Color.clear` sizing driver pinned to `heroHeight`, with backdrop, gradient,
@@ -90,7 +100,17 @@ struct LibraryHeroSection: View {
     @ViewBuilder
     private func heroActionButtons(id: String) -> some View {
         HStack(spacing: heroButtonSpacing) {
-            PlayLink(itemId: id, title: item.name ?? "") {
+            PlayLink(
+                // A series hero plays its resolved next-up EPISODE, so the
+                // navigator and the media describe the same thing. Falls back
+                // to the item itself (movies, or a probe that found nothing).
+                itemId: heroPlay?.itemId ?? id,
+                title: heroPlay?.title ?? item.name ?? "",
+                startTime: heroPlay?.startSeconds,
+                previousEpisode: heroPlay?.previous,
+                nextEpisode: heroPlay?.next,
+                episodeNavigator: heroPlay?.navigator
+            ) {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     Text(loc.localized("action.play"))
                         .font(.system(size: heroButtonFontSize, weight: .bold))

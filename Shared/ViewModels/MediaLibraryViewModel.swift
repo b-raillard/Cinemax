@@ -210,11 +210,22 @@ final class MediaLibraryViewModel {
             genres = fetchedGenres
             totalCount = heroData.totalCount
             heroItem = heroData.items.first
+            // A new hero invalidates the previous one's navigation immediately,
+            // so the Play button can never carry the old series' episode.
+            heroPlay = nil
 
             // Progressive render: the hero (and its `totalCount`) are ready, so
             // drop the skeleton now. The genre rows fetched below fill in off
             // their own `@Observable` slice (`itemsByGenre`) as each lands.
             isLoading = false
+
+            // Side task, off the critical path: the hero paints now and gains
+            // its prev/next buttons (and the end-of-series card) a beat later.
+            // Blocking the first paint on a next-up probe would be a poor trade
+            // for something only end-of-episode behaviour depends on.
+            Task { [weak self] in
+                await self?.loadHeroNavigation(using: appState)
+            }
         } catch {
             if Self.isCancellation(error) {
                 logger.debug("Library load cancelled — leaving state for the superseding load")
@@ -304,6 +315,122 @@ final class MediaLibraryViewModel {
         guard !genres.isEmpty, let userId = appState.currentUserId else { return }
         guard appliedGenreSortFilter != sortFilter else { return }
         try? await fetchGenreItems(using: appState, userId: userId, genres: genres)
+    }
+
+    /// What the library hero's Play button opens, plus the episode navigation
+    /// that goes with it.
+    ///
+    /// A series hero used to call `PlayLink(itemId:title:)` and nothing else,
+    /// so the player got no `episodeNavigator` — and `handlePlaybackEnded`
+    /// requires a non-nil one to show the end-of-series card, dismissing
+    /// silently otherwise. That is the A7 bug: play a series from Home or the
+    /// detail screen and the card appears; play it from the library hero and it
+    /// never can. Same gap also costs the in-player prev/next episode buttons.
+    struct HeroPlay: Equatable {
+        let itemId: String
+        let title: String
+        let startSeconds: Double?
+        let previous: EpisodeRef?
+        let next: EpisodeRef?
+        let navigator: EpisodeNavigator?
+
+        static func == (lhs: HeroPlay, rhs: HeroPlay) -> Bool {
+            lhs.itemId == rhs.itemId && lhs.startSeconds == rhs.startSeconds
+                && lhs.previous?.id == rhs.previous?.id && lhs.next?.id == rhs.next?.id
+                && (lhs.navigator == nil) == (rhs.navigator == nil)
+        }
+    }
+
+    private(set) var heroPlay: HeroPlay?
+
+    /// Resolves the hero's play target + episode navigation.
+    ///
+    /// Deliberately a side task after the main load, and **failing silently**,
+    /// same discipline as `MediaDetailViewModel.loadRemoteTargets`: a series
+    /// with no next-up legitimately has no navigation, so a failed probe must
+    /// degrade to "no prev/next buttons and no end-of-series card" — today's
+    /// behaviour — never to an error over an otherwise-fine hero.
+    ///
+    /// Targets the resolved EPISODE rather than the series so the navigator and
+    /// the media always describe the same thing. `getNextUp` and `getEpisodes`
+    /// are both 10 s-cached, so this is usually free.
+    func loadHeroNavigation(using appState: AppState) async {
+        guard let userId = appState.currentUserId,
+              let hero = heroItem,
+              hero.type == .series,
+              let seriesId = hero.id else {
+            logger.debug("""
+                hero-nav skipped kind=\(String(describing: self.heroItem?.type), privacy: .public) \
+                hasUser=\(appState.currentUserId != nil, privacy: .public)
+                """)
+            heroPlay = nil
+            return
+        }
+        do {
+            // Mirror the server's own rule (`resolvePlayableEpisode`): next-up
+            // first, else the first episode of the first season. Without the
+            // fallback a fully-watched series — precisely the one you reach the
+            // END of — got no navigator, so the end-of-series card stayed
+            // unreachable there. Verified on device: `getNextUp` returns nil
+            // once every episode is played.
+            let nextUp = try await appState.apiClient.getNextUp(seriesId: seriesId, userId: userId)
+            let resolved: (episodeId: String, seasonId: String)?
+            if let nextUp, let id = nextUp.id, let seasonId = nextUp.seasonID {
+                resolved = (id, seasonId)
+            } else {
+                let seasons = try await appState.apiClient.getSeasons(seriesId: seriesId, userId: userId)
+                let firstSeason = seasons
+                    .sorted { ($0.indexNumber ?? .max) < ($1.indexNumber ?? .max) }
+                    .first
+                if let seasonId = firstSeason?.id {
+                    let firstEpisodes = try await appState.apiClient.getEpisodes(
+                        seriesId: seriesId, seasonId: seasonId, userId: userId
+                    )
+                    let firstEpisode = firstEpisodes
+                        .sorted { ($0.indexNumber ?? .max) < ($1.indexNumber ?? .max) }
+                        .first
+                    resolved = firstEpisode?.id.map { ($0, seasonId) }
+                } else {
+                    resolved = nil
+                }
+            }
+            guard let resolved else {
+                logger.debug("hero-nav unresolved series=\(seriesId, privacy: .public)")
+                heroPlay = nil
+                return
+            }
+            let episodeId = resolved.episodeId
+            let seasonId = resolved.seasonId
+            let episodes = try await appState.apiClient.getEpisodes(
+                seriesId: seriesId, seasonId: seasonId, userId: userId
+            )
+            let nav = buildEpisodeNavigation(for: episodeId, in: episodes)
+            // Take the title and resume position from the episode as it appears
+            // in the season list, so both resolution paths (next-up and the
+            // first-episode fallback, where `nextUp` is nil) agree.
+            let episode = episodes.first { $0.id == episodeId }
+            heroPlay = HeroPlay(
+                itemId: episodeId,
+                title: episode?.name ?? hero.name ?? "",
+                // Same SSOT as every other resume site: a residual position on
+                // a played item is not a resume.
+                startSeconds: CardPlayTargetResolver.resumeSeconds(
+                    positionTicks: episode?.userData?.playbackPositionTicks ?? 0,
+                    isPlayed: episode?.userData?.isPlayed ?? false
+                ),
+                previous: nav.previous, next: nav.next, navigator: nav.navigator
+            )
+            logger.debug("""
+                hero-nav ready episode=\(episodeId, privacy: .public) \
+                episodes=\(episodes.count, privacy: .public) \
+                hasPrev=\(nav.previous != nil, privacy: .public) \
+                hasNext=\(nav.next != nil, privacy: .public) \
+                hasNavigator=\(nav.navigator != nil, privacy: .public)
+                """)
+        } catch {
+            logger.notice("hero-nav failed: \(error.localizedDescription, privacy: .public)")
+            heroPlay = nil
+        }
     }
 
     func applyFilter(using appState: AppState) async {
