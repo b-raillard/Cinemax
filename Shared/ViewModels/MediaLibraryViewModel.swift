@@ -317,27 +317,72 @@ final class MediaLibraryViewModel {
         await loadMoreFiltered(using: appState, userId: userId)
     }
 
+    /// Targeted refresh for a tier-2 `.cinemaxItemUserDataChanged`: re-pulls
+    /// only what the user has already paged in, in place.
+    ///
+    /// The screen used to answer that notification with a full `reload`, which
+    /// runs `applyFilter` → `filteredLoader.reset()` → page 0. The cards in
+    /// this grid carry a context menu whose own watched/favorite toggles raise
+    /// that very notification, so a grid scrolled several pages deep collapsed
+    /// to 40 items **under the user's finger**. `refreshLoadedSpan` is the
+    /// documented remedy and was wired on `FavoritesScreen` and
+    /// `WatchedHistoryScreen` but not here — a missed surface, not a
+    /// trade-off. Locked by `MediaLibraryRefreshSpanTests`.
+    ///
+    /// No-op when nothing has been paged in (the loader's own guard): a browse
+    /// layout has no filtered page to refresh, and the tier-1 path still owns
+    /// full reloads.
+    func refreshUserData(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        let currentSortFilter = sortFilter
+        let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
+        let parentScopeID = parentId
+        await filteredLoader.refreshLoadedSpan { startIndex, limit in
+            try await self.fetchFilteredPage(
+                using: appState, userId: userId, sortFilter: currentSortFilter,
+                typeFilter: typeFilter, parentScopeID: parentScopeID,
+                startIndex: startIndex, limit: limit
+            )
+        }
+    }
+
+    /// The one query, shared by pagination and by `refreshUserData` so the two
+    /// can never disagree on sort/filter — same discipline as
+    /// `FavoritesViewModel.page`.
+    private func fetchFilteredPage(
+        using appState: AppState, userId: String,
+        sortFilter currentSortFilter: LibrarySortFilterState,
+        typeFilter: [BaseItemKind]?, parentScopeID: String?,
+        startIndex: Int, limit: Int
+    ) async throws -> (items: [BaseItemDto], total: Int) {
+        let genres = currentSortFilter.selectedGenres.isEmpty ? nil : Array(currentSortFilter.selectedGenres)
+        let filters: [ItemFilter]? = currentSortFilter.showUnwatchedOnly ? [.isUnplayed] : nil
+        let years = currentSortFilter.expandedYears
+        let result = try await appState.apiClient.getItems(
+            userId: userId,
+            parentId: parentScopeID,
+            includeItemTypes: typeFilter,
+            sortBy: [currentSortFilter.sortBy],
+            sortOrder: currentSortFilter.sortAscending ? [.ascending] : [.descending],
+            genres: genres,
+            years: years,
+            filters: filters,
+            limit: limit,
+            startIndex: startIndex
+        )
+        return (items: result.items, total: result.totalCount)
+    }
+
     private func loadMoreFiltered(using appState: AppState, userId: String) async {
         let currentSortFilter = sortFilter
         let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
         let parentScopeID = parentId
         await filteredLoader.loadMore { startIndex in
-            let genres = currentSortFilter.selectedGenres.isEmpty ? nil : Array(currentSortFilter.selectedGenres)
-            let filters: [ItemFilter]? = currentSortFilter.showUnwatchedOnly ? [.isUnplayed] : nil
-            let years = currentSortFilter.expandedYears
-            let result = try await appState.apiClient.getItems(
-                userId: userId,
-                parentId: parentScopeID,
-                includeItemTypes: typeFilter,
-                sortBy: [currentSortFilter.sortBy],
-                sortOrder: currentSortFilter.sortAscending ? [.ascending] : [.descending],
-                genres: genres,
-                years: years,
-                filters: filters,
-                limit: 40,
-                startIndex: startIndex
+            try await self.fetchFilteredPage(
+                using: appState, userId: userId, sortFilter: currentSortFilter,
+                typeFilter: typeFilter, parentScopeID: parentScopeID,
+                startIndex: startIndex, limit: 40
             )
-            return (items: result.items, total: result.totalCount)
         }
     }
 }

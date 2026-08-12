@@ -14,6 +14,46 @@ struct CardPlayTarget: Sendable, Equatable {
     let startSeconds: Double?
 }
 
+/// A card menu's optimistic mirror of a server-side flag (watched, favourite).
+///
+/// Lives here, next to `isResumable`, because the watched override *modifies*
+/// that rule: the menu's play group has to see the toggle the user just made,
+/// and deriving the label from the override while deriving the play entries
+/// from the raw snapshot is exactly the drift `CardPlayTargetResolver` exists
+/// to prevent.
+///
+/// It carries the server value it was derived from **and** the instant it was
+/// set, and surrenders on either. The `base` check alone was not enough: on a
+/// surface that never refreshes its DTOs (Search observes none of the three
+/// refresh notifications), a server value that returns to `base` — which is
+/// what a playback stop does to a just-marked-watched item — left the override
+/// standing for the lifetime of the view's identity.
+struct OptimisticFlag: Equatable {
+    /// How long an optimistic value outranks the snapshot. It only has to
+    /// bridge the gap until the menu is dismissed and real data arrives; past
+    /// that, server truth is the better answer even on a surface that never
+    /// refreshes.
+    static let lifetime: TimeInterval = 20
+
+    let base: Bool
+    let value: Bool
+    let setAt: Date
+
+    init(base: Bool, value: Bool, setAt: Date = Date()) {
+        self.base = base
+        self.value = value
+        self.setAt = setAt
+    }
+
+    /// The override, or `nil` once it has expired or the server value it was
+    /// derived from has moved on — in which case the caller falls back to
+    /// server truth.
+    func resolved(against serverValue: Bool, now: Date = Date()) -> Bool? {
+        guard now.timeIntervalSince(setAt) < Self.lifetime else { return nil }
+        return base == serverValue ? value : nil
+    }
+}
+
 /// Resolves the play target for a poster card.
 ///
 /// **What this resolver deliberately does NOT do**: pick the episode of a
@@ -120,6 +160,21 @@ enum CardPlayTargetResolver {
     /// rule would drift the first time it gains a condition.
     static func isResumable(positionTicks: Int, isPlayed: Bool) -> Bool {
         positionTicks > 0 && !isPlayed
+    }
+
+    /// The same rule, as the card menu must apply it: an optimistic watched
+    /// override still in force outranks the snapshot's `isPlayed`.
+    ///
+    /// The menu used to derive its watched *label* from the override and its
+    /// *play group* from the raw snapshot, so marking an item watched left
+    /// "Resume" on offer — and it really did open the film mid-way, on an item
+    /// the app had just marked fully played. One rule, one input.
+    static func isResumable(
+        positionTicks: Int, isPlayed: Bool,
+        playedOverride: OptimisticFlag?, now: Date = Date()
+    ) -> Bool {
+        let resolvedIsPlayed = playedOverride?.resolved(against: isPlayed, now: now) ?? isPlayed
+        return isResumable(positionTicks: positionTicks, isPlayed: resolvedIsPlayed)
     }
 
     /// The resume offset in seconds, or `nil` to play from the beginning.

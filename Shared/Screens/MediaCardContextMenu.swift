@@ -117,17 +117,6 @@ private struct CardMenuItem {
 /// from the detail screen left the menu offering "Remove from watched" on an
 /// unwatched item — and acting on it issued a redundant write plus a redundant
 /// notification fan-out.
-private struct OptimisticFlag {
-    let base: Bool
-    let value: Bool
-
-    /// The override, or `nil` once the server value it was derived from has
-    /// moved on — in which case the caller falls back to server truth.
-    func resolved(against serverValue: Bool) -> Bool? {
-        base == serverValue ? value : nil
-    }
-}
-
 private struct MediaCardContextMenu: ViewModifier {
     // Read HERE, in the attached view's own hierarchy, and forwarded onto the
     // menu/preview below. SwiftUI hosts `contextMenu` content in a separate
@@ -249,9 +238,14 @@ private struct CardMenuContent: View {
         // "Play" and "Play from beginning" doesn't show.
         let localResume: Bool = {
             guard item.type == .movie || item.type == .episode else { return false }
+            // The OVERRIDE, not the raw snapshot: marking the item watched in
+            // this very menu must retire "Resume" and "Play from beginning"
+            // along with flipping the label. Locked by
+            // `CardMenuOptimisticStateTests`.
             return CardPlayTargetResolver.isResumable(
                 positionTicks: item.positionTicks,
-                isPlayed: item.isPlayed
+                isPlayed: item.isPlayed,
+                playedOverride: playedOverride
             )
         }()
         // Same presence discipline as the "Play on…" entry below, applied to
@@ -412,9 +406,14 @@ private struct CardMenuContent: View {
         // straight to a `nonisolated` resolver — the extraction that used to
         // happen here (because `BaseItemDto` is not Sendable) now happens once
         // per card at the modifier's entry point instead of once per call.
+        // Same discipline as the play group's label: an optimistic watched
+        // override still in force outranks the snapshot, so a "Resume" the
+        // user has just invalidated can't hand a mid-film offset to the
+        // player — nor to `startRemotePlay`, which routes through here too.
+        let effectiveIsPlayed = playedOverride?.resolved(against: item.isPlayed) ?? item.isPlayed
         return await CardPlayTargetResolver.resolve(
             itemId: id, type: item.type, title: item.name ?? "",
-            positionTicks: item.positionTicks, isPlayed: item.isPlayed,
+            positionTicks: item.positionTicks, isPlayed: effectiveIsPlayed,
             api: appState.apiClient, userId: userId
         )
     }
