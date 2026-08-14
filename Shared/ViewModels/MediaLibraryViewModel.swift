@@ -343,6 +343,30 @@ final class MediaLibraryViewModel {
 
     private(set) var heroPlay: HeroPlay?
 
+    /// Re-derives `heroPlay` against current server state.
+    ///
+    /// `heroPlay` otherwise has exactly one writer — `performLoad`'s side task —
+    /// and nothing revisits it: closing the player posts neither refresh
+    /// notification, and `.task` is latched by `hasLoaded`. So the hero's Play
+    /// button stayed pinned to whatever episode was resolved when the page first
+    /// loaded, at the resume offset it had *then*. Measured on device
+    /// (2026-08-14): after watching episode 2 to 2:02 and closing the player,
+    /// Play on the same hero reopened episode 1 at 0:01 / -23:57.
+    ///
+    /// Callers are the two moments the answer can have moved: the screen
+    /// re-appearing (returning from the player) and a tier-2 userData
+    /// notification. Both fire often, so this stays cheap by construction — it
+    /// is a no-op unless the hero is a series (a movie hero has no episode
+    /// navigation to re-derive, and the Films tab must cost nothing), and
+    /// `getNextUp` / `getSeasons` / `getEpisodes` are all 10 s-cached.
+    ///
+    /// Being a no-op while `heroItem` is still nil is what makes it safe to call
+    /// from `.onAppear` while the initial load is in flight.
+    func refreshHeroNavigation(using appState: AppState) async {
+        guard heroItem?.type == .series else { return }
+        await loadHeroNavigation(using: appState)
+    }
+
     /// Resolves the hero's play target + episode navigation.
     ///
     /// Deliberately a side task after the main load, and **failing silently**,

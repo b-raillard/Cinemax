@@ -8,7 +8,12 @@ struct MediaLibraryScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
-    #if !os(tvOS)
+    #if os(tvOS)
+    // Same reason as `MediaDetailScreen`: the tvOS player is a UIKit modal, so
+    // its dismissal raises no SwiftUI `.onAppear` here — `lastDismissedAt` is
+    // the only signal that a playback just ended.
+    @Environment(VideoPlayerCoordinator.self) private var coordinator
+    #else
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State private var viewModel: MediaLibraryViewModel
@@ -148,13 +153,26 @@ struct MediaLibraryScreen: View {
             if pendingReload {
                 pendingReload = false
                 pendingUserDataRefresh = false // subsumed by the full reload
-                performReload()
-            } else if pendingUserDataRefresh {
-                pendingUserDataRefresh = false
-                performUserDataRefresh()
+                performReload() // re-derives `heroPlay` on its own
+            } else {
+                if pendingUserDataRefresh {
+                    pendingUserDataRefresh = false
+                    performUserDataRefresh()
+                }
+                // Coming back from the player lands here, and on iOS this is the
+                // ONLY signal we get: the player posts neither refresh
+                // notification, and `.task` is latched by `hasLoaded`. Without
+                // this, the hero's Play button kept relaunching the episode
+                // resolved when the page first loaded, at 0:00.
+                refreshHeroNavigation()
             }
         }
         .onDisappear { isVisible = false }
+        #if os(tvOS)
+        .onChange(of: coordinator.lastDismissedAt) { _, _ in
+            refreshHeroNavigation()
+        }
+        #endif
     }
 
     /// Reloads immediately if the tab is visible, otherwise records the intent
@@ -163,23 +181,33 @@ struct MediaLibraryScreen: View {
         if isVisible { performReload() } else { pendingReload = true }
     }
 
-    /// Tier-2 sibling of `reloadOrDefer`.
+    /// Tier-2 sibling of `reloadOrDefer`. Neither branch may flip `isLoading`:
+    /// that swaps the body for `loadingView`, which tears the `ScrollView` down
+    /// and rebuilds it — the user loses their scroll position under their own
+    /// finger, since the notification is raised by this screen's OWN card menu.
     ///
-    /// Falls back to a full reload when nothing has been paged in: that means
-    /// the browse layout (hero + genre rows), which has no paginated span to
-    /// refresh in place, so its previous behaviour is preserved exactly. Only
-    /// the filtered grid — the one surface that could be scrolled deep — takes
-    /// the in-place path.
+    /// Empty paginated span means the browse layout (hero + genre rows). Its
+    /// only userData-dependent piece is the hero's play target: `LibraryPosterCard`
+    /// draws neither a watched badge nor a progress bar, so the full reload this
+    /// used to do refetched the hero and fanned out up to 8 genre rows to change
+    /// zero pixels. The filtered grid takes the in-place span refresh.
     private func refreshUserDataOrDefer() {
         guard isVisible else {
             pendingUserDataRefresh = true
             return
         }
         if viewModel.filteredLoader.items.isEmpty {
-            performReload()
+            refreshHeroNavigation()
         } else {
             performUserDataRefresh()
         }
+    }
+
+    /// Re-derives the hero's play target. Cheap, silent and idempotent — a no-op
+    /// unless the hero is a series, and its probes are 10 s-cached. See
+    /// `MediaLibraryViewModel.refreshHeroNavigation`.
+    private func refreshHeroNavigation() {
+        Task { await viewModel.refreshHeroNavigation(using: appState) }
     }
 
     /// In-place refresh of the filtered grid's loaded span. No prefetch reset:
