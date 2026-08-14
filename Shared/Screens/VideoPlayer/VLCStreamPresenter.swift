@@ -1319,6 +1319,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         statsContainer.backgroundColor = UIColor.black.withAlphaComponent(0.6)
         statsContainer.layer.cornerRadius = 10
         statsContainer.isHidden = true
+        // Same rule as `loadingIndicator` above, and for the same reason: this
+        // is a sibling of `videoView` added after it, so it wins the hit-test,
+        // and `shouldReceive` only admits the player's gestures for
+        // `touch.view === videoView`. Without this the panel was a dead zone —
+        // swipe-down-to-dismiss, tap-to-toggle-the-HUD and hold-to-2× were all
+        // swallowed inside its bounds. It deliberately lives OUTSIDE
+        // `controlsContainer` so it stays readable once the HUD auto-hides,
+        // which is exactly what made the dead zone outlive the 4 s fade.
+        statsContainer.isUserInteractionEnabled = false
         statsLabel.translatesAutoresizingMaskIntoConstraints = false
         statsLabel.numberOfLines = 0
         statsLabel.textColor = .white

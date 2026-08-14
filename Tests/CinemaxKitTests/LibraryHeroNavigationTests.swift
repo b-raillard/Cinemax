@@ -25,13 +25,23 @@ import CinemaxKit
 /// Free (non-isolated) helpers so the `@Sendable` `MockAPIClient` handler
 /// closures can call them without an `await` — same reason as
 /// `FavoritesViewModelTests`.
-private func makeHeroEpisode(id: String, index: Int, seasonId: String) -> BaseItemDto {
+private func makeHeroEpisode(
+    id: String,
+    index: Int,
+    seasonId: String,
+    positionTicks: Int = 0,
+    isPlayed: Bool = false
+) -> BaseItemDto {
     var ep = BaseItemDto()
     ep.id = id
     ep.name = "Épisode \(index)"
     ep.indexNumber = index
     ep.seasonID = seasonId
     ep.seriesID = "series1"
+    var data = UserItemDataDto()
+    data.playbackPositionTicks = positionTicks
+    data.isPlayed = isPlayed
+    ep.userData = data
     return ep
 }
 
@@ -161,5 +171,94 @@ struct LibraryHeroNavigationTests {
         let error = vm.errorMessage
         #expect(play == nil)
         #expect(error == nil, "une sonde ratée ne doit pas remplacer le héros par une erreur")
+    }
+
+    // MARK: - Re-dérivation après lecture (recette adversariale du 2026-08-14)
+
+    /// `heroPlay` n'avait qu'un seul écrivain — la tâche annexe de
+    /// `performLoad` — et rien ne le revisitait : la fermeture du lecteur ne
+    /// poste aucune des deux notifications de rafraîchissement, et `.task` est
+    /// verrouillée par `hasLoaded`. Mesuré sur appareil : après avoir regardé
+    /// l'épisode 2 jusqu'à 2:02 puis fermé le lecteur, « Lecture » sur le même
+    /// héros rouvrait l'épisode 1 à 0:01 / -23:57.
+
+    @Test("Retour sur l'écran : la cible du héros suit le next-up qui a bougé")
+    func heroTargetFollowsMovedNextUp() async {
+        let api = MockAPIClient()
+        api.stubbedNextUp = makeHeroEpisode(id: "ep2", index: 2, seasonId: "s1")
+        api.getEpisodesHandler = { _ in makeHeroSeason() }
+
+        let vm = MediaLibraryViewModel(itemType: .series)
+        vm.heroItem = makeSeriesHeroItem()
+        let appState = makeAppState(api: api)
+        await vm.loadHeroNavigation(using: appState)
+        #expect(vm.heroPlay?.itemId == "ep2", "état de départ")
+
+        // L'utilisateur regarde l'épisode 2 en entier : le serveur avance son
+        // next-up sur l'épisode 3.
+        api.stubbedNextUp = makeHeroEpisode(id: "ep3", index: 3, seasonId: "s1")
+        await vm.refreshHeroNavigation(using: appState)
+
+        let play = vm.heroPlay
+        #expect(play?.itemId == "ep3", "la cible du héros doit suivre le next-up, pas rester figée au chargement de la page")
+        #expect(play?.previous?.id == "ep2")
+        #expect(play?.next == nil)
+    }
+
+    @Test("Retour sur l'écran : la position de reprise du héros est réactualisée")
+    func heroResumeOffsetIsRefreshed() async {
+        let api = MockAPIClient()
+        api.stubbedNextUp = makeHeroEpisode(id: "ep2", index: 2, seasonId: "s1")
+        api.getEpisodesHandler = { _ in makeHeroSeason() }
+
+        let vm = MediaLibraryViewModel(itemType: .series)
+        vm.heroItem = makeSeriesHeroItem()
+        let appState = makeAppState(api: api)
+        await vm.loadHeroNavigation(using: appState)
+        #expect(vm.heroPlay?.startSeconds == nil, "épisode vierge : aucune reprise")
+
+        // 2 min 02 de visionnage sur ce même épisode.
+        api.getEpisodesHandler = { _ in
+            [makeHeroEpisode(id: "ep1", index: 1, seasonId: "s1"),
+             makeHeroEpisode(id: "ep2", index: 2, seasonId: "s1", positionTicks: 1_220_000_000),
+             makeHeroEpisode(id: "ep3", index: 3, seasonId: "s1")]
+        }
+        await vm.refreshHeroNavigation(using: appState)
+
+        #expect(vm.heroPlay?.itemId == "ep2")
+        #expect(vm.heroPlay?.startSeconds == 122, "la relance doit reprendre où l'on s'est arrêté, pas repartir à 0:00")
+    }
+
+    @Test("Sans héros chargé, la re-dérivation ne sonde rien")
+    func refreshWithoutHeroDoesNotProbe() async {
+        // Appelée depuis `.onAppear`, elle peut partir pendant que le premier
+        // chargement est encore en vol : elle doit alors être un pur no-op.
+        let api = MockAPIClient()
+        let vm = MediaLibraryViewModel(itemType: .series)
+
+        await vm.refreshHeroNavigation(using: makeAppState(api: api))
+
+        let nextUpCalls = api.getNextUpCallCount
+        #expect(nextUpCalls == 0)
+        #expect(vm.heroPlay == nil)
+    }
+
+    @Test("Héros film : la re-dérivation ne sonde rien")
+    func refreshOnMovieHeroDoesNotProbe() async {
+        // L'onglet Films appelle le même point d'entrée à chaque retour sur
+        // l'écran : il ne doit rien coûter.
+        let api = MockAPIClient()
+        var movie = BaseItemDto()
+        movie.id = "m1"
+        movie.type = .movie
+
+        let vm = MediaLibraryViewModel(itemType: .movie)
+        vm.heroItem = movie
+        await vm.refreshHeroNavigation(using: makeAppState(api: api))
+
+        let nextUpCalls = api.getNextUpCallCount
+        let episodeCalls = api.getEpisodesCallCount
+        #expect(nextUpCalls == 0)
+        #expect(episodeCalls == 0)
     }
 }
