@@ -76,8 +76,4 @@ struct MenuSettingsScreen: View {
     var activeEntries: [MenuEntry] {
         store.customKind == .contentType ? store.contentTypeEntries : store.libraryEntries
     }
-
-    var enabledCount: Int {
-        activeEntries.filter { $0.enabled }.count
-    }
 }
