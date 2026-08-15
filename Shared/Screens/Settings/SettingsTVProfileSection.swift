@@ -23,7 +23,24 @@ extension SettingsScreen {
         } else {
             users = serverUsers
         }
-        return users.sorted { a, _ in a.id == currentUserId }
+        // Signed-in user first, everyone else in the order the server gave.
+        //
+        // This was `users.sorted { a, _ in a.id == currentUserId }`, which is
+        // NOT a strict weak ordering: it ignores its right operand, so it
+        // answers `true` for `(a, a)` whenever `a` is the current user, which
+        // breaks irreflexivity. `sorted(by:)` documents its output as
+        // unspecified for such a predicate — the current user was not reliably
+        // first, and the relative order of the others was arbitrary and free to
+        // shift between two evaluations of this very property. A move-to-front
+        // states the intent directly, is O(n), and is stable for the rest, so
+        // the grid stops reshuffling under the focus engine.
+        guard let currentIndex = users.firstIndex(where: { $0.id == currentUserId }) else {
+            return users
+        }
+        var ordered = users
+        let current = ordered.remove(at: currentIndex)
+        ordered.insert(current, at: 0)
+        return ordered
     }
 
     var tvProfileSection: some View {
