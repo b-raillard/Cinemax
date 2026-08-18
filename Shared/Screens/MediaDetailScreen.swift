@@ -1416,14 +1416,6 @@ struct MediaDetailScreen: View {
         #endif
     }
 
-    private var actionButtonSpacing: CGFloat {
-        #if os(tvOS)
-        CinemaSpacing.spacing5
-        #else
-        12
-        #endif
-    }
-
     private var playButtonWidth: CGFloat {
         #if os(tvOS)
         240

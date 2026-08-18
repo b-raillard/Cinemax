@@ -234,10 +234,6 @@ struct SettingsScreen: View {
         appState.keychain.getUserSession()?.username ?? "User"
     }
 
-    var userInitial: String {
-        String(username.prefix(1)).uppercased()
-    }
-
     var serverName: String {
         appState.serverInfo?.name ?? "Jellyfin Server"
     }

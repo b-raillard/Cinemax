@@ -49,7 +49,6 @@ final class MetadataEditorViewModel {
 
     // Cast
     var editingPerson: BaseItemPerson?
-    var pendingPersonDelete: Int?
 
     // Identify — full flow state lives on the shared `IdentifyFlowModel` so
     // the standalone `IdentifyScreen` and this tab stay feature-identical.

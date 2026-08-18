@@ -101,8 +101,6 @@ final class AppState {
     // Stored so it is only rebuilt when serverURL changes, not on every access.
     var imageBuilder = ImageURLBuilder(serverURL: AppState.placeholderServerURL)
 
-    var imageServerURL: URL { serverURL ?? Self.placeholderServerURL }
-
     /// Hydrates auth state from the keychain. Network probes (server info,
     /// admin flag) are dispatched in the background so the UI doesn't wait
     /// on them — important when the user launches the app offline, where

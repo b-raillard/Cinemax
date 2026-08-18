@@ -32,7 +32,6 @@ final class AdminUserDetailViewModel {
     // vice versa).
     var newPassword: String = ""
     var confirmPassword: String = ""
-    var resetPasswordAtNextLogin: Bool = false
 
     var selectedTab: AdminUserDetailTab = .profile
     var isSaving = false

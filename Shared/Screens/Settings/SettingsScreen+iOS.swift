@@ -560,12 +560,18 @@ extension SettingsScreen {
     // MARK: - iOS Reusable Components
 
     var profileHeader: some View {
-        HStack(spacing: CinemaSpacing.spacing4) {
-            profileAvatar
+        // One keychain read for the whole header. `username` is not a stored
+        // value — every access is a `SecItemCopyMatching` round-trip to
+        // securityd plus a `JSONDecoder` init and decode — and this header
+        // paid it twice per body pass: once for the label, once more inside
+        // `profileAvatar`. Read it once here and thread it down.
+        let name = username
+        return HStack(spacing: CinemaSpacing.spacing4) {
+            profileAvatar(name: name)
                 .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
-                Text(username)
+                Text(name)
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurface)
 
@@ -583,15 +589,18 @@ extension SettingsScreen {
     /// Account avatar. Renders the Jellyfin primary image for the signed-in
     /// user when available, with an accent gradient + initial underneath as
     /// the fallback (covers "no image set" and offline cases uniformly).
+    /// Takes the display name as a parameter rather than re-reading `username`:
+    /// its only caller (`profileHeader`) already resolved it, and that property
+    /// hits the keychain on every access.
     @ViewBuilder
-    var profileAvatar: some View {
+    func profileAvatar(name: String) -> some View {
         // `appState.currentUser` is hydrated by `refreshCurrentUser()` via
         // `getUserByID` for every account — unlike `getUsers()` which is
         // admin-only and 401s for regular users (the avatar silently never
         // rendered for them when this fetched its own copy).
         UserAvatar(
             userId: appState.currentUserId,
-            name: username,
+            name: name,
             primaryImageTag: appState.currentUser?.primaryImageTag,
             size: 56
         )

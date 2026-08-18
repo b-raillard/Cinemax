@@ -100,8 +100,14 @@ enum LibrarySearchRanker {
         }
 
         guard !queryWords.isEmpty else { return 0 }
-        let titleWords = Set(normalized.split(separator: " ").map(String.init))
-        let present = queryWords.filter { titleWords.contains($0) || normalized.contains($0) }
+        // Substring test only: `normalized` is its own words joined by single
+        // spaces, so a whole-word hit is *always* also a substring hit — a
+        // word-set membership check could never accept anything this doesn't.
+        // Building that set cost a split + a String allocation + a hash per
+        // title word, on every candidate and for both title fields, i.e. the
+        // per-keystroke bulk of ranking, for a branch that never changed the
+        // answer.
+        let present = queryWords.filter { normalized.contains($0) }
         guard !present.isEmpty else { return 0 }
 
         // Tier 2 — every query word present but separated; Tier 3 — only some.
