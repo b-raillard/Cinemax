@@ -116,7 +116,7 @@ struct MediaDetailScreen: View {
         }
         #endif
         .task {
-            await viewModel.load(using: appState, loc: loc, cardActions: cardActions)
+            await viewModel.loadInitial(using: appState, loc: loc, cardActions: cardActions)
             // After the load, so the series → next-up resolution and the resume
             // position the request needs are already in place. Runs on BOTH
             // platforms: App Intents are iOS-only, but an inbound remote-control
@@ -124,13 +124,19 @@ struct MediaDetailScreen: View {
             // primary target.
             consumeIntentPlaybackRequest()
         }
-        #if os(tvOS)
-        .onChange(of: coordinator.lastDismissedAt) { _, _ in
-            // Targeted refresh (userData / episodes / next-up) — no full reload,
-            // no spinner flash. See `MediaDetailViewModel.refreshAfterPlayback`.
+        // One signal, both platforms. Playback announces its own userData change
+        // (`PlaybackReporter.reportStop`), so this screen no longer needs a
+        // platform-specific hook — it used to observe `lastDismissedAt` on tvOS
+        // and rely on `.task` re-running on pop for iOS, which is exactly the
+        // asymmetry that left `HomeScreen` with no hook at all.
+        //
+        // Targeted refresh (userData / episodes / next-up) — no full reload, no
+        // spinner flash. See `MediaDetailViewModel.refreshAfterPlayback`.
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { note in
+            // Skip our own toggles: they already refreshed what they changed.
+            guard (note.object as AnyObject?) !== viewModel else { return }
             Task { await viewModel.refreshAfterPlayback(using: appState) }
         }
-        #endif
         .sheet(item: $episodeOverview) { ep in
             EpisodeOverviewSheet(item: ep)
                 .environment(themeManager)

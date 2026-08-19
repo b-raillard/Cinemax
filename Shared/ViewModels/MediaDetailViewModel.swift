@@ -81,6 +81,30 @@ final class MediaDetailViewModel {
         self.itemType = itemType
     }
 
+    /// Whether a clean load has already populated this screen. Same latch as
+    /// `HomeViewModel` / `MediaLibraryViewModel`, and it exists for the same
+    /// reason here: SwiftUI re-runs `.task` when the screen reappears after the
+    /// player is popped on iOS.
+    private var hasLoaded = false
+
+    /// First load. Idempotent — safe to call from `.task` on every appearance.
+    ///
+    /// Without the latch the reappearance re-ran the FULL `load()`: measured on
+    /// device 2026-08-19, it fired 39 ms before the targeted post-playback
+    /// refresh, flipping `isLoading` (which swaps the body for the spinner and
+    /// drops the user's scroll position) and re-fetching seasons, episodes,
+    /// similar titles and remote targets to display what the targeted refresh
+    /// was about to fetch properly. Playback now announces its own userData
+    /// change, so a reappearance needs no reload at all — the tier-2 observer
+    /// does the small, correct amount of work.
+    ///
+    /// A failed load leaves the latch clear so the next appearance (or Retry)
+    /// tries again.
+    func loadInitial(using appState: AppState, loc: LocalizationManager, cardActions: CardActionPresenter? = nil) async {
+        if hasLoaded { return }
+        await load(using: appState, loc: loc, cardActions: cardActions)
+    }
+
     func load(using appState: AppState, loc: LocalizationManager, cardActions: CardActionPresenter? = nil) async {
         guard let userId = appState.currentUserId else { return }
         loadGeneration += 1
@@ -135,6 +159,7 @@ final class MediaDetailViewModel {
         // sendable, so there's no type guard here.
         Task { await loadRemoteTargets(using: appState, cardActions: cardActions) }
 
+        hasLoaded = errorMessage == nil
         isLoading = false
     }
 
@@ -252,7 +277,11 @@ final class MediaDetailViewModel {
             } else {
                 try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             }
-            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
+            // `object: self` identifies the sender so this screen's own tier-2
+            // observer can skip it: these toggles already refresh exactly what
+            // they changed, and re-entering `refreshAfterPlayback` here would
+            // spend three requests re-reading what we just wrote.
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: self)
             if resolvedType == .series {
                 await refreshVisibleEpisodes(seriesId: id, using: appState)
             }
@@ -282,7 +311,7 @@ final class MediaDetailViewModel {
         do {
             try await appState.apiClient.markItemPlayed(itemId: seasonId, userId: userId)
             toast.success(loc.localized("detail.season.markedWatched"))
-            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: self)
             await refreshVisibleEpisodes(seriesId: seriesId, using: appState)
         } catch {
             logger.error("Season mark-watched failed: \(error.localizedDescription, privacy: .public)")
@@ -304,7 +333,7 @@ final class MediaDetailViewModel {
             } else {
                 try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             }
-            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: self)
         } catch {
             logger.error("Episode watched toggle failed: \(error.localizedDescription, privacy: .public)")
             setEpisodePlayed(id: id, played: !target)

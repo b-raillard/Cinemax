@@ -21,10 +21,6 @@ final class VideoPlayerCoordinator {
     @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
 
     var localizationManager: LocalizationManager?
-    /// Updated each time a playback session ends (player dismissed). MediaDetailScreen
-    /// observes this to refresh its content after the user returns from the player.
-    var lastDismissedAt: Date?
-
     /// Retained so the presenter isn't deallocated during playback.
     private var presenter: NativeVideoPresenter?
     /// VLC engine presenter (default online path). Same lifetime contract.
@@ -84,7 +80,6 @@ final class VideoPlayerCoordinator {
                         onDismiss: { [weak self] in
                             guard let self, self.currentGeneration == generation else { return }
                             self.vlcPresenter = nil
-                            self.lastDismissedAt = Date()
                         }
                     )
                     guard self.currentGeneration == generation else { return }
@@ -103,7 +98,6 @@ final class VideoPlayerCoordinator {
                     onDismiss: { [weak self] in
                         guard let self, self.currentGeneration == generation else { return }
                         self.presenter = nil
-                        self.lastDismissedAt = Date()
                     }
                 )
                 guard self.currentGeneration == generation else { return }

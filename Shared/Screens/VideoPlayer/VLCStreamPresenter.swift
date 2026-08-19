@@ -2695,7 +2695,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard let navigator = episodeNavigator else { return }
         navGeneration += 1
         let gen = navGeneration
-        reporter?.reportStop()
+        reporter?.reportStop(reason: .episodeSwap)
         progressTimer?.invalidate()
         Task { [weak self] in
             guard let self else { return }

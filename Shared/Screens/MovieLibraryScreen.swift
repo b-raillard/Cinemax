@@ -8,12 +8,7 @@ struct MediaLibraryScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
-    #if os(tvOS)
-    // Same reason as `MediaDetailScreen`: the tvOS player is a UIKit modal, so
-    // its dismissal raises no SwiftUI `.onAppear` here — `lastDismissedAt` is
-    // the only signal that a playback just ended.
-    @Environment(VideoPlayerCoordinator.self) private var coordinator
-    #else
+    #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State private var viewModel: MediaLibraryViewModel
@@ -154,25 +149,12 @@ struct MediaLibraryScreen: View {
                 pendingReload = false
                 pendingUserDataRefresh = false // subsumed by the full reload
                 performReload() // re-derives `heroPlay` on its own
-            } else {
-                if pendingUserDataRefresh {
-                    pendingUserDataRefresh = false
-                    performUserDataRefresh()
-                }
-                // Coming back from the player lands here, and on iOS this is the
-                // ONLY signal we get: the player posts neither refresh
-                // notification, and `.task` is latched by `hasLoaded`. Without
-                // this, the hero's Play button kept relaunching the episode
-                // resolved when the page first loaded, at 0:00.
-                refreshHeroNavigation()
+            } else if pendingUserDataRefresh {
+                pendingUserDataRefresh = false
+                performUserDataRefresh()
             }
         }
         .onDisappear { isVisible = false }
-        #if os(tvOS)
-        .onChange(of: coordinator.lastDismissedAt) { _, _ in
-            refreshHeroNavigation()
-        }
-        #endif
     }
 
     /// Reloads immediately if the tab is visible, otherwise records the intent
@@ -196,11 +178,7 @@ struct MediaLibraryScreen: View {
             pendingUserDataRefresh = true
             return
         }
-        if viewModel.filteredLoader.items.isEmpty {
-            refreshHeroNavigation()
-        } else {
-            performUserDataRefresh()
-        }
+        performUserDataRefresh()
     }
 
     /// Re-derives the hero's play target. Cheap, silent and idempotent — a no-op
@@ -210,11 +188,27 @@ struct MediaLibraryScreen: View {
         Task { await viewModel.refreshHeroNavigation(using: appState) }
     }
 
-    /// In-place refresh of the filtered grid's loaded span. No prefetch reset:
-    /// item identity is preserved, so the posters already warmed stay valid.
+    /// The tier-2 refresh itself, and the SOLE owner of the browse-vs-grid split.
+    ///
+    /// Both entry points funnel here — the immediate one and the deferred one
+    /// consumed by `.onAppear` — precisely so they cannot diverge. They did: the
+    /// deferred path used to run the span refresh unconditionally, which is a
+    /// silent no-op in browse layout (empty paginated span), so a tier-2 event
+    /// that arrived while the tab was hidden left the hero stale.
+    ///
+    /// Neither branch may flip `isLoading`: that swaps the body for
+    /// `loadingView`, tearing the `ScrollView` down and dropping the user's
+    /// scroll position.
     private func performUserDataRefresh() {
-        Task {
-            await viewModel.refreshUserData(using: appState)
+        if viewModel.filteredLoader.items.isEmpty {
+            // Browse layout: the only userData-dependent piece is the hero's
+            // play target — `LibraryPosterCard` draws neither a watched badge
+            // nor a progress bar.
+            refreshHeroNavigation()
+        } else {
+            // Filtered grid: refresh the loaded span in place. No prefetch reset
+            // — item identity is preserved, so warmed posters stay valid.
+            Task { await viewModel.refreshUserData(using: appState) }
         }
     }
 

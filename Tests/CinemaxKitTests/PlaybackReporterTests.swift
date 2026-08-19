@@ -332,9 +332,87 @@ struct PlaybackReporterTests {
         }
         #expect(mock.lastStopTicks == 420_000_000)
     }
+
+    // MARK: - Annonce du changement de données utilisateur
+
+    /// Verrouille le correctif du Home périmé : la lecture était le seul
+    /// producteur de changement de données utilisateur qui n'annonçait rien, si
+    /// bien que l'Accueil affichait encore « 1h 44m restantes » après une
+    /// lecture qui avait ramené le film à 1h 43m (mesuré sur appareil le
+    /// 2026-08-14, ligne « Reprendre »).
+
+    @Test("Fin de session : l'annonce part APRÈS le rapport au serveur")
+    func sessionEndAnnouncesAfterServerReport() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+        )
+        let witness = NotificationWitness()
+        let token = NotificationCenter.default.addObserver(
+            forName: .cinemaxItemUserDataChanged, object: nil, queue: nil
+        ) { [mock] _ in
+            witness.record(stopCountAtPost: mock.stopCount)
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        reporter.reportStop()
+        for _ in 0..<200 where witness.count == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(witness.count == 1, "une fin de session doit annoncer exactement une fois")
+        // Le cœur du test : annoncer AVANT que le serveur ait enregistré la
+        // position ferait relire l'ancienne valeur à tous les consommateurs —
+        // le bug que cette notification existe pour corriger, en intermittent.
+        #expect(witness.stopCountAtPost == 1, "l'annonce doit suivre reportPlaybackStopped, pas le précéder")
+    }
+
+    @Test("Changement d'épisode : aucune annonce")
+    func episodeSwapStaysSilent() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+        )
+        let witness = NotificationWitness()
+        let token = NotificationCenter.default.addObserver(
+            forName: .cinemaxItemUserDataChanged, object: nil, queue: nil
+        ) { _ in witness.record(stopCountAtPost: 0) }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        reporter.reportStop(reason: .episodeSwap)
+        // Attendre que le rapport serveur soit parti, pour que l'absence
+        // d'annonce soit un vrai constat et pas une course gagnée de justesse.
+        for _ in 0..<200 where mock.stopCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(mock.stopCount == 1, "le serveur doit tout de même recevoir le stop")
+        #expect(witness.count == 0, "on regarde encore : rafraîchir les rails ici coûterait une salve par épisode")
+    }
 }
 
 // MARK: - Test helpers
+
+/// Enregistre les notifications reçues et l'état du serveur À L'INSTANT du post,
+/// ce qui est la seule façon d'observer l'ordonnancement depuis un test.
+private final class NotificationWitness: @unchecked Sendable {
+    private let lock = NSLock()
+    private var received = 0
+    private var stopCount = 0
+
+    func record(stopCountAtPost: Int) {
+        lock.lock(); defer { lock.unlock() }
+        received += 1
+        stopCount = stopCountAtPost
+    }
+
+    var count: Int { lock.lock(); defer { lock.unlock() }; return received }
+    var stopCountAtPost: Int { lock.lock(); defer { lock.unlock() }; return stopCount }
+}
+
 
 /// Minimal `PlaybackAPI` conformance that counts calls. Uses
 /// `OSAllocatedUnfairLock` because it's async-safe (unlike `NSLock.lock/unlock`
