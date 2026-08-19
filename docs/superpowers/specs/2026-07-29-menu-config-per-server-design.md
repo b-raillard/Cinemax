@@ -90,12 +90,12 @@ Nothing needs saving before switching: the active profile is already written on 
 `persistContentTypeEntries()`, `persistLibraryEntries()` and `persistAvailableViews()` collapse into a single:
 
 ```swift
-private func persistActiveProfile()   // no-op when activeProfileId == nil
+private func persistActiveProfile()   // falls back to the legacy keys when activeProfileId == nil
 ```
 
 which snapshots the five properties into `profiles[activeProfileId]` and writes the whole dict under `SettingsKey.menuProfiles`. `setMode` / `setCustomKind` call it instead of their inline `Self.persist(...)`. `toggleInternal`'s `persist: () -> Void` parameter disappears — there is one persist path now, so the closure only carried duplication.
 
-`init` no longer reads the five legacy keys; it decodes `menu.profiles` (empty dict on failure or absence) and seeds the observable properties from `MenuProfile.factoryDefault`. Nothing renders the menu before activation (`MainTabView` is behind `hasCheckedSession && isAuthenticated`), so there is no wrong-menu flash and no need to mirror a "last active id" for `init`.
+`init` decodes `menu.profiles` (empty dict on failure or absence) and seeds the observable properties from the legacy global menu when one exists, else `MenuProfile.factoryDefault` — see *No active profile* below for why the legacy keys are still read. Nothing renders the menu before activation (`MainTabView` is behind `hasCheckedSession && isAuthenticated`), so there is no wrong-menu flash and no need to mirror a "last active id" for `init`.
 
 ### Migration
 
@@ -122,7 +122,7 @@ Concretely:
 - **New observer** (declared before the other two):
   `menuConfig.activate(serverId: newId, knownServerIds: Set(appState.servers.map(\.id)))`.
 - **`serverURL` observer**: `menuConfig.invalidateViews()` is removed; only the `StreamTransportPolicy.shared.configure(serverURL:)` call remains.
-- **`.task`**: `menuConfig.activate(...)` immediately after `await appState.restoreSession()` and **before** `hasCheckedSession = true`, next to the existing `menuConfig.attach(...)`. `restoreSession` calls `loadServersFromKeychain()` first, so both `activeServerId` and `servers` are populated by then.
+- **`.task`**: `menuConfig.activate(...)` immediately after `await appState.restoreSession()`, next to the existing `menuConfig.attach(...)`. `restoreSession` calls `loadServersFromKeychain()` first, so both `activeServerId` and `servers` are populated by then. It sits *after* `hasCheckedSession = true` but in the **same main-actor slice** — no `await` separates them, so SwiftUI coalesces the whole block into one render and the bar is never shown before its profile is loaded. Inserting an `await` between them breaks that.
 - **`invalidateViews()` is deleted.** Each profile carries its own `availableViews`, so there is nothing left to invalidate on a switch. The `currentUserId` observer stays the single owner of `refreshAvailableViews()`.
 
 ### `MainTabView` (tvOS)
@@ -148,7 +148,7 @@ Profiles of removed servers are collected on the next `activate(...)`. `AppState
 | `menu.profiles` missing or undecodable | empty dict → factory defaults; migration seed still applies |
 | No profile for the activated server | factory defaults |
 | `knownServerIds` empty | prune skipped, profile still loaded |
-| `activeProfileId == nil` (never activated / signed out) | mutators mutate in memory, `persistActiveProfile()` no-ops |
+| `activeProfileId == nil` (never activated / registry unavailable) | the store reads **and** writes the legacy global keys — exactly the pre-profiles behaviour; the first `activate` then adopts them (see *No active profile*) |
 | Resolution comes up empty | unchanged: `computeResolvedTabs()` falls back to the canonical 5 — a black tab bar stays impossible |
 | Two accounts on one server | share the profile; `mergeLibraryEntries` drops libraries the new account cannot see |
 
@@ -176,6 +176,13 @@ Run the full suite (`-only-testing` silently runs zero swift-testing tests) and 
 - `CLAUDE.md` → Multi-server "Out of scope, deliberately": the menu is no longer global; only accent/theme/rating cap remain.
 - `CLAUDE.md` → *Custom menu / dynamic tabs*: the invalidate-before-refresh RULE becomes activate-before-refresh; `invalidateViews()` no longer exists; note that profiles are keyed by server id, shared across accounts of that server.
 - `CLAUDE.md` → `@AppStorage` table: add `menu.profiles`; mark the five `menu.*` keys as migration-only.
+
+## No active profile
+
+`activate` only ever sets `activeProfileId` from a non-nil server id, and `activate(nil)` returns early without clearing it — so `activeProfileId` is nil only *before* the first successful activation. That state is reachable **while signed in**: `migrateToMultiServerIfNeeded` returns early when its `saveServers` write throws, so `getActiveServerId()` stays nil while the legacy mirror still restores a session. The menu editor is reachable there, and per-server profiles have nothing to key on.
+
+Rather than add a second storage namespace, the store degrades to **exactly its pre-profiles behaviour** in that state: `init` seeds from `legacyProfileSeed()`, and `persistActiveProfile()` writes the same legacy global keys. Both halves are needed — writing without reading would still show the factory-default menu, and reading without writing would still lose the edit. Because the fallback destination is the very key `legacyProfileSeed()` reads, an edit made in this state round-trips through `init` and is adopted by the first server that activates, through the existing one-shot migration. Nothing changes on the healthy path: once a profile is active it stays active for the process, so the fallback is unreachable there.
+
 
 ## Out of scope
 

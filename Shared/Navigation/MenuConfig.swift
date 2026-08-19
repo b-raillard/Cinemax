@@ -93,7 +93,7 @@ struct MenuProfile: Codable, Equatable {
     /// What a newly added server starts from. Deliberately NOT inherited from
     /// the server the user is currently on: library entries can't transfer, and
     /// a half-inherited menu is harder to explain than a clean default.
-    static let factoryDefault = MenuProfile(
+    static let factoryDefault = Self(
         mode: .default,
         customKind: .contentType,
         contentTypeEntries: MenuConfigStore.defaultContentTypeEntries,
@@ -215,13 +215,18 @@ final class MenuConfigStore {
     /// Loads the profile dictionary but NOT any particular profile: which
     /// server is active is `AppState`'s answer, and it isn't known this early
     /// (`restoreSession` reads it from the Keychain inside `AppNavigation`'s
-    /// `.task`). The observable properties therefore start at factory defaults
-    /// and `activate(serverId:knownServerIds:)` swaps the real profile in
+    /// `.task`). `activate(serverId:knownServerIds:)` swaps the real profile in
     /// before `MainTabView` ever renders — nothing displays the menu until
     /// `hasCheckedSession && isAuthenticated`.
+    ///
+    /// The seed is the legacy global menu when one exists, NOT the factory
+    /// default: if the registry never resolves an active server (see
+    /// `persistActiveProfile`), this seed is the menu the user keeps looking
+    /// at, and showing them the factory default instead would be a visible
+    /// regression against the pre-profiles behaviour.
     init() {
         self.profiles = Self.load([String: MenuProfile].self, forKey: SettingsKey.menuProfiles) ?? [:]
-        let seed = MenuProfile.factoryDefault
+        let seed = Self.legacyProfileSeed() ?? MenuProfile.factoryDefault
         self.mode = seed.mode
         self.customKind = seed.customKind
         self.contentTypeEntries = seed.contentTypeEntries
@@ -475,11 +480,21 @@ final class MenuConfigStore {
     // MARK: - Persistence (explicit)
 
     /// Writes the working copy back into the active server's profile. The ONLY
-    /// persistence path — every mutator ends with it. A no-op while no profile
-    /// is active: nothing renders or edits the menu before `activate`, and a
-    /// nil-keyed write would have no server to belong to.
+    /// persistence path — every mutator ends with it. While no profile is
+    /// active it falls back to the legacy global keys rather than dropping the
+    /// write; see the guard below.
     private func persistActiveProfile() {
-        guard let activeProfileId else { return }
+        guard let activeProfileId else {
+            // No server to key on. This is reachable while signed in — the
+            // multi-server migration returns early when its Keychain write
+            // throws, leaving `getActiveServerId()` nil while the legacy
+            // mirror still restores a session — and dropping the write there
+            // would lose the edit silently. Fall back to the legacy global
+            // keys, i.e. exactly the pre-profiles behaviour, which `init`
+            // reads back and which the first `activate` then adopts.
+            persistLegacyFallback()
+            return
+        }
         profiles[activeProfileId] = MenuProfile(
             mode: mode,
             customKind: customKind,
@@ -492,6 +507,19 @@ final class MenuConfigStore {
 
     private func persistProfiles() {
         Self.persist(profiles, forKey: SettingsKey.menuProfiles)
+    }
+
+    /// Writes the working copy to the legacy global keys — the store's only
+    /// destination while no profile is active. Deliberately the SAME keys
+    /// `legacyProfileSeed()` reads, so the value round-trips through `init`
+    /// and is adopted by the first server that activates.
+    private func persistLegacyFallback() {
+        let defaults = UserDefaults.standard
+        defaults.set(mode.rawValue, forKey: SettingsKey.menuMode)
+        defaults.set(customKind.rawValue, forKey: SettingsKey.menuCustomKind)
+        Self.persist(contentTypeEntries, forKey: SettingsKey.menuContentTypeEntries)
+        Self.persist(libraryEntries, forKey: SettingsKey.menuLibraryEntries)
+        Self.persist(availableViews, forKey: SettingsKey.menuCachedViews)
     }
 
     /// Restore factory defaults for the ACTIVE server only (mode + both entry

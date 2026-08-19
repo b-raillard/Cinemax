@@ -924,9 +924,12 @@ struct AppNavigation: View {
             // switch) — `restoreSession` has already set `currentUserId` by
             // now, so the cold-restore case fires through that observer.
             menuConfig.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
-            // Load the restored server's menu profile BEFORE `hasCheckedSession`
-            // flips — `MainTabView` renders off `resolvedTabs`, so activating
-            // after that point would flash the factory-default tab bar.
+            // Load the restored server's menu profile in the SAME main-actor
+            // slice as `hasCheckedSession = true` above — there is no `await`
+            // between the two, so SwiftUI coalesces them into one render and
+            // `MainTabView` never paints a menu the user hasn't configured.
+            // RULE: keep it that way. Inserting an `await` between them makes
+            // the tab bar visible before its profile is loaded.
             // `restoreSession` has already hydrated the registry, so both the
             // active id and the known ids are available here.
             menuConfig.activate(serverId: appState.activeServerId,

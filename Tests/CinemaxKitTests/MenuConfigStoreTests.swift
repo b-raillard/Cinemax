@@ -520,6 +520,63 @@ struct MenuConfigStoreTests {
         #expect(store.libraryEntries.isEmpty)
     }
 
+    // MARK: - No active profile (registry unavailable)
+
+    /// `activeProfileId` stays nil whenever the registry can't say which server
+    /// we are on: `migrateToMultiServerIfNeeded` returns early when its Keychain
+    /// write throws, so `getActiveServerId()` is nil while the legacy mirror
+    /// still restores a session. The user is signed in and the menu editor is
+    /// reachable, but per-server profiles have nothing to key on. The store must
+    /// then degrade to EXACTLY its pre-profiles behaviour — read *and* write the
+    /// legacy global keys — so a menu is never shown wrong nor silently lost.
+
+    @Test("with no active profile, the store shows the legacy global menu, not factory defaults")
+    func noActiveProfileReadsLegacyKeys() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        let legacyEntries: [MenuEntry] = [
+            .init(id: MenuEntry.homeID, enabled: true),
+            .init(id: MenuEntry.libraryID(viewId: "v1"), enabled: true),
+            .init(id: MenuEntry.settingsID, enabled: true)
+        ]
+        let defaults = UserDefaults.standard
+        defaults.set("custom", forKey: SettingsKey.menuMode)
+        defaults.set("library", forKey: SettingsKey.menuCustomKind)
+        if let data = try? JSONEncoder().encode(legacyEntries) {
+            defaults.set(data, forKey: SettingsKey.menuLibraryEntries)
+        }
+
+        // No `activate(...)`: the registry never resolved an active server.
+        let store = MenuConfigStore()
+
+        #expect(store.activeProfileId == nil)
+        #expect(store.mode == .custom, "the user's own menu must show, not the factory default")
+        #expect(store.customKind == .library)
+        #expect(store.libraryEntries == legacyEntries)
+    }
+
+    @Test("with no active profile, an edit survives a relaunch and is adopted on the next activation")
+    func noActiveProfileWritesLegacyKeys() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+
+        let store = MenuConfigStore()
+        #expect(store.activeProfileId == nil)
+        store.setMode(.custom)
+        #expect(store.toggle(MenuEntry.moviesID) == .disabled)
+
+        // Relaunch, registry still unavailable: the edit must still be there.
+        let relaunched = MenuConfigStore()
+        #expect(relaunched.mode == .custom, "a menu edit must never be silently lost")
+        #expect(relaunched.contentTypeEntries.first { $0.id == MenuEntry.moviesID }?.enabled == false)
+
+        // Registry recovers: the first activated server adopts the edit.
+        relaunched.activate(serverId: "A", knownServerIds: ["A"])
+        #expect(relaunched.mode == .custom)
+        #expect(persistedProfiles()["A"]?.contentTypeEntries
+            .first { $0.id == MenuEntry.moviesID }?.enabled == false)
+    }
+
     @Test("activate drops the profiles of servers that are no longer registered")
     func pruneRemovesOrphanProfiles() {
         clearMenuDefaults()
