@@ -516,7 +516,7 @@ final class NativeVideoPresenter {
     private func navigateToEpisode(_ ep: EpisodeRef) {
         guard let navigator = episodeNavigator, let vc = playerVC else { return }
         Task {
-            playbackReporter.reportStop()
+            playbackReporter.reportStop(reason: .episodeSwap)
             // Neighbors resolve synchronously (pure index lookups); this
             // presenter owns the negotiation, with the Apple device profile.
             guard let (prev, next) = navigator(ep.id),

@@ -10,6 +10,19 @@ import CinemaxKit
 /// The presenter owns the shared periodic time observer (used by both segment
 /// skip detection and progress reporting). It fans out ticks to this reporter
 /// via `onTick()`, which applies the 10-tick throttle before reporting.
+/// Why a playback session stopped.
+///
+/// The distinction exists for exactly one reason: `.sessionEnded` announces the
+/// userData change to the rest of the app, `.episodeSwap` does not. Both still
+/// report the stop to the server — the position of the episode being left has
+/// genuinely moved — but the user is still watching, so refreshing every rail
+/// mid-session would cost a burst of requests per episode and change nothing
+/// the user can see. The announcement happens once, when playback really ends.
+enum PlaybackStopReason {
+    case sessionEnded
+    case episodeSwap
+}
+
 @MainActor
 final class PlaybackReporter {
     struct Context {
@@ -90,7 +103,16 @@ final class PlaybackReporter {
         }
     }
 
-    func reportStop() {
+    /// Reports the stop to the server and, for a real end of session, announces
+    /// the userData change so every surface can resynchronise.
+    ///
+    /// **The announcement is deliberately inside the detached task, after the
+    /// `reportPlaybackStopped` await.** That call is what persists the new
+    /// position server-side AND drops the client's userData caches, so it is the
+    /// first instant at which a listener can refetch and get truth. Posting at
+    /// call time instead would hand every consumer the pre-playback value — the
+    /// exact bug this notification exists to fix, made intermittent by the race.
+    func reportStop(reason: PlaybackStopReason = .sessionEnded) {
         guard let ctx = context() else { return }
         let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient
@@ -103,6 +125,15 @@ final class PlaybackReporter {
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
                 positionTicks: positionTicks, liveStreamId: info.liveStreamId
             )
+            // Announce now, and in its own task so a slow `stopEncoding` below
+            // can't delay the UI catching up. Playback is the only producer of
+            // this change that used to stay silent: every consumer already
+            // listens to tier-2, they were simply never told.
+            if reason == .sessionEnded {
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: nil)
+                }
+            }
             // Sequential, not concurrent: the server has to record the resume
             // position before we tear the encoding job down. Unconditional —
             // the call is a server-side no-op when nothing was transcoding, and
