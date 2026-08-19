@@ -924,6 +924,16 @@ struct AppNavigation: View {
             // switch) — `restoreSession` has already set `currentUserId` by
             // now, so the cold-restore case fires through that observer.
             menuConfig.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
+            // Load the restored server's menu profile in the SAME main-actor
+            // slice as `hasCheckedSession = true` above — there is no `await`
+            // between the two, so SwiftUI coalesces them into one render and
+            // `MainTabView` never paints a menu the user hasn't configured.
+            // RULE: keep it that way. Inserting an `await` between them makes
+            // the tab bar visible before its profile is loaded.
+            // `restoreSession` has already hydrated the registry, so both the
+            // active id and the known ids are available here.
+            menuConfig.activate(serverId: appState.activeServerId,
+                                knownServerIds: Set(appState.servers.map(\.id)))
             #if os(iOS)
             // One-shot cleanup for installs that used the removed offline-
             // downloads feature — purge the (potentially multi-GB) media tree
@@ -944,24 +954,24 @@ struct AppNavigation: View {
             // the observers below can call it freely.
             remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
         }
-        // RULE — DECLARATION ORDER IS LOAD-BEARING: `serverURL` must be observed
-        // BEFORE `currentUserId`. A server switch mutates both in one
-        // transaction, and SwiftUI delivers same-transaction `onChange`
-        // handlers in declaration order. This one calls
-        // `menuConfig.invalidateViews()` (wipes the server-scoped library
-        // cache); the next one is the single owner of `refreshAvailableViews()`.
-        // Refresh-then-invalidate would throw away the views just fetched and
-        // resolve the tab bar to zero tabs — the historical black-screen bug.
-        // Do not reorder these two, and do not add a second refresh owner.
-        .onChange(of: appState.serverURL) { old, new in
-            // Library view IDs are server-scoped. Invalidate the cached menu
-            // entries only when switching to a *different* concrete server
-            // (both sides non-nil and not equal). Plain logouts (URL → nil)
-            // keep the cache so re-logging into the same server preserves
-            // the user's custom tab arrangement.
-            if let old, let new, old != new {
-                menuConfig.invalidateViews()
-            }
+        // RULE — DECLARATION ORDER IS LOAD-BEARING: `activeServerId` must be
+        // observed BEFORE `currentUserId`. A server switch mutates both (and
+        // `serverURL`) in one transaction, and SwiftUI delivers
+        // same-transaction `onChange` handlers in declaration order. This one
+        // swaps the menu profile; the `currentUserId` one below is the single
+        // owner of `refreshAvailableViews()`, which merges the fetched
+        // libraries into `libraryEntries` and persists them. Refreshing before
+        // the swap would merge the NEW server's libraries into the PREVIOUS
+        // server's profile and save them there. Do not reorder these, and do
+        // not add a second refresh owner.
+        .onChange(of: appState.activeServerId) { _, newId in
+            // Menu configuration is per-server (mode, kind, order, enabled
+            // flags, cached views). Nothing to invalidate on a switch — the
+            // target server's own profile is loaded wholesale.
+            menuConfig.activate(serverId: newId,
+                                knownServerIds: Set(appState.servers.map(\.id)))
+        }
+        .onChange(of: appState.serverURL) { _, new in
             // Re-decide stream transport for the new server (or clear on logout).
             StreamTransportPolicy.shared.configure(serverURL: new)
             // The "Play on…" poll result is per-server (a different server has
@@ -979,12 +989,12 @@ struct AppNavigation: View {
             // transition that establishes or changes the signed-in user —
             // cold-launch session restore (`restoreSession` sets the id from
             // inside `.task`), fresh login (`completeSession`), and user
-            // switch. The fresh-login case is load-bearing: after a server
-            // switch, `invalidateViews()` left the library cache empty and
-            // `.task` ran pre-login with a nil userId, so skipping `nil →
-            // some` here meant nothing ever re-fetched the views — the tab
-            // bar resolved to zero tabs and the app came up as a black
-            // screen until the next full relaunch.
+            // switch. The fresh-login case is load-bearing: a server the user
+            // has never signed into carries no cached views, and `.task` ran
+            // pre-login with a nil userId, so skipping `nil → some` here meant
+            // nothing ever fetched the views — the tab bar resolved to zero
+            // tabs and the app came up as a black screen until the next full
+            // relaunch.
             if newId != nil, oldId != newId,
                menuConfig.mode == .custom && menuConfig.customKind == .library {
                 Task { await menuConfig.refreshAvailableViews() }

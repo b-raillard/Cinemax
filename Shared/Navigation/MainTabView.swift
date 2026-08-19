@@ -162,6 +162,12 @@ struct MainTabView: View {
             // user sees what they're configuring.
             displayedTabs = menuConfig.resolvedTabs
         }
+        .onChange(of: menuConfig.activeProfileId) { _, _ in
+            // A server switch loads a whole different menu profile — as
+            // structural as a mode / kind change, and never a fine-grained
+            // edit the freeze is meant to absorb.
+            displayedTabs = menuConfig.resolvedTabs
+        }
         #endif
     }
 

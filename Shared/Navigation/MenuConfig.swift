@@ -71,6 +71,37 @@ struct MenuEntry: Codable, Identifiable, Equatable, Hashable {
     }
 }
 
+// MARK: - MenuProfile
+
+/// The whole menu configuration for ONE registered server.
+///
+/// Menu state is per-server because library ids are: surfacing server A's
+/// libraries as tabs means nothing on server B. Everything else (mode, custom
+/// kind, content-type entry order) rides along so each server keeps a complete,
+/// independent menu — see `MenuConfigStore.activate(serverId:knownServerIds:)`.
+///
+/// Keyed by `ServerEntry.id`, **not** by user: two accounts on the same server
+/// share a profile, and `mergeLibraryEntries` drops the libraries the signed-in
+/// account can't see.
+struct MenuProfile: Codable, Equatable {
+    var mode: MenuConfigStore.Mode
+    var customKind: MenuConfigStore.CustomKind
+    var contentTypeEntries: [MenuEntry]
+    var libraryEntries: [MenuEntry]
+    var availableViews: [LibraryView]
+
+    /// What a newly added server starts from. Deliberately NOT inherited from
+    /// the server the user is currently on: library entries can't transfer, and
+    /// a half-inherited menu is harder to explain than a clean default.
+    static let factoryDefault = Self(
+        mode: .default,
+        customKind: .contentType,
+        contentTypeEntries: MenuConfigStore.defaultContentTypeEntries,
+        libraryEntries: [],
+        availableViews: []
+    )
+}
+
 // MARK: - ResolvedTab
 
 /// What `MainTabView` actually renders. Built from the user's `MenuConfigStore`
@@ -159,6 +190,10 @@ final class MenuConfigStore {
     /// behaviour with a custom synthetic tab.
     private(set) var resolvedTabs: [ResolvedTab] = []
 
+    /// Id of the server whose `MenuProfile` is currently loaded into the five
+    /// properties above (`ServerEntry.id`). `nil` until the first `activate`.
+    private(set) var activeProfileId: String?
+
     var isLoadingViews: Bool = false
     /// Last `refreshAvailableViews()` failure, kept as the raw `Error` so the
     /// store stays UI-agnostic. **Never render this directly** (RULE: never
@@ -167,22 +202,36 @@ final class MenuConfigStore {
     /// at the catch site instead.
     var lastFetchError: (any Error)?
 
+    /// Every registered server's menu, keyed by `ServerEntry.id`. The five
+    /// observable properties above are a working copy of `profiles[activeProfileId]`,
+    /// written back by `persistActiveProfile()` on every mutation.
+    private var profiles: [String: MenuProfile]
+
     private var apiClient: (any APIClientProtocol)?
     private var userId: String?
     /// Monotonic id for refreshAvailableViews — newest call wins (see method).
     private var refreshGeneration = 0
 
+    /// Loads the profile dictionary but NOT any particular profile: which
+    /// server is active is `AppState`'s answer, and it isn't known this early
+    /// (`restoreSession` reads it from the Keychain inside `AppNavigation`'s
+    /// `.task`). `activate(serverId:knownServerIds:)` swaps the real profile in
+    /// before `MainTabView` ever renders — nothing displays the menu until
+    /// `hasCheckedSession && isAuthenticated`.
+    ///
+    /// The seed is the legacy global menu when one exists, NOT the factory
+    /// default: if the registry never resolves an active server (see
+    /// `persistActiveProfile`), this seed is the menu the user keeps looking
+    /// at, and showing them the factory default instead would be a visible
+    /// regression against the pre-profiles behaviour.
     init() {
-        let defaults = UserDefaults.standard
-        self.mode = Mode(rawValue: defaults.string(forKey: SettingsKey.menuMode) ?? "") ?? .default
-        self.customKind = CustomKind(rawValue: defaults.string(forKey: SettingsKey.menuCustomKind) ?? "") ?? .contentType
-        let storedContentType = Self.load([MenuEntry].self, forKey: SettingsKey.menuContentTypeEntries) ?? Self.defaultContentTypeEntries
-        let storedLibrary = Self.load([MenuEntry].self, forKey: SettingsKey.menuLibraryEntries) ?? []
-        // Enforce the cap on persisted state — defensive against snapshots
-        // saved before the cap existed.
-        self.contentTypeEntries = Self.applyCap(to: storedContentType)
-        self.libraryEntries = Self.applyCap(to: storedLibrary)
-        self.availableViews = Self.load([LibraryView].self, forKey: SettingsKey.menuCachedViews) ?? []
+        self.profiles = Self.load([String: MenuProfile].self, forKey: SettingsKey.menuProfiles) ?? [:]
+        let seed = Self.legacyProfileSeed() ?? MenuProfile.factoryDefault
+        self.mode = seed.mode
+        self.customKind = seed.customKind
+        self.contentTypeEntries = seed.contentTypeEntries
+        self.libraryEntries = seed.libraryEntries
+        self.availableViews = seed.availableViews
         // Seed the memoized tab list from the restored state (all stored
         // properties are initialized by this point).
         recomputeResolvedTabs()
@@ -213,14 +262,14 @@ final class MenuConfigStore {
     /// in-memory state but **won't persist** — callers must go through here.
     func setMode(_ value: Mode) {
         mode = value
-        Self.persist(value.rawValue, forKey: SettingsKey.menuMode)
+        persistActiveProfile()
         recomputeResolvedTabs()
     }
 
     func setCustomKind(_ value: CustomKind) {
         customKind = value
-        Self.persist(value.rawValue, forKey: SettingsKey.menuCustomKind)
         if value == .library { ensureLibraryEntriesPopulated() }
+        persistActiveProfile()
         recomputeResolvedTabs()
     }
 
@@ -229,9 +278,98 @@ final class MenuConfigStore {
         self.userId = userId
     }
 
+    /// Loads `serverId`'s menu profile into the observable properties, and
+    /// collects the profiles of servers that are no longer registered.
+    ///
+    /// **RULE — `AppNavigation` must declare its `onChange(of: activeServerId)`
+    /// BEFORE its `currentUserId` observer.** A server switch mutates both in
+    /// one transaction and SwiftUI delivers same-transaction handlers in
+    /// declaration order; the `currentUserId` observer is the single owner of
+    /// `refreshAvailableViews()`, which merges into `libraryEntries` and
+    /// persists. Refreshing before the profile is swapped would merge server
+    /// B's libraries into server A's profile and then save it there.
+    ///
+    /// - Parameters:
+    ///   - serverId: `ServerEntry.id` of the server to make active. `nil`
+    ///     (signed out, no registry) keeps the loaded profile: the menu isn't
+    ///     reachable while signed out, and re-logging into the same server must
+    ///     find its arrangement intact.
+    ///   - knownServerIds: every currently registered server. An **empty** set
+    ///     means "registry not hydrated", never "no servers" — pruning against
+    ///     it would wipe every profile.
+    func activate(serverId: String?, knownServerIds: Set<String>) {
+        guard let serverId else { return }
+        guard serverId != activeProfileId else { return }
+
+        // Evaluated BEFORE the prune: the legacy seed must run only when no
+        // profile was ever written, not when a prune happens to empty the dict.
+        let isFirstEverActivation = profiles.isEmpty
+        var dirty = false
+
+        if !knownServerIds.isEmpty {
+            let orphans = profiles.keys.filter { $0 != serverId && !knownServerIds.contains($0) }
+            if !orphans.isEmpty {
+                for orphan in orphans { profiles.removeValue(forKey: orphan) }
+                dirty = true
+            }
+        }
+
+        let profile: MenuProfile
+        if let stored = profiles[serverId] {
+            profile = stored
+        } else if isFirstEverActivation, let legacy = Self.legacyProfileSeed() {
+            // One-shot upgrade path: the single global menu this install was
+            // using becomes the first server's profile. Every later server
+            // starts from factory defaults.
+            profile = legacy
+            profiles[serverId] = legacy
+            dirty = true
+        } else {
+            profile = .factoryDefault
+        }
+
+        activeProfileId = serverId
+        mode = profile.mode
+        customKind = profile.customKind
+        // Enforce the cap on restored state — defensive against snapshots
+        // saved before the cap existed.
+        contentTypeEntries = Self.applyCap(to: profile.contentTypeEntries)
+        libraryEntries = Self.applyCap(to: profile.libraryEntries)
+        availableViews = profile.availableViews
+
+        if dirty { persistProfiles() }
+        recomputeResolvedTabs()
+    }
+
+    /// The pre-multi-server global menu (`SettingsKey.menu*`), read once to
+    /// seed the first activated server. Non-destructive: the legacy keys are
+    /// left in place, mirroring `KeychainService.migrateToMultiServerIfNeeded`.
+    /// Returns `nil` when this install never wrote a menu configuration.
+    private static func legacyProfileSeed() -> MenuProfile? {
+        let defaults = UserDefaults.standard
+        let legacyKeys = [
+            SettingsKey.menuMode, SettingsKey.menuCustomKind,
+            SettingsKey.menuContentTypeEntries, SettingsKey.menuLibraryEntries,
+            SettingsKey.menuCachedViews
+        ]
+        guard legacyKeys.contains(where: { defaults.object(forKey: $0) != nil }) else { return nil }
+        // A partially-written legacy state falls back exactly where the old
+        // `init` did, so there is no special case for it.
+        return MenuProfile(
+            mode: Mode(rawValue: defaults.string(forKey: SettingsKey.menuMode) ?? "") ?? .default,
+            customKind: CustomKind(rawValue: defaults.string(forKey: SettingsKey.menuCustomKind) ?? "") ?? .contentType,
+            contentTypeEntries: load([MenuEntry].self, forKey: SettingsKey.menuContentTypeEntries) ?? defaultContentTypeEntries,
+            libraryEntries: load([MenuEntry].self, forKey: SettingsKey.menuLibraryEntries) ?? [],
+            availableViews: load([LibraryView].self, forKey: SettingsKey.menuCachedViews) ?? []
+        )
+    }
+
     // MARK: - Defaults
 
-    static let defaultContentTypeEntries: [MenuEntry] = [
+    /// `nonisolated` so `MenuProfile.factoryDefault` — a plain value type with
+    /// no isolation — can read it. Safe: `[MenuEntry]` is Sendable (escape
+    /// hatch #3 in CLAUDE.md).
+    nonisolated static let defaultContentTypeEntries: [MenuEntry] = [
         .init(id: MenuEntry.homeID, enabled: true),
         .init(id: MenuEntry.moviesID, enabled: true),
         .init(id: MenuEntry.seriesID, enabled: true),
@@ -271,16 +409,15 @@ final class MenuConfigStore {
         guard !MenuEntry.mandatoryIDs.contains(id) else { return .noChange }
         switch customKind {
         case .contentType:
-            return toggleInternal(id, in: \.contentTypeEntries, persist: persistContentTypeEntries)
+            return toggleInternal(id, in: \.contentTypeEntries)
         case .library:
-            return toggleInternal(id, in: \.libraryEntries, persist: persistLibraryEntries)
+            return toggleInternal(id, in: \.libraryEntries)
         }
     }
 
     private func toggleInternal(
         _ id: String,
-        in keyPath: ReferenceWritableKeyPath<MenuConfigStore, [MenuEntry]>,
-        persist: () -> Void
+        in keyPath: ReferenceWritableKeyPath<MenuConfigStore, [MenuEntry]>
     ) -> ToggleResult {
         var copy = self[keyPath: keyPath]
         guard let idx = copy.firstIndex(where: { $0.id == id }) else { return .noChange }
@@ -295,7 +432,7 @@ final class MenuConfigStore {
         }
         copy[idx].enabled.toggle()
         self[keyPath: keyPath] = copy
-        persist()
+        persistActiveProfile()
         recomputeResolvedTabs()
         return wantsEnable ? .enabled : .disabled
     }
@@ -307,13 +444,12 @@ final class MenuConfigStore {
             var copy = contentTypeEntries
             copy.move(fromOffsets: fromOffsets, toOffset: toOffset)
             contentTypeEntries = copy
-            persistContentTypeEntries()
         case .library:
             var copy = libraryEntries
             copy.move(fromOffsets: fromOffsets, toOffset: toOffset)
             libraryEntries = copy
-            persistLibraryEntries()
         }
+        persistActiveProfile()
         recomputeResolvedTabs()
     }
 
@@ -327,7 +463,6 @@ final class MenuConfigStore {
             var copy = contentTypeEntries
             copy.swapAt(i, target)
             contentTypeEntries = copy
-            persistContentTypeEntries()
         case .library:
             guard let i = libraryEntries.firstIndex(where: { $0.id == id }) else { return }
             let target = i + delta
@@ -335,38 +470,67 @@ final class MenuConfigStore {
             var copy = libraryEntries
             copy.swapAt(i, target)
             libraryEntries = copy
-            persistLibraryEntries()
         }
         // Only reached on a successful swap — the guards above `return` early
-        // when nothing moved, so this never recomputes for a no-op.
+        // when nothing moved, so this never persists/recomputes for a no-op.
+        persistActiveProfile()
         recomputeResolvedTabs()
     }
 
     // MARK: - Persistence (explicit)
 
-    private func persistContentTypeEntries() {
+    /// Writes the working copy back into the active server's profile. The ONLY
+    /// persistence path — every mutator ends with it. While no profile is
+    /// active it falls back to the legacy global keys rather than dropping the
+    /// write; see the guard below.
+    private func persistActiveProfile() {
+        guard let activeProfileId else {
+            // No server to key on. This is reachable while signed in — the
+            // multi-server migration returns early when its Keychain write
+            // throws, leaving `getActiveServerId()` nil while the legacy
+            // mirror still restores a session — and dropping the write there
+            // would lose the edit silently. Fall back to the legacy global
+            // keys, i.e. exactly the pre-profiles behaviour, which `init`
+            // reads back and which the first `activate` then adopts.
+            persistLegacyFallback()
+            return
+        }
+        profiles[activeProfileId] = MenuProfile(
+            mode: mode,
+            customKind: customKind,
+            contentTypeEntries: contentTypeEntries,
+            libraryEntries: libraryEntries,
+            availableViews: availableViews
+        )
+        persistProfiles()
+    }
+
+    private func persistProfiles() {
+        Self.persist(profiles, forKey: SettingsKey.menuProfiles)
+    }
+
+    /// Writes the working copy to the legacy global keys — the store's only
+    /// destination while no profile is active. Deliberately the SAME keys
+    /// `legacyProfileSeed()` reads, so the value round-trips through `init`
+    /// and is adopted by the first server that activates.
+    private func persistLegacyFallback() {
+        let defaults = UserDefaults.standard
+        defaults.set(mode.rawValue, forKey: SettingsKey.menuMode)
+        defaults.set(customKind.rawValue, forKey: SettingsKey.menuCustomKind)
         Self.persist(contentTypeEntries, forKey: SettingsKey.menuContentTypeEntries)
-    }
-
-    private func persistLibraryEntries() {
         Self.persist(libraryEntries, forKey: SettingsKey.menuLibraryEntries)
-    }
-
-    private func persistAvailableViews() {
         Self.persist(availableViews, forKey: SettingsKey.menuCachedViews)
     }
 
-    /// Restore factory defaults (mode + both entry lists, but keep
-    /// `availableViews` cache — it's tied to the server, not the menu).
+    /// Restore factory defaults for the ACTIVE server only (mode + both entry
+    /// lists, but keep the `availableViews` cache — it's tied to the server,
+    /// not the menu). Other servers' profiles are untouched.
     func reset() {
         mode = .default
         customKind = .contentType
         contentTypeEntries = Self.defaultContentTypeEntries
         libraryEntries = makeLibraryDefaultEntries(from: availableViews)
-        Self.persist(mode.rawValue, forKey: SettingsKey.menuMode)
-        Self.persist(customKind.rawValue, forKey: SettingsKey.menuCustomKind)
-        persistContentTypeEntries()
-        persistLibraryEntries()
+        persistActiveProfile()
         recomputeResolvedTabs()
     }
 
@@ -403,15 +567,18 @@ final class MenuConfigStore {
             // actually changed. Prevents a spurious second re-render right
             // after the user opened the menu (which was racing with their
             // first toggle and surfaced as "redirected to Home").
+            var changed = false
             if views != availableViews {
                 availableViews = views
-                persistAvailableViews()
+                changed = true
             }
             let merged = mergeLibraryEntries(existing: libraryEntries, views: views)
             if merged != libraryEntries {
                 libraryEntries = merged
-                persistLibraryEntries()
+                changed = true
             }
+            // One write for both slices — they live in the same profile blob.
+            if changed { persistActiveProfile() }
             // Refresh the memoized tab list; the equality guard inside makes a
             // same-views refresh a no-op (no spurious re-render), preserving the
             // idempotence the two guards above establish.
@@ -428,21 +595,17 @@ final class MenuConfigStore {
         }
     }
 
-    /// Wipe the cached views (e.g., on server switch — view IDs are
-    /// server-scoped). The mode itself is kept; on next switch to library
-    /// the user sees an empty list until a refresh completes.
-    func invalidateViews() {
-        availableViews = []
-        libraryEntries = []
-        persistAvailableViews()
-        persistLibraryEntries()
-        recomputeResolvedTabs()
-    }
+    // No `invalidateViews()`: library view ids are server-scoped, but so is the
+    // whole profile now — `activate(serverId:knownServerIds:)` swaps in the
+    // target server's own `availableViews` / `libraryEntries`. Wiping them on a
+    // switch is exactly what used to destroy the user's arrangement, and left a
+    // menu that rebuilt itself in the wrong order and over the 5-tab cap.
 
+    /// Callers persist afterwards — the only caller is `setCustomKind`, which
+    /// ends with a single `persistActiveProfile()`.
     private func ensureLibraryEntriesPopulated() {
         if libraryEntries.isEmpty {
             libraryEntries = makeLibraryDefaultEntries(from: availableViews)
-            persistLibraryEntries()
         }
     }
 
@@ -530,7 +693,7 @@ final class MenuConfigStore {
     /// `@Observable` + property observers), every mutator that changes an
     /// input to the resolution calls this at its end: `setMode`,
     /// `setCustomKind`, `toggleInternal`, `move`, `moveBy`, `reset`,
-    /// `refreshAvailableViews`, `invalidateViews`, plus `init`.
+    /// `refreshAvailableViews`, `activate`, plus `init`.
     private func recomputeResolvedTabs() {
         let updated = computeResolvedTabs()
         if updated != resolvedTabs { resolvedTabs = updated }
@@ -651,9 +814,5 @@ final class MenuConfigStore {
         if let data = try? JSONEncoder().encode(value) {
             UserDefaults.standard.set(data, forKey: key)
         }
-    }
-
-    private static func persist(_ value: String, forKey key: String) {
-        UserDefaults.standard.set(value, forKey: key)
     }
 }

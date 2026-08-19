@@ -99,7 +99,14 @@ enum SettingsKey {
     static let debugFastSleepTimer = "debug.fastSleepTimer"
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
 
-    // Main menu customization
+    // Main menu customization — one `MenuProfile` per registered server,
+    // keyed by `ServerEntry.id`. See `MenuConfigStore.activate(serverId:…)`.
+    static let menuProfiles = "menu.profiles"                  // JSON [serverId: MenuProfile]
+
+    // Legacy single-profile keys — MIGRATION ONLY. Read once by
+    // `MenuConfigStore` to seed the first server's profile (see
+    // `legacyProfileSeed`), never written again. Not deleted: the migration is
+    // non-destructive, mirroring `KeychainService.migrateToMultiServerIfNeeded`.
     static let menuMode = "menu.mode"                          // "default" | "custom"
     static let menuCustomKind = "menu.customKind"              // "contentType" | "library"
     static let menuContentTypeEntries = "menu.contentTypeEntries" // JSON [MenuEntry]
