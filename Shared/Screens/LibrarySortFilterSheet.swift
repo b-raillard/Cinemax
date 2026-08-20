@@ -183,6 +183,13 @@ struct LibrarySortFilterSheet: View {
                     ? themeManager.accent.opacity(0.08)
                     : Color.clear
             )
+            // Without this the row is tappable only where it actually draws: an
+            // unselected row's background is `Color.clear`, which takes no hits,
+            // so only the label itself responded and the rest of the row read as
+            // dead. The selected row worked by accident — its accent fill at 0.08
+            // is a real colour. Every other control in this sheet always has a
+            // real background, which is why this row was the only one affected.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
 
