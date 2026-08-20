@@ -168,11 +168,11 @@ struct MediaLibraryScreen: View {
     /// and rebuilds it — the user loses their scroll position under their own
     /// finger, since the notification is raised by this screen's OWN card menu.
     ///
-    /// Empty paginated span means the browse layout (hero + genre rows). Its
-    /// only userData-dependent piece is the hero's play target: `LibraryPosterCard`
-    /// draws neither a watched badge nor a progress bar, so the full reload this
-    /// used to do refetched the hero and fanned out up to 8 genre rows to change
-    /// zero pixels. The filtered grid takes the in-place span refresh.
+    /// The browse layout (hero + genre rows) has exactly one userData-dependent
+    /// piece, the hero's play target: `LibraryPosterCard` draws neither a watched
+    /// badge nor a progress bar, so the full reload this used to do refetched the
+    /// hero and fanned out up to 8 genre rows to change zero pixels. The filtered
+    /// grid takes the in-place span refresh.
     private func refreshUserDataOrDefer() {
         guard isVisible else {
             pendingUserDataRefresh = true
@@ -199,8 +199,23 @@ struct MediaLibraryScreen: View {
     /// Neither branch may flip `isLoading`: that swaps the body for
     /// `loadingView`, tearing the `ScrollView` down and dropping the user's
     /// scroll position.
+    ///
+    /// **RULE — the split asks `shouldShowFilteredView`, the authoritative
+    /// predicate of the layout, NEVER `filteredLoader.items.isEmpty`.** The
+    /// loader is not a proxy for what is on screen and diverges from it in both
+    /// directions: `LibrarySortFilterSheet` calls `onApply` from all four of its
+    /// exits — "Réinitialiser" included — and `applyFilter` resets then reloads
+    /// 40 *unfiltered* items without ever consulting `isFiltered`, so merely
+    /// validating the sheet populates a grid nothing displays, permanently for
+    /// the life of the view model; conversely that same `reset()` empties the
+    /// loader while a grid IS displayed. Measured on device 2026-08-19: two
+    /// gestures (open the sheet, press Appliquer, nothing changed) left the
+    /// hero's play target frozen, so its Play button reopened an episode the
+    /// user had just finished — defect A, reopened. `refreshHeroNavigation()`
+    /// is this branch's only production caller since #114 removed the
+    /// unconditional `.onAppear` hook that used to mask it.
     private func performUserDataRefresh() {
-        if viewModel.filteredLoader.items.isEmpty {
+        if !shouldShowFilteredView {
             // Browse layout: the only userData-dependent piece is the hero's
             // play target — `LibraryPosterCard` draws neither a watched badge
             // nor a progress bar.
