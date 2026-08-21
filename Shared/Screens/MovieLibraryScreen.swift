@@ -371,7 +371,26 @@ struct MediaLibraryScreen: View {
     private var filteredView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+                // **RULE — plain `VStack`, NEVER `LazyVStack`.** This stack has
+                // at most four children (the count header, one of the three
+                // content branches, and a trailing `Spacer`); the hundreds of
+                // cards live in the `LazyVGrid` below, which is already lazy.
+                // Nesting the grid inside a *lazy* stack made the whole screen
+                // render nothing at all after a tab round-trip once ~3 pages
+                // were paged in — measured on device 2026-08-20: Films →
+                // "Non vus uniquement" → ~9 flicks → Accueil → Films left a
+                // black screen with no count header, no cards, no empty state,
+                // no skeleton and no error, and **no way back**: a second tab
+                // round-trip, scrolling up, pull-to-refresh and re-applying the
+                // filter all failed, so only relaunching restored the tab. The
+                // data was never the problem (the sheet still read the filter
+                // correctly and a refresh still issued its requests) — the
+                // screen's SwiftUI subgraph stopped rebuilding, which is why
+                // even the unconditional header vanished. Reproduced 3/3 above
+                // the threshold, never at 0 or 5 flicks. Nesting two lazy
+                // containers with hundreds of children is what the tab switch's
+                // `UIHostingController` re-hosting cannot survive.
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
                     #if os(tvOS)
                     Color.clear.frame(height: 0).id("library.top")
                     tvTopBar
