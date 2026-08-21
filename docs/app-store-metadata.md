@@ -93,6 +93,41 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
 
+#### iOS — 1.2.1
+```
+Une version de corrections, dont plusieurs blocages qui obligeaient à quitter l'app.
+
+— PLUS DE BLOCAGES
+• L'appui long sur une affiche ne fait plus quitter l'app
+• L'onglet Films ne devient plus une page noire dont rien ne permettait de sortir
+• Le lecteur ne se fige plus après un glissement sur la barre de progression
+• Le glissement vers le bas referme le lecteur même pendant un chargement
+
+— APPUI LONG
+• Le menu s'ouvre sur l'affiche touchée, et non plus sur sa voisine
+• Il s'ouvre plus vite, y compris sur les grandes bibliothèques
+• Marquer un titre comme vu ne renvoie plus la grille tout en haut
+
+— BIBLIOTHÈQUE
+• Votre place est conservée quand vous passez sur un autre onglet et revenez
+• Le bouton « Lecture » de l'affiche du haut reprend là où vous vous êtes arrêté
+• Toute la ligne « Trier par » est cliquable, et non son seul libellé
+• Les rangées se remettent à jour après une lecture, sans avoir à rafraîchir
+
+— LECTEUR
+• Les boutons épisode précédent / suivant apparaissent et disparaissent au bon moment
+• « Vous avez terminé … » s'affiche aussi quand la lecture a démarré depuis la bibliothèque
+• Les vignettes de chapitres ne disparaissent plus quand le flux doit être rouvert
+
+— LIRE SUR…
+• Une lecture envoyée depuis un autre appareil n'est plus perdue si une fiche est déjà ouverte
+
+— MENU
+• Votre organisation des onglets est désormais mémorisée serveur par serveur
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 1.2.0
 ```
 Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
@@ -118,6 +153,41 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
 • Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
 • Même correction dans le widget
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 1.2.1
+```
+Une version de corrections, dont plusieurs blocages qui obligeaient à quitter l'app.
+
+— PLUS DE BLOCAGES
+• L'appui long sur une affiche ne fait plus quitter l'app
+• L'onglet Films ne devient plus une page noire dont rien ne permettait de sortir
+
+— APPUI LONG
+• Le menu s'ouvre sur l'affiche sélectionnée, et non plus sur sa voisine
+• Il s'ouvre plus vite, y compris sur les grandes bibliothèques
+• Marquer un titre comme vu ne renvoie plus la grille tout en haut
+
+— BIBLIOTHÈQUE
+• Votre place est conservée quand vous passez sur un autre onglet et revenez
+• Le bouton « Lecture » de l'affiche du haut reprend là où vous vous êtes arrêté
+• Les rangées se remettent à jour après une lecture, sans avoir à rafraîchir
+
+— LECTEUR
+• Les boutons épisode précédent / suivant apparaissent et disparaissent au bon moment
+• « Vous avez terminé … » s'affiche aussi quand la lecture a démarré depuis la bibliothèque
+• Les vignettes de chapitres ne disparaissent plus quand le flux doit être rouvert
+
+— LIRE SUR…
+• Une lecture envoyée depuis un autre appareil n'est plus perdue si une fiche est déjà ouverte
+
+— RÉGLAGES
+• La grille de changement de profil s'affiche à nouveau correctement
+
+— MENU
+• Votre organisation des onglets est désormais mémorisée serveur par serveur
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -290,6 +360,41 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 > Two separate texts: Live Activity is iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
 
+#### iOS — 1.2.1
+```
+A fix-focused release, including several dead ends that forced you to quit the app.
+
+— NO MORE DEAD ENDS
+• Long-pressing a poster no longer quits the app
+• The Movies tab no longer turns into a black page with no way out
+• The player no longer freezes after a drag on the progress bar
+• Swiping down closes the player even while it is loading
+
+— LONG PRESS
+• The menu opens on the poster you touched, not on its neighbour
+• It opens faster, large libraries included
+• Marking a title as watched no longer throws the grid back to the top
+
+— LIBRARY
+• Your place is kept when you switch to another tab and come back
+• The featured title's Play button resumes where you actually stopped
+• The whole "Sort by" row is tappable, not just its label
+• Rows refresh themselves after playback, with no pull-to-refresh needed
+
+— PLAYER
+• Previous / next episode buttons appear and disappear at the right time
+• "You finished …" now also shows when playback started from the library
+• Chapter thumbnails no longer vanish when the stream has to be reopened
+
+— PLAY ON…
+• Playback sent from another device is no longer lost when a title page is already open
+
+— MENU
+• Your tab arrangement is now remembered per server
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 1.2.0
 ```
 Long-press a title and it now does everything, without opening its page.
@@ -315,6 +420,41 @@ Long-press a title and it now does everything, without opening its page.
 • One show can no longer take over the row: importing a full season used to fill it entirely
 • Series that just received episodes now surface there, alongside new movies and shows
 • Same fix in the widget
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 1.2.1
+```
+A fix-focused release, including several dead ends that forced you to quit the app.
+
+— NO MORE DEAD ENDS
+• Long-pressing a poster no longer quits the app
+• The Movies tab no longer turns into a black page with no way out
+
+— LONG PRESS
+• The menu opens on the selected poster, not on its neighbour
+• It opens faster, large libraries included
+• Marking a title as watched no longer throws the grid back to the top
+
+— LIBRARY
+• Your place is kept when you switch to another tab and come back
+• The featured title's Play button resumes where you actually stopped
+• Rows refresh themselves after playback, with no pull-to-refresh needed
+
+— PLAYER
+• Previous / next episode buttons appear and disappear at the right time
+• "You finished …" now also shows when playback started from the library
+• Chapter thumbnails no longer vanish when the stream has to be reopened
+
+— PLAY ON…
+• Playback sent from another device is no longer lost when a title page is already open
+
+— SETTINGS
+• The profile-switching grid renders correctly again
+
+— MENU
+• Your tab arrangement is now remembered per server
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
