@@ -215,28 +215,6 @@ enum CardPlayTargetResolver {
         }
     }
 
-    /// Guards a continuation so exactly one of the two racers resumes it —
-    /// resuming a `CheckedContinuation` twice is a crash, and both racers can
-    /// land near-simultaneously on a deadline this short.
-    private final class ProbeRace: @unchecked Sendable {
-        private let lock = NSLock()
-        private var continuation: CheckedContinuation<ProbeOutcome, Never>?
-
-        init(_ continuation: CheckedContinuation<ProbeOutcome, Never>) {
-            self.continuation = continuation
-        }
-
-        /// First caller wins; every later one is a no-op. The continuation is
-        /// resumed OUTSIDE the lock so the awaiting task can't be scheduled while
-        /// this thread still holds it.
-        func resume(_ outcome: ProbeOutcome) {
-            let pending: CheckedContinuation<ProbeOutcome, Never>? = lock.withLock {
-                defer { continuation = nil }
-                return continuation
-            }
-            pending?.resume(returning: outcome)
-        }
-    }
 
     /// Only the scalars pulled off the next-up episode inside the probing
     /// task — never the `BaseItemDto` itself, which is not `Sendable`
@@ -253,5 +231,128 @@ enum CardPlayTargetResolver {
         case noNextUp
         case failed
         case timedOut
+    }
+}
+
+/// Guards a continuation so exactly one of the two racers resumes it —
+/// resuming a `CheckedContinuation` twice is a crash, and both racers can
+/// land near-simultaneously on a deadline this short.
+///
+/// File-scope and generic because both card-menu resolvers need the same
+/// bound: `CardPlayTargetResolver` races the next-up probe, and
+/// `CardEpisodeNavigationResolver` races the season fetch. A second
+/// hand-written `@unchecked Sendable` copy is exactly the kind of duplicate
+/// whose two halves drift.
+private final class ProbeRace<Outcome: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Outcome, Never>?
+
+    init(_ continuation: CheckedContinuation<Outcome, Never>) {
+        self.continuation = continuation
+    }
+
+    /// First caller wins; every later one is a no-op. The continuation is
+    /// resumed OUTSIDE the lock so the awaiting task can't be scheduled while
+    /// this thread still holds it.
+    func resume(_ outcome: Outcome) {
+        let pending: CheckedContinuation<Outcome, Never>? = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
+        pending?.resume(returning: outcome)
+    }
+}
+
+/// Resolves the prev/next episode graph a card-launched playback must carry.
+///
+/// Home's two rails hand both `PlayLink` and the card menu the trio they have
+/// already built (`resumeNavigation` / `nextUpNavigation`). No other surface
+/// can: `SearchScreen` and `WatchedHistoryScreen` draw EPISODE cards from a
+/// flat query that never touched a season, so their menus passed `nil` — and a
+/// nil navigator costs far more than two buttons. `handlePlaybackEnded` gates
+/// autoplay on `nextEpisode != nil && episodeNavigator != nil`, and the
+/// "you finished …" card on the navigator alone, so an episode started from
+/// Search played to its end and closed in silence. Measured on device
+/// 2026-08-21: the same episode of the same season drew **3** transport
+/// buttons launched from Search and **5** launched from the series page.
+/// Same defect, same cure, as the library hero's `loadHeroNavigation`.
+///
+/// Resolved HERE — once, at play time — and never per card. A `contextMenu`'s
+/// content is built **synchronously** for every card a lazy container
+/// instantiates, so probing per card would mean a season fetch per poster on
+/// every grid fill. This runs only when the user actually starts something,
+/// and rides the 10 s `episodes-` cache.
+///
+/// `nonisolated`, scalars in and `Sendable` values out, same discipline as
+/// `CardPlayTargetResolver` right above.
+enum CardEpisodeNavigationResolver {
+
+    /// The whole resolution is bounded, for the same reason the next-up probe
+    /// is: the menu offers no loading affordance, and before this existed the
+    /// tap opened the player at once. A slow server must cost the episode
+    /// buttons — never turn "Lecture" into a button that looks dead.
+    static let probeDeadline: Duration = .milliseconds(1500)
+
+    /// `nil` when the target has no neighbours, when the season can't be
+    /// resolved, or when the deadline expires first. Every one of those is an
+    /// ordinary outcome that degrades to today's behaviour, so none of them
+    /// is surfaced as an error over a playback that is otherwise fine.
+    static func resolve(
+        episodeId: String,
+        seriesId: String?,
+        seasonId: String?,
+        api: any LibraryAPI,
+        userId: String,
+        probeDeadline: Duration = probeDeadline
+    ) async -> CardPlaybackNavigation? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<CardPlaybackNavigation?, Never>) in
+            let race = ProbeRace(continuation)
+            // The loser is deliberately NOT cancelled, same argument as the
+            // next-up probe: `getEpisodes` fills its 10 s `episodes-` cache
+            // only once the response lands, so cancelling would throw away
+            // precisely what makes the next play on this season instant.
+            Task {
+                race.resume(await probe(
+                    episodeId: episodeId, seriesId: seriesId, seasonId: seasonId,
+                    api: api, userId: userId
+                ))
+            }
+            Task {
+                try? await Task.sleep(for: probeDeadline)
+                race.resume(nil)
+            }
+        }
+    }
+
+    private static func probe(
+        episodeId: String, seriesId: String?, seasonId: String?,
+        api: any LibraryAPI, userId: String
+    ) async -> CardPlaybackNavigation? {
+        var series = seriesId
+        var season = seasonId
+        // A search hit carries `seriesID`/`seasonID` already; a series card
+        // whose next-up probe handed back an episode id carries neither, and
+        // a season is what `getEpisodes` is keyed on. One 10 s-cached,
+        // single-flighted `getItem` closes the gap — and reports no season at
+        // all when the target is still the series itself (the next-up probe
+        // timed out), which is what makes that case a clean `nil`.
+        if series == nil || season == nil {
+            guard let item = try? await api.getItem(userId: userId, itemId: episodeId) else { return nil }
+            series = series ?? item.seriesID
+            season = season ?? item.seasonID
+        }
+        guard let series, let season else { return nil }
+        guard let episodes = try? await api.getEpisodes(
+            seriesId: series, seasonId: season, userId: userId
+        ) else { return nil }
+
+        let nav = buildEpisodeNavigation(for: episodeId, in: episodes)
+        // A one-episode season yields no navigator; handing the player an
+        // empty trio would behave exactly like `nil` while claiming navigation
+        // exists where there is none.
+        guard let navigator = nav.navigator else { return nil }
+        return CardPlaybackNavigation(
+            previous: nav.previous, next: nav.next, navigator: navigator
+        )
     }
 }
