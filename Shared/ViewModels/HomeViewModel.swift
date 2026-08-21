@@ -390,15 +390,57 @@ final class HomeViewModel {
     /// (resume), Next Up, and Favorites — fired by `.cinemaxItemUserDataChanged`
     /// after a per-item watched / resume toggle anywhere in the app. Mirrors
     /// `refreshResume` / `refreshFavorites`: single fetches mutating only those
-    /// `@Observable` slices, NO genre fan-out / latest / sessions. Like
-    /// `refreshResume` it deliberately does NOT rebuild the episode-nav maps —
-    /// those only gate the in-player prev/next buttons and tolerate brief
-    /// staleness (rail-only refresh is the established pattern).
+    /// `@Observable` slices, NO genre fan-out / latest / sessions.
+    ///
+    /// It *does* fill in episode navigation for whatever card these fetches
+    /// bring in — see `fillMissingEpisodeNavigation`. It used to skip that on
+    /// the grounds that the maps "only gate the in-player prev/next buttons and
+    /// tolerate brief staleness". Both halves were wrong: a nil navigator also
+    /// silences autoplay-next and the end-of-series card, and a card that has
+    /// just ENTERED a rail has no entry at all rather than a stale one.
     func refreshUserDataRails(using appState: AppState) async {
         async let resume: Void = refreshResume(using: appState)
         async let nextUp: Void = refreshNextUp(using: appState)
         async let favorites: Void = refreshFavorites(using: appState)
         _ = await (resume, nextUp, favorites)
+        await fillMissingEpisodeNavigation(using: appState)
+    }
+
+    /// Builds episode navigation for the rail cards that don't have any yet.
+    ///
+    /// `load()` builds both maps in one pass over the rails as they were then;
+    /// this covers every card that enters a rail LATER, through
+    /// `refreshUserDataRails` — which is the ordinary path, not an edge case:
+    /// finishing an episode posts the tier-2 notification, the rails refetch,
+    /// and the very next thing the user taps is the freshly-arrived card.
+    /// Measured on device 2026-08-21: that card played with **3** transport
+    /// buttons where a full Home reload gave it **5**, and the same card's
+    /// context menu — which resolves its own navigation — gave 5 throughout.
+    ///
+    /// Deliberately scoped to the **missing** entries. An existing one stays
+    /// valid (navigation depends on the season's episode list, not on the
+    /// card's userData), so re-deriving the whole map on every watched toggle
+    /// anywhere in the app would re-fetch every referenced season for nothing.
+    /// With nothing new in the rails this is a no-op that issues no request.
+    private func fillMissingEpisodeNavigation(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        let missingResume = resumeItems.filter { item in
+            item.type == .episode && item.id.map { resumeNavigation[$0] == nil } == true
+        }
+        let missingNextUp = nextUpItems.filter { item in
+            item.type == .episode && item.id.map { nextUpNavigation[$0] == nil } == true
+        }
+        guard !missingResume.isEmpty || !missingNextUp.isEmpty else { return }
+
+        let seasonEpisodes = await fetchSeasonEpisodes(
+            for: missingResume + missingNextUp, userId: userId, appState: appState
+        )
+        resumeNavigation.merge(
+            buildNavigationMap(for: missingResume, seasonEpisodes: seasonEpisodes)
+        ) { _, new in new }
+        nextUpNavigation.merge(
+            buildNavigationMap(for: missingNextUp, seasonEpisodes: seasonEpisodes)
+        ) { _, new in new }
     }
 
     /// Re-fetches just the Next Up rail. Companion to `refreshResume` — used by
