@@ -121,6 +121,78 @@ struct MediaLibraryRefreshSpanTests {
         #expect(doneP == true)
     }
 
+    // MARK: - Défaut E : l'aller-retour d'onglet ne doit pas rejouer le filtre
+
+    /// `MovieLibraryScreen` pilote la grille filtrée par
+    /// `.task(id: viewModel.sortFilter)`, et `.task(id:)` se redéclenche **à
+    /// chaque attachement**, pas seulement au changement d'id — comportement
+    /// déjà documenté pour le fan-out des genres. Un simple aller-retour
+    /// d'onglet rejouait donc `applyFilter` → `filteredLoader.reset()` → page 0 :
+    /// mesuré sur appareil le 2026-08-21, une grille « Non vus » parcourue
+    /// jusqu'à « Les Rayons et les Ombres / Le Parrain 3 / Dirty Dancing »
+    /// revenait à « La Petite Princesse » dès un passage par Accueil.
+    @Test("Rejouer le même filtre ne renvoie pas la grille à la page 0")
+    func applyFilterIgnoresARepeatOfTheSameFilter() async {
+        let api = makePagingAPI()
+        let appState = makeAppState(api: api)
+        let vm = MediaLibraryViewModel(itemType: .movie)
+        vm.sortFilter.showUnwatchedOnly = true
+
+        await vm.applyFilter(using: appState)
+        await vm.loadMoreFiltered(using: appState)
+        let loadedBefore = vm.filteredLoader.items.count
+        let callsBefore = api.getItemsCalls.count
+        #expect(loadedBefore == 80, "pré-condition : deux pages chargées")
+
+        // Le re-déclenchement du `.task(id:)` au retour sur l'onglet.
+        await vm.applyFilter(using: appState)
+
+        let loadedAfter = vm.filteredLoader.items.count
+        let firstID = vm.filteredLoader.items.first?.id
+        let lastID = vm.filteredLoader.items.last?.id
+        #expect(loadedAfter == 80, "la portée déjà paginée survit à l'aller-retour")
+        #expect(firstID == "m0")
+        #expect(lastID == "m79")
+        #expect(api.getItemsCalls.count == callsBefore, "et rien n'est redemandé au serveur")
+    }
+
+    @Test("Un filtre RÉELLEMENT changé repart bien de la page 0")
+    func applyFilterRunsWhenTheFilterChanges() async {
+        let api = makePagingAPI()
+        let appState = makeAppState(api: api)
+        let vm = MediaLibraryViewModel(itemType: .movie)
+        vm.sortFilter.showUnwatchedOnly = true
+
+        await vm.applyFilter(using: appState)
+        await vm.loadMoreFiltered(using: appState)
+        #expect(vm.filteredLoader.items.count == 80)
+
+        vm.sortFilter.selectedGenres = ["Action"]
+        await vm.applyFilter(using: appState)
+
+        let loaded = vm.filteredLoader.items.count
+        #expect(loaded == 40, "un nouveau filtre décrit une autre liste : on repart de zéro")
+    }
+
+    @Test("Un rafraîchissement explicite ré-arme l'estampille")
+    func reloadReArmsTheStamp() async {
+        let api = makePagingAPI()
+        let appState = makeAppState(api: api)
+        let vm = MediaLibraryViewModel(itemType: .movie)
+        vm.sortFilter.showUnwatchedOnly = true
+
+        await vm.applyFilter(using: appState)
+        await vm.loadMoreFiltered(using: appState)
+        #expect(vm.filteredLoader.items.count == 80)
+
+        // Tirer-pour-rafraîchir / notification de niveau 1.
+        await vm.reload(using: appState, loc: LocalizationManager())
+        await vm.applyFilter(using: appState)
+
+        let loaded = vm.filteredLoader.items.count
+        #expect(loaded == 40, "l'estampille effacée laisse le filtre se rejouer")
+    }
+
     @Test("Sans rien de paginé, le rafraîchissement ciblé ne fait rien")
     func noOpWhenNothingPagedIn() async {
         let api = makePagingAPI()

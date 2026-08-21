@@ -84,6 +84,12 @@ final class MediaLibraryViewModel {
     /// fan-out never latches it and a retry can always re-run.
     private var appliedGenreSortFilter: LibrarySortFilterState?
 
+    /// The filter the paginated grid was last loaded for. Same role as
+    /// `appliedGenreSortFilter` one line up, for the *filtered* half of the
+    /// screen: `applyFilter` no-ops when it is asked to re-apply the filter the
+    /// grid already shows. See its doc comment for why that is load-bearing.
+    private var appliedFilterStamp: LibrarySortFilterState?
+
     init(itemType: BaseItemKind?, parentId: String? = nil) {
         self.itemType = itemType
         self.parentId = parentId
@@ -143,6 +149,7 @@ final class MediaLibraryViewModel {
         // through the guarded `reloadGenreItems`, so it already bypasses the
         // guard — clearing the stamp here keeps that explicit.
         appliedGenreSortFilter = nil
+        appliedFilterStamp = nil
 
         // Register OUR pass in `loadTask` too, not just the initial load's.
         // Without this a second `reload` arriving while this one is in flight
@@ -457,10 +464,35 @@ final class MediaLibraryViewModel {
         }
     }
 
+    /// Loads the filtered grid from page 0 — **once per filter**.
+    ///
+    /// Its caller is the grid's `.task(id: viewModel.sortFilter)`, and
+    /// `.task(id:)` re-fires on every *attach*, not only on id change (same
+    /// trap as the browse fan-out's `.task(id: sortFilter)` one screen over).
+    /// The screen relies on `onAppear`/`onDisappear` for its `isVisible` flag,
+    /// so the attach really does happen on every tab round-trip — and each one
+    /// re-ran `filteredLoader.reset()` → page 0. Measured on device 2026-08-21:
+    /// a "unwatched only" grid scrolled down to « Les Rayons et les Ombres /
+    /// Le Parrain 3 / Dirty Dancing » was back on « La Petite Princesse », at
+    /// the top, after a single trip through the Accueil tab. Locked by
+    /// `MediaLibraryRefreshSpanTests`.
+    ///
+    /// **The stamp is on the filter, NOT on `isFiltered`** — the `guard
+    /// sortFilter.isFiltered` shortcut is explicitly proscribed: this same
+    /// function is what loads an iOS grid in sort-only state (`isNonDefault`
+    /// true, `isFiltered` false), which would then never load at all.
+    ///
+    /// Stamped only once the load actually produced a list (or a legitimately
+    /// empty one), so a failed fetch still retries on the next attach.
     func applyFilter(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
+        let snapshot = sortFilter
+        guard appliedFilterStamp != snapshot else { return }
         filteredLoader.reset()
         await loadMoreFiltered(using: appState, userId: userId)
+        if !filteredLoader.items.isEmpty || filteredLoader.hasLoadedAll {
+            appliedFilterStamp = snapshot
+        }
     }
 
     func loadMoreFiltered(using appState: AppState) async {
