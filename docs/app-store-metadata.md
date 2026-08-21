@@ -95,9 +95,9 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 
 #### iOS — 1.2.1
 ```
-Une version de corrections, dont plusieurs blocages qui obligeaient à quitter l'app.
+Une version de corrections, dont plusieurs bugs qui obligeaient à quitter l'app.
 
-— PLUS DE BLOCAGES
+— BUGS CORRIGÉS
 • L'appui long sur une affiche ne fait plus quitter l'app
 • L'onglet Films ne devient plus une page noire dont rien ne permettait de sortir
 • Le lecteur ne se fige plus après un glissement sur la barre de progression
@@ -159,9 +159,9 @@ Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b
 
 #### tvOS — 1.2.1
 ```
-Une version de corrections, dont plusieurs blocages qui obligeaient à quitter l'app.
+Une version de corrections, dont plusieurs bugs qui obligeaient à quitter l'app.
 
-— PLUS DE BLOCAGES
+— BUGS CORRIGÉS
 • L'appui long sur une affiche ne fait plus quitter l'app
 • L'onglet Films ne devient plus une page noire dont rien ne permettait de sortir
 
@@ -362,9 +362,9 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 
 #### iOS — 1.2.1
 ```
-A fix-focused release, including several dead ends that forced you to quit the app.
+A fix-focused release, including several bugs that forced you to quit the app.
 
-— NO MORE DEAD ENDS
+— BUGS FIXED
 • Long-pressing a poster no longer quits the app
 • The Movies tab no longer turns into a black page with no way out
 • The player no longer freezes after a drag on the progress bar
@@ -426,9 +426,9 @@ Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-rail
 
 #### tvOS — 1.2.1
 ```
-A fix-focused release, including several dead ends that forced you to quit the app.
+A fix-focused release, including several bugs that forced you to quit the app.
 
-— NO MORE DEAD ENDS
+— BUGS FIXED
 • Long-pressing a poster no longer quits the app
 • The Movies tab no longer turns into a black page with no way out
 
