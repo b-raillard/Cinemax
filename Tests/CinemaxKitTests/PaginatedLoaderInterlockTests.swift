@@ -3,34 +3,27 @@ import Foundation
 import CinemaxKit
 @testable import Cinemax
 
-/// Verrouille le comportement de la garde `!isLoadingMore` de `PaginatedLoader`,
-/// caractérisé en recette adversariale (scénarios `Rafr L2` et `Rafr L3`).
+/// Verrouille le contrat de concurrence de `PaginatedLoader` : `loadMore` et
+/// `refreshLoadedSpan` s'excluent mutuellement, mais l'appel qui arrive pendant
+/// qu'un autre est en vol est **mis en attente puis rejoué**, jamais abandonné.
 ///
-/// `loadMore` et `refreshLoadedSpan` partagent le drapeau `isLoadingMore` et
-/// s'excluent mutuellement. Chacun le pose pour toute la durée de son
-/// aller-retour réseau, et l'appel qui arrive pendant est **abandonné en
-/// silence** : pas de file d'attente, pas de réarmement, aucune trace.
+/// Caractérisé en recette adversariale (scénarios `Rafr L2` et `Rafr L3`), où
+/// l'ancien comportement — abandon silencieux, sans file ni réarmement —
+/// produisait deux dégâts visibles :
 ///
-/// Ce n'est pas une régression mais un manque par construction, et il n'est
-/// **pas observable par automatisation de gestes** : la fenêtre vaut un
-/// aller-retour réseau (< 4 s mesuré sur appareil le 2026-08-21) là où un
+/// - **rafraîchissement perdu** — deux bascules « vu » rapprochées, ou une
+///   bascule pendant la pagination : la seconde était jetée, la vignette restait
+///   affichée dans une grille « non vus » que le serveur savait pourtant à jour ;
+/// - **pagination perdue** — un `loadMore` déclenché pendant un rafraîchissement
+///   était jeté ; comme il naît de l'`.onAppear` de la dernière carte, déjà
+///   apparue, plus rien ne le relançait.
+///
+/// La course n'est **pas observable par automatisation de gestes** : la fenêtre
+/// vaut un aller-retour réseau (< 4 s mesuré sur appareil le 2026-08-21) là où un
 /// aller-retour d'outil coûte ~7,7 s. D'où ces tests, qui tiennent la fenêtre
 /// ouverte explicitement par une barrière plutôt que d'espérer la croiser.
-///
-/// Les conséquences produit à trancher, dans les deux sens :
-///
-/// - **Rafraîchissement perdu** — deux bascules « vu » rapprochées, ou une
-///   bascule pendant la pagination : la seconde notification est jetée, la
-///   vignette reste affichée dans une grille « non vus » que le serveur sait
-///   pourtant à jour. L'écran et le serveur se contredisent sans que rien ne
-///   le signale.
-/// - **Pagination perdue** — un `loadMore` déclenché pendant un
-///   rafraîchissement est jeté ; comme il est déclenché par l'`.onAppear` de la
-///   dernière carte, et que cette carte est déjà apparue, plus rien ne le
-///   relance : la pagination reste bloquée tant que l'utilisateur ne remonte
-///   pas de deux écrans avant de redescendre.
 @MainActor
-@Suite("PaginatedLoader — exclusion mutuelle")
+@Suite("PaginatedLoader — file d'attente d'un cran")
 struct PaginatedLoaderInterlockTests {
 
     /// Barrière explicite : elle maintient un `fetch` suspendu pour que la
@@ -55,6 +48,7 @@ struct PaginatedLoaderInterlockTests {
     @MainActor
     private final class Counter {
         var value = 0
+        var lastLimit = 0
     }
 
     /// Amorce le chargeur avec une première page, sans quoi
@@ -71,8 +65,13 @@ struct PaginatedLoaderInterlockTests {
         while !loader.isLoadingMore { await Task.yield() }
     }
 
-    @Test("Un rafraîchissement de portée arrivé pendant un autre est jeté sans rattrapage")
-    func concurrentSpanRefreshIsDropped() async {
+    /// Laisse une tâche concurrente atteindre son point de mise en attente.
+    private func settle() async {
+        for _ in 0..<20 { await Task.yield() }
+    }
+
+    @Test("Un rafraîchissement de portée arrivé pendant un autre est rejoué à la libération")
+    func concurrentSpanRefreshIsReplayed() async {
         let loader = await seededLoader()
         let gate = Gate()
         let secondFetches = Counter()
@@ -86,25 +85,29 @@ struct PaginatedLoaderInterlockTests {
         await waitUntilLoading(loader)
 
         // Deuxième bascule « vu » pendant que la première est en vol.
-        await loader.refreshLoadedSpan { _, _ in
-            secondFetches.value += 1
-            return (items: ["second", "second2"], total: 100)
+        let second = Task {
+            await loader.refreshLoadedSpan { _, _ in
+                secondFetches.value += 1
+                return (items: ["second", "second2"], total: 100)
+            }
         }
+        await settle()
 
-        // Elle n'a même pas atteint le réseau.
+        // Elle attend son tour : rien n'est parti sur le réseau.
         #expect(secondFetches.value == 0)
 
         gate.open()
         await first.value
+        await second.value
 
-        // Et rien ne la rejoue : la portée porte les données du premier appel.
-        #expect(loader.items == ["premier", "premier2"])
-        #expect(secondFetches.value == 0)
+        // Et elle est bien rejouée : la portée porte les données les plus fraîches.
+        #expect(secondFetches.value == 1)
+        #expect(loader.items == ["second", "second2"])
         #expect(loader.isLoadingMore == false)
     }
 
-    @Test("Une pagination déclenchée pendant un rafraîchissement est jetée, et rien ne la relance")
-    func loadMoreDuringSpanRefreshIsDropped() async {
+    @Test("Une pagination déclenchée pendant un rafraîchissement est rejouée")
+    func loadMoreDuringSpanRefreshIsReplayed() async {
         let loader = await seededLoader()
         let gate = Gate()
         let pageFetches = Counter()
@@ -118,25 +121,29 @@ struct PaginatedLoaderInterlockTests {
         await waitUntilLoading(loader)
 
         // L'`.onAppear` de la dernière carte pendant le rafraîchissement.
-        await loader.loadMore { _ in
-            pageFetches.value += 1
-            return (items: ["c", "d"], total: 100)
+        let paging = Task {
+            await loader.loadMore { startIndex in
+                pageFetches.value += 1
+                pageFetches.lastLimit = startIndex
+                return (items: ["c", "d"], total: 100)
+            }
         }
+        await settle()
         #expect(pageFetches.value == 0)
 
         gate.open()
         await refresh.value
+        await paging.value
 
-        // La page suivante n'est jamais arrivée. Sur l'écran, la carte
-        // déclencheuse est déjà apparue : son `.onAppear` ne se rejouera pas,
-        // donc la pagination reste bloquée jusqu'à un aller-retour de
-        // défilement.
-        #expect(loader.items.count == 2)
-        #expect(loader.hasLoadedAll == false)
+        // La page suivante arrive, et son index de départ tient compte de la
+        // portée rafraîchie entre-temps.
+        #expect(pageFetches.value == 1)
+        #expect(pageFetches.lastLimit == 2)
+        #expect(loader.items == ["a", "b", "c", "d"])
     }
 
-    @Test("Un rafraîchissement arrivé pendant une pagination est jeté")
-    func spanRefreshDuringLoadMoreIsDropped() async {
+    @Test("Un rafraîchissement arrivé pendant une pagination couvre aussi la page qui vient d'arriver")
+    func spanRefreshDuringLoadMoreIsReplayed() async {
         let loader = await seededLoader()
         let gate = Gate()
         let refreshFetches = Counter()
@@ -150,19 +157,98 @@ struct PaginatedLoaderInterlockTests {
         await waitUntilLoading(loader)
 
         // La bascule « vu » pendant que la roue de pied de page tourne.
-        await loader.refreshLoadedSpan { _, _ in
-            refreshFetches.value += 1
-            return (items: ["frais"], total: 99)
+        let refresh = Task {
+            await loader.refreshLoadedSpan { _, limit in
+                refreshFetches.value += 1
+                refreshFetches.lastLimit = limit
+                return (items: ["frais1", "frais2", "frais3"], total: 99)
+            }
         }
+        await settle()
         #expect(refreshFetches.value == 0)
 
         gate.open()
         await paging.value
+        await refresh.value
 
-        // La page est bien arrivée, mais la bascule n'a laissé aucune trace :
-        // le total reste celui d'avant.
-        #expect(loader.items == ["a", "b", "c", "d"])
-        #expect(loader.totalCount == 100)
+        // La portée est lue APRÈS l'attente : elle couvre les 4 éléments,
+        // page fraîchement paginée comprise.
+        #expect(refreshFetches.lastLimit == 4)
+        #expect(loader.items == ["frais1", "frais2", "frais3"])
+        #expect(loader.totalCount == 99)
+    }
+
+    @Test("Deux rafraîchissements en attente se fondent en un seul rejeu")
+    func redundantSpanRefreshCoalesces() async {
+        let loader = await seededLoader()
+        let gate = Gate()
+        let queuedFetches = Counter()
+
+        let first = Task {
+            await loader.refreshLoadedSpan { _, _ in
+                await gate.wait()
+                return (items: ["premier", "premier2"], total: 100)
+            }
+        }
+        await waitUntilLoading(loader)
+
+        // Trois bascules « vu » d'affilée pendant la même fenêtre : une seule
+        // requête doit en sortir, elles demandent toutes la même chose.
+        let second = Task {
+            await loader.refreshLoadedSpan { _, _ in
+                queuedFetches.value += 1
+                return (items: ["frais", "frais2"], total: 100)
+            }
+        }
+        let third = Task {
+            await loader.refreshLoadedSpan { _, _ in
+                queuedFetches.value += 1
+                return (items: ["frais", "frais2"], total: 100)
+            }
+        }
+        await settle()
+
+        gate.open()
+        await first.value
+        await second.value
+        await third.value
+
+        #expect(queuedFetches.value == 1)
+        #expect(loader.items == ["frais", "frais2"])
+    }
+
+    @Test("Un `reset()` pendant l'attente annule l'appel en file plutôt que de le rejouer")
+    func resetDiscardsQueuedCall() async {
+        let loader = await seededLoader()
+        let gate = Gate()
+        let queuedFetches = Counter()
+
+        let first = Task {
+            await loader.refreshLoadedSpan { _, _ in
+                await gate.wait()
+                return (items: ["premier", "premier2"], total: 100)
+            }
+        }
+        await waitUntilLoading(loader)
+
+        let queued = Task {
+            await loader.refreshLoadedSpan { _, _ in
+                queuedFetches.value += 1
+                return (items: ["obsolete"], total: 1)
+            }
+        }
+        await settle()
+
+        // L'utilisateur change de filtre : la portée en attente ne décrit plus
+        // rien d'affiché.
+        loader.reset()
+        gate.open()
+        await first.value
+        await queued.value
+
+        #expect(queuedFetches.value == 0)
+        #expect(loader.items.isEmpty)
+        #expect(loader.isLoadingMore == false)
     }
 
     @Test("Après relâchement de la garde, un nouvel appel repasse normalement")

@@ -7,7 +7,11 @@ import Observation
 public final class PaginatedLoader<T: Sendable>: Sendable {
     public var items: [T] = []
     public var totalCount = 0
-    public var isLoadingMore = false
+    /// Held for the whole duration of a `loadMore` / `refreshLoadedSpan` pass,
+    /// and **owned by the loader alone**: an outside writer could otherwise
+    /// raise the flag with no pass behind it to lower it again, and a caller
+    /// queued behind that phantom pass would wait forever (see `acquireGuard`).
+    public private(set) var isLoadingMore = false
     public private(set) var hasLoadedAll = false
     private let pageSize: Int
 
@@ -20,14 +24,78 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     /// abandoned pass, so a stale pass must never touch it either.
     private var generation = 0
 
+    private enum PendingCall { case loadMore, spanRefresh }
+
+    /// Callers parked behind the in-flight pass, in arrival order — at most one
+    /// per kind (see `acquireGuard`). Deliberately `@ObservationIgnored`: it is
+    /// pure scheduling bookkeeping, and instrumenting it would invalidate every
+    /// SwiftUI view observing the loader each time a call merely queues.
+    @ObservationIgnored
+    private var waiters: [(kind: PendingCall, continuation: CheckedContinuation<Bool, Never>)] = []
+
     public init(pageSize: Int = 40) {
         self.pageSize = pageSize
     }
 
-    /// Appends the next page. No-op if already loading or all loaded.
+    /// Takes the guard, **waiting for its turn** rather than giving up when a
+    /// pass is already in flight.
+    ///
+    /// `loadMore` and `refreshLoadedSpan` share `isLoadingMore` and must not
+    /// interleave their writes, but the arriving call used to be dropped in
+    /// silence — no queue, no re-arming, no trace. That cost the user real
+    /// state in both directions (characterised in the `Rafr L2`/`L3` adversarial
+    /// scenarios, locked by `PaginatedLoaderInterlockTests`):
+    ///
+    /// - a second watched-toggle raised while the first refresh was in flight
+    ///   was lost, leaving the item on screen in an "unwatched only" grid the
+    ///   server already knew was stale — **the screen contradicting the server,
+    ///   with nothing to signal it**;
+    /// - a `loadMore` raised during a refresh was lost, and since it is driven
+    ///   by the last card's `.onAppear` — a card that has already appeared —
+    ///   **nothing ever fired it again**: pagination stayed stuck until the user
+    ///   scrolled two screens back up.
+    ///
+    /// Returns `true` when the caller now OWNS the guard. The flag is handed
+    /// over directly (never cleared in between), so no third call can slip into
+    /// the gap. Returns `false` when the caller must give up without writing:
+    /// either an identical call is already queued — they ask for the same work,
+    /// so they coalesce — or `reset()` fired while this one was parked, meaning
+    /// its request describes a list that no longer exists.
+    ///
+    /// Parking is bounded by the in-flight pass itself, which always ends in
+    /// `handOverOrRelease()` (or in `reset()` draining the queue) — hence
+    /// `isLoadingMore` being `private(set)`: an outside writer could raise the
+    /// flag with no pass behind it and strand every later caller. A parked
+    /// caller does not observe `Task` cancellation; it resumes when its turn
+    /// comes, and its own `fetch` is where cancellation surfaces.
+    private func acquireGuard(_ kind: PendingCall) async -> Bool {
+        guard isLoadingMore else {
+            isLoadingMore = true
+            return true
+        }
+        guard !waiters.contains(where: { $0.kind == kind }) else { return false }
+        return await withCheckedContinuation { continuation in
+            waiters.append((kind, continuation))
+        }
+    }
+
+    /// Hands the guard to the first waiter, or releases it when none is queued.
+    private func handOverOrRelease() {
+        guard !waiters.isEmpty else {
+            isLoadingMore = false
+            return
+        }
+        waiters.removeFirst().continuation.resume(returning: true)
+    }
+
+    /// Appends the next page. No-op if all loaded; queued behind any pass
+    /// already in flight.
     public func loadMore(fetch: (Int) async throws -> (items: [T], total: Int)) async {
-        guard !hasLoadedAll, !isLoadingMore else { return }
-        isLoadingMore = true
+        guard !hasLoadedAll else { return }
+        guard await acquireGuard(.loadMore) else { return }
+        // Re-read after the wait: the pass we queued behind may have loaded the
+        // tail of the list while we were parked.
+        guard !hasLoadedAll else { handOverOrRelease(); return }
         let generationAtStart = generation
         do {
             let result = try await fetch(items.count)
@@ -39,11 +107,11 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
             }
             totalCount = result.total
             hasLoadedAll = items.count >= result.total
-            isLoadingMore = false
+            handOverOrRelease()
         } catch {
             // Caller can observe isLoadingMore returning to false with no new items
             guard generationAtStart == generation else { return }
-            isLoadingMore = false
+            handOverOrRelease()
         }
     }
 
@@ -64,13 +132,15 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     /// stops asking for more.
     ///
     /// No-op when nothing has been paged in yet (the caller should do a normal
-    /// load) or while a `loadMore` is in flight — same discipline as `loadMore`
-    /// itself, and it keeps the two from interleaving writes.
+    /// load). While another pass is in flight it queues behind it rather than
+    /// giving up — see `acquireGuard` — and reads the span **after** its turn
+    /// comes, so a page that landed in the meantime is covered too.
     public func refreshLoadedSpan(
         fetch: (_ startIndex: Int, _ limit: Int) async throws -> (items: [T], total: Int)
     ) async {
-        guard !items.isEmpty, !isLoadingMore else { return }
-        isLoadingMore = true
+        guard !items.isEmpty else { return }
+        guard await acquireGuard(.spanRefresh) else { return }
+        guard !items.isEmpty else { handOverOrRelease(); return }
         let generationAtStart = generation
         let span = items.count
         do {
@@ -79,10 +149,10 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
             items = result.items
             totalCount = result.total
             hasLoadedAll = items.count >= result.total
-            isLoadingMore = false
+            handOverOrRelease()
         } catch {
             guard generationAtStart == generation else { return }
-            isLoadingMore = false
+            handOverOrRelease()
         }
     }
 
@@ -92,5 +162,11 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
         totalCount = 0
         isLoadingMore = false
         hasLoadedAll = false
+        // Every parked caller described the list we just threw away: wake them
+        // so they return without writing, rather than replaying onto a list that
+        // no longer exists — or worse, never returning at all.
+        let parked = waiters
+        waiters = []
+        for waiter in parked { waiter.continuation.resume(returning: false) }
     }
 }
