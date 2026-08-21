@@ -361,20 +361,12 @@ struct PaginatedLoaderTests {
         #expect(loader.hasLoadedAll)
     }
 
-    @Test("loadMore is a no-op while a fetch is already marked in-flight")
-    func guardsReentrancyWhileLoading() async {
-        let loader = PaginatedLoader<Int>(pageSize: 2)
-        loader.isLoadingMore = true
-
-        var fetchCalled = false
-        await loader.loadMore { _ in
-            fetchCalled = true
-            return (items: [1], total: 1)
-        }
-
-        #expect(!fetchCalled)
-        #expect(loader.items.isEmpty)
-    }
+    // « loadMore ne fait rien pendant qu'un chargement est en vol » simulait
+    // l'état en vol en écrivant `isLoadingMore` de l'extérieur. Le drapeau
+    // appartient désormais au chargeur seul (`private(set)`) et un appel qui
+    // arrive pendant un autre n'est plus abandonné mais mis en file, ce que
+    // `PaginatedLoaderInterlockTests` vérifie avec une passe réellement en vol,
+    // tenue ouverte par une barrière — la seule façon honnête de le prouver.
 
     @Test("loadMore is a no-op once hasLoadedAll is true")
     func guardsAgainstFetchAfterFullyLoaded() async {
@@ -506,7 +498,7 @@ struct PaginatedLoaderTests {
         #expect(loader.hasLoadedAll)
     }
 
-    @Test("refreshLoadedSpan is a no-op before anything is paged in, and while a loadMore is in flight")
+    @Test("refreshLoadedSpan is a no-op before anything is paged in")
     func refreshGuards() async {
         let loader = PaginatedLoader<Int>(pageSize: 2)
 
@@ -517,15 +509,6 @@ struct PaginatedLoaderTests {
         }
         #expect(!fetchCalled) // nothing loaded yet — the caller must do a full load
         #expect(loader.items.isEmpty)
-
-        await loader.loadMore { _ in (items: [1, 2], total: 10) }
-        loader.isLoadingMore = true
-        await loader.refreshLoadedSpan { _, _ in
-            fetchCalled = true
-            return (items: [9], total: 9)
-        }
-        #expect(!fetchCalled)
-        #expect(loader.items == [1, 2])
     }
 
     @Test("a thrown refreshLoadedSpan leaves the visible page intact")
