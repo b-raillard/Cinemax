@@ -87,6 +87,11 @@ private struct CardMenuItem {
     let type: BaseItemKind?
     let name: String?
     let seriesId: String?
+    /// Carried so an episode card can resolve its own neighbours without a
+    /// `getItem` first — see `CardEpisodeNavigationResolver`. A search hit and
+    /// a watch-history entry both populate it; a movie or series card doesn't,
+    /// and doesn't need to.
+    let seasonId: String?
     let isPlayed: Bool
     let isFavorite: Bool
     let positionTicks: Int
@@ -99,6 +104,7 @@ private struct CardMenuItem {
         type = item.type
         name = item.name
         seriesId = item.seriesID
+        seasonId = item.seasonID
         isPlayed = item.userData?.isPlayed ?? false
         isFavorite = item.userData?.isFavorite ?? false
         positionTicks = item.userData?.playbackPositionTicks ?? 0
@@ -359,21 +365,55 @@ private struct CardMenuContent: View {
     private func startPlayback(fromStart: Bool) async {
         guard let target = await resolvedCardPlayTarget() else { return }
         let startTime = fromStart ? nil : target.startSeconds
+        // The screen's own trio when it has one (Home's two rails), else
+        // resolve it here — without this, an episode played from Search or
+        // Watch History reached the player with no neighbours and no
+        // navigator, which costs the prev/next buttons AND silences both
+        // autoplay-next and the end-of-series card.
+        // Not `navigation ?? (await …)`: `??`'s right-hand side is a
+        // non-async autoclosure.
+        let nav: CardPlaybackNavigation?
+        if let navigation {
+            nav = navigation
+        } else {
+            nav = await resolvedEpisodeNavigation(for: target)
+        }
 
         #if os(tvOS)
         coordinator?.play(
             itemId: target.itemId, title: target.title, startTime: startTime,
-            previousEpisode: navigation?.previous, nextEpisode: navigation?.next,
-            episodeNavigator: navigation?.navigator,
+            previousEpisode: nav?.previous, nextEpisode: nav?.next,
+            episodeNavigator: nav?.navigator,
             using: appState
         )
         #else
         cardActions?.present(playback: CardPlaybackRequest(
             itemId: target.itemId, title: target.title, startTime: startTime,
-            previousEpisode: navigation?.previous, nextEpisode: navigation?.next,
-            episodeNavigator: navigation?.navigator
+            previousEpisode: nav?.previous, nextEpisode: nav?.next,
+            episodeNavigator: nav?.navigator
         ))
         #endif
+    }
+
+    /// The episode graph for what is about to play, for the surfaces that
+    /// cannot supply one themselves.
+    ///
+    /// Only an episode has neighbours. A **series** card qualifies too when
+    /// its next-up probe handed back an episode id (`target.itemId` then
+    /// differs from the card's own): the resolver learns the season from that
+    /// id. When the probe instead fell through to the series id, the season
+    /// lookup comes back empty and this is one cached call spent on a `nil`.
+    private func resolvedEpisodeNavigation(for target: CardPlayTarget) async -> CardPlaybackNavigation? {
+        guard let userId = appState.currentUserId else { return nil }
+        let isEpisode = item.type == .episode
+        guard isEpisode || target.itemId != item.id else { return nil }
+        return await CardEpisodeNavigationResolver.resolve(
+            episodeId: target.itemId,
+            seriesId: isEpisode ? item.seriesId : item.id,
+            seasonId: isEpisode ? item.seasonId : nil,
+            api: appState.apiClient,
+            userId: userId
+        )
     }
 
     /// Sends to another session what "Play" would have started here, going
