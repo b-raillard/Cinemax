@@ -217,6 +217,117 @@ struct HomeViewModelTests {
         #expect(nav?.navigator != nil)
     }
 
+    // MARK: - Défaut G : une carte arrivée par un rafraîchissement de niveau 2
+
+    /// Trouvé en recette adversariale (« Menus contextuels `M1` »), avec
+    /// contrôle apparié sur appareil : le même épisode, sur la même carte de
+    /// « Reprendre », donnait **3** boutons de transport lancé par appui simple
+    /// et **5** lancé depuis le menu contextuel — et **5** par appui simple une
+    /// fois l'Accueil rechargé en entier.
+    ///
+    /// `load()` construit les deux cartes de navigation en une passe ; tout ce
+    /// qui entre dans un rail APRÈS, via `refreshUserDataRails`, n'en avait
+    /// aucune. Or c'est le chemin ordinaire : finir un épisode poste la
+    /// notification de niveau 2, les rails se refetchent, et la carte
+    /// fraîchement arrivée est précisément celle que l'utilisateur touche
+    /// ensuite. Un navigateur nul ne coûte pas que deux boutons — il coupe
+    /// aussi l'enchaînement automatique et la carte de fin de série.
+    @Test("Une carte entrée dans « Reprendre » par le niveau 2 reçoit sa navigation")
+    func tierTwoRefreshFillsMissingResumeNavigation() async {
+        let api = MockAPIClient()
+        api.getEpisodesHandler = { seasonId in
+            guard seasonId == "season-1" else { return [] }
+            return [
+                makeSeasonEpisode(id: "ep-1", name: "Episode 1"),
+                makeSeasonEpisode(id: "ep-2", name: "Episode 2"),
+                makeSeasonEpisode(id: "ep-3", name: "Episode 3"),
+            ]
+        }
+        let vm = HomeViewModel()
+        let appState = makeAppState(api: api)
+
+        // Chargement initial : le rail est vide, donc aucune navigation.
+        await vm.load(using: appState)
+        #expect(vm.resumeNavigation.isEmpty)
+
+        // L'épisode arrive dans « Reprendre » — exactement ce que produit un
+        // arrêt de lecture, qui poste la notification de niveau 2.
+        var ep = BaseItemDto()
+        ep.id = "ep-2"
+        ep.name = "Episode 2"
+        ep.type = .episode
+        ep.seasonID = "season-1"
+        ep.seriesID = "series-1"
+        api.stubbedResumeItems = [ep]
+
+        await vm.refreshUserDataRails(using: appState)
+
+        let nav = vm.resumeNavigation["ep-2"]
+        let prev = nav?.previous?.id
+        let next = nav?.next?.id
+        #expect(nav != nil, "la carte fraîchement arrivée doit porter sa navigation")
+        #expect(prev == "ep-1")
+        #expect(next == "ep-3")
+        #expect(nav?.navigator != nil, "sans navigateur, ni enchaînement ni carte de fin")
+    }
+
+    @Test("Le rail « À suivre » est couvert de la même façon")
+    func tierTwoRefreshFillsMissingNextUpNavigation() async {
+        let api = MockAPIClient()
+        api.getEpisodesHandler = { seasonId in
+            seasonId == "season-9" ? [
+                makeSeasonEpisode(id: "e1", name: "E1"),
+                makeSeasonEpisode(id: "e2", name: "E2"),
+            ] : []
+        }
+        let vm = HomeViewModel()
+        let appState = makeAppState(api: api)
+        await vm.load(using: appState)
+
+        var ep = BaseItemDto()
+        ep.id = "e1"
+        ep.type = .episode
+        ep.seasonID = "season-9"
+        ep.seriesID = "series-9"
+        api.stubbedNextUpItems = [ep]
+
+        await vm.refreshUserDataRails(using: appState)
+
+        let nav = vm.nextUpNavigation["e1"]
+        let next = nav?.next?.id
+        #expect(nav != nil)
+        #expect(next == "e2")
+    }
+
+    /// Le remplissage est volontairement borné aux entrées MANQUANTES : une
+    /// entrée existante reste valable (la navigation dépend de la liste des
+    /// épisodes de la saison, pas des données utilisateur de la carte), donc
+    /// re-dériver toute la carte à chaque bascule « vu » de l'application
+    /// re-demanderait chaque saison pour rien.
+    @Test("Rien de nouveau dans les rails : aucune requête d'épisodes")
+    func tierTwoRefreshIssuesNoRequestWhenNothingIsMissing() async {
+        let api = MockAPIClient()
+        var ep = BaseItemDto()
+        ep.id = "ep-2"
+        ep.type = .episode
+        ep.seasonID = "season-1"
+        ep.seriesID = "series-1"
+        api.stubbedResumeItems = [ep]
+        api.getEpisodesHandler = { _ in
+            [makeSeasonEpisode(id: "ep-1", name: "E1"), makeSeasonEpisode(id: "ep-2", name: "E2")]
+        }
+        let vm = HomeViewModel()
+        let appState = makeAppState(api: api)
+
+        await vm.load(using: appState)
+        #expect(vm.resumeNavigation["ep-2"] != nil, "pré-condition : la navigation existe déjà")
+        let before = api.getEpisodesCallCount
+
+        await vm.refreshUserDataRails(using: appState)
+
+        #expect(api.getEpisodesCallCount == before, "aucune saison re-demandée")
+    }
+
     @Test("Next Up fetch failure leaves nextUpItems empty without failing the load")
     func nextUpFailureIsIsolated() async {
         let api = MockAPIClient()
