@@ -93,9 +93,12 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
 
-#### iOS — 1.2.1
+#### iOS — 1.3.0
 ```
-Une version de corrections, dont plusieurs bugs qui obligeaient à quitter l'app.
+Une nouveauté, et surtout beaucoup de corrections — dont plusieurs bugs qui obligeaient à quitter l'app.
+
+— NOUVEAU
+• Votre organisation des onglets est désormais mémorisée serveur par serveur : chaque serveur garde son propre menu
 
 — BUGS CORRIGÉS
 • L'appui long sur une affiche ne fait plus quitter l'app
@@ -121,9 +124,6 @@ Une version de corrections, dont plusieurs bugs qui obligeaient à quitter l'app
 
 — LIRE SUR…
 • Une lecture envoyée depuis un autre appareil n'est plus perdue si une fiche est déjà ouverte
-
-— MENU
-• Votre organisation des onglets est désormais mémorisée serveur par serveur
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -157,9 +157,12 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
-#### tvOS — 1.2.1
+#### tvOS — 1.3.0
 ```
-Une version de corrections, dont plusieurs bugs qui obligeaient à quitter l'app.
+Une nouveauté, et surtout beaucoup de corrections — dont plusieurs bugs qui obligeaient à quitter l'app.
+
+— NOUVEAU
+• Votre organisation des onglets est désormais mémorisée serveur par serveur : chaque serveur garde son propre menu
 
 — BUGS CORRIGÉS
 • L'appui long sur une affiche ne fait plus quitter l'app
@@ -185,9 +188,6 @@ Une version de corrections, dont plusieurs bugs qui obligeaient à quitter l'app
 
 — RÉGLAGES
 • La grille de changement de profil s'affiche à nouveau correctement
-
-— MENU
-• Votre organisation des onglets est désormais mémorisée serveur par serveur
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -360,9 +360,12 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 > Two separate texts: Live Activity is iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
 
-#### iOS — 1.2.1
+#### iOS — 1.3.0
 ```
-A fix-focused release, including several bugs that forced you to quit the app.
+One new feature, and a lot of fixes — including several bugs that forced you to quit the app.
+
+— NEW
+• Your tab arrangement is now remembered per server: each server keeps its own menu
 
 — BUGS FIXED
 • Long-pressing a poster no longer quits the app
@@ -388,9 +391,6 @@ A fix-focused release, including several bugs that forced you to quit the app.
 
 — PLAY ON…
 • Playback sent from another device is no longer lost when a title page is already open
-
-— MENU
-• Your tab arrangement is now remembered per server
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
@@ -424,9 +424,12 @@ Long-press a title and it now does everything, without opening its page.
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
-#### tvOS — 1.2.1
+#### tvOS — 1.3.0
 ```
-A fix-focused release, including several bugs that forced you to quit the app.
+One new feature, and a lot of fixes — including several bugs that forced you to quit the app.
+
+— NEW
+• Your tab arrangement is now remembered per server: each server keeps its own menu
 
 — BUGS FIXED
 • Long-pressing a poster no longer quits the app
@@ -452,9 +455,6 @@ A fix-focused release, including several bugs that forced you to quit the app.
 
 — SETTINGS
 • The profile-switching grid renders correctly again
-
-— MENU
-• Your tab arrangement is now remembered per server
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
@@ -592,7 +592,7 @@ saving of any kind — it is exclusively a streaming client.
 For tvOS: same flow, server URL is entered via the on-screen keyboard.
 
 VLC playback engine is used by default. To test the native AVPlayer fallback:
-Settings → Interface → enable "Use Native Player".
+Settings → Playback → enable "Use Native Player".
 ```
 
 ---
@@ -609,7 +609,9 @@ ASC → Pricing and Availability → Edit Countries or Regions → cocher unique
 
 ## 6. Build à sélectionner
 
-iOS : dernière build TestFlight (1.0 build N)
-tvOS : dernière build TestFlight (1.0 build N)
+iOS : dernière build TestFlight (**1.3.0** build N)
+tvOS : dernière build TestFlight (**1.3.0** build N)
+
+`MARKETING_VERSION` et `CURRENT_PROJECT_VERSION` sont source unique dans `project.yml` (settings.base) : bumper `MARKETING_VERSION` à chaque version publique, `CURRENT_PROJECT_VERSION` à chaque archive envoyée.
 
 ASC → Distribution → iOS App / tvOS App → Build → Select Build → choisir le build le plus récent processé.
