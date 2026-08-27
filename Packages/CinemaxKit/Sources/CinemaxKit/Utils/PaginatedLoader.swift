@@ -15,6 +15,23 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     public private(set) var hasLoadedAll = false
     private let pageSize: Int
 
+    /// Extracts a stable identity for de-duplication, when the element type has
+    /// one. `nil` (the default) keeps the historical append-everything
+    /// behaviour for element types with no identity to speak of.
+    @ObservationIgnored
+    private let identity: (@Sendable (T) -> String?)?
+
+    /// How many elements the SERVER has handed us — the true pagination offset,
+    /// which `items.count` stops being the moment a duplicate is rejected.
+    ///
+    /// Keeping the two apart is what makes de-duplication safe. Paging on
+    /// `items.count` after dropping *k* duplicates would re-request those same
+    /// *k* elements on every later page, and `hasLoadedAll` — derived from a
+    /// count that can then never reach `totalCount` — would never become true,
+    /// so the last card's `.onAppear` would keep firing for ever.
+    @ObservationIgnored
+    private var loadedCount = 0
+
     /// Bumped by `reset()`. A `loadMore` pass snapshots this before awaiting
     /// `fetch` and, on resume, only writes state (including `isLoadingMore`)
     /// if the snapshot still matches — otherwise a `reset()` (or a newer,
@@ -33,8 +50,30 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     @ObservationIgnored
     private var waiters: [(kind: PendingCall, continuation: CheckedContinuation<Bool, Never>)] = []
 
-    public init(pageSize: Int = 40) {
+    public init(pageSize: Int = 40, identity: (@Sendable (T) -> String?)? = nil) {
         self.pageSize = pageSize
+        self.identity = identity
+    }
+
+    /// Drops incoming elements already present in `existing`.
+    ///
+    /// Jellyfin paginates by offset, so any change to the underlying list
+    /// between two pages shifts the window: an item inserted at the head under
+    /// a `dateCreated` sort makes page N+1 re-deliver the tail of page N.
+    /// `ForEach(items, id: \.id)` on duplicated ids is **undefined** in SwiftUI
+    /// — it renders a single view for the duplicated identity, so a card
+    /// silently vanishes from the grid while the header still counts it
+    /// (measured on device 2026-08-24; defect N of the adversarial campaign).
+    ///
+    /// An element with no identity is KEPT: it cannot be proven to be a
+    /// duplicate, and dropping it would be the same silent loss in reverse.
+    private func deduplicated(_ incoming: [T], against existing: [T]) -> [T] {
+        guard let identity else { return incoming }
+        var seen = Set(existing.compactMap(identity))
+        return incoming.filter { element in
+            guard let id = identity(element) else { return true }
+            return seen.insert(id).inserted
+        }
     }
 
     /// Takes the guard, **waiting for its turn** rather than giving up when a
@@ -98,15 +137,21 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
         guard !hasLoadedAll else { handOverOrRelease(); return }
         let generationAtStart = generation
         do {
-            let result = try await fetch(items.count)
+            let result = try await fetch(loadedCount)
             guard generationAtStart == generation else { return }
+            let fresh = deduplicated(result.items, against: items)
             if items.isEmpty {
-                items = result.items
+                items = fresh
             } else {
-                items.append(contentsOf: result.items)
+                items.append(contentsOf: fresh)
             }
+            // Count what the SERVER sent, not what we retained — see `loadedCount`.
+            loadedCount += result.items.count
             totalCount = result.total
-            hasLoadedAll = items.count >= result.total
+            // An empty page is the end of the list whatever the reported total
+            // says: without this, a server over-reporting `totalRecordCount`
+            // leaves the last card asking for more for ever.
+            hasLoadedAll = loadedCount >= result.total || result.items.isEmpty
             handOverOrRelease()
         } catch {
             // Caller can observe isLoadingMore returning to false with no new items
@@ -142,13 +187,18 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
         guard await acquireGuard(.spanRefresh) else { return }
         guard !items.isEmpty else { handOverOrRelease(); return }
         let generationAtStart = generation
-        let span = items.count
+        // The span the SERVER knows about, which is what index 0 has to cover —
+        // it exceeds `items.count` by exactly the duplicates already rejected.
+        let span = max(loadedCount, items.count)
         do {
             let result = try await fetch(0, span)
             guard generationAtStart == generation else { return }
-            items = result.items
+            // Replaces rather than appends, so nothing is already on screen to
+            // compare against — but the page itself can carry duplicates.
+            items = deduplicated(result.items, against: [])
+            loadedCount = result.items.count
             totalCount = result.total
-            hasLoadedAll = items.count >= result.total
+            hasLoadedAll = loadedCount >= result.total || result.items.isEmpty
             handOverOrRelease()
         } catch {
             guard generationAtStart == generation else { return }
@@ -159,6 +209,7 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     public func reset() {
         generation += 1
         items = []
+        loadedCount = 0
         totalCount = 0
         isLoadingMore = false
         hasLoadedAll = false

@@ -7,7 +7,9 @@ import UIKit
 /// focus navigation already handles this naturally via remote.
 struct AlphabeticalJumpBar: View {
     let accent: Color
-    let onSelect: (String) -> Void
+    /// Returns whether the tap actually led somewhere — the haptic follows that
+    /// answer. See `fire(_:)`.
+    let onSelect: (String) -> Bool
 
     /// The letters rendered. "#" covers items that begin with a digit or symbol.
     private static let letters: [String] = {
@@ -59,8 +61,13 @@ struct AlphabeticalJumpBar: View {
 
     private func fire(_ letter: String) {
         lastFired = letter
-        UISelectionFeedbackGenerator().selectionChanged()
-        onSelect(letter)
+        // The haptic follows the outcome; it never precedes it. Firing up front
+        // made a letter that led nowhere FEEL like it had been taken into
+        // account — the worst possible signal on a bar that, before the grid
+        // learned to re-anchor, could not reach most of its own alphabet.
+        if onSelect(letter) {
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
     }
 }
 #endif

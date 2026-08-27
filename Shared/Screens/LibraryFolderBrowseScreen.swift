@@ -8,7 +8,19 @@ import JellyfinAPI
 /// detail. Reached as a library tab from the custom-menu (library mode); see
 /// `MenuConfigStore.libraryTab` → `.libraryFolders`.
 struct LibraryFolderBrowseScreen: View {
-    let parentId: String
+    /// Where the folders come from.
+    ///
+    /// `.playlists` exists so the "all playlists" screen does NOT depend on the
+    /// server exposing a Playlists *view*: `getPlaylists` answers for the user
+    /// directly. That was the second of the two conditions that made a created
+    /// playlist unfindable — the first being that only a `.custom + .library`
+    /// menu could reach this screen at all.
+    enum Source: Hashable {
+        case parent(String)
+        case playlists
+    }
+
+    let source: Source
     let title: String
     /// Drives the empty-state copy + icon (Playlists vs Collections).
     let isPlaylist: Bool
@@ -29,10 +41,21 @@ struct LibraryFolderBrowseScreen: View {
             .navigationBarTitleDisplayMode(.large)
             #endif
             .navigationDestination(item: $selection) { sel in
-                MediaLibraryScreen(itemType: nil, parentId: sel.id, overrideTitle: sel.name)
+                // A playlist is ORDERED, and only `getPlaylistItems` returns it
+                // in order — a `parentId` query cannot.
+                if isPlaylist {
+                    PlaylistDetailScreen(playlistId: sel.id, title: sel.name)
+                } else {
+                    // A collection gets its own fiche — backdrop, overview,
+                    // "Play all", and its members — not a bare scoped grid.
+                    // The fiche existed but nothing reached it: this browser
+                    // predates it and drilled straight into `parentId`
+                    // contents, so "Play all" was unreachable by any route.
+                    MediaDetailScreen(itemId: sel.id, itemType: .boxSet)
+                }
             }
-            .task(id: parentId) {
-                await viewModel.load(parentId: parentId, using: appState)
+            .task(id: source) {
+                await viewModel.load(source: source, using: appState)
             }
     }
 
@@ -46,7 +69,7 @@ struct LibraryFolderBrowseScreen: View {
                 message: loc.localized("error.generic"),
                 retryTitle: loc.localized("action.retry")
             ) {
-                Task { await viewModel.load(parentId: parentId, using: appState) }
+                Task { await viewModel.load(source: source, using: appState) }
             }
         case .empty:
             EmptyStateView(
@@ -75,7 +98,7 @@ struct LibraryFolderBrowseScreen: View {
                                     maxWidth: 300, tag: folder.primaryImageTagValue
                                 )
                             },
-                            subtitle: folder.childCount.map { loc.localized("library.itemCount", $0) }
+                            subtitle: folder.childCount.map { loc.itemCount($0) }
                         )
                     }
                     .buttonStyle(.plain)
@@ -88,7 +111,7 @@ struct LibraryFolderBrowseScreen: View {
         .scrollClipDisabled()
         #endif
         .refreshable {
-            await viewModel.load(parentId: parentId, using: appState)
+            await viewModel.load(source: source, using: appState)
         }
     }
 
@@ -135,20 +158,26 @@ final class FolderBrowseViewModel {
 
     private(set) var state: State = .loading
 
-    func load(parentId: String, using appState: AppState) async {
+    func load(source: LibraryFolderBrowseScreen.Source, using appState: AppState) async {
         guard let userId = appState.currentUserId else {
             state = .failed
             return
         }
         if case .loaded = state {} else { state = .loading }
         do {
-            let result = try await appState.apiClient.getItems(
-                userId: userId,
-                parentId: parentId,
-                sortBy: [.sortName],
-                sortOrder: [.ascending]
-            )
-            state = result.items.isEmpty ? .empty : .loaded(result.items)
+            let folders: [BaseItemDto]
+            switch source {
+            case .parent(let parentId):
+                folders = try await appState.apiClient.getItems(
+                    userId: userId,
+                    parentId: parentId,
+                    sortBy: [.sortName],
+                    sortOrder: [.ascending]
+                ).items
+            case .playlists:
+                folders = try await appState.apiClient.getPlaylists(userId: userId)
+            }
+            state = folders.isEmpty ? .empty : .loaded(folders)
         } catch {
             state = .failed
         }

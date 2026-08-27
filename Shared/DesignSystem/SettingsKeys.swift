@@ -43,6 +43,7 @@ enum SettingsKey {
     static let homeShowNextUp = "home.showNextUp"
     static let homeShowRecentlyAdded = "home.showRecentlyAdded"
     static let homeShowFavorites = "home.showFavorites"
+    static let homeShowPlaylists = "home.showPlaylists"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
     /// JSON `[String]` — the genres the user picked to surface as Home rows.
@@ -134,6 +135,7 @@ enum SettingsKey {
         static let homeShowNextUp = true
         static let homeShowRecentlyAdded = true
         static let homeShowFavorites = true
+        static let homeShowPlaylists = true
         static let homeShowGenreRows = true
         static let homeShowWatchingNow = true
 

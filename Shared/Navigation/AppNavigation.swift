@@ -1102,6 +1102,15 @@ extension Notification.Name {
     /// refreshes just its Favorites row (the full-reload notification above
     /// would re-shuffle genre rows and clear caches — overkill for a heart).
     static let cinemaxFavoritesChanged = Notification.Name("cinemaxFavoritesChanged")
+
+    /// A playlist was created, or an item was added to one. Its own fast path,
+    /// like `cinemaxFavoritesChanged`: nothing about an item's userData changed,
+    /// so neither refresh tier applies — what changed is the set of playlists
+    /// and their item counts. Home's Playlists rail is the consumer, and it
+    /// matters that it listens: that rail is the only route to a playlist on the
+    /// default menu, so without this the surface that exists to make playlists
+    /// findable would be the last place to hear about a new one.
+    static let cinemaxPlaylistsChanged = Notification.Name("cinemaxPlaylistsChanged")
     /// Posted by the API client when any session-scoped call returns HTTP 401.
     /// `AppNavigation` observes this on MainActor and runs the logout + toast.
     /// Cross-actor bridge: the API callback runs from a non-MainActor context

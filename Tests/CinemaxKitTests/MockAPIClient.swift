@@ -338,7 +338,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     // Call counters — let tests assert which fetches a targeted refresh touches.
     private(set) var getResumeItemsCallCount = 0
     private(set) var getLatestMediaCallCount = 0
+    /// The letter the last `/Items` page was anchored on — `nil` for an
+    /// ordinary page. Drives the A–Z jump-bar tests (defect M).
+    private(set) var lastNameAnchor: String?
     private(set) var getGenresCallCount = 0
+    /// The scope the last `getGenres` was asked for — `nil` means server-wide.
+    /// A scoped library must never ask server-wide (defect L).
+    private(set) var lastGenresParentId: String?
     /// Count of `getItems` calls scoped to favorites (`isFavorite == true`),
     /// distinguishing the Favorites-row fetch from genre-row fetches.
     private(set) var favoriteFetchCount = 0
@@ -391,10 +397,12 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?,
         sortBy: [ItemSortBy]?, sortOrder: [JellyfinAPI.SortOrder]?,
         genres: [String]?, years: [Int]?, isFavorite: Bool?,
-        filters: [ItemFilter]?, limit: Int?, startIndex: Int?
+        filters: [ItemFilter]?, nameStartsWithOrGreater: String?,
+        limit: Int?, startIndex: Int?
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         recordLock.withLock {
             if isFavorite == true { favoriteFetchCount += 1 }
+            lastNameAnchor = nameStartsWithOrGreater
             getItemsCalls.append((startIndex: startIndex, limit: limit))
             getItemsQueries.append((
                 includeItemTypes: includeItemTypes, sortBy: sortBy,
@@ -416,8 +424,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return (stubbedItems, stubbedTotalCount)
     }
 
-    func getGenres(userId: String, includeItemTypes: [BaseItemKind]?) async throws -> [String] {
-        recordLock.withLock { getGenresCallCount += 1 }
+    func getGenres(userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?) async throws -> [String] {
+        recordLock.withLock {
+            getGenresCallCount += 1
+            lastGenresParentId = parentId
+        }
         if shouldThrow { throw stubbedError }
         return stubbedGenres
     }
@@ -451,6 +462,31 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         recordLock.withLock { getItemUserDataCallCount += 1 }
         if shouldThrow { throw stubbedError }
         return stubbedItemUserData
+    }
+
+    /// Playlists served to the Home rail. `PlaylistAPI` ships default no-op
+    /// implementations so hand-written mocks compile without stubbing the
+    /// whole slice — this overrides only the read the rail depends on.
+    var stubbedPlaylists: [BaseItemDto] = []
+    private(set) var getPlaylistsCallCount = 0
+    func getPlaylists(userId: String) async throws -> [BaseItemDto] {
+        recordLock.withLock { getPlaylistsCallCount += 1 }
+        if shouldThrow { throw stubbedError }
+        return stubbedPlaylists
+    }
+
+    /// Playlist contents, in playlist order and carrying entry ids.
+    var stubbedPlaylistItems: [BaseItemDto] = []
+    /// Every `movePlaylistItem` call, in order.
+    private(set) var moveCalls: [(entryId: String, newIndex: Int)] = []
+    var shouldFailPlaylistMove = false
+    func getPlaylistItems(playlistId: String, userId: String) async throws -> [BaseItemDto] {
+        if shouldThrow { throw stubbedError }
+        return stubbedPlaylistItems
+    }
+    func movePlaylistItem(playlistId: String, entryId: String, newIndex: Int) async throws {
+        recordLock.withLock { moveCalls.append((entryId: entryId, newIndex: newIndex)) }
+        if shouldFailPlaylistMove { throw stubbedError }
     }
 
     private(set) var getSimilarItemsCallCount = 0

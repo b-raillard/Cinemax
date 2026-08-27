@@ -909,6 +909,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Second chance to close a settling seek: if VLC went quiet on time
         // updates the heartbeat's own sampling still sees the playhead move.
         if seekLoadingTargetMs != nil, !updateSeekLoading() { clearLoadingIfOpen() }
+        // ...and a second chance to REPAINT, for exactly the same reason.
+        // `refreshTimeUI()` was reachable only from `onEngineTimeChanged`, so
+        // while libVLC was silent during a seek settle the two labels stayed
+        // wherever their two different authors had left them: `scrubberChanged`
+        // writes `timeLabel` alone, `writeTimeLabels` writes both — giving an
+        // impossible pair (measured 2/2 on 2026-08-24: `1:53:14 / -1:21:30` on
+        // a 2 h 06 film, i.e. a 3 h 14 total, at the precise moment the user is
+        // asking themselves why the picture is frozen). The `pendingScrubTargetMs`
+        // branch already paints the target into BOTH labels. Costs nothing in
+        // the steady state: `refreshTimeUI` returns at once while scrubbing, and
+        // `paintPosition`'s two gates (HUD hidden, unchanged whole second)
+        // swallow the rest.
+        refreshTimeUI()
         if statsVisible { refreshStats() }
         if sleepActive {
             sleepRemaining -= 1
@@ -2201,6 +2214,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #if os(iOS)
         prevButton.isHidden = previousEpisode == nil
         nextButton.isHidden = nextEpisode == nil
+        // The row just changed how many buttons it carries; re-fit it.
+        layoutTransportRow()
         #else
         let prevHidden = previousEpisode == nil
         let nextHidden = nextEpisode == nil
@@ -2217,6 +2232,48 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         #endif
     }
+
+    #if os(iOS)
+    /// Widest gap the transport row uses when it has room to breathe.
+    private static let transportSpacingIdeal: CGFloat = 24
+    /// Tightest gap it may fall back to before the glyphs read as one blob.
+    private static let transportSpacingMinimum: CGFloat = 8
+    /// Kept clear of the safe-area edges on both sides.
+    private static let transportRowMargin: CGFloat = 16
+
+    /// Shrinks the row's spacing so it always fits inside the safe area.
+    ///
+    /// `transportRow` carries only a centre-X and a bottom constraint, so a
+    /// `UIStackView` with no width takes its intrinsic size — and as soon as an
+    /// episode has a neighbour on BOTH sides the row grows to five buttons:
+    /// measured at ~416 pt on an iPhone 17's 402 pt (centres at
+    /// 16/104/201/297/387), i.e. ⏮ and ⏭ clipped by the screen edges, with the
+    /// leading one refusing a tap at its own visible centre while responding
+    /// 14 pt further in. Four buttons fit, which is why a film never showed it.
+    ///
+    /// Fitting by SPACING rather than by an inequality constraint is deliberate:
+    /// a required width limit would have to be satisfied by compressing buttons
+    /// whose intrinsic size comes from a glyph, i.e. by breaking a constraint on
+    /// a narrow device. Here the arithmetic is exact and there is nothing to
+    /// break — and it re-runs on rotation, where the available width doubles.
+    private func layoutTransportRow() {
+        let visible = transportRow.arrangedSubviews.filter { !$0.isHidden }
+        guard visible.count > 1 else { return }
+        let insets = view.safeAreaInsets
+        let available = view.bounds.width - insets.left - insets.right
+            - 2 * Self.transportRowMargin
+        guard available > 0 else { return } // pre-layout call from setup
+        let glyphs = visible.reduce(CGFloat.zero) { $0 + $1.intrinsicContentSize.width }
+        let fitted = (available - glyphs) / CGFloat(visible.count - 1)
+        let spacing = min(Self.transportSpacingIdeal, max(Self.transportSpacingMinimum, fitted))
+        if transportRow.spacing != spacing { transportRow.spacing = spacing }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        layoutTransportRow()
+    }
+    #endif
 
     #if os(tvOS)
     private func updateScrubBar(progress: Float) {

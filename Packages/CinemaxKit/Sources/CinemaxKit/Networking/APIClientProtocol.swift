@@ -104,10 +104,11 @@ public protocol LibraryAPI: Sendable {
         years: [Int]?,
         isFavorite: Bool?,
         filters: [ItemFilter]?,
+        nameStartsWithOrGreater: String?,
         limit: Int?,
         startIndex: Int?
     ) async throws -> (items: [BaseItemDto], totalCount: Int)
-    func getGenres(userId: String, includeItemTypes: [BaseItemKind]?) async throws -> [String]
+    func getGenres(userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?) async throws -> [String]
     func getUserViews(userId: String) async throws -> [BaseItemDto]
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
@@ -573,17 +574,24 @@ public extension LibraryAPI {
         years: [Int]? = nil,
         isFavorite: Bool? = nil,
         filters: [ItemFilter]? = nil,
+        nameStartsWithOrGreater: String? = nil,
         limit: Int? = nil,
         startIndex: Int? = nil
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         try await getItems(
             userId: userId, parentId: parentId, includeItemTypes: includeItemTypes,
             sortBy: sortBy, sortOrder: sortOrder, genres: genres, years: years,
-            isFavorite: isFavorite, filters: filters, limit: limit, startIndex: startIndex
+            isFavorite: isFavorite, filters: filters,
+            nameStartsWithOrGreater: nameStartsWithOrGreater,
+            limit: limit, startIndex: startIndex
         )
     }
-    func getGenres(userId: String, includeItemTypes: [BaseItemKind]? = nil) async throws -> [String] {
-        try await getGenres(userId: userId, includeItemTypes: includeItemTypes)
+    func getGenres(
+        userId: String,
+        parentId: String? = nil,
+        includeItemTypes: [BaseItemKind]? = nil
+    ) async throws -> [String] {
+        try await getGenres(userId: userId, parentId: parentId, includeItemTypes: includeItemTypes)
     }
     func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
         try await getSimilarItems(itemId: itemId, userId: userId, limit: limit)

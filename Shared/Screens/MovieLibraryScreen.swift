@@ -21,6 +21,12 @@ struct MediaLibraryScreen: View {
     /// `onAdminAction:` — we bind the resulting `AdminMenuPushIntent`
     /// here and host the destination on the body's outer ZStack.
     @State private var adminPushIntent: AdminMenuPushIntent?
+    #if os(iOS)
+    /// In-flight A–Z re-anchor. Held so a finger sliding down the bar cancels
+    /// the previous letter's fetch instead of racing it — the drag gesture
+    /// fires on every letter it crosses.
+    @State private var jumpTask: Task<Void, Never>?
+    #endif
     #endif
     #if os(tvOS)
     @State private var showSortPicker = false
@@ -56,7 +62,11 @@ struct MediaLibraryScreen: View {
     let parentId: String?
     let overrideTitle: String?
 
-    init(itemType: BaseItemKind?, parentId: String? = nil, overrideTitle: String? = nil) {
+    init(
+        itemType: BaseItemKind?,
+        parentId: String? = nil,
+        overrideTitle: String? = nil
+    ) {
         self.itemType = itemType
         self.parentId = parentId
         self.overrideTitle = overrideTitle
@@ -395,7 +405,7 @@ struct MediaLibraryScreen: View {
                     Color.clear.frame(height: 0).id("library.top")
                     tvTopBar
                     #else
-                    Text(loc.localized(itemType == .series ? "tvShows.count" : "movies.count", viewModel.filteredLoader.totalCount))
+                    Text(filteredCountLabel)
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .padding(.horizontal, gridPadding)
@@ -453,11 +463,7 @@ struct MediaLibraryScreen: View {
                 if shouldShowJumpBar {
                     AlphabeticalJumpBar(
                         accent: themeManager.accent,
-                        onSelect: { letter in
-                            if let target = firstItemID(for: letter) {
-                                withAnimation { proxy.scrollTo(target, anchor: .top) }
-                            }
-                        }
+                        onSelect: { letter in jump(to: letter, proxy: proxy) }
                     )
                     .padding(.trailing, CinemaSpacing.spacing2)
                 }
@@ -753,7 +759,49 @@ struct MediaLibraryScreen: View {
     private var shouldShowJumpBar: Bool {
         viewModel.sortFilter.sortBy == .sortName
             && viewModel.sortFilter.sortAscending
-            && viewModel.filteredLoader.items.count > 20
+            // The SET's size, not how much of it is paged in: anchoring near Z
+            // can leave a handful of loaded items, and keying on that made the
+            // bar vanish exactly where the user needs it to get back.
+            && viewModel.displayedTotalCount > 20
+    }
+
+    /// "503 films" — plus "from M" whenever the grid is anchored, so a list
+    /// that starts in the middle reads as a deliberate jump rather than as
+    /// missing titles.
+    private var filteredCountLabel: String {
+        // A Mixed / Other library has no `itemType`, and calling its contents
+        // "films" would simply be wrong — those tabs get the neutral wording.
+        let total = viewModel.displayedTotalCount
+        let count: String
+        switch itemType {
+        case .series: count = loc.localized("tvShows.count", total)
+        case .movie:  count = loc.localized("movies.count", total)
+        default:      count = loc.itemCount(total)
+        }
+        guard let anchor = viewModel.letterAnchor else { return count }
+        return count + " · " + loc.localized("library.anchoredAt", anchor)
+    }
+
+    /// Handles one A–Z tap. Returns whether it led somewhere — the bar's haptic
+    /// keys on the answer.
+    ///
+    /// Two paths, cheapest first: a letter already among the loaded pages is a
+    /// pure scroll with no request; anything else re-anchors the grid on the
+    /// server (see `MediaLibraryViewModel.anchorGrid`). Before this, the second
+    /// path did not exist and the tap was simply swallowed.
+    private func jump(to letter: String, proxy: ScrollViewProxy) -> Bool {
+        if let target = firstItemID(for: letter) {
+            withAnimation { proxy.scrollTo(target, anchor: .top) }
+            return true
+        }
+        jumpTask?.cancel()
+        jumpTask = Task {
+            let moved = await viewModel.anchorGrid(atLetter: letter, using: appState)
+            guard moved, !Task.isCancelled else { return }
+            guard let first = viewModel.filteredLoader.items.first?.id else { return }
+            withAnimation { proxy.scrollTo(first, anchor: .top) }
+        }
+        return true
     }
 
     /// Returns the id of the first loaded item whose name begins with the given letter.

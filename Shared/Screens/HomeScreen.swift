@@ -24,11 +24,15 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowNextUp) private var showNextUp: Bool = SettingsKey.Default.homeShowNextUp
     @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) private var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
+    @AppStorage(SettingsKey.homeShowPlaylists) private var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
     @State private var deepLinkTarget: DeepLinkTarget?
     /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
     /// hoisted to the screen root per the lazy-container navigation RULE.
     @State private var favoritesDestination: FavoritesDestination?
+    @State private var playlistsDestination: PlaylistsDestination?
+    /// One playlist, opened from a card on the rail.
+    @State private var playlistDestination: PlaylistDestination?
     /// "Go to series" target raised from a card's context menu. State lives
     /// here and the destination is hoisted to the screen body: SwiftUI
     /// ignores `navigationDestination(item:)` inside a `LazyHStack`, where the
@@ -95,6 +99,9 @@ struct HomeScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxFavoritesChanged)) { _ in
             Task { await viewModel.refreshFavorites(using: appState) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxPlaylistsChanged)) { _ in
+            Task { await viewModel.refreshPlaylists(using: appState) }
+        }
         // Genre selection changed in Settings → refresh just the genre rows.
         .onChange(of: selectedGenresJSON) {
             Task { await viewModel.reloadGenreRows(using: appState) }
@@ -109,6 +116,21 @@ struct HomeScreen: View {
         // screen root (NOT inside the lazy scroll content — lazy-container RULE).
         .navigationDestination(item: $favoritesDestination) { _ in
             FavoritesScreen()
+        }
+        // "View All" on the Playlists row → every playlist, read straight from
+        // `getPlaylists` so the screen doesn't depend on the server exposing a
+        // Playlists view. Same hoisting rule as above.
+        .navigationDestination(item: $playlistsDestination) { _ in
+            LibraryFolderBrowseScreen(
+                source: .playlists,
+                title: loc.localized("home.playlists"),
+                isPlaylist: true
+            )
+        }
+        // One playlist's contents, in playlist order and reorderable — its card
+        // drills INTO it rather than opening an item detail.
+        .navigationDestination(item: $playlistDestination) { target in
+            PlaylistDetailScreen(playlistId: target.id, title: target.name)
         }
         // "Go to series" from an episode card's context menu. Hoisted to the
         // screen root for the same reason as `favoritesDestination` above.
@@ -164,6 +186,15 @@ struct HomeScreen: View {
 
     /// Identity token for the Favorites "View All" push. A fresh instance each
     /// tap re-triggers `navigationDestination(item:)` (nil → non-nil).
+    private struct PlaylistsDestination: Identifiable, Hashable {
+        let id = "playlists"
+    }
+
+    private struct PlaylistDestination: Identifiable, Hashable {
+        let id: String
+        let name: String
+    }
+
     private struct FavoritesDestination: Identifiable, Hashable {
         let id = "favorites"
     }
@@ -319,6 +350,14 @@ struct HomeScreen: View {
                     // Favorites
                     if showFavorites, !viewModel.favoriteItems.isEmpty {
                         favoritesRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
+                    // Playlists — next to Favorites on purpose: both are sets
+                    // the user assembled themselves, and this rail is the only
+                    // route to a playlist on the default menu.
+                    if showPlaylists, !viewModel.playlists.isEmpty {
+                        playlistsRow
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
@@ -937,6 +976,51 @@ struct HomeScreen: View {
             recentlyAddedCard(item)
                 .frame(width: posterCardWidth)
         }
+    }
+
+    // MARK: - Playlists
+
+    /// The user's own playlists. Cards drill into the playlist's contents, so
+    /// they deliberately carry no `mediaCardContextMenu`: a playlist is a
+    /// folder, and none of that menu's entries (play, watched, favorite, add to
+    /// a playlist) mean anything on one — the same reason
+    /// `LibraryFolderBrowseScreen` has none either.
+    private var playlistsRow: some View {
+        ContentRow(
+            title: loc.localized("home.playlists"),
+            showViewAll: true,
+            onViewAll: { playlistsDestination = PlaylistsDestination() },
+            data: viewModel.playlists,
+            id: \.id
+        ) { playlist in
+            playlistCard(playlist)
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    @ViewBuilder
+    private func playlistCard(_ playlist: BaseItemDto) -> some View {
+        Button {
+            if let id = playlist.id {
+                playlistDestination = PlaylistDestination(id: id, name: playlist.name ?? "")
+            }
+        } label: {
+            PosterCard(
+                title: playlist.name ?? loc.localized("playlist.untitled"),
+                imageURL: playlist.id.map {
+                    appState.imageBuilder.imageURL(
+                        itemId: $0, imageType: .primary,
+                        maxWidth: 300, tag: playlist.primaryImageTagValue
+                    )
+                },
+                subtitle: playlist.childCount.map { loc.itemCount($0) }
+            )
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
     }
 
     @ViewBuilder

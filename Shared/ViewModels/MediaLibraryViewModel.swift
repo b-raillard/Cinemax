@@ -49,7 +49,25 @@ final class MediaLibraryViewModel {
     var itemsByGenre: [String: [BaseItemDto]] = [:]
 
     // Filtered flat list
-    let filteredLoader = PaginatedLoader<BaseItemDto>(pageSize: 40)
+    let filteredLoader = PaginatedLoader<BaseItemDto>(pageSize: 40, identity: { $0.id })
+
+    /// The letter the filtered grid is anchored on, or `nil` for the start of
+    /// the list. Set by the A–Z jump bar — see `anchorGrid(atLetter:using:)`.
+    private(set) var letterAnchor: String?
+
+    /// Size of the filtered set with NO anchor applied.
+    ///
+    /// An anchored query reports how many titles sort at or after the anchor,
+    /// which is not the size of the library: the header would have dropped from
+    /// "503 films" to "210 films" the instant the user tapped M. The last
+    /// unanchored total is kept so the header keeps telling the truth about the
+    /// collection while the grid shows a slice of it.
+    private(set) var unanchoredTotal = 0
+
+    /// What the count header shows — see `unanchoredTotal`.
+    var displayedTotalCount: Int {
+        letterAnchor == nil ? filteredLoader.totalCount : unanchoredTotal
+    }
 
     // Shared state
     var totalCount = 0
@@ -150,6 +168,7 @@ final class MediaLibraryViewModel {
         // guard — clearing the stamp here keeps that explicit.
         appliedGenreSortFilter = nil
         appliedFilterStamp = nil
+        letterAnchor = nil
 
         // Register OUR pass in `loadTask` too, not just the initial load's.
         // Without this a second `reload` arriving while this one is in flight
@@ -191,8 +210,16 @@ final class MediaLibraryViewModel {
         let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
 
         do {
+            // Scoped to the SAME `parentId` as the hero/items query below.
+            // While it wasn't, a library tab surfacing one Jellyfin view got the
+            // WHOLE server's genre list — and the damage wasn't the ~30 dead
+            // chips, it was `fetchGenreItems` only loading `prefix(genreLoadLimit)`
+            // of that list: a scoped library whose own genres sit outside the
+            // server's first 8 lost every genre row and collapsed to its hero
+            // (defect L, measured 2026-08-24).
             async let genresResult = appState.apiClient.getGenres(
                 userId: userId,
+                parentId: parentId,
                 includeItemTypes: typeFilter
             )
 
@@ -488,6 +515,12 @@ final class MediaLibraryViewModel {
         guard let userId = appState.currentUserId else { return }
         let snapshot = sortFilter
         guard appliedFilterStamp != snapshot else { return }
+        // A different filter describes a different list, so an anchor taken on
+        // the previous one means nothing. Cleared BEFORE the fetch so the first
+        // page comes back unanchored — and note the stamp guard above is what
+        // lets an anchor survive a tab round-trip, where the filter is
+        // unchanged and `applyFilter` no-ops.
+        letterAnchor = nil
         filteredLoader.reset()
         await loadMoreFiltered(using: appState, userId: userId)
         if !filteredLoader.items.isEmpty || filteredLoader.hasLoadedAll {
@@ -520,11 +553,12 @@ final class MediaLibraryViewModel {
         let currentSortFilter = sortFilter
         let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
         let parentScopeID = parentId
+        let anchor = letterAnchor
         await filteredLoader.refreshLoadedSpan { startIndex, limit in
             try await self.fetchFilteredPage(
                 using: appState, userId: userId, sortFilter: currentSortFilter,
                 typeFilter: typeFilter, parentScopeID: parentScopeID,
-                startIndex: startIndex, limit: limit
+                anchor: anchor, startIndex: startIndex, limit: limit
             )
         }
     }
@@ -536,6 +570,7 @@ final class MediaLibraryViewModel {
         using appState: AppState, userId: String,
         sortFilter currentSortFilter: LibrarySortFilterState,
         typeFilter: [BaseItemKind]?, parentScopeID: String?,
+        anchor: String?,
         startIndex: Int, limit: Int
     ) async throws -> (items: [BaseItemDto], total: Int) {
         let genres = currentSortFilter.selectedGenres.isEmpty ? nil : Array(currentSortFilter.selectedGenres)
@@ -550,6 +585,7 @@ final class MediaLibraryViewModel {
             genres: genres,
             years: years,
             filters: filters,
+            nameStartsWithOrGreater: anchor,
             limit: limit,
             startIndex: startIndex
         )
@@ -560,12 +596,48 @@ final class MediaLibraryViewModel {
         let currentSortFilter = sortFilter
         let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
         let parentScopeID = parentId
+        let anchor = letterAnchor
         await filteredLoader.loadMore { startIndex in
             try await self.fetchFilteredPage(
                 using: appState, userId: userId, sortFilter: currentSortFilter,
                 typeFilter: typeFilter, parentScopeID: parentScopeID,
-                startIndex: startIndex, limit: 40
+                anchor: anchor, startIndex: startIndex, limit: 40
             )
         }
+        // Only an unanchored page can speak for the whole set.
+        if anchor == nil { unanchoredTotal = filteredLoader.totalCount }
+    }
+
+    /// Re-anchors the filtered grid at the first title sorting at or after
+    /// `letter`, and lets pagination continue from there. `"#"` clears the
+    /// anchor and returns to the start of the list.
+    ///
+    /// Jellyfin never reports an item's RANK, so an A–Z bar cannot "scroll to
+    /// M" in an offset-paginated grid: M's first title may sit hundreds of
+    /// items past everything paged in, and the bar's own lookup — which only
+    /// ever searched the loaded pages — simply returned nothing, with no jump,
+    /// no fetch and no message. Measured on device 2026-08-24 (defect M): on a
+    /// 503-film catalogue whose first page ended in the B's, **C through Z were
+    /// dead from the moment the screen opened**, i.e. the bar was inert exactly
+    /// when pagination made it necessary.
+    ///
+    /// "Everything from M onward" is one request whatever the catalogue's size,
+    /// which is why this re-anchors instead of paging forward to the letter.
+    /// The cost is that titles before the anchor leave the grid — deliberate,
+    /// and the reason `"#"` is always available to come back.
+    ///
+    /// Returns `false` only when there is nothing to do, so the caller never
+    /// reports a jump that did not happen.
+    @discardableResult
+    func anchorGrid(atLetter letter: String, using appState: AppState) async -> Bool {
+        guard let userId = appState.currentUserId else { return false }
+        let target: String? = letter == "#" ? nil : letter.uppercased()
+        // Already anchored there: the tap is honoured (the caller scrolls to
+        // the top of the grid) but costs no request.
+        guard target != letterAnchor else { return true }
+        letterAnchor = target
+        filteredLoader.reset()
+        await loadMoreFiltered(using: appState, userId: userId)
+        return true
     }
 }
