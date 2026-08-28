@@ -24,6 +24,20 @@ struct SeekCoalescerTests {
         #expect(SeekCoalescer.clamp(target: 999_999, lengthMs: 100_000) == 99_750)
     }
 
+    /// La cible exacte du défaut H : un glissement au bord droit donne
+    /// `slider.value == 1.0`, donc `lengthMs` pile. libVLC la REFUSE
+    /// (`INPUT_CONTROL_SET_TIME @… failed`) et l'entrée ne s'en remet pas —
+    /// image figée sous un HUD qui dit « en lecture », et toutes les recherches
+    /// suivantes meurent aussi (mesuré le 2026-08-21 : `target=2503936` pour un
+    /// `lengthMs` de 2503936). La borne existait déjà ; elle n'était appliquée
+    /// que sur le chemin des sauts ±N, et le relâchement du curseur ne la
+    /// consultait pas. Elle vit désormais dans `engineSeek`, l'entonnoir.
+    @Test("la fin exacte — le bord droit — est ramenée sous la borne")
+    func exactEndIsClamped() {
+        let length: Int32 = 2_503_936
+        #expect(SeekCoalescer.clamp(target: length, lengthMs: length) == length - SeekCoalescer.endGuardMs)
+    }
+
     @Test("target within range is returned unchanged")
     func clampWithinRange() {
         #expect(SeekCoalescer.clamp(target: 50_000, lengthMs: 100_000) == 50_000)

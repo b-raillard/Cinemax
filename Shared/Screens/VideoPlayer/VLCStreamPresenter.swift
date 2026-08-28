@@ -599,7 +599,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var liveActivityRate: Double { enginePlaying ? Double(player.rate) : 0 }
 
     private func engineSeek(ms: Int32) {
-        let target = max(0, ms)
+        // The near-end guard belongs HERE, in the funnel, not one level up.
+        // `SeekCoalescer.clamp` had a SINGLE caller — `accumulateSeek`, the ±N
+        // skip path — while the three other entries into this method went
+        // through unbounded: the scrub release (`userEngineSeek`), the SyncPlay
+        // echo, and the resume-position seek. At the right edge
+        // `slider.value == 1.0`, so a drag targeted `lengthMs` EXACTLY; libVLC
+        // refuses that (`INPUT_CONTROL_SET_TIME @… failed`) and the input never
+        // recovers — frozen picture under a HUD still reading "playing", the
+        // spinner held to its 30 s backstop, and every later seek dead too
+        // (measured on device 2026-08-21: `target=2503936` on a `lengthMs` of
+        // 2503936, i.e. the end itself, not `lengthMs − endGuardMs` as the
+        // first reading of that log assumed).
+        //
+        // Clamping here is what makes the guard true to this method's own
+        // "every seek path funnels here". The ±N path clamps a second time —
+        // idempotent, and it keeps its own call because it also PAINTS the
+        // clamped target into the HUD before the debounced commit.
+        let target = SeekCoalescer.clamp(target: ms, lengthMs: lengthMs)
         // DIAG (recette loader) — every seek path funnels here.
         logger.notice("""
             seek-fire target=\(target, privacy: .public) \
