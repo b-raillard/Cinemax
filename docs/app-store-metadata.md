@@ -93,6 +93,33 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
 
+#### iOS — 1.4.0
+```
+Les collections ont enfin une vraie page, et vos playlists se retrouvent.
+
+— NOUVEAU
+• Une collection s'ouvre sur sa propre page : le nombre de titres, les années couvertes, et les films qu'elle contient, dans l'ordre de sortie
+• « Tout lire » enchaîne une saga entière et démarre au premier film que vous n'avez pas terminé
+• Vos playlists ont leur rangée sur l'accueil — jusqu'ici, une playlist créée était introuvable
+• Une playlist s'ouvre dans son propre ordre, et vous pouvez réordonner ses titres par glisser-déposer
+
+— BUGS CORRIGÉS
+• Le lecteur ne meurt plus quand le curseur est amené tout à l'extrémité droite de la barre
+• « Lecture » sur une collection n'ouvre plus un lecteur vide en accusant votre serveur
+• Une affiche ne manque plus à l'appel dans la grille au fil du défilement
+
+— BIBLIOTHÈQUE
+• La barre A–Z fonctionne sur toute sa hauteur : passé les premières pages, la plupart des lettres ne faisaient rien
+• Les rangées de genres réapparaissent dans les bibliothèques restreintes, où elles pouvaient disparaître entièrement
+• Les genres proposés sont ceux de la bibliothèque consultée, et non ceux du serveur entier
+
+— LECTEUR
+• Les deux compteurs de temps ne se contredisent plus pendant un calage
+• Le bouton « épisode précédent » répond là où on le voit, sur les écrans où la rangée était trop serrée
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 1.3.0
 ```
 Une nouveauté, et surtout beaucoup de corrections — dont plusieurs bugs qui obligeaient à quitter l'app.
@@ -153,6 +180,31 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
 • Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
 • Même correction dans le widget
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 1.4.0
+```
+Les collections ont enfin une vraie page, et vos playlists se retrouvent.
+
+— NOUVEAU
+• Une collection s'ouvre sur sa propre page : le nombre de titres, les années couvertes, et les films qu'elle contient, dans l'ordre de sortie
+• « Tout lire » enchaîne une saga entière et démarre au premier film que vous n'avez pas terminé
+• Vos playlists ont leur rangée sur l'accueil — jusqu'ici, une playlist créée était introuvable
+• Une playlist s'ouvre dans son propre ordre, et « Monter » / « Descendre » réordonnent ses titres
+
+— BUGS CORRIGÉS
+• Le lecteur ne meurt plus quand le curseur est amené tout à l'extrémité droite de la barre
+• « Lecture » sur une collection n'ouvre plus un lecteur vide en accusant votre serveur
+• Une affiche ne manque plus à l'appel dans la grille au fil du défilement
+
+— BIBLIOTHÈQUE
+• Les rangées de genres réapparaissent dans les bibliothèques restreintes, où elles pouvaient disparaître entièrement
+• Les genres proposés sont ceux de la bibliothèque consultée, et non ceux du serveur entier
+
+— LECTEUR
+• Les deux compteurs de temps ne se contredisent plus pendant un calage
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -360,6 +412,33 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 > Two separate texts: Live Activity is iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
 
+#### iOS — 1.4.0
+```
+Collections finally have a real page, and your playlists can be found again.
+
+— NEW
+• A collection opens on its own page: how many titles, the years it spans, and the films it holds, in release order
+• "Play all" runs a whole saga and starts at the first film you haven't finished
+• Your playlists get their own row on the home screen — until now, a playlist you created was impossible to find again
+• A playlist opens in its own order, and you can reorder its titles by dragging
+
+— BUGS FIXED
+• The player no longer dies when the scrubber is taken all the way to the right edge
+• "Play" on a collection no longer opens an empty player and blames your server
+• A poster no longer goes missing from the grid as you scroll
+
+— LIBRARY
+• The A–Z bar works over its whole height: past the first few pages, most letters did nothing
+• Genre rows come back in scoped libraries, where they could disappear entirely
+• The genres offered are those of the library you are in, not those of the whole server
+
+— PLAYER
+• The two time counters no longer contradict each other while a seek settles
+• The "previous episode" button responds where you can see it, on screens where the row was too tight
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 1.3.0
 ```
 One new feature, and a lot of fixes — including several bugs that forced you to quit the app.
@@ -420,6 +499,31 @@ Long-press a title and it now does everything, without opening its page.
 • One show can no longer take over the row: importing a full season used to fill it entirely
 • Series that just received episodes now surface there, alongside new movies and shows
 • Same fix in the widget
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 1.4.0
+```
+Collections finally have a real page, and your playlists can be found again.
+
+— NEW
+• A collection opens on its own page: how many titles, the years it spans, and the films it holds, in release order
+• "Play all" runs a whole saga and starts at the first film you haven't finished
+• Your playlists get their own row on the home screen — until now, a playlist you created was impossible to find again
+• A playlist opens in its own order, and "Move up" / "Move down" reorder its titles
+
+— BUGS FIXED
+• The player no longer dies when the scrubber is taken all the way to the right edge
+• "Play" on a collection no longer opens an empty player and blames your server
+• A poster no longer goes missing from the grid as you scroll
+
+— LIBRARY
+• Genre rows come back in scoped libraries, where they could disappear entirely
+• The genres offered are those of the library you are in, not those of the whole server
+
+— PLAYER
+• The two time counters no longer contradict each other while a seek settles
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
@@ -609,8 +713,8 @@ ASC → Pricing and Availability → Edit Countries or Regions → cocher unique
 
 ## 6. Build à sélectionner
 
-iOS : dernière build TestFlight (**1.3.0** build N)
-tvOS : dernière build TestFlight (**1.3.0** build N)
+iOS : dernière build TestFlight (**1.4.0** build N)
+tvOS : dernière build TestFlight (**1.4.0** build N)
 
 `MARKETING_VERSION` et `CURRENT_PROJECT_VERSION` sont source unique dans `project.yml` (settings.base) : bumper `MARKETING_VERSION` à chaque version publique, `CURRENT_PROJECT_VERSION` à chaque archive envoyée.
 
