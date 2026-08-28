@@ -19,7 +19,14 @@ import Foundation
 /// reliably summed to N×.
 enum SeekCoalescer {
     /// Near-end guard: never seek to within this many ms of the reported length.
-    /// libVLC treats a seek to the very end as end-of-media, so we keep headroom.
+    ///
+    /// libVLC treats a seek to the very end as end-of-media — and worse than
+    /// end-of-media: a target of exactly `lengthMs` is REFUSED
+    /// (`INPUT_CONTROL_SET_TIME @… failed`), after which the input never
+    /// recovers and every later seek dies with it. `VLCStreamViewController`
+    /// applies this in `engineSeek`, the funnel, so all four seek paths inherit
+    /// it — for a long time only the ±N skip path did, which is why dragging
+    /// the scrubber to the right edge could kill the player.
     static let endGuardMs: Int32 = 250
 
     /// Clamp an absolute target into the valid range `[0, lengthMs - endGuardMs]`.

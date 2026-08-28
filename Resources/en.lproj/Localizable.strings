@@ -102,6 +102,7 @@
 "library.loading.movies" = "Loading movies…";
 "library.loading.series" = "Loading series…";
 "library.itemCount" = "%d items";
+"library.itemCount.one" = "%d item";
 "library.collections.empty" = "No collections here yet";
 "library.playlists.empty" = "No playlists here yet";
 "empty.home.title" = "Your library is empty";
@@ -842,6 +843,12 @@
 
 "home.favorites" = "Favorites";
 "detail.partOf" = "Part of: %@";
+"library.anchoredAt" = "from %@";
+"detail.collection" = "Collection";
+"detail.collection.count" = "%d titles";
+"detail.collection.count.one" = "%d title";
+"detail.collection.contents" = "In this collection";
+"detail.collection.playAll" = "Play all";
 "detail.favorite.add" = "Add to favorites";
 "detail.trailer" = "Trailer";
 "detail.favorite.remove" = "Remove from favorites";
@@ -965,6 +972,12 @@
 "settings.playback.remoteControl" = "Remote control";
 
 /* Playlists — write surface */
+"home.playlists" = "Your playlists";
+"settings.homePage.playlists" = "Playlists";
+"playlist.contents.empty" = "This playlist is empty";
+"playlist.reorder" = "Reorder";
+"playlist.moveUp" = "Move up";
+"playlist.moveDown" = "Move down";
 "playlist.add.action" = "Add to a playlist";
 "playlist.add.title" = "Add to a playlist";
 "playlist.new.label" = "New playlist";
@@ -972,6 +985,5 @@
 "playlist.new.create" = "Create and add";
 "playlist.added" = "Added to %@";
 "playlist.untitled" = "Untitled playlist";
-"playlist.itemCount" = "%d item(s)";
 "playlist.empty.title" = "No playlists yet";
 "playlist.empty.subtitle" = "Create one above — this title gets added to it straight away.";

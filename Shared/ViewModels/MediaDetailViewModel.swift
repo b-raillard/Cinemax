@@ -44,6 +44,15 @@ final class MediaDetailViewModel {
     var collectionName: String?
     var collectionItems: [BaseItemDto] = []
 
+    /// What a BoxSet CONTAINS — the opposite direction from `collectionItems`,
+    /// which answers "which other films share this one's collection".
+    ///
+    /// A collection's fiche used to borrow a work's chrome wholesale: title,
+    /// Lecture, favorite / watched / playlist, "Similar titles" — with no year,
+    /// runtime, genre or overview (a BoxSet carries none), and, worse, no list
+    /// of what it holds, which is the only thing anyone opens it for.
+    var collectionChildren: [BaseItemDto] = []
+
     /// Jellyfin sessions this user can send the item to ("Play on…"). Resolved
     /// after the main load, like `loadCollection`, so a slow or failing
     /// `/Sessions` never delays the detail render. Empty ⇒ no affordance drawn,
@@ -133,7 +142,11 @@ final class MediaDetailViewModel {
                 if effectiveType == .series {
                     try await loadSeriesDetail(seriesId: itemId, apiClient: appState.apiClient, userId: userId, generation: generation)
                     guard loadGeneration == generation else { return }
-                } else {
+                } else if effectiveType != .boxSet {
+                    // A collection has nothing to be "similar" to — its own
+                    // members are what the screen shows in that slot, and they
+                    // load as a side task below. Asking anyway spent a request
+                    // to fill a row the fiche no longer renders.
                     async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
                     let loadedSimilar = try await similar
                     guard loadGeneration == generation else { return }
@@ -153,6 +166,10 @@ final class MediaDetailViewModel {
         // so a slow boxset lookup never delays the detail render.
         if resolvedType == .movie, item != nil {
             Task { await loadCollection(using: appState) }
+        }
+        // The mirror image, for a collection's OWN fiche: what it contains.
+        if resolvedType == .boxSet, item != nil {
+            Task { await loadCollectionChildren(using: appState) }
         }
         // Same discipline for the "Play on…" probe: a side task, so `/Sessions`
         // being slow or unreachable costs the render nothing. Every item kind is
@@ -369,6 +386,30 @@ final class MediaDetailViewModel {
             episodes = refreshed
             rebuildNavigationMaps()
         }
+    }
+
+    /// Loads a BoxSet's members.
+    ///
+    /// Side task off the critical path and silent on failure, like
+    /// `loadCollection` and `loadRemoteTargets`: the hero paints first, and a
+    /// collection that comes back empty renders no section rather than an error
+    /// over an otherwise-fine screen.
+    ///
+    /// Sorted by release date so the set reads in the order it was made — the
+    /// one ordering a collection has that an alphabetical list destroys.
+    private func loadCollectionChildren(using appState: AppState) async {
+        guard resolvedType == .boxSet,
+              let userId = appState.currentUserId,
+              let id = item?.id else { return }
+        let members = (try? await appState.apiClient.getItems(
+            userId: userId,
+            parentId: id,
+            sortBy: [.premiereDate],
+            sortOrder: [.ascending],
+            limit: 100
+        ).items) ?? []
+        guard !members.isEmpty else { return }
+        collectionChildren = members
     }
 
     private func loadCollection(using appState: AppState) async {

@@ -73,6 +73,19 @@ final class LocalizationManager {
         return localized("error.generic")
     }
 
+    /// "1 élément" / "3 éléments" — the shared count for a folder's contents:
+    /// a library view, a collection, a playlist. Replaced two strings that each
+    /// got the singular wrong in their own way ("1 éléments" and "1 élément(s)").
+    func itemCount(_ count: Int) -> String {
+        localized(count == 1 ? "library.itemCount.one" : "library.itemCount", count)
+    }
+
+    /// "1 titre" / "3 titres" — a collection can legitimately hold a single
+    /// film, and the shared plural form would have read "1 titres".
+    func collectionCount(_ count: Int) -> String {
+        localized(count == 1 ? "detail.collection.count.one" : "detail.collection.count", count)
+    }
+
     /// Formats a remaining duration using the `home.remainingTime.*` keys.
     /// Centralises the `>= 60` branching so call sites don't reimplement it.
     /// The underlying `.strings` keep their current masculine-plural form on

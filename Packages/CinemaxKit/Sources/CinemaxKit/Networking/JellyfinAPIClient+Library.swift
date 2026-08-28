@@ -131,6 +131,13 @@ extension JellyfinAPIClient {
         years: [Int]? = nil,
         isFavorite: Bool? = nil,
         filters: [ItemFilter]? = nil,
+        /// Anchors the page at the first title sorting at or after this string.
+        ///
+        /// This is what makes the A–Z jump bar work on a paginated grid:
+        /// Jellyfin never reports an item's RANK, so "scroll to M" is not
+        /// expressible as an offset — but "serve me everything from M onward"
+        /// is one request whatever the catalogue's size.
+        nameStartsWithOrGreater: String? = nil,
         limit: Int? = nil,
         startIndex: Int? = nil
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
@@ -152,6 +159,7 @@ extension JellyfinAPIClient {
                 years: years
             )
             params.isFavorite = isFavorite
+            params.nameStartsWithOrGreater = nameStartsWithOrGreater
             params.fields = [.overview, .genres, .childCount]
             params.enableUserData = true
             params.enableImageTypes = [.primary, .backdrop, .thumb]
@@ -166,12 +174,21 @@ extension JellyfinAPIClient {
     }
 
     /// Fetches available genres for the given item types from the server.
+    ///
+    /// `parentId` scopes the answer to one library view, and MUST be threaded
+    /// by any caller that also scopes its item queries — the cache key carries
+    /// it for the same reason. While it didn't, every scoped library shared one
+    /// server-wide list: cosmetically ~30 chips leading to "0 films", but the
+    /// real damage was that the browse rows are built from the FIRST
+    /// `genreLoadLimit` entries of that list, so a library whose own genres sat
+    /// outside the server's first 8 rendered no genre row at all (defect L).
     public func getGenres(
         userId: String,
+        parentId: String? = nil,
         includeItemTypes: [BaseItemKind]? = nil
     ) async throws -> [String] {
         let itemTypes = includeItemTypes?.map(\.rawValue).sorted().joined(separator: ",") ?? ""
-        let cacheKey = "genres-\(userId)-\(itemTypes)"
+        let cacheKey = "genres-\(userId)-\(parentId ?? "all")-\(itemTypes)"
         if let cached: [String] = cache.get(cacheKey) { return cached }
 
         guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -182,6 +199,7 @@ extension JellyfinAPIClient {
         // libraries. Keep /Items/Filters as a fallback for servers/configs where
         // /Genres returns nothing.
         let genresParams = Paths.GetGenresParameters(
+            parentID: parentId,
             includeItemTypes: includeItemTypes,
             userID: userId,
             enableImages: false,
@@ -193,6 +211,7 @@ extension JellyfinAPIClient {
         if result.isEmpty {
             let filterParams = Paths.GetQueryFiltersParameters(
                 userID: userId,
+                parentID: parentId,
                 includeItemTypes: includeItemTypes,
                 isRecursive: true
             )

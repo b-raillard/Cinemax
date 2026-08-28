@@ -13,7 +13,7 @@ private let logger = Logger(subsystem: "com.cinemax", category: "WatchedHistory"
 /// of order).
 @MainActor @Observable
 final class WatchedHistoryViewModel {
-    let loader = PaginatedLoader<BaseItemDto>(pageSize: 40)
+    let loader = PaginatedLoader<BaseItemDto>(pageSize: 40, identity: { $0.id })
     var isLoading = true
     /// True when the last fetch threw — drives the error state instead of the
     /// (misleading) empty state.

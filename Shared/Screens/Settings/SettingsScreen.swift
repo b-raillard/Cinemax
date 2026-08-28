@@ -200,6 +200,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowNextUp) var showNextUp: Bool = SettingsKey.Default.homeShowNextUp
     @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
+    @AppStorage(SettingsKey.homeShowPlaylists) var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
@@ -294,6 +295,7 @@ struct SettingsScreen: View {
             .init(id: "homeNextUp", icon: "forward.end", label: loc.localized("settings.homePage.nextUp"), value: $showNextUp),
             .init(id: "homeRecentlyAdded", icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"), value: $showRecentlyAdded),
             .init(id: "homeFavorites", icon: "heart", label: loc.localized("settings.homePage.favorites"), value: $showFavorites),
+            .init(id: "homePlaylists", icon: "music.note.list", label: loc.localized("settings.homePage.playlists"), value: $showPlaylists),
             .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows)
         ]
         // "Watching Now" ("En direct") exposes other users' active sessions —

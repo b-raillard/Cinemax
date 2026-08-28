@@ -326,6 +326,18 @@ struct MediaDetailScreen: View {
             ).equatable()
         }
 
+        // What a collection CONTAINS — the section a BoxSet's fiche exists for,
+        // standing where "Similar titles" does on a work. Reuses the same
+        // carousel deliberately: it already carries card context menus and the
+        // push to each member's own fiche.
+        if !viewModel.collectionChildren.isEmpty {
+            MediaDetailSimilarSection(
+                items: viewModel.collectionChildren,
+                cardWidth: similarCardWidth,
+                titleOverride: loc.localized("detail.collection.contents")
+            ).equatable()
+        }
+
         // Similar items
         if !viewModel.similarItems.isEmpty {
             MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
@@ -473,7 +485,32 @@ struct MediaDetailScreen: View {
     // MARK: - Metadata
 
     private func metadataLine(_ item: BaseItemDto) -> some View {
-        let parts: [String] = [
+        let parts: [String] = viewModel.resolvedType == .boxSet
+            ? collectionMetadataParts(item)
+            : workMetadataParts(item)
+
+        return Text(parts.joined(separator: " · "))
+            .font(.system(size: metadataFontSize, weight: .medium))
+    }
+
+    /// A collection carries no year, runtime or genre, so the shared line came
+    /// out EMPTY on its fiche. What it does have is a size and a span — the two
+    /// facts that tell you whether you are looking at a duology or a franchise.
+    /// The span is derived from the members, so it fills in when they land.
+    private func collectionMetadataParts(_ item: BaseItemDto) -> [String] {
+        var parts = [loc.localized("detail.collection")]
+        let children = viewModel.collectionChildren
+        let count = children.isEmpty ? (item.childCount ?? 0) : children.count
+        if count > 0 { parts.append(loc.collectionCount(count)) }
+        let years = children.compactMap(\.productionYear).sorted()
+        if let first = years.first, let last = years.last {
+            parts.append(first == last ? "\(first)" : "\(first)–\(last)")
+        }
+        return parts
+    }
+
+    private func workMetadataParts(_ item: BaseItemDto) -> [String] {
+        [
             item.productionYear.map(String.init),
             item.runTimeTicks.map { ticks in
                 let minutes = ticks.jellyfinMinutes
@@ -481,9 +518,6 @@ struct MediaDetailScreen: View {
             },
             viewModel.resolvedType == .series ? item.childCount.map { loc.localized("detail.seasons", $0) } : nil
         ].compactMap { $0 }
-
-        return Text(parts.joined(separator: " · "))
-            .font(.system(size: metadataFontSize, weight: .medium))
     }
 
     // MARK: - Episode Navigation
@@ -695,17 +729,21 @@ struct MediaDetailScreen: View {
 
     private func resolvedPlayTarget(for item: BaseItemDto) -> ResolvedPlayTarget {
         let isSeries = viewModel.resolvedType == .series
-        let nextEp: BaseItemDto? = isSeries ? viewModel.nextUpEpisode : nil
+        // Both a series and a collection resolve to something OTHER than the
+        // item under the fiche, and every caller already reads `nextEpisode` to
+        // learn that — so a collection's member travels through the same field
+        // rather than through a parallel one the callers would have to learn.
+        let nextEp: BaseItemDto? = isSeries
+            ? viewModel.nextUpEpisode
+            : (viewModel.resolvedType == .boxSet ? collectionPlayTarget() : nil)
 
-        let posTicks: Int = isSeries
-            ? (nextEp?.userData?.playbackPositionTicks ?? 0)
-            : (item.userData?.playbackPositionTicks ?? 0)
-        let totalTicks: Int = isSeries
-            ? (nextEp?.runTimeTicks ?? 0)
-            : (item.runTimeTicks ?? 0)
-        let isPlayed: Bool = isSeries
-            ? (nextEp?.userData?.isPlayed ?? false)
-            : (item.userData?.isPlayed ?? false)
+        // Read the RESOLVED target's progress, whatever resolved it: keying on
+        // `isSeries` would have made a collection describe the BoxSet's own
+        // (always absent) userData instead of the film about to play.
+        let source = nextEp ?? item
+        let posTicks = source.userData?.playbackPositionTicks ?? 0
+        let totalTicks = source.runTimeTicks ?? 0
+        let isPlayed = source.userData?.isPlayed ?? false
 
         let showResume = posTicks > 0 && !isPlayed && totalTicks > 0
 
@@ -807,6 +845,42 @@ struct MediaDetailScreen: View {
     /// Resolves the data `PlayActionButtonsSection` needs. Kept out of the
     /// sub-view so the sub-view's dependencies stay narrow (and its
     /// `Equatable` short-circuit can skip unrelated view-model updates).
+    /// Whether the item on screen actually resolves to a media stream.
+    ///
+    /// A BoxSet has none — nor does a folder or a person — yet this screen draws
+    /// it with the full chrome of a work: title, Lecture, favorite / watched /
+    /// playlist, "Similar titles". Pressing Lecture opened the player and then
+    /// blamed the SERVER ("check your Jellyfin server") for a stream that was
+    /// never supposed to exist. Observed 2026-08-24 on a collection-of-
+    /// collections, whose hero is the BoxSet "Wonder Woman - Saga".
+    ///
+    /// Season is included: `getPlaybackInfo` resolves Series/Season → Episode
+    /// server-side, so both are legitimate play targets.
+    private var isPlayableType: Bool {
+        switch viewModel.resolvedType {
+        case .movie, .series, .season, .episode: return true
+        // A collection has no stream of its own, but "Play all" resolves it to
+        // one of its members — so it is playable exactly when there is a member
+        // to play, and not one instant before.
+        case .boxSet: return !viewModel.collectionChildren.isEmpty
+        default: return false
+        }
+    }
+
+    /// What "Play all" starts: the first member the user hasn't finished, else
+    /// the first member.
+    ///
+    /// The same reading the server gives a series in `resolvePlayableEpisode`
+    /// — next-up first, else the opening item — and the one the library hero
+    /// already follows. A saga watched end to end therefore replays from the
+    /// beginning instead of refusing to play.
+    private func collectionPlayTarget() -> BaseItemDto? {
+        let members = viewModel.collectionChildren
+        let flags = members.map { $0.userData?.isPlayed == true }
+        guard let index = CollectionPlayTarget.startIndex(playedFlags: flags) else { return nil }
+        return members[index]
+    }
+
     private func actionButtons(_ item: BaseItemDto) -> some View {
         let target = resolvedPlayTarget(for: item)
         let nextEp = target.nextEpisode
@@ -835,8 +909,16 @@ struct MediaDetailScreen: View {
 
         let remainingText: String? = showResume ? loc.remainingTime(minutes: remainingMinutes) : nil
 
+        // `EpisodeNavigator` is a pure index lookup over any list of playable
+        // items — nothing about it is episode-specific but the name. Handing it
+        // the collection's members is what gives "Play all" its ⏮/⏭, its
+        // autoplay-next and its end-of-set card, with NO second queue authority
+        // beside it.
         let epNav = nextEp.flatMap { ep -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)? in
             guard let id = ep.id else { return nil }
+            if viewModel.resolvedType == .boxSet {
+                return buildEpisodeNavigation(for: id, in: viewModel.collectionChildren)
+            }
             return episodeNavigation(for: id)
         }
 
@@ -854,7 +936,9 @@ struct MediaDetailScreen: View {
             // Only meaningful for multi-source items; `selectedSource` returns
             // nil otherwise and playback falls back to the ranked pick.
             mediaSourceId: selectedSource(item)?.id,
-            playLabel: loc.localized("detail.play"),
+            playLabel: loc.localized(
+                viewModel.resolvedType == .boxSet ? "detail.collection.playAll" : "detail.play"
+            ),
             playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
             buttonFontSize: buttonFontSize,
             buttonVerticalPadding: buttonVerticalPadding,
@@ -870,7 +954,7 @@ struct MediaDetailScreen: View {
         // how much resume chrome (episode label, progress bar, remaining text)
         // stacks above it.
         return HStack(alignment: .playActionRow, spacing: CinemaSpacing.spacing3) {
-            playSection
+            if isPlayableType { playSection }
             favoriteButton
             watchedButton
             if Self.watchTogetherEnabled && network.isOnline {
@@ -879,7 +963,7 @@ struct MediaDetailScreen: View {
             // "Play on…" — appended last, so this late-arriving button (the
             // session probe lands after the first render) can't steal focus from
             // Play, which holds it by default.
-            if network.isOnline, !viewModel.remoteTargets.isEmpty {
+            if network.isOnline, isPlayableType, !viewModel.remoteTargets.isEmpty {
                 remotePlayButton(for: item)
             }
             // Writing to a playlist needs the server — hidden offline, like the
@@ -897,7 +981,7 @@ struct MediaDetailScreen: View {
         // phones once the watched toggle was added — an evenly-distributed
         // labeled row can't overflow and names each action.
         return VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            playSection
+            if isPlayableType { playSection }
             secondaryActionsRow(for: item, nextEp: nextEp)
         }
         .padding(.horizontal, contentPadding)
@@ -1046,7 +1130,7 @@ struct MediaDetailScreen: View {
             // device, so most of the time there is none and this stays hidden).
             // Deliberately NOT the AirPlay glyph: this is not AirPlay, and the
             // phone keeps no controls once the command is sent.
-            if network.isOnline, !viewModel.remoteTargets.isEmpty {
+            if network.isOnline, isPlayableType, !viewModel.remoteTargets.isEmpty {
                 secondaryActionCell(
                     systemImage: "tv.badge.wifi",
                     active: false,

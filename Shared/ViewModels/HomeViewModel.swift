@@ -27,6 +27,15 @@ final class HomeViewModel {
     var latestItems: [BaseItemDto] = []
     /// User-hearted movies/series, most recently favorited first.
     var favoriteItems: [BaseItemDto] = []
+
+    /// The user's playlists, for the Home rail.
+    ///
+    /// Before this rail existed the app could CREATE a playlist and then never
+    /// show it again: `getPlaylists` had exactly one caller — the "add to a
+    /// playlist" sheet — and the only screen listing playlists was reachable
+    /// solely from a `.custom + .library` menu on a server that exposes a
+    /// Playlists view. On the default five-tab menu there was no path at all.
+    var playlists: [BaseItemDto] = []
     /// Next unwatched episode for every in-progress series — the global
     /// "Next Up" rail. Distinct from `resumeItems` (mid-episode resume points).
     var nextUpItems: [BaseItemDto] = []
@@ -120,7 +129,7 @@ final class HomeViewModel {
         isFullyLoaded = false
         errorMessage = nil
 
-        enum Section { case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto]); case nextUp([BaseItemDto]) }
+        enum Section { case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto]); case nextUp([BaseItemDto]); case playlists([BaseItemDto]) }
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
@@ -191,12 +200,21 @@ final class HomeViewModel {
                     return nil
                 }
             }
+            group.addTask {
+                do {
+                    return .playlists(try await appState.apiClient.getPlaylists(userId: userId))
+                } catch {
+                    logger.warning("Home playlists fetch failed: \(error.localizedDescription, privacy: .public)")
+                    return nil
+                }
+            }
             for await result in group {
                 switch result {
                 case .resume(let items): resumeItems = items
                 case .latest(let items): latestItems = items
                 case .favorites(let items): favoriteItems = items
                 case .nextUp(let items): nextUpItems = items
+                case .playlists(let items): playlists = items
                 case nil: break
                 }
             }
@@ -383,6 +401,20 @@ final class HomeViewModel {
             ).items
         } catch {
             logger.warning("Favorites refresh failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Lightweight refresh of just the Playlists row — fired by
+    /// `.cinemaxPlaylistsChanged` after a create-or-add, so a playlist the user
+    /// just made appears without a full Home reload. Without it the rail that
+    /// exists to make playlists findable would itself be the last place to
+    /// learn about a new one.
+    func refreshPlaylists(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        do {
+            playlists = try await appState.apiClient.getPlaylists(userId: userId)
+        } catch {
+            logger.warning("Playlists refresh failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

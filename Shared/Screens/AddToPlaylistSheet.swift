@@ -229,7 +229,7 @@ struct AddToPlaylistSheet: View {
                         .font(CinemaFont.body)
                         .foregroundStyle(CinemaColor.onSurface)
                         .lineLimit(1)
-                    Text(loc.localized("playlist.itemCount", playlist.childCount ?? 0))
+                    Text(loc.itemCount(playlist.childCount ?? 0))
                         .font(CinemaFont.label(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .lineLimit(1)
@@ -269,6 +269,7 @@ struct AddToPlaylistSheet: View {
                     userId: userId
                 )
                 model.busy = false
+                NotificationCenter.default.post(name: .cinemaxPlaylistsChanged, object: nil)
                 toast.success(loc.localized("playlist.added", displayName(playlist)))
                 dismiss()
             } catch {
@@ -295,6 +296,7 @@ struct AddToPlaylistSheet: View {
                     userId: userId
                 )
                 model.busy = false
+                NotificationCenter.default.post(name: .cinemaxPlaylistsChanged, object: nil)
                 toast.success(loc.localized("playlist.added", name))
                 dismiss()
             } catch {

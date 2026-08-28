@@ -356,3 +356,28 @@ enum CardEpisodeNavigationResolver {
         )
     }
 }
+
+/// Where "Play all" starts inside a collection.
+///
+/// Extracted as a pure rule for the same reason as `CardPlayTargetResolver`:
+/// it is a *policy*, and the project already carries three copies of the same
+/// idea (the server's `resolvePlayableEpisode`, the library hero's next-up
+/// probe, and this one). Keeping it here, testable and named, is what stops a
+/// fourth reading of "where does this set resume" from drifting away.
+enum CollectionPlayTarget {
+    /// Index of the member to open: the first the user hasn't finished, else
+    /// the first of all.
+    ///
+    /// A saga watched end to end replays from the beginning rather than
+    /// refusing to play — the same fallback `resolvePlayableEpisode` applies
+    /// to a series whose every episode is watched, which is precisely the case
+    /// where `getNextUp` returns nothing.
+    ///
+    /// Takes the played flags rather than the items: the members are
+    /// non-`Sendable` `BaseItemDto`s owned by the main actor, and the rule
+    /// needs nothing else from them.
+    static func startIndex(playedFlags: [Bool]) -> Int? {
+        guard !playedFlags.isEmpty else { return nil }
+        return playedFlags.firstIndex(of: false) ?? 0
+    }
+}
