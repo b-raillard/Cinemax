@@ -360,6 +360,16 @@ public protocol AdminAPI: Sendable {
     /// exposed by `ImageURLBuilder`) because admin workflows need the full
     /// Jellyfin image-type surface (Disc, Art, BoxRear, Screenshot, …) that
     /// the UI builder doesn't model.
+    /// Artwork the metadata providers offer for an item, already ranked for
+    /// display. Backs the remote-image picker; `downloadRemoteImage` applies
+    /// whichever candidate the user taps.
+    func getRemoteImages(
+        itemId: String,
+        type: JellyfinAPI.ImageType,
+        includeAllLanguages: Bool,
+        limit: Int,
+        preferredLanguage: String?
+    ) async throws -> [RemoteImageCandidate]
     func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws
     /// Deletes an image from an item. `index` is required for image types
     /// that can have multiples (Backdrop); pass `nil` for singleton types.

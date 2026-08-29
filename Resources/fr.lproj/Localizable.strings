@@ -989,3 +989,12 @@
 "playlist.untitled" = "Playlist sans nom";
 "playlist.empty.title" = "Aucune playlist";
 "playlist.empty.subtitle" = "Crée-en une ci-dessus : ce titre y sera ajouté directement.";
+
+/* Remote artwork picker (admin) */
+"admin.metadata.images.browse.title" = "Choisir une image";
+"admin.metadata.images.browse.byURL" = "Par URL…";
+"admin.metadata.images.browse.applied" = "Image appliquée";
+"admin.metadata.images.browse.textless" = "Sans texte";
+"admin.metadata.images.browse.unknownProvider" = "Fournisseur inconnu";
+"admin.metadata.images.browse.empty.title" = "Aucune image proposée";
+"admin.metadata.images.browse.empty.subtitle" = "Les fournisseurs de métadonnées n'ont rien pour ce type d'image. Utilisez « Par URL… » pour en ajouter une.";

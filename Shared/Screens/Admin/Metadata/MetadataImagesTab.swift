@@ -39,6 +39,9 @@ struct MetadataImagesTab: View {
         .sheet(isPresented: $viewModel.showAddImageSheet) {
             addImageSheet
         }
+        .sheet(isPresented: $viewModel.showBrowseImagesSheet) {
+            MetadataRemoteImagePicker(viewModel: viewModel)
+        }
         .confirmationDialog(
             loc.localized("admin.metadata.images.delete.title"),
             isPresented: Binding(
@@ -183,15 +186,18 @@ struct MetadataImagesTab: View {
         }
     }
 
+    /// Opens the provider gallery rather than the URL field. Picking from what
+    /// the providers actually offer is the common case; the URL entry is still
+    /// one tap away inside the picker, for artwork no provider lists.
     @ViewBuilder
     private func addButton(type: JellyfinAPI.ImageType, label: String? = nil) -> some View {
         Button {
-            viewModel.pendingImageType = type
-            viewModel.showAddImageSheet = true
+            viewModel.prepareRemoteImagePicker(for: type)
+            viewModel.showBrowseImagesSheet = true
         } label: {
             Label(
                 label ?? loc.localized("admin.metadata.images.add"),
-                systemImage: "link.badge.plus"
+                systemImage: "photo.on.rectangle.angled"
             )
             .font(CinemaFont.label(.small))
         }

@@ -240,6 +240,45 @@ extension JellyfinAPIClient {
         cache.clear()
     }
 
+    /// Artwork the metadata providers offer for this item, ranked for display.
+    ///
+    /// Deliberately **uncached**: its one caller is the picker the user just
+    /// opened to choose an image, so serving a stale list is exactly wrong —
+    /// and it is an explicit admin action, not a hot path.
+    ///
+    /// Returns scalars (`RemoteImageCandidate`), never the SDK's
+    /// `RemoteImageInfo`, so the result can cross to the `@MainActor` picker
+    /// without a region transfer — same discipline as `LibraryAPI.fetchUserData`.
+    public func getRemoteImages(
+        itemId: String,
+        type: JellyfinAPI.ImageType,
+        includeAllLanguages: Bool,
+        limit: Int,
+        preferredLanguage: String?
+    ) async throws -> [RemoteImageCandidate] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        let params = Paths.GetRemoteImagesParameters(
+            type: type,
+            startIndex: 0,
+            limit: limit,
+            isIncludeAllLanguages: includeAllLanguages
+        )
+        let response = try await client.send(Paths.getRemoteImages(itemID: itemId, parameters: params))
+        let candidates = (response.value.images ?? []).map { info in
+            RemoteImageCandidate(
+                url: info.url ?? "",
+                thumbnailURL: info.thumbnailURL,
+                providerName: info.providerName,
+                language: info.language,
+                width: info.width,
+                height: info.height,
+                communityRating: info.communityRating,
+                voteCount: info.voteCount
+            )
+        }
+        return RemoteImageCatalog.rank(candidates, preferredLanguage: preferredLanguage)
+    }
+
     public func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.DownloadRemoteImageParameters(type: type, imageURL: imageURL)

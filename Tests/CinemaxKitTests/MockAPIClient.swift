@@ -304,6 +304,26 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func deleteItem(id: String) async throws {
         if shouldThrow { throw stubbedError }
     }
+    var stubbedRemoteImages: [RemoteImageCandidate] = []
+
+    /// Optional barrier letting a test hold `getRemoteImages` mid-flight and
+    /// supersede it. The race is a network round-trip wide, so it is not
+    /// reachable by gesture automation — same reason `PaginatedLoaderInterlockTests`
+    /// holds its window open explicitly instead of hoping to cross it.
+    var remoteImagesGate: (@Sendable () async -> Void)?
+
+    func getRemoteImages(
+        itemId: String,
+        type: JellyfinAPI.ImageType,
+        includeAllLanguages: Bool,
+        limit: Int,
+        preferredLanguage: String?
+    ) async throws -> [RemoteImageCandidate] {
+        if let remoteImagesGate { await remoteImagesGate() }
+        if shouldThrow { throw stubbedError }
+        return stubbedRemoteImages
+    }
+
     func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws {
         if shouldThrow { throw stubbedError }
     }
