@@ -45,6 +45,31 @@ final class MetadataEditorViewModel {
     var showAddImageSheet = false
     var pendingImageType: JellyfinAPI.ImageType = .primary
     var newImageURL: String = ""
+
+    // Remote-artwork picker. `applyingImageURL` doubles as the in-flight guard
+    // and as the per-tile spinner's identity, so a second tap while a download
+    // is in flight is a no-op rather than a competing request.
+    var showBrowseImagesSheet = false
+    var remoteImages: [RemoteImageCandidate] = []
+    var isLoadingRemoteImages = false
+    var remoteImagesError: String?
+    var applyingImageURL: String?
+
+    /// Enough to scroll through without paginating. The server ranks nothing —
+    /// `RemoteImageCatalog` does — so a bounded page is only ever a display
+    /// choice, never a correctness one.
+    private let remoteImageLimit = 60
+
+    /// Bumped by every picker presentation and by each load/apply, and
+    /// re-checked after every await — the `MediaDetailViewModel.loadGeneration`
+    /// pattern. The picker is a sheet the user can swipe away mid-request, and
+    /// the slot it was opened for (`pendingImageType`) changes with it, so
+    /// without this a superseded response writes its artwork into the state a
+    /// LATER presentation is showing: a poster list rendered under a Backdrop
+    /// sheet, whose next tap sends a 2:3 poster to the backdrop slot and toasts
+    /// success. Guarding on `pendingImageType` alone is not enough — reopening
+    /// the same slot twice must also discard the first pass.
+    private var remoteImagesGeneration = 0
     var pendingImageDelete: (type: JellyfinAPI.ImageType, index: Int?)?
 
     // Cast
@@ -132,6 +157,7 @@ final class MetadataEditorViewModel {
             try await apiClient.downloadRemoteImage(itemId: id, type: pendingImageType, imageURL: url)
             newImageURL = ""
             await reloadItem(using: apiClient, userId: userId)
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
             errorMessage = loc.userFacingMessage(for: error)
@@ -146,8 +172,101 @@ final class MetadataEditorViewModel {
             try await apiClient.deleteItemImage(id: id, type: pending.type, index: pending.index)
             pendingImageDelete = nil
             await reloadItem(using: apiClient, userId: userId)
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
+            errorMessage = loc.userFacingMessage(for: error)
+            return false
+        }
+    }
+
+    /// Loads what the metadata providers offer for `pendingImageType`.
+    ///
+    /// Asks for **all languages** deliberately: the point of the picker is
+    /// choice, and `RemoteImageCatalog` already floats the user's language to
+    /// the top, so filtering server-side would only hide options without
+    /// improving the order.
+    /// Single entry point for opening the picker on a slot. Bumps the
+    /// generation, so anything still in flight from a previous presentation
+    /// lands on a stale token and writes nothing — including `applyingImageURL`,
+    /// which otherwise stays set for the rest of the in-flight download and
+    /// leaves the NEXT sheet rendered but entirely un-tappable, with no spinner
+    /// and no error to explain it.
+    func prepareRemoteImagePicker(for type: JellyfinAPI.ImageType) {
+        remoteImagesGeneration += 1
+        pendingImageType = type
+        remoteImages = []
+        remoteImagesError = nil
+        applyingImageURL = nil
+        isLoadingRemoteImages = false
+    }
+
+    func loadRemoteImages(
+        using apiClient: any APIClientProtocol,
+        preferredLanguage: String?,
+        loc: LocalizationManager
+    ) async {
+        guard let id = item.id else { return }
+        remoteImagesGeneration += 1
+        let generation = remoteImagesGeneration
+        let requestedType = pendingImageType
+        isLoadingRemoteImages = true
+        remoteImagesError = nil
+        do {
+            let images = try await apiClient.getRemoteImages(
+                itemId: id,
+                type: requestedType,
+                includeAllLanguages: true,
+                limit: remoteImageLimit,
+                preferredLanguage: preferredLanguage
+            )
+            guard remoteImagesGeneration == generation else { return }
+            remoteImages = images
+            isLoadingRemoteImages = false
+        } catch {
+            guard remoteImagesGeneration == generation else { return }
+            // A dismissal cancels the `.task`, and the cancellation surfaces as
+            // `URLError.cancelled` — which `userFacingMessage` would render as a
+            // generic failure over a screen the user already left. Same rule as
+            // Quick Connect's poll loop.
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                isLoadingRemoteImages = false
+                return
+            }
+            remoteImages = []
+            remoteImagesError = loc.userFacingMessage(for: error)
+            isLoadingRemoteImages = false
+        }
+    }
+
+    /// Applies one candidate. The server fetches the bytes itself
+    /// (`downloadRemoteImage`), so nothing is proxied through the phone.
+    func applyRemoteImage(
+        _ candidate: RemoteImageCandidate,
+        using apiClient: any APIClientProtocol,
+        userId: String,
+        loc: LocalizationManager
+    ) async -> Bool {
+        guard let id = item.id, applyingImageURL == nil else { return false }
+        remoteImagesGeneration += 1
+        let generation = remoteImagesGeneration
+        // Captured, not re-read after the await: `pendingImageType` moves the
+        // moment another slot's picker opens, and the download must describe the
+        // slot the user actually tapped in.
+        let requestedType = pendingImageType
+        applyingImageURL = candidate.url
+        errorMessage = nil
+        defer { if remoteImagesGeneration == generation { applyingImageURL = nil } }
+        do {
+            try await apiClient.downloadRemoteImage(itemId: id, type: requestedType, imageURL: candidate.url)
+            // A superseded apply returns `false` WITHOUT setting `errorMessage`,
+            // so the picker neither toasts nor dismisses a sheet it no longer owns.
+            guard remoteImagesGeneration == generation else { return false }
+            await reloadItem(using: apiClient, userId: userId)
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            return true
+        } catch {
+            guard remoteImagesGeneration == generation else { return false }
             errorMessage = loc.userFacingMessage(for: error)
             return false
         }
