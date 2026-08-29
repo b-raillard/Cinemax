@@ -324,8 +324,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedRemoteImages
     }
 
+    /// Records every applied artwork so a test can assert WHICH image was
+    /// pinned, not merely that something was.
+    var downloadedImages: [(itemId: String, type: JellyfinAPI.ImageType, imageURL: String)] = []
+
     func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws {
         if shouldThrow { throw stubbedError }
+        downloadedImages.append((itemId: itemId, type: type, imageURL: imageURL))
     }
     func deleteItemImage(id: String, type: JellyfinAPI.ImageType, index: Int?) async throws {
         if shouldThrow { throw stubbedError }

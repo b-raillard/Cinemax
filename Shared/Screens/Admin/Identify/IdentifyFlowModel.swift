@@ -133,6 +133,36 @@ final class IdentifyFlowModel {
                 result: result,
                 replaceAllImages: replaceAllImages
             )
+
+            // Pin the artwork the user actually chose.
+            //
+            // `ApplySearchCriteria` does NOT apply the poster shown next to the
+            // result: it sets the provider ids, re-runs a full refresh, and the
+            // metadata providers then re-pick artwork by THEIR own ranking
+            // (language + provider order). Measured on device 2026-08-29 — the
+            // `primaryImageTag` moves on every apply, so the image really is
+            // re-downloaded, but TMDb re-picks the same poster every time.
+            // Re-identifying an already-correct film was therefore a
+            // no-visible-op, and picking the elephants poster over the Anthony
+            // Mackie one changed nothing, because neither was ever a candidate.
+            //
+            // Picking a result is the user stating which artwork they want, so
+            // we apply it explicitly, AFTER the refresh — the server's own
+            // download lands during `applySearchCriteria`, so doing this first
+            // would simply be overwritten.
+            //
+            // Gated on `replaceAllImages`: unticked means "keep my images", and
+            // forcing ours would be precisely the setting's opposite.
+            if replaceAllImages,
+               let chosenArtwork = result.imageURL?.trimmingCharacters(in: .whitespaces),
+               !chosenArtwork.isEmpty {
+                try await apiClient.downloadRemoteImage(
+                    itemId: itemId,
+                    type: .primary,
+                    imageURL: chosenArtwork
+                )
+            }
+
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
