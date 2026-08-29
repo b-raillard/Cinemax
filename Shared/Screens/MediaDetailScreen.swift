@@ -137,6 +137,25 @@ struct MediaDetailScreen: View {
             guard (note.object as AnyObject?) !== viewModel else { return }
             Task { await viewModel.refreshAfterPlayback(using: appState) }
         }
+        // Tier-1: the catalogue's CONTENT changed (admin metadata / identify /
+        // delete, "Rafraîchir le catalogue", rating cap) — not just one item's
+        // userData, so the targeted refresh above can't serve it: title,
+        // overview, cast and artwork tags all move. A full `load()` is the
+        // documented tier-1 answer and is what Home, la bibliothèque, Favoris
+        // et l'historique already do.
+        //
+        // This screen is the one the admin flows are LAUNCHED FROM, and it was
+        // the only one of the five not listening: `IdentifyFlowModel.apply`
+        // posts tier-1 and then pops straight back here, onto a screen still
+        // rendering the DTO it loaded before the change. Nothing re-fetched it —
+        // `.task` goes through `loadInitial`, latched by `hasLoaded` — so an
+        // applied change stayed invisible until the app was relaunched. Before
+        // `5306dcf` that `.task` re-ran a full `load()` on every reappearance,
+        // which masked the gap; removing it (rightly, for the player pop) left
+        // this hole behind.
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
+            Task { await viewModel.load(using: appState, loc: loc, cardActions: cardActions) }
+        }
         .sheet(item: $episodeOverview) { ep in
             EpisodeOverviewSheet(item: ep)
                 .environment(themeManager)
