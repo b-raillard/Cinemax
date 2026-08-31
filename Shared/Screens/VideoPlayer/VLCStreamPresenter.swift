@@ -2544,9 +2544,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
         didApplyServerTrackDefaults = true
 
-        if let wantAudio = info.selectedAudioIndex,
-           let ordinal = info.audioTracks.firstIndex(where: { $0.id == wantAudio }),
-           ordinal < player.audioTracks.count {
+        // NOT `info.selectedAudioIndex` verbatim: the server's default can be a
+        // TrueHD track, which this engine renders as silence on Apple. See
+        // `AudioTrackPolicy`.
+        if let ordinal = AudioTrackPolicy.defaultOrdinal(
+            tracks: info.audioTracks,
+            serverDefaultId: info.selectedAudioIndex
+        ), ordinal < player.audioTracks.count {
             player.selectedAudioTrack = player.audioTracks[ordinal]
         }
 
