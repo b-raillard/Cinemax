@@ -64,6 +64,9 @@ struct PlaylistDetailScreen: View {
             .task(id: playlistId) {
                 await viewModel.load(playlistId: playlistId, using: appState)
             }
+            // Only ever pushed (Home's playlists rail, or the Playlists tab's
+            // folder browser) — see `tvPushedScreen`.
+            .tvPushedScreen()
     }
 
     @ViewBuilder

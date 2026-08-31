@@ -39,6 +39,17 @@ struct ServerSetupScreen: View {
             ServerHelpSheet()
         }
         .fullScreenCover(isPresented: $showServersSheet) { serversModal }
+        // The remote's Back button does what « Annuler l'ajout » does, and
+        // nothing otherwise. This screen is a PRE-AUTH root rendered straight
+        // by `AppNavigation` — no `TabView` above it, so `MainTabView`'s
+        // handler is not in the hierarchy and this one is uncontested (see the
+        // tvOS Menu-button RULE). Without it, Back on an add-a-server screen
+        // reached from Réglages QUITS the app, stranding the user in add mode.
+        // `nil` when there is nothing to cancel: this really is the app's root
+        // then, and suspending is the right answer.
+        .onExitCommand(perform: appState.isAddingServer
+            ? { Task { await appState.restorePreviousServer() } }
+            : nil)
         #else
         .sheet(isPresented: $showDiscoverySheet) {
             ServerDiscoverySheet { address in

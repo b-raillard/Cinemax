@@ -126,6 +126,10 @@ struct HomeScreen: View {
                 title: loc.localized("home.playlists"),
                 isPlaylist: true
             )
+            // Marked HERE, not inside the screen: the same view doubles as the
+            // root of a Collections / Playlists tab, where it must not register
+            // itself as its own "back" target.
+            .tvPushedScreen()
         }
         // One playlist's contents, in playlist order and reorderable — its card
         // drills INTO it rather than opening an item detail.

@@ -42,6 +42,13 @@ struct LoginScreen: View {
             QuickConnectSheet(viewModel: viewModel)
         }
         .fullScreenCover(isPresented: $showServers) { serversModal }
+        // Back on the remote mirrors the escape hatch's first two shapes — the
+        // two that actually have somewhere to return to. Same reasoning as
+        // `ServerSetupScreen`: this is a pre-auth root with no `TabView` above
+        // it, so this handler is uncontested. `nil` for the other two shapes
+        // (no add, no rollback): the app is at its root and Back suspends it,
+        // which is the pre-existing behaviour.
+        .onExitCommand(perform: tvExitCommand)
         #else
         .sheet(isPresented: $showQuickConnect) {
             QuickConnectSheet(viewModel: viewModel)
@@ -62,6 +69,16 @@ struct LoginScreen: View {
             .environment(loc)
             .environment(toasts)
     }
+
+    #if os(tvOS)
+    /// What the Menu button does here. Deliberately narrower than
+    /// `serverEscapeHatch`: shapes 3 and 4 open the servers list / disconnect,
+    /// which are choices, not a "back".
+    private var tvExitCommand: (() -> Void)? {
+        guard appState.isAddingServer || appState.pendingRollbackServer != nil else { return nil }
+        return { Task { await appState.restorePreviousServer() } }
+    }
+    #endif
 
     /// Escape hatch under the form. Four shapes, in priority order:
     /// 1. an ADD is in flight → "cancel adding", which is what the action does

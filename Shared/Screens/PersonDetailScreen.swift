@@ -72,6 +72,9 @@ struct PersonDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await load(force: false) }
+        // Always a pushed screen — and the one that surfaced the bug: its
+        // header is not focusable, so an Up press escapes into the tab bar.
+        .tvPushedScreen()
     }
 
     private var header: some View {

@@ -189,6 +189,10 @@ struct MediaDetailScreen: View {
             )
         }
         #endif
+        // tvOS: this screen is only ever pushed, so the Menu button must pop
+        // it — including when focus has escaped up into the tab bar, where the
+        // system default is to quit the app.
+        .tvPushedScreen()
     }
 
     /// Kicks off playback once a Watch Together group is created/joined. tvOS
