@@ -567,7 +567,14 @@ extension JellyfinAPIClient {
             .compactMap { s in
                 guard let idx = s.index else { return nil }
                 let label = s.displayTitle ?? s.language ?? "Track \(idx)"
-                return MediaTrackInfo(id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false)
+                return MediaTrackInfo(
+                    id: idx,
+                    label: label,
+                    isDefault: s.isDefault ?? false,
+                    isForced: s.isForced ?? false,
+                    codec: s.codec,
+                    language: s.language
+                )
             }
         let subtitles: [MediaTrackInfo] = streams
             .filter { $0.type == .subtitle }
