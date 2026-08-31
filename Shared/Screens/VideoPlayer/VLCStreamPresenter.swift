@@ -2547,12 +2547,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // NOT `info.selectedAudioIndex` verbatim: the server's default can be a
         // TrueHD track, which this engine renders as silence on Apple. See
         // `AudioTrackPolicy`.
-        if let ordinal = AudioTrackPolicy.defaultOrdinal(
+        let chosen = AudioTrackPolicy.defaultOrdinal(
             tracks: info.audioTracks,
             serverDefaultId: info.selectedAudioIndex
-        ), ordinal < player.audioTracks.count {
+        )
+        if let ordinal = chosen, ordinal < player.audioTracks.count {
             player.selectedAudioTrack = player.audioTracks[ordinal]
         }
+        // Permanent, because this decision is invisible from the outside and a
+        // wrong one reaches the user as SILENCE with no other trace. Without it
+        // a remote log cannot even answer "did the guard run?" — which is
+        // exactly the question a build sent out for testing raises.
+        logAudioTrackChoice(applied: chosen)
 
         if let wantSub = info.selectedSubtitleIndex, wantSub >= 0,
            let ordinal = info.subtitleTracks.firstIndex(where: { $0.id == wantSub }),
@@ -2561,6 +2567,27 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         } else {
             player.selectedSubtitleTrack = nil
         }
+    }
+
+    /// One line describing which audio track opened and why. Codec and
+    /// language only — no URL, no token, nothing user-identifying.
+    private func logAudioTrackChoice(applied: Int?) {
+        let serverDefault = info.selectedAudioIndex
+        let catalogue = info.audioTracks.enumerated()
+            .map { "[\($0.offset)] id=\($0.element.id) \($0.element.codec ?? "?")/\($0.element.language ?? "?")" }
+            .joined(separator: " ")
+        var appliedDescription = "aucun (choix du moteur conservé)"
+        if let applied, applied < info.audioTracks.count {
+            let track = info.audioTracks[applied]
+            appliedDescription = "[\(applied)] \(track.codec ?? "?")/\(track.language ?? "?")"
+            if let serverDefault, serverDefault != track.id {
+                appliedDescription += " (REMPLACE le défaut serveur — codec muet sur Apple)"
+            }
+        }
+        let summary = "défaut serveur=" + String(describing: serverDefault)
+            + " appliqué=" + appliedDescription
+            + " pistes=" + catalogue
+        logger.notice("CINEMAX-AUDIO ▸ \(summary, privacy: .public)")
     }
 
     // MARK: - Playback
