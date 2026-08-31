@@ -42,11 +42,50 @@ struct MainTabView: View {
 
     @State private var playerCoordinator = VideoPlayerCoordinator()
 
+    /// Knows what the Menu button should undo in each tab. See
+    /// `TVBackNavigation.swift` — the whole reason it exists is that the
+    /// `.onExitCommand` below intercepts EVERY Menu press in the tab layout,
+    /// `NavigationStack`'s own pop included.
+    @State private var tvBack = TVBackCoordinator()
+
     /// True only while the user is editing the menu on the Main Menu
     /// sub-page. Drives whether the bar snapshot keeps pace with the live
     /// store or stays frozen until they back out.
     private var isEditingMenu: Bool {
         settingsNav.selectedInterfaceSub == .menu
+    }
+
+    /// Which tab "back" falls through to. Normally Accueil; a custom menu can
+    /// drop it, and then the first tab plays that role — the user still needs
+    /// one screen the Menu button converges on before it gives up and suspends
+    /// the app.
+    private var tvHomeTabID: String? {
+        displayedTabs.first(where: { $0.id == MenuEntry.homeID })?.id ?? displayedTabs.first?.id
+    }
+
+    /// The single Menu-button decision for the whole tvOS tab layout, in the
+    /// order the user described it:
+    ///
+    /// 1. something stacked in this tab (a pushed screen, a Settings sub-page)
+    ///    → go back one level, wherever focus happens to sit. This is the fix
+    ///    for the reported bug: with focus escaped onto the tab bar, tvOS's
+    ///    default was to QUIT;
+    /// 2. a main page that isn't Accueil → go to Accueil;
+    /// 3. Accueil itself → **nil**, which hands the press back to the system
+    ///    and suspends the app. `nil` is the only way to express that:
+    ///    `UIApplication.suspend()` is private, and any non-nil handler
+    ///    consumes the press.
+    private var tvExitCommand: (() -> Void)? {
+        let tab = selectedTabID
+        switch TVBackPolicy.decide(
+            tabID: tab,
+            hasBack: tvBack.canGoBack(in: tab),
+            homeTabID: tvHomeTabID
+        ) {
+        case .goBack: return { tvBack.goBack(in: tab) }
+        case .switchTab(let target): return { selectedTabID = target }
+        case .suspend: return nil
+        }
     }
     #endif
 
@@ -55,6 +94,7 @@ struct MainTabView: View {
             #if os(tvOS)
             tvTabLayout(tabs: displayedTabs)
                 .environment(playerCoordinator)
+                .environment(tvBack)
                 .task { playerCoordinator.localizationManager = loc }
             #else
             // iOS / iPadOS render the live resolved list directly — no
@@ -214,13 +254,26 @@ struct MainTabView: View {
             ForEach(tabs) { tab in
                 Tab(value: tab.id) {
                     NavigationStack {
+                        // `tvTabRoot` clears this tab's back registration: the
+                        // root being on screen is the one moment we know for
+                        // certain nothing is stacked on it.
                         destinationView(for: tab)
+                            .tvTabRoot(tab.id)
                     }
+                    // On the STACK, not the root screen, so pushed
+                    // destinations inherit it and can register against the
+                    // right tab.
+                    .environment(\.tvTabID, tab.id)
                 } label: {
                     Label(tab.displayTitle(loc), systemImage: tab.icon)
                 }
             }
         }
+        // One handler for the whole layout — see `tvExitCommand`. It is
+        // deliberately the ONLY `.onExitCommand` inside the tab content: an
+        // ancestor handler wins over a descendant one on tvOS, so a second one
+        // further down would simply never run.
+        .onExitCommand(perform: tvExitCommand)
     }
     #endif
 

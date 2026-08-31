@@ -19,11 +19,17 @@ extension SettingsScreen {
                 Group {
                     if let sub = selectedInterfaceSub {
                         // Three-level state: pop sub → hub.
+                        //
+                        // Registered on `TVBackCoordinator` rather than held in
+                        // a local `.onExitCommand`: `MainTabView` now carries
+                        // one on the `TabView`, and on tvOS the ANCESTOR wins —
+                        // a handler here would simply never run, and Menu would
+                        // jump to Accueil from inside a settings sub-page.
                         tvInterfaceSubDetailView(for: sub)
-                            .onExitCommand { selectedInterfaceSub = nil }
+                            .tvBackAction { selectedInterfaceSub = nil }
                     } else if let category = selectedCategory {
                         tvDetailView(for: category)
-                            .onExitCommand { selectedCategory = nil }
+                            .tvBackAction { selectedCategory = nil }
                     } else {
                         tvLandingPage
                     }

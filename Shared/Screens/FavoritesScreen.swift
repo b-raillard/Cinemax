@@ -140,6 +140,8 @@ struct FavoritesScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
             Task { await viewModel.refresh(using: appState) }
         }
+        // Only ever pushed (Home's Favoris « Voir tout ») — see `tvPushedScreen`.
+        .tvPushedScreen()
     }
 
     @ViewBuilder
