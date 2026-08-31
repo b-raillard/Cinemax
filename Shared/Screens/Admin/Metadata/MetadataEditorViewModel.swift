@@ -156,7 +156,7 @@ final class MetadataEditorViewModel {
         do {
             try await apiClient.downloadRemoteImage(itemId: id, type: pendingImageType, imageURL: url)
             newImageURL = ""
-            await reloadItem(using: apiClient, userId: userId)
+            await reloadImages(using: apiClient, userId: userId)
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
@@ -171,7 +171,7 @@ final class MetadataEditorViewModel {
         do {
             try await apiClient.deleteItemImage(id: id, type: pending.type, index: pending.index)
             pendingImageDelete = nil
-            await reloadItem(using: apiClient, userId: userId)
+            await reloadImages(using: apiClient, userId: userId)
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
@@ -262,7 +262,7 @@ final class MetadataEditorViewModel {
             // A superseded apply returns `false` WITHOUT setting `errorMessage`,
             // so the picker neither toasts nor dismisses a sheet it no longer owns.
             guard remoteImagesGeneration == generation else { return false }
-            await reloadItem(using: apiClient, userId: userId)
+            await reloadImages(using: apiClient, userId: userId)
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
             return true
         } catch {
@@ -353,9 +353,11 @@ final class MetadataEditorViewModel {
 
     // MARK: - Helpers
 
-    /// Re-fetches the item after a server-side mutation (image download,
-    /// identify apply, etc.) so the editor reflects the fresh DTO —
-    /// including refreshed image tags that bust `CinemaLazyImage`'s cache.
+    /// Re-fetches the item after a server-side mutation that rewrote its
+    /// metadata wholesale — i.e. Identify, which is the user asking the server
+    /// to replace title, overview, cast and provider ids. Taking the fresh DTO
+    /// entire is the right answer there, unsaved edits included: they describe
+    /// the identification the user just discarded.
     /// Caller threads `userId` through since the VM doesn't own AppState.
     private func reloadItem(using apiClient: any APIClientProtocol, userId: String) async {
         guard let id = item.id else { return }
@@ -363,6 +365,50 @@ final class MetadataEditorViewModel {
             self.item = fresh
             self.original = fresh
         }
+    }
+
+    /// Re-fetches after an **artwork** mutation, keeping the user's unsaved
+    /// General/Cast edits.
+    ///
+    /// The three image paths only need the refreshed image tags, which bust
+    /// `CinemaLazyImage`'s URL-keyed cache. They used to take the whole fresh
+    /// DTO like Identify does — and since that overwrites `original` too,
+    /// `isDirty` fell back to false: a pending title or cast edit was dropped
+    /// **in silence**, with `interactiveDismissDisabled(isDirty)` no longer
+    /// guarding the sheet either. Changing a poster is not a reason to lose a
+    /// synopsis, and the picker made that the ordinary path rather than an edge.
+    ///
+    /// Splicing into `original` as well as `item` is what keeps `isDirty`
+    /// describing the USER's edits alone — otherwise the new tags would
+    /// themselves read as unsaved changes, and the editor would keep claiming
+    /// them after the user had reverted everything by hand.
+    private func reloadImages(using apiClient: any APIClientProtocol, userId: String) async {
+        guard let id = item.id else { return }
+        guard let fresh = try? await apiClient.getItem(userId: userId, itemId: id) else { return }
+        guard isDirty else {
+            // Nothing to protect: take the fresh DTO whole, exactly as before.
+            self.item = fresh
+            self.original = fresh
+            return
+        }
+        self.item = Self.splicingImageFields(of: fresh, into: item)
+        self.original = Self.splicingImageFields(of: fresh, into: original)
+    }
+
+    /// Copies across only the fields an image mutation on THIS item can move.
+    ///
+    /// `primaryImageAspectRatio` belongs here — a new poster of different
+    /// proportions changes it, and a stale value mis-sizes every card. The
+    /// `parent*` / `series*` / `album*` tags deliberately do NOT: they describe
+    /// artwork owned by another item, which nothing done here can affect.
+    static func splicingImageFields(of fresh: BaseItemDto, into base: BaseItemDto) -> BaseItemDto {
+        var out = base
+        out.imageTags = fresh.imageTags
+        out.backdropImageTags = fresh.backdropImageTags
+        out.screenshotImageTags = fresh.screenshotImageTags
+        out.imageBlurHashes = fresh.imageBlurHashes
+        out.primaryImageAspectRatio = fresh.primaryImageAspectRatio
+        return out
     }
 }
 #endif
