@@ -109,7 +109,18 @@ targets:
         # APP target only — the widget extension that renders it needs no extra
         # key or entitlement.
         NSSupportsLiveActivities: true
-        UILaunchScreen: {}
+        # Launch screen. The key itself is mandatory from the iOS 27 SDK on (a
+        # build without one is rejected), but the empty dict it used to be
+        # resolved to `systemBackground` — i.e. WHITE on a light-mode phone,
+        # while the app paints dark by default. `darkMode` is a per-app setting
+        # the system appearance never sees, so that flash hit every user whose
+        # phone is in light mode, whatever they chose in Cinemax. Naming a fixed
+        # dark colour removes it for the default configuration; it tracks
+        # `CinemaColor.surface`'s dark value (0x0E0E0E). Deliberately NOT a
+        # dynamic colorset: following the system appearance would put the white
+        # launch screen back in exactly the case this fixes.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
         NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi."
