@@ -66,9 +66,16 @@ enum MediaCardStatus: Equatable {
 extension View {
     /// Paints a card's watched check or progress bar over its artwork.
     ///
+    /// `@MainActor` because the body evaluates `CinemaScale.pt`, whose factor
+    /// cache is `nonisolated(unsafe)` on the stated contract that it is only
+    /// ever read while rendering on the main actor. Every call site is a
+    /// main-actor view body already, so the annotation costs nothing and keeps
+    /// the contract enforced by the compiler rather than by convention.
+    ///
     /// Applied to the CLIPPED artwork box, before `.contentShape`/`.cinemaFocus`,
     /// so the bar follows the poster's rounded corners and the check sits inside
     /// them.
+    @MainActor
     func mediaCardStatusOverlay(_ status: MediaCardStatus) -> some View {
         self
             .overlay(alignment: .bottom) {

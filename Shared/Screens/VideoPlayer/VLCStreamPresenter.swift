@@ -589,6 +589,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterThumbTasks.forEach { $0.cancel() }
         chapterThumbTasks = []
         pendingChapterThumbnails = nil
+        #if os(tvOS)
+        // The HUD poster outlives the two media-swap paths that cancel it
+        // otherwise, so a dismissal mid-fetch would leave an authenticated GET
+        // nobody consumes — and, if it landed during the dismiss animation, a
+        // write plus a `layoutIfNeeded()` into a controller already tearing
+        // down. Same discipline as every other unstructured task here.
+        contextArtworkTask?.cancel()
+        contextArtworkTask = nil
+        #endif
         trickplay.reset()
         eventsTask?.cancel()
         eventsTask = nil
