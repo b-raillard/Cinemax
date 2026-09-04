@@ -109,14 +109,25 @@ final class VLCStreamPresenter: NSObject {
     // MARK: - Helpers
 
     /// libVLC can't reliably inject arbitrary HTTP headers across versions, so
-    /// authenticate via Jellyfin's accepted `api_key` query param instead of the
+    /// authenticate via Jellyfin's `ApiKey` query param instead of the
     /// `Authorization: MediaBrowser Token=…` header AVURLAsset uses.
+    ///
+    /// `ApiKey`, never `api_key`: the latter is a legacy spelling that Jellyfin
+    /// 12.0 rejects by default (`EnableLegacyAuthorization = false`), while
+    /// `ApiKey` is read unconditionally on every server since 10.8. It is also
+    /// the spelling the server itself appends to every `TranscodingUrl`, hence
+    /// the case-insensitive presence test — comparing against `api_key` alone
+    /// sent the forced-transcode URL out with the token under both names.
     nonisolated static func authedURL(_ url: URL, token: String?) -> URL {
         guard let token, !token.isEmpty,
               var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         var items = comps.queryItems ?? []
-        if !items.contains(where: { $0.name.lowercased() == "api_key" }) {
-            items.append(URLQueryItem(name: "api_key", value: token))
+        let carriesToken = items.contains { item in
+            let name = item.name.lowercased()
+            return name == "apikey" || name == "api_key"
+        }
+        if !carriesToken {
+            items.append(URLQueryItem(name: "ApiKey", value: token))
         }
         comps.queryItems = items
         return comps.url ?? url
@@ -424,7 +435,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // App-lifecycle wake resilience. When the device sleeps (Apple TV / phone
     // locked) mid-playback, the stream socket dies AND the OS invalidates the
     // hardware VideoToolbox decode session + the audio session. On resume we
-    // re-resolve a FRESH PlaybackInfo (new api_key + playSessionId) and rebuild
+    // re-resolve a FRESH PlaybackInfo (new ApiKey + playSessionId) and rebuild
     // playback from where we left off. **Recovery runs on `didBecomeActive`, not
     // `willEnterForeground`** — tvOS won't hand out a valid VT hardware session
     // (or let the audio session activate) until the app is genuinely
@@ -2150,7 +2161,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     /// Downloads one chapter thumbnail. Sends the token both as the
-    /// `api_key` query param (what Jellyfin image endpoints expect) and as the
+    /// `ApiKey` query param (what Jellyfin image endpoints expect) and as the
     /// Authorization header, so it works regardless of server hardening.
     nonisolated private static func loadImage(url: URL, token: String?) async -> Data? {
         let authed = VLCStreamPresenter.authedURL(url, token: token)
@@ -3595,7 +3606,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
     }
 
-    /// Re-negotiates a FRESH PlaybackInfo (new `api_key` + `playSessionId`) for
+    /// Re-negotiates a FRESH PlaybackInfo (new `ApiKey` + `playSessionId`) for
     /// the current item and resumes from `ms`. Trimmed copy of
     /// `navigateToEpisode`'s media/proxy/seek machinery (no episode-graph
     /// changes). Guarded by `navGeneration` so a user episode-nav started during

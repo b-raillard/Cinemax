@@ -18,7 +18,7 @@ final class HLSManifestLoader: NSObject, AVAssetResourceLoaderDelegate, @uncheck
 
     /// Dedicated EPHEMERAL session, never `URLSession.shared`: the URLs this
     /// delegate fetches are Jellyfin's transcoding manifest + its WebVTT
-    /// segments, and they carry `api_key=<token>` in the query string. The
+    /// segments, and they carry `ApiKey=<token>` in the query string. The
     /// shared session is backed by a disk `URLCache`, so every one of those
     /// authenticated URLs (token included, as part of the cache key) was being
     /// written into a cache file in the app container. Nothing here benefits

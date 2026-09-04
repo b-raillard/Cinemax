@@ -122,8 +122,11 @@ extension JellyfinAPIClient: RemoteControlAPI {
         guard var comps = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.setEndpointPath("/socket", preservingBasePathOf: serverURL)
         comps.scheme = (serverURL.scheme?.lowercased() == "https") ? "wss" : "ws"
+        // `ApiKey`, not the legacy `api_key` — rejected once Jellyfin 12.0's
+        // `EnableLegacyAuthorization = false` default lands; a socket has no
+        // header to carry the token any other way.
         comps.queryItems = [
-            URLQueryItem(name: "api_key", value: token),
+            URLQueryItem(name: "ApiKey", value: token),
             URLQueryItem(name: "deviceId", value: deviceID)
         ]
         guard let url = comps.url else { return nil }

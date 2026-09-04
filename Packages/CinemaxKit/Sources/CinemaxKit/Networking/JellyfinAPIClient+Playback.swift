@@ -323,7 +323,7 @@ extension JellyfinAPIClient {
     /// Dedicated session for the hand-built PlaybackInfo POST. Deliberately NOT
     /// `URLSession.shared`, which carries a disk-backed `URLCache`: this request
     /// is authenticated (`MediaBrowser Token=…` header) and its response body
-    /// contains the freshly-negotiated stream URL — including the `api_key`
+    /// contains the freshly-negotiated stream URL — including the `ApiKey`
     /// query item — so a shared-session cache file would hold both at rest.
     /// Mirrors `syncPlaySession` and the SDK clients'
     /// `fastFailSessionConfiguration` (`urlCache = nil`, bounded timeouts,

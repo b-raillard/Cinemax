@@ -23,7 +23,7 @@ import Nuke
 ///
 /// Cache-key note: Nuke keys on the URL (the Authorization header is not part of
 /// the key). Chapter/artwork URLs carry no token; trickplay URLs already embed
-/// `api_key` via `VLCStreamPresenter.authedURL(_:token:)` — the key stays stable
+/// `ApiKey` via `VLCStreamPresenter.authedURL(_:token:)` — the key stays stable
 /// per item, no behavior change.
 enum AuthenticatedImageFetch {
     nonisolated static func data(from url: URL, token: String?) async -> Data? {
