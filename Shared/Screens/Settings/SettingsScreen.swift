@@ -165,6 +165,7 @@ struct SettingsScreen: View {
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
+    @State var showProfile = false
     @State var showServers = false
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
@@ -387,11 +388,13 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .sheet(isPresented: $showServers) { serversSheet }
+        .sheet(isPresented: $showProfile) { profileSheet }
         #else
         .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .fullScreenCover(isPresented: $showServers) { serversSheet }
+        .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
     }
 
@@ -428,6 +431,49 @@ struct SettingsScreen: View {
             #if os(tvOS)
             .environment(playerCoordinator)
             #endif
+    }
+
+    /// The signed-in user's own account. Not admin: it changes THEIR password
+    /// through `AuthAPI`, never the admin reset path.
+    private var profileSheet: some View {
+        #if os(iOS)
+        NavigationStack {
+            ProfileScreen()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(loc.localized("action.done")) { showProfile = false }
+                    }
+                }
+        }
+        .environment(appState)
+        .environment(themeManager)
+        .environment(loc)
+        .environment(toasts)
+        #else
+        // tvOS draws no toolbar on a cover, so it carries its own Done button —
+        // which is also the focusable every state of the screen needs, per the
+        // pushed-inside-a-cover rule.
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Spacer()
+                CinemaButton(title: loc.localized("action.done"), style: .accent) {
+                    showProfile = false
+                }
+                .frame(width: CinemaTVLayout.ctaWidth)
+            }
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
+            .padding(.top, CinemaSpacing.spacing5)
+            .focusSection()
+
+            ProfileScreen()
+        }
+        .background(CinemaColor.surface.ignoresSafeArea())
+        .environment(appState)
+        .environment(themeManager)
+        .environment(loc)
+        .environment(toasts)
+        .onExitCommand { showProfile = false }
+        #endif
     }
 
     private var privacySecuritySheet: some View {

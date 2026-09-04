@@ -55,6 +55,26 @@ public extension ServerAPI {
 public protocol AuthAPI: Sendable {
     func authenticate(username: String, password: String) async throws -> UserSession
 
+    /// Changes the SIGNED-IN user's own password.
+    ///
+    /// Deliberately NOT `AdminAPI.updateUserPassword`, which is an admin
+    /// resetting somebody else's and carries no `currentPassword`. That slice is
+    /// a privilege boundary gated on `AppState.isAdministrator`, so routing a
+    /// self-service change through it would put an ordinary user's own password
+    /// change behind an admin gate — and hand the server a payload that omits
+    /// the proof of identity it is entitled to ask for.
+    func changeOwnPassword(userId: String, currentPassword: String, newPassword: String) async throws
+
+    /// The server's known languages, for the audio / subtitle preference
+    /// pickers. Two-letter ISO codes are what `UserConfiguration` stores.
+    func getCultures() async throws -> [ServerCulture]
+
+    /// The signed-in user's playback preferences, as the server holds them.
+    func getUserConfiguration(userId: String) async throws -> UserPlaybackPreferences
+    /// Replaces them. Read-modify-write on the server's own configuration, so
+    /// the fields this app does not surface are preserved.
+    func updateUserConfiguration(userId: String, preferences: UserPlaybackPreferences) async throws
+
     /// Whether the server has Quick Connect enabled. The login UI hides the
     /// Quick Connect affordance when this is `false` (or the call fails) so we
     /// never offer a flow the server will reject.
@@ -635,6 +655,13 @@ public extension AuthAPI {
     func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
         try await getActiveSessions(activeWithinSeconds: activeWithinSeconds)
     }
+
+    // Empty defaults so hand-written test mocks need not stub what they don't
+    // exercise — the `SyncPlayAPI` pattern.
+    func changeOwnPassword(userId: String, currentPassword: String, newPassword: String) async throws {}
+    func getCultures() async throws -> [ServerCulture] { [] }
+    func getUserConfiguration(userId: String) async throws -> UserPlaybackPreferences { .init() }
+    func updateUserConfiguration(userId: String, preferences: UserPlaybackPreferences) async throws {}
 }
 
 public extension AdminAPI {

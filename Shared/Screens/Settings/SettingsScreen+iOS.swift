@@ -223,9 +223,13 @@ extension SettingsScreen {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 iOSSettingsSectionHeader(loc.localized("settings.account"))
 
-                // TODO(v2): wire a user-facing Profile Settings screen
-                // (password change + avatar) — see docs/v2-todo.md.
                 VStack(spacing: 0) {
+                    navigationRow(icon: "person.crop.circle", label: loc.localized("profile.title")) {
+                        showProfile = true
+                    }
+
+                    iOSSettingsDivider
+
                     navigationRow(icon: "clock.arrow.circlepath", label: loc.localized("settings.watchedHistory")) {
                         showWatchedHistory = true
                     }

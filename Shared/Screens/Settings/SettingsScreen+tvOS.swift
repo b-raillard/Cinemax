@@ -331,6 +331,14 @@ extension SettingsScreen {
             tvProfileSection
 
             tvActionRow(
+                id: "profile",
+                icon: "person.crop.circle",
+                label: loc.localized("profile.title"),
+                showsChevron: true,
+                action: { showProfile = true }
+            )
+
+            tvActionRow(
                 id: "watchedHistory",
                 icon: "clock.arrow.circlepath",
                 label: loc.localized("settings.watchedHistory"),

@@ -1030,3 +1030,27 @@
 "subtitleSize.large" = "Grande";
 "subtitleSize.extraLarge" = "Très grande";
 "subtitleSize.huge" = "Énorme";
+
+/* Écran Profil. */
+"profile.title" = "Profil";
+"profile.password.section" = "Mot de passe";
+"profile.password.change" = "Changer le mot de passe";
+"profile.password.current" = "Mot de passe actuel";
+"profile.password.new" = "Nouveau mot de passe";
+"profile.password.confirm" = "Confirmer le nouveau mot de passe";
+"profile.password.mismatch" = "Les deux nouveaux mots de passe ne correspondent pas.";
+"profile.password.tooShort" = "Le nouveau mot de passe est vide.";
+"profile.password.changed" = "Mot de passe modifié";
+"profile.password.rejected" = "Le serveur a refusé le changement. Vérifiez le mot de passe actuel.";
+"profile.preferences.section" = "Préférences de lecture";
+"profile.preferences.hint" = "Le serveur applique ces préférences à toutes vos applications Jellyfin.";
+"profile.audioLanguage" = "Langue audio préférée";
+"profile.subtitleLanguage" = "Langue des sous-titres préférée";
+"profile.subtitleMode" = "Affichage des sous-titres";
+"profile.language.none" = "Aucune préférence";
+"profile.subtitleMode.Default" = "Par défaut";
+"profile.subtitleMode.Smart" = "Intelligent";
+"profile.subtitleMode.OnlyForced" = "Forcés uniquement";
+"profile.subtitleMode.Always" = "Toujours";
+"profile.subtitleMode.None" = "Jamais";
+"profile.preferences.saved" = "Préférences enregistrées";
