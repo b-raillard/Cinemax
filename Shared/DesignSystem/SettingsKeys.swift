@@ -44,6 +44,8 @@ enum SettingsKey {
     static let homeShowRecentlyAdded = "home.showRecentlyAdded"
     static let homeShowFavorites = "home.showFavorites"
     static let homeShowPlaylists = "home.showPlaylists"
+    static let homeShowUpcoming = "home.showUpcoming"
+    static let homeShowCollections = "home.showCollections"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
     /// JSON `[String]` — the genres the user picked to surface as Home rows.
@@ -136,6 +138,11 @@ enum SettingsKey {
         static let homeShowRecentlyAdded = true
         static let homeShowFavorites = true
         static let homeShowPlaylists = true
+        /// Both default OFF, unlike every other rail: a server with no upcoming
+        /// schedule and no collections would otherwise show two headers over
+        /// nothing on first launch, and Home is already seven rows deep.
+        static let homeShowUpcoming = false
+        static let homeShowCollections = false
         static let homeShowGenreRows = true
         static let homeShowWatchingNow = true
 

@@ -123,6 +123,12 @@ public protocol LibraryAPI: Sendable {
     /// filter, so the server returns the next unwatched episode for every show
     /// the user has started.
     func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// Episodes due to air soon. Carries a default no-op so hand-written test
+    /// mocks need not stub a rail they don't exercise — the `SyncPlayAPI`
+    /// pattern.
+    func getUpcomingEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// Server-held trailers for an item. Same default-no-op reasoning.
+    func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto]
 
     /// Clears the user's played/progress state for the given item. Used by
     /// Privacy & Security → Clear Continue Watching to drop resume points
@@ -606,6 +612,9 @@ public extension LibraryAPI {
     func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
         try await getSimilarItems(itemId: itemId, userId: userId, limit: limit)
     }
+    func getUpcomingEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
+    func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto] { [] }
+
     func getNextUpEpisodes(userId: String, limit: Int = 20) async throws -> [BaseItemDto] {
         try await getNextUpEpisodes(userId: userId, limit: limit)
     }

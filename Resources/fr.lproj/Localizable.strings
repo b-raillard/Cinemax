@@ -1014,3 +1014,11 @@
 /* Retirer une entrée d'une playlist. */
 "playlist.removeItem" = "Retirer de la playlist";
 "playlist.removeItem.done" = "Retiré de la playlist";
+
+/* Rangées d'accueil « Prochainement » et « Collections ». */
+"settings.homePage.upcoming" = "Prochainement";
+"settings.homePage.collections" = "Collections";
+"home.upcoming" = "Prochainement";
+"home.collections" = "Collections";
+"home.upcoming.airs" = "Le %@";
+"detail.action.trailer" = "Bande-annonce";

@@ -201,6 +201,8 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
     @AppStorage(SettingsKey.homeShowPlaylists) var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
+    @AppStorage(SettingsKey.homeShowUpcoming) var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
+    @AppStorage(SettingsKey.homeShowCollections) var showCollections: Bool = SettingsKey.Default.homeShowCollections
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
@@ -296,6 +298,8 @@ struct SettingsScreen: View {
             .init(id: "homeRecentlyAdded", icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"), value: $showRecentlyAdded),
             .init(id: "homeFavorites", icon: "heart", label: loc.localized("settings.homePage.favorites"), value: $showFavorites),
             .init(id: "homePlaylists", icon: "music.note.list", label: loc.localized("settings.homePage.playlists"), value: $showPlaylists),
+            .init(id: "homeCollections", icon: "rectangle.stack", label: loc.localized("settings.homePage.collections"), value: $showCollections),
+            .init(id: "homeUpcoming", icon: "calendar", label: loc.localized("settings.homePage.upcoming"), value: $showUpcoming),
             .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows)
         ]
         // "Watching Now" ("En direct") exposes other users' active sessions —
@@ -312,11 +316,11 @@ struct SettingsScreen: View {
         var rows: [SettingsToggleRow] = [
             .init(id: "detailQualityBadges", icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"), value: $showQualityBadges)
         ]
-        // The trailer button opens the URL in Safari — tvOS has no browser,
-        // so neither the button nor its toggle exist there.
-        #if os(iOS)
+        // Both platforms. iOS opens a `remoteTrailers` link in Safari; tvOS,
+        // which has no browser, plays a trailer the SERVER holds through the
+        // normal player. Different mechanisms, one setting — what the user is
+        // choosing is whether trailers are offered at all.
         rows.append(.init(id: "detailTrailerButton", icon: "movieclapper", label: loc.localized("settings.detailPage.trailerButton"), value: $showTrailerButton))
-        #endif
         return rows
     }
 

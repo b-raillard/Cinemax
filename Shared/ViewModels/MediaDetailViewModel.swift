@@ -59,6 +59,10 @@ final class MediaDetailViewModel {
     /// which is the ordinary case: a session only exists while Jellyfin is
     /// actually running on the other device.
     var remoteTargets: [RemotePlayTarget] = []
+    /// Trailers the server holds for this item. Empty is the ordinary case —
+    /// most libraries have none — and the button renders only when it isn't,
+    /// which is what teaches the user the precondition.
+    var localTrailers: [BaseItemDto] = []
 
     /// The version the user picked from the detail screen's version row, when
     /// the item carries several media sources. `nil` ⇒ play whatever
@@ -175,6 +179,7 @@ final class MediaDetailViewModel {
         // being slow or unreachable costs the render nothing. Every item kind is
         // sendable, so there's no type guard here.
         Task { await loadRemoteTargets(using: appState, cardActions: cardActions) }
+        Task { await loadLocalTrailers(using: appState) }
 
         hasLoaded = errorMessage == nil
         isLoading = false
@@ -442,6 +447,18 @@ final class MediaDetailViewModel {
     /// Internal rather than private: the picker sheet re-runs the same probe
     /// when it opens (its snapshot has to be fresh at the moment a command is
     /// sent), and the tests exercise this path directly.
+    /// Side task, same discipline as `loadRemoteTargets`: having no trailer is
+    /// the ordinary outcome, so a failed probe degrades to "no button" and
+    /// never to an error over an otherwise-fine screen.
+    func loadLocalTrailers(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        let id = item?.id ?? itemId
+        let generation = loadGeneration
+        guard let trailers = try? await appState.apiClient.getLocalTrailers(itemId: id, userId: userId) else { return }
+        guard generation == loadGeneration else { return }
+        localTrailers = trailers
+    }
+
     func loadRemoteTargets(using appState: AppState, cardActions: CardActionPresenter? = nil) async {
         guard let userId = appState.currentUserId else { return }
         let generation = loadGeneration

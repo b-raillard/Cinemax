@@ -86,8 +86,11 @@ struct MediaDetailScreen: View {
     @AppStorage(SettingsKey.render4K) private var render4K: Bool = SettingsKey.Default.render4K
 
     @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
-    #if os(iOS)
+    // Both platforms now: iOS opens a `remoteTrailers` link in Safari, tvOS
+    // plays a trailer the server itself holds. One setting, two mechanisms —
+    // the user's intent ("show me trailers") is the same.
     @AppStorage(SettingsKey.detailShowTrailerButton) private var showTrailerButton: Bool = SettingsKey.Default.detailShowTrailerButton
+    #if os(iOS)
     @Environment(\.openURL) private var openURL
     #endif
 
@@ -1027,6 +1030,12 @@ struct MediaDetailScreen: View {
             if isPlayableType { playSection }
             favoriteButton
             watchedButton
+            // Like "Play on…", it arrives after the first render (its own side
+            // probe), so it goes after the two buttons that are always there
+            // and cannot pull focus off Play.
+            if showTrailerButton, network.isOnline, let trailer = viewModel.localTrailers.first {
+                trailerButton(for: trailer)
+            }
             if Self.watchTogetherEnabled && network.isOnline {
                 watchTogetherButton(for: item, nextEp: nextEp)
             }
@@ -1108,6 +1117,37 @@ struct MediaDetailScreen: View {
             isActive: SyncPlayController.shared.isInGroup
         ) {
             watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+        }
+    }
+
+    /// Plays a trailer the SERVER holds, through the normal player path.
+    ///
+    /// iOS's trailer button opens a `remoteTrailers` link in Safari, which tvOS
+    /// cannot do — it has no browser, which is why the button and its setting
+    /// were `#if os(iOS)`. A LOCAL trailer is a different thing entirely: an
+    /// ordinary Jellyfin item with its own media sources, so it plays here like
+    /// any other. Rendered only when the server holds one, which is what
+    /// teaches the user the precondition.
+    private func trailerButton(for trailer: BaseItemDto) -> some View {
+        TVAccessoryActionButton(
+            systemImage: "movieclapper",
+            label: loc.localized("detail.action.trailer"),
+            accessibilityLabel: loc.localized("detail.trailer")
+        ) {
+            guard let id = trailer.id else { return }
+            // No episode navigation and no version override: a trailer is a
+            // standalone clip, not part of a season and not a version of the
+            // film it advertises.
+            coordinator.play(
+                itemId: id,
+                title: trailer.name ?? loc.localized("detail.action.trailer"),
+                startTime: nil,
+                previousEpisode: nil,
+                nextEpisode: nil,
+                episodeNavigator: nil,
+                mediaSourceId: nil,
+                using: appState
+            )
         }
     }
 

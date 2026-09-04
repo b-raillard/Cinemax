@@ -1012,3 +1012,11 @@
 /* Removing an entry from a playlist. */
 "playlist.removeItem" = "Remove from playlist";
 "playlist.removeItem.done" = "Removed from playlist";
+
+/* Home "Upcoming" and "Collections" rows. */
+"settings.homePage.upcoming" = "Upcoming";
+"settings.homePage.collections" = "Collections";
+"home.upcoming" = "Upcoming";
+"home.collections" = "Collections";
+"home.upcoming.airs" = "%@";
+"detail.action.trailer" = "Trailer";

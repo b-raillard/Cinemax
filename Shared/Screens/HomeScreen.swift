@@ -25,6 +25,8 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowRecentlyAdded) private var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) private var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
     @AppStorage(SettingsKey.homeShowPlaylists) private var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
+    @AppStorage(SettingsKey.homeShowUpcoming) private var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
+    @AppStorage(SettingsKey.homeShowCollections) private var showCollections: Bool = SettingsKey.Default.homeShowCollections
     @State private var deepLinkTarget: DeepLinkTarget?
     /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
@@ -366,6 +368,16 @@ struct HomeScreen: View {
                     // route to a playlist on the default menu.
                     if showPlaylists, !viewModel.playlists.isEmpty {
                         playlistsRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
+                    if showCollections, !viewModel.collections.isEmpty {
+                        collectionsRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
+                    if showUpcoming, !viewModel.upcomingItems.isEmpty {
+                        upcomingRow
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
@@ -1027,6 +1039,99 @@ struct HomeScreen: View {
                     )
                 },
                 subtitle: playlist.childCount.map { loc.itemCount($0) }
+            )
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
+    }
+
+    /// The user's collections. A collection opens its own fiche — the one with
+    /// the members list and "Play all" — not a scoped grid.
+    private var collectionsRow: some View {
+        ContentRow(
+            title: loc.localized("home.collections"),
+            data: viewModel.collections,
+            id: \.id
+        ) { collection in
+            collectionCard(collection)
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    @ViewBuilder
+    private func collectionCard(_ collection: BaseItemDto) -> some View {
+        NavigationLink {
+            if let id = collection.id {
+                MediaDetailScreen(itemId: id, itemType: .boxSet)
+            }
+        } label: {
+            PosterCard(
+                title: collection.name ?? "",
+                imageURL: collection.id.map {
+                    appState.imageBuilder.imageURL(
+                        itemId: $0, imageType: .primary,
+                        maxWidth: 300, tag: collection.primaryImageTagValue
+                    )
+                },
+                subtitle: collection.childCount.map { loc.collectionCount($0) }
+            )
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
+        // No `mediaCardContextMenu`: a collection is a folder, and none of that
+        // menu's entries — play, watched, favourite, add to a playlist — mean
+        // anything on one. Same reason the playlists rail carries none.
+    }
+
+    /// Episodes the server expects to air soon.
+    ///
+    /// A calendar, not a queue: none of this exists yet, so the cards carry no
+    /// Play, no progress and no context menu — only the series, the episode and
+    /// the date. They still open the series fiche, which is the one useful
+    /// thing to do with a title you are waiting for.
+    private var upcomingRow: some View {
+        ContentRow(
+            title: loc.localized("home.upcoming"),
+            data: viewModel.upcomingItems,
+            id: \.id
+        ) { episode in
+            upcomingCard(episode)
+                .frame(width: wideCardWidth)
+        }
+    }
+
+    @ViewBuilder
+    private func upcomingCard(_ episode: BaseItemDto) -> some View {
+        let subtitle: String = {
+            guard let date = episode.premiereDate else { return episode.name ?? "" }
+            return String(
+                format: loc.localized("home.upcoming.airs"),
+                date.formatted(date: .abbreviated, time: .omitted)
+            )
+        }()
+
+        NavigationLink {
+            // The SERIES, not the episode: an unaired episode has no fiche
+            // worth opening, and the series is what the user is following.
+            if let id = episode.seriesID ?? episode.id {
+                MediaDetailScreen(itemId: id, itemType: .series)
+            }
+        } label: {
+            WideCard(
+                title: episode.seriesName ?? episode.name ?? "",
+                imageURL: episode.backdropItemID.map {
+                    appState.imageBuilder.imageURL(
+                        itemId: $0, imageType: .backdrop,
+                        maxWidth: 600, tag: episode.backdropImageTagValue
+                    )
+                },
+                subtitle: subtitle
             )
         }
         #if os(tvOS)

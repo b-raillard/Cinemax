@@ -418,6 +418,46 @@ extension JellyfinAPIClient {
         }
     }
 
+    /// Episodes the server expects to air soon, for series the user follows.
+    ///
+    /// Distinct from both other episode rails: Continue Watching holds what was
+    /// started, Next Up the next unwatched episode of a started series, and
+    /// this one episodes that do not exist yet. Nothing here is playable — the
+    /// rail is a calendar, and its cards say when rather than offering a Play.
+    public func getUpcomingEpisodes(userId: String, limit: Int = 20) async throws -> [BaseItemDto] {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            let params = Paths.GetUpcomingEpisodesParameters(
+                userID: userId,
+                limit: limit,
+                enableUserData: true
+            )
+            let response = try await client.send(Paths.getUpcomingEpisodes(parameters: params))
+            return applyRatingFilter(response.value.items ?? [])
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    /// Trailers the SERVER holds for an item — files sitting next to the film,
+    /// or extras the provider fetched.
+    ///
+    /// Distinct from `BaseItemDto.remoteTrailers`, which are YouTube/TMDb links:
+    /// those need a browser, which tvOS does not have. A local trailer is an
+    /// ordinary Jellyfin item with its own media sources, so it plays through
+    /// the normal player path on every platform.
+    public func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto] {
+        do {
+            guard let client = getClient() else { throw JellyfinError.notConnected }
+            let response = try await client.send(Paths.getLocalTrailers(itemID: itemId, userID: userId))
+            return response.value
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     // MARK: - User Item Data
 
     public func markItemUnplayed(itemId: String, userId: String) async throws {
