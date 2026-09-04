@@ -53,3 +53,47 @@ extension View {
         modifier(CinemaFocusModifier())
     }
 }
+
+// MARK: - Hero Ken Burns Drift
+
+#if os(tvOS)
+/// A very slow scale drift on a full-bleed hero backdrop.
+///
+/// iOS heroes rotate through up to five candidates with a crossfade; tvOS was
+/// deliberately excluded, because auto-advancing focusable chrome fights the
+/// focus engine — so its hero is a single still image that never changes for
+/// the life of the screen. This gives the page life without moving anything the
+/// remote can aim at: nothing is focusable inside the backdrop, and the drift
+/// is far too slow to read as motion while the user is looking at a card.
+///
+/// The hero clips, so the scaled edges never escape their box. Off entirely
+/// when the user has turned motion effects off — this is exactly the kind of
+/// ambient animation that setting exists to stop.
+struct HeroKenBurnsModifier: ViewModifier {
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+    @State private var drifted = false
+
+    /// 1.08 over 24 s, autoreversing — about 0.3 % of the frame per second.
+    private let scale: CGFloat = 1.08
+    private let period: Double = 24
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(motionEnabled && drifted ? scale : 1.0)
+            .animation(
+                motionEnabled
+                    ? .easeInOut(duration: period).repeatForever(autoreverses: true)
+                    : nil,
+                value: drifted
+            )
+            .onAppear { drifted = true }
+    }
+}
+
+extension View {
+    /// Applies the hero backdrop drift. tvOS only — see `HeroKenBurnsModifier`.
+    func heroKenBurns() -> some View {
+        modifier(HeroKenBurnsModifier())
+    }
+}
+#endif

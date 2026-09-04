@@ -1004,3 +1004,7 @@
 "detail.action.playlist" = "Playlist";
 "detail.action.watchTogether" = "Together";
 "detail.action.remotePlay" = "Play on…";
+
+/* Search result count, beside the scope chips. */
+"search.resultCount.one" = "%d result";
+"search.resultCount" = "%d results";
