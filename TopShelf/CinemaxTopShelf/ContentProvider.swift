@@ -189,7 +189,7 @@ final class ContentProvider: TVTopShelfContentProvider {
     private static func fetchResumeItems(session: Session, limit: Int) async -> [Item]? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/UserItems/Resume", serverURL: session.serverURL)
-        // No `api_key` query item — auth rides the Authorization header below,
+        // No `ApiKey` query item — auth rides the Authorization header below,
         // so the token never lands in a URL log or cache key.
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
@@ -208,13 +208,15 @@ final class ContentProvider: TVTopShelfContentProvider {
     /// The ONE place the token legitimately stays in a URL: these URLs are handed
     /// to `TVTopShelfSectionedItem.setImageURL`, i.e. the SYSTEM fetches them —
     /// we never issue the request, so header auth is impossible here.
+    /// `ApiKey`, never `api_key`: the legacy spelling is rejected by Jellyfin
+    /// 12.0's default (`EnableLegacyAuthorization = false`).
     private static func imageURL(session: Session, itemId: String, type: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/Items/\(itemId)/Images/\(type)", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "maxWidth", value: String(maxWidth)),
             URLQueryItem(name: "quality", value: "90"),
-            URLQueryItem(name: "api_key", value: session.accessToken)
+            URLQueryItem(name: "ApiKey", value: session.accessToken)
         ]
         return comps.url
     }

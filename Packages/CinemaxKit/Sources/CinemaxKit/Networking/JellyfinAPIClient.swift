@@ -11,7 +11,7 @@ func debugLog(_ message: String) {
 }
 #endif
 
-/// Strips secret query items (`api_key`, `ApiKey`, `X-Emby-Token`, anything
+/// Strips secret query items (`ApiKey`, legacy `api_key`, `X-Emby-Token`, anything
 /// containing "token") from a URL so logs can include the URL without leaking
 /// the access token. Keeps path + non-secret query items for debuggability.
 /// Accepts `String?` because Jellyfin's `transcodingURL` is a string path we

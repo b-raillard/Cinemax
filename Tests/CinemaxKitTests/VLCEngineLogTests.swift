@@ -55,6 +55,41 @@ struct VLCEngineLogTests {
     func handlesEmptyValue() {
         #expect(VLCEngineLog.scrubbed("s?api_key=&x=1") == "s?api_key=***&x=1")
     }
+
+    // `ApiKey` is the query name Jellyfin keeps once legacy authorization is
+    // off (12.0 default). It is what `authedURL` now appends AND what the
+    // server itself writes into every `TranscodingUrl` (`StreamInfo.cs`:
+    // `&ApiKey=`), so a scrubber that only knew `api_key=` let the token of
+    // every forced-transcode HLS open through to the system log.
+
+    @Test("the ApiKey spelling is scrubbed too")
+    func stripsApiKeySpelling() {
+        let scrubbed = VLCEngineLog.scrubbed(
+            "http debug: opening https://h/Videos/1/stream?ApiKey=abc123&static=true"
+        )
+        #expect(scrubbed == "http debug: opening https://h/Videos/1/stream?ApiKey=***&static=true")
+        #expect(!scrubbed.contains("abc123"))
+    }
+
+    @Test("the server-emitted transcode URL, which carries ApiKey mid-query, is scrubbed")
+    func stripsServerTranscodeURL() {
+        let scrubbed = VLCEngineLog.scrubbed(
+            "opening https://h/videos/1/master.m3u8?DeviceId=d&MediaSourceId=m&ApiKey=tok&PlaySessionId=p"
+        )
+        #expect(scrubbed == "opening https://h/videos/1/master.m3u8?DeviceId=d&MediaSourceId=m&ApiKey=***&PlaySessionId=p")
+    }
+
+    @Test("both spellings in one message are scrubbed, whatever their order")
+    func stripsMixedSpellings() {
+        let scrubbed = VLCEngineLog.scrubbed("a?ApiKey=one&api_key=two b?api_key=three&ApiKey=four")
+        #expect(scrubbed == "a?ApiKey=***&api_key=*** b?api_key=***&ApiKey=***")
+    }
+
+    @Test("marker match is case-insensitive, and the message's own spelling is kept")
+    func caseInsensitiveMarker() {
+        #expect(VLCEngineLog.scrubbed("s?APIKEY=tok&x=1") == "s?APIKEY=***&x=1")
+        #expect(VLCEngineLog.scrubbed("s?Api_Key=tok") == "s?Api_Key=***")
+    }
 }
 
 /// `parseModuleSelection` is what turns libVLC's debug stream into the stats

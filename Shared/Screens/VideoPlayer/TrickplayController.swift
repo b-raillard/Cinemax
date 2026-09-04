@@ -147,7 +147,7 @@ final class TrickplayController {
         fetchTasks.append(task)
     }
 
-    /// Same dual-auth pattern as the chapter thumbnails: `api_key` query param
+    /// Same dual-auth pattern as the chapter thumbnails: `ApiKey` query param
     /// (what image endpoints accept) plus the Authorization header.
     ///
     /// Returns a **decoded, bitmap-backed** image. `UIImage(data:)` alone is

@@ -121,7 +121,7 @@ extension JellyfinAPIClient: SyncPlayAPI {
         // URLComponents+ServerPath).
         comps.scheme = (serverURL.scheme?.lowercased() == "https") ? "wss" : "ws"
         comps.queryItems = [
-            URLQueryItem(name: "api_key", value: token),
+            URLQueryItem(name: "ApiKey", value: token),  // never `api_key` — see makeSessionSocket
             URLQueryItem(name: "deviceId", value: deviceID)
         ]
         guard let url = comps.url else { return nil }
