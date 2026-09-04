@@ -130,19 +130,22 @@ struct CinemaTVButtonStyle: ButtonStyle {
             // buttons get the accent itself.
             .overlay(
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
-                    .strokeBorder(focusRingColor.opacity(isFocused ? 1 : 0), lineWidth: 2.5)
+                    .strokeBorder(
+                        focusRingColor.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0),
+                        lineWidth: CinemaTVFocus.cardRingWidth
+                    )
             )
-            .scaleEffect(isFocused ? 1.05 : (configuration.isPressed ? 0.95 : 1.0))
+            .scaleEffect(isFocused ? CinemaTVFocus.cardScale : (configuration.isPressed ? CinemaTVFocus.chipPressScale : 1.0))
             // Subtle lift for relief (buttons are self-contained, so a vertical
             // offset is safe here — unlike poster cards whose title sits outside).
             .offset(y: isFocused && !configuration.isPressed ? -3 : 0)
             .shadow(
-                color: focusHaloColor.opacity(isFocused ? 0.42 : 0),
-                radius: 24,
+                color: focusHaloColor.opacity(isFocused ? CinemaTVFocus.haloOpacity : 0),
+                radius: CinemaTVFocus.haloRadius,
                 y: 12
             )
-            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
-            .animation(motionEnabled ? .easeInOut(duration: 0.1) : nil, value: configuration.isPressed)
+            .animation(motionEnabled ? .easeInOut(duration: CinemaTVFocus.cardDuration) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeInOut(duration: CinemaTVFocus.pressDuration) : nil, value: configuration.isPressed)
     }
 
     @ViewBuilder

@@ -33,6 +33,7 @@ struct PlaylistDetailScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toast
+    @Environment(ThemeManager.self) private var themeManager
 
     @State private var viewModel = PlaylistDetailViewModel()
     #if os(iOS)
@@ -133,15 +134,25 @@ struct PlaylistDetailScreen: View {
         ScrollView {
             LazyVStack(spacing: CinemaSpacing.spacing3) {
                 ForEach(Array(viewModel.items.enumerated()), id: \.element.playlistItemID) { index, item in
-                    Button {
-                        // Opening an item from tvOS goes through the detail
-                        // screen like everywhere else.
+                    // A `NavigationLink` rather than the hoisted
+                    // `navigationDestination(item:)` the folder browser uses:
+                    // the destination closure is honored inside a lazy
+                    // container, only the `item:` modifier is not.
+                    NavigationLink {
+                        if let id = item.id {
+                            MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                        }
                     } label: {
                         PlaylistRow(item: item, imageBuilder: appState.imageBuilder)
                             .padding(CinemaSpacing.spacing3)
                             .background(CinemaColor.surfaceContainerLow, in: RoundedRectangle(cornerRadius: CinemaRadius.large))
                     }
-                    .buttonStyle(.plain)
+                    // A full-width row, so the accent stroke rather than the
+                    // card style — scaling a row this wide visibly shifts its
+                    // own content sideways.
+                    .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+                    .focusEffectDisabled()
+                    .hoverEffectDisabled()
                     .contextMenu {
                         if index > 0 {
                             Button {
@@ -163,7 +174,7 @@ struct PlaylistDetailScreen: View {
                     }
                 }
             }
-            .padding(.horizontal, CinemaSpacing.spacing20)
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
             .padding(.top, CinemaSpacing.spacing3)
         }
         .scrollClipDisabled()

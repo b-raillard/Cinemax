@@ -470,7 +470,7 @@ struct LibrarySortFilterSheet: View {
     /// the chip flow readable on a 1080p viewport.
     private var sheetHorizontalPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         CinemaSpacing.spacing4
         #endif

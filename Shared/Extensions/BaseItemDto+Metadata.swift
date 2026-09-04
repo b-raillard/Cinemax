@@ -36,4 +36,12 @@ extension BaseItemDto {
         if let parentTags = parentBackdropImageTags, !parentTags.isEmpty { return true }
         return false
     }
+
+    /// Cache-busting tag for the title logo — the artwork most providers ship
+    /// with the title already set in the work's own typeface.
+    var logoImageTagValue: String? { imageTags?["Logo"] }
+
+    /// True only when the server actually holds a logo. Most libraries do not,
+    /// so every logo call site needs a text fallback rather than a placeholder.
+    var hasLogoImage: Bool { logoImageTagValue?.isEmpty == false }
 }

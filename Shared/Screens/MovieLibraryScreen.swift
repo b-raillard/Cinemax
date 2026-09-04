@@ -302,7 +302,9 @@ struct MediaLibraryScreen: View {
                 browseStack
             }
             .scrollClipDisabled()
-            .refreshable { await viewModel.reload(using: appState, loc: loc) }
+            // No `.refreshable` — a remote has no pull gesture, so the
+            // modifier only reads as if a refresh were on offer. Settings →
+            // "Refresh catalogue" is the single trigger on tvOS.
             .task(id: viewModel.sortFilter) {
                 if !viewModel.genres.isEmpty {
                     await viewModel.reloadGenreItems(using: appState)
@@ -372,7 +374,7 @@ struct MediaLibraryScreen: View {
 
     private var filteredColumns: [GridItem] {
         #if os(tvOS)
-        Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
+        CinemaTVLayout.posterGridColumns
         #else
         AdaptiveLayout.posterGridColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -448,10 +450,11 @@ struct MediaLibraryScreen: View {
             }
             #if os(tvOS)
             .scrollClipDisabled()
-            #endif
+            #else
             .refreshable {
                 await viewModel.reload(using: appState, loc: loc)
             }
+            #endif
             .task(id: viewModel.sortFilter) {
                 await viewModel.applyFilter(using: appState)
             }
@@ -498,7 +501,7 @@ struct MediaLibraryScreen: View {
             tvSortButton
             tvFilterSheetButton
         }
-        .padding(.horizontal, CinemaSpacing.spacing20)
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
         // Group sort/filter as a discrete focus section so up-presses from the
         // hero's Play/More Info row reliably bridge the ~700pt of empty hero
         // backdrop and land on the top bar (and ultimately escape upward to
@@ -725,7 +728,7 @@ struct MediaLibraryScreen: View {
 
     private var skeletonHeroHeight: CGFloat {
         #if os(tvOS)
-        820
+        CinemaTVLayout.heroHeight
         #else
         AdaptiveLayout.heroHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -733,7 +736,7 @@ struct MediaLibraryScreen: View {
 
     private var skeletonPosterWidth: CGFloat {
         #if os(tvOS)
-        200
+        CinemaTVLayout.posterCardWidth
         #else
         AdaptiveLayout.posterCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -876,7 +879,7 @@ struct MediaLibraryScreen: View {
 
     private var gridPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -884,7 +887,7 @@ struct MediaLibraryScreen: View {
 
     private var gridSpacing: CGFloat {
         #if os(tvOS)
-        32
+        CinemaTVLayout.gridGutter
         #else
         16
         #endif
@@ -905,7 +908,7 @@ struct MediaLibraryScreen: View {
 
     private var browseGenresPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif

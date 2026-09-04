@@ -47,7 +47,7 @@ struct SearchScreen: View {
 
     private var columns: [GridItem] {
         #if os(tvOS)
-        Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
+        CinemaTVLayout.posterGridColumns
         #else
         AdaptiveLayout.posterGridColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -538,7 +538,7 @@ struct SearchScreen: View {
 
     private var gridPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -546,7 +546,7 @@ struct SearchScreen: View {
 
     private var gridSpacing: CGFloat {
         #if os(tvOS)
-        32
+        CinemaTVLayout.gridGutter
         #else
         16
         #endif
@@ -717,10 +717,12 @@ private struct SearchResultsGrid: View, Equatable {
 
 /// Horizontal row of person matches, above the poster grid.
 ///
-/// Hand-rolled rather than reusing `ContentRow`: that component hardcodes
-/// `spacing6` horizontal padding, while this screen's grid uses `gridPadding`
-/// (`spacing20` on tvOS) — the row would sit visibly out of line with the
-/// posters underneath it.
+/// Hand-rolled rather than reusing `ContentRow`, historically because that
+/// component hardcoded `spacing6` horizontal padding while this screen's grid
+/// uses `gridPadding`, so the row sat visibly out of line with the posters
+/// underneath it. `ContentRow` now takes the tvOS page margin itself, so the
+/// two agree — this stays hand-rolled only because it takes its padding as a
+/// parameter and needs no header affordances.
 private struct SearchPersonRow: View {
     let people: [BaseItemDto]
     let imageBuilder: ImageURLBuilder
@@ -816,7 +818,12 @@ private struct SearchResultCard: View, Equatable {
                 imageURL: item.id.map {
                     imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
                 },
-                subtitle: subtitle
+                subtitle: subtitle,
+                status: .make(
+                    positionTicks: item.userData?.playbackPositionTicks,
+                    runtimeTicks: item.runTimeTicks,
+                    isPlayed: item.userData?.isPlayed
+                )
             )
         }
         #if os(tvOS)

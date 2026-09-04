@@ -38,18 +38,32 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
                                 .font(.system(size: CinemaScale.pt(12), weight: .semibold))
                         }
                         .foregroundStyle(themeManager.accent)
+                        #if os(tvOS)
+                        // Needs a shape of its own to carry the focus stroke —
+                        // bare text was the one focusable control on Home left
+                        // with the system's own chrome.
+                        .padding(.horizontal, CinemaSpacing.spacing3)
+                        .padding(.vertical, CinemaSpacing.spacing2)
+                        .background(CinemaColor.surfaceContainerHigh, in: Capsule())
+                        #endif
                     }
+                    #if os(tvOS)
+                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                    .focusEffectDisabled()
+                    .hoverEffectDisabled()
+                    #else
                     .buttonStyle(.plain)
+                    #endif
                 }
             }
-            .padding(.horizontal, CinemaSpacing.spacing6)
+            .padding(.horizontal, horizontalPadding)
 
             // Scrollable content
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
                     ForEach(data, id: id, content: itemView)
                 }
-                .padding(.horizontal, CinemaSpacing.spacing6)
+                .padding(.horizontal, horizontalPadding)
                 #if os(tvOS)
                 .padding(.vertical, CinemaSpacing.spacing2)
                 #endif
@@ -58,5 +72,18 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
             .scrollClipDisabled()
             #endif
         }
+    }
+
+    /// A rail is one page element among others, so its header and its first
+    /// card must line up with the hero title, the grid and the top bar above
+    /// them. tvOS pages sit at `pagePadding` (112 pt) while this row was fixed
+    /// at 32 pt, which is why every rail on Home and the detail fiche read as
+    /// visibly indented out of the page's own column.
+    private var horizontalPadding: CGFloat {
+        #if os(tvOS)
+        CinemaTVLayout.pagePadding
+        #else
+        CinemaSpacing.spacing6
+        #endif
     }
 }

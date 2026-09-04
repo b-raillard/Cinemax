@@ -105,6 +105,18 @@ private struct PosterCardContent: View {
     var onAdminAction: ((BaseItemDto, AdminItemMenu.Destination) -> Void)? = nil
     #endif
 
+    /// The card's watched / in-progress chrome. Neither was drawn here, which
+    /// is why the two-tier refresh could legitimately skip this grid — and also
+    /// why a film's progress vanished the moment the user left Home for the
+    /// library.
+    private var status: MediaCardStatus {
+        MediaCardStatus.make(
+            positionTicks: item.userData?.playbackPositionTicks,
+            runtimeTicks: item.runTimeTicks,
+            isPlayed: item.userData?.isPlayed
+        )
+    }
+
     #if os(tvOS)
     // Opt-in "spotlight" — dims this card while a *sibling* holds focus. Read
     // per-card via `@FocusState` so no grid-level focus plumbing is needed; the
@@ -130,6 +142,7 @@ private struct PosterCardContent: View {
                         }
                         .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                        .mediaCardStatusOverlay(status)
                         // Same reason as `PosterCard` — see the RULE there. A
                         // filled image overflows this 2:3 box and stays
                         // hit-testable past the clip, so the neighbouring card

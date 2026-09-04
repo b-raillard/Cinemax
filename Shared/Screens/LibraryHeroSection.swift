@@ -189,7 +189,7 @@ struct LibraryHeroSection: View {
 
     private var heroHeight: CGFloat {
         #if os(tvOS)
-        820
+        CinemaTVLayout.heroHeight
         #else
         AdaptiveLayout.heroHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -213,7 +213,7 @@ struct LibraryHeroSection: View {
 
     private var heroPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         CinemaSpacing.spacing4
         #endif

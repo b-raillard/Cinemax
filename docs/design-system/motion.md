@@ -116,11 +116,13 @@ From CLAUDE.md, repeated here because they are easy to break:
 
 1. **One focusable unit per row.** A settings row must be one `Button` — never a row with three individually focusable sub-controls. Multi-state rows (accent picker, language row) use `onMoveCommand` to cycle values inside the one focusable unit.
 2. **No individually-focusable nested items.** Same reason — Siri Remote swipes get confused.
-3. **No `.focusEffectDisabled()` hacks.** If focus doesn't work, the layout is wrong.
+3. **`.focusEffectDisabled()` is REQUIRED, not a hack — it is how Cinemax draws its own indicator.** This rule used to read "no `.focusEffectDisabled()` hacks", which contradicted both the app (~25 call sites) and the focus model documented in [platforms.md](./platforms.md#focus-model): the app suppresses the system halo precisely so the accent ring or stroke is the only thing on screen. Pair it with `.hoverEffectDisabled()` at every call site. What IS still a hack, and still banned: reaching for it to paper over focus that lands somewhere wrong. If focus goes to the wrong control, the layout or the focus sections are wrong.
 4. **Use `.tvSettingsFocusable(colorScheme:)` for settings-row-shaped surfaces.** It forces the correct colour scheme so `Color.dynamic` tokens don't flip to light-mode values inside focused buttons. Always pass `themeManager.darkModeEnabled ? .dark : .light`.
 5. **Back button** on detail settings uses `.focused($focusedItem, equals: .back)` and renders highlighted with `themeManager.accent`.
 
 ### The "focus inside AVPlayerViewController" special case
+
+**Scope: the opt-in native engine only.** Online playback defaults to `VLCStreamPresenter`, a plain `UIViewController` that draws its own focusable HUD, cards and overlays and overrides `preferredFocusEnvironments` freely. What follows applies when the user has turned on Settings → Playback → "Use native player".
 
 `AVPlayerViewController` locks the focus environment on tvOS while playback is on-screen. Custom overlay views with their own `preferredFocusEnvironments` **cannot** become focusable. The only approved mechanism for in-player affordances is:
 
@@ -159,5 +161,5 @@ Across both platforms:
 
 - Custom `@State private var isAnimating` toggles that aren't wired to `motionEnabled`.
 - `withAnimation { }` blocks without checking the flag — use `withAnimation(motionEnabled ? .default : nil) { }`.
-- tvOS: `.focusEffectDisabled()`, `preferredFocusEnvironments` overrides inside the player, white-background focus indicators.
-- iOS: SwiftUI modal presentation for the video player — corrupts `TabView` focus on dismiss. Always present `AVPlayerViewController` via UIKit (`UIViewController.present(…)`).
+- tvOS: white-background focus indicators; a third focus treatment beside the two in `CinemaTVFocus`; overriding `preferredFocusEnvironments` inside `AVPlayerViewController` (the opt-in native path, where its focus environment is locked). The default VLC presenter is a plain `UIViewController` and DOES override it — that is how its HUD, its next-episode countdown and its end-of-series card take focus.
+- iOS: SwiftUI modal presentation for the video player — corrupts `TabView` focus on dismiss. Always present the player view controller via UIKit (`UIViewController.present(…)`), whichever engine it hosts.

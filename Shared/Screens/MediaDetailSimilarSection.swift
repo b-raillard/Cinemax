@@ -26,6 +26,11 @@ struct MediaDetailSimilarSection: View, Equatable {
                   lhs.items.count == rhs.items.count else { return false }
             for (a, b) in zip(lhs.items, rhs.items) {
                 if a.id != b.id || a.name != b.name || a.productionYear != b.productionYear { return false }
+                // The status overlay reads these, so the diff must too —
+                // otherwise a card keeps the progress bar the playback that
+                // just finished has emptied.
+                if a.userData?.playbackPositionTicks != b.userData?.playbackPositionTicks
+                    || a.userData?.isPlayed != b.userData?.isPlayed { return false }
             }
             return true
         }
@@ -48,7 +53,12 @@ struct MediaDetailSimilarSection: View, Equatable {
                 PosterCard(
                     title: item.name ?? "",
                     imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
-                    subtitle: item.productionYear.map(String.init)
+                    subtitle: item.productionYear.map(String.init),
+                    status: .make(
+                        positionTicks: item.userData?.playbackPositionTicks,
+                        runtimeTicks: item.runTimeTicks,
+                        isPlayed: item.userData?.isPlayed
+                    )
                 )
                 .frame(width: cardWidth)
             }

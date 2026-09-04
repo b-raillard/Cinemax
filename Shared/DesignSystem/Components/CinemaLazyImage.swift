@@ -8,18 +8,23 @@ import NukeUI
 /// - `fallbackBackground`: Background color for the loading and error states.
 /// - `showLoadingIndicator`: When `true`, a `ProgressView` is shown while the
 ///   image is downloading. Suitable for small cards; skip for large backdrops.
+/// - `contentMode`: `.fill` for artwork that must cover its box (posters,
+///   backdrops, stills — the default, and what every card relies on). `.fit`
+///   for artwork whose own shape matters, such as a title logo, which must not
+///   be cropped and whose aspect ratio varies from one title to the next.
 struct CinemaLazyImage: View {
     let url: URL?
     var fallbackIcon: String? = "photo"
     var fallbackBackground: Color = CinemaColor.surfaceContainerHigh
     var showLoadingIndicator: Bool = false
+    var contentMode: ContentMode = .fill
 
     var body: some View {
         LazyImage(url: url) { state in
             if let image = state.image {
                 image
                     .resizable()
-                    .scaledToFill()
+                    .aspectRatio(contentMode: contentMode)
             } else if showLoadingIndicator && state.isLoading {
                 fallbackBackground
                     .overlay {

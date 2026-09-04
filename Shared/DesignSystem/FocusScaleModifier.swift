@@ -22,23 +22,23 @@ struct CinemaFocusModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
                     .strokeBorder(
                         themeManager.accent.opacity(isFocused ? 1 : 0),
-                        lineWidth: 3
+                        lineWidth: CinemaTVFocus.cardRingWidth
                     )
             )
             // Accent-tinted halo (was a near-invisible grey `surfaceTint` glow)
             // for relief, over a darker ambient shadow that lifts the card off
             // the background without any vertical translation.
             .shadow(
-                color: themeManager.accent.opacity(isFocused ? 0.35 : 0),
-                radius: 22,
+                color: themeManager.accent.opacity(isFocused ? CinemaTVFocus.haloOpacity : 0),
+                radius: CinemaTVFocus.haloRadius,
                 x: 0, y: 8
             )
             .shadow(
-                color: Color.black.opacity(isFocused ? 0.45 : 0),
-                radius: 26,
+                color: Color.black.opacity(isFocused ? CinemaTVFocus.ambientOpacity : 0),
+                radius: CinemaTVFocus.ambientRadius,
                 x: 0, y: 16
             )
-            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeInOut(duration: CinemaTVFocus.cardDuration) : nil, value: isFocused)
             #else
             // iPad pointer hover. No-op on iPhone (no hover). `.lift` gives a gentle
             // scale + shadow when motion is on; `.highlight` keeps the dim-only fallback

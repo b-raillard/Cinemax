@@ -4,6 +4,10 @@ struct PosterCard: View {
     let title: String
     let imageURL: URL?
     var subtitle: String? = nil
+    /// Watched check or progress bar over the artwork. Defaults to `.none`, so
+    /// a surface that has no `userData` to offer (a collection folder, a
+    /// filmography entry) simply shows nothing.
+    var status: MediaCardStatus = .none
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -18,6 +22,7 @@ struct PosterCard: View {
                 }
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                .mediaCardStatusOverlay(status)
                 // RULE — a clipped `CinemaLazyImage` MUST be followed by
                 // `.contentShape(Rectangle())`. `CinemaLazyImage` scales to
                 // FILL, so any source whose aspect ratio differs from the box

@@ -83,6 +83,18 @@ struct LibraryFolderBrowseScreen: View {
 
     private func grid(_ folders: [BaseItemDto]) -> some View {
         ScrollView {
+            #if os(tvOS)
+            // tvOS renders no navigation bar, so `.navigationTitle` above draws
+            // nothing at all — the page arrived untitled. Same in-scroll title
+            // `FavoritesScreen` carries.
+            Text(title)
+                .font(CinemaFont.display(.small))
+                .foregroundStyle(CinemaColor.onSurface)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, gridPadding)
+                .padding(.top, CinemaSpacing.spacing5)
+            #endif
+
             LazyVGrid(columns: columns, spacing: gridSpacing) {
                 ForEach(folders, id: \.id) { folder in
                     Button {
@@ -101,7 +113,14 @@ struct LibraryFolderBrowseScreen: View {
                             subtitle: folder.childCount.map { loc.itemCount($0) }
                         )
                     }
+                    #if os(tvOS)
+                    // Every other card grid in the app carries the focus card
+                    // style; this one was the sole `.plain` holdout, so its
+                    // cards neither grew nor brightened under focus.
+                    .buttonStyle(CinemaTVCardButtonStyle())
+                    #else
                     .buttonStyle(.plain)
+                    #endif
                 }
             }
             .padding(.horizontal, gridPadding)
@@ -109,15 +128,18 @@ struct LibraryFolderBrowseScreen: View {
         }
         #if os(tvOS)
         .scrollClipDisabled()
-        #endif
+        #else
+        // Pull-to-refresh has no gesture on a remote — the modifier is inert
+        // on tvOS and only reads as if a refresh were available.
         .refreshable {
             await viewModel.load(source: source, using: appState)
         }
+        #endif
     }
 
     private var columns: [GridItem] {
         #if os(tvOS)
-        Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
+        CinemaTVLayout.posterGridColumns
         #else
         Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
         #endif
@@ -125,7 +147,7 @@ struct LibraryFolderBrowseScreen: View {
 
     private var gridSpacing: CGFloat {
         #if os(tvOS)
-        32
+        CinemaTVLayout.gridGutter
         #else
         16
         #endif
@@ -133,7 +155,7 @@ struct LibraryFolderBrowseScreen: View {
 
     private var gridPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif

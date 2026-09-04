@@ -24,6 +24,15 @@ final class TVScrubBar: UIView {
     private let track = UIView()
     private let fill = UIView()
     private let knob = UIView()
+    /// One thin mark per chapter boundary, as fractions of the timeline.
+    ///
+    /// The strip below the bar already lists the chapters, but it says nothing
+    /// about WHERE they fall — so the bar answered "how far in am I?" and the
+    /// strip answered "what are the parts?", with nothing joining the two. The
+    /// marks are drawn as layers rather than subviews so a 40-chapter film adds
+    /// no views to the focus engine's hit-testing.
+    private var chapterMarks: [Float] = []
+    private var chapterLayers: [CALayer] = []
     private var progressValue: Float = 0
     private var scrubProgress: Float = 0
     private var isScrubbing = false
@@ -85,6 +94,31 @@ final class TVScrubBar: UIView {
         setNeedsLayout()
     }
 
+    /// Chapter boundaries as fractions of the timeline, in any order.
+    ///
+    /// The first mark is dropped when it sits at the very start: every film's
+    /// first chapter begins at 0, and a tick welded to the left edge of the bar
+    /// reads as a rendering artefact rather than as a boundary.
+    func setChapterMarks(_ fractions: [Float]) {
+        let cleaned = fractions
+            .filter { $0 > 0.001 && $0 < 0.999 }
+            .sorted()
+        guard cleaned != chapterMarks else { return }
+        chapterMarks = cleaned
+        rebuildChapterLayers()
+        setNeedsLayout()
+    }
+
+    private func rebuildChapterLayers() {
+        chapterLayers.forEach { $0.removeFromSuperlayer() }
+        chapterLayers = chapterMarks.map { _ in
+            let mark = CALayer()
+            mark.backgroundColor = UIColor.white.withAlphaComponent(0.55).cgColor
+            track.layer.addSublayer(mark)
+            return mark
+        }
+    }
+
     override var canBecomeFocused: Bool { true }
 
     override func layoutSubviews() {
@@ -97,6 +131,20 @@ final class TVScrubBar: UIView {
         fill.frame = CGRect(x: 0, y: 0, width: w, height: h)
         fill.layer.cornerRadius = h / 2
         knob.frame = CGRect(x: w - 11, y: bounds.midY - 11, width: 22, height: 22)
+
+        // Marks sit ABOVE the fill (added to `track.layer`, `fill` is a
+        // subview added before them), so a boundary already passed stays
+        // visible against the white fill.
+        let markWidth: CGFloat = 2
+        CATransaction.begin()
+        // The bar animates its height on focus; the marks must move with it in
+        // one step rather than drift across an implicit animation of their own.
+        CATransaction.setDisableActions(true)
+        for (mark, fraction) in zip(chapterLayers, chapterMarks) {
+            let x = (track.bounds.width * CGFloat(fraction)) - markWidth / 2
+            mark.frame = CGRect(x: x, y: 0, width: markWidth, height: h)
+        }
+        CATransaction.commit()
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {

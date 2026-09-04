@@ -190,6 +190,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     #endif
     private let controlsContainer = PassthroughView()
     private let titleLabel = UILabel()
+    #if os(tvOS)
+    /// Poster + "Series · S1E4" above the title in the tvOS HUD.
+    ///
+    /// The HUD carried the episode title and nothing else, so a viewer who
+    /// woke the controls mid-episode was told *which episode* and never which
+    /// series or where in it — the two things the iPhone lock screen has shown
+    /// all along, via `NowPlayingInfoController`. Both are filled from the
+    /// `getItem` the chapter fetch already makes, so neither costs a request.
+    private let contextArtwork = UIImageView()
+    private let contextLabel = UILabel()
+    private var contextArtworkWidth: NSLayoutConstraint?
+    /// Gap between the poster and the title — folds to 0 with the poster.
+    private var contextArtworkGap: NSLayoutConstraint?
+    /// Gap between the context line and the title — folds to 0 when there is
+    /// no context line, since an empty label still occupies its line height.
+    private var contextLabelGap: NSLayoutConstraint?
+    private var contextArtworkTask: Task<Void, Never>?
+    #endif
     private let timeLabel = UILabel()
     private let durationLabel = UILabel()
     private let progress = UIProgressView(progressViewStyle: .default)
@@ -285,6 +303,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // No on-screen Play/Pause button — the Siri Remote has a physical one;
     // feedback is the center glyph flash only.
     private let tvScrub = TVScrubBar()
+    /// The end-of-series card, while it is on screen. Non-nil is what makes it
+    /// claim focus in `preferredFocusEnvironments`.
+    private var endOfSeriesCard: UIView?
+    private var endOfSeriesDoneButton: UIButton?
     private let controlBar = UIStackView()
     /// True while the user is sliding the scrub bar via the Siri Remote touch
     /// surface — suppresses the periodic time tick so the preview isn't
@@ -570,6 +592,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterThumbTasks.forEach { $0.cancel() }
         chapterThumbTasks = []
         pendingChapterThumbnails = nil
+        #if os(tvOS)
+        // The HUD poster outlives the two media-swap paths that cancel it
+        // otherwise, so a dismissal mid-fetch would leave an authenticated GET
+        // nobody consumes — and, if it landed during the dismiss animation, a
+        // write plus a `layoutIfNeeded()` into a controller already tearing
+        // down. Same discipline as every other unstructured task here.
+        contextArtworkTask?.cancel()
+        contextArtworkTask = nil
+        #endif
         trickplay.reset()
         eventsTask?.cancel()
         eventsTask = nil
@@ -860,6 +891,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.mediaLengthMs = Int32(clamping: Int(c.seconds) * 1000
                         + Int(c.attoseconds / 1_000_000_000_000_000))
                     if self.mediaLengthMs > 0 { self.noteMediaOpened() }
+                    #if os(tvOS)
+                    // Chapter marks need BOTH the boundaries and the runtime.
+                    // Either can land first — the chapter fetch races the
+                    // engine's open — so both writers push.
+                    self.refreshChapterMarks()
+                    #endif
                 case .timeChanged:
                     self.onEngineTimeChanged()
                 case .stateChanged(let state):
@@ -1194,6 +1231,23 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         titleLabel.lineBreakMode = .byTruncatingTail
         controlsContainer.addSubview(titleLabel)
 
+        #if os(tvOS)
+        contextArtwork.translatesAutoresizingMaskIntoConstraints = false
+        contextArtwork.contentMode = .scaleAspectFill
+        contextArtwork.clipsToBounds = true
+        contextArtwork.layer.cornerRadius = 8
+        // Decorative: the label beside it carries the same information, and an
+        // opaque box while nothing has loaded would read as a broken image.
+        contextArtwork.isAccessibilityElement = false
+        controlsContainer.addSubview(contextArtwork)
+
+        contextLabel.translatesAutoresizingMaskIntoConstraints = false
+        contextLabel.font = .systemFont(ofSize: 20, weight: .medium)
+        contextLabel.textColor = UIColor.white.withAlphaComponent(0.7)
+        contextLabel.lineBreakMode = .byTruncatingTail
+        controlsContainer.addSubview(contextLabel)
+        #endif
+
         // SyncPlay ("Watch Together") pill — sits just under the title, hidden
         // until a group binds. Same translucent rounded language as `skipHUD`.
         // The player HUD is always-dark and uses raw UIKit font sizes
@@ -1261,9 +1315,41 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         view.addSubview(skipHUD)
 
         let safe = view.safeAreaLayoutGuide
+        #if os(tvOS)
+        // Zero until an image actually lands, so a title with no artwork sits
+        // exactly where it always did rather than beside an empty gap.
+        let artworkWidth = contextArtwork.widthAnchor.constraint(equalToConstant: 0)
+        contextArtworkWidth = artworkWidth
+        NSLayoutConstraint.activate([
+            contextArtwork.topAnchor.constraint(equalTo: safe.topAnchor, constant: titleTop),
+            contextArtwork.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: titleLead),
+            artworkWidth,
+            contextArtwork.heightAnchor.constraint(equalTo: contextArtwork.widthAnchor, multiplier: 3.0 / 2.0),
+
+            contextLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: titleTop),
+            contextLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            contextLabel.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor, constant: -24)
+        ])
+        // Below the context line, and to the right of the poster when there is
+        // one. Both the poster's width and this gap start at 0 and are set
+        // together the moment an image lands, so a title with no artwork sits
+        // exactly where it always did.
+        let titleLead2 = titleLabel.leadingAnchor.constraint(equalTo: contextArtwork.trailingAnchor, constant: 0)
+        contextArtworkGap = titleLead2
+        // An empty `UILabel` does NOT collapse — it still reports its font's
+        // line height — so a movie, which has no series line, would push its
+        // title down ~28 pt for a blank row. The gap is driven to 0 with the
+        // label's own `isHidden` in `applyHUDContext`.
+        let contextGap = titleLabel.topAnchor.constraint(equalTo: contextLabel.bottomAnchor, constant: 0)
+        contextLabelGap = contextGap
+        NSLayoutConstraint.activate([contextGap, titleLead2])
+        #else
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: titleTop),
-            titleLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: titleLead),
+            titleLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: titleLead)
+        ])
+        #endif
+        NSLayoutConstraint.activate([
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor, constant: -24),
 
             skipHUD.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -1686,6 +1772,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             handleMenu()
             return
         }
+        // The end-of-series card owns the screen, and this guard must precede
+        // the play/pause branch below: that branch calls `revealControls()`,
+        // which raises the HUD to full alpha BEHIND the 0.75 scrim while
+        // `preferredFocusEnvironments` still answers with the card's Done
+        // button — a transport visible, dimmed and unreachable. It also made
+        // the NEXT Menu press see `alpha > 0` and merely hide the HUD, so
+        // leaving took two presses. Without the guard a left/right press would
+        // additionally seek an episode that has already ended.
+        if endOfSeriesCard != nil {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         for press in presses {
             if press.type == .playPause {
                 playPauseTapped()
@@ -1975,7 +2073,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     @objc private func handleInfoPanelSwipe() {
         // HUD up → the focus engine owns down-swipes; a picker up → ignore.
+        // The end-of-series card needs its own clause rather than riding the
+        // alpha test: it HIDES the HUD on the way in, so `alpha == 0` holds and
+        // a swipe would open the panel on top of the card.
         guard !infoPanelVisible, controlsContainer.alpha == 0, !pickerPresented else { return }
+        #if os(tvOS)
+        guard endOfSeriesCard == nil else { return }
+        #endif
         setInfoPanelVisible(true)
     }
 
@@ -2024,6 +2128,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingChapterThumbnails = nil
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
+        #if os(tvOS)
+        tvScrub.setChapterMarks([])
+        contextArtworkTask?.cancel()
+        contextArtwork.image = nil
+        contextArtworkWidth?.constant = 0
+        contextArtworkGap?.constant = 0
+        contextLabel.text = nil
+        contextLabel.isHidden = true
+        contextLabelGap?.constant = 0
+        #endif
         chapterScroll.isHidden = true
         chapterHeightConstraint?.constant = 0
         trickplay.reset()
@@ -2041,6 +2155,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Reused by `showEndOfSeriesOverlay` so the end-of-series card
             // doesn't re-fetch this item just for its series name.
             self.resolvedSeriesName = item.seriesName ?? item.name
+            #if os(tvOS)
+            self.applyHUDContext(item: item, builder: builder, token: token)
+            #endif
             guard let chapters = item.chapters, chapters.count > 1 else { return }
             self.chapterStartTicks = chapters.map { $0.startPositionTicks ?? 0 }
             for (i, ch) in chapters.enumerated() {
@@ -2056,6 +2173,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.chapterHeightConstraint?.constant = 150
             #endif
             self.chapterScroll.isHidden = false
+            #if os(tvOS)
+            self.refreshChapterMarks()
+            #endif
             self.view.layoutIfNeeded()
             // The strip itself is already on screen with icon placeholders; the
             // thumbnails are pure garnish, so they must NOT compete with the
@@ -2091,6 +2211,50 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }
         }
     }
+
+    #if os(tvOS)
+    /// Fills the HUD's context line and poster from the item the chapter fetch
+    /// resolved. Both halves degrade independently: a movie has no series line
+    /// and simply gets none, and a poster that fails to load leaves the title
+    /// exactly where it sits with no artwork.
+    private func applyHUDContext(item: BaseItemDto, builder: ImageURLBuilder, token: String?) {
+        var parts: [String] = []
+        if let series = item.seriesName, !series.isEmpty { parts.append(series) }
+        if let season = item.parentIndexNumber, let episode = item.indexNumber {
+            parts.append("S\(season)E\(episode)")
+        }
+        let context = parts.joined(separator: " · ")
+        contextLabel.text = context
+        contextLabel.isHidden = context.isEmpty
+        contextLabelGap?.constant = context.isEmpty ? 0 : 4
+
+        // The poster of the SERIES where there is one — an episode's own
+        // primary image is its still, which the chapter strip already shows and
+        // which says nothing about what is playing.
+        let artworkId = item.seriesID ?? item.id
+        guard let artworkId else { return }
+        let tag = item.seriesID != nil ? item.seriesPrimaryImageTag : item.primaryImageTagValue
+        let url = builder.imageURL(itemId: artworkId, imageType: .primary, maxWidth: 240, tag: tag)
+        contextArtworkTask?.cancel()
+        contextArtworkTask = Task { @MainActor [weak self] in
+            guard let data = await Self.loadImage(url: url, token: token),
+                  !Task.isCancelled, let image = UIImage(data: data), let self else { return }
+            self.contextArtwork.image = image
+            self.contextArtworkWidth?.constant = 84
+            self.contextArtworkGap?.constant = 20
+            self.view.layoutIfNeeded()
+        }
+    }
+
+    /// Projects the chapter boundaries onto the scrub bar, once both they and
+    /// the runtime are known. A no-op until then, and idempotent — the bar
+    /// itself discards an unchanged set.
+    private func refreshChapterMarks() {
+        guard !chapterStartTicks.isEmpty, lengthMs > 0 else { return }
+        let lengthTicks = Double(lengthMs) * 10_000
+        tvScrub.setChapterMarks(chapterStartTicks.map { Float(Double($0) / lengthTicks) })
+    }
+    #endif
 
     private func makeChapterChip(index: Int, title: String, time: String) -> UIButton {
         let b = ChapterChip(type: .custom)
@@ -2329,6 +2493,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if let card = nextUpCard, !card.isHidden, controlsContainer.alpha == 0 {
             return [card.playButton]
         }
+        // The card outranks the transport: while it is up, the HUD is hidden
+        // and its Done button is the only thing to reach. Tested on `window`
+        // rather than on the field alone, so a future path that removes the
+        // card without clearing the field cannot strand focus for good.
+        if let done = endOfSeriesDoneButton, done.window != nil { return [done] }
         return controlsContainer.alpha > 0 ? [tvScrub] : []
     }
     #endif
@@ -3396,6 +3565,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 let item = try? await self.apiClient.getItem(userId: self.userId, itemId: self.itemId)
                 seriesName = item?.seriesName ?? item?.name ?? self.titleText
             }
+            // A Menu press during that await dismisses the player; the
+            // continuation would then add a scrim and write focus state into a
+            // controller already tearing down.
+            guard !self.isTearingDown else { return }
+            #if os(tvOS)
+            // A card rather than a `UIAlertController`. The alert was inherited
+            // from `EndOfSeriesOverlayController`, whose tvOS branch uses one
+            // because `AVPlayerViewController` locks its focus environment —
+            // a constraint this presenter does not have: it is a plain
+            // `UIViewController`, and `NextUpCountdownView` already proves a
+            // custom card's button takes focus here. iOS was getting the
+            // blurred card all along; tvOS got the system dialog.
+            self.presentEndOfSeriesCard(seriesName: seriesName)
+            #else
             let alert = UIAlertController(
                 title: String(format: self.loc.localized("player.finishedSeries.title"), seriesName),
                 message: self.loc.localized("player.finishedSeries.subtitle"),
@@ -3405,8 +3588,104 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self?.dismiss(animated: true)
             })
             self.present(alert, animated: true)
+            #endif
         }
     }
+
+    #if os(tvOS)
+    /// The "you finished {series}" card. Owns the screen: the HUD is hidden and
+    /// its own Done button takes focus, so the Menu button and a click both
+    /// reach it.
+    private func presentEndOfSeriesCard(seriesName: String) {
+        guard endOfSeriesCard == nil else { return }
+
+        let scrim = UIView()
+        scrim.translatesAutoresizingMaskIntoConstraints = false
+        scrim.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+        scrim.alpha = 0
+
+        let card = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+        card.translatesAutoresizingMaskIntoConstraints = false
+        card.layer.cornerRadius = 20
+        card.clipsToBounds = true
+
+        let icon = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.tintColor = .systemGreen
+        icon.contentMode = .scaleAspectFit
+
+        let title = UILabel()
+        title.translatesAutoresizingMaskIntoConstraints = false
+        title.font = .systemFont(ofSize: 38, weight: .bold)
+        title.textColor = .white
+        title.textAlignment = .center
+        title.numberOfLines = 0
+        title.text = String(format: loc.localized("player.finishedSeries.title"), seriesName)
+
+        let subtitle = UILabel()
+        subtitle.translatesAutoresizingMaskIntoConstraints = false
+        subtitle.font = .systemFont(ofSize: 24, weight: .regular)
+        subtitle.textColor = UIColor.white.withAlphaComponent(0.75)
+        subtitle.textAlignment = .center
+        subtitle.numberOfLines = 0
+        subtitle.text = loc.localized("player.finishedSeries.subtitle")
+
+        var doneCfg = UIButton.Configuration.filled()
+        doneCfg.cornerStyle = .capsule
+        doneCfg.baseBackgroundColor = .white
+        doneCfg.baseForegroundColor = .black
+        doneCfg.title = loc.localized("player.finishedSeries.done")
+        let done = UIButton(type: .system)
+        done.configuration = doneCfg
+        done.translatesAutoresizingMaskIntoConstraints = false
+        done.addTarget(self, action: #selector(endOfSeriesDoneTapped), for: .primaryActionTriggered)
+
+        let stack = UIStackView(arrangedSubviews: [icon, title, subtitle, done])
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 20
+        stack.setCustomSpacing(32, after: subtitle)
+
+        card.contentView.addSubview(stack)
+        scrim.addSubview(card)
+        view.addSubview(scrim)
+
+        endOfSeriesCard = scrim
+        endOfSeriesDoneButton = done
+
+        NSLayoutConstraint.activate([
+            scrim.topAnchor.constraint(equalTo: view.topAnchor),
+            scrim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            scrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            card.centerXAnchor.constraint(equalTo: scrim.centerXAnchor),
+            card.centerYAnchor.constraint(equalTo: scrim.centerYAnchor),
+            card.widthAnchor.constraint(lessThanOrEqualToConstant: 900),
+
+            icon.widthAnchor.constraint(equalToConstant: 72),
+            icon.heightAnchor.constraint(equalToConstant: 72),
+
+            stack.topAnchor.constraint(equalTo: card.contentView.topAnchor, constant: 56),
+            stack.bottomAnchor.constraint(equalTo: card.contentView.bottomAnchor, constant: -56),
+            stack.leadingAnchor.constraint(equalTo: card.contentView.leadingAnchor, constant: 64),
+            stack.trailingAnchor.constraint(equalTo: card.contentView.trailingAnchor, constant: -64)
+        ])
+
+        // The card owns the screen from here: hide the HUD so the transport
+        // can neither be seen behind the scrim nor claim focus from it.
+        hideControlsWorkItem?.cancel()
+        hideControlsImmediately()
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        UIView.animate(withDuration: 0.25) { scrim.alpha = 1 }
+    }
+
+    @objc private func endOfSeriesDoneTapped() {
+        dismiss(animated: true)
+    }
+    #endif
 
     private func handlePlaybackError() {
         cancelOpenWatchdog()
