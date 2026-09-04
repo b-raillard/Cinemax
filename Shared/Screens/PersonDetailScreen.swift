@@ -123,7 +123,12 @@ struct PersonDetailScreen: View {
                     imageURL: item.id.map {
                         appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
                     },
-                    subtitle: item.productionYear.map(String.init)
+                    subtitle: item.productionYear.map(String.init),
+                    status: .make(
+                        positionTicks: item.userData?.playbackPositionTicks,
+                        runtimeTicks: item.runTimeTicks,
+                        isPlayed: item.userData?.isPlayed
+                    )
                 )
                 .frame(width: cardWidth)
             }

@@ -385,6 +385,47 @@ struct MediaDetailScreen: View {
 
     // MARK: - Backdrop
 
+    /// The hero's title: the provider's logo artwork where it exists, the item
+    /// name otherwise.
+    ///
+    /// tvOS only. On iPhone the logo would have to shrink to a width where its
+    /// own typography stops being legible, and the text title already reads
+    /// well at arm's length.
+    @ViewBuilder
+    private func titleBlock(_ item: BaseItemDto) -> some View {
+        #if os(tvOS)
+        if item.hasLogoImage, let id = item.id {
+            CinemaLazyImage(
+                url: appState.imageBuilder.imageURL(
+                    itemId: id, imageType: .logo,
+                    maxWidth: 700, tag: item.logoImageTagValue
+                ),
+                fallbackIcon: nil,
+                // Transparent: the logo sits over the backdrop, so an opaque
+                // fallback would paint a grey slab while it loads.
+                fallbackBackground: .clear,
+                contentMode: .fit
+            )
+            // Height-led: a logo's width varies enormously between titles, so
+            // pinning the width would make one mark tower over the next.
+            .frame(maxWidth: CinemaTVLayout.logoMaxWidth, maxHeight: CinemaTVLayout.logoHeight, alignment: .leading)
+            .accessibilityLabel(item.name ?? "")
+        } else {
+            titleText(item)
+        }
+        #else
+        titleText(item)
+        #endif
+    }
+
+    private func titleText(_ item: BaseItemDto) -> some View {
+        Text(item.name ?? "")
+            .font(.system(size: detailTitleSize, weight: .black))
+            .tracking(-1.5)
+            .foregroundStyle(.white)
+            .lineLimit(2)
+    }
+
     @ViewBuilder
     private func backdropSection(_ item: BaseItemDto) -> some View {
         ZStack(alignment: .bottomLeading) {
@@ -414,12 +455,11 @@ struct MediaDetailScreen: View {
                 }
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
 
-                // Title
-                Text(item.name ?? "")
-                    .font(.system(size: detailTitleSize, weight: .black))
-                    .tracking(-1.5)
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
+                // Title — the work's own logo when the server holds one, since
+                // that is the mark a viewer recognises from the couch, and text
+                // otherwise. Most libraries have no logo, so the fallback is the
+                // ordinary case, not an error path.
+                titleBlock(item)
 
                 // Genres
                 if let genres = item.genres, !genres.isEmpty {
@@ -1019,87 +1059,69 @@ struct MediaDetailScreen: View {
     }
 
     #if os(tvOS)
-    /// Heart toggle in the tvOS action row — a focusable ghost button beside
-    /// Play. Optimistic flip on the view model; accent fill when active.
+    /// The five accessories beside Play. Each is an icon over a short label —
+    /// see `TVAccessoryActionButton` for why the label is always visible.
+
     private var favoriteButton: some View {
-        Button {
+        TVAccessoryActionButton(
+            systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
+            label: loc.localized("detail.action.favorite"),
+            accessibilityLabel: loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"),
+            isActive: viewModel.isFavorite
+        ) {
             Task { await viewModel.toggleFavorite(using: appState) }
-        } label: {
-            Image(systemName: viewModel.isFavorite ? "heart.fill" : "heart")
-                .font(.system(size: buttonFontSize, weight: .bold))
-                .foregroundStyle(viewModel.isFavorite ? themeManager.accent : CinemaColor.onSurface)
-                .padding(.vertical, buttonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
         }
-        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-        .accessibilityLabel(loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"))
     }
 
-    /// Watched toggle beside the heart on tvOS. Marks the movie / whole series
-    /// played; optimistic flip on the view model, accent fill when watched.
+    /// Marks the movie / whole series played; optimistic flip on the view model.
     private var watchedButton: some View {
-        Button {
+        TVAccessoryActionButton(
+            systemImage: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle",
+            label: loc.localized("detail.action.watched"),
+            accessibilityLabel: loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"),
+            isActive: viewModel.isPlayed
+        ) {
             Task { await viewModel.togglePlayed(using: appState) }
-        } label: {
-            Image(systemName: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle")
-                .font(.system(size: buttonFontSize, weight: .bold))
-                .foregroundStyle(viewModel.isPlayed ? themeManager.accent : CinemaColor.onSurface)
-                .padding(.vertical, buttonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
         }
-        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-        .accessibilityLabel(loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"))
     }
 
-    /// "Add to a playlist" in the tvOS action row — raises the root-hosted
-    /// sheet. Adds the item the fiche is showing (a series or a movie), NOT the
-    /// resolved play target: a playlist holds what the user is looking at, where
-    /// Play resolves down to a next-up episode.
+    /// Raises the root-hosted sheet. Adds the item the fiche is showing (a
+    /// series or a movie), NOT the resolved play target: a playlist holds what
+    /// the user is looking at, where Play resolves down to a next-up episode.
     private func addToPlaylistButton(for item: BaseItemDto) -> some View {
-        Button {
+        TVAccessoryActionButton(
+            systemImage: "text.badge.plus",
+            label: loc.localized("detail.action.playlist"),
+            accessibilityLabel: loc.localized("playlist.add.action")
+        ) {
             playlists?.present(itemId: item.id, title: item.name)
-        } label: {
-            Image(systemName: "text.badge.plus")
-                .font(.system(size: buttonFontSize, weight: .bold))
-                .foregroundStyle(CinemaColor.onSurface)
-                .padding(.vertical, buttonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
         }
-        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-        .accessibilityLabel(loc.localized("playlist.add.action"))
     }
 
-    /// "Watch Together" (SyncPlay) toggle in the tvOS action row — opens the
-    /// group sheet. Accent fill while already in a group.
+    /// "Watch Together" (SyncPlay) — opens the group sheet. Accent while already
+    /// in a group.
     private func watchTogetherButton(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
-        Button {
+        TVAccessoryActionButton(
+            systemImage: "person.2.fill",
+            label: loc.localized("detail.action.watchTogether"),
+            accessibilityLabel: loc.localized("syncplay.title"),
+            isActive: SyncPlayController.shared.isInGroup
+        ) {
             watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
-        } label: {
-            Image(systemName: "person.2.fill")
-                .font(.system(size: buttonFontSize, weight: .bold))
-                .foregroundStyle(SyncPlayController.shared.isInGroup ? themeManager.accent : CinemaColor.onSurface)
-                .padding(.vertical, buttonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
         }
-        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-        .accessibilityLabel(loc.localized("syncplay.title"))
     }
 
-    /// "Play on…" in the tvOS action row — the affordance for moving a film to
-    /// another room. Rendered only when a controllable session exists, so a
-    /// single-Apple-TV setup never sees it and the focus row stays as it was.
+    /// "Play on…" — the affordance for moving a film to another room. Rendered
+    /// only when a controllable session exists, so a single-Apple-TV setup never
+    /// sees it and the focus row stays as it was.
     private func remotePlayButton(for item: BaseItemDto) -> some View {
-        Button {
+        TVAccessoryActionButton(
+            systemImage: "tv.badge.wifi",
+            label: loc.localized("detail.action.remotePlay"),
+            accessibilityLabel: loc.localized("remote.title")
+        ) {
             cardActions?.present(remotePlay: remotePlayIntent(for: item))
-        } label: {
-            Image(systemName: "tv.badge.wifi")
-                .font(.system(size: buttonFontSize, weight: .bold))
-                .foregroundStyle(CinemaColor.onSurface)
-                .padding(.vertical, buttonVerticalPadding)
-                .padding(.horizontal, CinemaSpacing.spacing4)
         }
-        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-        .accessibilityLabel(loc.localized("remote.title"))
     }
     #endif
 

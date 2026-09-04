@@ -996,3 +996,11 @@
 "admin.metadata.images.browse.unknownProvider" = "Unknown provider";
 "admin.metadata.images.browse.empty.title" = "No images offered";
 "admin.metadata.images.browse.empty.subtitle" = "The metadata providers have nothing for this image type. Use \"By URL…\" to add one.";
+
+/* Short labels under the tvOS secondary action row icons. Distinct from the
+   accessibility labels, which spell the whole action out. */
+"detail.action.favorite" = "Favorite";
+"detail.action.watched" = "Watched";
+"detail.action.playlist" = "Playlist";
+"detail.action.watchTogether" = "Together";
+"detail.action.remotePlay" = "Play on…";

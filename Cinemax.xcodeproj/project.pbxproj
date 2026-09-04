@@ -56,6 +56,7 @@
 		1CE784553056487755282A82 /* AdminUserDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB9A108C0F29A3010E8E65A /* AdminUserDetailScreen.swift */; };
 		1E03D8BA6CCE8D44B3FA35DE /* MetadataIdentifyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70046F639E1635F36221E545 /* MetadataIdentifyTab.swift */; };
 		1E20DE4CAAE8A504D6900A25 /* PlaybackLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40009AD5DD766349EDADD8F6 /* PlaybackLiveActivityWidget.swift */; };
+		1E47E930A58186C067FC445D /* MediaCardStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F857E055120FC96752F7C6 /* MediaCardStatusTests.swift */; };
 		1E9CE08297D5E64B61E18257 /* NowPlayingInfoController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EB1E7DC341889FBAB7BE87 /* NowPlayingInfoController.swift */; };
 		1ED2FC93756895B5F884DDA2 /* AdminUserDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */; };
 		1EF97616FD7266817F2A97D0 /* AdminNetworkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952BA3312C0EC62F0CF9ACBE /* AdminNetworkViewModel.swift */; };
@@ -571,6 +572,7 @@
 		54C56CCEB123ABB29AC4D2A8 /* AdminPlaybackScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPlaybackScreen.swift; sourceTree = "<group>"; };
 		55122A5776984A5A63808F80 /* AdminNetworkScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminNetworkScreen.swift; sourceTree = "<group>"; };
 		554633B7F0AE3A72EE4B56BB /* MediaDetailButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailButtonStyles.swift; sourceTree = "<group>"; };
+		55F857E055120FC96752F7C6 /* MediaCardStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCardStatusTests.swift; sourceTree = "<group>"; };
 		5610FD34CD71B2F9E4D65FC6 /* ToastCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastCenter.swift; sourceTree = "<group>"; };
 		56E5F1E76FACB749BF2BBC8D /* LibrarySearchRanker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySearchRanker.swift; sourceTree = "<group>"; };
 		58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BaseItemDto+Metadata.swift"; sourceTree = "<group>"; };
@@ -996,6 +998,7 @@
 				699F44C0B4291FD30BD8C62F /* LibraryPaginationIdentityTests.swift */,
 				B57A1FF6A68786670C9AAFFA /* LibrarySearchRankerTests.swift */,
 				31D07FDBA8B067335CB393D9 /* LoginViewModelTests.swift */,
+				55F857E055120FC96752F7C6 /* MediaCardStatusTests.swift */,
 				B171C71911F6E759AB1A0EDB /* MediaDetailViewModelTests.swift */,
 				8B34A20D825429EC76C315C5 /* MediaEntityIDTests.swift */,
 				6911E68CC081EEF9F29059D3 /* MediaLibraryRefreshSpanTests.swift */,
@@ -1558,6 +1561,7 @@
 				904FB042097E2775A6443AB3 /* LibraryPaginationIdentityTests.swift in Sources */,
 				E0CC38869663ED812B2CA030 /* LibrarySearchRankerTests.swift in Sources */,
 				8B0BC8C9E0D75F440ACBD95A /* LoginViewModelTests.swift in Sources */,
+				1E47E930A58186C067FC445D /* MediaCardStatusTests.swift in Sources */,
 				7E2D4D829FBE580AC7B23A9E /* MediaDetailViewModelTests.swift in Sources */,
 				440F1A1C85E6FD6EE6D99210 /* MediaEntityIDTests.swift in Sources */,
 				04A556645552D7253B15CFAF /* MediaLibraryRefreshSpanTests.swift in Sources */,

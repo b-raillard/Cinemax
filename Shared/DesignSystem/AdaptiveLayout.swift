@@ -166,5 +166,13 @@ enum CinemaTVLayout {
     /// Caps a paragraph's measure. Unbounded, a synopsis ran the full 1920 px —
     /// roughly 200 characters a line, which is unreadable at 3 m.
     static let readingMaxWidth: CGFloat = 1100
+
+    // MARK: Title logo
+
+    /// A title logo is sized by HEIGHT, not width: marks vary from a short
+    /// wordmark to a long sentence, and pinning the width would make one tower
+    /// over the next. The width is only a ceiling for the longest of them.
+    static let logoHeight: CGFloat = 160
+    static let logoMaxWidth: CGFloat = 700
 }
 #endif

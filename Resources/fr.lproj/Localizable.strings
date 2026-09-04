@@ -998,3 +998,11 @@
 "admin.metadata.images.browse.unknownProvider" = "Fournisseur inconnu";
 "admin.metadata.images.browse.empty.title" = "Aucune image proposée";
 "admin.metadata.images.browse.empty.subtitle" = "Les fournisseurs de métadonnées n'ont rien pour ce type d'image. Utilisez « Par URL… » pour en ajouter une.";
+
+/* Libellés courts sous les icônes de la rangée d'actions secondaires (tvOS).
+   Distincts des libellés d'accessibilité, qui décrivent l'action complète. */
+"detail.action.favorite" = "Favori";
+"detail.action.watched" = "Vu";
+"detail.action.playlist" = "Playlist";
+"detail.action.watchTogether" = "Ensemble";
+"detail.action.remotePlay" = "Lire sur…";

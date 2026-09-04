@@ -86,3 +86,47 @@ extension View {
 }
 
 #endif
+
+#if os(tvOS)
+/// One accessory action beside Play on the detail fiche: favourite, watched,
+/// add to a playlist, watch together, play on another device.
+///
+/// The five were unlabelled 28 pt glyphs, which asks the viewer to recognise
+/// `text.badge.plus` and `tv.badge.wifi` from three metres — a guessing game
+/// iOS never sets, since its own secondary row carries labelled chips. The
+/// label is ALWAYS visible rather than revealed on focus: a button that grows a
+/// caption when focused reflows the whole row, moving its neighbours under the
+/// remote just as the user reaches for them.
+struct TVAccessoryActionButton: View {
+    let systemImage: String
+    let label: String
+    /// Accessibility phrasing — the full action ("Add to favorites"), where the
+    /// visible label is the short noun ("Favorite").
+    let accessibilityLabel: String
+    var isActive: Bool = false
+    let action: () -> Void
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    /// Fixed so the row's geometry never depends on how long a translation is.
+    private let width: CGFloat = 150
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: CinemaSpacing.spacing2) {
+                Image(systemName: systemImage)
+                    .font(.system(size: CinemaScale.pt(28), weight: .bold))
+                Text(label)
+                    .font(CinemaFont.label(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(isActive ? themeManager.accent : CinemaColor.onSurface)
+            .frame(width: width)
+            .padding(.vertical, CinemaSpacing.spacing3)
+        }
+        .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+#endif

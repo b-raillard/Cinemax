@@ -236,7 +236,12 @@ struct FavoritesScreen: View {
             PosterCard(
                 title: item.name ?? "",
                 imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
-                subtitle: subtitle
+                subtitle: subtitle,
+                status: .make(
+                    positionTicks: item.userData?.playbackPositionTicks,
+                    runtimeTicks: item.runTimeTicks,
+                    isPlayed: item.userData?.isPlayed
+                )
             )
         }
         #if os(tvOS)
