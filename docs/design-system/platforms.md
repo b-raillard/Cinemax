@@ -128,6 +128,7 @@ Same codebase as iPhone, but distinguished by size class + iPad-specific afforda
 - The scrub bar draws a mark per chapter boundary. There is deliberately **no** buffered-range indicator: libVLC exposes a buffer fill rate, not a range in the timeline.
 - The HUD carries the series poster and a "Series · S1E4" line above the title, filled from the `getItem` the chapter fetch already makes.
 - Overlays are custom focusable cards — the next-episode countdown and the end-of-series card. Their buttons take focus normally; the card claims `preferredFocusEnvironments` and hides the HUD while it is up.
+- The five option pickers (audio, subtitles, speed, audio delay, subtitle delay) raise `TVOptionPanel`, a trailing glass sheet with focusable rows — not a system action sheet. One funnel, `presentPicker`, so all five share it. The picture keeps the left two thirds of the screen, which is what makes syncing a delay against what is on screen possible at all.
 - Menu peels one layer at a time: info panel → HUD → dismiss, keyed on `controlsContainer.alpha` (the visual truth, never a flag).
 
 **Opt-in path — native `AVPlayerViewController`**, presented via UIKit modal. Everything in rule 3 above applies here and only here.
