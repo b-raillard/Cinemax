@@ -107,3 +107,45 @@ struct PlaybackEndDecisionTests {
         #expect(decision == .ignore)
     }
 }
+
+/// Verrouille la carte « Épisode suivant dans N s ».
+///
+/// La carte compte à rebours jusqu'à la FIN DU MÉDIA — c'est là que
+/// l'enchaînement se déclenche — et le segment « générique » ne dit que quand
+/// commencer à l'afficher. Les deux divergent dès que le segment est faux, et
+/// un générique détecté par le plugin s'est ouvert 13 minutes avant la fin :
+/// « Épisode suivant dans 788 s » à l'écran, mesuré sur Apple TV le
+/// 2026-09-04. Un compte qu'on ne peut pas lire comme un compte à rebours est
+/// une nuisance, et 788 s n'est le générique d'aucune série.
+///
+/// Vit dans ce fichier faute de pouvoir en ajouter un depuis une session
+/// distante (le `project.pbxproj` généré par XcodeGen ne peut pas y être
+/// régénéré — voir la RULE « Adding a new file under `Shared/` »).
+@Suite("Carte épisode suivant — admission")
+struct NextUpCountdownPolicyTests {
+
+    @Test("Un épisode : la carte n'apparaît qu'à moins de deux minutes de la fin")
+    func episodeCardIsBoundedToTheLastTwoMinutes() {
+        #expect(NextUpCountdownPolicy.episodeMaxSeconds == 120)
+        #expect(NextUpCountdownPolicy.shouldShowCard(secondsRemaining: 45, isEpisode: true))
+        #expect(NextUpCountdownPolicy.shouldShowCard(secondsRemaining: 120, isEpisode: true))
+        #expect(!NextUpCountdownPolicy.shouldShowCard(secondsRemaining: 121, isEpisode: true))
+    }
+
+    @Test("Le cas mesuré : 788 s restantes sur un épisode, pas de carte")
+    func theMeasuredDefectIsRefused() {
+        #expect(!NextUpCountdownPolicy.shouldShowCard(secondsRemaining: 788, isEpisode: true))
+    }
+
+    @Test("Un film enchaîné depuis une collection : son générique peut durer dix minutes")
+    func aFilmKeepsTheFullCredits() {
+        #expect(NextUpCountdownPolicy.shouldShowCard(secondsRemaining: 788, isEpisode: false))
+        #expect(NextUpCountdownPolicy.shouldShowCard(secondsRemaining: 45, isEpisode: false))
+    }
+
+    @Test("Plus rien à compter : la fin appartient au gestionnaire de fin")
+    func nothingLeftToCountShowsNoCard() {
+        #expect(!NextUpCountdownPolicy.shouldShowCard(secondsRemaining: 0, isEpisode: true))
+        #expect(!NextUpCountdownPolicy.shouldShowCard(secondsRemaining: -3, isEpisode: false))
+    }
+}

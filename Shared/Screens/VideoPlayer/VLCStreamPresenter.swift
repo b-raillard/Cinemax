@@ -348,6 +348,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// re-fetch the whole item purely for its `seriesName` (the getItem TTL has
     /// long expired by playback end). Reset per-media (episode swap / reload).
     private var resolvedSeriesName: String?
+    /// Whether the item on screen is an EPISODE, from the same `getItem` the
+    /// chapter fetch makes. `nil` until it lands; the countdown card treats
+    /// unknown as an episode, the conservative reading (see
+    /// `NextUpCountdownPolicy`). A film reaches this presenter with a "next"
+    /// only through a collection's « Tout lire ».
+    private var resolvedIsEpisode: Bool?
     /// Debounced commit for coalesced ±N skips / chapter jumps. Each press
     /// advances `pendingScrubTargetMs` (the on-screen target) and re-arms this;
     /// the single engine seek fires `seekCommitDelay` after the LAST press. See
@@ -1053,18 +1059,29 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let end = Double(segment.endTicks ?? 0) / 10_000_000
             guard end > start, currentTime >= start, currentTime < end - 1 else { continue }
             // Outro with auto-play armed → the countdown card replaces "Skip
-            // credits" (skipping to the end would just trigger the same nav).
+            // credits" (skipping to the end would just trigger the same nav) —
+            // but only once the count is one a viewer can read as a countdown.
+            // The segment's own bounds are NOT trusted for that: the card
+            // counts down to the END OF THE MEDIA, and a plugin-detected outro
+            // that opens 13 minutes early put « Épisode suivant dans 788 s » on
+            // screen (measured on device 2026-09-04). Until the policy admits
+            // the card, the segment is an ordinary one and the skip button
+            // stands, exactly as it does when auto-play is off.
+            let secondsRemaining = Double(lengthMs) / 1000 - currentTime
             if segment.type == .outro, autoPlayNext, let next = nextEpisode,
-               episodeNavigator != nil, !nextUpCancelledForThisItem {
+               episodeNavigator != nil, !nextUpCancelledForThisItem,
+               NextUpCountdownPolicy.shouldShowCard(secondsRemaining: secondsRemaining,
+                                                    isEpisode: resolvedIsEpisode ?? true) {
                 if activeSegmentType != nil {
                     activeSegmentType = nil
                     skipButton.isHidden = true
                 }
                 showNextUpCard(for: next)
-                let totalSec = Double(lengthMs) / 1000
-                nextUpCard?.update(secondsRemaining: Int((totalSec - currentTime).rounded()))
+                nextUpCard?.update(secondsRemaining: Int(secondsRemaining.rounded()))
                 return
             }
+            // A seek back out of the countdown window must take the card with it.
+            nextUpCard?.hide()
             if activeSegmentType != segment.type {
                 activeSegmentType = segment.type
                 let key = segment.type == .intro ? "player.skipIntro" : "player.skipCredits"
@@ -1087,8 +1104,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// so episode navigation tears it down for a fresh one).
     private func showNextUpCard(for next: EpisodeRef) {
         if nextUpCard == nil {
+            // "Next episode" is wrong for a collection's « Tout lire », where
+            // the next item is a film. Unknown counts as an episode, the same
+            // reading the policy takes.
+            let formatKey = (resolvedIsEpisode ?? true)
+                ? "player.nextUp.countdown" : "player.nextUp.countdown.title"
             let card = NextUpCountdownView(
-                countdownFormat: loc.localized("player.nextUp.countdown"),
+                countdownFormat: loc.localized(formatKey),
                 episodeTitle: next.title,
                 playTitle: loc.localized("player.nextUp.play"),
                 cancelTitle: loc.localized("action.cancel")
@@ -1811,7 +1833,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             super.pressesBegan(presses, with: event)
             return
         }
-        if let card = nextUpCard, !card.isHidden, controlsContainer.alpha == 0 {
+        // `alpha > 0` as well as `!isHidden`: `hide()` flips `isHidden` only in
+        // its animation completion, and the skip button asks for focus the
+        // instant the card starts fading — the model `alpha` is already 0 then.
+        if let card = nextUpCard, !card.isHidden, card.alpha > 0, controlsContainer.alpha == 0 {
             super.pressesBegan(presses, with: event)
             return
         }
@@ -2174,6 +2199,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Reused by `showEndOfSeriesOverlay` so the end-of-series card
             // doesn't re-fetch this item just for its series name.
             self.resolvedSeriesName = item.seriesName ?? item.name
+            self.resolvedIsEpisode = item.type == .episode
             #if os(tvOS)
             self.applyHUDContext(item: item, builder: builder, token: token)
             #endif
@@ -2515,7 +2541,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // opened it, behind the scrim.
         if let row = optionPanel?.preferredRow, row.window != nil { return [row] }
         if infoPanelVisible { return [infoPanelStack] }
-        if let card = nextUpCard, !card.isHidden, controlsContainer.alpha == 0 {
+        if let card = nextUpCard, !card.isHidden, card.alpha > 0, controlsContainer.alpha == 0 {
             return [card.playButton]
         }
         // The card outranks the transport: while it is up, the HUD is hidden
@@ -2685,7 +2711,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         for (i, track) in player.audioTracks.enumerated() {
             let selected = player.selectedAudioTrack == track
             opts.append((displayLabel(forAudioOrdinal: i, track: track), selected, { [weak self] in
-                self?.player.selectedAudioTrack = track
+                self?.selectAudioTrack(track)
             }))
         }
         opts.append(("\(loc.localized("player.audioDelay")) — \(Self.formatDelay(audioDelayMsState))", false, { [weak self] in
@@ -2698,6 +2724,34 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #endif
         }))
         presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, opts)
+    }
+
+    /// Switches the audio track and re-anchors playback at the switch position.
+    ///
+    /// Selecting a track alone is not enough on a streamed source. libVLC has
+    /// already demuxed `:network-caching` (5 s) worth of the file past the
+    /// playhead, and the packets of a track that was NOT selected at demux time
+    /// were dropped on the floor — the new decoder only receives data from the
+    /// demuxer's current position onward. So the picture kept running for those
+    /// seconds with no sound at all, then the new track cut in mid-sentence
+    /// (measured on device 2026-09-04: several seconds of silence on every
+    /// switch, picture advancing throughout). A seek back to the switch
+    /// position makes the demuxer re-deliver BOTH tracks from there: the
+    /// picture holds under the seek settle spinner and resumes with sound, from
+    /// exactly where the user switched. It goes through `engineSeek`, the
+    /// funnel, so the near-end clamp and the settle window both apply.
+    ///
+    /// Not applied at open (`applyServerTrackDefaultsIfNeeded` runs before a
+    /// frame has played, nothing has been demuxed past the playhead yet), and
+    /// not when the media has not confirmed open — a seek there would race the
+    /// open watchdog for nothing.
+    private func selectAudioTrack(_ track: Track) {
+        guard player.selectedAudioTrack != track else { return }
+        let anchor = currentMs
+        player.selectedAudioTrack = track
+        guard mediaConfirmedOpen, lengthMs > 0 else { return }
+        logger.notice("CINEMAX-AUDIO ▸ changement de piste, réancrage à \(anchor, privacy: .public) ms")
+        engineSeek(ms: anchor)
     }
 
     @objc private func openSubtitleMenu() {
@@ -2978,6 +3032,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         usingProxy = false
         nextUpCancelledForThisItem = false
         resolvedSeriesName = nil
+        resolvedIsEpisode = nil
         audioDelayMsState = 0
         subtitleDelayMsState = 0
         let url: URL
@@ -3170,6 +3225,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // and delays compensate per-file mux drift. Speed persists.
             self.tearDownNextUpCard()
             self.resolvedSeriesName = nil // fetchChapters re-resolves for the new episode
+            self.resolvedIsEpisode = nil
             self.audioDelayMsState = 0
             self.subtitleDelayMsState = 0
             self.previousEpisode = nav?.0

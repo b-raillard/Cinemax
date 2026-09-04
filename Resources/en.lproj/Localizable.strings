@@ -799,6 +799,7 @@
 "player.stats.modules" = "Modules";
 "player.stats.demux" = "Demux";
 "player.nextUp.countdown" = "Next episode in %ds";
+"player.nextUp.countdown.title" = "Next title in %ds";
 "player.nextUp.play" = "Play now";
 
 // MARK: - Licenses
