@@ -24,7 +24,7 @@ struct PersonDetailScreen: View {
 
     #if os(tvOS)
     private let portraitSize: CGFloat = 280
-    private let cardWidth: CGFloat = 220
+    private let cardWidth: CGFloat = CinemaTVLayout.filmographyCardWidth
     #else
     private let portraitSize: CGFloat = 132
     private let cardWidth: CGFloat = 130

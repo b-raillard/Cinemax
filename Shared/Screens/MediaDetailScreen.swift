@@ -1456,7 +1456,7 @@ struct MediaDetailScreen: View {
 
     private var backdropHeight: CGFloat {
         #if os(tvOS)
-        760
+        CinemaTVLayout.detailBackdropHeight
         #else
         AdaptiveLayout.detailBackdropHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -1480,7 +1480,7 @@ struct MediaDetailScreen: View {
 
     private var contentPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -1490,7 +1490,9 @@ struct MediaDetailScreen: View {
     /// Horizontal carousels (cast, similar, episodes) intentionally ignore this and use full width.
     private var readingMaxWidth: CGFloat {
         #if os(tvOS)
-        .infinity
+        // Capped rather than `.infinity`: unbounded, the synopsis and the
+        // studio line ran the full 1920 px, ~200 characters a line.
+        CinemaTVLayout.readingMaxWidth
         #else
         AdaptiveLayout.readingMaxWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass)) ?? .infinity
         #endif
@@ -1538,7 +1540,7 @@ struct MediaDetailScreen: View {
 
     private var playButtonWidth: CGFloat {
         #if os(tvOS)
-        240
+        CinemaTVLayout.ctaWidth
         #else
         160
         #endif
@@ -1546,7 +1548,7 @@ struct MediaDetailScreen: View {
 
     private var similarCardWidth: CGFloat {
         #if os(tvOS)
-        200
+        CinemaTVLayout.posterCardWidth
         #else
         140
         #endif
@@ -1554,7 +1556,7 @@ struct MediaDetailScreen: View {
 
     private var episodeThumbnailWidth: CGFloat {
         #if os(tvOS)
-        200
+        CinemaTVLayout.episodeThumbnailWidth
         #else
         130
         #endif

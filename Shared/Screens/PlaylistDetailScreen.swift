@@ -172,7 +172,7 @@ struct PlaylistDetailScreen: View {
                     }
                 }
             }
-            .padding(.horizontal, CinemaSpacing.spacing20)
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
             .padding(.top, CinemaSpacing.spacing3)
         }
         .scrollClipDisabled()

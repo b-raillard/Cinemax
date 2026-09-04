@@ -199,13 +199,22 @@ extension SettingsScreen {
                 RoundedRectangle(cornerRadius: CinemaRadius.full)
                     .fill(isFocused ? themeManager.accentContainer : .clear)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: CinemaRadius.full)
-                    .strokeBorder(CinemaColor.onSurface.opacity(isFocused ? 0.1 : 0), lineWidth: 4)
+            // The `accentContainer` fill above IS this tile's focus signal, so
+            // it carries no ring — but its motion and elevation now match the
+            // card level rather than a bespoke 4 pt border and a radius-40
+            // shadow found nowhere else.
+            .shadow(
+                color: themeManager.accentContainer.opacity(isFocused ? CinemaTVFocus.haloOpacity : 0),
+                radius: CinemaTVFocus.haloRadius,
+                x: 0, y: 8
             )
-            .shadow(color: isFocused ? themeManager.accentContainer.opacity(0.4) : .clear, radius: 40)
-            .scaleEffect(isFocused ? 1.05 : 1.0)
-            .animation(motionEffects ? .easeOut(duration: 0.2) : nil, value: isFocused)
+            .shadow(
+                color: Color.black.opacity(isFocused ? CinemaTVFocus.ambientOpacity : 0),
+                radius: CinemaTVFocus.ambientRadius,
+                x: 0, y: 16
+            )
+            .scaleEffect(isFocused ? CinemaTVFocus.cardScale : 1.0)
+            .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.cardDuration) : nil, value: isFocused)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -772,9 +781,13 @@ extension View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
-                    .strokeBorder(accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
+                    .strokeBorder(
+                        accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0),
+                        lineWidth: CinemaTVFocus.strokeWidth
+                    )
             )
-            .animation(animated ? .easeOut(duration: 0.15) : nil, value: isFocused)
+            .brightness(isFocused ? CinemaTVFocus.rowBrightness : 0)
+            .animation(animated ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: isFocused)
     }
 }
 

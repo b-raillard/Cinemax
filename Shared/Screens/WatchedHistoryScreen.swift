@@ -330,7 +330,7 @@ struct WatchedHistoryScreen: View {
 
     private var columns: [GridItem] {
         #if os(tvOS)
-        Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
+        CinemaTVLayout.posterGridColumns
         #else
         AdaptiveLayout.posterGridColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -338,7 +338,7 @@ struct WatchedHistoryScreen: View {
 
     private var gridSpacing: CGFloat {
         #if os(tvOS)
-        40
+        CinemaTVLayout.gridGutter
         #else
         20
         #endif
@@ -346,7 +346,7 @@ struct WatchedHistoryScreen: View {
 
     private var gridPadding: CGFloat {
         #if os(tvOS)
-        48
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif

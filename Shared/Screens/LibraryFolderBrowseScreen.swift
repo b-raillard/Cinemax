@@ -139,7 +139,7 @@ struct LibraryFolderBrowseScreen: View {
 
     private var columns: [GridItem] {
         #if os(tvOS)
-        Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
+        CinemaTVLayout.posterGridColumns
         #else
         Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
         #endif
@@ -147,7 +147,7 @@ struct LibraryFolderBrowseScreen: View {
 
     private var gridSpacing: CGFloat {
         #if os(tvOS)
-        32
+        CinemaTVLayout.gridGutter
         #else
         16
         #endif
@@ -155,7 +155,7 @@ struct LibraryFolderBrowseScreen: View {
 
     private var gridPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif

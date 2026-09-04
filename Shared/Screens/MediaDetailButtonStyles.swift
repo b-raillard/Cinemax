@@ -14,13 +14,16 @@ struct TVEpisodeZoneButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .brightness(isFocused ? 0.06 : 0)
+            .brightness(isFocused ? CinemaTVFocus.rowBrightness : 0)
             .overlay(
                 RoundedRectangle(cornerRadius: CinemaRadius.large)
-                    .strokeBorder(accent.opacity(isFocused ? 0.75 : 0), lineWidth: 2)
+                    .strokeBorder(
+                        accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0),
+                        lineWidth: CinemaTVFocus.strokeWidth
+                    )
                     .padding(1)
             )
-            .animation(motionEnabled ? .easeOut(duration: 0.15) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: isFocused)
     }
 }
 
@@ -33,11 +36,15 @@ struct SeasonTabButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .brightness(isFocused ? CinemaTVFocus.rowBrightness : 0)
             .overlay(
                 Capsule()
-                    .strokeBorder(accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
+                    .strokeBorder(
+                        accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0),
+                        lineWidth: CinemaTVFocus.strokeWidth
+                    )
             )
-            .animation(motionEnabled ? .easeOut(duration: 0.15) : nil, value: isFocused)
+            .animation(motionEnabled ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: isFocused)
     }
 }
 

@@ -249,7 +249,7 @@ struct HomeScreen: View {
 
     private var skeletonPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         CinemaSpacing.spacing6
         #endif
@@ -1081,7 +1081,7 @@ struct HomeScreen: View {
 
     private var heroHeight: CGFloat {
         #if os(tvOS)
-        820
+        CinemaTVLayout.heroHeight
         #else
         AdaptiveLayout.heroHeight(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -1105,7 +1105,7 @@ struct HomeScreen: View {
 
     private var heroPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         // Under 60 intentionally — the hero's "big-button" branch triggers above 60 (tvOS only).
         AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular
@@ -1118,7 +1118,7 @@ struct HomeScreen: View {
     /// tvOS 28 is the documented Play-label exception (bare literal inside a computed var).
     private var heroButtonFontSize: CGFloat {
         #if os(tvOS)
-        28
+        CinemaTVLayout.ctaLabelFontSize
         #else
         CinemaScale.pt(18)
         #endif
@@ -1126,7 +1126,7 @@ struct HomeScreen: View {
 
     private var maxOverviewWidth: CGFloat {
         #if os(tvOS)
-        600
+        CinemaTVLayout.heroOverviewMaxWidth
         #else
         300
         #endif
@@ -1134,7 +1134,7 @@ struct HomeScreen: View {
 
     private var playButtonWidth: CGFloat {
         #if os(tvOS)
-        220
+        CinemaTVLayout.heroPlayButtonWidth
         #else
         160
         #endif
@@ -1142,7 +1142,7 @@ struct HomeScreen: View {
 
     private var wideCardWidth: CGFloat {
         #if os(tvOS)
-        400
+        CinemaTVLayout.wideCardWidth
         #else
         AdaptiveLayout.wideCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -1150,7 +1150,7 @@ struct HomeScreen: View {
 
     private var posterCardWidth: CGFloat {
         #if os(tvOS)
-        200
+        CinemaTVLayout.posterCardWidth
         #else
         AdaptiveLayout.posterCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif

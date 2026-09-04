@@ -47,7 +47,7 @@ struct SearchScreen: View {
 
     private var columns: [GridItem] {
         #if os(tvOS)
-        Array(repeating: GridItem(.flexible(), spacing: 32), count: 6)
+        CinemaTVLayout.posterGridColumns
         #else
         AdaptiveLayout.posterGridColumns(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -538,7 +538,7 @@ struct SearchScreen: View {
 
     private var gridPadding: CGFloat {
         #if os(tvOS)
-        CinemaSpacing.spacing20
+        CinemaTVLayout.pagePadding
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
@@ -546,7 +546,7 @@ struct SearchScreen: View {
 
     private var gridSpacing: CGFloat {
         #if os(tvOS)
-        32
+        CinemaTVLayout.gridGutter
         #else
         16
         #endif
