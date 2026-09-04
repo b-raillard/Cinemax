@@ -199,6 +199,19 @@ final class SyncPlayController {
         if let loc, let toast { toast.info(loc.localized("syncplay.left")) }
     }
 
+    /// The session this group belonged to is gone — logout, server switch, user
+    /// switch. Tears down locally and deliberately does **not** call
+    /// `syncPlayLeaveGroup`: the client has already been repointed, so the REST
+    /// call would land on the wrong server.
+    ///
+    /// Without it, a switch from server A to server B leaves this controller
+    /// subscribed while the hub rebuilds its socket against B — so B's transport
+    /// commands get applied to a group that lives on A.
+    func sessionDidEnd() {
+        guard isInGroup || subscription != nil else { return }
+        teardownSession()
+    }
+
     /// Called by the presenter when its player is dismissed by the user. v1
     /// ties the group's lifetime to the player: closing playback leaves.
     func playbackDidDismiss() {
@@ -287,15 +300,30 @@ final class SyncPlayController {
         socketTask?.cancel()
         let previous = subscription
         subscription = nil
-        if let previous { Task { await JellyfinSocketHub.shared.unsubscribe(previous) } }
 
         socketTask = Task { @MainActor [weak self] in
             let handle = await JellyfinSocketHub.shared.subscribe(url: url)
-            guard let controller = self else {
+            // Re-check AFTER the hop. `teardownSession` cancels this task, but
+            // it cannot unsubscribe a handle that did not exist yet — and since
+            // `self` is a process singleton, a `weak self` guard can never fail
+            // here, so cancellation is the only signal there is. Without this,
+            // a group whose creation fails fast (offline) leaves an orphan
+            // subscription that keeps `subscribers` non-empty forever: the hub
+            // then never closes the socket, and a WebSocket carrying the OLD
+            // server's token survives logout for the life of the process.
+            guard !Task.isCancelled, self != nil else {
                 await JellyfinSocketHub.shared.unsubscribe(handle.id)
                 return
             }
-            controller.subscription = handle.id
+            // Bind weakly — a strong local held across the loop's awaits would
+            // pin the controller for the stream's whole life and make the
+            // `[weak self]` capture inert.
+            self?.subscription = handle.id
+            // Release the previous handle only once the new one is in hand:
+            // dropping it first can empty the hub and close the shared socket,
+            // which then reopens a beat later — a flap of the one connection
+            // remote control is also using.
+            if let previous { await JellyfinSocketHub.shared.unsubscribe(previous) }
             for await message in handle.messages {
                 guard let self else { return }
                 self.handle(message)

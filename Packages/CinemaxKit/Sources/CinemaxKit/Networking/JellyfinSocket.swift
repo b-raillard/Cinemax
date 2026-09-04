@@ -312,11 +312,23 @@ public actor JellyfinSocketHub {
 
     private func ensureSocket(url: URL) {
         if let activeURL, activeURL == url, socket != nil { return }
-        teardown()
+        // Close-before-open, and the ordering is load-bearing: a detached
+        // `stop()` leaves the outgoing `URLSessionWebSocketTask` resumed and
+        // connected until it wins its hop, so for that window the app holds TWO
+        // `/socket` connections against the same server-side session — the exact
+        // condition this hub exists to make impossible. The pump awaits the
+        // closer before starting.
+        //
+        // `teardown` stays synchronous on purpose: making it `async` would open
+        // a suspension point inside `ensureSocket`, letting two concurrent
+        // `subscribe` calls both pass the `activeURL` check and both build a
+        // socket — trading one race for a worse one.
+        let closing = teardown()
         let socket = JellyfinSocket(url: url)
         self.socket = socket
         self.activeURL = url
         pump = Task { [weak self] in
+            await closing.value
             await socket.start()
             for await message in socket.messages {
                 await self?.broadcast(message)
@@ -333,12 +345,13 @@ public actor JellyfinSocketHub {
     /// Drops the socket but NOT the subscribers — a URL change rebuilds under
     /// them and they keep receiving, which is what makes a server switch
     /// invisible to a consumer that is still interested.
-    private func teardown() {
+    @discardableResult
+    private func teardown() -> Task<Void, Never> {
         pump?.cancel()
         pump = nil
         let outgoing = socket
         socket = nil
         activeURL = nil
-        Task { await outgoing?.stop() }
+        return Task { await outgoing?.stop() }
     }
 }

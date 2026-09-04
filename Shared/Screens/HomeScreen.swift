@@ -806,7 +806,13 @@ struct HomeScreen: View {
         #else
         .buttonStyle(.plain)
         #endif
-        .disabled(joiningGroupId != nil)
+        // Deliberately NOT `.disabled(joiningGroupId != nil)`: a disabled control
+        // is unfocusable on tvOS, so pressing a card would drop it out of the
+        // focus chain for the length of the join round-trip — and on a
+        // non-admin's Home, where every card in this row is a session, focus
+        // would escape the row entirely and not come back. `joinLiveSession`
+        // already refuses re-entry. Same lesson as `ServersScreen`, where the
+        // active card stays focusable but inert.
         .accessibilityLabel(loc.localized(
             "syncplay.session.a11y",
             entry.title ?? loc.localized("syncplay.session.unknownTitle"),

@@ -1010,6 +1010,11 @@ struct AppNavigation: View {
                menuConfig.mode == .custom && menuConfig.customKind == .library {
                 Task { await menuConfig.refreshAvailableViews() }
             }
+            // A Watch Together group belongs to the session that opened it. On
+            // a logout / user switch the hub rebuilds its socket for whoever is
+            // signed in now, and a still-subscribed controller would apply the
+            // NEW session's transport commands to a group on the OLD one.
+            SyncPlayController.shared.sessionDidEnd()
             // Capabilities are per-session, so a login / user switch has to
             // re-declare them; a logout tears the socket down (`apply` sees
             // `isAuthenticated == false`).

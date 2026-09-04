@@ -1058,9 +1058,6 @@ struct MediaDetailScreen: View {
             if showTrailerButton, network.isOnline, let trailer = viewModel.localTrailers.first {
                 trailerButton(for: trailer)
             }
-            if watchTogetherEnabled && network.isOnline {
-                watchTogetherButton(for: item, nextEp: nextEp)
-            }
             // "Play on…" — appended last, so this late-arriving button (the
             // session probe lands after the first render) can't steal focus from
             // Play, which holds it by default.
@@ -1071,6 +1068,15 @@ struct MediaDetailScreen: View {
             // two buttons above.
             if network.isOnline, playlists != nil {
                 addToPlaylistButton(for: item)
+            }
+            // Last, for the same reason as "Play on…": `watchTogetherEnabled`
+            // reads `currentUser?.policy`, which `refreshCurrentUser()`
+            // populates asynchronously — so on a cold launch that reaches a
+            // fiche fast (Top Shelf, deep link, inbound remote play) it
+            // materialises after the first render. Mid-row, that slid its
+            // neighbours sideways under the remote.
+            if watchTogetherEnabled && network.isOnline {
+                watchTogetherButton(for: item, nextEp: nextEp)
             }
             Spacer(minLength: 0)
         }

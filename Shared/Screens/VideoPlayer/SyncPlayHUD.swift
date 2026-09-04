@@ -57,7 +57,12 @@ private func initial(for name: String) -> String {
 /// be inventing information the protocol does not carry.
 final class SyncPlayPresenceStrip: UIView {
     private let stack = UIStackView()
-    private var pulse: CABasicAnimation?
+
+    /// Chips drawn before collapsing the rest into a "+N". A six-person group is
+    /// legitimate and its names would otherwise run off an iPhone's right edge —
+    /// the strip carries only leading + top constraints, and each name label
+    /// takes its full intrinsic width.
+    private let maxChips = 4
 
     #if os(tvOS)
     private let avatarSize: CGFloat = 44
@@ -96,8 +101,14 @@ final class SyncPlayPresenceStrip: UIView {
         guard !participants.isEmpty else { return }
 
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for name in participants {
+        // The viewer first: their own chip is the anchor for reading the rest.
+        let ordered = participants.sorted { a, _ in a == you }
+        for name in ordered.prefix(maxChips) {
             stack.addArrangedSubview(chip(name: name, isYou: name == you, youLabel: youLabel, state: state, accent: accent))
+        }
+        let overflow = ordered.count - maxChips
+        if overflow > 0 {
+            stack.addArrangedSubview(chip(name: "+\(overflow)", isYou: false, youLabel: youLabel, state: state, accent: accent))
         }
     }
 
@@ -143,6 +154,9 @@ final class SyncPlayPresenceStrip: UIView {
         label.font = .systemFont(ofSize: nameFont, weight: .semibold)
         label.textColor = UIColor.white.withAlphaComponent(0.75)
         label.textAlignment = .center
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.widthAnchor.constraint(lessThanOrEqualToConstant: avatarSize * 2).isActive = true
 
         container.addArrangedSubview(avatar)
         container.addArrangedSubview(label)

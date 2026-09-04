@@ -520,6 +520,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let syncPlayEvents = SyncPlayEventLine()
     /// Last participant list rendered, so a repaint can name who arrived or left.
     private var syncPlayLastParticipants: [String] = []
+    /// Pending "show the waiting scrim" — cancelled if the group settles first.
+    private var syncPlayWaitingWork: DispatchWorkItem?
+    private static let syncPlayWaitingDelay: TimeInterval = 0.35
 
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
@@ -1293,14 +1296,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // The player HUD is always-dark and uses raw UIKit font sizes
         // throughout (matches `timeFont`/`hudFont` below), so hardcoded sizes
         // here are consistent with the file, not the SwiftUI CinemaFont rule.
-        #if os(tvOS)
-        let pillFont: CGFloat = 22
-        let pillHeight: CGFloat = 40
-        #else
-        let pillFont: CGFloat = 13
-        let pillHeight: CGFloat = 24
-        #endif
-        _ = pillFont; _ = pillHeight
         // Presence sits INSIDE the controls container: it is chrome, and it
         // fades with the HUD.
         syncPlayPresence.translatesAutoresizingMaskIntoConstraints = false
@@ -1316,7 +1311,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // auto-hides — a held picture with the explanation faded out is the
         // freeze this exists to prevent.
         syncPlayWaiting.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(syncPlayWaiting)
+        // Directly above the picture and BELOW `controlsContainer`. Added on top
+        // instead, its 55 % scrim washed the whole tvOS transport — including
+        // the accent focus ring, the one thing telling the user where they are —
+        // while leaving every control fully operable. It still outlives the
+        // HUD's auto-hide from here, because the container is transparent once
+        // faded.
+        view.insertSubview(syncPlayWaiting, aboveSubview: videoView)
         NSLayoutConstraint.activate([
             syncPlayWaiting.topAnchor.constraint(equalTo: view.topAnchor),
             syncPlayWaiting.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -1331,9 +1332,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #else
         let eventInset: CGFloat = 20
         #endif
+        // Below the presence strip, which is itself below the title. Pinned to
+        // the safe-area top instead, it landed exactly on `titleLabel` (iOS) and
+        // over the series poster + "Série · S1E4" line (tvOS) — and being added
+        // after `controlsContainer`, it drew on top of both. Cross-container
+        // constraint: both are descendants of `view`, and an empty presence
+        // strip has zero height, so the no-group case is unchanged.
         NSLayoutConstraint.activate([
             syncPlayEvents.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: eventInset),
-            syncPlayEvents.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            syncPlayEvents.topAnchor.constraint(equalTo: syncPlayPresence.bottomAnchor, constant: 12),
             syncPlayEvents.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -eventInset)
         ])
 
@@ -3213,14 +3220,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         // The group is held while somebody buffers. Saying so is the difference
         // between a wait and what reads as a frozen player.
-        let waiting = syncPlay.isWaitingForParticipants
-        if waiting {
+        // Delayed on the way IN, immediate on the way out — the same shape as
+        // `seekSpinnerDelay`, and for the same reason: a group re-enters
+        // `Waiting` on every synced seek while participants re-buffer, which for
+        // a healthy group is routine and sub-second, so showing it at once
+        // makes ordinary seeking flash a full-screen scrim over the picture.
+        syncPlayWaitingWork?.cancel()
+        syncPlayWaitingWork = nil
+        if syncPlay.isWaitingForParticipants {
             syncPlayWaiting.configure(
                 title: loc.localized("syncplay.waiting.title"),
                 subtitle: loc.localized("syncplay.waiting.subtitle")
             )
+            let work = DispatchWorkItem { [weak self] in self?.syncPlayWaiting.setVisible(true) }
+            syncPlayWaitingWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.syncPlayWaitingDelay, execute: work)
+        } else {
+            syncPlayWaiting.setVisible(false)
         }
-        syncPlayWaiting.setVisible(waiting)
         if !inGroup { syncPlayEvents.cancel() }
     }
 
@@ -3239,6 +3256,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func unbindSyncPlay() {
         syncPlay.onSessionChanged = nil
         syncPlay.unbindPlayback()
+        syncPlayWaitingWork?.cancel()
+        syncPlayWaitingWork = nil
         syncPlayWaiting.setVisible(false, animated: false)
         syncPlayEvents.cancel()
         syncPlayLastParticipants = []
