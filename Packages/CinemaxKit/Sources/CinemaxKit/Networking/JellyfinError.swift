@@ -12,6 +12,17 @@ public enum JellyfinError: LocalizedError, Sendable {
     /// `JellyfinAPIClient.isUnauthorized` match it precisely instead of
     /// string-sniffing a `playbackFailed("… 401")` message.
     case unauthorized
+    /// The server refused a self-service credential change — in practice, a
+    /// wrong current password.
+    ///
+    /// Distinct from `.unauthorized`, which means the SESSION is invalid and
+    /// feeds the expiry coordinator. Conflating the two would sign a user out
+    /// for mistyping their own password.
+    case invalidCredentials
+    /// A record the client holds is missing the id an operation addresses it
+    /// by — a playlist entry with no `playlistItemID`, say. Refusing beats
+    /// acting on the wrong occurrence.
+    case malformedRecord
 
     public var errorDescription: String? {
         switch self {
@@ -20,6 +31,8 @@ public enum JellyfinError: LocalizedError, Sendable {
         case .invalidURL:              "Invalid server URL"
         case .playbackFailed(let reason): "Playback failed: \(reason)"
         case .unauthorized:            "Session expired"
+        case .invalidCredentials:      "The current password is incorrect"
+        case .malformedRecord:         "This entry is missing the identifier the server needs"
         }
     }
 }

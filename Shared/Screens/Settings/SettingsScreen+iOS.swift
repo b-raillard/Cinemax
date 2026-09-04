@@ -223,9 +223,13 @@ extension SettingsScreen {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 iOSSettingsSectionHeader(loc.localized("settings.account"))
 
-                // TODO(v2): wire a user-facing Profile Settings screen
-                // (password change + avatar) — see docs/v2-todo.md.
                 VStack(spacing: 0) {
+                    navigationRow(icon: "person.crop.circle", label: loc.localized("profile.title")) {
+                        showProfile = true
+                    }
+
+                    iOSSettingsDivider
+
                     navigationRow(icon: "clock.arrow.circlepath", label: loc.localized("settings.watchedHistory")) {
                         showWatchedHistory = true
                     }
@@ -542,6 +546,8 @@ extension SettingsScreen {
             VStack(spacing: 0) {
                 iOSToggleRowsJoined(playbackToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
                 iOSSettingsDivider
+                iOSSubtitleSizeRow
+                iOSSettingsDivider
                 iOSSleepTimerRow
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
@@ -636,6 +642,44 @@ extension SettingsScreen {
     /// Menu-based picker for the default sleep timer duration. Label matches the selected
     /// option's localized name ("Off", "30 minutes", etc.).
     @ViewBuilder
+    /// Subtitle size. VLC path only — the native `AVPlayer` renders subtitles
+    /// through the system, which has its own accessibility settings.
+    var iOSSubtitleSizeRow: some View {
+        iOSSettingsRow {
+            HStack {
+                iOSRowIcon(systemName: "captions.bubble", color: themeManager.accent)
+                Text(loc.localized("settings.subtitleSize"))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                Menu {
+                    ForEach(SubtitleTextSizeOption.allCases) { option in
+                        Button {
+                            subtitleTextSize = option.rawValue
+                        } label: {
+                            if subtitleTextSize == option.rawValue {
+                                Label(loc.localized(option.localizationKey), systemImage: "checkmark")
+                            } else {
+                                Text(loc.localized(option.localizationKey))
+                            }
+                        }
+                    }
+                } label: {
+                    let selected = SubtitleTextSizeOption(rawValue: subtitleTextSize) ?? .normal
+                    HStack(spacing: 4) {
+                        Text(loc.localized(selected.localizationKey))
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
+                            .foregroundStyle(CinemaColor.outlineVariant)
+                    }
+                }
+                .tint(themeManager.accent)
+            }
+        }
+    }
+
     var iOSSleepTimerRow: some View {
         iOSSettingsRow {
             HStack {

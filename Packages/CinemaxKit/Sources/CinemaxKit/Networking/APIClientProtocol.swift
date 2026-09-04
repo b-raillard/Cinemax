@@ -55,6 +55,26 @@ public extension ServerAPI {
 public protocol AuthAPI: Sendable {
     func authenticate(username: String, password: String) async throws -> UserSession
 
+    /// Changes the SIGNED-IN user's own password.
+    ///
+    /// Deliberately NOT `AdminAPI.updateUserPassword`, which is an admin
+    /// resetting somebody else's and carries no `currentPassword`. That slice is
+    /// a privilege boundary gated on `AppState.isAdministrator`, so routing a
+    /// self-service change through it would put an ordinary user's own password
+    /// change behind an admin gate — and hand the server a payload that omits
+    /// the proof of identity it is entitled to ask for.
+    func changeOwnPassword(userId: String, currentPassword: String, newPassword: String) async throws
+
+    /// The server's known languages, for the audio / subtitle preference
+    /// pickers. Two-letter ISO codes are what `UserConfiguration` stores.
+    func getCultures() async throws -> [ServerCulture]
+
+    /// The signed-in user's playback preferences, as the server holds them.
+    func getUserConfiguration(userId: String) async throws -> UserPlaybackPreferences
+    /// Replaces them. Read-modify-write on the server's own configuration, so
+    /// the fields this app does not surface are preserved.
+    func updateUserConfiguration(userId: String, preferences: UserPlaybackPreferences) async throws
+
     /// Whether the server has Quick Connect enabled. The login UI hides the
     /// Quick Connect affordance when this is `false` (or the call fails) so we
     /// never offer a flow the server will reject.
@@ -123,6 +143,12 @@ public protocol LibraryAPI: Sendable {
     /// filter, so the server returns the next unwatched episode for every show
     /// the user has started.
     func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// Episodes due to air soon. Carries a default no-op so hand-written test
+    /// mocks need not stub a rail they don't exercise — the `SyncPlayAPI`
+    /// pattern.
+    func getUpcomingEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// Server-held trailers for an item. Same default-no-op reasoning.
+    func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto]
 
     /// Clears the user's played/progress state for the given item. Used by
     /// Privacy & Security → Clear Continue Watching to drop resume points
@@ -606,6 +632,9 @@ public extension LibraryAPI {
     func getSimilarItems(itemId: String, userId: String, limit: Int = 12) async throws -> [BaseItemDto] {
         try await getSimilarItems(itemId: itemId, userId: userId, limit: limit)
     }
+    func getUpcomingEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
+    func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto] { [] }
+
     func getNextUpEpisodes(userId: String, limit: Int = 20) async throws -> [BaseItemDto] {
         try await getNextUpEpisodes(userId: userId, limit: limit)
     }
@@ -626,6 +655,19 @@ public extension AuthAPI {
     func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
         try await getActiveSessions(activeWithinSeconds: activeWithinSeconds)
     }
+
+    // Empty defaults so hand-written test mocks need not stub what they don't
+    // exercise — the `SyncPlayAPI` pattern.
+    /// Throws rather than succeeding: `AuthAPI` is core, not an optional
+    /// feature slice, and a conformer that forgets this would otherwise have
+    /// the UI report "password changed" while nothing happened. The other
+    /// defaults here answer with empty data, which reads as "nothing to show".
+    func changeOwnPassword(userId: String, currentPassword: String, newPassword: String) async throws {
+        throw JellyfinError.notConnected
+    }
+    func getCultures() async throws -> [ServerCulture] { [] }
+    func getUserConfiguration(userId: String) async throws -> UserPlaybackPreferences { .init() }
+    func updateUserConfiguration(userId: String, preferences: UserPlaybackPreferences) async throws {}
 }
 
 public extension AdminAPI {

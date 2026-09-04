@@ -106,6 +106,72 @@ struct PlaylistMoveTests {
         #expect(vm.items.map(\.playlistItemID) == ["e1", "e2", "e3"])
     }
 
+    /// Le même film figurant deux fois, retirer la troisième ligne doit
+    /// retirer « e3 » — pas la première occurrence du même élément.
+    @Test("Une suppression envoie l'ID D'ENTRÉE, pas celui de l'élément")
+    func removeSendsTheEntryId() async {
+        let api = makeAPI()
+        let appState = makeAppState(api: api)
+        let vm = PlaylistDetailViewModel()
+        await vm.load(playlistId: "p1", using: appState)
+
+        let outcome = await vm.remove(entryId: "e3", playlistId: "p1", using: appState)
+
+        if case .removed = outcome {} else { Issue.record("suppression attendue") }
+        #expect(api.removeCalls == [["e3"]])
+        #expect(vm.items.map(\.playlistItemID) == ["e1", "e2"])
+    }
+
+    /// Optimiste comme le déplacement : un refus du serveur doit remettre la
+    /// ligne, sans quoi l'écran affirme une suppression que la playlist n'a
+    /// pas enregistrée.
+    @Test("Un refus du serveur remet la ligne supprimée")
+    func aRefusedRemoveIsRolledBack() async {
+        let api = makeAPI()
+        api.shouldFailPlaylistRemove = true
+        let appState = makeAppState(api: api)
+        let vm = PlaylistDetailViewModel()
+        await vm.load(playlistId: "p1", using: appState)
+
+        let outcome = await vm.remove(entryId: "e1", playlistId: "p1", using: appState)
+
+        if case .failed = outcome {} else { Issue.record("échec attendu") }
+        #expect(vm.items.map(\.playlistItemID) == ["e1", "e2", "e3"])
+    }
+
+    /// Retirer la dernière entrée doit faire basculer l'écran sur son état
+    /// vide, pas le laisser sur une liste chargée sans contenu.
+    @Test("Retirer la dernière entrée vide la playlist")
+    func removingTheLastEntryEmptiesTheList() async {
+        let api = makeAPI()
+        api.stubbedPlaylistItems = [entry(itemId: "m1", entryId: "e1", name: "Seul")]
+        let appState = makeAppState(api: api)
+        let vm = PlaylistDetailViewModel()
+        await vm.load(playlistId: "p1", using: appState)
+
+        _ = await vm.remove(entryId: "e1", playlistId: "p1", using: appState)
+
+        #expect(vm.items.isEmpty)
+        if case .empty = vm.state {} else { Issue.record("état attendu : vide") }
+    }
+
+    /// La liste peut avoir bougé sous un menu déjà ouvert. Rien n'est envoyé,
+    /// et surtout rien n'est annoncé : un toast dirait une suppression qui n'a
+    /// pas eu lieu.
+    @Test("Un identifiant d'entrée inconnu ne déclenche aucun appel et ne dit rien")
+    func removingAnUnknownEntryIsSilent() async {
+        let api = makeAPI()
+        let appState = makeAppState(api: api)
+        let vm = PlaylistDetailViewModel()
+        await vm.load(playlistId: "p1", using: appState)
+
+        let outcome = await vm.remove(entryId: "disparue", playlistId: "p1", using: appState)
+
+        if case .notFound = outcome {} else { Issue.record("« introuvable » attendu") }
+        #expect(api.removeCalls.isEmpty)
+        #expect(vm.items.map(\.playlistItemID) == ["e1", "e2", "e3"])
+    }
+
     @Test("Un index hors bornes ne déclenche aucun appel")
     func outOfRangeIsIgnored() async {
         let api = makeAPI()

@@ -165,6 +165,7 @@ struct SettingsScreen: View {
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
+    @State var showProfile = false
     @State var showServers = false
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
@@ -201,6 +202,8 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowRecentlyAdded) var showRecentlyAdded: Bool = SettingsKey.Default.homeShowRecentlyAdded
     @AppStorage(SettingsKey.homeShowFavorites) var showFavorites: Bool = SettingsKey.Default.homeShowFavorites
     @AppStorage(SettingsKey.homeShowPlaylists) var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
+    @AppStorage(SettingsKey.homeShowUpcoming) var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
+    @AppStorage(SettingsKey.homeShowCollections) var showCollections: Bool = SettingsKey.Default.homeShowCollections
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
@@ -208,6 +211,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.libraryBrowseLayout) var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
     @AppStorage(SettingsKey.dimUnfocusedPosters) var dimUnfocusedPosters: Bool = SettingsKey.Default.dimUnfocusedPosters
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
+    @AppStorage(SettingsKey.subtitleTextSize) var subtitleTextSize: Int = SettingsKey.Default.subtitleTextSize
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
     @AppStorage(SettingsKey.rainbowUnlocked) var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
@@ -226,6 +230,7 @@ struct SettingsScreen: View {
     /// requests (and any toast on failure) on every menu interaction.
     @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
+    @State var showSubtitleSizePicker = false
     @State var showLibraryLayoutPicker = false
     #endif
 
@@ -296,6 +301,8 @@ struct SettingsScreen: View {
             .init(id: "homeRecentlyAdded", icon: "sparkles.rectangle.stack", label: loc.localized("settings.homePage.recentlyAdded"), value: $showRecentlyAdded),
             .init(id: "homeFavorites", icon: "heart", label: loc.localized("settings.homePage.favorites"), value: $showFavorites),
             .init(id: "homePlaylists", icon: "music.note.list", label: loc.localized("settings.homePage.playlists"), value: $showPlaylists),
+            .init(id: "homeCollections", icon: "rectangle.stack", label: loc.localized("settings.homePage.collections"), value: $showCollections),
+            .init(id: "homeUpcoming", icon: "calendar", label: loc.localized("settings.homePage.upcoming"), value: $showUpcoming),
             .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows)
         ]
         // "Watching Now" ("En direct") exposes other users' active sessions —
@@ -312,11 +319,11 @@ struct SettingsScreen: View {
         var rows: [SettingsToggleRow] = [
             .init(id: "detailQualityBadges", icon: "info.square", label: loc.localized("settings.detailPage.qualityBadges"), value: $showQualityBadges)
         ]
-        // The trailer button opens the URL in Safari — tvOS has no browser,
-        // so neither the button nor its toggle exist there.
-        #if os(iOS)
+        // Both platforms. iOS opens a `remoteTrailers` link in Safari; tvOS,
+        // which has no browser, plays a trailer the SERVER holds through the
+        // normal player. Different mechanisms, one setting — what the user is
+        // choosing is whether trailers are offered at all.
         rows.append(.init(id: "detailTrailerButton", icon: "movieclapper", label: loc.localized("settings.detailPage.trailerButton"), value: $showTrailerButton))
-        #endif
         return rows
     }
 
@@ -381,11 +388,13 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .sheet(isPresented: $showServers) { serversSheet }
+        .sheet(isPresented: $showProfile) { profileSheet }
         #else
         .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .fullScreenCover(isPresented: $showServers) { serversSheet }
+        .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
     }
 
@@ -422,6 +431,49 @@ struct SettingsScreen: View {
             #if os(tvOS)
             .environment(playerCoordinator)
             #endif
+    }
+
+    /// The signed-in user's own account. Not admin: it changes THEIR password
+    /// through `AuthAPI`, never the admin reset path.
+    private var profileSheet: some View {
+        #if os(iOS)
+        NavigationStack {
+            ProfileScreen()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(loc.localized("action.done")) { showProfile = false }
+                    }
+                }
+        }
+        .environment(appState)
+        .environment(themeManager)
+        .environment(loc)
+        .environment(toasts)
+        #else
+        // tvOS draws no toolbar on a cover, so it carries its own Done button —
+        // which is also the focusable every state of the screen needs, per the
+        // pushed-inside-a-cover rule.
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Spacer()
+                CinemaButton(title: loc.localized("action.done"), style: .accent) {
+                    showProfile = false
+                }
+                .frame(width: CinemaTVLayout.ctaWidth)
+            }
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
+            .padding(.top, CinemaSpacing.spacing5)
+            .focusSection()
+
+            ProfileScreen()
+        }
+        .background(CinemaColor.surface.ignoresSafeArea())
+        .environment(appState)
+        .environment(themeManager)
+        .environment(loc)
+        .environment(toasts)
+        .onExitCommand { showProfile = false }
+        #endif
     }
 
     private var privacySecuritySheet: some View {

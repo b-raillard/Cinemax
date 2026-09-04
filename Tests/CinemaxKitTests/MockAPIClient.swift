@@ -514,6 +514,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldFailPlaylistMove { throw stubbedError }
     }
 
+    /// Every `removeFromPlaylist` call, in order.
+    private(set) var removeCalls: [[String]] = []
+    var shouldFailPlaylistRemove = false
+    func removeFromPlaylist(playlistId: String, entryIds: [String]) async throws {
+        recordLock.withLock { removeCalls.append(entryIds) }
+        if shouldFailPlaylistRemove { throw stubbedError }
+    }
+
     private(set) var getSimilarItemsCallCount = 0
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock { getSimilarItemsCallCount += 1 }

@@ -21,16 +21,12 @@ struct MediaLibraryScreen: View {
     /// `onAdminAction:` — we bind the resulting `AdminMenuPushIntent`
     /// here and host the destination on the body's outer ZStack.
     @State private var adminPushIntent: AdminMenuPushIntent?
-    #if os(iOS)
-    /// In-flight A–Z re-anchor. Held so a finger sliding down the bar cancels
-    /// the previous letter's fetch instead of racing it — the drag gesture
-    /// fires on every letter it crosses.
+    #endif
+    /// In-flight A–Z re-anchor. Both platforms: on iOS a finger sliding down
+    /// the bar must cancel the previous letter's fetch instead of racing it
+    /// (the drag fires on every letter it crosses), and on tvOS a user walking
+    /// the chip strip does the same thing one click at a time.
     @State private var jumpTask: Task<Void, Never>?
-    #endif
-    #endif
-    #if os(tvOS)
-    @State private var showSortPicker = false
-    #endif
     /// Browse ("By genre") vs flat grid ("Show all") landing layout. Honored on
     /// both platforms; the toggle lives in Settings → Appearance.
     @AppStorage(SettingsKey.libraryBrowseLayout) private var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
@@ -122,14 +118,6 @@ struct MediaLibraryScreen: View {
             makeSortFilterSheet()
                 .environment(themeManager)
                 .environment(loc)
-        }
-        .confirmationDialog(loc.localized("sort.by"), isPresented: $showSortPicker, titleVisibility: .visible) {
-            ForEach(tvSortDirectionalOptions, id: \.id) { option in
-                Button(option.label) {
-                    viewModel.sortFilter.sortBy = option.value
-                    viewModel.sortFilter.sortAscending = option.ascending
-                }
-            }
         }
         #endif
         .task {
@@ -406,6 +394,9 @@ struct MediaLibraryScreen: View {
                     #if os(tvOS)
                     Color.clear.frame(height: 0).id("library.top")
                     tvTopBar
+                    if shouldShowJumpBar {
+                        tvLetterStrip(proxy: proxy)
+                    }
                     #else
                     Text(filteredCountLabel)
                         .font(CinemaFont.label(.large))
@@ -478,6 +469,42 @@ struct MediaLibraryScreen: View {
     // MARK: - tvOS Compact Top Bar
 
     #if os(tvOS)
+    /// The A–Z jump, as a remote can aim it.
+    ///
+    /// iOS overlays a thin vertical strip of letters sized for a thumb tracking
+    /// down the screen's edge — a gesture that does not exist here. The same
+    /// machinery (`jump`, and the server-side re-anchor behind it) drives a
+    /// horizontal row of focusable chips instead: one click per letter, and the
+    /// row reads like a keyboard row rather than a target to hit.
+    ///
+    /// Its own focus section, so a Down press from it lands in the grid rather
+    /// than travelling along the letters.
+    private func tvLetterStrip(proxy: ScrollViewProxy) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: CinemaSpacing.spacing2) {
+                ForEach(AlphabeticalJump.letters, id: \.self) { letter in
+                    Button {
+                        _ = jump(to: letter, proxy: proxy)
+                    } label: {
+                        Text(letter)
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                            .frame(minWidth: 52)
+                            .padding(.vertical, CinemaSpacing.spacing2)
+                            .background(CinemaColor.surfaceContainerHigh, in: Capsule())
+                    }
+                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                    .focusEffectDisabled()
+                    .hoverEffectDisabled()
+                    .accessibilityLabel(letter)
+                }
+            }
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
+        }
+        .scrollClipDisabled()
+        .focusSection()
+    }
+
     /// Compact top bar that replaces the previous full-screen filter wall:
     /// title + count on the left, sort menu and filters button on the right.
     /// Filter detail (chips for watch status / decade / genre) lives inside
@@ -516,13 +543,16 @@ struct MediaLibraryScreen: View {
         .focusSection()
     }
 
-    /// Opens a `confirmationDialog` listing every sort field doubled by direction
-    /// (e.g. "Date Added ↓", "Date Added ↑"). Direction-as-separate-items keeps
-    /// the action one focused click away — re-tap-to-reverse never worked well
-    /// with remote navigation.
+    /// Shows the current sort and opens the sort-and-filter sheet.
+    ///
+    /// It used to raise a `confirmationDialog` of its own, so sorting and
+    /// filtering — one job — had two different idioms, and the sheet titled
+    /// "Trier et filtrer" could not in fact sort. The button survives because
+    /// it is the only place the CURRENT sort is legible without opening
+    /// anything; only its destination changed.
     private var tvSortButton: some View {
         Button {
-            showSortPicker = true
+            showSortFilter = true
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.up.arrow.down")
@@ -572,30 +602,6 @@ struct MediaLibraryScreen: View {
         .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
         .focusEffectDisabled()
         .hoverEffectDisabled()
-    }
-
-    /// Sort options × direction. Each label encodes both, so the dialog is
-    /// flat and one focused click commits both sortBy and sortAscending.
-    private var tvSortDirectionalOptions: [(id: String, label: String, value: ItemSortBy, ascending: Bool)] {
-        let fields: [(label: String, value: ItemSortBy, ascendingFirst: Bool)] = [
-            (loc.localized("sort.dateAdded"), .dateCreated, false),       // newest first feels natural
-            (loc.localized("sort.name"), .sortName, true),                // A→Z first
-            (loc.localized("sort.releaseYear"), .productionYear, false),  // newest first
-            (loc.localized("sort.rating"), .communityRating, false)       // highest first
-        ]
-        var out: [(String, String, ItemSortBy, Bool)] = []
-        for f in fields {
-            let descLabel = "\(f.label) ↓"
-            let ascLabel = "\(f.label) ↑"
-            if f.ascendingFirst {
-                out.append((f.value.rawValue + ".asc", ascLabel, f.value, true))
-                out.append((f.value.rawValue + ".desc", descLabel, f.value, false))
-            } else {
-                out.append((f.value.rawValue + ".desc", descLabel, f.value, false))
-                out.append((f.value.rawValue + ".asc", ascLabel, f.value, true))
-            }
-        }
-        return out
     }
 
     /// Label shown on the sort button — current field + direction arrow.
@@ -762,7 +768,6 @@ struct MediaLibraryScreen: View {
 
     // MARK: - Alphabetical Jump Bar (iOS)
 
-    #if os(iOS)
     /// Only shown when the filtered view is actually alphabetically meaningful:
     /// the user has sorted by name ascending. Other sorts (date added, year, rating)
     /// wouldn't produce a coherent A→Z scroll.
@@ -829,7 +834,6 @@ struct MediaLibraryScreen: View {
         }
         return nil
     }
-    #endif
 
     /// Shown in the filtered grid (iOS or tvOS) when the current sort/filter combination
     /// yields no results. Offers a "Clear filters" action that resets sort + filter state.

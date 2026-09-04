@@ -1,3 +1,20 @@
+/// The alphabet both jump affordances offer.
+///
+/// Outside the `#if` below on purpose: tvOS draws a horizontal strip of
+/// focusable chips (`MovieLibraryScreen.tvLetterStrip`) because a vertical bar
+/// tracked with a thumb is meaningless on a remote — but the two must offer the
+/// SAME set, or a letter reachable on one platform would be missing on the
+/// other.
+enum AlphabeticalJump {
+    /// "#" covers items that begin with a digit or symbol.
+    static let letters: [String] = {
+        var list = ["#"]
+        list.append(contentsOf: (UnicodeScalar("A").value...UnicodeScalar("Z").value)
+            .compactMap { UnicodeScalar($0).map { String(Character($0)) } })
+        return list
+    }()
+}
+
 #if os(iOS)
 import SwiftUI
 import UIKit
@@ -11,13 +28,8 @@ struct AlphabeticalJumpBar: View {
     /// answer. See `fire(_:)`.
     let onSelect: (String) -> Bool
 
-    /// The letters rendered. "#" covers items that begin with a digit or symbol.
-    private static let letters: [String] = {
-        var list = ["#"]
-        list.append(contentsOf: (UnicodeScalar("A").value...UnicodeScalar("Z").value)
-            .compactMap { UnicodeScalar($0).map { String(Character($0)) } })
-        return list
-    }()
+    /// The letters rendered. See `AlphabeticalJump.letters`.
+    private static let letters = AlphabeticalJump.letters
 
     @State private var lastFired: String?
 

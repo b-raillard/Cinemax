@@ -36,6 +36,15 @@ final class HomeViewModel {
     /// solely from a `.custom + .library` menu on a server that exposes a
     /// Playlists view. On the default five-tab menu there was no path at all.
     var playlists: [BaseItemDto] = []
+    /// Episodes the server expects to air soon. A calendar, not a queue —
+    /// nothing here is playable yet, which is why its cards carry no Play and
+    /// no context menu.
+    var upcomingItems: [BaseItemDto] = []
+    /// The user's collections (BoxSets). On the default five tabs a collection
+    /// was reachable only through a `.custom + .library` menu on a server that
+    /// exposes a Collections view — the same shape that made playlists
+    /// unfindable before their own rail.
+    var collections: [BaseItemDto] = []
     /// Next unwatched episode for every in-progress series — the global
     /// "Next Up" rail. Distinct from `resumeItems` (mid-episode resume points).
     var nextUpItems: [BaseItemDto] = []
@@ -129,7 +138,11 @@ final class HomeViewModel {
         isFullyLoaded = false
         errorMessage = nil
 
-        enum Section { case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto]); case nextUp([BaseItemDto]); case playlists([BaseItemDto]) }
+        enum Section {
+            case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto])
+            case nextUp([BaseItemDto]); case playlists([BaseItemDto])
+            case upcoming([BaseItemDto]); case collections([BaseItemDto])
+        }
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
@@ -208,6 +221,30 @@ final class HomeViewModel {
                     return nil
                 }
             }
+            group.addTask {
+                do {
+                    return .upcoming(try await appState.apiClient.getUpcomingEpisodes(userId: userId, limit: 20))
+                } catch {
+                    logger.warning("Home upcoming fetch failed: \(error.localizedDescription, privacy: .public)")
+                    return nil
+                }
+            }
+            group.addTask {
+                do {
+                    // No `parentId`: the user's collections wherever they live,
+                    // rather than those of one library.
+                    return .collections(try await appState.apiClient.getItems(
+                        userId: userId,
+                        includeItemTypes: [.boxSet],
+                        sortBy: [.sortName],
+                        sortOrder: [.ascending],
+                        limit: 20
+                    ).items)
+                } catch {
+                    logger.warning("Home collections fetch failed: \(error.localizedDescription, privacy: .public)")
+                    return nil
+                }
+            }
             for await result in group {
                 switch result {
                 case .resume(let items): resumeItems = items
@@ -215,6 +252,8 @@ final class HomeViewModel {
                 case .favorites(let items): favoriteItems = items
                 case .nextUp(let items): nextUpItems = items
                 case .playlists(let items): playlists = items
+                case .upcoming(let items): upcomingItems = items
+                case .collections(let items): collections = items
                 case nil: break
                 }
             }

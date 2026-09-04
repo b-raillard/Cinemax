@@ -19,6 +19,7 @@ enum SettingsKey {
     static let motionEffects = "motionEffects"
     static let render4K = "render4K"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
+    static let subtitleTextSize = "playback.subtitleTextSize"
     static let sleepTimerDefaultMinutes = "sleepTimerDefaultMinutes"
     /// When `true`, online playback uses the native `AVPlayer` engine (AVKit
     /// chrome) instead of the default VLC engine. VLC DirectPlays MKV/HEVC/DV
@@ -44,6 +45,8 @@ enum SettingsKey {
     static let homeShowRecentlyAdded = "home.showRecentlyAdded"
     static let homeShowFavorites = "home.showFavorites"
     static let homeShowPlaylists = "home.showPlaylists"
+    static let homeShowUpcoming = "home.showUpcoming"
+    static let homeShowCollections = "home.showCollections"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
     /// JSON `[String]` — the genres the user picked to surface as Home rows.
@@ -126,6 +129,9 @@ enum SettingsKey {
         static let motionEffects = true
         static let render4K = true
         static let autoPlayNextEpisode = true
+        /// 100 % — the engine's own default, so an untouched install renders
+        /// subtitles exactly as it did before this setting existed.
+        static let subtitleTextSize = 100
         static let sleepTimerDefaultMinutes = 0
         static let forceNativeAVPlayer = false
         static let playbackLiveActivity = true
@@ -136,6 +142,11 @@ enum SettingsKey {
         static let homeShowRecentlyAdded = true
         static let homeShowFavorites = true
         static let homeShowPlaylists = true
+        /// Both default OFF, unlike every other rail: a server with no upcoming
+        /// schedule and no collections would otherwise show two headers over
+        /// nothing on first launch, and Home is already seven rows deep.
+        static let homeShowUpcoming = false
+        static let homeShowCollections = false
         static let homeShowGenreRows = true
         static let homeShowWatchingNow = true
 

@@ -21,6 +21,11 @@ struct PersonDetailScreen: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var hasLoaded = false
+    #if os(tvOS)
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+    @FocusState private var portraitFocused: Bool
+    #endif
 
     #if os(tvOS)
     private let portraitSize: CGFloat = 280
@@ -78,8 +83,9 @@ struct PersonDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await load(force: false) }
-        // Always a pushed screen — and the one that surfaced the bug: its
-        // header is not focusable, so an Up press escapes into the tab bar.
+        // Always a pushed screen. Its header is focusable now (see `header`),
+        // which is what stops an Up press escaping into the tab bar — the case
+        // that surfaced the Menu-button bug this modifier answers.
         .tvPushedScreen()
     }
 
@@ -95,6 +101,25 @@ struct PersonDetailScreen: View {
             )
             .frame(width: portraitSize, height: portraitSize)
             .clipShape(Circle())
+            #if os(tvOS)
+            // Focusable so the page has a top row at all. Without one, an Up
+            // press from the filmography rails had nowhere to go and escaped
+            // into the tab bar — from where tvOS's default Menu behaviour is to
+            // QUIT the app, which is the reported bug `TVBackPolicy` exists to
+            // contain. A circular ring, since the rectangular `cinemaFocus()`
+            // is the wrong shape for a portrait — same reason `CastCircle`
+            // draws its own.
+            .overlay(
+                Circle().strokeBorder(
+                    themeManager.accent.opacity(portraitFocused ? CinemaTVFocus.strokeOpacity : 0),
+                    lineWidth: CinemaTVFocus.cardRingWidth
+                )
+            )
+            .focusable()
+            .focused($portraitFocused)
+            .focusEffectDisabled()
+            .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: portraitFocused)
+            #endif
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 Text(personName)
