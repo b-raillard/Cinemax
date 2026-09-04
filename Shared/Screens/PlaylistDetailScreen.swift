@@ -113,6 +113,15 @@ struct PlaylistDetailScreen: View {
                     PlaylistRow(item: item, imageBuilder: appState.imageBuilder)
                 }
                 .listRowBackground(CinemaColor.surfaceContainerLow)
+                .swipeActions(edge: .trailing) {
+                    if let index = viewModel.items.firstIndex(where: { $0.playlistItemID == item.playlistItemID }) {
+                        Button(role: .destructive) {
+                            Task { await remove(at: index) }
+                        } label: {
+                            Label(loc.localized("playlist.removeItem"), systemImage: "minus.circle")
+                        }
+                    }
+                }
             }
             .onMove { offsets, destination in
                 guard let source = offsets.first else { return }
@@ -161,6 +170,11 @@ struct PlaylistDetailScreen: View {
                                 Label(loc.localized("playlist.moveUp"), systemImage: "arrow.up")
                             }
                         }
+                        Button(role: .destructive) {
+                            Task { await remove(at: index) }
+                        } label: {
+                            Label(loc.localized("playlist.removeItem"), systemImage: "minus.circle")
+                        }
                         if index < viewModel.items.count - 1 {
                             Button {
                                 // `+2` because SwiftUI's move destination is an
@@ -180,6 +194,15 @@ struct PlaylistDetailScreen: View {
         .scrollClipDisabled()
     }
     #endif
+
+    private func remove(at index: Int) async {
+        guard let failure = await viewModel.remove(at: index, playlistId: playlistId, using: appState) else {
+            NotificationCenter.default.post(name: .cinemaxPlaylistsChanged, object: nil)
+            toast.success(loc.localized("playlist.removeItem.done"))
+            return
+        }
+        toast.error(loc.userFacingMessage(for: failure))
+    }
 
     private func move(from source: Int, to destination: Int) async {
         let target = PlaylistReorder.destinationIndex(from: source, to: destination)
@@ -273,6 +296,34 @@ final class PlaylistDetailViewModel {
         } catch {
             logger.error("Playlist load failed: \(error.localizedDescription, privacy: .public)")
             state = .failed
+        }
+    }
+
+    /// Removes an entry and tells the server. Returns the error when the server
+    /// refused, having already put the row back — the screen must not claim a
+    /// removal the playlist did not record.
+    ///
+    /// Addressed by ENTRY id, never item id: the same film can sit in a
+    /// playlist twice and only `getPlaylistItems` populates `playlistItemID`.
+    /// An entry without one is refused rather than removing the wrong
+    /// occurrence — the same guard `move` makes.
+    func remove(at index: Int, playlistId: String, using appState: AppState) async -> (any Error)? {
+        guard items.indices.contains(index) else { return nil }
+        let snapshot = items
+        let entry = items.remove(at: index)
+        guard let entryId = entry.playlistItemID else {
+            items = snapshot
+            return JellyfinError.notConnected
+        }
+        if items.isEmpty { state = .empty }
+        do {
+            try await appState.apiClient.removeFromPlaylist(playlistId: playlistId, entryIds: [entryId])
+            return nil
+        } catch {
+            logger.error("Playlist remove failed: \(error.localizedDescription, privacy: .public)")
+            items = snapshot
+            state = .loaded
+            return error
         }
     }
 

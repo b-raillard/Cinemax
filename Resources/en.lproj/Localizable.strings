@@ -1008,3 +1008,7 @@
 /* Search result count, beside the scope chips. */
 "search.resultCount.one" = "%d result";
 "search.resultCount" = "%d results";
+
+/* Removing an entry from a playlist. */
+"playlist.removeItem" = "Remove from playlist";
+"playlist.removeItem.done" = "Removed from playlist";

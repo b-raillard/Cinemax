@@ -29,7 +29,6 @@ struct MediaLibraryScreen: View {
     #endif
     #endif
     #if os(tvOS)
-    @State private var showSortPicker = false
     #endif
     /// Browse ("By genre") vs flat grid ("Show all") landing layout. Honored on
     /// both platforms; the toggle lives in Settings → Appearance.
@@ -122,14 +121,6 @@ struct MediaLibraryScreen: View {
             makeSortFilterSheet()
                 .environment(themeManager)
                 .environment(loc)
-        }
-        .confirmationDialog(loc.localized("sort.by"), isPresented: $showSortPicker, titleVisibility: .visible) {
-            ForEach(tvSortDirectionalOptions, id: \.id) { option in
-                Button(option.label) {
-                    viewModel.sortFilter.sortBy = option.value
-                    viewModel.sortFilter.sortAscending = option.ascending
-                }
-            }
         }
         #endif
         .task {
@@ -516,13 +507,16 @@ struct MediaLibraryScreen: View {
         .focusSection()
     }
 
-    /// Opens a `confirmationDialog` listing every sort field doubled by direction
-    /// (e.g. "Date Added ↓", "Date Added ↑"). Direction-as-separate-items keeps
-    /// the action one focused click away — re-tap-to-reverse never worked well
-    /// with remote navigation.
+    /// Shows the current sort and opens the sort-and-filter sheet.
+    ///
+    /// It used to raise a `confirmationDialog` of its own, so sorting and
+    /// filtering — one job — had two different idioms, and the sheet titled
+    /// "Trier et filtrer" could not in fact sort. The button survives because
+    /// it is the only place the CURRENT sort is legible without opening
+    /// anything; only its destination changed.
     private var tvSortButton: some View {
         Button {
-            showSortPicker = true
+            showSortFilter = true
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.up.arrow.down")
@@ -572,30 +566,6 @@ struct MediaLibraryScreen: View {
         .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
         .focusEffectDisabled()
         .hoverEffectDisabled()
-    }
-
-    /// Sort options × direction. Each label encodes both, so the dialog is
-    /// flat and one focused click commits both sortBy and sortAscending.
-    private var tvSortDirectionalOptions: [(id: String, label: String, value: ItemSortBy, ascending: Bool)] {
-        let fields: [(label: String, value: ItemSortBy, ascendingFirst: Bool)] = [
-            (loc.localized("sort.dateAdded"), .dateCreated, false),       // newest first feels natural
-            (loc.localized("sort.name"), .sortName, true),                // A→Z first
-            (loc.localized("sort.releaseYear"), .productionYear, false),  // newest first
-            (loc.localized("sort.rating"), .communityRating, false)       // highest first
-        ]
-        var out: [(String, String, ItemSortBy, Bool)] = []
-        for f in fields {
-            let descLabel = "\(f.label) ↓"
-            let ascLabel = "\(f.label) ↑"
-            if f.ascendingFirst {
-                out.append((f.value.rawValue + ".asc", ascLabel, f.value, true))
-                out.append((f.value.rawValue + ".desc", descLabel, f.value, false))
-            } else {
-                out.append((f.value.rawValue + ".desc", descLabel, f.value, false))
-                out.append((f.value.rawValue + ".asc", ascLabel, f.value, true))
-            }
-        }
-        return out
     }
 
     /// Label shown on the sort button — current field + direction arrow.

@@ -1010,3 +1010,7 @@
 /* Compteur de résultats de recherche, à côté des pastilles de portée. */
 "search.resultCount.one" = "%d résultat";
 "search.resultCount" = "%d résultats";
+
+/* Retirer une entrée d'une playlist. */
+"playlist.removeItem" = "Retirer de la playlist";
+"playlist.removeItem.done" = "Retiré de la playlist";

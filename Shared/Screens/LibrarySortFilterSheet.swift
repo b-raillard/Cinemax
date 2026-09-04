@@ -107,6 +107,8 @@ struct LibrarySortFilterSheet: View {
                 // Filter sections
                 ScrollView {
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                        sortSection
+                        sortOrderSection
                         unwatchedSection
                         decadeSection
                         if !availableGenres.isEmpty {
@@ -194,7 +196,13 @@ struct LibrarySortFilterSheet: View {
             // real background, which is why this row was the only one affected.
             .contentShape(Rectangle())
         }
+        #if os(tvOS)
+        .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
         .buttonStyle(.plain)
+        #endif
 
         if value != sortOptions.last?.value {
             Divider()
@@ -239,7 +247,13 @@ struct LibrarySortFilterSheet: View {
             )
             .clipShape(Capsule())
         }
+        #if os(tvOS)
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
         .buttonStyle(.plain)
+        #endif
     }
 
     // MARK: Watch Status
