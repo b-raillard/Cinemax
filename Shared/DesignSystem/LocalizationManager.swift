@@ -86,6 +86,13 @@ final class LocalizationManager {
         localized(count == 1 ? "detail.collection.count.one" : "detail.collection.count", count)
     }
 
+    /// "1 résultat" / "12 résultats" — the search result count. Its own helper
+    /// rather than `itemCount`: a search returns *results*, and French makes
+    /// the two different words.
+    func searchResultCount(_ count: Int) -> String {
+        localized(count == 1 ? "search.resultCount.one" : "search.resultCount", count)
+    }
+
     /// Formats a remaining duration using the `home.remainingTime.*` keys.
     /// Centralises the `>= 60` branching so call sites don't reimplement it.
     /// The underlying `.strings` keep their current masculine-plural form on

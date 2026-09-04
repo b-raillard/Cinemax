@@ -88,7 +88,9 @@ struct LibrarySortFilterSheet: View {
     #if os(tvOS)
     private var tvBody: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            // Dimmed rather than opaque, with the panel itself in glass: this
+            // is a modal over the library, and a flat page hid that entirely.
+            CinemaColor.surface.opacity(0.75).ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
                 // Title row
@@ -138,6 +140,7 @@ struct LibrarySortFilterSheet: View {
                 .padding(.vertical, CinemaSpacing.spacing5)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .glassPanel(cornerRadius: 0)
         }
     }
     #endif

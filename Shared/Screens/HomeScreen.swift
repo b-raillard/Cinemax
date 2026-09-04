@@ -607,6 +607,9 @@ struct HomeScreen: View {
                         fallbackIcon: nil,
                         fallbackBackground: CinemaColor.surfaceContainerLow
                     )
+                    #if os(tvOS)
+                    .heroKenBurns()
+                    #endif
                     .accessibilityHidden(true)
                 } else {
                     BackdropFallbackView()

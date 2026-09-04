@@ -501,6 +501,13 @@ struct MediaLibraryScreen: View {
             tvSortButton
             tvFilterSheetButton
         }
+        .padding(.vertical, CinemaSpacing.spacing3)
+        .padding(.horizontal, CinemaSpacing.spacing5)
+        // A surface of its own: the bar floats directly over the hero backdrop,
+        // so its title and count read against whatever image happens to be
+        // behind them. Glass rather than an opaque fill, which would cut a
+        // hard band across the top of the hero.
+        .glassPanel(cornerRadius: CinemaRadius.large)
         .padding(.horizontal, CinemaTVLayout.pagePadding)
         // Group sort/filter as a discrete focus section so up-presses from the
         // hero's Play/More Info row reliably bridge the ~700pt of empty hero

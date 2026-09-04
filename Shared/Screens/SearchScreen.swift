@@ -11,9 +11,11 @@ struct SearchScreen: View {
     @Environment(ToastCenter.self) private var toasts
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+    // Both platforms now: tvOS drives the search field's own focus stroke from
+    // this binding, and animates it against the motion-effects setting.
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @FocusState private var searchFieldFocused: Bool
-    #endif
     @State private var viewModel = SearchViewModel()
     @AppStorage(SettingsKey.searchSaveHistory) private var saveSearchHistory: Bool = SettingsKey.Default.searchSaveHistory
 
@@ -187,8 +189,11 @@ struct SearchScreen: View {
             TextField(loc.localized("search.placeholder"), text: Bindable(viewModel).searchText)
                 #if os(iOS)
                 .textFieldStyle(.plain)
-                .focused($searchFieldFocused)
                 #endif
+                // Bound on BOTH platforms: on tvOS the binding is what drives
+                // the field's own focus stroke, and it was previously written
+                // only on iOS, so the indicator would have stayed dark.
+                .focused($searchFieldFocused)
                 .font(.system(size: searchFontSize))
                 .foregroundStyle(CinemaColor.onSurface)
                 .autocorrectionDisabled()
@@ -228,8 +233,26 @@ struct SearchScreen: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        #if os(tvOS)
+        // Glass rather than an opaque fill: the design system is called Cinema
+        // Glass, and on tvOS almost every `.ultraThinMaterial` was gated to
+        // iOS, so the field read as a flat grey slab.
+        .glassPanel(cornerRadius: CinemaRadius.large)
+        // A `TextField` carries no focus chrome of its own here, so the field
+        // was the one control on the page that said nothing when focus
+        // arrived. Row level, per `CinemaTVFocus`.
+        .overlay(
+            RoundedRectangle(cornerRadius: CinemaRadius.large)
+                .strokeBorder(
+                    themeManager.accent.opacity(searchFieldFocused ? CinemaTVFocus.strokeOpacity : 0),
+                    lineWidth: CinemaTVFocus.strokeWidth
+                )
+        )
+        .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: searchFieldFocused)
+        #else
         .background(CinemaColor.surfaceContainerHigh)
         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+        #endif
         .padding(.horizontal, gridPadding)
         .padding(.vertical, CinemaSpacing.spacing3)
     }
@@ -247,6 +270,15 @@ struct SearchScreen: View {
                     filterChip(scope)
                 }
                 Spacer(minLength: 0)
+                // How many matches the chips are narrowing. The screen said
+                // nothing at all until now: a grid that stops after two rows is
+                // indistinguishable from one still loading.
+                if !viewModel.results.isEmpty {
+                    Text(loc.searchResultCount(viewModel.results.count))
+                        .font(CinemaFont.label(.medium))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .accessibilityLabel(loc.searchResultCount(viewModel.results.count))
+                }
             }
             .padding(.horizontal, gridPadding)
             .padding(.bottom, CinemaSpacing.spacing3)
