@@ -219,7 +219,74 @@ struct AdminUserDetailScreen: View {
                     isOn: policyBinding(\.enableAllDevices)
                 )
             }
+
+            // Watch Together is granted per user, by an admin, through the
+            // server's OWN permission — so the choice made here holds for every
+            // Jellyfin client this account uses, not just Cinemax. Mirrors the
+            // parental-rating row rather than inventing a control shape.
+            AdminSectionGroup(
+                loc.localized("admin.user.access.syncPlay.title"),
+                footer: loc.localized("admin.user.access.syncPlay.footer")
+            ) {
+                iOSSettingsRow {
+                    HStack {
+                        iOSRowIcon(systemName: "person.2.wave.2", color: themeManager.accent)
+                        Text(loc.localized("admin.user.access.syncPlay.label"))
+                            .font(CinemaFont.dynamicLabel(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Spacer()
+                        Menu {
+                            ForEach(syncPlayAccessOptions, id: \.value) { option in
+                                Button {
+                                    setPolicy { $0.syncPlayAccess = option.value }
+                                } label: {
+                                    if currentSyncPlayAccess == option.value {
+                                        Label(option.label, systemImage: "checkmark")
+                                    } else {
+                                        Text(option.label)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(currentSyncPlayAccessLabel)
+                                    .font(CinemaFont.dynamicLabel(.large))
+                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: CinemaScale.pt(11), weight: .semibold))
+                                    .foregroundStyle(CinemaColor.outlineVariant)
+                            }
+                        }
+                        .tint(themeManager.accent)
+                    }
+                }
+            }
         }
+    }
+
+    private struct SyncPlayAccessOption {
+        let value: SyncPlayUserAccessType
+        let label: String
+    }
+
+    private var syncPlayAccessOptions: [SyncPlayAccessOption] {
+        [
+            .init(value: .none, label: loc.localized("admin.user.access.syncPlay.none")),
+            .init(value: .joinGroups, label: loc.localized("admin.user.access.syncPlay.join")),
+            .init(value: .createAndJoinGroups, label: loc.localized("admin.user.access.syncPlay.createAndJoin"))
+        ]
+    }
+
+    /// An absent policy value is shown as `.none` — and read that way too, since
+    /// `LiveSessionsRow.canJoin(nil)` is false. The picker must not claim a
+    /// permission the app itself refuses to assume.
+    private var currentSyncPlayAccess: SyncPlayUserAccessType {
+        viewModel.editedUser.policy?.syncPlayAccess ?? .none
+    }
+
+    private var currentSyncPlayAccessLabel: String {
+        syncPlayAccessOptions.first { $0.value == currentSyncPlayAccess }?.label
+            ?? loc.localized("admin.user.access.syncPlay.none")
     }
 
     @ViewBuilder

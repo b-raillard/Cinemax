@@ -515,6 +515,12 @@
 "admin.user.access.libraries.empty" = "Aucune médiathèque trouvée sur le serveur.";
 "admin.user.access.devices" = "Accès des appareils";
 "admin.user.access.enableAllDevices" = "Autoriser l'accès depuis tous les appareils";
+"admin.user.access.syncPlay.title" = "Regarder ensemble";
+"admin.user.access.syncPlay.label" = "Autorisation";
+"admin.user.access.syncPlay.footer" = "Permission du serveur, valable pour tous les clients Jellyfin de ce compte. Sans autorisation, la rangée « En direct » disparaît aussi pour cet utilisateur, qui ne voit alors plus aucune séance.";
+"admin.user.access.syncPlay.none" = "Aucune";
+"admin.user.access.syncPlay.join" = "Rejoindre uniquement";
+"admin.user.access.syncPlay.createAndJoin" = "Créer et rejoindre";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";

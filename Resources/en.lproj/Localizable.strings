@@ -324,6 +324,12 @@
 "admin.user.access.libraries.empty" = "No libraries found on the server.";
 "admin.user.access.devices" = "Device access";
 "admin.user.access.enableAllDevices" = "Allow access from all devices";
+"admin.user.access.syncPlay.title" = "Watch Together";
+"admin.user.access.syncPlay.label" = "Permission";
+"admin.user.access.syncPlay.footer" = "A server permission, applying to every Jellyfin client this account uses. With no permission the \"Live\" row disappears for this user too, so they see no sessions at all.";
+"admin.user.access.syncPlay.none" = "None";
+"admin.user.access.syncPlay.join" = "Join only";
+"admin.user.access.syncPlay.createAndJoin" = "Create and join";
 
 "admin.user.parental.rating.title" = "Max content rating";
 "admin.user.parental.rating.footer" = "Hides content rated above the chosen age for this user. Unrated titles stay visible.";
