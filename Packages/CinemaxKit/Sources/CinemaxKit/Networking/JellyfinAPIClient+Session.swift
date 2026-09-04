@@ -1,5 +1,8 @@
 import Foundation
 import JellyfinAPI
+// For the status match in `changeOwnPassword` — `Get` is a direct dependency
+// of CinemaxKit, and mapping here is what keeps it out of the app layer.
+import Get
 
 /// Outcome of an authoritative session re-check (`ServerAPI.validateSession`).
 ///
@@ -52,6 +55,16 @@ public extension JellyfinAPIClient {
             // CURRENT PASSWORD was wrong, not that the session expired. Routing
             // it to the session-expiry coordinator would log the user out for
             // mistyping their own password.
+            //
+            // Mapped HERE rather than at the call site, so the app layer never
+            // has to reach past CinemaxKit into the SDK's transitive `Get` to
+            // read a status code — which is exactly what the API-slice design
+            // exists to prevent.
+            if let apiError = error as? Get.APIError,
+               case .unacceptableStatusCode(let code) = apiError,
+               code == 401 || code == 403 {
+                throw JellyfinError.invalidCredentials
+            }
             throw error
         }
     }
@@ -90,9 +103,16 @@ public extension JellyfinAPIClient {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let user = try await client.send(Paths.getUserByID(userID: userId)).value
             let config = user.configuration
+            // The server spells "no preference" as an empty string; this model
+            // spells it `nil`. Normalise on the way in, or an untouched
+            // round-trip compares as changed.
+            func normalized(_ value: String?) -> String? {
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
             return UserPlaybackPreferences(
-                audioLanguage: config?.audioLanguagePreference,
-                subtitleLanguage: config?.subtitleLanguagePreference,
+                audioLanguage: normalized(config?.audioLanguagePreference),
+                subtitleLanguage: normalized(config?.subtitleLanguagePreference),
                 subtitleMode: config?.subtitleMode
                     .flatMap { UserPlaybackPreferences.SubtitleMode(rawValue: $0.rawValue) } ?? .defaultTrack
             )

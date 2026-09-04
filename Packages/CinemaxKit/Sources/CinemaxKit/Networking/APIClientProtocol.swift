@@ -658,7 +658,13 @@ public extension AuthAPI {
 
     // Empty defaults so hand-written test mocks need not stub what they don't
     // exercise — the `SyncPlayAPI` pattern.
-    func changeOwnPassword(userId: String, currentPassword: String, newPassword: String) async throws {}
+    /// Throws rather than succeeding: `AuthAPI` is core, not an optional
+    /// feature slice, and a conformer that forgets this would otherwise have
+    /// the UI report "password changed" while nothing happened. The other
+    /// defaults here answer with empty data, which reads as "nothing to show".
+    func changeOwnPassword(userId: String, currentPassword: String, newPassword: String) async throws {
+        throw JellyfinError.notConnected
+    }
     func getCultures() async throws -> [ServerCulture] { [] }
     func getUserConfiguration(userId: String) async throws -> UserPlaybackPreferences { .init() }
     func updateUserConfiguration(userId: String, preferences: UserPlaybackPreferences) async throws {}

@@ -1054,3 +1054,4 @@
 "profile.subtitleMode.Always" = "Toujours";
 "profile.subtitleMode.None" = "Jamais";
 "profile.preferences.saved" = "Préférences enregistrées";
+"profile.preferences.unavailable" = "Préférences illisibles pour l'instant. Rouvrez cet écran pour réessayer.";

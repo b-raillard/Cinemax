@@ -114,9 +114,9 @@ struct PlaylistDetailScreen: View {
                 }
                 .listRowBackground(CinemaColor.surfaceContainerLow)
                 .swipeActions(edge: .trailing) {
-                    if let index = viewModel.items.firstIndex(where: { $0.playlistItemID == item.playlistItemID }) {
+                    if let entryId = item.playlistItemID {
                         Button(role: .destructive) {
-                            Task { await remove(at: index) }
+                            Task { await remove(entryId: entryId) }
                         } label: {
                             Label(loc.localized("playlist.removeItem"), systemImage: "minus.circle")
                         }
@@ -170,10 +170,12 @@ struct PlaylistDetailScreen: View {
                                 Label(loc.localized("playlist.moveUp"), systemImage: "arrow.up")
                             }
                         }
-                        Button(role: .destructive) {
-                            Task { await remove(at: index) }
-                        } label: {
-                            Label(loc.localized("playlist.removeItem"), systemImage: "minus.circle")
+                        if let entryId = item.playlistItemID {
+                            Button(role: .destructive) {
+                                Task { await remove(entryId: entryId) }
+                            } label: {
+                                Label(loc.localized("playlist.removeItem"), systemImage: "minus.circle")
+                            }
                         }
                         if index < viewModel.items.count - 1 {
                             Button {
@@ -195,13 +197,19 @@ struct PlaylistDetailScreen: View {
     }
     #endif
 
-    private func remove(at index: Int) async {
-        guard let failure = await viewModel.remove(at: index, playlistId: playlistId, using: appState) else {
+    private func remove(entryId: String) async {
+        switch await viewModel.remove(entryId: entryId, playlistId: playlistId, using: appState) {
+        case .removed:
             NotificationCenter.default.post(name: .cinemaxPlaylistsChanged, object: nil)
             toast.success(loc.localized("playlist.removeItem.done"))
-            return
+        case .notFound:
+            // The list moved under an open menu. Nothing was sent, so nothing
+            // is announced — a toast here would report a removal that never
+            // happened.
+            break
+        case .failed(let error):
+            toast.error(loc.userFacingMessage(for: error))
         }
-        toast.error(loc.userFacingMessage(for: failure))
     }
 
     private func move(from source: Int, to destination: Int) async {
@@ -307,23 +315,40 @@ final class PlaylistDetailViewModel {
     /// playlist twice and only `getPlaylistItems` populates `playlistItemID`.
     /// An entry without one is refused rather than removing the wrong
     /// occurrence — the same guard `move` makes.
-    func remove(at index: Int, playlistId: String, using appState: AppState) async -> (any Error)? {
-        guard items.indices.contains(index) else { return nil }
-        let snapshot = items
-        let entry = items.remove(at: index)
-        guard let entryId = entry.playlistItemID else {
-            items = snapshot
-            return JellyfinError.notConnected
+    /// What a removal actually did. `nil` used to mean both "removed" and
+    /// "found nothing", so a stale index still toasted a removal and posted a
+    /// change notification.
+    enum RemoveOutcome {
+        case removed
+        /// No entry with that id — the list moved under a menu that was already
+        /// open. Nothing was sent and nothing is claimed.
+        case notFound
+        case failed(any Error)
+    }
+
+    /// Removes an entry and tells the server. On refusal the row is already
+    /// back — the screen must not claim a removal the playlist did not record.
+    ///
+    /// Takes the ENTRY id, not an index: the same film can sit in a playlist
+    /// twice, only `getPlaylistItems` populates `playlistItemID`, and a menu
+    /// closure built before a reload would carry an index that now points at a
+    /// different row. Resolving the position here makes the guarantee
+    /// unconditional rather than dependent on the list not having moved.
+    func remove(entryId: String, playlistId: String, using appState: AppState) async -> RemoveOutcome {
+        guard let index = items.firstIndex(where: { $0.playlistItemID == entryId }) else {
+            return .notFound
         }
+        let snapshot = items
+        items.remove(at: index)
         if items.isEmpty { state = .empty }
         do {
             try await appState.apiClient.removeFromPlaylist(playlistId: playlistId, entryIds: [entryId])
-            return nil
+            return .removed
         } catch {
             logger.error("Playlist remove failed: \(error.localizedDescription, privacy: .public)")
             items = snapshot
             state = .loaded
-            return error
+            return .failed(error)
         }
     }
 
@@ -343,7 +368,10 @@ final class PlaylistDetailViewModel {
             // which is the only thing that populates it — refuse rather than
             // address the wrong occurrence.
             items = snapshot
-            return JellyfinError.notConnected
+            // NOT `.notConnected`, which `userFacingMessage` renders as a
+            // network problem: the server is fine, this entry simply has no id
+            // to address it by.
+            return JellyfinError.malformedRecord
         }
         do {
             try await appState.apiClient.movePlaylistItem(

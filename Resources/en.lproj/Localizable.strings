@@ -1052,3 +1052,4 @@
 "profile.subtitleMode.Always" = "Always";
 "profile.subtitleMode.None" = "Never";
 "profile.preferences.saved" = "Preferences saved";
+"profile.preferences.unavailable" = "Preferences could not be read. Reopen this screen to retry.";

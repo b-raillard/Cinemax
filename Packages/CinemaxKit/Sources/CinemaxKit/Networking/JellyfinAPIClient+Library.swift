@@ -451,7 +451,11 @@ extension JellyfinAPIClient {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let response = try await client.send(Paths.getLocalTrailers(itemID: itemId, userID: userId))
-            return response.value
+            // Filtered like every other item-returning method here. A trailer is
+            // a child of an already-visible item and carries no rating of its
+            // own, so this admits them all today — the point is that the
+            // discipline is uniform, not that this call needs it.
+            return applyRatingFilter(response.value)
         } catch {
             notifyIfUnauthorized(error)
             throw error

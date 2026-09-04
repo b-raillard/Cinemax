@@ -1,9 +1,6 @@
 import SwiftUI
 import OSLog
 import CinemaxKit
-// For the 401/403 status match in `changePassword` — `Get` is already a direct
-// dependency of the app target.
-import Get
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Profile")
 
@@ -173,6 +170,13 @@ struct ProfileScreen: View {
             Text(loc.localized("profile.preferences.hint"))
                 .font(CinemaFont.label(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
+            if !model.preferencesLoaded {
+                // The read failed. Saying so beats offering pickers that would
+                // write this type's defaults over the account's real settings.
+                Text(loc.localized("profile.preferences.unavailable"))
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.error)
+            }
 
             languageRow(
                 label: loc.localized("profile.audioLanguage"),
@@ -192,16 +196,24 @@ struct ProfileScreen: View {
 
             subtitleModeRow
         }
+        .disabled(!model.preferencesLoaded)
+        .opacity(model.preferencesLoaded ? 1 : 0.6)
     }
 
     private func save(_ mutate: (inout UserPlaybackPreferences) -> Void) async {
         var next = model.preferences
         mutate(&next)
-        guard let failure = await model.savePreferences(next, using: appState) else {
+        switch await model.savePreferences(next, using: appState) {
+        case .saved:
             toast.success(loc.localized("profile.preferences.saved"))
-            return
+        case .skipped:
+            // Nothing was written, so nothing is claimed. Reached when the
+            // preferences never loaded — the pickers are disabled in that state,
+            // so this is a belt-and-braces branch, not a user-visible path.
+            break
+        case .failed(let error):
+            toast.error(loc.userFacingMessage(for: error))
         }
-        toast.error(loc.userFacingMessage(for: failure))
     }
 
     private func languageName(_ code: String?) -> String {
@@ -410,6 +422,20 @@ final class ProfileModel {
     private(set) var cultures: [ServerCulture] = []
     private(set) var preferences = UserPlaybackPreferences()
     private(set) var isChangingPassword = false
+    /// Whether `preferences` came from the server rather than from this type's
+    /// own default.
+    ///
+    /// Load-bearing, not bookkeeping: `savePreferences` posts the WHOLE slice,
+    /// so saving from an unloaded default would clear this account's audio
+    /// language, subtitle language and subtitle mode — on every Jellyfin client
+    /// it has — because one read failed on the way in.
+    private(set) var preferencesLoaded = false
+    /// Serialises saves. Each picker fires its own task, and every save is a
+    /// server-side read-modify-write: two overlapping ones let the second read
+    /// the configuration before the first has written it, so the first field
+    /// silently loses. Same chained-task shape as
+    /// `PlaybackLiveActivityController.enqueue`.
+    private var saveChain: Task<Void, Never>?
 
     enum PasswordOutcome {
         case success
@@ -421,14 +447,20 @@ final class ProfileModel {
     }
 
     /// Both halves fail independently: no culture list still leaves the
-    /// password form usable, and a failed preference read still lets the
-    /// pickers show "no preference".
+    /// password form usable, and the pickers still render.
+    ///
+    /// A failed preference read leaves `preferencesLoaded` false, which DISABLES
+    /// saving rather than letting the user write this type's defaults over their
+    /// account — see that property.
     func load(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         async let culturesTask = try? appState.apiClient.getCultures()
         async let prefsTask = try? appState.apiClient.getUserConfiguration(userId: userId)
         cultures = await culturesTask ?? []
-        preferences = await prefsTask ?? UserPlaybackPreferences()
+        if let loaded = await prefsTask {
+            preferences = loaded
+            preferencesLoaded = true
+        }
     }
 
     func changePassword(current: String, new: String, using appState: AppState) async -> PasswordOutcome {
@@ -445,33 +477,49 @@ final class ProfileModel {
             // password, and a server that echoes its request would put it in
             // the system log.
             logger.error("Password change failed")
-            // A 401 on THIS call means the current password was wrong, not
-            // that the session expired — the client deliberately does not route
-            // it to the expiry coordinator. Matched on the status rather than
-            // through the internal `isUnauthorized` SSOT, which CinemaxKit does
-            // not export.
-            if let apiError = error as? Get.APIError,
-               case .unacceptableStatusCode(let code) = apiError,
-               code == 401 || code == 403 {
-                return .refused
-            }
+            // The client maps the server's refusal to its own case, so this
+            // layer never has to read a status code.
+            if case JellyfinError.invalidCredentials = error { return .refused }
             return .failed(error)
         }
     }
 
+    /// What a save actually did. `nil` used to mean both "saved" and "did
+    /// nothing", so a save that never ran still toasted success.
+    enum SaveOutcome {
+        case saved
+        /// Refused before reaching the server — no signed-in user, or the
+        /// preferences were never read, so writing would clear them.
+        case skipped
+        case failed(any Error)
+    }
+
     /// Optimistic, with rollback: the pickers must not keep showing a language
     /// the server did not record.
-    func savePreferences(_ next: UserPlaybackPreferences, using appState: AppState) async -> (any Error)? {
-        guard let userId = appState.currentUserId else { return nil }
-        let snapshot = preferences
-        preferences = next
-        do {
-            try await appState.apiClient.updateUserConfiguration(userId: userId, preferences: next)
-            return nil
-        } catch {
-            logger.error("Preference save failed: \(error.localizedDescription, privacy: .public)")
-            preferences = snapshot
-            return error
+    ///
+    /// Serialised through `saveChain`, and the rollback target is read INSIDE
+    /// the chained work rather than captured at call time — a snapshot taken
+    /// before an earlier save landed would, on a later failure, restore a state
+    /// that predates both and discard a change the server had accepted.
+    func savePreferences(_ next: UserPlaybackPreferences, using appState: AppState) async -> SaveOutcome {
+        guard let userId = appState.currentUserId, preferencesLoaded else { return .skipped }
+        let previous = saveChain
+        let work = Task { @MainActor [weak self] () -> SaveOutcome in
+            await previous?.value
+            guard let self else { return .skipped }
+            let snapshot = self.preferences
+            self.preferences = next
+            do {
+                try await appState.apiClient.updateUserConfiguration(userId: userId, preferences: next)
+                return .saved
+            } catch {
+                logger.error("Preference save failed: \(error.localizedDescription, privacy: .public)")
+                self.preferences = snapshot
+                return .failed(error)
+            }
         }
+        // The chain waits on completion, not on the outcome.
+        saveChain = Task { _ = await work.value }
+        return await work.value
     }
 }

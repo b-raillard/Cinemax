@@ -179,7 +179,13 @@ final class MediaDetailViewModel {
         // being slow or unreachable costs the render nothing. Every item kind is
         // sendable, so there's no type guard here.
         Task { await loadRemoteTargets(using: appState, cardActions: cardActions) }
+        // tvOS only: `localTrailers` has exactly one consumer, the tvOS action
+        // row's trailer button. iOS opens a `remoteTrailers` link instead, so
+        // dispatching here would issue a request per detail-screen open whose
+        // result nothing reads.
+        #if os(tvOS)
         Task { await loadLocalTrailers(using: appState) }
+        #endif
 
         hasLoaded = errorMessage == nil
         isLoading = false
@@ -438,15 +444,6 @@ final class MediaDetailViewModel {
         collectionItems = others
     }
 
-    /// Discovers the sessions the "Play on…" affordance can target.
-    ///
-    /// **Deliberately silent on failure**: having no target is the ordinary case,
-    /// so a failed probe must degrade to "no button" — never to an error state
-    /// over an otherwise-fine detail screen. Logged at debug level only.
-    ///
-    /// Internal rather than private: the picker sheet re-runs the same probe
-    /// when it opens (its snapshot has to be fresh at the moment a command is
-    /// sent), and the tests exercise this path directly.
     /// Side task, same discipline as `loadRemoteTargets`: having no trailer is
     /// the ordinary outcome, so a failed probe degrades to "no button" and
     /// never to an error over an otherwise-fine screen.
@@ -459,6 +456,15 @@ final class MediaDetailViewModel {
         localTrailers = trailers
     }
 
+    /// Discovers the sessions the "Play on…" affordance can target.
+    ///
+    /// **Deliberately silent on failure**: having no target is the ordinary case,
+    /// so a failed probe must degrade to "no button" — never to an error state
+    /// over an otherwise-fine detail screen. Logged at debug level only.
+    ///
+    /// Internal rather than private: the picker sheet re-runs the same probe
+    /// when it opens (its snapshot has to be fresh at the moment a command is
+    /// sent), and the tests exercise this path directly.
     func loadRemoteTargets(using appState: AppState, cardActions: CardActionPresenter? = nil) async {
         guard let userId = appState.currentUserId else { return }
         let generation = loadGeneration

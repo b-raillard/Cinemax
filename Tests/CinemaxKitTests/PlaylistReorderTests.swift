@@ -115,9 +115,9 @@ struct PlaylistMoveTests {
         let vm = PlaylistDetailViewModel()
         await vm.load(playlistId: "p1", using: appState)
 
-        let failure = await vm.remove(at: 2, playlistId: "p1", using: appState)
+        let outcome = await vm.remove(entryId: "e3", playlistId: "p1", using: appState)
 
-        #expect(failure == nil)
+        if case .removed = outcome {} else { Issue.record("suppression attendue") }
         #expect(api.removeCalls == [["e3"]])
         #expect(vm.items.map(\.playlistItemID) == ["e1", "e2"])
     }
@@ -133,9 +133,9 @@ struct PlaylistMoveTests {
         let vm = PlaylistDetailViewModel()
         await vm.load(playlistId: "p1", using: appState)
 
-        let failure = await vm.remove(at: 0, playlistId: "p1", using: appState)
+        let outcome = await vm.remove(entryId: "e1", playlistId: "p1", using: appState)
 
-        #expect(failure != nil)
+        if case .failed = outcome {} else { Issue.record("échec attendu") }
         #expect(vm.items.map(\.playlistItemID) == ["e1", "e2", "e3"])
     }
 
@@ -149,10 +149,27 @@ struct PlaylistMoveTests {
         let vm = PlaylistDetailViewModel()
         await vm.load(playlistId: "p1", using: appState)
 
-        _ = await vm.remove(at: 0, playlistId: "p1", using: appState)
+        _ = await vm.remove(entryId: "e1", playlistId: "p1", using: appState)
 
         #expect(vm.items.isEmpty)
         if case .empty = vm.state {} else { Issue.record("état attendu : vide") }
+    }
+
+    /// La liste peut avoir bougé sous un menu déjà ouvert. Rien n'est envoyé,
+    /// et surtout rien n'est annoncé : un toast dirait une suppression qui n'a
+    /// pas eu lieu.
+    @Test("Un identifiant d'entrée inconnu ne déclenche aucun appel et ne dit rien")
+    func removingAnUnknownEntryIsSilent() async {
+        let api = makeAPI()
+        let appState = makeAppState(api: api)
+        let vm = PlaylistDetailViewModel()
+        await vm.load(playlistId: "p1", using: appState)
+
+        let outcome = await vm.remove(entryId: "disparue", playlistId: "p1", using: appState)
+
+        if case .notFound = outcome {} else { Issue.record("« introuvable » attendu") }
+        #expect(api.removeCalls.isEmpty)
+        #expect(vm.items.map(\.playlistItemID) == ["e1", "e2", "e3"])
     }
 
     @Test("Un index hors bornes ne déclenche aucun appel")
