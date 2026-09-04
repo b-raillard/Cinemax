@@ -203,6 +203,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var contextArtworkWidth: NSLayoutConstraint?
     /// Gap between the poster and the title — folds to 0 with the poster.
     private var contextArtworkGap: NSLayoutConstraint?
+    /// Gap between the context line and the title — folds to 0 when there is
+    /// no context line, since an empty label still occupies its line height.
+    private var contextLabelGap: NSLayoutConstraint?
     private var contextArtworkTask: Task<Void, Never>?
     #endif
     private let timeLabel = UILabel()
@@ -1333,10 +1336,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // exactly where it always did.
         let titleLead2 = titleLabel.leadingAnchor.constraint(equalTo: contextArtwork.trailingAnchor, constant: 0)
         contextArtworkGap = titleLead2
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: contextLabel.bottomAnchor, constant: 4),
-            titleLead2
-        ])
+        // An empty `UILabel` does NOT collapse — it still reports its font's
+        // line height — so a movie, which has no series line, would push its
+        // title down ~28 pt for a blank row. The gap is driven to 0 with the
+        // label's own `isHidden` in `applyHUDContext`.
+        let contextGap = titleLabel.topAnchor.constraint(equalTo: contextLabel.bottomAnchor, constant: 0)
+        contextLabelGap = contextGap
+        NSLayoutConstraint.activate([contextGap, titleLead2])
         #else
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: titleTop),
@@ -1766,6 +1772,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             handleMenu()
             return
         }
+        // The end-of-series card owns the screen, and this guard must precede
+        // the play/pause branch below: that branch calls `revealControls()`,
+        // which raises the HUD to full alpha BEHIND the 0.75 scrim while
+        // `preferredFocusEnvironments` still answers with the card's Done
+        // button — a transport visible, dimmed and unreachable. It also made
+        // the NEXT Menu press see `alpha > 0` and merely hide the HUD, so
+        // leaving took two presses. Without the guard a left/right press would
+        // additionally seek an episode that has already ended.
+        if endOfSeriesCard != nil {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         for press in presses {
             if press.type == .playPause {
                 playPauseTapped()
@@ -1777,13 +1795,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // focus engine — let presses flow to its buttons instead of treating
         // them as "reveal the HUD".
         if infoPanelVisible {
-            super.pressesBegan(presses, with: event)
-            return
-        }
-        // Same for the end-of-series card, which hides the HUD on the way in:
-        // without this a left/right press would seek a finished episode and a
-        // select would wake a transport nobody can see behind the scrim.
-        if endOfSeriesCard != nil {
             super.pressesBegan(presses, with: event)
             return
         }
@@ -2062,7 +2073,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     @objc private func handleInfoPanelSwipe() {
         // HUD up → the focus engine owns down-swipes; a picker up → ignore.
+        // The end-of-series card needs its own clause rather than riding the
+        // alpha test: it HIDES the HUD on the way in, so `alpha == 0` holds and
+        // a swipe would open the panel on top of the card.
         guard !infoPanelVisible, controlsContainer.alpha == 0, !pickerPresented else { return }
+        #if os(tvOS)
+        guard endOfSeriesCard == nil else { return }
+        #endif
         setInfoPanelVisible(true)
     }
 
@@ -2118,6 +2135,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         contextArtworkWidth?.constant = 0
         contextArtworkGap?.constant = 0
         contextLabel.text = nil
+        contextLabel.isHidden = true
+        contextLabelGap?.constant = 0
         #endif
         chapterScroll.isHidden = true
         chapterHeightConstraint?.constant = 0
@@ -2204,7 +2223,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if let season = item.parentIndexNumber, let episode = item.indexNumber {
             parts.append("S\(season)E\(episode)")
         }
-        contextLabel.text = parts.joined(separator: " · ")
+        let context = parts.joined(separator: " · ")
+        contextLabel.text = context
+        contextLabel.isHidden = context.isEmpty
+        contextLabelGap?.constant = context.isEmpty ? 0 : 4
 
         // The poster of the SERIES where there is one — an episode's own
         // primary image is its still, which the chapter strip already shows and
@@ -2472,8 +2494,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return [card.playButton]
         }
         // The card outranks the transport: while it is up, the HUD is hidden
-        // and its Done button is the only thing to reach.
-        if let done = endOfSeriesDoneButton { return [done] }
+        // and its Done button is the only thing to reach. Tested on `window`
+        // rather than on the field alone, so a future path that removes the
+        // card without clearing the field cannot strand focus for good.
+        if let done = endOfSeriesDoneButton, done.window != nil { return [done] }
         return controlsContainer.alpha > 0 ? [tvScrub] : []
     }
     #endif
@@ -3541,6 +3565,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 let item = try? await self.apiClient.getItem(userId: self.userId, itemId: self.itemId)
                 seriesName = item?.seriesName ?? item?.name ?? self.titleText
             }
+            // A Menu press during that await dismisses the player; the
+            // continuation would then add a scrim and write focus state into a
+            // controller already tearing down.
+            guard !self.isTearingDown else { return }
             #if os(tvOS)
             // A card rather than a `UIAlertController`. The alert was inherited
             // from `EndOfSeriesOverlayController`, whose tvOS branch uses one

@@ -50,6 +50,7 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
                     #if os(tvOS)
                     .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
                     .focusEffectDisabled()
+                    .hoverEffectDisabled()
                     #else
                     .buttonStyle(.plain)
                     #endif

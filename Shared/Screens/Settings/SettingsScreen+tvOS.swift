@@ -786,7 +786,11 @@ extension View {
                         lineWidth: CinemaTVFocus.strokeWidth
                     )
             )
-            .brightness(isFocused ? CinemaTVFocus.rowBrightness : 0)
+            // Dark only: the row level's brightness lifts a dark surface, but
+            // on the pale light-mode surface it washes toward white and LOWERS
+            // the contrast with the label. The accent stroke carries focus in
+            // both modes; this is the half that is mode-dependent.
+            .brightness(isFocused && colorScheme == .dark ? CinemaTVFocus.rowBrightness : 0)
             .animation(animated ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: isFocused)
     }
 }

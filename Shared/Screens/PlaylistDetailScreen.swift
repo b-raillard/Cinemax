@@ -151,6 +151,8 @@ struct PlaylistDetailScreen: View {
                     // card style — scaling a row this wide visibly shifts its
                     // own content sideways.
                     .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+                    .focusEffectDisabled()
+                    .hoverEffectDisabled()
                     .contextMenu {
                         if index > 0 {
                             Button {
