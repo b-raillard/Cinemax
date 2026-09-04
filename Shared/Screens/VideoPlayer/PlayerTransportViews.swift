@@ -247,3 +247,179 @@ final class PassthroughView: UIView {
         #endif
     }
 }
+
+#if os(tvOS)
+/// The player's option panel: audio tracks, subtitles, speed, audio/subtitle
+/// delay. One glass sheet with focusable rows, in place of the system
+/// `UIAlertController` action sheet those five pickers used to raise.
+///
+/// The action sheet was the wrong shape here in three ways. It renders as a
+/// system-styled slab that shares nothing with the player's own chrome — the
+/// info panel three points away is a `UIVisualEffectView`. It marks the current
+/// track by appending a literal `"  ✓"` to the label, which reads as part of
+/// the track name. And it is a separate presentation context, so it dimmed the
+/// picture behind it and took the Menu button out of the presenter's own peel
+/// order, where every other layer of this player is handled.
+///
+/// A leaf view like `TVScrubBar`: it owns its focus and its layout, and talks
+/// to the presenter through closures only.
+final class TVOptionPanel: UIView {
+    struct Option {
+        let title: String
+        let isSelected: Bool
+        let action: () -> Void
+    }
+
+    /// Fired when a row is chosen. The presenter decides whether that closes
+    /// the panel — a delay nudge keeps it open and re-renders in place.
+    ///
+    /// There is no cancel closure and no cancel row: the panel is part of the
+    /// player's own Menu peel order now, where the action sheet it replaces was
+    /// a separate presentation context that needed its own way out.
+    var onSelect: ((Int) -> Void)?
+
+    private let titleLabel = UILabel()
+    private let rowStack = UIStackView()
+    private let scroll = UIScrollView()
+
+    /// The row the focus engine should land on when the panel appears or is
+    /// re-rendered. Preserved across a re-render so a repeated delay nudge does
+    /// not throw focus back to the first row on every press.
+    private var preferredIndex: Int = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        blur.isUserInteractionEnabled = false
+        addSubview(blur)
+        layer.cornerRadius = 20
+        clipsToBounds = true
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = .systemFont(ofSize: 30, weight: .semibold)
+        titleLabel.textColor = .white
+        titleLabel.numberOfLines = 2
+        addSubview(titleLabel)
+
+        rowStack.translatesAutoresizingMaskIntoConstraints = false
+        rowStack.axis = .vertical
+        rowStack.spacing = 4
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(rowStack)
+        addSubview(scroll)
+        // Faded in by the presenter; without this the panel would snap in at
+        // full opacity while only its scrim animated.
+        alpha = 0
+
+        NSLayoutConstraint.activate([
+            blur.topAnchor.constraint(equalTo: topAnchor),
+            blur.bottomAnchor.constraint(equalTo: bottomAnchor),
+            blur.leadingAnchor.constraint(equalTo: leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: trailingAnchor),
+
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 40),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
+
+            scroll.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 24),
+            scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -40),
+
+            rowStack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            rowStack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            rowStack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            rowStack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+            rowStack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
+
+    /// Renders a fresh set of options. Safe to call on an already-visible
+    /// panel: that is how a delay nudge updates its running value in the title
+    /// without the picker blinking out and back.
+    ///
+    /// **A re-render keeps the row the user is standing on.** Deriving the
+    /// index afresh every time looks harmless but is not: a delay picker's four
+    /// nudge rows are all unselected, so "first selected, else 0" sent focus to
+    /// −250 ms after a +50 ms press — a second press would then apply the
+    /// opposite delta. Only a first render picks the selected row.
+    func render(title: String, options: [Option]) {
+        let isRerender = !rowStack.arrangedSubviews.isEmpty
+        titleLabel.text = title
+        // `Option.action` is deliberately not stored: the presenter owns the
+        // actions and invokes them by index, so keeping a second copy here
+        // would pin a `Track` per audio row for the panel's lifetime.
+
+        if !isRerender {
+            preferredIndex = options.firstIndex(where: { $0.isSelected }) ?? 0
+        }
+        preferredIndex = min(max(preferredIndex, 0), max(options.count - 1, 0))
+
+        rowStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        for (i, opt) in options.enumerated() {
+            rowStack.addArrangedSubview(makeRow(index: i, option: opt))
+        }
+    }
+
+    /// The row the panel wants focused. The presenter forwards this from its own
+    /// `preferredFocusEnvironments`.
+    var preferredRow: UIView? {
+        let views = rowStack.arrangedSubviews
+        guard !views.isEmpty else { return nil }
+        return views[min(max(preferredIndex, 0), views.count - 1)]
+    }
+
+    private func makeRow(index: Int, option: Option) -> UIButton {
+        var cfg = UIButton.Configuration.plain()
+        cfg.title = option.title
+        cfg.baseForegroundColor = .white
+        cfg.contentInsets = NSDirectionalEdgeInsets(top: 16, leading: 40, bottom: 16, trailing: 40)
+        // The selection mark is an IMAGE beside the label, not a "  ✓" glued to
+        // the end of it — appended to the string it reads as part of the track's
+        // own name, which on a list of language labels is genuinely confusing.
+        // Always an image, transparent when unselected, so the selected row's
+        // label does not shift sideways relative to its neighbours.
+        cfg.image = UIImage(systemName: "checkmark")
+        cfg.imagePlacement = .leading
+        cfg.imagePadding = 16
+        cfg.titleAlignment = .leading
+        let button = TVOptionRow(type: .custom)
+        button.configuration = cfg
+        button.tintColor = option.isSelected ? .white : .clear
+        button.contentHorizontalAlignment = .leading
+        button.tag = index
+        // The former "  ✓" suffix was at least SPOKEN; a `cfg.image` is not, so
+        // selection has to be carried explicitly or VoiceOver loses it.
+        button.accessibilityLabel = option.title
+        button.accessibilityTraits = option.isSelected ? [.button, .selected] : .button
+        button.addTarget(self, action: #selector(rowTapped(_:)), for: .primaryActionTriggered)
+        return button
+    }
+
+    @objc private func rowTapped(_ sender: UIButton) {
+        // Remember where the user was, so a re-render (a delay nudge) comes
+        // back under their thumb rather than at the top of the list.
+        preferredIndex = sender.tag
+        onSelect?(sender.tag)
+    }
+}
+
+/// A panel row. Focus is the app's row level — an accent-free white wash and no
+/// scale, since a row that grows shifts its own label sideways.
+private final class TVOptionRow: UIButton {
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        coordinator.addCoordinatedAnimations({
+            self.backgroundColor = self.isFocused
+                ? UIColor.white.withAlphaComponent(0.22)
+                : .clear
+            self.layer.cornerRadius = 12
+        })
+    }
+}
+#endif

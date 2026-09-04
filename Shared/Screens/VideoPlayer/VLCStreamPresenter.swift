@@ -307,6 +307,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// claim focus in `preferredFocusEnvironments`.
     private var endOfSeriesCard: UIView?
     private var endOfSeriesDoneButton: UIButton?
+    /// The player's own option sheet — audio, subtitles, speed, the two delays.
+    /// Replaces the system action sheet those five pickers used to raise; see
+    /// `TVOptionPanel`.
+    private var optionPanel: TVOptionPanel?
+    private var optionPanelScrim: UIView?
+    /// The actions behind the visible rows, index-aligned with them.
+    private var optionPanelActions: [() -> Void] = []
+    /// Bumped by every render. A row's action that re-renders the panel — the
+    /// delay nudges do, to show their running value — leaves it open; anything
+    /// else closes it. Comparing the count before and after the action is what
+    /// tells the two apart, without a flag each caller would have to set.
+    private var optionPanelGeneration = 0
     private let controlBar = UIStackView()
     /// True while the user is sliding the scrub bar via the Siri Remote touch
     /// surface — suppresses the periodic time tick so the preview isn't
@@ -593,6 +605,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterThumbTasks = []
         pendingChapterThumbnails = nil
         #if os(tvOS)
+        dismissOptionPanel()
         // The HUD poster outlives the two media-swap paths that cancel it
         // otherwise, so a dismissal mid-fetch would leave an authenticated GET
         // nobody consumes — and, if it landed during the dismiss animation, a
@@ -1780,7 +1793,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // the NEXT Menu press see `alpha > 0` and merely hide the HUD, so
         // leaving took two presses. Without the guard a left/right press would
         // additionally seek an episode that has already ended.
-        if endOfSeriesCard != nil {
+        if endOfSeriesCard != nil || optionPanel != nil {
             super.pressesBegan(presses, with: event)
             return
         }
@@ -2061,6 +2074,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let now = Date()
         if now.timeIntervalSince(lastMenuHandledAt) < 0.2 { return }
         lastMenuHandledAt = now
+        #if os(tvOS)
+        if optionPanel != nil {
+            endPicker()
+            return
+        }
+        #endif
         if infoPanelVisible {
             setInfoPanelVisible(false)
         } else if controlsContainer.alpha > 0 {
@@ -2078,7 +2097,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // a swipe would open the panel on top of the card.
         guard !infoPanelVisible, controlsContainer.alpha == 0, !pickerPresented else { return }
         #if os(tvOS)
-        guard endOfSeriesCard == nil else { return }
+        guard endOfSeriesCard == nil, optionPanel == nil else { return }
         #endif
         setInfoPanelVisible(true)
     }
@@ -2489,6 +2508,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        // FIRST, and it must stay first: the option panel is the topmost layer,
+        // and every one of the five pickers is raised from the info-panel strip,
+        // so a clause placed below `infoPanelVisible` is dead for all of them —
+        // the panel would come up while focus went back to the button that
+        // opened it, behind the scrim.
+        if let row = optionPanel?.preferredRow, row.window != nil { return [row] }
         if infoPanelVisible { return [infoPanelStack] }
         if let card = nextUpCard, !card.isHidden, controlsContainer.alpha == 0 {
             return [card.playButton]
@@ -2510,12 +2535,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pickerPresented = true
         hideControlsWorkItem?.cancel()
         #if os(tvOS)
-        // A picker opened from the info panel keeps the panel as its backdrop —
-        // revealing the HUD underneath would stack both chrome layers.
-        if !infoPanelVisible { showControls() }
+        // The panel OWNS the screen, exactly as `presentEndOfSeriesCard` does:
+        // a scrim dims the HUD but occludes nothing for the focus engine, and
+        // `tvScrub` spans the full safe-area width *behind* the panel — so a
+        // Left press from a panel row handed it focus and seeked the film with
+        // the picker still open. Interaction off is what actually removes a
+        // subtree from the focus map; `endPicker` puts both back.
+        controlsContainer.isUserInteractionEnabled = false
+        infoPanel.isUserInteractionEnabled = false
         #else
         showControls()
         #endif
+        #if os(tvOS)
+        presentOptionPanel(title: title, options: options)
+        return
+        #else
         let sheet = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
         for opt in options {
             sheet.addAction(UIAlertAction(title: opt.title + (opt.selected ? "  ✓" : ""), style: .default) { [weak self] _ in
@@ -2531,11 +2565,96 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             pop.sourceRect = sv.bounds
         }
         present(sheet, animated: true)
+        #endif
     }
+
+    #if os(tvOS)
+    /// Builds or re-renders the option panel. Re-rendering an already-visible
+    /// panel is the delay-nudge path: the title carries the running value, so
+    /// it has to change without the sheet blinking out and back.
+    private func presentOptionPanel(title: String, options: [(title: String, selected: Bool, action: () -> Void)]) {
+        optionPanelGeneration += 1
+        optionPanelActions = options.map { $0.action }
+
+        let panel: TVOptionPanel
+        if let existing = optionPanel {
+            panel = existing
+        } else {
+            let scrim = UIView()
+            scrim.translatesAutoresizingMaskIntoConstraints = false
+            scrim.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+            scrim.alpha = 0
+            // Decorative. Every overlay added to the player's `view` must say
+            // so — the stats panel's dead zone was exactly this omission.
+            scrim.isUserInteractionEnabled = false
+            view.addSubview(scrim)
+            optionPanelScrim = scrim
+
+            panel = TVOptionPanel()
+            view.addSubview(panel)
+            optionPanel = panel
+
+            NSLayoutConstraint.activate([
+                scrim.topAnchor.constraint(equalTo: view.topAnchor),
+                scrim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                scrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                scrim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+                // Trailing rather than centred: the picture keeps the left two
+                // thirds of the screen, so the user can still see what they are
+                // syncing a delay against.
+                panel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -64),
+                panel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 64),
+                panel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64),
+                panel.widthAnchor.constraint(equalToConstant: 620)
+            ])
+
+            panel.onSelect = { [weak self] index in
+                guard let self, index < self.optionPanelActions.count else { return }
+                let before = self.optionPanelGeneration
+                self.optionPanelActions[index]()
+                // The action re-rendered the panel (a delay nudge): leave it up
+                // under the user's thumb. Anything else is a final choice.
+                if self.optionPanelGeneration == before { self.endPicker() }
+            }
+            UIView.animate(withDuration: 0.2) {
+                scrim.alpha = 1
+                panel.alpha = 1
+            }
+        }
+
+        panel.render(
+            title: title,
+            options: options.map { TVOptionPanel.Option(title: $0.title, isSelected: $0.selected, action: $0.action) }
+        )
+        view.layoutIfNeeded()
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    private func dismissOptionPanel() {
+        guard let panel = optionPanel else { return }
+        let scrim = optionPanelScrim
+        optionPanel = nil
+        optionPanelScrim = nil
+        optionPanelActions = []
+        UIView.animate(withDuration: 0.15) {
+            panel.alpha = 0
+            scrim?.alpha = 0
+        } completion: { _ in
+            panel.removeFromSuperview()
+            scrim?.removeFromSuperview()
+        }
+    }
+    #endif
 
     private func endPicker() {
         pickerPresented = false
         #if os(tvOS)
+        dismissOptionPanel()
+        // Hand the layers behind the panel back to the focus engine.
+        controlsContainer.isUserInteractionEnabled = controlsVisible
+        infoPanel.isUserInteractionEnabled = true
         if infoPanelVisible {
             // Back to the panel, not the HUD — restore focus to its buttons.
             setNeedsFocusUpdate()
@@ -2570,7 +2689,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }))
         }
         opts.append(("\(loc.localized("player.audioDelay")) — \(Self.formatDelay(audioDelayMsState))", false, { [weak self] in
+            // Synchronous on tvOS so the generation bumps before `onSelect`
+            // decides, which keeps the one panel and re-renders it in place.
+            #if os(tvOS)
+            self?.openAudioDelayMenu()
+            #else
             DispatchQueue.main.async { self?.openAudioDelayMenu() }
+            #endif
         }))
         presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, opts)
     }
@@ -2587,7 +2712,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }))
         }
         opts.append(("\(loc.localized("player.subtitleDelay")) — \(Self.formatDelay(subtitleDelayMsState))", false, { [weak self] in
+            #if os(tvOS)
+            self?.openSubtitleDelayMenu()
+            #else
             DispatchQueue.main.async { self?.openSubtitleDelayMenu() }
+            #endif
         }))
         presentPicker(loc.localized("player.subtitles"), sourceView: subtitlePickerSource, opts)
     }
@@ -2624,9 +2753,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         for delta in [-250, -50, 50, 250] {
             opts.append((String(format: "%+d ms", delta), false, { [weak self] in
                 self?.setDelay(isAudio: isAudio, ms: current + delta)
-                // Re-present AFTER endPicker resets the picker state, else the
-                // new sheet's pickerPresented flag is immediately cleared.
+                // Re-present so the title carries the running value. On tvOS
+                // this re-renders the open panel in place — synchronously, so
+                // the generation bump lands before the select handler decides
+                // whether the choice was final. On iOS it must still bounce
+                // through the run loop: the alert's `pickerPresented` flag is
+                // cleared by `endPicker` immediately after this action.
+                #if os(tvOS)
+                self?.presentDelayPicker(isAudio: isAudio)
+                #else
                 DispatchQueue.main.async { self?.presentDelayPicker(isAudio: isAudio) }
+                #endif
             }))
         }
         opts.append((loc.localized("player.delay.reset"), current == 0, { [weak self] in
@@ -2978,6 +3115,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func navigateToEpisode(_ ref: EpisodeRef, isAutoplay: Bool = false) {
         // Only navigable when the episode-nav graph is present.
         guard let navigator = episodeNavigator else { return }
+        #if os(tvOS)
+        // The panel's rows address the outgoing episode's tracks.
+        closeOptionPanelForMediaChange()
+        #endif
         navGeneration += 1
         let gen = navGeneration
         reporter?.reportStop(reason: .episodeSwap)
@@ -3550,6 +3691,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
     }
 
+    #if os(tvOS)
+    /// Closes the option panel when the media underneath it changes.
+    ///
+    /// Its rows address the tracks of the media that raised it, and a panel that
+    /// survives an episode swap keeps both `preferredRow` — so the end-of-series
+    /// card's Done button is unreachable — and `pickerPresented`, which pins the
+    /// HUD open for the rest of the session.
+    private func closeOptionPanelForMediaChange() {
+        guard optionPanel != nil else { return }
+        endPicker()
+    }
+    #endif
+
     private func showEndOfSeriesOverlay() {
         // Gated on `episodeNavigator != nil` (series playback only).
         Task { [weak self] in
@@ -3598,6 +3752,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// reach it.
     private func presentEndOfSeriesCard(seriesName: String) {
         guard endOfSeriesCard == nil else { return }
+        // Or its rows would outrank this card's Done button in the focus map.
+        closeOptionPanelForMediaChange()
 
         let scrim = UIView()
         scrim.translatesAutoresizingMaskIntoConstraints = false
