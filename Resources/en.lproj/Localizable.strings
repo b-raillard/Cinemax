@@ -912,6 +912,20 @@
 "syncplay.session.more" = "%@, %@ and %d others";
 "syncplay.session.unknownTitle" = "Session in progress";
 "syncplay.session.a11y" = "Session: %@, with %@. Join.";
+"syncplay.session.mine" = "You're in \u00b7 with %@";
+"syncplay.session.a11y.mine" = "Session in progress: %@, with %@. Leave.";
+"syncplay.lobby.eyebrow" = "Session open";
+"syncplay.lobby.participants" = "Here";
+"syncplay.lobby.alone" = "You're on your own so far.";
+"syncplay.lobby.invite" = "Invite";
+"syncplay.lobby.invite.how" = "Others join from the Live row on their own home screen: the session shows there for as long as it stays open.";
+"syncplay.lobby.invite.nobody" = "Nobody else is connected right now.";
+"syncplay.lobby.invite.send" = "Notify";
+"syncplay.lobby.invite.sent" = "Notified";
+"syncplay.lobby.invite.message" = "%@ opened a session: %@. Open the Live row on your home screen to join.";
+"syncplay.lobby.invite.sentToast" = "%@ has been notified";
+"syncplay.lobby.start" = "Start playback";
+"syncplay.lobby.leave" = "Leave session";
 "syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
 
 // MARK: - Continue Watching & detail UX

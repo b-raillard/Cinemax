@@ -38,6 +38,12 @@ final class SyncPlayController {
     private(set) var currentItemId: String?
     /// Where the group stands in that item, in Jellyfin ticks.
     private(set) var currentStartTicks: Int?
+    /// The queue ENTRY the group is on. Quoted back in every `Ready` /
+    /// `Buffering` report: Jellyfin matches a report against this, so sending
+    /// `nil` — which this client always did — means the report names no entry,
+    /// the participant is never counted ready, and the group sits in `Waiting`
+    /// with a black screen and no explanation.
+    @ObservationIgnored private(set) var currentPlaylistItemId: String?
 
     var isInGroup: Bool { group != nil }
     var participantCount: Int { participants.count }
@@ -115,6 +121,19 @@ final class SyncPlayController {
 
     private static let ticksPerMillisecond = 10_000
 
+    /// One permanent trace line per session event.
+    ///
+    /// A Watch Together session is invisible from the outside: when it stalls,
+    /// the only symptom is a picture that never starts, which is
+    /// indistinguishable from a stream that failed to open. Without a trace a
+    /// remote log cannot even answer *did the group leave `Waiting`?* — the
+    /// first question any report of "rien ne se passe" raises. Same reasoning as
+    /// the `CINEMAX-AUDIO` line, and the same discipline: names and ids only,
+    /// never a URL and never a token.
+    private func trace(_ message: String) {
+        syncLogger.notice("CINEMAX-SYNCPLAY ▸ \(message, privacy: .public)")
+    }
+
     /// Whether the engine currently selected can actually synchronise.
     ///
     /// Only `VLCStreamPresenter` binds a `PlaybackBridge`; `NativeVideoPresenter`
@@ -145,6 +164,7 @@ final class SyncPlayController {
             // Optimistic placeholder until the socket's GroupJoined refines it.
             group = SyncPlayGroup(id: "", name: name, participants: currentUserName.map { [$0] } ?? [])
             participants = group?.participants ?? []
+            trace("groupe créé « \(name) » — en attente de l'écho GroupJoined")
             notifySessionChanged()
             return true
         } catch {
@@ -168,6 +188,7 @@ final class SyncPlayController {
             try await api.syncPlayJoinGroup(groupId: target.id)
             group = target
             participants = target.participants
+            trace("groupe rejoint id=\(target.id) participants=\(target.participants.count)")
             notifySessionChanged()
             toast.info(loc.localized("syncplay.joined"))
             return true
@@ -264,13 +285,19 @@ final class SyncPlayController {
     func reportBuffering() {
         guard isInGroup, !isApplyingRemoteCommand, let api, let bridge else { return }
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
-        Task { try? await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: nil) }
+        let entry = currentPlaylistItemId
+        Task { try? await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: entry) }
     }
 
     func reportReady(isPlaying: Bool) {
         guard isInGroup, !isApplyingRemoteCommand, let api, let bridge else { return }
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
-        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: nil) }
+        let entry = currentPlaylistItemId
+        // The entry id is what the server matches the report against. Logged
+        // because sending none is invisible from the outside and stalls the
+        // whole group in `Waiting`.
+        trace("Ready envoyé position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
+        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
     }
 
     // MARK: - Session plumbing
@@ -337,6 +364,7 @@ final class SyncPlayController {
         groupState = .idle
         currentItemId = nil
         currentStartTicks = nil
+        currentPlaylistItemId = nil
         selfQueuedItemId = nil
         scheduledCommandTask?.cancel(); scheduledCommandTask = nil
         socketTask?.cancel(); socketTask = nil
@@ -413,7 +441,11 @@ final class SyncPlayController {
     }
 
     private func applyCommand(_ command: SyncPlayCommand) {
-        guard let bridge else { return }
+        guard let bridge else {
+            trace("commande \(command.command.rawValue) reçue sans lecteur lié — ignorée")
+            return
+        }
+        trace("commande appliquée : \(command.command.rawValue) position=\(command.positionTicks.map(String.init) ?? "—")")
         // Raise the echo window BEFORE touching the engine: its state-change
         // events arrive asynchronously, after this function has returned.
         remoteEchoUntil = Date().addingTimeInterval(Self.remoteEchoWindow)
@@ -469,18 +501,28 @@ final class SyncPlayController {
     }
 
     private func applyState(_ raw: String?) {
-        guard let raw, let parsed = SyncPlayGroupState(rawValue: raw) else { return }
+        guard let raw, let parsed = SyncPlayGroupState(rawValue: raw) else {
+            if let raw { trace("état de groupe inconnu « \(raw) » — ignoré") }
+            return
+        }
+        guard parsed != groupState else { return }
+        trace("état du groupe : \(groupState.rawValue) → \(parsed.rawValue)")
         groupState = parsed
     }
 
     /// The `PlayQueue` update — the only thing that says what the group is
     /// watching. Dropping it is what left a joiner synchronised to nothing.
     private func applyQueue(_ update: SyncPlayGroupUpdate) {
-        guard let itemId = update.playingItemId else { return }
+        guard let itemId = update.playingItemId else {
+            trace("PlayQueue reçu SANS élément lisible — le joueur ne saura pas quoi ouvrir")
+            return
+        }
         let ticks = max(0, update.startPositionTicks ?? 0)
         let changed = itemId != currentItemId
         currentItemId = itemId
         currentStartTicks = ticks
+        currentPlaylistItemId = update.playingPlaylistItemId.flatMap { $0.isEmpty ? nil : $0 }
+        trace("PlayQueue : item=\(itemId) entrée=\(currentPlaylistItemId ?? "aucune") position=\(ticks) lecture=\(update.isPlaying.map(String.init) ?? "?")")
         if let isPlaying = update.isPlaying {
             groupState = isPlaying ? .playing : .paused
         }

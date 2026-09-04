@@ -915,6 +915,20 @@
 "syncplay.session.unknownTitle" = "Séance en cours";
 "syncplay.session.a11y" = "Séance : %@, avec %@. Rejoindre.";
 "syncplay.needsVLC" = "Regarder ensemble ne fonctionne qu'avec le lecteur VLC. Désactivez « Lecteur natif » dans Réglages → Lecture.";
+"syncplay.session.mine" = "Vous y êtes · avec %@";
+"syncplay.session.a11y.mine" = "Séance en cours : %@, avec %@. Quitter.";
+"syncplay.lobby.eyebrow" = "Séance ouverte";
+"syncplay.lobby.participants" = "Présents";
+"syncplay.lobby.alone" = "Vous êtes seul pour l'instant.";
+"syncplay.lobby.invite" = "Inviter";
+"syncplay.lobby.invite.how" = "Les autres rejoignent depuis la rangée « En direct » de leur accueil : la séance y apparaît tant qu'elle est ouverte.";
+"syncplay.lobby.invite.nobody" = "Personne d'autre n'est connecté en ce moment.";
+"syncplay.lobby.invite.send" = "Prévenir";
+"syncplay.lobby.invite.sent" = "Prévenu";
+"syncplay.lobby.invite.message" = "%@ a ouvert une séance : %@. Ouvrez « En direct » sur votre accueil pour la rejoindre.";
+"syncplay.lobby.invite.sentToast" = "%@ a été prévenu";
+"syncplay.lobby.start" = "Lancer la lecture";
+"syncplay.lobby.leave" = "Quitter la séance";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";

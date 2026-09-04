@@ -178,6 +178,7 @@ public actor JellyfinSocket {
         var userName: String?
         var state: String?
         var playlist: [String] = []
+        var playlistItemIds: [String] = []
         var playingItemIndex: Int?
         var startPositionTicks: Int?
         var isPlaying: Bool?
@@ -196,7 +197,14 @@ public actor JellyfinSocket {
             // `Playlist` as `SyncPlayQueueItem { ItemId, PlaylistItemId }`,
             // never a bare `ItemIds` array.
             if let items = dict["Playlist"] as? [[String: Any]] {
-                playlist = items.compactMap { $0["ItemId"] as? String }.filter { !$0.isEmpty }
+                // Kept positionally aligned — `PlayingItemIndex` addresses both
+                // lists, so an entry dropped from one must drop from the other.
+                let entries = items.compactMap { entry -> (String, String)? in
+                    guard let itemId = entry["ItemId"] as? String, !itemId.isEmpty else { return nil }
+                    return (itemId, entry["PlaylistItemId"] as? String ?? "")
+                }
+                playlist = entries.map(\.0)
+                playlistItemIds = entries.map(\.1)
             }
             playingItemIndex = (dict["PlayingItemIndex"] as? NSNumber)?.intValue
             startPositionTicks = (dict["StartPositionTicks"] as? NSNumber)?.intValue
@@ -213,6 +221,7 @@ public actor JellyfinSocket {
             userName: userName,
             state: state,
             playlist: playlist,
+            playlistItemIds: playlistItemIds,
             playingItemIndex: playingItemIndex,
             startPositionTicks: startPositionTicks,
             isPlaying: isPlaying

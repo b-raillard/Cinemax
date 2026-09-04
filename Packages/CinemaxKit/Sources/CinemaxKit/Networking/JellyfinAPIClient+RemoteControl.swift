@@ -111,6 +111,22 @@ extension JellyfinAPIClient: RemoteControlAPI {
         }
     }
 
+    /// Sends a message to another session. See the protocol note on
+    /// `RemoteControlAPI.sendMessage`: Jellyfin has no invitation primitive, so
+    /// this is a notification and nothing more — it carries no join action.
+    public func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        do {
+            _ = try await client.send(Paths.sendMessageCommand(
+                sessionID: sessionId,
+                MessageCommand(header: header, text: text, timeoutMs: timeoutMs)
+            ))
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     /// The URL of Jellyfin's realtime `/socket`, for `JellyfinSocketHub` to
     /// connect. Returns `nil` when unauthenticated.
     ///

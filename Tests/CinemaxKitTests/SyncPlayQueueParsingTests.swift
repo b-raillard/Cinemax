@@ -83,6 +83,43 @@ struct SyncPlayQueueParsingTests {
         #expect(update.playingItemId == "item-b")
     }
 
+    @Test("The queue ENTRY id is carried, not just the item id")
+    func carriesPlaylistItemId() {
+        // Jellyfin matches a `Ready` report against `PlaylistItemId`. Sending
+        // nil — which this client always did — means the report names no entry,
+        // so the participant is never counted ready and the group sits in
+        // `Waiting`: a black screen where nothing ever starts.
+        let update = JellyfinSocket.parseGroupUpdate(playQueue(playlist: [
+            ["ItemId": "item-a", "PlaylistItemId": "entry-1"],
+            ["ItemId": "item-b", "PlaylistItemId": "entry-2"]
+        ], index: 1))
+        #expect(update.playlistItemIds == ["entry-1", "entry-2"])
+        #expect(update.playingPlaylistItemId == "entry-2")
+    }
+
+    @Test("The two lists stay positionally aligned when an entry is dropped")
+    func alignmentHolds() {
+        // `PlayingItemIndex` addresses both lists, so an entry dropped from one
+        // must drop from the other or the index resolves to the wrong pair.
+        let update = JellyfinSocket.parseGroupUpdate(playQueue(playlist: [
+            ["ItemId": "", "PlaylistItemId": "entry-junk"],
+            ["ItemId": "item-b", "PlaylistItemId": "entry-2"]
+        ], index: 0))
+        #expect(update.playlist == ["item-b"])
+        #expect(update.playlistItemIds == ["entry-2"])
+        #expect(update.playingItemId == "item-b")
+        #expect(update.playingPlaylistItemId == "entry-2")
+    }
+
+    @Test("A queue entry with no PlaylistItemId yields an empty marker, never a crash")
+    func missingEntryId() {
+        let update = JellyfinSocket.parseGroupUpdate(playQueue(playlist: [
+            ["ItemId": "item-a"]
+        ], index: 0))
+        #expect(update.playlist == ["item-a"])
+        #expect(update.playingPlaylistItemId == "")
+    }
+
     @Test("Library access denied is a recognised outcome, not an unknown type")
     func libraryAccessDenied() {
         // The group is watching something this account cannot see. Before it was

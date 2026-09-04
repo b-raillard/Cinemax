@@ -785,8 +785,12 @@ struct HomeScreen: View {
     /// a non-admin cannot know what a group is watching until they join. The
     /// card says who, and joining is what reveals what.
     private func togetherCard(_ entry: LiveSessionsRow.Entry, groupId: String) -> some View {
-        Button {
-            joinLiveSession(groupId: groupId)
+        // Being IN the session changes what the card is for. Before this, the
+        // only way out of a group was dismissing the player — there was no
+        // other exit anywhere in the app.
+        let isMine = SyncPlayController.shared.group?.id == groupId
+        return Button {
+            if isMine { leaveLiveSession() } else { joinLiveSession(groupId: groupId) }
         } label: {
             WideCard(
                 title: entry.title ?? loc.localized("syncplay.session.unknownTitle"),
@@ -797,7 +801,10 @@ struct HomeScreen: View {
                     )
                 },
                 progress: entry.progress ?? 0,
-                subtitle: loc.localized("syncplay.session.with", participantSummary(entry.participants))
+                subtitle: loc.localized(
+                    isMine ? "syncplay.session.mine" : "syncplay.session.with",
+                    participantSummary(entry.participants)
+                )
             )
             .overlay(alignment: .topLeading) { livePill(isTogether: true) }
         }
@@ -814,7 +821,7 @@ struct HomeScreen: View {
         // already refuses re-entry. Same lesson as `ServersScreen`, where the
         // active card stays focusable but inert.
         .accessibilityLabel(loc.localized(
-            "syncplay.session.a11y",
+            isMine ? "syncplay.session.a11y.mine" : "syncplay.session.a11y",
             entry.title ?? loc.localized("syncplay.session.unknownTitle"),
             participantSummary(entry.participants)
         ))
@@ -896,6 +903,12 @@ struct HomeScreen: View {
     /// only thing that names the title is the `PlayQueue` update that arrives
     /// over the socket **after** joining. `SyncPlayController.onQueueChanged`
     /// (wired at the app root) is what turns that into a screen.
+    /// Leaves the session from Home. The counterpart the app never had.
+    private func leaveLiveSession() {
+        SyncPlayController.shared.leaveGroup()
+        Task { await viewModel.refreshUserDataRails(using: appState) }
+    }
+
     private func joinLiveSession(groupId: String) {
         guard joiningGroupId == nil,
               let group = viewModel.syncPlayGroups.first(where: { $0.id == groupId }) else { return }

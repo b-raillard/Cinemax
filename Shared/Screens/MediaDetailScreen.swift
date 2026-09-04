@@ -48,6 +48,10 @@ struct MediaDetailScreen: View {
     /// Watch Together (SyncPlay): the item to present the group sheet for, and
     /// (iOS) the item to push into playback once a group is created/joined.
     @State private var watchTogetherSheet: WatchTogetherIntent?
+    /// The staging screen between opening a session and playing it. Creating a
+    /// session used to drop straight into the player, where the group waits for
+    /// participants to report ready — a black screen with no way back.
+    @State private var watchTogetherLobby: WatchTogetherIntent?
     /// Raises the root-hosted "Play on…" sheet. A context menu can raise it too
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
@@ -192,8 +196,34 @@ struct MediaDetailScreen: View {
             loc: loc,
             toast: toast,
             network: network,
-            onStart: { intent in startWatchTogether(intent) }
+            // Hand off to the lobby rather than to playback. Deferred by one
+            // main-actor slice because the sheet calls `dismiss()` immediately
+            // before this, and raising a second presentation inside the first
+            // one's dismissal is how SwiftUI drops it silently.
+            onStart: { intent in Task { @MainActor in watchTogetherLobby = intent } }
         ))
+        .fullScreenCover(item: $watchTogetherLobby) { intent in
+            WatchTogetherLobby(
+                itemId: intent.itemId,
+                title: intent.title,
+                backdropURL: viewModel.item?.backdropItemID.map {
+                    appState.imageBuilder.imageURL(
+                        itemId: $0, imageType: .backdrop,
+                        maxWidth: ImageURLBuilder.screenPixelWidth,
+                        tag: viewModel.item?.backdropImageTagValue
+                    )
+                },
+                onStart: {
+                    watchTogetherLobby = nil
+                    Task { @MainActor in startWatchTogether(intent) }
+                }
+            )
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toast)
+            .environment(network)
+        }
         #if os(iOS)
         .navigationDestination(item: $watchTogetherPlay) { intent in
             VideoPlayerView(itemId: intent.itemId, title: intent.title, startTime: intent.startTime)

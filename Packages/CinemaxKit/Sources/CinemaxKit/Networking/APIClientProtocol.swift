@@ -516,6 +516,19 @@ public protocol RemoteControlAPI: RealtimeSocketAPI {
         mediaSourceId: String?
     ) async throws
 
+    /// Sends a plain message to another session (`POST /Sessions/{id}/Message`).
+    ///
+    /// This is the ONLY notification primitive Jellyfin offers — there is no
+    /// invitation concept — so a Watch Together invite is literally a message
+    /// telling someone a session is open. Every other client renders it as a
+    /// bare toast, which is exactly what it is; the recipient joins from the
+    /// « En direct » row rather than from the message.
+    ///
+    /// Reaching another user's session requires `/Sessions`, so this is
+    /// **admin-only in practice** — `getControllableSessions` returns the
+    /// caller's own sessions and nothing else.
+    func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws
+
     /// Declares this device's capabilities so the server marks the session
     /// remote-controllable. The receiving counterpart of `playOnSession`, and a
     /// prerequisite for this app appearing in ANY client's target list —
@@ -533,6 +546,7 @@ public extension RemoteControlAPI {
         mediaSourceId: String?
     ) async throws {}
     func publishCapabilities(supportsMediaControl: Bool) async throws {}
+    func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws {}
 }
 
 // MARK: - Playlists

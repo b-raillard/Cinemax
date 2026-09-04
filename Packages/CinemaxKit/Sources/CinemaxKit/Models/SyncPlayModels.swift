@@ -138,6 +138,13 @@ public struct SyncPlayGroupUpdate: Sendable, Equatable {
     /// to. That is the whole of defect n°1: the information was always arriving
     /// and the parser dropped it on the floor.
     public let playlist: [String]
+    /// The queue's `PlaylistItemId`s, positionally aligned with `playlist`.
+    ///
+    /// Jellyfin addresses a queue ENTRY by this, not by the item id, and
+    /// `Ready` / `Buffering` reports are matched against it. Sending `nil`
+    /// means the report names no entry, so the participant is never counted as
+    /// ready and the group stays in `Waiting` — nothing ever starts.
+    public let playlistItemIds: [String]
     /// Index into `playlist` of the item actually playing.
     public let playingItemIndex: Int?
     /// Where in that item the group stands, in Jellyfin ticks.
@@ -153,6 +160,12 @@ public struct SyncPlayGroupUpdate: Sendable, Equatable {
         return playlist.first
     }
 
+    /// The queue entry the group is on — what a `Ready` report must name.
+    public var playingPlaylistItemId: String? {
+        if let i = playingItemIndex, playlistItemIds.indices.contains(i) { return playlistItemIds[i] }
+        return playlistItemIds.first
+    }
+
     public init(
         type: Kind?,
         rawType: String,
@@ -161,6 +174,7 @@ public struct SyncPlayGroupUpdate: Sendable, Equatable {
         userName: String?,
         state: String?,
         playlist: [String] = [],
+        playlistItemIds: [String] = [],
         playingItemIndex: Int? = nil,
         startPositionTicks: Int? = nil,
         isPlaying: Bool? = nil
@@ -172,6 +186,7 @@ public struct SyncPlayGroupUpdate: Sendable, Equatable {
         self.userName = userName
         self.state = state
         self.playlist = playlist
+        self.playlistItemIds = playlistItemIds
         self.playingItemIndex = playingItemIndex
         self.startPositionTicks = startPositionTicks
         self.isPlaying = isPlaying
