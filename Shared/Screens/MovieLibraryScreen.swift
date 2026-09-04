@@ -21,15 +21,12 @@ struct MediaLibraryScreen: View {
     /// `onAdminAction:` — we bind the resulting `AdminMenuPushIntent`
     /// here and host the destination on the body's outer ZStack.
     @State private var adminPushIntent: AdminMenuPushIntent?
-    #if os(iOS)
-    /// In-flight A–Z re-anchor. Held so a finger sliding down the bar cancels
-    /// the previous letter's fetch instead of racing it — the drag gesture
-    /// fires on every letter it crosses.
+    #endif
+    /// In-flight A–Z re-anchor. Both platforms: on iOS a finger sliding down
+    /// the bar must cancel the previous letter's fetch instead of racing it
+    /// (the drag fires on every letter it crosses), and on tvOS a user walking
+    /// the chip strip does the same thing one click at a time.
     @State private var jumpTask: Task<Void, Never>?
-    #endif
-    #endif
-    #if os(tvOS)
-    #endif
     /// Browse ("By genre") vs flat grid ("Show all") landing layout. Honored on
     /// both platforms; the toggle lives in Settings → Appearance.
     @AppStorage(SettingsKey.libraryBrowseLayout) private var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
@@ -397,6 +394,9 @@ struct MediaLibraryScreen: View {
                     #if os(tvOS)
                     Color.clear.frame(height: 0).id("library.top")
                     tvTopBar
+                    if shouldShowJumpBar {
+                        tvLetterStrip(proxy: proxy)
+                    }
                     #else
                     Text(filteredCountLabel)
                         .font(CinemaFont.label(.large))
@@ -469,6 +469,42 @@ struct MediaLibraryScreen: View {
     // MARK: - tvOS Compact Top Bar
 
     #if os(tvOS)
+    /// The A–Z jump, as a remote can aim it.
+    ///
+    /// iOS overlays a thin vertical strip of letters sized for a thumb tracking
+    /// down the screen's edge — a gesture that does not exist here. The same
+    /// machinery (`jump`, and the server-side re-anchor behind it) drives a
+    /// horizontal row of focusable chips instead: one click per letter, and the
+    /// row reads like a keyboard row rather than a target to hit.
+    ///
+    /// Its own focus section, so a Down press from it lands in the grid rather
+    /// than travelling along the letters.
+    private func tvLetterStrip(proxy: ScrollViewProxy) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: CinemaSpacing.spacing2) {
+                ForEach(AlphabeticalJump.letters, id: \.self) { letter in
+                    Button {
+                        _ = jump(to: letter, proxy: proxy)
+                    } label: {
+                        Text(letter)
+                            .font(CinemaFont.label(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                            .frame(minWidth: 52)
+                            .padding(.vertical, CinemaSpacing.spacing2)
+                            .background(CinemaColor.surfaceContainerHigh, in: Capsule())
+                    }
+                    .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                    .focusEffectDisabled()
+                    .hoverEffectDisabled()
+                    .accessibilityLabel(letter)
+                }
+            }
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
+        }
+        .scrollClipDisabled()
+        .focusSection()
+    }
+
     /// Compact top bar that replaces the previous full-screen filter wall:
     /// title + count on the left, sort menu and filters button on the right.
     /// Filter detail (chips for watch status / decade / genre) lives inside
@@ -732,7 +768,6 @@ struct MediaLibraryScreen: View {
 
     // MARK: - Alphabetical Jump Bar (iOS)
 
-    #if os(iOS)
     /// Only shown when the filtered view is actually alphabetically meaningful:
     /// the user has sorted by name ascending. Other sorts (date added, year, rating)
     /// wouldn't produce a coherent A→Z scroll.
@@ -799,7 +834,6 @@ struct MediaLibraryScreen: View {
         }
         return nil
     }
-    #endif
 
     /// Shown in the filtered grid (iOS or tvOS) when the current sort/filter combination
     /// yields no results. Offers a "Clear filters" action that resets sort + filter state.

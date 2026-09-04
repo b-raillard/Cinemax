@@ -1022,3 +1022,11 @@
 "home.collections" = "Collections";
 "home.upcoming.airs" = "Le %@";
 "detail.action.trailer" = "Bande-annonce";
+
+/* Taille des sous-titres (lecteur VLC). */
+"settings.subtitleSize" = "Taille des sous-titres";
+"subtitleSize.small" = "Petite";
+"subtitleSize.normal" = "Normale";
+"subtitleSize.large" = "Grande";
+"subtitleSize.extraLarge" = "Très grande";
+"subtitleSize.huge" = "Énorme";

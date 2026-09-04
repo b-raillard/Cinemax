@@ -1020,3 +1020,11 @@
 "home.collections" = "Collections";
 "home.upcoming.airs" = "%@";
 "detail.action.trailer" = "Trailer";
+
+/* Subtitle text size (VLC player). */
+"settings.subtitleSize" = "Subtitle size";
+"subtitleSize.small" = "Small";
+"subtitleSize.normal" = "Normal";
+"subtitleSize.large" = "Large";
+"subtitleSize.extraLarge" = "Extra large";
+"subtitleSize.huge" = "Huge";

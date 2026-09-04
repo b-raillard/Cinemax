@@ -2734,6 +2734,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         presentPicker(loc.localized("player.speed"), sourceView: speedPickerSource, opts)
     }
 
+    /// Applies the user's subtitle size.
+    ///
+    /// `Player.subtitleTextScale` wraps `libvlc_video_set_spu_text_scale`, a
+    /// first-class libVLC call — not a guessed `--freetype-*` option string,
+    /// whose names differ between libVLC 3.x and 4.0.
+    private func applySubtitleTextScale() {
+        let stored = UserDefaults.standard.object(forKey: SettingsKey.subtitleTextSize) as? Int
+        let option = SubtitleTextSizeOption(rawValue: stored ?? SettingsKey.Default.subtitleTextSize)
+            ?? .normal
+        guard abs(player.subtitleTextScale - option.scale) > 0.001 else { return }
+        // SwiftVLC 1.0.0 made this a get-only property with a typed setter —
+        // the same shape as `setPlaybackRate`. `SubtitleScale` clamps to
+        // 0.1…5.0 itself.
+        player.setSubtitleScale(SubtitleScale(option.scale))
+    }
+
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         try? player.setPlaybackRate(PlaybackRate(rate))
@@ -3623,6 +3639,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if !boosting, abs(player.rate - playbackRate) > 0.01 {
                 try? player.setPlaybackRate(PlaybackRate(playbackRate))
             }
+            // Same reasoning as the rate: a player-level property that a media
+            // swap can reset, re-applied from the user's setting rather than
+            // assumed to have survived. Read fresh each time so a change made
+            // in Settings mid-session takes effect on the next episode.
+            applySubtitleTextScale()
             #if os(iOS)
             setPlayPauseIcon(playing: true)
             #endif

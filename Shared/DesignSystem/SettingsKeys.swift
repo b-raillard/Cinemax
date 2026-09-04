@@ -19,6 +19,7 @@ enum SettingsKey {
     static let motionEffects = "motionEffects"
     static let render4K = "render4K"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
+    static let subtitleTextSize = "playback.subtitleTextSize"
     static let sleepTimerDefaultMinutes = "sleepTimerDefaultMinutes"
     /// When `true`, online playback uses the native `AVPlayer` engine (AVKit
     /// chrome) instead of the default VLC engine. VLC DirectPlays MKV/HEVC/DV
@@ -128,6 +129,9 @@ enum SettingsKey {
         static let motionEffects = true
         static let render4K = true
         static let autoPlayNextEpisode = true
+        /// 100 % — the engine's own default, so an untouched install renders
+        /// subtitles exactly as it did before this setting existed.
+        static let subtitleTextSize = 100
         static let sleepTimerDefaultMinutes = 0
         static let forceNativeAVPlayer = false
         static let playbackLiveActivity = true

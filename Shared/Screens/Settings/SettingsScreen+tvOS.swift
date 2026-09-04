@@ -427,6 +427,7 @@ extension SettingsScreen {
     var tvPlaybackDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(playbackToggleRows)
+            tvSubtitleSizeRow
             tvSleepTimerRow
 
             tvSectionLabel(loc.localized("settings.debug"))
@@ -673,6 +674,47 @@ extension SettingsScreen {
             ForEach(LibraryBrowseLayout.allCases) { option in
                 Button(loc.localized(option == .browse ? "settings.libraryLayout.browse" : "settings.libraryLayout.grid")) {
                     libraryBrowseLayout = option.rawValue
+                }
+            }
+        }
+    }
+
+    /// Subtitle size. VLC path only — the native `AVPlayer` renders subtitles
+    /// through the system, which has its own accessibility settings.
+    var tvSubtitleSizeRow: some View {
+        let isFocused = focusedItem == .toggle("subtitleSize")
+        let selected = SubtitleTextSizeOption(rawValue: subtitleTextSize) ?? .normal
+        return Button {
+            showSubtitleSizePicker = true
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: "captions.bubble")
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+                Text(loc.localized("settings.subtitleSize"))
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                Text(loc.localized(selected.localizationKey))
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(CinemaFont.label(.small))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle("subtitleSize"))
+        .confirmationDialog(loc.localized("settings.subtitleSize"), isPresented: $showSubtitleSizePicker) {
+            ForEach(SubtitleTextSizeOption.allCases) { option in
+                Button(loc.localized(option.localizationKey)) {
+                    subtitleTextSize = option.rawValue
                 }
             }
         }

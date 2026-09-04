@@ -45,3 +45,38 @@ enum SleepTimerOption: Int, CaseIterable, Identifiable {
         return currentDefault.seconds
     }
 }
+
+/// Subtitle text size, as a percentage of the engine's own default.
+///
+/// Backed by libVLC's `libvlc_video_set_spu_text_scale`, which SwiftVLC exposes
+/// as `Player.subtitleTextScale` — a first-class API rather than a guessed
+/// `--freetype-*` option string, whose names differ between libVLC 3.x and 4.0.
+///
+/// Size only. Colour, outline and background opacity live in the text-renderer
+/// module's own options, which this build has no verified surface for — and a
+/// styling control that silently does nothing is worse than none.
+///
+/// Stored as an Int percentage so it round-trips through `@AppStorage` without
+/// the floating-point comparison a `Double` key would need at every read.
+enum SubtitleTextSizeOption: Int, CaseIterable, Identifiable {
+    case small = 75
+    case normal = 100
+    case large = 125
+    case extraLarge = 150
+    case huge = 200
+
+    var id: Int { rawValue }
+
+    /// The scale libVLC takes: 1.0 is the engine's own default.
+    var scale: Float { Float(rawValue) / 100 }
+
+    var localizationKey: String {
+        switch self {
+        case .small:      return "subtitleSize.small"
+        case .normal:     return "subtitleSize.normal"
+        case .large:      return "subtitleSize.large"
+        case .extraLarge: return "subtitleSize.extraLarge"
+        case .huge:       return "subtitleSize.huge"
+        }
+    }
+}

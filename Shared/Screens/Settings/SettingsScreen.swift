@@ -210,6 +210,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.libraryBrowseLayout) var libraryBrowseLayout: String = SettingsKey.Default.libraryBrowseLayout
     @AppStorage(SettingsKey.dimUnfocusedPosters) var dimUnfocusedPosters: Bool = SettingsKey.Default.dimUnfocusedPosters
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
+    @AppStorage(SettingsKey.subtitleTextSize) var subtitleTextSize: Int = SettingsKey.Default.subtitleTextSize
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
     @AppStorage(SettingsKey.rainbowUnlocked) var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
@@ -228,6 +229,7 @@ struct SettingsScreen: View {
     /// requests (and any toast on failure) on every menu interaction.
     @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
+    @State var showSubtitleSizePicker = false
     @State var showLibraryLayoutPicker = false
     #endif
 
