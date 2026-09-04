@@ -939,6 +939,17 @@ struct AppNavigation: View {
             // downloads feature — purge the (potentially multi-GB) media tree
             // that no longer has any UI to clear it.
             Self.purgeLegacyDownloads()
+
+            // A joined group learns WHAT to watch only from the socket's
+            // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
+            // it through the same in-process pair an App Intent and a remote
+            // « Lire sur… » use, so a session join inherits the full fidelity of
+            // a tap: series → next-up, resume position, version pick, prev/next.
+            SyncPlayController.shared.onQueueChanged = { itemId, _ in
+                guard AppState.isValidItemId(itemId) else { return }
+                appState.pendingIntentPlaybackItemId = itemId
+                appState.pendingDeepLinkItemId = itemId
+            }
             // A crash / force-quit mid-playback leaves the playback Live
             // Activity pinned to the Lock Screen with a timer that keeps
             // running. Sweep any orphan at launch (the player also sweeps on

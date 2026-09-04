@@ -53,11 +53,33 @@ struct MediaDetailScreen: View {
     /// `AppNavigation` — same optionality rationale as `playlists` above.
     @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
     /// Watch Together (SyncPlay) is not production-ready yet. This kill-switch
-    /// hides both UI entry points (iOS secondary-actions chip + tvOS action-row
-    /// button) while keeping the whole implementation compiled and type-checked.
-    /// Flip to `true` to bring the feature back. See CLAUDE.md "SyncPlay / Watch
-    /// Together". Revisit after 1.0.5 ships.
-    private static let watchTogetherEnabled = false
+    /// Whether this account may START a session from a title's page.
+    ///
+    /// This replaced a compile-time kill-switch that had been `false` since
+    /// 2026-07-15. The gate is now the server's own `UserPolicy.syncPlayAccess`
+    /// — Jellyfin has always modelled the permission (`None` / `JoinGroups` /
+    /// `CreateAndJoinGroups`) and the client simply never asked, so it offered
+    /// the feature to accounts the server would then refuse. `canCreate` is the
+    /// stricter of the two rights: an account that may only *join* still sees
+    /// sessions in the Home row, it just cannot open one here.
+    /// Opens the Watch Together sheet, or explains why it cannot work.
+    ///
+    /// The refusal is a toast rather than a hidden button on purpose: only the
+    /// VLC path binds a `PlaybackBridge`, so with the native player forced a
+    /// group would form server-side and nothing would ever move. Hiding the
+    /// control would leave the user with a feature that is documented,
+    /// permitted by their server, and simply absent — with nothing to act on.
+    private func presentWatchTogether(for item: BaseItemDto, nextEp: BaseItemDto?) {
+        guard SyncPlayController.isEngineSupported else {
+            toast.error(loc.localized("syncplay.title"), message: loc.localized("syncplay.needsVLC"))
+            return
+        }
+        watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+    }
+
+    private var watchTogetherEnabled: Bool {
+        LiveSessionsRow.canCreate(appState.currentUser?.policy?.syncPlayAccess)
+    }
     #if os(iOS)
     @State private var watchTogetherPlay: WatchTogetherIntent?
     /// Set once, on arrival, when an App Intent asked to play this item.
@@ -1036,7 +1058,7 @@ struct MediaDetailScreen: View {
             if showTrailerButton, network.isOnline, let trailer = viewModel.localTrailers.first {
                 trailerButton(for: trailer)
             }
-            if Self.watchTogetherEnabled && network.isOnline {
+            if watchTogetherEnabled && network.isOnline {
                 watchTogetherButton(for: item, nextEp: nextEp)
             }
             // "Play on…" — appended last, so this late-arriving button (the
@@ -1116,7 +1138,7 @@ struct MediaDetailScreen: View {
             accessibilityLabel: loc.localized("syncplay.title"),
             isActive: SyncPlayController.shared.isInGroup
         ) {
-            watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+            presentWatchTogether(for: item, nextEp: nextEp)
         }
     }
 
@@ -1206,14 +1228,14 @@ struct MediaDetailScreen: View {
             }
 
             // Watch Together (SyncPlay) — online only. Accent while in a group.
-            if Self.watchTogetherEnabled && network.isOnline {
+            if watchTogetherEnabled && network.isOnline {
                 secondaryActionCell(
                     systemImage: "person.2.fill",
                     active: SyncPlayController.shared.isInGroup,
                     accessibility: loc.localized("syncplay.title"),
                     trigger: false
                 ) {
-                    watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+                    presentWatchTogether(for: item, nextEp: nextEp)
                 }
             }
 

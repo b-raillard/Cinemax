@@ -59,6 +59,23 @@ final class HomeViewModel {
     var nextUpNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Other users currently watching something on this server. Excludes the logged-in user.
     var activeSessions: [SessionInfoDto] = []
+    /// Watch Together groups open on the server. Governed by the server's own
+    /// `UserPolicy.syncPlayAccess`, NOT by `isAdministrator` — which is what
+    /// lets a regular account see (and join) a session at all.
+    var syncPlayGroups: [SyncPlayGroup] = []
+
+    /// The merged "En direct" row: groups folded into one card each, then
+    /// whoever is watching alone. See `LiveSessionsRow` for why the two sources
+    /// share a row rather than sitting in two.
+    var liveEntries: [LiveSessionsRow.Entry] {
+        LiveSessionsRow.build(
+            groups: syncPlayGroups,
+            sessions: activeSessions,
+            currentUserName: currentUserName
+        )
+    }
+    /// Set alongside the fetch so the merge can drop the viewer from every card.
+    private var currentUserName: String?
     /// Gates the full-screen skeleton — flips false once the phase-1 fetches
     /// (resume/latest/favorites/next-up) land and the hero is chosen, so the
     /// hero + rails render while genre rows and the episode-nav maps keep
@@ -527,23 +544,36 @@ final class HomeViewModel {
     /// Fetches active sessions and filters down to ones with a currently-playing item,
     /// excluding the logged-in user (their own "resume" already covers that).
     private func loadActiveSessions(userId: String, appState: AppState) async {
-        // "Watching Now" is admin-only. /Sessions is meant to be elevated and
-        // even leaks every user's session to non-admins on some servers
-        // (jellyfin#5210), so don't fetch it at all unless the caller is an
-        // admin — the Home row and Settings toggle are likewise admin-gated.
-        guard appState.isAdministrator else {
-            activeSessions = []
-            return
-        }
-        do {
-            let all = try await appState.apiClient.getActiveSessions(activeWithinSeconds: 60)
-            activeSessions = all.filter { session in
-                session.nowPlayingItem != nil
-                    && (session.userID ?? "") != userId
-            }
-        } catch {
-            activeSessions = []
-        }
+        currentUserName = appState.currentUser?.name
+
+        // Two sources, two permissions — and that split is what makes the row
+        // reachable by everyone. `/Sessions` stays admin-only: it is meant to be
+        // elevated and even leaks every user's session to non-admins on some
+        // servers (jellyfin#5210). `GET /SyncPlay/List` is governed by the
+        // server's own per-user SyncPlay policy, so a regular account still
+        // sees the sessions it is allowed to join.
+        // Both permissions are read HERE, on the main actor, and only the
+        // resulting scalars cross into the concurrent closures below —
+        // `AppState` is main-actor isolated and cannot be touched from them.
+        let isAdmin = appState.isAdministrator
+        let mayJoin = LiveSessionsRow.canJoin(appState.currentUser?.policy?.syncPlayAccess)
+        let client = appState.apiClient
+
+        async let sessions: [SessionInfoDto] = {
+            guard isAdmin else { return [] }
+            let all = (try? await client.getActiveSessions(activeWithinSeconds: 60)) ?? []
+            return all.filter { $0.nowPlayingItem != nil && ($0.userID ?? "") != userId }
+        }()
+
+        async let groups: [SyncPlayGroup] = {
+            guard mayJoin else { return [] }
+            return (try? await client.syncPlayListGroups()) ?? []
+        }()
+
+        // Each source fails on its own: a dead `/Sessions` must not take the
+        // groups down with it, and vice versa.
+        activeSessions = await sessions
+        syncPlayGroups = await groups
     }
 
     /// Re-fetches only the genre rows — fired from `HomeScreen` when the user

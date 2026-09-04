@@ -881,7 +881,6 @@
 
 // MARK: - SyncPlay
 "syncplay.title" = "Watch Together";
-"syncplay.pill" = "Together · %d";
 "syncplay.groupName" = "Group name";
 "syncplay.create" = "Create group";
 "syncplay.join" = "Join";
@@ -895,6 +894,19 @@
 "syncplay.left" = "Left group";
 "syncplay.groupEnded" = "The group has ended";
 "syncplay.error" = "Sync failed";
+"syncplay.you" = "You";
+"syncplay.event.joined" = "%@ joined";
+"syncplay.event.left" = "%@ left";
+"syncplay.waiting.title" = "Waiting for a participant";
+"syncplay.waiting.subtitle" = "Someone is buffering. Everyone will resume together.";
+"syncplay.libraryAccessDenied" = "Your account can't access this title";
+"syncplay.session.badge" = "TOGETHER";
+"syncplay.session.with" = "With %@";
+"syncplay.session.two" = "%@ and %@";
+"syncplay.session.more" = "%@, %@ and %d others";
+"syncplay.session.unknownTitle" = "Session in progress";
+"syncplay.session.a11y" = "Session: %@, with %@. Join.";
+"syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Remove from Continue Watching";

@@ -52,6 +52,9 @@ struct HomeScreen: View {
     /// `onDisappear` doesn't fire in some container, `isVisible` stays true and
     /// behavior falls back to today's immediate reload.
     @State private var isVisible = false
+    /// Non-nil while a join round-trip is in flight, so a second press on the
+    /// same card can't open two sessions.
+    @State private var joiningGroupId: String?
     /// A `.cinemaxShouldRefreshCatalogue` arrived while hidden — run the full
     /// reload on next appear. Subsumes any pending userData refresh.
     @State private var pendingFullReload = false
@@ -331,10 +334,14 @@ struct HomeScreen: View {
                     }
                     #endif
 
-                    // Watching Now (other users on the server) — admin-only:
-                    // surfaces who else is streaming, which is elevated data
-                    // (see HomeViewModel.loadActiveSessions / jellyfin#5210).
-                    if appState.isAdministrator, showWatchingNow, !viewModel.activeSessions.isEmpty {
+                    // "En direct" — Watch Together sessions AND whoever is
+                    // watching alone, merged (see `LiveSessionsRow`). No longer
+                    // admin-gated as a row: the SOLO half still is, inside the
+                    // view model, because `/Sessions` is elevated data
+                    // (jellyfin#5210); the group half is governed by the
+                    // server's own per-user SyncPlay policy, so a regular
+                    // account sees the sessions it may join.
+                    if showWatchingNow, !viewModel.liveEntries.isEmpty {
                         watchingNowRow
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
@@ -747,67 +754,163 @@ struct HomeScreen: View {
     private var watchingNowRow: some View {
         ContentRow(
             title: loc.localized("home.watchingNow"),
-            // Feed the sessions themselves — NEVER a snapshot of their indices.
-            // `reload()` (pull-to-refresh, tier-1 catalogue refresh) empties
-            // `activeSessions` before refetching, and Observation invalidates the
-            // already-instantiated LazyHStack children directly: they re-run their
-            // body against the emptied array while still holding the old index
-            // snapshot, trapping with "Index out of range".
-            data: viewModel.activeSessions,
+            // Feed the entries themselves — NEVER a snapshot of their indices.
+            // `reload()` empties the underlying arrays before refetching, and
+            // Observation invalidates the already-instantiated LazyHStack
+            // children directly: they re-run their body against the emptied
+            // array while still holding the old index snapshot, trapping with
+            // "Index out of range".
+            data: viewModel.liveEntries,
             id: \.id
-        ) { session in
-            watchingNowCard(session)
+        ) { entry in
+            liveCard(entry)
                 .frame(width: wideCardWidth)
         }
     }
 
     @ViewBuilder
-    private func watchingNowCard(_ session: SessionInfoDto) -> some View {
-        if let item = session.nowPlayingItem, let id = item.id {
-            // Episodes → use parent series for backdrop; fall back to the episode itself.
-            let backdropId = item.backdropItemID ?? id
-            let title = (item.seriesName ?? item.name) ?? ""
-            let subtitle = String(format: loc.localized("home.watchingNow.playing"), session.userName ?? "")
+    private func liveCard(_ entry: LiveSessionsRow.Entry) -> some View {
+        switch entry.kind {
+        case .together(let groupId):
+            togetherCard(entry, groupId: groupId)
+        case .solo:
+            soloCard(entry)
+        }
+    }
 
+    /// A Watch Together session. One card for however many people are in it —
+    /// the whole reason the two sources were merged.
+    ///
+    /// The title can legitimately be absent: `GroupInfoDto` carries no item, so
+    /// a non-admin cannot know what a group is watching until they join. The
+    /// card says who, and joining is what reveals what.
+    private func togetherCard(_ entry: LiveSessionsRow.Entry, groupId: String) -> some View {
+        Button {
+            joinLiveSession(groupId: groupId)
+        } label: {
+            WideCard(
+                title: entry.title ?? loc.localized("syncplay.session.unknownTitle"),
+                imageURL: entry.backdropItemId.map {
+                    appState.imageBuilder.imageURL(
+                        itemId: $0, imageType: .backdrop,
+                        maxWidth: 600, tag: entry.backdropTag
+                    )
+                },
+                progress: entry.progress ?? 0,
+                subtitle: loc.localized("syncplay.session.with", participantSummary(entry.participants))
+            )
+            .overlay(alignment: .topLeading) { livePill(isTogether: true) }
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .disabled(joiningGroupId != nil)
+        .accessibilityLabel(loc.localized(
+            "syncplay.session.a11y",
+            entry.title ?? loc.localized("syncplay.session.unknownTitle"),
+            participantSummary(entry.participants)
+        ))
+    }
+
+    /// Somebody watching alone. Unchanged behaviour: it opens their title.
+    ///
+    /// It deliberately carries no "watch with them" action yet — Jellyfin has no
+    /// invitation primitive, so asking someone mid-film would have to ride
+    /// `DisplayMessage`, which every other client renders as a bare toast. That
+    /// belongs with the invitation lot, not here.
+    @ViewBuilder
+    private func soloCard(_ entry: LiveSessionsRow.Entry) -> some View {
+        if let id = entry.itemId {
             NavigationLink {
-                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                MediaDetailScreen(itemId: id, itemType: entry.itemType ?? .movie)
             } label: {
                 WideCard(
-                    title: title,
-                    imageURL: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue),
-                    progress: sessionProgress(session),
-                    subtitle: subtitle
+                    title: entry.title ?? "",
+                    imageURL: entry.backdropItemId.map {
+                        appState.imageBuilder.imageURL(
+                            itemId: $0, imageType: .backdrop,
+                            maxWidth: 600, tag: entry.backdropTag
+                        )
+                    },
+                    progress: entry.progress ?? 0,
+                    subtitle: String(
+                        format: loc.localized("home.watchingNow.playing"),
+                        entry.participants.first ?? ""
+                    )
                 )
-                .overlay(alignment: .topLeading) {
-                    // Small red "LIVE" pill to signal this is a session, not a recommendation.
-                    HStack(spacing: CinemaSpacing.spacing1) {
-                        Circle().fill(Color.red).frame(width: 6, height: 6)
-                        Text(loc.localized("home.liveSession"))
-                            .font(.system(size: CinemaScale.pt(10), weight: .bold))
-                            .tracking(0.5)
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .padding(8)
-                }
+                .overlay(alignment: .topLeading) { livePill(isTogether: false) }
             }
             #if os(tvOS)
             .buttonStyle(CinemaTVCardButtonStyle())
             #else
             .buttonStyle(.plain)
             #endif
-            .accessibilityLabel("\(title), \(subtitle)")
+            .accessibilityLabel("\(entry.title ?? ""), \(entry.participants.first ?? "")")
         }
     }
 
-    private func sessionProgress(_ session: SessionInfoDto) -> Double {
-        guard let position = session.playState?.positionTicks,
-              let total = session.nowPlayingItem?.runTimeTicks,
-              total > 0 else { return 0 }
-        return min(1.0, Double(position) / Double(total))
+    /// Signals that a card is a live session rather than a recommendation.
+    /// Accent for a joinable session, red for someone watching alone — the
+    /// colour is the difference between "come in" and "just so you know".
+    private func livePill(isTogether: Bool) -> some View {
+        HStack(spacing: CinemaSpacing.spacing1) {
+            if isTogether {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: CinemaScale.pt(9), weight: .bold))
+            } else {
+                Circle().fill(Color.red).frame(width: 6, height: 6)
+            }
+            Text(loc.localized(isTogether ? "syncplay.session.badge" : "home.liveSession"))
+                .font(.system(size: CinemaScale.pt(10), weight: .bold))
+                .tracking(0.5)
+        }
+        .foregroundStyle(isTogether ? themeManager.accent : CinemaColor.onSurface)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(.ultraThinMaterial, in: Capsule())
+        .padding(8)
     }
+
+    /// "Marie", "Marie et Paul", "Marie, Paul et 2 autres" — a list of names is
+    /// what makes the card an invitation rather than a statistic.
+    private func participantSummary(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return ""
+        case 1: return names[0]
+        case 2: return loc.localized("syncplay.session.two", names[0], names[1])
+        default: return loc.localized("syncplay.session.more", names[0], names[1], names.count - 2)
+        }
+    }
+
+    /// Joins the group, then lets the server tell us what to open.
+    ///
+    /// It has to be that order: `GET /SyncPlay/List` returns no item, so the
+    /// only thing that names the title is the `PlayQueue` update that arrives
+    /// over the socket **after** joining. `SyncPlayController.onQueueChanged`
+    /// (wired at the app root) is what turns that into a screen.
+    private func joinLiveSession(groupId: String) {
+        guard joiningGroupId == nil,
+              let group = viewModel.syncPlayGroups.first(where: { $0.id == groupId }) else { return }
+        guard SyncPlayController.isEngineSupported else {
+            toast.error(loc.localized("syncplay.title"), message: loc.localized("syncplay.needsVLC"))
+            return
+        }
+        joiningGroupId = groupId
+        Task {
+            let ok = await SyncPlayController.shared.joinGroup(
+                group,
+                api: appState.apiClient,
+                loc: loc,
+                toast: toast,
+                currentUserName: appState.currentUser?.name
+            )
+            joiningGroupId = nil
+            if ok { Haptics.success() }
+        }
+    }
+
 
     private var continueWatchingRow: some View {
         ContentRow(

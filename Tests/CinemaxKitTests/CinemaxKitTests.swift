@@ -224,12 +224,12 @@ struct ServerVersionTests {
 
 // MARK: - Remote control, receiving side
 
-@Suite("SessionSocket frame parsing")
-struct SessionSocketParsingTests {
+@Suite("JellyfinSocket frame parsing")
+struct JellyfinSocketParsingTests {
 
     @Test("Parses a Play message")
     func parsesPlay() throws {
-        let request = try #require(SessionSocket.parsePlay([
+        let request = try #require(JellyfinSocket.parsePlay([
             "ItemIds": ["abc"],
             "PlayCommand": "PlayNow",
             "StartPositionTicks": NSNumber(value: 1_200_000_000),
@@ -243,8 +243,8 @@ struct SessionSocketParsingTests {
 
     @Test("Drops a Play message with no items")
     func dropsEmptyPlay() {
-        #expect(SessionSocket.parsePlay(["ItemIds": [String](), "PlayCommand": "PlayNow"]) == nil)
-        #expect(SessionSocket.parsePlay(["PlayCommand": "PlayNow"]) == nil)
+        #expect(JellyfinSocket.parsePlay(["ItemIds": [String](), "PlayCommand": "PlayNow"]) == nil)
+        #expect(JellyfinSocket.parsePlay(["PlayCommand": "PlayNow"]) == nil)
     }
 
     @Test("An unknown play command parses but is not PlayNow")
@@ -252,21 +252,21 @@ struct SessionSocketParsingTests {
         // Kept as a raw string precisely so a future value is ignored rather
         // than mis-mapped onto PlayNow — the queue-less client can only honor
         // "start this now".
-        let next = try #require(SessionSocket.parsePlay(["ItemIds": ["a"], "PlayCommand": "PlayNext"]))
+        let next = try #require(JellyfinSocket.parsePlay(["ItemIds": ["a"], "PlayCommand": "PlayNext"]))
         #expect(!next.isPlayNow)
-        let missing = try #require(SessionSocket.parsePlay(["ItemIds": ["a"]]))
+        let missing = try #require(JellyfinSocket.parsePlay(["ItemIds": ["a"]]))
         #expect(!missing.isPlayNow)
     }
 
     @Test("PlayNow matching is case-insensitive")
     func playNowCaseInsensitive() throws {
-        let request = try #require(SessionSocket.parsePlay(["ItemIds": ["a"], "PlayCommand": "playnow"]))
+        let request = try #require(JellyfinSocket.parsePlay(["ItemIds": ["a"], "PlayCommand": "playnow"]))
         #expect(request.isPlayNow)
     }
 
     @Test("Parses a DisplayMessage general command")
     func parsesDisplayMessage() throws {
-        let message = try #require(SessionSocket.parseDisplayMessage([
+        let message = try #require(JellyfinSocket.parseDisplayMessage([
             "Name": "DisplayMessage",
             "Arguments": ["Header": "Cinemax", "Text": "Bonjour"]
         ]))
@@ -278,7 +278,7 @@ struct SessionSocketParsingTests {
     func ignoresUnadvertisedCommands() {
         // The app declares only DisplayMessage; anything else must be dropped
         // rather than surfaced as an empty toast.
-        #expect(SessionSocket.parseDisplayMessage([
+        #expect(JellyfinSocket.parseDisplayMessage([
             "Name": "SetVolume",
             "Arguments": ["Volume": "50"]
         ]) == nil)
@@ -286,8 +286,8 @@ struct SessionSocketParsingTests {
 
     @Test("Drops a DisplayMessage with no usable text")
     func dropsEmptyDisplayMessage() {
-        #expect(SessionSocket.parseDisplayMessage(["Name": "DisplayMessage"]) == nil)
-        #expect(SessionSocket.parseDisplayMessage([
+        #expect(JellyfinSocket.parseDisplayMessage(["Name": "DisplayMessage"]) == nil)
+        #expect(JellyfinSocket.parseDisplayMessage([
             "Name": "DisplayMessage",
             "Arguments": ["Text": "   "]
         ]) == nil)
@@ -295,7 +295,7 @@ struct SessionSocketParsingTests {
 
     @Test("A blank header collapses to nil rather than an empty toast title")
     func blankHeaderBecomesNil() throws {
-        let message = try #require(SessionSocket.parseDisplayMessage([
+        let message = try #require(JellyfinSocket.parseDisplayMessage([
             "Name": "DisplayMessage",
             "Arguments": ["Header": "  ", "Text": "Hello"]
         ]))

@@ -513,8 +513,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // echoes the command and THAT is what moves the playhead) instead of
     // touching the local engine.
     private let syncPlay = SyncPlayController.shared
-    private var syncPlayActive = false
-    private let syncPlayPill = UILabel()
+    /// Presence + waiting + event chrome. All three are information-only and
+    /// non-interactive — see the RULE at the top of `SyncPlayHUD.swift`.
+    private let syncPlayPresence = SyncPlayPresenceStrip()
+    private let syncPlayWaiting = SyncPlayWaitingOverlay()
+    private let syncPlayEvents = SyncPlayEventLine()
+    /// Last participant list rendered, so a repaint can name who arrived or left.
+    private var syncPlayLastParticipants: [String] = []
 
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
@@ -569,7 +574,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         startPlayback()
         scheduleHideControls()
         setupLifecycleObservers()
-        bindSyncPlayIfNeeded()
+        bindSyncPlay()
     }
 
     #if os(iOS)
@@ -1295,19 +1300,41 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let pillFont: CGFloat = 13
         let pillHeight: CGFloat = 24
         #endif
-        syncPlayPill.translatesAutoresizingMaskIntoConstraints = false
-        syncPlayPill.font = .systemFont(ofSize: pillFont, weight: .semibold)
-        syncPlayPill.textColor = .white
-        syncPlayPill.textAlignment = .center
-        syncPlayPill.backgroundColor = UIColor.black.withAlphaComponent(0.5)
-        syncPlayPill.layer.cornerRadius = pillHeight / 2
-        syncPlayPill.clipsToBounds = true
-        syncPlayPill.isHidden = true
-        controlsContainer.addSubview(syncPlayPill)
+        _ = pillFont; _ = pillHeight
+        // Presence sits INSIDE the controls container: it is chrome, and it
+        // fades with the HUD.
+        syncPlayPresence.translatesAutoresizingMaskIntoConstraints = false
+        syncPlayPresence.isHidden = true
+        controlsContainer.addSubview(syncPlayPresence)
         NSLayoutConstraint.activate([
-            syncPlayPill.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            syncPlayPill.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
-            syncPlayPill.heightAnchor.constraint(equalToConstant: pillHeight)
+            syncPlayPresence.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            syncPlayPresence.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8)
+        ])
+
+        // The waiting overlay and the event line sit on `view`, OUTSIDE the
+        // controls container, because both must stay readable after the HUD
+        // auto-hides — a held picture with the explanation faded out is the
+        // freeze this exists to prevent.
+        syncPlayWaiting.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(syncPlayWaiting)
+        NSLayoutConstraint.activate([
+            syncPlayWaiting.topAnchor.constraint(equalTo: view.topAnchor),
+            syncPlayWaiting.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            syncPlayWaiting.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            syncPlayWaiting.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+
+        syncPlayEvents.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(syncPlayEvents)
+        #if os(tvOS)
+        let eventInset: CGFloat = 64
+        #else
+        let eventInset: CGFloat = 20
+        #endif
+        NSLayoutConstraint.activate([
+            syncPlayEvents.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: eventInset),
+            syncPlayEvents.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            syncPlayEvents.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -eventInset)
         ])
 
         #if os(tvOS)
@@ -3118,7 +3145,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // action: emit it and let the echoed command move every participant's
         // playhead together. The center glyph + icon still flip for immediate
         // feedback; the engine follows when the echo lands.
-        if syncPlayActive {
+        if syncPlay.isInGroup {
             if willPlay { syncPlay.userDidPlay() } else { syncPlay.userDidPause() }
         } else {
             if enginePlaying { enginePause() } else { enginePlay() }
@@ -3132,13 +3159,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     // MARK: - SyncPlay ("Watch Together")
 
-    /// Binds this presenter to the shared SyncPlay controller when playback
-    /// opens while already in a group. The controller drives the engine
-    /// through these closures (never re-emitting), and routes the user's
-    /// transport actions to the server instead.
-    private func bindSyncPlayIfNeeded() {
-        guard syncPlay.isInGroup else { return }
-        syncPlayActive = true
+    /// Binds this presenter to the shared SyncPlay controller — **always**, not
+    /// only when a group already exists.
+    ///
+    /// It used to be `bindSyncPlayIfNeeded`, guarded on `isInGroup` and run once
+    /// at open, which meant a player already running when the user joined a
+    /// group never received the bridge: the group formed server-side, the
+    /// transport stayed local, nothing synchronised, and nothing reported an
+    /// error. Binding unconditionally and letting the controller's own
+    /// `isInGroup` guards be the no-op is what makes joining mid-playback work
+    /// at all — and it is the only ordering that has no wrong moment.
+    private func bindSyncPlay() {
         syncPlay.bindPlayback(SyncPlayController.PlaybackBridge(
             play: { [weak self] in self?.enginePlay() },
             pause: { [weak self] in self?.enginePause() },
@@ -3146,32 +3177,78 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             positionMs: { [weak self] in Int(self?.currentMs ?? 0) },
             stop: { [weak self] in self?.enginePause() } // v1: pause on server Stop
         ))
-        syncPlay.onParticipantsChanged = { [weak self] count in self?.updateSyncPlayPill(count: count) }
-        updateSyncPlayPill(count: syncPlay.participantCount)
+        syncPlay.onSessionChanged = { [weak self] in self?.refreshSyncPlayHUD() }
+        refreshSyncPlayHUD()
     }
 
-    private func updateSyncPlayPill(count: Int) {
-        guard syncPlayActive else { return }
-        syncPlayPill.isHidden = false
-        // Padded with spaces so the rounded background reads as a pill without
-        // a custom label-inset subclass.
-        syncPlayPill.text = "  " + loc.localized("syncplay.pill", max(count, 1)) + "  "
+    /// Repaints presence, the waiting overlay and any arrival/departure line.
+    /// Driven by the controller's `onSessionChanged`, so it covers joining and
+    /// leaving mid-playback as well as the initial state.
+    private func refreshSyncPlayHUD() {
+        let inGroup = syncPlay.isInGroup
+        let participants = syncPlay.participants
+
+        syncPlayPresence.isHidden = !inGroup
+        if inGroup {
+            syncPlayPresence.update(
+                participants: participants,
+                state: syncPlay.groupState,
+                you: syncPlay.currentUserName,
+                youLabel: loc.localized("syncplay.you"),
+                accent: Self.accentColor()
+            )
+        }
+
+        // Name arrivals and departures against the previous render — the
+        // controller reports the list, not the delta.
+        if inGroup, !syncPlayLastParticipants.isEmpty {
+            let before = Set(syncPlayLastParticipants), after = Set(participants)
+            if let joined = after.subtracting(before).sorted().first {
+                syncPlayEvents.flash(loc.localized("syncplay.event.joined", joined))
+            } else if let left = before.subtracting(after).sorted().first {
+                syncPlayEvents.flash(loc.localized("syncplay.event.left", left))
+            }
+        }
+        syncPlayLastParticipants = inGroup ? participants : []
+
+        // The group is held while somebody buffers. Saying so is the difference
+        // between a wait and what reads as a frozen player.
+        let waiting = syncPlay.isWaitingForParticipants
+        if waiting {
+            syncPlayWaiting.configure(
+                title: loc.localized("syncplay.waiting.title"),
+                subtitle: loc.localized("syncplay.waiting.subtitle")
+            )
+        }
+        syncPlayWaiting.setVisible(waiting)
+        if !inGroup { syncPlayEvents.cancel() }
+    }
+
+    /// The player is a fixed dark surface with no `ThemeManager` in reach, so
+    /// the accent is read straight from its stored key. Rainbow resolves to its
+    /// static stand-in — a UIKit HUD has no hue phase to follow.
+    private static func accentColor() -> UIColor {
+        let raw = UserDefaults.standard.string(forKey: SettingsKey.accentColor)
+            ?? SettingsKey.Default.accentColor
+        let option = AccentOption(rawValue: raw) ?? .green
+        return .cinemaHex(option.palette.accentDark)
     }
 
     /// Detaches from the controller and, since v1 ties the group's lifetime to
     /// the player, leaves the group. Called from `teardown` (user dismiss).
     private func unbindSyncPlay() {
-        guard syncPlayActive else { return }
-        syncPlayActive = false
-        syncPlay.onParticipantsChanged = nil
+        syncPlay.onSessionChanged = nil
         syncPlay.unbindPlayback()
+        syncPlayWaiting.setVisible(false, animated: false)
+        syncPlayEvents.cancel()
+        syncPlayLastParticipants = []
         syncPlay.playbackDidDismiss()
     }
 
     /// A user-initiated seek. In a group it becomes a server Seek request (the
     /// echo does the actual engine seek); otherwise it seeks locally.
     private func userEngineSeek(ms: Int32) {
-        if syncPlayActive {
+        if syncPlay.isInGroup {
             syncPlay.userDidSeek(toMs: Int(max(0, ms)))
         } else {
             engineSeek(ms: ms)
@@ -3637,7 +3714,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // the gap reads as "loading", not "frozen". Cleared by .playing or the
             // first time tick.
             setLoading(true)
-            if syncPlayActive { syncPlay.reportBuffering() }
+            if syncPlay.isInGroup { syncPlay.reportBuffering() }
         case .stopped:
             endSeekLoading() // no frames are coming — a pending settle is moot
             // DIAG (recette A7) — libVLC has no distinct `.ended`, so every
@@ -3704,7 +3781,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setPlayPauseIcon(playing: true)
             #endif
             refreshNowPlayingRate(playing: true)
-            if syncPlayActive { syncPlay.reportReady(isPlaying: true) }
+            if syncPlay.isInGroup { syncPlay.reportReady(isPlaying: true) }
         case .paused:
             endSeekLoading()
             clearLoadingIfOpen()
@@ -3712,7 +3789,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setPlayPauseIcon(playing: false)
             #endif
             refreshNowPlayingRate(playing: false)
-            if syncPlayActive { syncPlay.reportReady(isPlaying: false) }
+            if syncPlay.isInGroup { syncPlay.reportReady(isPlaying: false) }
         default: break
         }
     }

@@ -90,7 +90,7 @@ extension JellyfinAPIClient: RemoteControlAPI {
     /// the point: `Play` (the "start this now" message) is not a
     /// `GeneralCommandType` and needs no declaration, while advertising
     /// transport commands the app doesn't execute would render dead controls in
-    /// the sender's UI. `SessionSocket` honors exactly what is promised here.
+    /// the sender's UI. `JellyfinSocket` honors exactly what is promised here.
     /// `supportsMediaControl: false` is how the user's opt-out is expressed:
     /// re-posting with the flag cleared removes this device from every picker
     /// immediately, whereas simply not posting would leave the session's
@@ -111,11 +111,18 @@ extension JellyfinAPIClient: RemoteControlAPI {
         }
     }
 
-    /// Opens the realtime socket that carries inbound session commands. Returns
-    /// `nil` when unauthenticated. Mirrors `makeSyncPlaySocket` — including the
-    /// `setEndpointPath` base-path preservation, without which a sub-path-hosted
-    /// server (`https://host/jellyfin`) gets a socket URL that 404s.
-    public func makeSessionSocket() -> SessionSocket? {
+    /// The URL of Jellyfin's realtime `/socket`, for `JellyfinSocketHub` to
+    /// connect. Returns `nil` when unauthenticated.
+    ///
+    /// Lives here — in the remote-control file — rather than in the SyncPlay one
+    /// because remote control is the consumer that is on by default; SyncPlay
+    /// inherits the same member through `RealtimeSocketAPI`. There is deliberately
+    /// only ONE of these: two factories is how the app ended up able to open two
+    /// sockets onto the same server-side session.
+    ///
+    /// Note the `setEndpointPath` base-path preservation, without which a
+    /// sub-path-hosted server (`https://host/jellyfin`) gets a socket URL that 404s.
+    public func makeRealtimeSocketURL() -> URL? {
         guard let client = getClient(),
               let serverURL = getServerURL(),
               let token = client.accessToken else { return nil }
@@ -129,7 +136,6 @@ extension JellyfinAPIClient: RemoteControlAPI {
             URLQueryItem(name: "ApiKey", value: token),
             URLQueryItem(name: "deviceId", value: deviceID)
         ]
-        guard let url = comps.url else { return nil }
-        return SessionSocket(url: url)
+        return comps.url
     }
 }
