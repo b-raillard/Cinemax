@@ -309,12 +309,19 @@ struct MediaDetailScreen: View {
         if let overview = item.overview {
             Text(overview)
                 .font(CinemaFont.dynamicBody)
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                .padding(.horizontal, contentPadding)
                 #if os(tvOS)
+                // Focusable so the remote can reach and scroll a long synopsis,
+                // and washed so that focus is VISIBLE when it lands here. The
+                // wash sits inside `.focusable()`: the environment's
+                // `isFocused` reaches the focusable view's content, not the
+                // modifiers wrapped around it.
+                .tvFocusableProse()
                 .focusable()
+                #else
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
                 #endif
+                .padding(.horizontal, contentPadding)
         }
 
         // Studio / Network

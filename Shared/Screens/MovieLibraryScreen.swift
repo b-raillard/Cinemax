@@ -302,7 +302,9 @@ struct MediaLibraryScreen: View {
                 browseStack
             }
             .scrollClipDisabled()
-            .refreshable { await viewModel.reload(using: appState, loc: loc) }
+            // No `.refreshable` — a remote has no pull gesture, so the
+            // modifier only reads as if a refresh were on offer. Settings →
+            // "Refresh catalogue" is the single trigger on tvOS.
             .task(id: viewModel.sortFilter) {
                 if !viewModel.genres.isEmpty {
                     await viewModel.reloadGenreItems(using: appState)
@@ -448,10 +450,11 @@ struct MediaLibraryScreen: View {
             }
             #if os(tvOS)
             .scrollClipDisabled()
-            #endif
+            #else
             .refreshable {
                 await viewModel.reload(using: appState, loc: loc)
             }
+            #endif
             .task(id: viewModel.sortFilter) {
                 await viewModel.applyFilter(using: appState)
             }

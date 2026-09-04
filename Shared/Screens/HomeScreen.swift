@@ -267,7 +267,11 @@ struct HomeScreen: View {
             }
             .padding(.top, CinemaSpacing.spacing20)
         }
+        #if os(iOS)
+        // Inert on tvOS — a remote has no pull gesture. Refresh lives in the
+        // empty state's own action there.
         .refreshable { await viewModel.reload(using: appState) }
+        #endif
     }
 
     private var content: some View {
@@ -382,9 +386,11 @@ struct HomeScreen: View {
                     Spacer(minLength: 80)
                 }
             }
+            #if os(iOS)
             .refreshable {
                 await viewModel.reload(using: appState)
             }
+            #endif
             #if os(tvOS)
             .scrollClipDisabled()
             .onAppear {
