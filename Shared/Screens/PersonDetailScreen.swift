@@ -25,9 +25,15 @@ struct PersonDetailScreen: View {
     #if os(tvOS)
     private let portraitSize: CGFloat = 280
     private let cardWidth: CGFloat = CinemaTVLayout.filmographyCardWidth
+    /// The page margin, so the portrait, the biography and the filmography
+    /// rails share one left edge. `ContentRow` draws its rails at the tvOS page
+    /// margin; leaving this page's own content at `spacing5` (28 pt) would set
+    /// the header 84 pt inboard of the rows under it.
+    private let pagePadding: CGFloat = CinemaTVLayout.pagePadding
     #else
     private let portraitSize: CGFloat = 132
     private let cardWidth: CGFloat = 130
+    private let pagePadding: CGFloat = CinemaSpacing.spacing5
     #endif
 
     var body: some View {
@@ -38,7 +44,7 @@ struct PersonDetailScreen: View {
                     Text(overview)
                         .font(CinemaFont.dynamicBody)
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .padding(.horizontal, CinemaSpacing.spacing5)
+                        .padding(.horizontal, pagePadding)
                 }
                 if let errorMessage {
                     ErrorStateView(
@@ -108,7 +114,7 @@ struct PersonDetailScreen: View {
             }
             Spacer()
         }
-        .padding(.horizontal, CinemaSpacing.spacing5)
+        .padding(.horizontal, pagePadding)
     }
 
     private func filmographyRow(title: String, items: [BaseItemDto]) -> some View {

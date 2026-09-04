@@ -717,10 +717,12 @@ private struct SearchResultsGrid: View, Equatable {
 
 /// Horizontal row of person matches, above the poster grid.
 ///
-/// Hand-rolled rather than reusing `ContentRow`: that component hardcodes
-/// `spacing6` horizontal padding, while this screen's grid uses `gridPadding`
-/// (`spacing20` on tvOS) — the row would sit visibly out of line with the
-/// posters underneath it.
+/// Hand-rolled rather than reusing `ContentRow`, historically because that
+/// component hardcoded `spacing6` horizontal padding while this screen's grid
+/// uses `gridPadding`, so the row sat visibly out of line with the posters
+/// underneath it. `ContentRow` now takes the tvOS page margin itself, so the
+/// two agree — this stays hand-rolled only because it takes its padding as a
+/// parameter and needs no header affordances.
 private struct SearchPersonRow: View {
     let people: [BaseItemDto]
     let imageBuilder: ImageURLBuilder
