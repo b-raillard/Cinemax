@@ -32,6 +32,16 @@ final class VideoPlayerCoordinator {
     /// replacement presenter.
     private var currentGeneration: UInt = 0
 
+    /// Bumped every time a player this coordinator presented goes away.
+    ///
+    /// **This is a signal for closing a HOST presentation, never a data-refresh
+    /// hook.** A dismissal is a poor proxy for "something changed" — that is
+    /// what the tier-2 `.cinemaxItemUserDataChanged` notification is for, and
+    /// the removal of the old `lastDismissedAt` is exactly that lesson. The one
+    /// legitimate reader is a modal that exists only to carry a playback: when
+    /// the playback ends, so should it.
+    private(set) var playerDismissals: Int = 0
+
     var maxBitrate: Int { render4K ? 120_000_000 : 20_000_000 }
 
     func play(
@@ -80,6 +90,7 @@ final class VideoPlayerCoordinator {
                         onDismiss: { [weak self] in
                             guard let self, self.currentGeneration == generation else { return }
                             self.vlcPresenter = nil
+                            self.playerDismissals &+= 1
                         }
                     )
                     guard self.currentGeneration == generation else { return }
@@ -98,6 +109,7 @@ final class VideoPlayerCoordinator {
                     onDismiss: { [weak self] in
                         guard let self, self.currentGeneration == generation else { return }
                         self.presenter = nil
+                        self.playerDismissals &+= 1
                     }
                 )
                 guard self.currentGeneration == generation else { return }

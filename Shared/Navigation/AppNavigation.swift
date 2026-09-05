@@ -934,6 +934,26 @@ struct AppNavigation: View {
             // active id and the known ids are available here.
             menuConfig.activate(serverId: appState.activeServerId,
                                 knownServerIds: Set(appState.servers.map(\.id)))
+            // A joined group learns WHAT to watch only from the socket's
+            // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
+            // it through the same in-process pair an App Intent and a remote
+            // « Lire sur… » use, so a session join inherits the full fidelity of
+            // a tap: series → next-up, resume position, version pick, prev/next.
+            //
+            // RULE — this MUST stay outside `#if os(iOS)`. It sat inside that
+            // block, between two genuinely iOS-only chores, and the Apple TV is
+            // the device Watch Together exists for: measured on 2026-09-05, a
+            // tvOS join received the `PlayQueue` frame (`CINEMAX-SYNCPLAY ▸
+            // PlayQueue : item=… entrée=…`), had nowhere to hand it, and left
+            // the viewer on Accueil with the card merely flipping to « Vous y
+            // êtes » — a feature that looks wired and does nothing. Exactly the
+            // failure `MediaDetailScreen.consumeIntentPlaybackRequest()` carries
+            // its own cross-platform RULE about.
+            SyncPlayController.shared.onQueueChanged = { itemId, _ in
+                guard AppState.isValidItemId(itemId) else { return }
+                appState.pendingIntentPlaybackItemId = itemId
+                appState.pendingDeepLinkItemId = itemId
+            }
             #if os(iOS)
             // One-shot cleanup for installs that used the removed offline-
             // downloads feature — purge the (potentially multi-GB) media tree
@@ -999,6 +1019,11 @@ struct AppNavigation: View {
                menuConfig.mode == .custom && menuConfig.customKind == .library {
                 Task { await menuConfig.refreshAvailableViews() }
             }
+            // A Watch Together group belongs to the session that opened it. On
+            // a logout / user switch the hub rebuilds its socket for whoever is
+            // signed in now, and a still-subscribed controller would apply the
+            // NEW session's transport commands to a group on the OLD one.
+            SyncPlayController.shared.sessionDidEnd()
             // Capabilities are per-session, so a login / user switch has to
             // re-declare them; a logout tears the socket down (`apply` sees
             // `isAuthenticated == false`).
@@ -1037,6 +1062,17 @@ struct AppNavigation: View {
                    Date().timeIntervalSince(since) > 60 {
                     lastBackgroundedAt = nil
                     Task { await appState.handlePossibleSessionExpiry() }
+                } else if appState.isAuthenticated {
+                    // Shorter hop — the token is not in question, but the
+                    // POLICY may be. `AppState.currentUser` is a cache taken at
+                    // login that nothing else refreshes for the life of the
+                    // process, so an admin granting or withdrawing a permission
+                    // reached a running client only at the next launch. The
+                    // socket's `UserUpdated` frame is the immediate path (see
+                    // `RemoteControlListener`); this is the floor for the case
+                    // where the user has turned the remote-control socket off.
+                    // One small request per foreground.
+                    Task { await appState.refreshCurrentUser() }
                 }
                 // Re-open the socket dropped on background and re-declare the
                 // capabilities, since the session may have been reaped while away.

@@ -4,19 +4,25 @@ import OSLog
 
 private let syncLogger = Logger(subsystem: "com.cinemax", category: "SyncPlay")
 
-/// Drives a SyncPlay ("Watch Together") session: owns the current group, the
-/// realtime socket, the client↔server clock offset, and the bridge to whatever
-/// player surface is on screen. A single shared instance is consulted by the
-/// VLC presenter (online path) — when `isInGroup`, the presenter routes the
-/// user's play / pause / seek through this controller (which hits the REST
-/// endpoint) instead of applying them locally; the server echoes the command
-/// back over the socket and *that* echo is what actually moves the playhead, so
-/// every participant stays in lockstep.
+/// Drives a SyncPlay ("Regarder ensemble") session: owns the current group, the
+/// subscription to the shared realtime socket, the client↔server clock offset,
+/// and the bridge to whatever player surface is on screen.
 ///
-/// v1 scope: single shared group, transport sync only (play / pause / seek),
-/// ~100 ms tolerance. Content selection is not synced — each participant opens
-/// the item themselves; the group syncs the transport across whoever has a
-/// player open.
+/// When `isInGroup`, the presenter routes the user's play / pause / seek through
+/// this controller (which hits the REST endpoint) instead of applying them
+/// locally; the server echoes the command back over the socket and *that* echo
+/// is what moves the playhead, so every participant stays in lockstep.
+///
+/// **What the protocol does and does not give us**, because two pieces of UI
+/// depend on knowing the difference:
+/// - Who is in the group: yes (`participants`, usernames).
+/// - What the group is watching: yes, but only over the socket
+///   (`PlayQueue`) — `GET /SyncPlay/List` returns `GroupInfoDto`, which carries
+///   no item at all. A group's title is therefore unknowable until you join.
+/// - Per-participant transport state: **no**. `GroupStateUpdate` is
+///   `{ State, Reason }`: it says the group is waiting, never who for. Any
+///   "waiting for Paul" would be inventing that name, so the UI says "waiting
+///   for a participant".
 @MainActor
 @Observable
 final class SyncPlayController {
@@ -26,21 +32,45 @@ final class SyncPlayController {
 
     private(set) var group: SyncPlayGroup?
     private(set) var participants: [String] = []
+    /// Group-level transport state. Drives the "waiting" affordance.
+    private(set) var groupState: SyncPlayGroupState = .idle
+    /// The item the group is watching, learned from `PlayQueue`.
+    private(set) var currentItemId: String?
+    /// Where the group stands in that item, in Jellyfin ticks.
+    private(set) var currentStartTicks: Int?
+    /// The queue ENTRY the group is on. Quoted back in every `Ready` /
+    /// `Buffering` report: Jellyfin matches a report against this, so sending
+    /// `nil` — which this client always did — means the report names no entry,
+    /// the participant is never counted ready, and the group sits in `Waiting`
+    /// with a black screen and no explanation.
+    @ObservationIgnored private(set) var currentPlaylistItemId: String?
 
     var isInGroup: Bool { group != nil }
     var participantCount: Int { participants.count }
     var groupName: String? { group?.name }
+    /// The group is held while a participant finishes buffering. Everyone's
+    /// picture is frozen; this is what lets the player say so instead of
+    /// looking broken.
+    var isWaitingForParticipants: Bool { isInGroup && groupState == .waiting }
 
     // MARK: Dependencies (set on activation)
 
     @ObservationIgnored private var api: (any SyncPlayAPI)?
     @ObservationIgnored private var loc: LocalizationManager?
     @ObservationIgnored private var toast: ToastCenter?
-    @ObservationIgnored private var currentUserName: String?
+    /// The signed-in user's Jellyfin username. Read by the player HUD so the
+    /// viewer's own chip says "You" rather than showing them their own name.
+    @ObservationIgnored private(set) var currentUserName: String?
+    /// An item this client itself just queued. The server echoes `PlayQueue`
+    /// back to the sender like every other participant, and announcing our own
+    /// echo would ask the app to open what it is already opening.
+    @ObservationIgnored private var selfQueuedItemId: String?
 
     // MARK: Socket + clock
 
-    @ObservationIgnored private var socket: SyncPlaySocket?
+    /// Our handle on the app's single realtime socket. `JellyfinSocketHub` owns
+    /// the connection; remote control subscribes to the same one.
+    @ObservationIgnored private var subscription: UUID?
     @ObservationIgnored private var socketTask: Task<Void, Never>?
     /// Estimated `serverClock - localClock`, in seconds. A command's server
     /// `When` maps to local time via `When - clockOffset`.
@@ -63,23 +93,63 @@ final class SyncPlayController {
 
     @ObservationIgnored private var bridge: PlaybackBridge?
 
-    /// True while an inbound command is being applied — lets the presenter
-    /// suppress the buffering/ready reports it would otherwise fire from the
-    /// engine state change the command induces (avoids a feedback echo).
-    @ObservationIgnored private(set) var isApplyingRemoteCommand = false
+    /// How long after applying a remote command the engine's own state changes
+    /// are treated as that command's echo rather than as the user's doing.
+    ///
+    /// This used to be a `defer`-reset boolean around the synchronous bridge
+    /// calls — which suppressed nothing, because the engine reports buffering
+    /// and readiness *asynchronously*, long after the `defer` had already put
+    /// the flag back. A window is the honest shape: the echo arrives later, so
+    /// the guard has to still be up later.
+    private static let remoteEchoWindow: TimeInterval = 1.0
+    @ObservationIgnored private var remoteEchoUntil: Date = .distantPast
 
-    /// Notified whenever the participant count changes so a UIKit HUD (the VLC
-    /// presenter's "Watch Together" pill) can repaint without observation.
-    @ObservationIgnored var onParticipantsChanged: (@MainActor (Int) -> Void)?
+    /// True while an inbound command's echo is still expected — lets the
+    /// presenter suppress the buffering/ready reports the command induces.
+    var isApplyingRemoteCommand: Bool { Date() < remoteEchoUntil }
+
+    /// Notified whenever the session's shape changes — participants, group
+    /// state, membership — so a UIKit HUD can repaint without observation.
+    @ObservationIgnored var onSessionChanged: (@MainActor () -> Void)?
+
+    /// Notified when the group's queue names an item, with its position in
+    /// ticks. This is how a participant learns **what to open**; nothing else
+    /// tells them.
+    @ObservationIgnored var onQueueChanged: (@MainActor (String, Int) -> Void)?
 
     private init() {}
 
     private static let ticksPerMillisecond = 10_000
 
+    /// One permanent trace line per session event.
+    ///
+    /// A Watch Together session is invisible from the outside: when it stalls,
+    /// the only symptom is a picture that never starts, which is
+    /// indistinguishable from a stream that failed to open. Without a trace a
+    /// remote log cannot even answer *did the group leave `Waiting`?* — the
+    /// first question any report of "rien ne se passe" raises. Same reasoning as
+    /// the `CINEMAX-AUDIO` line, and the same discipline: names and ids only,
+    /// never a URL and never a token.
+    private func trace(_ message: String) {
+        syncLogger.notice("CINEMAX-SYNCPLAY ▸ \(message, privacy: .public)")
+    }
+
+    /// Whether the engine currently selected can actually synchronise.
+    ///
+    /// Only `VLCStreamPresenter` binds a `PlaybackBridge`; `NativeVideoPresenter`
+    /// has no SyncPlay integration at all. With the native player forced, a
+    /// group would form server-side and nothing would ever move — a silent
+    /// no-op, which is precisely the failure mode this feature had too much of.
+    /// Callers refuse with an explanation rather than hiding the button, because
+    /// a documented feature that is simply absent teaches the user nothing.
+    static var isEngineSupported: Bool {
+        !UserDefaults.standard.bool(forKey: SettingsKey.forceNativeAVPlayer)
+    }
+
     // MARK: - Group lifecycle (driven by the UI)
 
-    /// Creates a group and starts a session. The realtime socket + clock are
-    /// spun up first so we're ready for the server's `GroupJoined` echo.
+    /// Creates a group and starts a session. The realtime subscription + clock
+    /// are spun up first so we're ready for the server's `GroupJoined` echo.
     func createGroup(
         named name: String,
         api: any SyncPlayAPI,
@@ -88,15 +158,14 @@ final class SyncPlayController {
         currentUserName: String?
     ) async -> Bool {
         prepare(api: api, loc: loc, toast: toast, currentUserName: currentUserName)
-        // Bring the socket up FIRST so we're listening when the server echoes
-        // `GroupJoined` (which refines the optimistic group below).
         startSession()
         do {
             try await api.syncPlayNewGroup(name: name)
             // Optimistic placeholder until the socket's GroupJoined refines it.
             group = SyncPlayGroup(id: "", name: name, participants: currentUserName.map { [$0] } ?? [])
             participants = group?.participants ?? []
-            notifyParticipants()
+            trace("groupe créé « \(name) » — en attente de l'écho GroupJoined")
+            notifySessionChanged()
             return true
         } catch {
             reportError(error)
@@ -119,7 +188,8 @@ final class SyncPlayController {
             try await api.syncPlayJoinGroup(groupId: target.id)
             group = target
             participants = target.participants
-            notifyParticipants()
+            trace("groupe rejoint id=\(target.id) participants=\(target.participants.count)")
+            notifySessionChanged()
             toast.info(loc.localized("syncplay.joined"))
             return true
         } catch {
@@ -132,6 +202,7 @@ final class SyncPlayController {
     /// Sets the group's queue to a single item (the creator, at Play time).
     func setQueue(itemId: String, startPositionTicks: Int) async {
         guard let api else { return }
+        selfQueuedItemId = itemId
         do {
             try await api.syncPlaySetNewQueue(itemIds: [itemId], startPositionTicks: startPositionTicks)
         } catch {
@@ -149,6 +220,19 @@ final class SyncPlayController {
         if let loc, let toast { toast.info(loc.localized("syncplay.left")) }
     }
 
+    /// The session this group belonged to is gone — logout, server switch, user
+    /// switch. Tears down locally and deliberately does **not** call
+    /// `syncPlayLeaveGroup`: the client has already been repointed, so the REST
+    /// call would land on the wrong server.
+    ///
+    /// Without it, a switch from server A to server B leaves this controller
+    /// subscribed while the hub rebuilds its socket against B — so B's transport
+    /// commands get applied to a group that lives on A.
+    func sessionDidEnd() {
+        guard isInGroup || subscription != nil else { return }
+        teardownSession()
+    }
+
     /// Called by the presenter when its player is dismissed by the user. v1
     /// ties the group's lifetime to the player: closing playback leaves.
     func playbackDidDismiss() {
@@ -158,9 +242,18 @@ final class SyncPlayController {
 
     // MARK: - Playback bridge
 
+    /// Binds a player surface. Called **unconditionally** when a player opens,
+    /// not only when a group already exists.
+    ///
+    /// It used to be guarded on `isInGroup` and run once, at open — so a player
+    /// that was already running when the user joined a group never received the
+    /// bridge at all: the group formed server-side, the transport stayed local,
+    /// nothing synchronised, and no error was raised anywhere. Binding always
+    /// and letting the group's absence be the no-op removes the whole class of
+    /// ordering bug, and is what makes joining from an open player possible.
     func bindPlayback(_ bridge: PlaybackBridge) {
         self.bridge = bridge
-        notifyParticipants()
+        notifySessionChanged()
     }
 
     func unbindPlayback() {
@@ -192,13 +285,19 @@ final class SyncPlayController {
     func reportBuffering() {
         guard isInGroup, !isApplyingRemoteCommand, let api, let bridge else { return }
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
-        Task { try? await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: nil) }
+        let entry = currentPlaylistItemId
+        Task { try? await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: entry) }
     }
 
     func reportReady(isPlaying: Bool) {
         guard isInGroup, !isApplyingRemoteCommand, let api, let bridge else { return }
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
-        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: nil) }
+        let entry = currentPlaylistItemId
+        // The entry id is what the server matches the report against. Logged
+        // because sending none is invisible from the outside and stalls the
+        // whole group in `Waiting`.
+        trace("Ready envoyé position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
+        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
     }
 
     // MARK: - Session plumbing
@@ -221,21 +320,40 @@ final class SyncPlayController {
     }
 
     private func startSocket() {
-        guard let api else { return }
-        socketTask?.cancel()
-        // Snapshot the outgoing socket so the async stop can't race the
-        // `self.socket = socket` reassignment below and stop the NEW socket.
-        let previous = self.socket
-        Task { await previous?.stop() }
-        guard let socket = api.makeSyncPlaySocket() else {
-            syncLogger.error("SyncPlay: could not open socket (not connected?)")
+        guard let api, let url = api.makeRealtimeSocketURL() else {
+            syncLogger.error("SyncPlay: no realtime socket URL (not connected?)")
             return
         }
-        self.socket = socket
-        Task { await socket.start() }
+        socketTask?.cancel()
+        let previous = subscription
+        subscription = nil
+
         socketTask = Task { @MainActor [weak self] in
-            for await message in socket.messages {
-                self?.handle(message)
+            let handle = await JellyfinSocketHub.shared.subscribe(url: url)
+            // Re-check AFTER the hop. `teardownSession` cancels this task, but
+            // it cannot unsubscribe a handle that did not exist yet — and since
+            // `self` is a process singleton, a `weak self` guard can never fail
+            // here, so cancellation is the only signal there is. Without this,
+            // a group whose creation fails fast (offline) leaves an orphan
+            // subscription that keeps `subscribers` non-empty forever: the hub
+            // then never closes the socket, and a WebSocket carrying the OLD
+            // server's token survives logout for the life of the process.
+            guard !Task.isCancelled, self != nil else {
+                await JellyfinSocketHub.shared.unsubscribe(handle.id)
+                return
+            }
+            // Bind weakly — a strong local held across the loop's awaits would
+            // pin the controller for the stream's whole life and make the
+            // `[weak self]` capture inert.
+            self?.subscription = handle.id
+            // Release the previous handle only once the new one is in hand:
+            // dropping it first can empty the hub and close the shared socket,
+            // which then reopens a beat later — a flap of the one connection
+            // remote control is also using.
+            if let previous { await JellyfinSocketHub.shared.unsubscribe(previous) }
+            for await message in handle.messages {
+                guard let self else { return }
+                self.handle(message)
             }
         }
     }
@@ -243,17 +361,26 @@ final class SyncPlayController {
     private func teardownSession() {
         group = nil
         participants = []
+        groupState = .idle
+        currentItemId = nil
+        currentStartTicks = nil
+        currentPlaylistItemId = nil
+        selfQueuedItemId = nil
         scheduledCommandTask?.cancel(); scheduledCommandTask = nil
         socketTask?.cancel(); socketTask = nil
-        let socket = self.socket
-        self.socket = nil
-        Task { await socket?.stop() }
+        if let subscription {
+            // Drops only OUR subscription; the hub keeps the socket up for
+            // remote control, which is on by default.
+            Task { await JellyfinSocketHub.shared.unsubscribe(subscription) }
+        }
+        subscription = nil
         clockOffset = 0
-        notifyParticipants()
+        remoteEchoUntil = .distantPast
+        notifySessionChanged()
     }
 
-    private func notifyParticipants() {
-        onParticipantsChanged?(participantCount)
+    private func notifySessionChanged() {
+        onSessionChanged?()
     }
 
     private func reportError(_ error: Error) {
@@ -285,10 +412,14 @@ final class SyncPlayController {
 
     // MARK: - Inbound handling
 
-    private func handle(_ message: SyncPlaySocketMessage) {
+    /// The hub delivers every frame to every consumer, so remote-control
+    /// traffic arrives here too and is ignored — `RemoteControlListener` owns
+    /// that half.
+    private func handle(_ message: JellyfinSocketMessage) {
         switch message {
-        case .command(let command): schedule(command)
-        case .groupUpdate(let update): apply(update)
+        case .syncPlayCommand(let command): schedule(command)
+        case .syncPlayGroupUpdate(let update): apply(update)
+        case .play, .displayMessage, .userUpdated: break
         }
     }
 
@@ -310,9 +441,14 @@ final class SyncPlayController {
     }
 
     private func applyCommand(_ command: SyncPlayCommand) {
-        guard let bridge else { return }
-        isApplyingRemoteCommand = true
-        defer { isApplyingRemoteCommand = false }
+        guard let bridge else {
+            trace("commande \(command.command.rawValue) reçue sans lecteur lié — ignorée")
+            return
+        }
+        trace("commande appliquée : \(command.command.rawValue) position=\(command.positionTicks.map(String.init) ?? "—")")
+        // Raise the echo window BEFORE touching the engine: its state-change
+        // events arrive asynchronously, after this function has returned.
+        remoteEchoUntil = Date().addingTimeInterval(Self.remoteEchoWindow)
 
         switch command.command {
         case .unpause:
@@ -334,31 +470,93 @@ final class SyncPlayController {
             if let g = update.group {
                 group = g
                 participants = g.participants
+                applyState(g.state)
             }
-            notifyParticipants()
+            notifySessionChanged()
         case .userJoined:
             if let name = update.userName, !participants.contains(name) {
                 participants.append(name)
-                notifyParticipants()
+                notifySessionChanged()
             }
         case .userLeft:
             if let name = update.userName {
                 participants.removeAll { $0 == name }
-                notifyParticipants()
+                notifySessionChanged()
             }
+        case .stateUpdate:
+            applyState(update.state)
+            notifySessionChanged()
+        case .playQueue:
+            applyQueue(update)
         case .groupLeft, .notInGroup, .groupDoesNotExist:
-            handleServerRemoval()
-        case .stateUpdate, .playQueue, .none:
+            handleServerRemoval(message: "syncplay.groupEnded")
+        case .libraryAccessDenied:
+            // The group is watching something this account cannot see. Saying
+            // so is the whole value: the alternative is a session that joins
+            // and then shows nothing, with no reason given.
+            handleServerRemoval(message: "syncplay.libraryAccessDenied")
+        case .none:
             break
         }
     }
 
-    /// The server removed us (group disbanded, kicked, or we left elsewhere).
-    private func handleServerRemoval() {
+    private func applyState(_ raw: String?) {
+        guard let raw, let parsed = SyncPlayGroupState(rawValue: raw) else {
+            if let raw { trace("état de groupe inconnu « \(raw) » — ignoré") }
+            return
+        }
+        guard parsed != groupState else { return }
+        trace("état du groupe : \(groupState.rawValue) → \(parsed.rawValue)")
+        groupState = parsed
+    }
+
+    /// The `PlayQueue` update — the only thing that says what the group is
+    /// watching. Dropping it is what left a joiner synchronised to nothing.
+    private func applyQueue(_ update: SyncPlayGroupUpdate) {
+        guard let itemId = update.playingItemId else {
+            trace("PlayQueue reçu SANS élément lisible — le joueur ne saura pas quoi ouvrir")
+            return
+        }
+        let ticks = max(0, update.startPositionTicks ?? 0)
+        let changed = itemId != currentItemId
+        currentItemId = itemId
+        currentStartTicks = ticks
+        currentPlaylistItemId = update.playingPlaylistItemId.flatMap { $0.isEmpty ? nil : $0 }
+        trace("PlayQueue : item=\(itemId) entrée=\(currentPlaylistItemId ?? "aucune") position=\(ticks) lecture=\(update.isPlaying.map(String.init) ?? "?")")
+        if let isPlaying = update.isPlaying {
+            groupState = isPlaying ? .playing : .paused
+        }
+        notifySessionChanged()
+
+        // Announce only a genuine change of item: the server re-sends the queue
+        // on several unrelated events, and re-opening the media the user is
+        // already watching would restart it under them.
+        guard changed else { return }
+        // …and never our own echo, which would double-open what the creator is
+        // already opening.
+        if selfQueuedItemId == itemId {
+            selfQueuedItemId = nil
+            return
+        }
+        // A bound bridge means a player is already on screen. Switching the
+        // media under it is deliberately out of v1 scope — the group's transport
+        // still applies, and the mismatch is logged rather than acted on, since
+        // silently restarting someone's player is worse than a divergence they
+        // can see and fix by rejoining.
+        guard bridge == nil else {
+            syncLogger.notice("SyncPlay: group moved to a different item while a player was open — not switching in v1")
+            return
+        }
+        onQueueChanged?(itemId, ticks)
+    }
+
+    /// The server removed us (group disbanded, kicked, we left elsewhere, or
+    /// the library is out of reach).
+    private func handleServerRemoval(message key: String) {
         let wasIn = isInGroup
         teardownSession()
         if wasIn, let loc, let toast {
-            toast.info(loc.localized("syncplay.groupEnded"))
+            toast.info(loc.localized(key))
         }
     }
 }

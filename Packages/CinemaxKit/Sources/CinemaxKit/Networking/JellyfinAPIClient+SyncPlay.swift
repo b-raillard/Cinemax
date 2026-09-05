@@ -30,7 +30,7 @@ import JellyfinAPI
 // duplication this migration removes. The practical effect is bounded — a dead
 // server stalls a transport action for 30 s instead of 15 s before surfacing.
 //
-// `makeSyncPlaySocket()` stays hand-built: the SDK models REST only, and the
+// The realtime socket stays hand-built: the SDK models REST only, and the
 // realtime `/socket` endpoint has no generated counterpart.
 
 extension JellyfinAPIClient: SyncPlayAPI {
@@ -110,23 +110,6 @@ extension JellyfinAPIClient: SyncPlayAPI {
         return SyncPlayUtcTime(requestReceptionTime: received, responseTransmissionTime: transmitted)
     }
 
-    public func makeSyncPlaySocket() -> SyncPlaySocket? {
-        guard let client = getClient(),
-              let serverURL = getServerURL(),
-              let token = client.accessToken else { return nil }
-        guard var comps = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else { return nil }
-        comps.setEndpointPath("/socket", preservingBasePathOf: serverURL)
-        // Derive the WebSocket scheme from the server's, preserving the base
-        // path already set above (never assign `path` directly — see
-        // URLComponents+ServerPath).
-        comps.scheme = (serverURL.scheme?.lowercased() == "https") ? "wss" : "ws"
-        comps.queryItems = [
-            URLQueryItem(name: "ApiKey", value: token),  // never `api_key` — see makeSessionSocket
-            URLQueryItem(name: "deviceId", value: deviceID)
-        ]
-        guard let url = comps.url else { return nil }
-        return SyncPlaySocket(url: url)
-    }
 
     // MARK: - Send helpers
 

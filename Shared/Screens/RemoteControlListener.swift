@@ -14,9 +14,12 @@ private let logger = Logger(subsystem: "com.cinemax", category: "RemoteControl")
 ///      appear in a picker at all (this app's own `RemotePlayTarget.resolve`
 ///      filters on exactly that flag, which is why Cinemax could never cast to
 ///      Cinemax before).
-///   2. `SessionSocket` — Jellyfin delivers session commands over the realtime
-///      socket and nowhere else, so capabilities without a socket would put the
-///      device in the list and then swallow every tap.
+///   2. A subscription to the realtime socket — Jellyfin delivers session
+///      commands there and nowhere else, so capabilities without one would put
+///      the device in the list and then swallow every tap. The socket itself is
+///      owned by `JellyfinSocketHub`, never by this listener: Watch Together
+///      needs the same one, and two connections would make every frame arrive
+///      twice (see the one-socket rule on `JellyfinSocket`).
 ///
 /// **Playback is routed through the same in-process path as an App Intent**
 /// (`pendingIntentPlaybackItemId` + `pendingDeepLinkItemId`), not straight to
@@ -34,7 +37,8 @@ private let logger = Logger(subsystem: "com.cinemax", category: "RemoteControl")
 /// send-only by design anyway (see the "Remote control" RULE in CLAUDE.md).
 @MainActor
 final class RemoteControlListener {
-    private var socket: SessionSocket?
+    /// Our handle on the shared socket. Nil when not listening.
+    private var subscription: UUID?
     private var consumeTask: Task<Void, Never>?
     /// Bumped by every `apply`, and re-checked after each await inside `start`.
     /// A logout / server switch that lands while `publishCapabilities` is in
@@ -97,21 +101,28 @@ final class RemoteControlListener {
         generation &+= 1
         consumeTask?.cancel()
         consumeTask = nil
-        if let socket {
-            Task { await socket.stop() }
+        if let subscription {
+            // Only ever drops OUR subscription. The hub closes the socket when
+            // the last consumer leaves, so a live Watch Together session keeps
+            // it up — which is the whole point of the hub.
+            Task { await JellyfinSocketHub.shared.unsubscribe(subscription) }
         }
-        socket = nil
+        subscription = nil
         appliedState = nil
     }
 
     // MARK: - Socket
 
     private func openSocket(appState: AppState, toasts: ToastCenter, token: Int) {
-        guard let socket = appState.apiClient.makeSessionSocket() else { return }
-        self.socket = socket
+        guard let url = appState.apiClient.makeRealtimeSocketURL() else { return }
         consumeTask = Task { [weak self] in
-            await socket.start()
-            for await message in socket.messages {
+            let handle = await JellyfinSocketHub.shared.subscribe(url: url)
+            guard let listener = self, token == listener.generation else {
+                await JellyfinSocketHub.shared.unsubscribe(handle.id)
+                return
+            }
+            listener.subscription = handle.id
+            for await message in handle.messages {
                 // A logout / switch / background bumps the token; the stream can
                 // still deliver a frame that was already in flight.
                 guard let self, token == self.generation else { return }
@@ -120,8 +131,12 @@ final class RemoteControlListener {
         }
     }
 
-    private func handle(_ message: RemoteSessionMessage, appState: AppState, toasts: ToastCenter) {
+    /// The hub delivers every frame to every consumer, so this sees SyncPlay
+    /// traffic too and ignores it — `SyncPlayController` owns that half.
+    private func handle(_ message: JellyfinSocketMessage, appState: AppState, toasts: ToastCenter) {
         switch message {
+        case .syncPlayCommand, .syncPlayGroupUpdate:
+            break
         case .play(let request):
             // Only "start this now" is honored: this app has no playback queue,
             // so PlayNext / PlayLast have nothing truthful to map onto.
@@ -136,6 +151,13 @@ final class RemoteControlListener {
             }
             appState.pendingIntentPlaybackItemId = itemId
             appState.pendingDeepLinkItemId = itemId
+        case .userUpdated:
+            // An administrator saved this account's user record. Re-read it so
+            // the permission gates (`syncPlayAccess`, `canSeeOthers`) stop
+            // answering from a cache taken at launch. Cheap — one `GET
+            // /Users/Me` — and it also republishes the extension session, which
+            // is what `refreshCurrentUser` is for.
+            Task { await appState.refreshCurrentUser() }
         case .displayMessage(let message):
             // The only `GeneralCommandType` the capability post advertises.
             if let header = message.header {
