@@ -804,7 +804,8 @@ struct HomeScreen: View {
                 subtitle: loc.localized(
                     isMine ? "syncplay.session.mine" : "syncplay.session.with",
                     participantSummary(entry.participants)
-                )
+                ),
+                detail: liveDetail(entry)
             )
             .overlay(alignment: .topLeading) { livePill(isTogether: true) }
         }
@@ -862,6 +863,37 @@ struct HomeScreen: View {
             #endif
             .accessibilityLabel("\(entry.title ?? ""), \(entry.participants.first ?? "")")
         }
+    }
+
+    /// "en pause · ouverte il y a 4 min" — the state of the group and how long
+    /// it has stood there.
+    ///
+    /// Both come from `GroupInfoDto` fields the app already parsed and then
+    /// threw away at render time, so they cost no request and no permission.
+    /// They answer the two questions a card could not: whether joining now
+    /// lands on something playing, and whether the session is live at all or
+    /// was abandoned an hour ago and left standing.
+    private func liveDetail(_ entry: LiveSessionsRow.Entry) -> String? {
+        var parts: [String] = []
+        // `.idle` is deliberately not rendered: a group in that state has
+        // nothing playing, and naming it would read as a fault rather than as
+        // "nobody has started yet".
+        switch entry.groupState {
+        case .playing: parts.append(loc.localized("syncplay.session.state.playing"))
+        case .paused: parts.append(loc.localized("syncplay.session.state.paused"))
+        case .waiting: parts.append(loc.localized("syncplay.session.state.waiting"))
+        case .idle, .none: break
+        }
+        if let minutes = entry.minutesSinceUpdate() {
+            if minutes < 1 {
+                parts.append(loc.localized("syncplay.session.age.now"))
+            } else if minutes < 60 {
+                parts.append(loc.localized("syncplay.session.age.minutes", minutes))
+            } else {
+                parts.append(loc.localized("syncplay.session.age.hours", minutes / 60))
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// Signals that a card is a live session rather than a recommendation.

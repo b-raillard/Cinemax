@@ -159,12 +159,21 @@ struct WatchTogetherSheet: View {
 
     // MARK: - Shared pieces
 
+    /// The group's NAME is the one thing about a session that reaches every
+    /// account: `GroupInfoDto` carries no item, so somebody who may not read
+    /// `/Sessions` learns what is playing from this string or from nothing at
+    /// all. Naming the group after the work rather than after its owner
+    /// therefore costs no request and no permission, and it is what lets a card
+    /// on someone else's Home say what it is. The owner's name remains the
+    /// fallback for the case the title is missing.
     private var defaultGroupName: String {
+        let title = itemTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
         let owner = appState.currentUser?.name
         if let owner, !owner.isEmpty {
             return loc.localized("syncplay.defaultName", owner)
         }
-        return itemTitle
+        return loc.localized("syncplay.title")
     }
 
     private var createSection: some View {

@@ -546,21 +546,24 @@ final class HomeViewModel {
     private func loadActiveSessions(userId: String, appState: AppState) async {
         currentUserName = appState.currentUser?.name
 
-        // Two sources, two permissions — and that split is what makes the row
-        // reachable by everyone. `/Sessions` stays admin-only: it is meant to be
-        // elevated and even leaks every user's session to non-admins on some
-        // servers (jellyfin#5210). `GET /SyncPlay/List` is governed by the
-        // server's own per-user SyncPlay policy, so a regular account still
-        // sees the sessions it is allowed to join.
+        // Two sources, two per-user permissions — neither of them
+        // `isAdministrator` any more. `GET /SyncPlay/List` is governed by the
+        // server's own SyncPlay policy; `/Sessions`, which hands out every
+        // account's current activity, by `canSeeOthers` (see the reasoning
+        // there — the administrator gate that used to sit here was Cinemax's
+        // own, not a server rule).
         // Both permissions are read HERE, on the main actor, and only the
         // resulting scalars cross into the concurrent closures below —
         // `AppState` is main-actor isolated and cannot be touched from them.
-        let isAdmin = appState.isAdministrator
-        let mayJoin = LiveSessionsRow.canJoin(appState.currentUser?.policy?.syncPlayAccess)
+        let policy = appState.currentUser?.policy
+        let maySeeOthers = LiveSessionsRow.canSeeOthers(
+            isAdministrator: appState.isAdministrator, policy: policy
+        )
+        let mayJoin = LiveSessionsRow.canJoin(policy?.syncPlayAccess)
         let client = appState.apiClient
 
         async let sessions: [SessionInfoDto] = {
-            guard isAdmin else { return [] }
+            guard maySeeOthers else { return [] }
             let all = (try? await client.getActiveSessions(activeWithinSeconds: 60)) ?? []
             return all.filter { $0.nowPlayingItem != nil && ($0.userID ?? "") != userId }
         }()

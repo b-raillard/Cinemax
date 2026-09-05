@@ -261,6 +261,23 @@ struct AdminUserDetailScreen: View {
                     }
                 }
             }
+
+            // The other half of « En direct », and the reason it is a
+            // permission rather than an administrator gate: `/Sessions` hands
+            // out every account's current activity, so who may read it is a
+            // decision to take per user. Jellyfin models nothing narrower than
+            // "may act on other people's sessions", so the footer says plainly
+            // that the switch grants both — see `LiveSessionsRow.canSeeOthers`.
+            AdminSectionGroup(
+                loc.localized("admin.user.access.liveSessions.title"),
+                footer: loc.localized("admin.user.access.liveSessions.footer")
+            ) {
+                toggleRow(
+                    icon: "dot.radiowaves.left.and.right",
+                    label: loc.localized("admin.user.access.liveSessions.label"),
+                    isOn: policyBinding(\.enableRemoteControlOfOtherUsers)
+                )
+            }
         }
     }
 

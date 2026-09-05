@@ -330,6 +330,9 @@
 "admin.user.access.syncPlay.none" = "None";
 "admin.user.access.syncPlay.join" = "Join only";
 "admin.user.access.syncPlay.createAndJoin" = "Create and join";
+"admin.user.access.liveSessions.title" = "See \"Live\"";
+"admin.user.access.liveSessions.label" = "See other people's activity";
+"admin.user.access.liveSessions.footer" = "Shows this user who is watching what right now, and lets them notify someone from a lobby. Without it they see Watch Together sessions only. Note: Jellyfin does not separate seeing from controlling — this permission also lets the account drive playback on other people's devices.";
 
 "admin.user.parental.rating.title" = "Max content rating";
 "admin.user.parental.rating.footer" = "Hides content rated above the chosen age for this user. Unrated titles stay visible.";
@@ -914,6 +917,12 @@
 "syncplay.session.a11y" = "Session: %@, with %@. Join.";
 "syncplay.session.mine" = "You're in \u00b7 with %@";
 "syncplay.session.a11y.mine" = "Session in progress: %@, with %@. Leave.";
+"syncplay.session.state.playing" = "playing";
+"syncplay.session.state.paused" = "paused";
+"syncplay.session.state.waiting" = "waiting";
+"syncplay.session.age.now" = "just opened";
+"syncplay.session.age.minutes" = "opened %d min ago";
+"syncplay.session.age.hours" = "opened %d h ago";
 "syncplay.lobby.eyebrow" = "Session open";
 "syncplay.lobby.participants" = "Here";
 "syncplay.lobby.alone" = "You're on your own so far.";

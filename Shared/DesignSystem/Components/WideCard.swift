@@ -5,6 +5,10 @@ struct WideCard: View {
     let imageURL: URL?
     var progress: Double? = nil
     var subtitle: String? = nil
+    /// A third, quieter line. Carried by the "En direct" row so a session's
+    /// state and age can sit under the participants without crowding
+    /// `subtitle`, which is `lineLimit(1)` and already spoken for.
+    var detail: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -39,6 +43,13 @@ struct WideCard: View {
                 Text(subtitle)
                     .font(CinemaFont.label(.medium))
                     .foregroundStyle(CinemaColor.outline)
+                    .lineLimit(1)
+            }
+
+            if let detail {
+                Text(detail)
+                    .font(CinemaFont.label(.small))
+                    .foregroundStyle(CinemaColor.outlineVariant)
                     .lineLimit(1)
             }
         }

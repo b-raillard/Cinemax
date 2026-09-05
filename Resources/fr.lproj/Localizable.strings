@@ -521,6 +521,9 @@
 "admin.user.access.syncPlay.none" = "Aucune";
 "admin.user.access.syncPlay.join" = "Rejoindre uniquement";
 "admin.user.access.syncPlay.createAndJoin" = "Créer et rejoindre";
+"admin.user.access.liveSessions.title" = "Voir « En direct »";
+"admin.user.access.liveSessions.label" = "Voir l'activité des autres";
+"admin.user.access.liveSessions.footer" = "Montre à cet utilisateur qui regarde quoi en ce moment, et lui permet de prévenir quelqu'un depuis une salle d'attente. Sans cela, il ne voit que les séances « Regarder ensemble ». Attention : Jellyfin ne sépare pas voir et piloter — cette permission autorise aussi ce compte à commander la lecture sur les appareils des autres.";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";
@@ -917,6 +920,12 @@
 "syncplay.needsVLC" = "Regarder ensemble ne fonctionne qu'avec le lecteur VLC. Désactivez « Lecteur natif » dans Réglages → Lecture.";
 "syncplay.session.mine" = "Vous y êtes · avec %@";
 "syncplay.session.a11y.mine" = "Séance en cours : %@, avec %@. Quitter.";
+"syncplay.session.state.playing" = "en lecture";
+"syncplay.session.state.paused" = "en pause";
+"syncplay.session.state.waiting" = "en attente";
+"syncplay.session.age.now" = "ouverte à l'instant";
+"syncplay.session.age.minutes" = "ouverte il y a %d min";
+"syncplay.session.age.hours" = "ouverte il y a %d h";
 "syncplay.lobby.eyebrow" = "Séance ouverte";
 "syncplay.lobby.participants" = "Présents";
 "syncplay.lobby.alone" = "Vous êtes seul pour l'instant.";

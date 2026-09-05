@@ -173,7 +173,7 @@ struct WatchTogetherLobby: View {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if appState.isAdministrator {
+            if canSeeOthers {
                 if invitees.isEmpty {
                     Text(loc.localized("syncplay.lobby.invite.nobody"))
                         .font(CinemaFont.body)
@@ -271,11 +271,22 @@ struct WatchTogetherLobby: View {
         }
     }
 
-    /// Everyone else with a live session on this server. Non-admins get an
-    /// empty list — `/Sessions` is elevated — which is why the section leads
-    /// with the explanation rather than with this.
+    /// Whether this account may read `/Sessions` at all — the same per-user
+    /// permission the "En direct" row's solo cards ride on. An account without
+    /// it sees the explanation above and no list, which is the honest shape:
+    /// there is nobody we are allowed to name.
+    private var canSeeOthers: Bool {
+        LiveSessionsRow.canSeeOthers(
+            isAdministrator: appState.isAdministrator,
+            policy: appState.currentUser?.policy
+        )
+    }
+
+    /// Everyone else with a live session on this server. An account without the
+    /// permission gets an empty list, which is why the section leads with the
+    /// explanation rather than with this.
     private func loadInvitees() async {
-        guard appState.isAdministrator else { return }
+        guard canSeeOthers else { return }
         let me = appState.currentUserId
         let sessions = (try? await appState.apiClient.getActiveSessions(activeWithinSeconds: 300)) ?? []
         invitees = sessions.compactMap { session in
