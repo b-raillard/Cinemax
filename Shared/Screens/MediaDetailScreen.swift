@@ -52,6 +52,9 @@ struct MediaDetailScreen: View {
     /// session used to drop straight into the player, where the group waits for
     /// participants to report ready — a black screen with no way back.
     @State private var watchTogetherLobby: WatchTogetherIntent?
+    /// Held between « Lancer la lecture » and the lobby cover actually going
+    /// away — see the `onDisappear` that consumes it.
+    @State private var pendingWatchTogetherStart: WatchTogetherIntent?
     /// Raises the root-hosted "Play on…" sheet. A context menu can raise it too
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
@@ -214,8 +217,17 @@ struct MediaDetailScreen: View {
                     )
                 },
                 onStart: {
+                    // Remember the intent, then close — and start playback
+                    // only once the cover is GONE (see the `onDisappear`
+                    // below), never from inside its dismissal. Raising a
+                    // presentation while another is dismissing is the hazard
+                    // the sheet → lobby hop above already documents; here it
+                    // would be a `navigationDestination` push on iOS and the
+                    // coordinator's own cover on tvOS, i.e. the same shape.
+                    // Sequencing it after the dismissal costs nothing and
+                    // removes the question.
+                    pendingWatchTogetherStart = intent
                     watchTogetherLobby = nil
-                    Task { @MainActor in startWatchTogether(intent) }
                 }
             )
             .environment(appState)
@@ -223,6 +235,13 @@ struct MediaDetailScreen: View {
             .environment(loc)
             .environment(toast)
             .environment(network)
+            // Fires once the cover is actually gone, which is the earliest
+            // moment a push (or the tvOS coordinator's own cover) can land.
+            .onDisappear {
+                guard let pending = pendingWatchTogetherStart else { return }
+                pendingWatchTogetherStart = nil
+                Task { @MainActor in startWatchTogether(pending) }
+            }
         }
         #if os(iOS)
         .navigationDestination(item: $watchTogetherPlay) { intent in

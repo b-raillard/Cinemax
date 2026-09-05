@@ -919,7 +919,9 @@
 "syncplay.session.a11y" = "Séance : %@, avec %@. Rejoindre.";
 "syncplay.needsVLC" = "Regarder ensemble ne fonctionne qu'avec le lecteur VLC. Désactivez « Lecteur natif » dans Réglages → Lecture.";
 "syncplay.session.mine" = "Vous y êtes · avec %@";
+"syncplay.session.mine.alone" = "Vous y êtes · personne d'autre";
 "syncplay.session.a11y.mine" = "Séance en cours : %@, avec %@. Quitter.";
+"syncplay.session.a11y.mine.alone" = "Séance en cours : %@, personne d'autre pour l'instant. Quitter.";
 "syncplay.session.state.playing" = "en lecture";
 "syncplay.session.state.paused" = "en pause";
 "syncplay.session.state.waiting" = "en attente";

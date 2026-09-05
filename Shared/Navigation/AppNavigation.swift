@@ -934,22 +934,31 @@ struct AppNavigation: View {
             // active id and the known ids are available here.
             menuConfig.activate(serverId: appState.activeServerId,
                                 knownServerIds: Set(appState.servers.map(\.id)))
-            #if os(iOS)
-            // One-shot cleanup for installs that used the removed offline-
-            // downloads feature — purge the (potentially multi-GB) media tree
-            // that no longer has any UI to clear it.
-            Self.purgeLegacyDownloads()
-
             // A joined group learns WHAT to watch only from the socket's
             // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
             // it through the same in-process pair an App Intent and a remote
             // « Lire sur… » use, so a session join inherits the full fidelity of
             // a tap: series → next-up, resume position, version pick, prev/next.
+            //
+            // RULE — this MUST stay outside `#if os(iOS)`. It sat inside that
+            // block, between two genuinely iOS-only chores, and the Apple TV is
+            // the device Watch Together exists for: measured on 2026-09-05, a
+            // tvOS join received the `PlayQueue` frame (`CINEMAX-SYNCPLAY ▸
+            // PlayQueue : item=… entrée=…`), had nowhere to hand it, and left
+            // the viewer on Accueil with the card merely flipping to « Vous y
+            // êtes » — a feature that looks wired and does nothing. Exactly the
+            // failure `MediaDetailScreen.consumeIntentPlaybackRequest()` carries
+            // its own cross-platform RULE about.
             SyncPlayController.shared.onQueueChanged = { itemId, _ in
                 guard AppState.isValidItemId(itemId) else { return }
                 appState.pendingIntentPlaybackItemId = itemId
                 appState.pendingDeepLinkItemId = itemId
             }
+            #if os(iOS)
+            // One-shot cleanup for installs that used the removed offline-
+            // downloads feature — purge the (potentially multi-GB) media tree
+            // that no longer has any UI to clear it.
+            Self.purgeLegacyDownloads()
             // A crash / force-quit mid-playback leaves the playback Live
             // Activity pinned to the Lock Screen with a timer that keeps
             // running. Sweep any orphan at launch (the player also sweeps on

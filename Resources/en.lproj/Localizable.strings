@@ -916,7 +916,9 @@
 "syncplay.session.unknownTitle" = "Session in progress";
 "syncplay.session.a11y" = "Session: %@, with %@. Join.";
 "syncplay.session.mine" = "You're in \u00b7 with %@";
+"syncplay.session.mine.alone" = "You're in \u00b7 nobody else yet";
 "syncplay.session.a11y.mine" = "Session in progress: %@, with %@. Leave.";
+"syncplay.session.a11y.mine.alone" = "Session in progress: %@, nobody else yet. Leave.";
 "syncplay.session.state.playing" = "playing";
 "syncplay.session.state.paused" = "paused";
 "syncplay.session.state.waiting" = "waiting";

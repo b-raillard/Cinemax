@@ -541,6 +541,19 @@ final class HomeViewModel {
         }
     }
 
+    /// Re-asks the two « En direct » sources and nothing else.
+    ///
+    /// Deliberately NOT `reload()`: that flips `isLoading`, which swaps the body
+    /// for the skeleton and costs the user their scroll position — the same
+    /// mistake the two-tier refresh RULE documents for `MediaLibraryScreen`.
+    /// A session someone else opens has no other way of reaching this screen:
+    /// Jellyfin sends group updates over the socket only to a group's own
+    /// members, so a non-member is told nothing at all.
+    func refreshLiveRow(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        await loadActiveSessions(userId: userId, appState: appState)
+    }
+
     /// Fetches active sessions and filters down to ones with a currently-playing item,
     /// excluding the logged-in user (their own "resume" already covers that).
     private func loadActiveSessions(userId: String, appState: AppState) async {

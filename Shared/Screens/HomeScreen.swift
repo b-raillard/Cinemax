@@ -162,7 +162,35 @@ struct HomeScreen: View {
             }
         }
         .onDisappear { isVisible = false }
+        // The « En direct » row is the ONLY door into a session somebody else
+        // opened, and nothing pushes it open: `/SyncPlay/List` has no realtime
+        // counterpart (Jellyfin broadcasts group updates to a group's own
+        // members only, so a non-member hears nothing), Home loads once behind
+        // `hasLoaded`, and tvOS has no pull-to-refresh at all. Measured on
+        // 2026-09-05 with two accounts: a session opened on the phone never
+        // appeared on an Apple TV sitting on Accueil — while the host's lobby
+        // was promising « la séance y apparaît tant qu'elle est ouverte ».
+        //
+        // So Home re-asks, quietly, and only while it is the visible tab. The
+        // cost is one small JSON request per interval, and none at all for an
+        // account whose permissions let neither source return anything (both
+        // fetches are gated before the network call). It refreshes the row
+        // alone — never `reload()`, which would flip `isLoading` and drop the
+        // viewer's scroll position every interval.
+        .task(id: isVisible) {
+            guard isVisible, showWatchingNow else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.liveRowPollInterval))
+                guard !Task.isCancelled, isVisible else { return }
+                await viewModel.refreshLiveRow(using: appState)
+            }
+        }
     }
+
+    /// Seconds between two « En direct » polls. Long enough to be invisible in
+    /// server logs, short enough that someone told « rejoins-moi » finds the
+    /// card there by the time they have reached their Accueil.
+    private static let liveRowPollInterval: Double = 20
 
     /// Full Home reload + poster re-prefetch. Shared by the tier-1 observer and
     /// the deferred-on-appear path.
@@ -788,7 +816,14 @@ struct HomeScreen: View {
         // Being IN the session changes what the card is for. Before this, the
         // only way out of a group was dismissing the player — there was no
         // other exit anywhere in the app.
-        let isMine = SyncPlayController.shared.group?.id == groupId
+        //
+        // `viewerIsParticipant` comes FIRST, and it is what the server says.
+        // This process's own `group` is nil after a crash / force-quit / OS
+        // kill while the membership survives server-side, and reading only the
+        // local copy then labelled the card « Rejoindre » — offering to join a
+        // group the account has never left.
+        let isMine = entry.viewerIsParticipant || SyncPlayController.shared.group?.id == groupId
+        let alone = entry.participants.isEmpty
         return Button {
             if isMine { leaveLiveSession() } else { joinLiveSession(groupId: groupId) }
         } label: {
@@ -801,10 +836,18 @@ struct HomeScreen: View {
                     )
                 },
                 progress: entry.progress ?? 0,
-                subtitle: loc.localized(
-                    isMine ? "syncplay.session.mine" : "syncplay.session.with",
-                    participantSummary(entry.participants)
-                ),
+                subtitle: alone
+                    ? loc.localized("syncplay.session.mine.alone")
+                    : loc.localized(
+                        isMine ? "syncplay.session.mine" : "syncplay.session.with",
+                        participantSummary(entry.participants)
+                    ),
+                // A group has no artwork unless a participant's session is
+                // visible to us, which is the ordinary case for an account that
+                // may not read `/Sessions`. The default "missing video" glyph
+                // makes that read as a broken card; the people glyph says what
+                // the tile actually is.
+                fallbackIcon: "person.2.fill",
                 detail: liveDetail(entry)
             )
             .overlay(alignment: .topLeading) { livePill(isTogether: true) }
@@ -821,11 +864,18 @@ struct HomeScreen: View {
         // would escape the row entirely and not come back. `joinLiveSession`
         // already refuses re-entry. Same lesson as `ServersScreen`, where the
         // active card stays focusable but inert.
-        .accessibilityLabel(loc.localized(
-            isMine ? "syncplay.session.a11y.mine" : "syncplay.session.a11y",
-            entry.title ?? loc.localized("syncplay.session.unknownTitle"),
-            participantSummary(entry.participants)
-        ))
+        .accessibilityLabel(
+            alone
+                ? loc.localized(
+                    "syncplay.session.a11y.mine.alone",
+                    entry.title ?? loc.localized("syncplay.session.unknownTitle")
+                )
+                : loc.localized(
+                    isMine ? "syncplay.session.a11y.mine" : "syncplay.session.a11y",
+                    entry.title ?? loc.localized("syncplay.session.unknownTitle"),
+                    participantSummary(entry.participants)
+                )
+        )
     }
 
     /// Somebody watching alone. Unchanged behaviour: it opens their title.
@@ -936,9 +986,27 @@ struct HomeScreen: View {
     /// over the socket **after** joining. `SyncPlayController.onQueueChanged`
     /// (wired at the app root) is what turns that into a screen.
     /// Leaves the session from Home. The counterpart the app never had.
+    ///
+    /// Two shapes, and the second is the one that matters: when this process
+    /// holds the session, the controller owns the departure (socket teardown +
+    /// REST). When it does NOT — a membership that outlived an app kill — the
+    /// controller has no API client to speak through (`prepare` was never
+    /// called), so `leaveGroup()` would tear down nothing and tell the server
+    /// nothing. The account would stay listed on everyone else's Accueil with
+    /// no way out. Speaking to the server directly is that way out.
     private func leaveLiveSession() {
-        SyncPlayController.shared.leaveGroup()
-        Task { await viewModel.refreshUserDataRails(using: appState) }
+        let controller = SyncPlayController.shared
+        if controller.isInGroup {
+            controller.leaveGroup()
+        } else {
+            let api = appState.apiClient
+            toast.info(loc.localized("syncplay.left"))
+            Task { try? await api.syncPlayLeaveGroup() }
+        }
+        Task {
+            await viewModel.refreshUserDataRails(using: appState)
+            await viewModel.refreshLiveRow(using: appState)
+        }
     }
 
     private func joinLiveSession(groupId: String) {

@@ -44,6 +44,13 @@ enum LiveSessionsRow {
         let itemType: BaseItemKind?
         let positionTicks: Int?
         let runtimeTicks: Int?
+        /// Whether the SERVER counts the viewer as a member of this group.
+        ///
+        /// Read from `/SyncPlay/List`, not from this process's own controller,
+        /// and that is the point: the two disagree after a crash, a force-quit
+        /// or an OS kill, and the app used to have no way back from that
+        /// disagreement. See the "alone in a group" note on `build`.
+        let viewerIsParticipant: Bool
         /// The group's transport state. `nil` on a solo card, and on a group
         /// whose server reported none.
         let groupState: SyncPlayGroupState?
@@ -89,9 +96,19 @@ enum LiveSessionsRow {
 
         for group in groups where !group.id.isEmpty {
             let others = group.participants.filter { $0 != currentUserName }
+            let viewerIsIn = currentUserName.map(group.participants.contains) ?? false
             claimed.formUnion(group.participants)
-            // A group whose only member is the viewer is not something to join.
-            guard !others.isEmpty else { continue }
+            // A group with nobody else in it is not something to JOIN — but it
+            // is very much something to LEAVE when the viewer is its lone
+            // member. That state is reachable and used to be a dead end: the
+            // server keeps a membership across an app kill, so on the next
+            // launch this process knew nothing of the group while everyone
+            // else's Accueil still read « avec reviewer ». Dropping the card
+            // took away the one exit the app has (measured 2026-09-05: the
+            // Apple TV showed no row at all while the phone showed the session
+            // as still holding reviewer). An empty group with the viewer
+            // outside it is still dropped.
+            guard !others.isEmpty || viewerIsIn else { continue }
 
             // Artwork comes from any participant's session, when we can see one.
             let session = sessions.first {
@@ -119,6 +136,7 @@ enum LiveSessionsRow {
                 itemType: item?.type,
                 positionTicks: session?.playState?.positionTicks,
                 runtimeTicks: item?.runTimeTicks,
+                viewerIsParticipant: viewerIsIn,
                 groupState: group.state.flatMap(SyncPlayGroupState.init(rawValue:)),
                 updatedAt: group.lastUpdatedAt
             ))
@@ -143,6 +161,7 @@ enum LiveSessionsRow {
                 itemType: item.type,
                 positionTicks: session.playState?.positionTicks,
                 runtimeTicks: item.runTimeTicks,
+                viewerIsParticipant: false,
                 groupState: nil,
                 updatedAt: nil
             ))

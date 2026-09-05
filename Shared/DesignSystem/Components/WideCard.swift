@@ -5,6 +5,11 @@ struct WideCard: View {
     let imageURL: URL?
     var progress: Double? = nil
     var subtitle: String? = nil
+    /// Glyph drawn when there is no image to draw. `play.rectangle` reads as
+    /// "a video whose artwork is missing", which is right for a media card and
+    /// wrong for a Watch Together session — a group carries no item, so having
+    /// no artwork is its ORDINARY state, not a failure.
+    var fallbackIcon: String = "play.rectangle"
     /// A third, quieter line. Carried by the "En direct" row so a session's
     /// state and age can sit under the participants without crowding
     /// `subtitle`, which is `lineLimit(1)` and already spoken for.
@@ -16,7 +21,7 @@ struct WideCard: View {
                 .aspectRatio(16/9, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .overlay {
-                    CinemaLazyImage(url: imageURL, fallbackIcon: "play.rectangle")
+                    CinemaLazyImage(url: imageURL, fallbackIcon: fallbackIcon)
                 }
                 .overlay(alignment: .bottom) {
                     if let progress, progress > 0 {

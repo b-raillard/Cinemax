@@ -114,7 +114,14 @@ struct WatchTogetherLobby: View {
             Text(title)
                 .font(CinemaFont.display(.small))
                 .foregroundStyle(CinemaColor.onSurface)
-            if let name = controller.groupName, !name.isEmpty {
+            // The group's name is shown only when it says something the
+            // headline does not. Since the create sheet seeds it with the
+            // work's title — so a card on someone else's Accueil can name what
+            // is playing — the default case would otherwise print the same
+            // title twice, one line apart.
+            if let name = controller.groupName,
+               !name.isEmpty,
+               name.compare(title, options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame {
                 Text(name)
                     .font(CinemaFont.bodyLarge)
                     .foregroundStyle(CinemaColor.onSurfaceVariant)

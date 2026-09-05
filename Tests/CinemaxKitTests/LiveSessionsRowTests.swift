@@ -155,10 +155,28 @@ struct LiveSessionsRowTests {
         #expect(entries[0].participants == ["Marie"])
     }
 
-    @Test("A group holding only the viewer produces no card at all")
-    func selfOnlyGroupDropped() {
+    @Test("A group holding only the viewer keeps its card — it is the way out")
+    func selfOnlyGroupKeepsItsExit() {
+        // The server keeps a membership across an app kill, so this is what a
+        // relaunch finds: nobody else in the group, and this process knowing
+        // nothing about it. Dropping the card took away the app's only exit
+        // while everyone else's Accueil still listed the account as present.
         let entries = LiveSessionsRow.build(
             groups: [SyncPlayGroup(id: "g1", name: "Seul", participants: ["Bastien"])],
+            sessions: [],
+            currentUserName: "Bastien"
+        )
+        #expect(entries.count == 1)
+        #expect(entries[0].viewerIsParticipant)
+        #expect(entries[0].participants.isEmpty)
+    }
+
+    @Test("A group holding nobody the viewer knows of is still dropped")
+    func emptyGroupDropped() {
+        // Same shape, opposite membership: the viewer is NOT in it and there is
+        // nobody to join, so there is nothing to draw.
+        let entries = LiveSessionsRow.build(
+            groups: [SyncPlayGroup(id: "g1", name: "Vide", participants: [])],
             sessions: [],
             currentUserName: "Bastien"
         )
