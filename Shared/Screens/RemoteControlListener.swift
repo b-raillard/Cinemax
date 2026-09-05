@@ -151,6 +151,13 @@ final class RemoteControlListener {
             }
             appState.pendingIntentPlaybackItemId = itemId
             appState.pendingDeepLinkItemId = itemId
+        case .userUpdated:
+            // An administrator saved this account's user record. Re-read it so
+            // the permission gates (`syncPlayAccess`, `canSeeOthers`) stop
+            // answering from a cache taken at launch. Cheap — one `GET
+            // /Users/Me` — and it also republishes the extension session, which
+            // is what `refreshCurrentUser` is for.
+            Task { await appState.refreshCurrentUser() }
         case .displayMessage(let message):
             // The only `GeneralCommandType` the capability post advertises.
             if let header = message.header {

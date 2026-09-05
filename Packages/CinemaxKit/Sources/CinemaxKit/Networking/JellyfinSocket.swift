@@ -22,6 +22,13 @@ public enum JellyfinSocketMessage: Sendable, Equatable {
     case play(RemotePlayRequest)
     /// Inbound `DisplayMessage` general command.
     case displayMessage(RemoteDisplayMessage)
+    /// The signed-in account's own user record changed server-side — in
+    /// practice, an administrator editing its policy.
+    ///
+    /// Carries nothing: the payload is a full `UserDto` this layer has no
+    /// business decoding, and the only useful reaction is to re-read the user
+    /// through the normal path. Announcing the fact is the whole job.
+    case userUpdated
 }
 
 // MARK: - Socket
@@ -145,6 +152,14 @@ public actor JellyfinSocket {
             if let d = obj["Data"] as? [String: Any], let request = Self.parsePlay(d) {
                 continuation.yield(.play(request))
             }
+        case "UserUpdated":
+            // Jellyfin pushes this to the account's own sessions when its user
+            // record is saved. `AppState.currentUser` — and therefore every
+            // permission gate read from `policy` — is a cache nothing else
+            // refreshes for the life of the process, so without this an admin
+            // granting or withdrawing Watch Together / « En direct » reached a
+            // running client only at the next launch.
+            continuation.yield(.userUpdated)
         case "GeneralCommand":
             if let d = obj["Data"] as? [String: Any], let message = Self.parseDisplayMessage(d) {
                 continuation.yield(.displayMessage(message))

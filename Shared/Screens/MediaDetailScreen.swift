@@ -123,8 +123,28 @@ struct MediaDetailScreen: View {
     @Environment(\.openURL) private var openURL
     #endif
 
-    init(itemId: String, itemType: BaseItemKind = .movie) {
+    /// Called when a playback this screen started *on someone else's behalf* —
+    /// an App Intent, an inbound « Lire sur… », a Watch Together join — has been
+    /// dismissed.
+    ///
+    /// Only `MainTabView`'s modal fallback passes it, and only because that
+    /// modal exists purely to carry such a playback: the user never asked for
+    /// the fiche, so leaving them parked on it behind a « Terminé » button, with
+    /// the tab bar unreachable, is the presentation outliving its reason. A
+    /// screen the user actually navigated to passes nothing and keeps standing.
+    private let onIntentPlaybackFinished: (() -> Void)?
+    /// True between an intent-driven playback starting and its player going
+    /// away — so an ordinary Play press, which shares the same players, never
+    /// fires the callback above.
+    @State private var intentPlaybackInFlight = false
+
+    init(
+        itemId: String,
+        itemType: BaseItemKind = .movie,
+        onIntentPlaybackFinished: (() -> Void)? = nil
+    ) {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
+        self.onIntentPlaybackFinished = onIntentPlaybackFinished
     }
 
     var body: some View {
@@ -261,6 +281,23 @@ struct MediaDetailScreen: View {
                 episodeNavigator: nav.navigator,
                 mediaSourceId: viewModel.item.flatMap { selectedSource($0)?.id }
             )
+        }
+        #endif
+        // The player raised on someone else's behalf has gone away — tell the
+        // host that only existed to carry it. Two platforms, two signals for
+        // the same fact: iOS pops a `navigationDestination` (the binding goes
+        // back to nil), tvOS dismisses a UIKit modal the coordinator owns.
+        #if os(tvOS)
+        .onChange(of: coordinator.playerDismissals) { _, _ in
+            guard intentPlaybackInFlight else { return }
+            intentPlaybackInFlight = false
+            onIntentPlaybackFinished?()
+        }
+        #else
+        .onChange(of: siriPlayback) { _, new in
+            guard new == nil, intentPlaybackInFlight else { return }
+            intentPlaybackInFlight = false
+            onIntentPlaybackFinished?()
         }
         #endif
         // tvOS: this screen is only ever pushed, so the Menu button must pop
@@ -969,6 +1006,7 @@ struct MediaDetailScreen: View {
     /// resolved here for tvOS because the coordinator takes them up front,
     /// whereas the iOS destination closure resolves them at push time.
     private func startIntentPlayback(_ route: SiriPlaybackRoute) {
+        intentPlaybackInFlight = true
         #if os(tvOS)
         let nav = episodeNavigation(for: route.itemId)
         coordinator.play(

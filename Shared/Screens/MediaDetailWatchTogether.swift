@@ -176,14 +176,41 @@ struct WatchTogetherSheet: View {
         return loc.localized("syncplay.title")
     }
 
+    /// **RULE — tvOS gets NO name field here.** A `TextField` on tvOS is drawn
+    /// by the system as a bright white capsule that cannot be restyled
+    /// (`.textFieldStyle(.plain)` is inert there — measured), so it sat inside
+    /// this dark panel looking like a foreign object; and reaching it costs a
+    /// full-screen keyboard driven from a remote, to retype a name that already
+    /// defaults to the work's title. The name is shown as text instead, so the
+    /// user still knows what the session will be called. iPhone keeps the
+    /// field: a soft keyboard is one tap and renaming a session is a
+    /// reasonable thing to want there.
     private var createSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            #if os(tvOS)
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                Text(loc.localized("syncplay.groupName").uppercased())
+                    .font(CinemaFont.label(.medium))
+                    .tracking(1.4)
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: CinemaScale.pt(24)))
+                        .foregroundStyle(themeManager.accent)
+                    Text(defaultGroupName)
+                        .font(CinemaFont.bodyLarge)
+                        .foregroundStyle(CinemaColor.onSurface)
+                        .lineLimit(1)
+                }
+            }
+            #else
             GlassTextField(
                 label: loc.localized("syncplay.groupName"),
                 text: $model.newGroupName,
                 placeholder: defaultGroupName,
                 icon: "person.2.fill"
             )
+            #endif
             CinemaButton(
                 title: loc.localized("syncplay.create"),
                 style: .accent,

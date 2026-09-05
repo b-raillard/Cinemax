@@ -1062,6 +1062,17 @@ struct AppNavigation: View {
                    Date().timeIntervalSince(since) > 60 {
                     lastBackgroundedAt = nil
                     Task { await appState.handlePossibleSessionExpiry() }
+                } else if appState.isAuthenticated {
+                    // Shorter hop — the token is not in question, but the
+                    // POLICY may be. `AppState.currentUser` is a cache taken at
+                    // login that nothing else refreshes for the life of the
+                    // process, so an admin granting or withdrawing a permission
+                    // reached a running client only at the next launch. The
+                    // socket's `UserUpdated` frame is the immediate path (see
+                    // `RemoteControlListener`); this is the floor for the case
+                    // where the user has turned the remote-control socket off.
+                    // One small request per foreground.
+                    Task { await appState.refreshCurrentUser() }
                 }
                 // Re-open the socket dropped on background and re-declare the
                 // capabilities, since the session may have been reaped while away.
