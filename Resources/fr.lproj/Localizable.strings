@@ -401,6 +401,7 @@
 "player.stats.modules" = "Modules";
 "player.stats.demux" = "Demux";
 "player.nextUp.countdown" = "Épisode suivant dans %d s";
+"player.nextUp.countdown.title" = "Titre suivant dans %d s";
 "player.nextUp.play" = "Lire maintenant";
 
 // MARK: - Licenses

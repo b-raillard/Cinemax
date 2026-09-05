@@ -384,13 +384,23 @@ final class TVOptionPanel: UIView {
         // own name, which on a list of language labels is genuinely confusing.
         // Always an image, transparent when unselected, so the selected row's
         // label does not shift sideways relative to its neighbours.
-        cfg.image = UIImage(systemName: "checkmark")
+        //
+        // The transparency has to be baked INTO the image (`.alwaysOriginal`
+        // over a clear tint): a `UIButton.Configuration` paints a template
+        // image with `baseForegroundColor`, never with the button's
+        // `tintColor`, so the first version — `tintColor = .clear` on the
+        // unselected rows — drew a white check on EVERY row, the delay row
+        // included, and the picker could not say which track was playing
+        // (measured on device 2026-09-04).
+        let check = UIImage(systemName: "checkmark")
+        cfg.image = option.isSelected
+            ? check
+            : check?.withTintColor(.clear, renderingMode: .alwaysOriginal)
         cfg.imagePlacement = .leading
         cfg.imagePadding = 16
         cfg.titleAlignment = .leading
         let button = TVOptionRow(type: .custom)
         button.configuration = cfg
-        button.tintColor = option.isSelected ? .white : .clear
         button.contentHorizontalAlignment = .leading
         button.tag = index
         // The former "  ✓" suffix was at least SPOKEN; a `cfg.image` is not, so
