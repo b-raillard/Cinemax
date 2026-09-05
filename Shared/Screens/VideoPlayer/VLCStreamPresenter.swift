@@ -2788,15 +2788,31 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         engineSeek(ms: anchor)
     }
 
+    /// Switches the subtitle track and re-anchors playback at the switch
+    /// position — the same cure as `selectAudioTrack`, for the same cause: the
+    /// captions of a track that was not selected at demux time are gone for
+    /// the `:network-caching` window, so a freshly enabled track stayed blank
+    /// for several seconds before its first line came in. Turning subtitles
+    /// OFF re-anchors nothing: there is no data to recover, and a freeze on
+    /// the way out would be a cost with no benefit.
+    private func selectSubtitleTrack(_ track: Track?) {
+        guard player.selectedSubtitleTrack != track else { return }
+        let anchor = currentMs
+        player.selectedSubtitleTrack = track
+        guard track != nil, mediaConfirmedOpen, lengthMs > 0 else { return }
+        logger.notice("CINEMAX-SUBS ▸ changement de piste, réancrage à \(anchor, privacy: .public) ms")
+        engineSeek(ms: anchor)
+    }
+
     @objc private func openSubtitleMenu() {
         var opts: [(String, Bool, () -> Void)] = []
         opts.append((loc.localized("player.subtitles.off"),
                      player.selectedSubtitleTrack == nil,
-                     { [weak self] in self?.player.selectedSubtitleTrack = nil }))
+                     { [weak self] in self?.selectSubtitleTrack(nil) }))
         for (i, track) in player.subtitleTracks.enumerated() {
             let selected = player.selectedSubtitleTrack == track
             opts.append((displayLabel(forSubtitleOrdinal: i, track: track), selected, { [weak self] in
-                self?.player.selectedSubtitleTrack = track
+                self?.selectSubtitleTrack(track)
             }))
         }
         opts.append(("\(loc.localized("player.subtitleDelay")) — \(Self.formatDelay(subtitleDelayMsState))", false, { [weak self] in
