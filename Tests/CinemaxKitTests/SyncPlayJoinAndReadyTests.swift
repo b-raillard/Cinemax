@@ -183,3 +183,87 @@ struct SyncPlaySeekSettleReadyTests {
         #expect(api.ready.isEmpty)
     }
 }
+
+// MARK: - Announcing readiness at a position the engine has actually reached
+
+/// `Ready` is not a courtesy: Jellyfin reads its `PositionTicks` as "this is
+/// where that participant is", and uses the difference against the group's own
+/// position to decide whether the client is *lagging*. A report sent from a
+/// position the engine has not reached yet therefore does not merely arrive
+/// early — it makes the server believe the group must wait for a straggler.
+///
+/// Measured on the iPhone simulator against the real server on 2026-09-06,
+/// with the group's queue seeded at 1:36 (`position=964460000`):
+///
+/// ```
+/// 18:50:18.801  engine-state opening
+/// 18:50:18.876  état du groupe : Paused → Waiting
+/// 18:50:18.934  engine-state playing          ← 133 ms after `opening`
+/// 18:50:18.935  Ready envoyé position=0       ← the lie
+/// 18:50:20.774  seek-settle now=96446 landed=true   ← the truth, 1.8 s later
+/// ```
+///
+/// libVLC reports `.playing` as soon as the input starts, **before the demuxer
+/// has reached the position the group asked for** — the same fact the
+/// `clearLoadingIfOpen` / `noteMediaOpened` RULE already documents for the
+/// spinner. The server read `0` against its own `964460000`, concluded this
+/// session was 96 s behind, and took `WaitingGroupState`'s "client is
+/// recovering" branch, which sets `LastActivity = now + 96.4 s`. From then on
+/// every command it issued carried a `When` up to 96 s in the future, and
+/// `SyncPlayController.schedule` slept on each one (capped at 30 s) before
+/// applying it — so pause, ±10 s and unpause all read as dead buttons, and a
+/// later command cancelled the one still waiting. The group's `PositionTicks`
+/// stopped advancing too (`Math.Max(elapsed, 0)` clamps a negative elapsed to
+/// zero), so the `Pause` that eventually landed dragged the picture from 2:45
+/// back to 1:36.
+@Suite("SyncPlayReadyPolicy — n'annoncer qu'une position réellement atteinte")
+struct SyncPlayReadyPolicyTests {
+
+    @Test("Un « playing » qui précède l'ouverture du média n'annonce rien")
+    func silentBeforeTheMediaIsOpen() {
+        #expect(SyncPlayReadyPolicy.shouldAnnounceReady(
+            mediaConfirmedOpen: false, startSeekPending: false, isSeekSettling: false) == false)
+    }
+
+    /// Le cas décisif, et celui qu'un premier correctif a manqué : le média est
+    /// OUVERT et aucune recherche n'est en cours — parce que la recherche de
+    /// reprise n'a pas encore été *émise*. Mesuré le 2026-09-06 après ce premier
+    /// correctif, groupe à 7:04 :
+    ///
+    /// ```
+    /// 19:06:30.748  Ready envoyé position=0     ← média ouvert, rien en calage
+    /// 19:06:30.809  engine-state playing
+    /// 19:06:30.810  Ready envoyé position=0
+    /// 19:06:30.826  seek-fire target=424172 from=0   ← la reprise part APRÈS
+    /// ```
+    ///
+    /// `VLCStreamPresenter` n'émet la recherche de reprise que depuis
+    /// `onEngineTimeChanged`, une fois `lengthMs` connu — donc « ouvert » précède
+    /// « au bon endroit », et la fenêtre entre les deux est exactement celle où
+    /// la tête de lecture vaut 0.
+    @Test("Une reprise encore à émettre n'annonce rien, même média ouvert")
+    func silentWhileTheStartSeekIsStillPending() {
+        #expect(SyncPlayReadyPolicy.shouldAnnounceReady(
+            mediaConfirmedOpen: true, startSeekPending: true, isSeekSettling: false) == false)
+    }
+
+    /// Et une fois émise, elle doit encore atterrir : la position reste celle
+    /// d'avant le saut. Le rapport appartient alors au calage
+    /// (`SyncPlayController.reportSeekSettled`), qui connaît la position
+    /// d'arrivée.
+    @Test("Une recherche en cours de calage n'annonce rien — le calage a son propre rapport")
+    func silentWhileASeekIsStillSettling() {
+        #expect(SyncPlayReadyPolicy.shouldAnnounceReady(
+            mediaConfirmedOpen: true, startSeekPending: false, isSeekSettling: true) == false)
+    }
+
+    /// Et il faut bien que quelqu'un parle : un groupe qui démarre à zéro n'a
+    /// aucune reprise à émettre et n'arme aucune fenêtre de calage, donc si ce
+    /// cas se taisait aussi, plus personne ne sortirait jamais le groupe de
+    /// `Waiting`.
+    @Test("Média ouvert, aucune reprise en attente, aucun calage : on annonce")
+    func announcesOnceOpenAndSettled() {
+        #expect(SyncPlayReadyPolicy.shouldAnnounceReady(
+            mediaConfirmedOpen: true, startSeekPending: false, isSeekSettling: false) == true)
+    }
+}

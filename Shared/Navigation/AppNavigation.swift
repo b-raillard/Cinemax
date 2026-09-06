@@ -1166,6 +1166,23 @@ extension Notification.Name {
     /// default menu, so without this the surface that exists to make playlists
     /// findable would be the last place to hear about a new one.
     static let cinemaxPlaylistsChanged = Notification.Name("cinemaxPlaylistsChanged")
+
+    /// Somebody may have just opened a Watch Together session. Home's « En
+    /// direct » row is the consumer, and it is the only door into a session
+    /// another person opened.
+    ///
+    /// Posted when a `DisplayMessage` arrives over the realtime socket, because
+    /// that is the whole of what an invitation can be here: Jellyfin has no
+    /// invitation primitive, so the lobby's « Prévenir » sends a plain toast
+    /// telling the recipient to look at their Accueil. Before this, the row on
+    /// the other end only caught up on the next 20 s poll — and only if that
+    /// person happened to be sitting on Accueil already, which is precisely
+    /// what the message is asking them to go and do.
+    ///
+    /// Deliberately not narrowed to invitations: a `DisplayMessage` costs one
+    /// small permission-gated refresh, and the socket carries no way to tell an
+    /// invitation from any other message a server might send.
+    static let cinemaxLiveSessionsChanged = Notification.Name("cinemaxLiveSessionsChanged")
     /// Posted by the API client when any session-scoped call returns HTTP 401.
     /// `AppNavigation` observes this on MainActor and runs the logout + toast.
     /// Cross-actor bridge: the API callback runs from a non-MainActor context

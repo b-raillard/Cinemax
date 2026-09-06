@@ -3149,6 +3149,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `.playing` proves nothing (see `onEngineStateChanged`), and renewing on
     /// it turned "retry once" into an unbounded watchdog loop.
     private func noteMediaOpened() {
+        let wasOpen = mediaConfirmedOpen
         cancelOpenWatchdog()
         recoverFromErrorIfNeeded()
         didRetry = false
@@ -3160,6 +3161,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if let startThumbnails = pendingChapterThumbnails {
             pendingChapterThumbnails = nil
             startThumbnails()
+        }
+        // The `.playing` that a group would normally answer with `Ready` fires
+        // BEFORE this point and is refused there (the playhead isn't real yet),
+        // so without a report here nothing would ever leave `Waiting` on a
+        // group that starts from zero — no settle window is armed in that case.
+        // A group opening at a resume offset is still settling and stays
+        // silent; its own settle reports.
+        if !wasOpen {
+            announceSyncPlayReadyIfPositionIsReal(isPlaying: player.state == .playing)
         }
     }
 
@@ -3214,6 +3224,36 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         ))
         syncPlay.onSessionChanged = { [weak self] in self?.refreshSyncPlayHUD() }
         refreshSyncPlayHUD()
+    }
+
+    /// Tells the group we are ready — but only from a position the engine has
+    /// actually reached. See `SyncPlayReadyPolicy`, which carries the measured
+    /// reasoning: a `Ready` sent off libVLC's first `.playing` reported `0`
+    /// while the group sat at 1:36, and the server rebuilt the group's clock
+    /// 96 s into the future around it, leaving every transport button dead.
+    ///
+    /// `seekLoadingTargetMs != nil` is the "a seek is still settling" test; the
+    /// settle closes with its own report (`reportSeekSettled`), which knows the
+    /// arrival position. `startSeekPending` covers the window BEFORE that, where
+    /// the media is open and nothing is settling only because the resume seek
+    /// has not been emitted yet — `onEngineTimeChanged` waits for `lengthMs`.
+    private func announceSyncPlayReadyIfPositionIsReal(isPlaying: Bool) {
+        guard syncPlay.isInGroup else { return }
+        guard SyncPlayReadyPolicy.shouldAnnounceReady(
+            mediaConfirmedOpen: mediaConfirmedOpen,
+            startSeekPending: startSeekPending,
+            isSeekSettling: seekLoadingTargetMs != nil
+        ) else { return }
+        syncPlay.reportReady(isPlaying: isPlaying)
+    }
+
+    /// A resume position was asked for and the engine has not been sent there
+    /// yet. Deliberately not `!didSeekToStart` on its own: that flag is only
+    /// ever set from the seek branch, so on a start with no resume offset
+    /// (`startTime == nil`) it stays false for the whole session — and a group
+    /// beginning at zero would then never announce itself at all.
+    private var startSeekPending: Bool {
+        !didSeekToStart && (startTime ?? 0) > 0
     }
 
     /// Repaints presence, the waiting overlay and any arrival/departure line.
@@ -3828,7 +3868,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setPlayPauseIcon(playing: true)
             #endif
             refreshNowPlayingRate(playing: true)
-            if syncPlay.isInGroup { syncPlay.reportReady(isPlaying: true) }
+            announceSyncPlayReadyIfPositionIsReal(isPlaying: true)
         case .paused:
             endSeekLoading()
             clearLoadingIfOpen()
@@ -3836,7 +3876,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setPlayPauseIcon(playing: false)
             #endif
             refreshNowPlayingRate(playing: false)
-            if syncPlay.isInGroup { syncPlay.reportReady(isPlaying: false) }
+            announceSyncPlayReadyIfPositionIsReal(isPlaying: false)
         default: break
         }
     }

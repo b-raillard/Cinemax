@@ -165,6 +165,14 @@ final class RemoteControlListener {
             } else {
                 toasts.info(message.text)
             }
+            // A message is also the only shape an invitation to a Watch
+            // Together session can take — Jellyfin has no invitation primitive,
+            // so the lobby's « Prévenir » sends exactly this and the text tells
+            // the recipient to go and look at their Accueil. Telling them to
+            // look at a row that will not catch up for another 20 s (and on
+            // tvOS cannot be refreshed by hand at all) is the same defect as a
+            // dead button, so the row is re-asked here.
+            NotificationCenter.default.post(name: .cinemaxLiveSessionsChanged, object: nil)
         }
     }
 }

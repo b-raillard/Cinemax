@@ -59,3 +59,63 @@ enum SyncPlayJoinStart {
         max(0, resumeTicks ?? 0)
     }
 }
+
+// MARK: - When a participant may announce it is ready
+
+/// Whether this client may tell the group it is ready **now**.
+///
+/// `Ready` is not a courtesy ping: Jellyfin reads its `PositionTicks` as "this
+/// is where that participant is" and compares it against the group's own
+/// position to decide whether everyone else must wait. Announcing a position
+/// the engine has not reached does not merely arrive early — it tells the
+/// server this session is a straggler, and the server then rebuilds the whole
+/// group's clock around that lie.
+///
+/// Measured on 2026-09-06 against the real server, group queued at 1:36
+/// (`position=964460000`):
+///
+/// ```
+/// 18:50:18.801  engine-state opening
+/// 18:50:18.934  engine-state playing        ← 133 ms later
+/// 18:50:18.935  Ready envoyé position=0
+/// 18:50:20.774  seek-settle now=96446 landed=true   ← where we actually were
+/// ```
+///
+/// libVLC reports `.playing` as soon as the input starts, **before the demuxer
+/// has reached the position the group asked for** — exactly the fact the
+/// `clearLoadingIfOpen` / `noteMediaOpened` RULE already documents for the
+/// spinner, applied to the wrong consumer. The server read `0` against its own
+/// `964460000`, took `WaitingGroupState`'s "client is recovering" branch and
+/// set `LastActivity = now + 96.4 s`. Every command it issued afterwards
+/// carried a `When` up to 96 s in the future, and `SyncPlayController.schedule`
+/// slept on each one (capped at 30 s) before applying it — so pause, ±10 s and
+/// unpause all read as dead buttons, and each new command cancelled the one
+/// still waiting. The group's `PositionTicks` also stopped advancing
+/// (`Math.Max(elapsed, 0)` clamps a negative elapsed to zero), so the `Pause`
+/// that eventually landed dragged the picture from 2:45 back to 1:36.
+///
+/// All three refusals are load-bearing, and so is the acceptance:
+///
+///   - **not open** — the playhead is not a playhead yet;
+///   - **a start seek still to be emitted** — `mediaConfirmedOpen` is NOT enough
+///     on its own, which a first version of this gate got wrong. The presenter
+///     issues the resume seek from `onEngineTimeChanged`, once `lengthMs` is
+///     known, so "open" precedes "at the right place" and the gap between them
+///     is exactly where the playhead reads 0. Measured with that first version
+///     in place, group at 7:04: `Ready envoyé position=0` at 19:06:30.748 and
+///     again at .810, `seek-fire target=424172 from=0` only at .826;
+///   - **a seek still settling** — the position is the pre-seek one, and the
+///     settle has its own reporter (`SyncPlayController.reportSeekSettled`),
+///     which knows the arrival position;
+///   - **open, nothing pending, nothing settling** — somebody must speak, or a
+///     group that starts at zero (no resume to emit, so no settle window ever
+///     armed) would never leave `Waiting`.
+enum SyncPlayReadyPolicy {
+    static func shouldAnnounceReady(
+        mediaConfirmedOpen: Bool,
+        startSeekPending: Bool,
+        isSeekSettling: Bool
+    ) -> Bool {
+        mediaConfirmedOpen && !startSeekPending && !isSeekSettling
+    }
+}
