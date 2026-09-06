@@ -224,6 +224,17 @@ final class AppState {
     /// `MediaDetailScreen` consumes it once, and only on the matching item.
     var pendingIntentPlaybackItemId: String?
 
+    /// The position the request must open at, in Jellyfin ticks, when it came
+    /// from a Watch Together queue. `nil` — and only `nil` — means "no group
+    /// position given, use the fiche's own resume".
+    ///
+    /// Set alongside `pendingIntentPlaybackItemId` and cleared by the same
+    /// consumer. It exists because in a session the GROUP's position is
+    /// authoritative: without it the joiner opened at its own resume point and
+    /// two people watched different parts of the same film with no signal. See
+    /// `SyncPlayJoinStart` for the rule and the measurement.
+    var pendingIntentPlaybackStartTicks: Int?
+
     /// True when `itemId` is the item a pending **playback** request names.
     ///
     /// The routing SSOT for that request: `MainTabView` sends these to its
@@ -949,9 +960,17 @@ struct AppNavigation: View {
             // êtes » — a feature that looks wired and does nothing. Exactly the
             // failure `MediaDetailScreen.consumeIntentPlaybackRequest()` carries
             // its own cross-platform RULE about.
-            SyncPlayController.shared.onQueueChanged = { itemId, _ in
+            //
+            // The position is carried, NOT discarded. `{ itemId, _ in … }` was
+            // the whole of defect D2: the group's `startPositionTicks` reached
+            // this closure and died here, so the request fell through to the
+            // fiche's own resume resolution — the JOINING account's. Measured
+            // 2026-09-06: group at 3:39, joiner opened at 12:33 on the end
+            // credits, gap never corrected. See `SyncPlayJoinStart`.
+            SyncPlayController.shared.onQueueChanged = { itemId, startTicks in
                 guard AppState.isValidItemId(itemId) else { return }
                 appState.pendingIntentPlaybackItemId = itemId
+                appState.pendingIntentPlaybackStartTicks = startTicks
                 appState.pendingDeepLinkItemId = itemId
             }
             #if os(iOS)

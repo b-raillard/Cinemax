@@ -775,8 +775,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             since=\(Date().timeIntervalSince(self.seekLoadingStartedAt), format: .fixed(precision: 2), privacy: .public)
             """)
         // Backstop: a missed engine signal must never strand the spinner.
-        if landed || Date().timeIntervalSince(seekLoadingStartedAt) > Self.seekLoadingMaxHold {
+        let expired = Date().timeIntervalSince(seekLoadingStartedAt) > Self.seekLoadingMaxHold
+        if landed || expired {
             endSeekLoading()
+            // The group is in `Waiting` until every participant re-announces
+            // readiness, and this is the ONLY moment that can say so: libVLC
+            // emits no state change when a seek settles on an already-open
+            // stream, so the two `.playing` / `.paused` callers of
+            // `reportReady` never fire. Without it the veil stood for 7 min 41 s
+            // over a picture playing normally. The backstop reports too — a
+            // stranded group is worse than a report made a beat late, and the
+            // position sent is read live from the bridge either way.
+            if syncPlay.isInGroup {
+                syncPlay.reportSeekSettled(isPlaying: player.state == .playing)
+            }
             return false
         }
         return true

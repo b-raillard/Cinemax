@@ -37,6 +37,11 @@ final class WatchTogetherModel {
 struct WatchTogetherSheet: View {
     let itemId: String
     let itemTitle: String
+    /// Where a group created here starts, in Jellyfin ticks — the creator's own
+    /// resume point. It was a hardcoded `0`, which restarted a half-watched film
+    /// from zero and then overwrote the host's resume server-side. See
+    /// `SyncPlayJoinStart.queueStartTicks`.
+    let startPositionTicks: Int
     /// Called after a successful create/join so the caller starts playback.
     let onStart: () -> Void
 
@@ -343,7 +348,8 @@ struct WatchTogetherSheet: View {
                 currentUserName: appState.currentUser?.name
             )
             if ok {
-                await SyncPlayController.shared.setQueue(itemId: itemId, startPositionTicks: 0)
+                await SyncPlayController.shared.setQueue(
+                    itemId: itemId, startPositionTicks: startPositionTicks)
             }
             model.busy = false
             if ok {

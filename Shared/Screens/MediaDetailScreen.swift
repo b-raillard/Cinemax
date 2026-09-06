@@ -11,6 +11,11 @@ struct WatchTogetherIntent: Identifiable, Hashable {
     let itemId: String
     let title: String
     let startTime: Double?
+    /// The same position in Jellyfin ticks — what the group's queue is seeded
+    /// with, so every participant lands where the creator actually is. Carried
+    /// rather than converted from `startTime` so the queue and the creator's own
+    /// player cannot round differently.
+    let startTicks: Int?
 }
 
 /// Playback started programmatically rather than by a tap — an App Intent
@@ -318,12 +323,20 @@ struct MediaDetailScreen: View {
 
     /// Builds the play target for Watch Together: the resolved next-up episode
     /// for a series, else the item itself.
+    ///
+    /// `startTime` used to be a hardcoded `nil`, so opening a session on a
+    /// half-watched film restarted it from zero — and, two minutes later,
+    /// overwrote the host's resume point server-side. It now reads the same
+    /// resolution the Play button one row above uses, which already applies the
+    /// "a residual position on a played item isn't a resume" rule.
     private func watchTogetherIntent(for item: BaseItemDto, nextEp: BaseItemDto?) -> WatchTogetherIntent {
         let target = nextEp ?? item
+        let resolved = resolvedPlayTarget(for: item)
         return WatchTogetherIntent(
             itemId: target.id ?? item.id ?? viewModel.itemId,
             title: target.name ?? item.name ?? "",
-            startTime: nil
+            startTime: resolved.startSeconds,
+            startTicks: resolved.startTicks
         )
     }
 
@@ -973,6 +986,11 @@ struct MediaDetailScreen: View {
     private func consumeIntentPlaybackRequest() {
         guard appState.pendingIntentPlaybackItemId == viewModel.itemId else { return }
         appState.pendingIntentPlaybackItemId = nil
+        // Taken with the item id and cleared on EVERY path below, including the
+        // early returns: a group position left behind would silently seek the
+        // next unrelated request to the wrong place.
+        let groupTicks = appState.pendingIntentPlaybackStartTicks
+        appState.pendingIntentPlaybackStartTicks = nil
         guard let item = viewModel.item else { return }
 
         // A request naming an episode plays THAT episode — the view model has
@@ -981,21 +999,26 @@ struct MediaDetailScreen: View {
         if let episode = viewModel.episodes.first(where: { $0.id == viewModel.itemId }) {
             let ticks = episode.userData?.playbackPositionTicks ?? 0
             let played = episode.userData?.isPlayed ?? false
+            let localResume = (ticks > 0 && !played) ? ticks.jellyfinSeconds : nil
             startIntentPlayback(SiriPlaybackRoute(
                 itemId: viewModel.itemId,
                 title: episode.name ?? item.name ?? "",
-                startTime: (ticks > 0 && !played) ? ticks.jellyfinSeconds : nil
+                startTime: SyncPlayJoinStart.startSeconds(
+                    groupStartTicks: groupTicks, localResumeSeconds: localResume)
             ))
             return
         }
 
-        // Everything else goes through the Play button's own resolution.
+        // Everything else goes through the Play button's own resolution — series
+        // → next-up, version pick and prev/next are inherited exactly as before.
+        // Only the START POSITION defers to the group when there is one.
         let target = resolvedPlayTarget(for: item)
         guard !target.itemId.isEmpty else { return }
         startIntentPlayback(SiriPlaybackRoute(
             itemId: target.itemId,
             title: target.title,
-            startTime: target.startSeconds
+            startTime: SyncPlayJoinStart.startSeconds(
+                groupStartTicks: groupTicks, localResumeSeconds: target.startSeconds)
         ))
     }
 
@@ -1971,6 +1994,7 @@ private struct WatchTogetherPresentation: ViewModifier {
         WatchTogetherSheet(
             itemId: intent.itemId,
             itemTitle: intent.title,
+            startPositionTicks: SyncPlayJoinStart.queueStartTicks(resumeTicks: intent.startTicks),
             onStart: { onStart(intent) }
         )
         .environment(appState)
