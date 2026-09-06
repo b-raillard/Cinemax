@@ -74,10 +74,7 @@ struct WatchTogetherSheet: View {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
                 createSection
 
-                Text(loc.localized("syncplay.existingGroups").uppercased())
-                    .font(.system(size: CinemaScale.pt(12), weight: .bold))
-                    .tracking(1.5)
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                sectionLabel(loc.localized("syncplay.existingGroups"))
 
                 if model.isLoading {
                     LoadingStateView()
@@ -110,63 +107,164 @@ struct WatchTogetherSheet: View {
     // MARK: - tvOS
 
     #if os(tvOS)
+    /// Laid out like `WatchTogetherLobby`, deliberately: the two screens are one
+    /// journey (create here, wait there) and they were built to different page
+    /// contracts. This one ran edge to edge at 1920 px — the panel stretched
+    /// across the screen, its accent CTA became a full-bleed slab whose focus
+    /// ring bled over the panel's own corners, and the empty state floated in
+    /// the middle of a column nothing else was centred in. Same page margin,
+    /// same reading measure, same centring, same CTA width as the lobby.
     private var tvBody: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                    HStack {
-                        Text(loc.localized("syncplay.title"))
-                            .font(CinemaFont.headline(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
-                        CinemaButton(title: loc.localized("action.done"), style: .ghost) { dismiss() }
-                            .frame(width: 240)
-                    }
-
+                    tvHeader
                     createSection
-
-                    Text(loc.localized("syncplay.existingGroups"))
-                        .font(CinemaFont.headline(.small))
-                        .foregroundStyle(CinemaColor.onSurface)
-
-                    if model.isLoading {
-                        LoadingStateView()
-                    } else if let error = model.errorMessage {
-                        ErrorStateView(message: error, retryTitle: loc.localized("action.retry")) {
-                            Task { await model.load(api: appState.apiClient, loc: loc) }
-                        }
-                    } else if model.groups.isEmpty {
-                        EmptyStateView(
-                            systemImage: "person.2.slash",
-                            title: loc.localized("syncplay.noGroups.title"),
-                            subtitle: loc.localized("syncplay.noGroups.subtitle")
-                        )
-                    } else {
-                        VStack(spacing: CinemaSpacing.spacing3) {
-                            ForEach(model.groups) { group in
-                                groupRow(group)
-                            }
-                        }
-                    }
+                    sectionLabel(loc.localized("syncplay.existingGroups"))
+                    groupsSection
                 }
-                .padding(CinemaSpacing.spacing8)
+                // Padding INSIDE the width frame — see the same note in
+                // `WatchTogetherLobby.content`: applied outside two stacked
+                // `maxWidth: .infinity` frames it is silently dropped.
+                .padding(.horizontal, pagePadding)
+                .padding(.vertical, CinemaSpacing.spacing8)
+                .frame(maxWidth: readingWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .task { await model.load(api: appState.apiClient, loc: loc) }
     }
+
+    private var tvHeader: some View {
+        // `.center`, not `.firstTextBaseline`: the CTA's box is taller than the
+        // title's line, so baseline-aligning them pushed the button's top above
+        // the title and the row read as two things at different heights.
+        HStack(alignment: .center) {
+            Text(loc.localized("syncplay.title"))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+            Spacer(minLength: CinemaSpacing.spacing4)
+            CinemaButton(title: loc.localized("action.done"), style: .ghost) { dismiss() }
+                .frame(width: ctaWidth)
+        }
+    }
+
+    @ViewBuilder
+    private var groupsSection: some View {
+        if model.isLoading {
+            LoadingStateView()
+                .frame(maxWidth: .infinity)
+        } else if let error = model.errorMessage {
+            ErrorStateView(message: error, retryTitle: loc.localized("action.retry")) {
+                Task { await model.load(api: appState.apiClient, loc: loc) }
+            }
+            .frame(maxWidth: .infinity)
+        } else if model.groups.isEmpty {
+            // `EmptyStateView` centres its own content; without this it centres
+            // inside its intrinsic width and sits off to the left of a column
+            // everything else fills.
+            EmptyStateView(
+                systemImage: "person.2.slash",
+                title: loc.localized("syncplay.noGroups.title"),
+                subtitle: loc.localized("syncplay.noGroups.subtitle")
+            )
+            .frame(maxWidth: .infinity)
+        } else {
+            VStack(spacing: CinemaSpacing.spacing3) {
+                ForEach(model.groups) { group in
+                    groupRow(group)
+                }
+            }
+        }
+    }
+
+    // MARK: - tvOS metrics (same contract as `WatchTogetherLobby`)
+
+    private var pagePadding: CGFloat { CinemaTVLayout.pagePadding }
+    private var readingWidth: CGFloat { CinemaTVLayout.readingMaxWidth }
+    private var ctaWidth: CGFloat { CinemaTVLayout.ctaWidth }
     #endif
 
     // MARK: - Shared pieces
 
+    /// The group's NAME is the one thing about a session that reaches every
+    /// account: `GroupInfoDto` carries no item, so somebody who may not read
+    /// `/Sessions` learns what is playing from this string or from nothing at
+    /// all. Naming the group after the work rather than after its owner
+    /// therefore costs no request and no permission, and it is what lets a card
+    /// on someone else's Home say what it is. The owner's name remains the
+    /// fallback for the case the title is missing.
     private var defaultGroupName: String {
+        let title = itemTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
         let owner = appState.currentUser?.name
         if let owner, !owner.isEmpty {
             return loc.localized("syncplay.defaultName", owner)
         }
-        return itemTitle
+        return loc.localized("syncplay.title")
     }
 
+    /// **RULE — tvOS gets NO name field here.** A `TextField` on tvOS is drawn
+    /// by the system as a bright white capsule that cannot be restyled
+    /// (`.textFieldStyle(.plain)` is inert there — measured), so it sat inside
+    /// this dark panel looking like a foreign object; and reaching it costs a
+    /// full-screen keyboard driven from a remote, to retype a name that already
+    /// defaults to the work's title. The name is shown as text instead, so the
+    /// user still knows what the session will be called. iPhone keeps the
+    /// field: a soft keyboard is one tap and renaming a session is a
+    /// reasonable thing to want there.
+    /// One section label for both platforms. They had drifted — a bare
+    /// `.font(.system(size:))` on iOS against a `CinemaFont` token on tvOS — so
+    /// the same heading was two different things depending on the device.
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(CinemaFont.label(.medium))
+            .tracking(1.2)
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+    }
+
+    private var createButton: some View {
+        CinemaButton(
+            title: loc.localized("syncplay.create"),
+            style: .accent,
+            icon: "plus.circle.fill",
+            isLoading: model.busy
+        ) {
+            createGroup()
+        }
+    }
+
+    #if os(tvOS)
+    /// Name on the left, CTA on the right, one row.
+    ///
+    /// Stacked, the panel spent its whole 1100 pt measure on a short name and a
+    /// button that then had to be either a full-bleed slab or a small control
+    /// adrift in an empty half. On a 16:9 screen the row uses the width it has
+    /// and the panel stays the height of one line.
+    private var createSection: some View {
+        HStack(alignment: .center, spacing: CinemaSpacing.spacing6) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                sectionLabel(loc.localized("syncplay.groupName"))
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: CinemaScale.pt(24)))
+                        .foregroundStyle(themeManager.accent)
+                    Text(defaultGroupName)
+                        .font(CinemaFont.bodyLarge)
+                        .foregroundStyle(CinemaColor.onSurface)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: CinemaSpacing.spacing4)
+            createButton
+                .frame(width: ctaWidth)
+        }
+        .padding(CinemaSpacing.spacing5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassPanel()
+    }
+    #else
     private var createSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             GlassTextField(
@@ -175,18 +273,12 @@ struct WatchTogetherSheet: View {
                 placeholder: defaultGroupName,
                 icon: "person.2.fill"
             )
-            CinemaButton(
-                title: loc.localized("syncplay.create"),
-                style: .accent,
-                icon: "plus.circle.fill",
-                isLoading: model.busy
-            ) {
-                createGroup()
-            }
+            createButton
         }
         .padding(CinemaSpacing.spacing4)
         .glassPanel()
     }
+    #endif
 
     private func groupRow(_ group: SyncPlayGroup) -> some View {
         Button {
@@ -208,13 +300,22 @@ struct WatchTogetherSheet: View {
                 }
                 Spacer(minLength: CinemaSpacing.spacing2)
                 Text(loc.localized("syncplay.join"))
-                    .font(.system(size: CinemaScale.pt(14), weight: .bold))
+                    .font(CinemaFont.label(.large))
                     .foregroundStyle(themeManager.accent)
             }
             .padding(CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .glassPanel()
         }
+        // A full-width row is the "rangée" focus level: accent stroke and a
+        // brightness lift, no growth. It carried `.plain` on tvOS, i.e. NO
+        // focus treatment at all — the one focusable list on this screen said
+        // nothing when the remote reached it.
+        #if os(tvOS)
+        .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+        #else
         .buttonStyle(.plain)
+        #endif
         .disabled(model.busy)
     }
 

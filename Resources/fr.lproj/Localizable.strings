@@ -515,6 +515,15 @@
 "admin.user.access.libraries.empty" = "Aucune médiathèque trouvée sur le serveur.";
 "admin.user.access.devices" = "Accès des appareils";
 "admin.user.access.enableAllDevices" = "Autoriser l'accès depuis tous les appareils";
+"admin.user.access.syncPlay.title" = "Regarder ensemble";
+"admin.user.access.syncPlay.label" = "Autorisation";
+"admin.user.access.syncPlay.footer" = "Permission du serveur, valable pour tous les clients Jellyfin de ce compte. Sans autorisation, la rangée « En direct » disparaît aussi pour cet utilisateur, qui ne voit alors plus aucune séance.";
+"admin.user.access.syncPlay.none" = "Aucune";
+"admin.user.access.syncPlay.join" = "Rejoindre uniquement";
+"admin.user.access.syncPlay.createAndJoin" = "Créer et rejoindre";
+"admin.user.access.liveSessions.title" = "Voir « En direct »";
+"admin.user.access.liveSessions.label" = "Voir l'activité des autres";
+"admin.user.access.liveSessions.footer" = "Montre à cet utilisateur qui regarde quoi en ce moment, et lui permet de prévenir quelqu'un depuis une salle d'attente. Sans cela, il ne voit que les séances « Regarder ensemble ». Attention : Jellyfin ne sépare pas voir et piloter — cette permission autorise aussi ce compte à commander la lecture sur les appareils des autres.";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";
@@ -883,7 +892,6 @@
 
 // MARK: - SyncPlay
 "syncplay.title" = "Regarder ensemble";
-"syncplay.pill" = "Ensemble · %d";
 "syncplay.groupName" = "Nom du groupe";
 "syncplay.create" = "Créer un groupe";
 "syncplay.join" = "Rejoindre";
@@ -897,6 +905,41 @@
 "syncplay.left" = "Groupe quitté";
 "syncplay.groupEnded" = "Le groupe s'est terminé";
 "syncplay.error" = "Échec de la synchronisation";
+"syncplay.you" = "Vous";
+"syncplay.event.joined" = "%@ a rejoint";
+"syncplay.event.left" = "%@ a quitté";
+"syncplay.waiting.title" = "En attente d'un participant";
+"syncplay.waiting.subtitle" = "Quelqu'un met en mémoire tampon. Tout le monde reprendra ensemble.";
+"syncplay.libraryAccessDenied" = "Ce titre n'est pas accessible à votre compte";
+"syncplay.session.badge" = "ENSEMBLE";
+"syncplay.session.with" = "Avec %@";
+"syncplay.session.two" = "%@ et %@";
+"syncplay.session.more" = "%@, %@ et %d autres";
+"syncplay.session.unknownTitle" = "Séance en cours";
+"syncplay.session.a11y" = "Séance : %@, avec %@. Rejoindre.";
+"syncplay.needsVLC" = "Regarder ensemble ne fonctionne qu'avec le lecteur VLC. Désactivez « Lecteur natif » dans Réglages → Lecture.";
+"syncplay.session.mine" = "Vous y êtes · avec %@";
+"syncplay.session.mine.alone" = "Vous y êtes · personne d'autre";
+"syncplay.session.a11y.mine" = "Séance en cours : %@, avec %@. Quitter.";
+"syncplay.session.a11y.mine.alone" = "Séance en cours : %@, personne d'autre pour l'instant. Quitter.";
+"syncplay.session.state.playing" = "en lecture";
+"syncplay.session.state.paused" = "en pause";
+"syncplay.session.state.waiting" = "en attente";
+"syncplay.session.age.now" = "ouverte à l'instant";
+"syncplay.session.age.minutes" = "ouverte il y a %d min";
+"syncplay.session.age.hours" = "ouverte il y a %d h";
+"syncplay.lobby.eyebrow" = "Séance ouverte";
+"syncplay.lobby.participants" = "Présents";
+"syncplay.lobby.alone" = "Vous êtes seul pour l'instant.";
+"syncplay.lobby.invite" = "Inviter";
+"syncplay.lobby.invite.how" = "Les autres rejoignent depuis la rangée « En direct » de leur accueil : la séance y apparaît tant qu'elle est ouverte.";
+"syncplay.lobby.invite.nobody" = "Personne d'autre n'est connecté en ce moment.";
+"syncplay.lobby.invite.send" = "Prévenir";
+"syncplay.lobby.invite.sent" = "Prévenu";
+"syncplay.lobby.invite.message" = "%@ a ouvert une séance : %@. Ouvrez « En direct » sur votre accueil pour la rejoindre.";
+"syncplay.lobby.invite.sentToast" = "%@ a été prévenu";
+"syncplay.lobby.start" = "Lancer la lecture";
+"syncplay.lobby.leave" = "Quitter la séance";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";

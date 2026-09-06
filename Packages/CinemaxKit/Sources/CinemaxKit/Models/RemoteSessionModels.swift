@@ -50,8 +50,3 @@ public struct RemoteDisplayMessage: Sendable, Equatable {
     }
 }
 
-/// A parsed frame delivered by `SessionSocket.messages`.
-public enum RemoteSessionMessage: Sendable, Equatable {
-    case play(RemotePlayRequest)
-    case displayMessage(RemoteDisplayMessage)
-}

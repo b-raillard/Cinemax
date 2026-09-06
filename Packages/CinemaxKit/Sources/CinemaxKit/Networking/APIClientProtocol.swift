@@ -418,7 +418,7 @@ public protocol AdminAPI: Sendable {
 /// All members carry default implementations below so the many `APIClientProtocol`
 /// test mocks keep compiling without an explicit SyncPlay override — only the
 /// real client (and any mock that opts in) needs to implement them.
-public protocol SyncPlayAPI: Sendable {
+public protocol SyncPlayAPI: RealtimeSocketAPI {
     /// Lists the groups currently open on the server (`GET /SyncPlay/List`).
     func syncPlayListGroups() async throws -> [SyncPlayGroup]
     /// Creates a new group and joins it (`POST /SyncPlay/New`). The server
@@ -452,9 +452,6 @@ public protocol SyncPlayAPI: Sendable {
     /// estimation (`GET /GetUtcTime`).
     func syncPlayGetUtcTime() async throws -> SyncPlayUtcTime
 
-    /// Opens a WebSocket to the Jellyfin `/socket` endpoint for realtime
-    /// SyncPlay events. Returns `nil` when not connected / unauthenticated.
-    func makeSyncPlaySocket() -> SyncPlaySocket?
 }
 
 public extension SyncPlayAPI {
@@ -472,7 +469,24 @@ public extension SyncPlayAPI {
     func syncPlayGetUtcTime() async throws -> SyncPlayUtcTime {
         SyncPlayUtcTime(requestReceptionTime: Date(), responseTransmissionTime: Date())
     }
-    func makeSyncPlaySocket() -> SyncPlaySocket? { nil }
+}
+
+// MARK: - Realtime socket
+
+/// The URL of Jellyfin's realtime `/socket`, shared by every consumer of it.
+///
+/// It is a **URL**, not a socket: the app is allowed exactly one connection
+/// (Jellyfin keys a session on device + client + user, so a second one makes
+/// every message arrive twice), and `JellyfinSocketHub` is what owns it. Handing
+/// out a socket per slice is precisely the shape that made Watch Together and
+/// remote control mutually exclusive.
+public protocol RealtimeSocketAPI: Sendable {
+    /// `nil` when not connected or unauthenticated.
+    func makeRealtimeSocketURL() -> URL?
+}
+
+public extension RealtimeSocketAPI {
+    func makeRealtimeSocketURL() -> URL? { nil }
 }
 
 // MARK: - Remote control ("Play on…")
@@ -485,7 +499,7 @@ public extension SyncPlayAPI {
 ///
 /// Both members carry empty default implementations, on the `SyncPlayAPI` model,
 /// so hand-written test mocks compile without stubbing calls they don't exercise.
-public protocol RemoteControlAPI: Sendable {
+public protocol RemoteControlAPI: RealtimeSocketAPI {
     /// Sessions the given user is allowed to drive. Uses Jellyfin's
     /// `controllableByUserId` filter, so **no elevated rights are needed** —
     /// unlike the unfiltered `getActiveSessions`, which is admin-gated in this
@@ -502,16 +516,25 @@ public protocol RemoteControlAPI: Sendable {
         mediaSourceId: String?
     ) async throws
 
+    /// Sends a plain message to another session (`POST /Sessions/{id}/Message`).
+    ///
+    /// This is the ONLY notification primitive Jellyfin offers — there is no
+    /// invitation concept — so a Watch Together invite is literally a message
+    /// telling someone a session is open. Every other client renders it as a
+    /// bare toast, which is exactly what it is; the recipient joins from the
+    /// « En direct » row rather than from the message.
+    ///
+    /// Reaching another user's session requires `/Sessions`, so this is
+    /// **admin-only in practice** — `getControllableSessions` returns the
+    /// caller's own sessions and nothing else.
+    func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws
+
     /// Declares this device's capabilities so the server marks the session
     /// remote-controllable. The receiving counterpart of `playOnSession`, and a
     /// prerequisite for this app appearing in ANY client's target list —
     /// including its own. Pass `false` to withdraw (the user's opt-out).
     func publishCapabilities(supportsMediaControl: Bool) async throws
 
-    /// Opens the realtime socket carrying inbound session commands, or `nil`
-    /// when unauthenticated. Capabilities make the device *visible*; this socket
-    /// is what makes a command *arrive* — Jellyfin delivers them nowhere else.
-    func makeSessionSocket() -> SessionSocket?
 }
 
 public extension RemoteControlAPI {
@@ -523,7 +546,7 @@ public extension RemoteControlAPI {
         mediaSourceId: String?
     ) async throws {}
     func publishCapabilities(supportsMediaControl: Bool) async throws {}
-    func makeSessionSocket() -> SessionSocket? { nil }
+    func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws {}
 }
 
 // MARK: - Playlists

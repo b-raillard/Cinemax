@@ -16,7 +16,7 @@ import JellyfinAPI
 /// - **REST** (`GET /SyncPlay/List`) hands back the SDK's typed `GroupInfoDto`,
 ///   mapped by `init(dto:)`.
 /// - **Socket** (`GroupJoined` / `GroupLeft` updates) carries an untyped JSON
-///   blob that `SyncPlaySocket` decodes directly into this type — which is why
+///   blob that `JellyfinSocket` decodes directly into this type — which is why
 ///   the hand-written `Decodable` conformance below survived the migration of
 ///   the REST layer onto the SDK. Do not drop it.
 public struct SyncPlayGroup: Sendable, Identifiable, Decodable, Equatable {
@@ -113,6 +113,10 @@ public struct SyncPlayGroupUpdate: Sendable, Equatable {
         case playQueue = "PlayQueue"
         case notInGroup = "NotInGroup"
         case groupDoesNotExist = "GroupDoesNotExist"
+        /// The group is watching something this account cannot see. A real
+        /// outcome on a server with per-user library access, and one that used
+        /// to reach the user as nothing at all.
+        case libraryAccessDenied = "LibraryAccessDenied"
     }
 
     public let type: Kind?
@@ -124,15 +128,82 @@ public struct SyncPlayGroupUpdate: Sendable, Equatable {
     public let userName: String?
     /// Present for `StateUpdate` (`Data.State`).
     public let state: String?
+    /// Present for `PlayQueue` — **what the group is watching**, as Jellyfin's
+    /// `PlayQueueUpdate.Playlist` (an array of `SyncPlayQueueItem`, flattened to
+    /// its `ItemId`s here).
+    ///
+    /// Jellyfin syncs the transport and the queue over the same socket, but only
+    /// the transport was ever read, so a participant who joined a group got a
+    /// synchronised play/pause/seek and was never told which item to apply it
+    /// to. That is the whole of defect n°1: the information was always arriving
+    /// and the parser dropped it on the floor.
+    public let playlist: [String]
+    /// The queue's `PlaylistItemId`s, positionally aligned with `playlist`.
+    ///
+    /// Jellyfin addresses a queue ENTRY by this, not by the item id, and
+    /// `Ready` / `Buffering` reports are matched against it. Sending `nil`
+    /// means the report names no entry, so the participant is never counted as
+    /// ready and the group stays in `Waiting` — nothing ever starts.
+    public let playlistItemIds: [String]
+    /// Index into `playlist` of the item actually playing.
+    public let playingItemIndex: Int?
+    /// Where in that item the group stands, in Jellyfin ticks.
+    public let startPositionTicks: Int?
+    /// Whether the group is playing rather than paused, at the moment of the update.
+    public let isPlaying: Bool?
 
-    public init(type: Kind?, rawType: String, groupId: String?, group: SyncPlayGroup?, userName: String?, state: String?) {
+    /// The one item a joiner should open. `playingItemIndex` is authoritative;
+    /// a queue with no valid index falls back to its first entry rather than to
+    /// nothing, since an empty answer here means a black screen for the user.
+    public var playingItemId: String? {
+        if let i = playingItemIndex, playlist.indices.contains(i) { return playlist[i] }
+        return playlist.first
+    }
+
+    /// The queue entry the group is on — what a `Ready` report must name.
+    public var playingPlaylistItemId: String? {
+        if let i = playingItemIndex, playlistItemIds.indices.contains(i) { return playlistItemIds[i] }
+        return playlistItemIds.first
+    }
+
+    public init(
+        type: Kind?,
+        rawType: String,
+        groupId: String?,
+        group: SyncPlayGroup?,
+        userName: String?,
+        state: String?,
+        playlist: [String] = [],
+        playlistItemIds: [String] = [],
+        playingItemIndex: Int? = nil,
+        startPositionTicks: Int? = nil,
+        isPlaying: Bool? = nil
+    ) {
         self.type = type
         self.rawType = rawType
         self.groupId = groupId
         self.group = group
         self.userName = userName
         self.state = state
+        self.playlist = playlist
+        self.playlistItemIds = playlistItemIds
+        self.playingItemIndex = playingItemIndex
+        self.startPositionTicks = startPositionTicks
+        self.isPlaying = isPlaying
     }
+}
+
+/// The group's transport state (`GroupStateType`).
+///
+/// **This is a GROUP state, never a per-participant one.** Jellyfin's
+/// `GroupStateUpdate` is `{ State, Reason }` — it says the group is waiting, it
+/// does not say who for. Any UI that names the participant it is waiting on
+/// would be inventing that name.
+public enum SyncPlayGroupState: String, Sendable, Equatable {
+    case idle = "Idle"
+    case waiting = "Waiting"
+    case paused = "Paused"
+    case playing = "Playing"
 }
 
 /// The two server timestamps returned by `GET /GetUtcTime`, used to estimate
@@ -145,12 +216,6 @@ public struct SyncPlayUtcTime: Sendable {
         self.requestReceptionTime = requestReceptionTime
         self.responseTransmissionTime = responseTransmissionTime
     }
-}
-
-/// A parsed frame delivered by `SyncPlaySocket.messages`.
-public enum SyncPlaySocketMessage: Sendable {
-    case command(SyncPlayCommand)
-    case groupUpdate(SyncPlayGroupUpdate)
 }
 
 // MARK: - Date parsing

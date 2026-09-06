@@ -324,6 +324,15 @@
 "admin.user.access.libraries.empty" = "No libraries found on the server.";
 "admin.user.access.devices" = "Device access";
 "admin.user.access.enableAllDevices" = "Allow access from all devices";
+"admin.user.access.syncPlay.title" = "Watch Together";
+"admin.user.access.syncPlay.label" = "Permission";
+"admin.user.access.syncPlay.footer" = "A server permission, applying to every Jellyfin client this account uses. With no permission the \"Live\" row disappears for this user too, so they see no sessions at all.";
+"admin.user.access.syncPlay.none" = "None";
+"admin.user.access.syncPlay.join" = "Join only";
+"admin.user.access.syncPlay.createAndJoin" = "Create and join";
+"admin.user.access.liveSessions.title" = "See \"Live\"";
+"admin.user.access.liveSessions.label" = "See other people's activity";
+"admin.user.access.liveSessions.footer" = "Shows this user who is watching what right now, and lets them notify someone from a lobby. Without it they see Watch Together sessions only. Note: Jellyfin does not separate seeing from controlling — this permission also lets the account drive playback on other people's devices.";
 
 "admin.user.parental.rating.title" = "Max content rating";
 "admin.user.parental.rating.footer" = "Hides content rated above the chosen age for this user. Unrated titles stay visible.";
@@ -881,7 +890,6 @@
 
 // MARK: - SyncPlay
 "syncplay.title" = "Watch Together";
-"syncplay.pill" = "Together · %d";
 "syncplay.groupName" = "Group name";
 "syncplay.create" = "Create group";
 "syncplay.join" = "Join";
@@ -895,6 +903,41 @@
 "syncplay.left" = "Left group";
 "syncplay.groupEnded" = "The group has ended";
 "syncplay.error" = "Sync failed";
+"syncplay.you" = "You";
+"syncplay.event.joined" = "%@ joined";
+"syncplay.event.left" = "%@ left";
+"syncplay.waiting.title" = "Waiting for a participant";
+"syncplay.waiting.subtitle" = "Someone is buffering. Everyone will resume together.";
+"syncplay.libraryAccessDenied" = "Your account can't access this title";
+"syncplay.session.badge" = "TOGETHER";
+"syncplay.session.with" = "With %@";
+"syncplay.session.two" = "%@ and %@";
+"syncplay.session.more" = "%@, %@ and %d others";
+"syncplay.session.unknownTitle" = "Session in progress";
+"syncplay.session.a11y" = "Session: %@, with %@. Join.";
+"syncplay.session.mine" = "You're in \u00b7 with %@";
+"syncplay.session.mine.alone" = "You're in \u00b7 nobody else yet";
+"syncplay.session.a11y.mine" = "Session in progress: %@, with %@. Leave.";
+"syncplay.session.a11y.mine.alone" = "Session in progress: %@, nobody else yet. Leave.";
+"syncplay.session.state.playing" = "playing";
+"syncplay.session.state.paused" = "paused";
+"syncplay.session.state.waiting" = "waiting";
+"syncplay.session.age.now" = "just opened";
+"syncplay.session.age.minutes" = "opened %d min ago";
+"syncplay.session.age.hours" = "opened %d h ago";
+"syncplay.lobby.eyebrow" = "Session open";
+"syncplay.lobby.participants" = "Here";
+"syncplay.lobby.alone" = "You're on your own so far.";
+"syncplay.lobby.invite" = "Invite";
+"syncplay.lobby.invite.how" = "Others join from the Live row on their own home screen: the session shows there for as long as it stays open.";
+"syncplay.lobby.invite.nobody" = "Nobody else is connected right now.";
+"syncplay.lobby.invite.send" = "Notify";
+"syncplay.lobby.invite.sent" = "Notified";
+"syncplay.lobby.invite.message" = "%@ opened a session: %@. Open the Live row on your home screen to join.";
+"syncplay.lobby.invite.sentToast" = "%@ has been notified";
+"syncplay.lobby.start" = "Start playback";
+"syncplay.lobby.leave" = "Leave session";
+"syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Remove from Continue Watching";

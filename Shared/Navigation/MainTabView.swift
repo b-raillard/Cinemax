@@ -221,7 +221,15 @@ struct MainTabView: View {
     @ViewBuilder
     private func deepLinkDetail(_ target: DeepLinkFallback) -> some View {
         NavigationStack {
-            MediaDetailScreen(itemId: target.id)
+            // This modal exists only to carry an inbound playback — an App
+            // Intent, a « Lire sur… », a Watch Together join. The user never
+            // asked for the fiche, so when the player closes the presentation
+            // has no reason left to stand: it went on covering the app, tab bar
+            // included, until « Terminé » was pressed.
+            MediaDetailScreen(
+                itemId: target.id,
+                onIntentPlaybackFinished: { deepLinkFallback = nil }
+            )
             #if os(iOS)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {

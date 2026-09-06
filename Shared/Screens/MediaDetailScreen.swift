@@ -48,16 +48,45 @@ struct MediaDetailScreen: View {
     /// Watch Together (SyncPlay): the item to present the group sheet for, and
     /// (iOS) the item to push into playback once a group is created/joined.
     @State private var watchTogetherSheet: WatchTogetherIntent?
+    /// The staging screen between opening a session and playing it. Creating a
+    /// session used to drop straight into the player, where the group waits for
+    /// participants to report ready — a black screen with no way back.
+    @State private var watchTogetherLobby: WatchTogetherIntent?
+    /// Held between « Lancer la lecture » and the lobby cover actually going
+    /// away — see the `onDisappear` that consumes it.
+    @State private var pendingWatchTogetherStart: WatchTogetherIntent?
     /// Raises the root-hosted "Play on…" sheet. A context menu can raise it too
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
     @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
     /// Watch Together (SyncPlay) is not production-ready yet. This kill-switch
-    /// hides both UI entry points (iOS secondary-actions chip + tvOS action-row
-    /// button) while keeping the whole implementation compiled and type-checked.
-    /// Flip to `true` to bring the feature back. See CLAUDE.md "SyncPlay / Watch
-    /// Together". Revisit after 1.0.5 ships.
-    private static let watchTogetherEnabled = false
+    /// Whether this account may START a session from a title's page.
+    ///
+    /// This replaced a compile-time kill-switch that had been `false` since
+    /// 2026-07-15. The gate is now the server's own `UserPolicy.syncPlayAccess`
+    /// — Jellyfin has always modelled the permission (`None` / `JoinGroups` /
+    /// `CreateAndJoinGroups`) and the client simply never asked, so it offered
+    /// the feature to accounts the server would then refuse. `canCreate` is the
+    /// stricter of the two rights: an account that may only *join* still sees
+    /// sessions in the Home row, it just cannot open one here.
+    /// Opens the Watch Together sheet, or explains why it cannot work.
+    ///
+    /// The refusal is a toast rather than a hidden button on purpose: only the
+    /// VLC path binds a `PlaybackBridge`, so with the native player forced a
+    /// group would form server-side and nothing would ever move. Hiding the
+    /// control would leave the user with a feature that is documented,
+    /// permitted by their server, and simply absent — with nothing to act on.
+    private func presentWatchTogether(for item: BaseItemDto, nextEp: BaseItemDto?) {
+        guard SyncPlayController.isEngineSupported else {
+            toast.error(loc.localized("syncplay.title"), message: loc.localized("syncplay.needsVLC"))
+            return
+        }
+        watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+    }
+
+    private var watchTogetherEnabled: Bool {
+        LiveSessionsRow.canCreate(appState.currentUser?.policy?.syncPlayAccess)
+    }
     #if os(iOS)
     @State private var watchTogetherPlay: WatchTogetherIntent?
     /// Set once, on arrival, when an App Intent asked to play this item.
@@ -94,8 +123,28 @@ struct MediaDetailScreen: View {
     @Environment(\.openURL) private var openURL
     #endif
 
-    init(itemId: String, itemType: BaseItemKind = .movie) {
+    /// Called when a playback this screen started *on someone else's behalf* —
+    /// an App Intent, an inbound « Lire sur… », a Watch Together join — has been
+    /// dismissed.
+    ///
+    /// Only `MainTabView`'s modal fallback passes it, and only because that
+    /// modal exists purely to carry such a playback: the user never asked for
+    /// the fiche, so leaving them parked on it behind a « Terminé » button, with
+    /// the tab bar unreachable, is the presentation outliving its reason. A
+    /// screen the user actually navigated to passes nothing and keeps standing.
+    private let onIntentPlaybackFinished: (() -> Void)?
+    /// True between an intent-driven playback starting and its player going
+    /// away — so an ordinary Play press, which shares the same players, never
+    /// fires the callback above.
+    @State private var intentPlaybackInFlight = false
+
+    init(
+        itemId: String,
+        itemType: BaseItemKind = .movie,
+        onIntentPlaybackFinished: (() -> Void)? = nil
+    ) {
         _viewModel = State(initialValue: MediaDetailViewModel(itemId: itemId, itemType: itemType))
+        self.onIntentPlaybackFinished = onIntentPlaybackFinished
     }
 
     var body: some View {
@@ -170,8 +219,50 @@ struct MediaDetailScreen: View {
             loc: loc,
             toast: toast,
             network: network,
-            onStart: { intent in startWatchTogether(intent) }
+            // Hand off to the lobby rather than to playback. Deferred by one
+            // main-actor slice because the sheet calls `dismiss()` immediately
+            // before this, and raising a second presentation inside the first
+            // one's dismissal is how SwiftUI drops it silently.
+            onStart: { intent in Task { @MainActor in watchTogetherLobby = intent } }
         ))
+        .fullScreenCover(item: $watchTogetherLobby) { intent in
+            WatchTogetherLobby(
+                itemId: intent.itemId,
+                title: intent.title,
+                backdropURL: viewModel.item?.backdropItemID.map {
+                    appState.imageBuilder.imageURL(
+                        itemId: $0, imageType: .backdrop,
+                        maxWidth: ImageURLBuilder.screenPixelWidth,
+                        tag: viewModel.item?.backdropImageTagValue
+                    )
+                },
+                onStart: {
+                    // Remember the intent, then close — and start playback
+                    // only once the cover is GONE (see the `onDisappear`
+                    // below), never from inside its dismissal. Raising a
+                    // presentation while another is dismissing is the hazard
+                    // the sheet → lobby hop above already documents; here it
+                    // would be a `navigationDestination` push on iOS and the
+                    // coordinator's own cover on tvOS, i.e. the same shape.
+                    // Sequencing it after the dismissal costs nothing and
+                    // removes the question.
+                    pendingWatchTogetherStart = intent
+                    watchTogetherLobby = nil
+                }
+            )
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toast)
+            .environment(network)
+            // Fires once the cover is actually gone, which is the earliest
+            // moment a push (or the tvOS coordinator's own cover) can land.
+            .onDisappear {
+                guard let pending = pendingWatchTogetherStart else { return }
+                pendingWatchTogetherStart = nil
+                Task { @MainActor in startWatchTogether(pending) }
+            }
+        }
         #if os(iOS)
         .navigationDestination(item: $watchTogetherPlay) { intent in
             VideoPlayerView(itemId: intent.itemId, title: intent.title, startTime: intent.startTime)
@@ -190,6 +281,23 @@ struct MediaDetailScreen: View {
                 episodeNavigator: nav.navigator,
                 mediaSourceId: viewModel.item.flatMap { selectedSource($0)?.id }
             )
+        }
+        #endif
+        // The player raised on someone else's behalf has gone away — tell the
+        // host that only existed to carry it. Two platforms, two signals for
+        // the same fact: iOS pops a `navigationDestination` (the binding goes
+        // back to nil), tvOS dismisses a UIKit modal the coordinator owns.
+        #if os(tvOS)
+        .onChange(of: coordinator.playerDismissals) { _, _ in
+            guard intentPlaybackInFlight else { return }
+            intentPlaybackInFlight = false
+            onIntentPlaybackFinished?()
+        }
+        #else
+        .onChange(of: siriPlayback) { _, new in
+            guard new == nil, intentPlaybackInFlight else { return }
+            intentPlaybackInFlight = false
+            onIntentPlaybackFinished?()
         }
         #endif
         // tvOS: this screen is only ever pushed, so the Menu button must pop
@@ -898,6 +1006,7 @@ struct MediaDetailScreen: View {
     /// resolved here for tvOS because the coordinator takes them up front,
     /// whereas the iOS destination closure resolves them at push time.
     private func startIntentPlayback(_ route: SiriPlaybackRoute) {
+        intentPlaybackInFlight = true
         #if os(tvOS)
         let nav = episodeNavigation(for: route.itemId)
         coordinator.play(
@@ -1036,9 +1145,6 @@ struct MediaDetailScreen: View {
             if showTrailerButton, network.isOnline, let trailer = viewModel.localTrailers.first {
                 trailerButton(for: trailer)
             }
-            if Self.watchTogetherEnabled && network.isOnline {
-                watchTogetherButton(for: item, nextEp: nextEp)
-            }
             // "Play on…" — appended last, so this late-arriving button (the
             // session probe lands after the first render) can't steal focus from
             // Play, which holds it by default.
@@ -1049,6 +1155,15 @@ struct MediaDetailScreen: View {
             // two buttons above.
             if network.isOnline, playlists != nil {
                 addToPlaylistButton(for: item)
+            }
+            // Last, for the same reason as "Play on…": `watchTogetherEnabled`
+            // reads `currentUser?.policy`, which `refreshCurrentUser()`
+            // populates asynchronously — so on a cold launch that reaches a
+            // fiche fast (Top Shelf, deep link, inbound remote play) it
+            // materialises after the first render. Mid-row, that slid its
+            // neighbours sideways under the remote.
+            if watchTogetherEnabled && network.isOnline {
+                watchTogetherButton(for: item, nextEp: nextEp)
             }
             Spacer(minLength: 0)
         }
@@ -1116,7 +1231,7 @@ struct MediaDetailScreen: View {
             accessibilityLabel: loc.localized("syncplay.title"),
             isActive: SyncPlayController.shared.isInGroup
         ) {
-            watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+            presentWatchTogether(for: item, nextEp: nextEp)
         }
     }
 
@@ -1206,14 +1321,14 @@ struct MediaDetailScreen: View {
             }
 
             // Watch Together (SyncPlay) — online only. Accent while in a group.
-            if Self.watchTogetherEnabled && network.isOnline {
+            if watchTogetherEnabled && network.isOnline {
                 secondaryActionCell(
                     systemImage: "person.2.fill",
                     active: SyncPlayController.shared.isInGroup,
                     accessibility: loc.localized("syncplay.title"),
                     trigger: false
                 ) {
-                    watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
+                    presentWatchTogether(for: item, nextEp: nextEp)
                 }
             }
 
