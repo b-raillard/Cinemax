@@ -300,6 +300,47 @@ final class SyncPlayController {
         Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
     }
 
+    /// A seek has settled: frames are flowing again at the new position.
+    ///
+    /// **RULE — a seek MUST re-announce readiness, and this report is
+    /// deliberately NOT gated on `isApplyingRemoteCommand`.** A seek is what
+    /// puts the whole group into `Waiting` server-side, and the server leaves
+    /// that state only when every participant reports ready again. The only two
+    /// callers of `reportReady` were engine state transitions (`.playing` /
+    /// `.paused` in `VLCStreamPresenter`) — and libVLC emits **no** state change
+    /// when a seek settles on an already-open stream, so nothing ever fired.
+    /// Measured on device 2026-09-06: after one ±10 s seek both clients went
+    /// `Playing → Waiting` in the same millisecond, neither sent `Ready` again,
+    /// and a full-screen "En attente d'un participant" veil stood for at least
+    /// 7 min 41 s over a picture playing normally — ended by tearing the players
+    /// down, not by the app. It survived the other participant leaving.
+    ///
+    /// The echo guard exists to stop an inbound command's *engine* echo looping
+    /// back out. Applying it here would defeat the purpose: an inbound `Seek` is
+    /// precisely the command that raises the window, and a fast settle would
+    /// land inside its 1 s and be swallowed, leaving the group waiting for ever.
+    /// The measured case settled at +2.3 s and squeaked through — luck, not
+    /// design.
+    ///
+    /// **What replaces the echo guard is `groupState == .waiting`, and it is
+    /// load-bearing, not a tidy-up.** Reporting on every settle instead — the
+    /// first shape of this fix — closed a feedback loop, measured on device the
+    /// same day: `Ready` at 220.067 s → the server answers `Unpause` at
+    /// 219.697 s → that seeks backwards → settles → `Ready` again → … every
+    /// 0.6 s, for ever, the picture jerking back 0.4 s each time. A group that
+    /// is already `Playing` is waiting on nobody, so there is nothing to
+    /// announce; only a group in `Waiting` is holding for this report. That is
+    /// also exactly the protocol: a seek drives the group to `Waiting`, each
+    /// participant answers `Ready`, and the server unpauses when all have.
+    /// `SyncPlaySeekSettleReadyTests` locks every half.
+    func reportSeekSettled(isPlaying: Bool) {
+        guard isInGroup, groupState == .waiting, let api, let bridge else { return }
+        let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
+        let entry = currentPlaylistItemId
+        trace("calage terminé — Ready réémis position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
+        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
+    }
+
     // MARK: - Session plumbing
 
     private func prepare(
@@ -440,7 +481,9 @@ final class SyncPlayController {
         }
     }
 
-    private func applyCommand(_ command: SyncPlayCommand) {
+    /// Applies one inbound transport command. Internal rather than private so
+    /// the tests can drive the echo window the way the socket does.
+    func applyCommand(_ command: SyncPlayCommand) {
         guard let bridge else {
             trace("commande \(command.command.rawValue) reçue sans lecteur lié — ignorée")
             return
@@ -500,7 +543,9 @@ final class SyncPlayController {
         }
     }
 
-    private func applyState(_ raw: String?) {
+    /// Applies the group's transport state. Internal rather than private so the
+    /// tests can put the controller in the states the socket produces.
+    func applyState(_ raw: String?) {
         guard let raw, let parsed = SyncPlayGroupState(rawValue: raw) else {
             if let raw { trace("état de groupe inconnu « \(raw) » — ignoré") }
             return

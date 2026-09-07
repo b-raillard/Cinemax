@@ -224,6 +224,17 @@ final class AppState {
     /// `MediaDetailScreen` consumes it once, and only on the matching item.
     var pendingIntentPlaybackItemId: String?
 
+    /// The position the request must open at, in Jellyfin ticks, when it came
+    /// from a Watch Together queue. `nil` — and only `nil` — means "no group
+    /// position given, use the fiche's own resume".
+    ///
+    /// Set alongside `pendingIntentPlaybackItemId` and cleared by the same
+    /// consumer. It exists because in a session the GROUP's position is
+    /// authoritative: without it the joiner opened at its own resume point and
+    /// two people watched different parts of the same film with no signal. See
+    /// `SyncPlayJoinStart` for the rule and the measurement.
+    var pendingIntentPlaybackStartTicks: Int?
+
     /// True when `itemId` is the item a pending **playback** request names.
     ///
     /// The routing SSOT for that request: `MainTabView` sends these to its
@@ -949,9 +960,17 @@ struct AppNavigation: View {
             // êtes » — a feature that looks wired and does nothing. Exactly the
             // failure `MediaDetailScreen.consumeIntentPlaybackRequest()` carries
             // its own cross-platform RULE about.
-            SyncPlayController.shared.onQueueChanged = { itemId, _ in
+            //
+            // The position is carried, NOT discarded. `{ itemId, _ in … }` was
+            // the whole of defect D2: the group's `startPositionTicks` reached
+            // this closure and died here, so the request fell through to the
+            // fiche's own resume resolution — the JOINING account's. Measured
+            // 2026-09-06: group at 3:39, joiner opened at 12:33 on the end
+            // credits, gap never corrected. See `SyncPlayJoinStart`.
+            SyncPlayController.shared.onQueueChanged = { itemId, startTicks in
                 guard AppState.isValidItemId(itemId) else { return }
                 appState.pendingIntentPlaybackItemId = itemId
+                appState.pendingIntentPlaybackStartTicks = startTicks
                 appState.pendingDeepLinkItemId = itemId
             }
             #if os(iOS)
@@ -1147,6 +1166,23 @@ extension Notification.Name {
     /// default menu, so without this the surface that exists to make playlists
     /// findable would be the last place to hear about a new one.
     static let cinemaxPlaylistsChanged = Notification.Name("cinemaxPlaylistsChanged")
+
+    /// Somebody may have just opened a Watch Together session. Home's « En
+    /// direct » row is the consumer, and it is the only door into a session
+    /// another person opened.
+    ///
+    /// Posted when a `DisplayMessage` arrives over the realtime socket, because
+    /// that is the whole of what an invitation can be here: Jellyfin has no
+    /// invitation primitive, so the lobby's « Prévenir » sends a plain toast
+    /// telling the recipient to look at their Accueil. Before this, the row on
+    /// the other end only caught up on the next 20 s poll — and only if that
+    /// person happened to be sitting on Accueil already, which is precisely
+    /// what the message is asking them to go and do.
+    ///
+    /// Deliberately not narrowed to invitations: a `DisplayMessage` costs one
+    /// small permission-gated refresh, and the socket carries no way to tell an
+    /// invitation from any other message a server might send.
+    static let cinemaxLiveSessionsChanged = Notification.Name("cinemaxLiveSessionsChanged")
     /// Posted by the API client when any session-scoped call returns HTTP 401.
     /// `AppNavigation` observes this on MainActor and runs the logout + toast.
     /// Cross-actor bridge: the API callback runs from a non-MainActor context

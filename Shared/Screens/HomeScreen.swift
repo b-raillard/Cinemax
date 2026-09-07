@@ -62,6 +62,9 @@ struct HomeScreen: View {
     /// rail refresh on next appear. Coalesces naturally: several while hidden
     /// collapse into one refresh on appear.
     @State private var pendingUserDataRefresh = false
+    /// False until Home's own first appearance has been served by `load()`, so
+    /// the arrival refresh below doesn't duplicate it on a cold launch.
+    @State private var liveRowPrimed = false
 
     var body: some View {
         ZStack {
@@ -106,6 +109,15 @@ struct HomeScreen: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxPlaylistsChanged)) { _ in
             Task { await viewModel.refreshPlaylists(using: appState) }
+        }
+        // Somebody opened a session and told us about it. No deferred-while-
+        // hidden flag here, unlike the two tiers above: the message that raises
+        // this says « va sur ton accueil », and the arrival refresh in the poll
+        // task below already covers a viewer who is not on Accueil yet — which
+        // is the ordinary case. This branch is for the one who already is.
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxLiveSessionsChanged)) { _ in
+            guard isVisible else { return }
+            Task { await viewModel.refreshLiveRow(using: appState) }
         }
         // Genre selection changed in Settings → refresh just the genre rows.
         .onChange(of: selectedGenresJSON) {
@@ -179,6 +191,17 @@ struct HomeScreen: View {
         // viewer's scroll position every interval.
         .task(id: isVisible) {
             guard isVisible, showWatchingNow else { return }
+            // Re-ask on ARRIVAL, not a full interval later. The loop used to
+            // sleep first, so somebody told « rejoins-moi, la séance est sur ton
+            // accueil » walked to Accueil and found the row still empty for up
+            // to 20 s — with no way to hurry it on tvOS, which has no
+            // pull-to-refresh. The very first appearance is left to `load()`,
+            // which already fetches the row.
+            if liveRowPrimed {
+                await viewModel.refreshLiveRow(using: appState)
+            } else {
+                liveRowPrimed = true
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.liveRowPollInterval))
                 guard !Task.isCancelled, isVisible else { return }
