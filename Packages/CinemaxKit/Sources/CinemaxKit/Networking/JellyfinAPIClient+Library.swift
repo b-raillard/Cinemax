@@ -17,11 +17,25 @@ extension JellyfinAPIClient {
         return response.value
     }
 
-    /// Returns all active sessions on the server. Used by the "Currently watching" indicator
-    /// on Home to show what other users are streaming right now.
-    public func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
+    /// Returns the active sessions the caller may see. Feeds the « En direct »
+    /// row and the lobby's invite list.
+    ///
+    /// **`controllableByUserId` is not optional for a non-admin caller.**
+    /// Jellyfin's `SessionManager.GetSessions` (10.10+, verified on
+    /// `release-10.10.z`, `release-10.11.z` and master) applies the account's
+    /// `EnableRemoteControlOfOtherUsers` permission ONLY inside the
+    /// `controllableUserToCheck` branch; the bare query takes the other branch,
+    /// « request isn't from administrator, limit to "own" sessions », whatever
+    /// the policy says. So a regular account granted « Voir En direct » still
+    /// got an answer containing only itself, which the caller then filtered to
+    /// nothing. The decision of which shape to send lives in
+    /// `LiveSessionsRow.sessionsQueryUserId`, not here.
+    public func getActiveSessions(activeWithinSeconds: Int = 60, controllableByUserId: String? = nil) async throws -> [SessionInfoDto] {
         guard let client = getClient() else { throw JellyfinError.notConnected }
-        let params = Paths.GetSessionsParameters(activeWithinSeconds: activeWithinSeconds)
+        let params = Paths.GetSessionsParameters(
+            controllableByUserID: controllableByUserId,
+            activeWithinSeconds: activeWithinSeconds
+        )
         let response = try await client.send(Paths.getSessions(parameters: params))
         return response.value
     }

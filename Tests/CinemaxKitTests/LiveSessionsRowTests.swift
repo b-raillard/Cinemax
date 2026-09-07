@@ -276,4 +276,20 @@ struct LiveSessionsRowTests {
         #expect(!LiveSessionsRow.canSeeOthers(isAdministrator: false, policy: policy(nil)))
         #expect(!LiveSessionsRow.canSeeOthers(isAdministrator: false, policy: nil))
     }
+
+    @Test("A non-admin's /Sessions query names them as controllableByUserId; an admin's stays unfiltered")
+    func sessionsQueryShape() {
+        // The server applies `EnableRemoteControlOfOtherUsers` only inside its
+        // `controllableUserToCheck` branch; the bare query limits a non-admin
+        // to their own sessions whatever the policy says. This is the half of
+        // the permission `canSeeOthers` cannot express on its own.
+        #expect(LiveSessionsRow.sessionsQueryUserId(isAdministrator: false, currentUserId: "wife") == "wife")
+        // An administrator is entitled to the whole list, including sessions
+        // that never declared remote control — which the controllable branch
+        // would drop.
+        #expect(LiveSessionsRow.sessionsQueryUserId(isAdministrator: true, currentUserId: "admin") == nil)
+        // No signed-in id means no shape to send; the caller bails before the
+        // request anyway.
+        #expect(LiveSessionsRow.sessionsQueryUserId(isAdministrator: false, currentUserId: nil) == nil)
+    }
 }
