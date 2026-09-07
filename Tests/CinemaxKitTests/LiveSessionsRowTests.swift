@@ -193,6 +193,43 @@ struct LiveSessionsRowTests {
         #expect(entries.isEmpty)
     }
 
+    @Test("An episode carries its S×E× line; a film carries none")
+    func episodeLabel() {
+        var episode = BaseItemDto()
+        episode.id = "e1"
+        episode.type = .episode
+        episode.name = "Deux hommes morts"
+        episode.seriesName = "Marvel's The Punisher"
+        episode.parentIndexNumber = 1
+        episode.indexNumber = 2
+        var solo = SessionInfoDto()
+        solo.id = "s1"
+        solo.userName = "Xavier"
+        solo.nowPlayingItem = episode
+        var member = SessionInfoDto()
+        member.id = "s2"
+        member.userName = "Marie"
+        member.nowPlayingItem = episode
+
+        let entries = LiveSessionsRow.build(
+            groups: [SyncPlayGroup(id: "g1", name: "Soirée", participants: ["Marie"])],
+            sessions: [member, solo, session("s3", user: "Léa", itemId: "i2", title: "Le Parrain 3")],
+            currentUserName: "Bastien"
+        )
+        #expect(entries.count == 3)
+        // The group borrows the episode from its member's session.
+        #expect(entries[0].isTogether)
+        #expect(entries[0].title == "Marvel's The Punisher")
+        #expect(entries[0].episodeLabel == "S01:E02 - Deux hommes morts")
+        // The solo card says the series AND the episode, as the rails do.
+        #expect(entries[1].kind == .solo(sessionId: "s1"))
+        #expect(entries[1].title == "Marvel's The Punisher")
+        #expect(entries[1].episodeLabel == "S01:E02 - Deux hommes morts")
+        // A film has no episode line to print.
+        #expect(entries[2].title == "Le Parrain 3")
+        #expect(entries[2].episodeLabel == nil)
+    }
+
     @Test("Progress comes from the session's play state")
     func progress() {
         let entries = LiveSessionsRow.build(

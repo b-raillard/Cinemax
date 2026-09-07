@@ -44,4 +44,21 @@ extension BaseItemDto {
     /// True only when the server actually holds a logo. Most libraries do not,
     /// so every logo call site needs a text fallback rather than a placeholder.
     var hasLogoImage: Bool { logoImageTagValue?.isEmpty == false }
+
+    /// "S01:E02 - Deux hommes morts" — the line the « À suivre » and
+    /// « Reprendre » rails print under a series title. `nil` for anything that
+    /// is not an episode, and for an episode carrying neither numbers nor a
+    /// name. Single-sourced so the « En direct » row can say the same thing
+    /// about what someone is watching as the rails say about what you are.
+    var episodeLabel: String? {
+        guard type == .episode else { return nil }
+        var label = ""
+        if let season = parentIndexNumber, let ep = indexNumber {
+            label = String(format: "S%02d:E%02d", season, ep)
+        }
+        if let name, !name.isEmpty {
+            label = label.isEmpty ? name : "\(label) - \(name)"
+        }
+        return label.isEmpty ? nil : label
+    }
 }

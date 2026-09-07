@@ -922,10 +922,15 @@ struct HomeScreen: View {
                         )
                     },
                     progress: entry.progress ?? 0,
-                    subtitle: String(
-                        format: loc.localized("home.watchingNow.playing"),
-                        entry.participants.first ?? ""
-                    )
+                    // An episode takes the SAME line « À suivre » gives it,
+                    // right under the series title, and the viewer's name
+                    // moves down one line. Before this the card named the
+                    // series and the person and never the episode — the one
+                    // thing that tells someone following the same show
+                    // whether Xavier is ahead of them. A film has no such
+                    // line, so the name keeps the subtitle there.
+                    subtitle: entry.episodeLabel ?? watcherLine(entry),
+                    detail: entry.episodeLabel == nil ? nil : watcherLine(entry)
                 )
                 .overlay(alignment: .topLeading) { livePill(isTogether: false) }
             }
@@ -934,7 +939,12 @@ struct HomeScreen: View {
             #else
             .buttonStyle(.plain)
             #endif
-            .accessibilityLabel("\(entry.title ?? ""), \(entry.participants.first ?? "")")
+            .accessibilityLabel(
+                [entry.title ?? "", entry.episodeLabel, entry.participants.first ?? ""]
+                    .compactMap { $0 }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: ", ")
+            )
         }
     }
 
@@ -948,6 +958,12 @@ struct HomeScreen: View {
     /// was abandoned an hour ago and left standing.
     private func liveDetail(_ entry: LiveSessionsRow.Entry) -> String? {
         var parts: [String] = []
+        // The episode leads: it is what the row's other cards print under a
+        // series, and if the line has to truncate, the age is the part the
+        // viewer can best do without. A group's subtitle is spoken for by
+        // the participants, which is what the card is FOR, so the episode
+        // rides this line rather than displacing them.
+        if let episode = entry.episodeLabel { parts.append(episode) }
         // `.idle` is deliberately not rendered: a group in that state has
         // nothing playing, and naming it would read as a fault rather than as
         // "nobody has started yet".
@@ -967,6 +983,11 @@ struct HomeScreen: View {
             }
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// « Xavier regarde » — who is on a solo card.
+    private func watcherLine(_ entry: LiveSessionsRow.Entry) -> String {
+        String(format: loc.localized("home.watchingNow.playing"), entry.participants.first ?? "")
     }
 
     /// Signals that a card is a live session rather than a recommendation.
@@ -1130,14 +1151,7 @@ struct HomeScreen: View {
 
         let cardSubtitle: String? = {
             if isEpisode {
-                var label = ""
-                if let season = item.parentIndexNumber, let ep = item.indexNumber {
-                    label = String(format: "S%02d:E%02d", season, ep)
-                }
-                if let name = item.name, !name.isEmpty {
-                    label = label.isEmpty ? name : "\(label) - \(name)"
-                }
-                return label.isEmpty ? nil : label
+                return item.episodeLabel
             } else {
                 guard let position = item.userData?.playbackPositionTicks,
                       let total = item.runTimeTicks else { return nil }
@@ -1201,16 +1215,7 @@ struct HomeScreen: View {
     @ViewBuilder
     private func nextUpCard(_ item: BaseItemDto) -> some View {
         let cardTitle = item.seriesName ?? item.name ?? ""
-        let cardSubtitle: String? = {
-            var label = ""
-            if let season = item.parentIndexNumber, let ep = item.indexNumber {
-                label = String(format: "S%02d:E%02d", season, ep)
-            }
-            if let name = item.name, !name.isEmpty {
-                label = label.isEmpty ? name : "\(label) - \(name)"
-            }
-            return label.isEmpty ? nil : label
-        }()
+        let cardSubtitle = item.episodeLabel
 
         WideCard(
             title: cardTitle,
