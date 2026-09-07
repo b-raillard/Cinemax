@@ -41,6 +41,12 @@ enum LiveSessionsRow {
         let backdropItemId: String?
         let backdropTag: String?
         let title: String?
+        /// "S01:E02 - Deux hommes morts" when the item is an episode, else
+        /// `nil`. `title` names the SERIES for an episode (so the card reads
+        /// like the rails), which left the row saying « Xavier regarde
+        /// Marvel's The Punisher » and never WHICH episode — the one thing
+        /// that makes the card useful to someone following the same show.
+        let episodeLabel: String?
         let itemType: BaseItemKind?
         let positionTicks: Int?
         let runtimeTicks: Int?
@@ -133,6 +139,7 @@ enum LiveSessionsRow {
                 backdropTag: item?.backdropImageTagValue,
                 title: item.map { ($0.seriesName ?? $0.name) ?? "" }
                     ?? (groupTitle.isEmpty ? nil : groupTitle),
+                episodeLabel: item?.episodeLabel,
                 itemType: item?.type,
                 positionTicks: session?.playState?.positionTicks,
                 runtimeTicks: item?.runTimeTicks,
@@ -158,6 +165,7 @@ enum LiveSessionsRow {
                 backdropItemId: item.backdropItemID ?? itemId,
                 backdropTag: item.backdropImageTagValue,
                 title: (item.seriesName ?? item.name) ?? "",
+                episodeLabel: item.episodeLabel,
                 itemType: item.type,
                 positionTicks: session.playState?.positionTicks,
                 runtimeTicks: item.runTimeTicks,
