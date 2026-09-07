@@ -98,7 +98,10 @@ public protocol AuthAPI: Sendable {
 
     func getPublicUsers() async throws -> [UserDto]
     func getUsers() async throws -> [UserDto]
-    func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto]
+    /// `GET /Sessions`. Pass `controllableByUserId` for a NON-ADMIN caller —
+    /// see `LiveSessionsRow.sessionsQueryUserId` for why: without it the server
+    /// limits the answer to the caller's own sessions whatever their policy says.
+    func getActiveSessions(activeWithinSeconds: Int, controllableByUserId: String?) async throws -> [SessionInfoDto]
     /// Lists devices registered on the server. For non-admin users the server
     /// returns only the caller's own devices; admins receive every device.
     func getDevices() async throws -> [DeviceInfoDto]
@@ -502,8 +505,8 @@ public extension RealtimeSocketAPI {
 public protocol RemoteControlAPI: RealtimeSocketAPI {
     /// Sessions the given user is allowed to drive. Uses Jellyfin's
     /// `controllableByUserId` filter, so **no elevated rights are needed** —
-    /// unlike the unfiltered `getActiveSessions`, which is admin-gated in this
-    /// app because it leaks every user's session on some servers.
+    /// unlike the bare `getActiveSessions` query, which the server limits to
+    /// the caller's own sessions for a non-admin (see the note on that method).
     func getControllableSessions(userId: String) async throws -> [SessionInfoDto]
 
     /// Tells a session to play an item now (`PlayNow`). Fire-and-forget by
@@ -675,8 +678,8 @@ public extension LibraryAPI {
 }
 
 public extension AuthAPI {
-    func getActiveSessions(activeWithinSeconds: Int = 60) async throws -> [SessionInfoDto] {
-        try await getActiveSessions(activeWithinSeconds: activeWithinSeconds)
+    func getActiveSessions(activeWithinSeconds: Int = 60, controllableByUserId: String? = nil) async throws -> [SessionInfoDto] {
+        try await getActiveSessions(activeWithinSeconds: activeWithinSeconds, controllableByUserId: controllableByUserId)
     }
 
     // Empty defaults so hand-written test mocks need not stub what they don't

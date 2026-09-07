@@ -44,6 +44,53 @@ struct HomeViewModelTests {
         #expect(vm.latestItems.isEmpty)
     }
 
+    @Test("A non-admin's « En direct » query names them as controllableByUserId and keeps the others' sessions")
+    func liveRowQueriesSessionsAsControllable() async {
+        let api = MockAPIClient()
+        var admin = SessionInfoDto()
+        admin.id = "s-admin"
+        admin.userID = "admin"
+        admin.userName = "Bastien"
+        var playing = BaseItemDto()
+        playing.id = "ep1"
+        playing.name = "Pilot"
+        admin.nowPlayingItem = playing
+        api.stubbedActiveSessions = [admin]
+
+        let appState = makeAppState(api: api, userId: "wife")
+        var user = UserDto()
+        user.id = "wife"
+        user.name = "Marie"
+        var policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+        policy.enableRemoteControlOfOtherUsers = true
+        user.policy = policy
+        appState.currentUser = user
+        let vm = HomeViewModel()
+
+        await vm.refreshLiveRow(using: appState)
+
+        // The bare query would have come back holding only "wife" herself,
+        // which the filter below then drops — the row showed nobody.
+        #expect(api.activeSessionsQueries == ["wife"])
+        #expect(vm.activeSessions.map(\.id) == ["s-admin"])
+    }
+
+    @Test("Without « Voir En direct » the /Sessions request is not even sent")
+    func liveRowSkipsSessionsWithoutPermission() async {
+        let api = MockAPIClient()
+        let appState = makeAppState(api: api, userId: "wife")
+        var user = UserDto()
+        user.id = "wife"
+        user.policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+        appState.currentUser = user
+        let vm = HomeViewModel()
+
+        await vm.refreshLiveRow(using: appState)
+
+        #expect(api.activeSessionsQueries.isEmpty)
+        #expect(vm.activeSessions.isEmpty)
+    }
+
     @Test("Recently Added leads with shows that got new episodes, then new titles")
     func recentlyAddedMergesBothSources() async {
         let shows = [makeItem(name: "Arrow"), makeItem(name: "Severance")]

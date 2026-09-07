@@ -332,7 +332,7 @@
 "admin.user.access.syncPlay.createAndJoin" = "Create and join";
 "admin.user.access.liveSessions.title" = "See \"Live\"";
 "admin.user.access.liveSessions.label" = "See other people's activity";
-"admin.user.access.liveSessions.footer" = "Shows this user who is watching what right now, and lets them notify someone from a lobby. Without it they see Watch Together sessions only. Note: Jellyfin does not separate seeing from controlling — this permission also lets the account drive playback on other people's devices.";
+"admin.user.access.liveSessions.footer" = "Shows this user who is watching what right now, and lets them notify someone from a lobby. Without it they see Watch Together sessions only. Only devices that accept remote control (“Play on…” enabled in Cinemax) are visible to them. Note: Jellyfin does not separate seeing from controlling — this permission also lets the account drive playback on other people's devices.";
 
 "admin.user.parental.rating.title" = "Max content rating";
 "admin.user.parental.rating.footer" = "Hides content rated above the chosen age for this user. Unrated titles stay visible.";

@@ -573,11 +573,19 @@ final class HomeViewModel {
             isAdministrator: appState.isAdministrator, policy: policy
         )
         let mayJoin = LiveSessionsRow.canJoin(policy?.syncPlayAccess)
+        // The permission says whether to ask; the query SHAPE decides whether
+        // the server answers with anyone but ourselves — see
+        // `sessionsQueryUserId`. Both are decided here, off the same policy.
+        let queryUserId = LiveSessionsRow.sessionsQueryUserId(
+            isAdministrator: appState.isAdministrator, currentUserId: userId
+        )
         let client = appState.apiClient
 
         async let sessions: [SessionInfoDto] = {
             guard maySeeOthers else { return [] }
-            let all = (try? await client.getActiveSessions(activeWithinSeconds: 60)) ?? []
+            let all = (try? await client.getActiveSessions(
+                activeWithinSeconds: 60, controllableByUserId: queryUserId
+            )) ?? []
             return all.filter { $0.nowPlayingItem != nil && ($0.userID ?? "") != userId }
         }()
 

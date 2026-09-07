@@ -139,7 +139,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     func getPublicUsers() async throws -> [UserDto] { [] }
     func getUsers() async throws -> [UserDto] { [] }
-    func getActiveSessions(activeWithinSeconds: Int) async throws -> [SessionInfoDto] { [] }
+    var stubbedActiveSessions: [SessionInfoDto] = []
+    /// Every `getActiveSessions` call's `controllableByUserId`, in order —
+    /// `nil` entries are the unfiltered (admin) shape.
+    private(set) var activeSessionsQueries: [String?] = []
+    func getActiveSessions(activeWithinSeconds: Int, controllableByUserId: String?) async throws -> [SessionInfoDto] {
+        recordLock.withLock { activeSessionsQueries.append(controllableByUserId) }
+        if shouldThrow { throw stubbedError }
+        return stubbedActiveSessions
+    }
     func getDevices() async throws -> [DeviceInfoDto] { [] }
     func deleteDevice(id: String) async throws {}
 

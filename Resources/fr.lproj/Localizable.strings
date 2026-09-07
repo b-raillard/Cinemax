@@ -523,7 +523,7 @@
 "admin.user.access.syncPlay.createAndJoin" = "Créer et rejoindre";
 "admin.user.access.liveSessions.title" = "Voir « En direct »";
 "admin.user.access.liveSessions.label" = "Voir l'activité des autres";
-"admin.user.access.liveSessions.footer" = "Montre à cet utilisateur qui regarde quoi en ce moment, et lui permet de prévenir quelqu'un depuis une salle d'attente. Sans cela, il ne voit que les séances « Regarder ensemble ». Attention : Jellyfin ne sépare pas voir et piloter — cette permission autorise aussi ce compte à commander la lecture sur les appareils des autres.";
+"admin.user.access.liveSessions.footer" = "Montre à cet utilisateur qui regarde quoi en ce moment, et lui permet de prévenir quelqu'un depuis une salle d'attente. Sans cela, il ne voit que les séances « Regarder ensemble ». Seuls les appareils qui acceptent le pilotage à distance (« Lire sur… » activé dans Cinemax) lui sont visibles. Attention : Jellyfin ne sépare pas voir et piloter — cette permission autorise aussi ce compte à commander la lecture sur les appareils des autres.";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";

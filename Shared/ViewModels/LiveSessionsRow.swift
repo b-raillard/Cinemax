@@ -86,8 +86,9 @@ enum LiveSessionsRow {
     /// - Parameters:
     ///   - groups: from `syncPlayListGroups()`. Empty when the account has no
     ///     SyncPlay access, which is a legitimate server policy.
-    ///   - sessions: from `getActiveSessions`. Empty for a non-admin — the row
-    ///     still renders, with groups only.
+    ///   - sessions: from `getActiveSessions`, queried with the shape
+    ///     `sessionsQueryUserId` decides. Empty for an account without
+    ///     `canSeeOthers` — the row still renders, with groups only.
     ///   - currentUserName: dropped from every card. Seeing yourself listed as
     ///     someone to watch with is nonsense.
     static func build(
@@ -232,5 +233,31 @@ enum LiveSessionsRow {
     static func canSeeOthers(isAdministrator: Bool, policy: UserPolicy?) -> Bool {
         if isAdministrator { return true }
         return policy?.enableRemoteControlOfOtherUsers == true
+    }
+
+    /// The `controllableByUserId` to send with `GET /Sessions` — the account's
+    /// own id for a regular user, `nil` for an administrator.
+    ///
+    /// **`canSeeOthers` alone was not enough, and this is the half that was
+    /// missing.** Jellyfin honours `EnableRemoteControlOfOtherUsers` only when
+    /// the request names a `controllableByUserId`; the bare query goes down
+    /// the other branch of `SessionManager.GetSessions` — « request isn't from
+    /// administrator, limit to "own" sessions » — whatever the policy says
+    /// (verified on `release-10.10.z`, `release-10.11.z` and master). So an
+    /// account granted « Voir En direct » asked the right question with the
+    /// wrong shape, got only itself back, filtered itself out, and the row
+    /// showed nobody: measured 2026-09-07, an administrator watching a series
+    /// was invisible from a non-admin account holding every permission.
+    ///
+    /// An administrator keeps the unfiltered shape on purpose: the
+    /// controllable branch also drops every session that does not advertise
+    /// `SupportsRemoteControl`, and an admin is entitled to the whole list.
+    /// Consequence for everyone else, to know when reading a bug report: a
+    /// regular account only ever sees sessions that DECLARE remote control —
+    /// a Cinemax whose « Lire sur… » target toggle is off, or a client that
+    /// never posts capabilities, is invisible to non-admins by the server's
+    /// own rule — and only on devices its device-access policy allows.
+    static func sessionsQueryUserId(isAdministrator: Bool, currentUserId: String?) -> String? {
+        isAdministrator ? nil : currentUserId
     }
 }

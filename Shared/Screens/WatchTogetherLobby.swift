@@ -295,7 +295,15 @@ struct WatchTogetherLobby: View {
     private func loadInvitees() async {
         guard canSeeOthers else { return }
         let me = appState.currentUserId
-        let sessions = (try? await appState.apiClient.getActiveSessions(activeWithinSeconds: 300)) ?? []
+        // Same query shape as the « En direct » row, for the same reason: a
+        // non-admin's permission is honoured by the server only when the
+        // request names them — see `LiveSessionsRow.sessionsQueryUserId`.
+        let queryUserId = LiveSessionsRow.sessionsQueryUserId(
+            isAdministrator: appState.isAdministrator, currentUserId: me
+        )
+        let sessions = (try? await appState.apiClient.getActiveSessions(
+            activeWithinSeconds: 300, controllableByUserId: queryUserId
+        )) ?? []
         invitees = sessions.compactMap { session in
             guard let id = session.id,
                   let user = session.userName,
