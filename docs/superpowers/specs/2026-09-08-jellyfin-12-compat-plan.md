@@ -102,3 +102,28 @@ Points à connaître pour A4 :
 - Nouvelles dépendances transitives : `swift-nio` 2.102, `swift-nio-transport-services` 1.28 (socket du SDK, que nous n'utilisons pas). Impact taille binaire non mesuré proprement (le DerivedData du probe contient XCTest).
 - 4 warnings de dépréciation nouveaux, tous dans l'admin : `SystemInfo.operatingSystem` / `operatingSystemDisplayName` / `systemArchitecture` (`AdminDashboardScreen`), `NetworkConfiguration.enableUPnP` (`AdminNetworkScreen`) — à traiter dans A4 ou à tolérer.
 - Aucune collision de noms (`JellyfinSocket`, `Session`, `Subscription`) — confirmé par la compilation des deux cibles.
+
+## 8. Résultat de la recette Lot C (2026-09-08, NAS 10.11.11, `EnableLegacyAuthorization=false` puis restauré à `true`)
+
+Banc : iPhone 17 simulateur (compte admin) avec le build PR 2 **signé** ; Apple TV simulateur (compte reviewer) avec le build PR 2 tvOS signé ; contrôle apparié = build pré-#133 signé, sur le même iPhone. Serveur observé par son journal (`log_20260908.log`), l'app par OSLog (`subsystem == com.cinemax`, niveau debug) et `lsof`.
+
+| Scénario | PR 2 (flag `false`) | Contrôle pré-#133 (flag `false`) |
+|---|---|---|
+| Accueil / REST (en-tête `MediaBrowser Token=`) | OK | OK |
+| MKV DirectStream via VLC (Hunger Games, TrueHD évité par `AudioTrackPolicy`) | OK, reprise à 10:24, image | OK — `GET /Videos/{id}/stream` est **sans `[Authorize]`** (vérifié dans la source v10.11.11 **et** v12.0), le jeton n'y sert à rien |
+| AVI en transcode forcé (« L'enfer du devoir » S01E01, `master.m3u8`, segments TS) | OK, une seule occurrence d'`ApiKey`, ffmpeg lancé | OK — le serveur ajoute lui-même `&ApiKey=` à `TranscodingUrl`, l'ancien `api_key=` doublon était ignoré |
+| Proxy loopback forcé (`SIMCTL_CHILD_CINEMAX_FORCE_PROXY=1`) | OK — `lsof` : libVLC → `127.0.0.1:52183` établi, proxy → origine HTTPS | non joué |
+| Chapitres (16 vignettes, en-tête via `AuthenticatedImageFetch`) | OK | non joué |
+| Arrêt : rapport + `DELETE /Videos/ActiveEncodings` (route masquée) | rapport reçu (« Playback stopped reported by app Cinemax 1.4.0 »), ffmpeg tué à `q` par le serveur sur le rapport lui-même ; le DELETE n'est pas journalisé (pas de 404 non plus) | — |
+| Rafraîchissement tier-2 après lecture | OK (« 2h 5m restantes » sur la carte) | — |
+| Socket temps réel (`/socket?ApiKey=`) | OK — **0** erreur `/socket` serveur sur toute la fenêtre | **ÉCHEC** — « Token is required » sur `/socket` en boucle toutes les ~5 s (c'est ce que PR #133 corrigeait) |
+| Échecs d'auth côté serveur sur la fenêtre | **0** (3 rapports d'arrêt Cinemax) | socket seulement |
+| Seerr | scan « Recently Added » terminé normalement → n'utilise plus l'auth legacy | — |
+
+Non joués : « Lire sur… » iPhone → Apple TV (l'Apple TV est en *reviewer*, le résolveur ne retient que les sessions du même compte — par conception), Watch Together à deux comptes, Top Shelf (l'extension tvOS du build PR 2 est installée, non observée), QuickConnect (POST déjà côté SDK).
+
+**Ce que le flag legacy casse vraiment dans un build antérieur à PR #133 : le socket (télécommande + Regarder ensemble) et les images du Top Shelf. Pas la lecture.** Une note dans CLAUDE.md le dit à côté de la RULE `ApiKey`.
+
+Leçon de banc, hors périmètre 12.0 : un build simulateur compilé avec `CODE_SIGNING_ALLOWED=NO` n'a pas les entitlements Keychain et « perd » la session (registre vide) — elle réapparaît en réinstallant un build signé (`DEVELOPMENT_TEAM=4T334S4NP6`). Les trois simulateurs du banc y sont passés ce jour.
+
+**Conclusion : Lot A validé en conditions réelles contre 10.11.11 en mode 12.0 (auth legacy coupée). Reste le Lot B, la migration du NAS elle-même, sur ton feu vert.**
