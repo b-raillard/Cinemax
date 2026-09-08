@@ -75,7 +75,10 @@ extension JellyfinAPIClient: PlaylistAPI {
     public func addToPlaylist(playlistId: String, itemIds: [String], userId: String) async throws {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         do {
-            _ = try await client.send(Paths.addItemToPlaylist(playlistID: playlistId, ids: itemIds, userID: userId))
+            var params = Paths.AddItemToPlaylistParameters()
+            params.ids = itemIds
+            params.userID = userId
+            _ = try await client.send(Paths.addItemToPlaylist(playlistID: playlistId, parameters: params))
         } catch {
             notifyIfUnauthorized(error)
             throw error

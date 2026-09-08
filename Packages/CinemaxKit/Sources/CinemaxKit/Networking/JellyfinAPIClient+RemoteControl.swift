@@ -98,10 +98,10 @@ extension JellyfinAPIClient: RemoteControlAPI {
     public func publishCapabilities(supportsMediaControl: Bool) async throws {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let body = ClientCapabilitiesDto(
-            playableMediaTypes: [.video],
-            supportedCommands: supportsMediaControl ? [.displayMessage] : [],
             isSupportsMediaControl: supportsMediaControl,
-            isSupportsPersistentIdentifier: true
+            isSupportsPersistentIdentifier: true,
+            playableMediaTypes: [.video],
+            supportedCommands: supportsMediaControl ? [.displayMessage] : []
         )
         do {
             _ = try await client.send(Paths.postFullCapabilities(body))

@@ -95,14 +95,14 @@ final class IdentifyFlowModel {
         do {
             switch itemKind {
             case .movie:
-                var info = MovieInfo()
+                var info = MetadataLookupInfo()
                 info.name = trimmedName.isEmpty ? nil : trimmedName
                 info.year = trimmedYear
                 if !providerIDs.isEmpty { info.providerIDs = providerIDs }
                 let query = MovieInfoRemoteSearchQuery(itemID: itemId, searchInfo: info)
                 results = try await apiClient.searchRemoteMovies(query: query)
             case .series:
-                var info = SeriesInfo()
+                var info = MetadataLookupInfo()
                 info.name = trimmedName.isEmpty ? nil : trimmedName
                 info.year = trimmedYear
                 if !providerIDs.isEmpty { info.providerIDs = providerIDs }

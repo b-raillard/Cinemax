@@ -1,4 +1,5 @@
 import Foundation
+import Get
 import JellyfinAPI
 
 extension JellyfinAPIClient {
@@ -443,7 +444,7 @@ extension JellyfinAPIClient {
     public func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {
         guard let client = getClient() else { return }
         let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
-        let body = PlaybackStartInfo(
+        let body = PlaybackStateInfo(
             canSeek: true,
             itemID: itemId,
             mediaSourceID: mediaSourceId,
@@ -457,7 +458,7 @@ extension JellyfinAPIClient {
     public func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {
         guard let client = getClient() else { return }
         let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
-        let body = PlaybackProgressInfo(
+        let body = PlaybackStateInfo(
             canSeek: true,
             isPaused: isPaused,
             itemID: itemId,
@@ -497,8 +498,25 @@ extension JellyfinAPIClient {
     /// no business knowing this device's identity.
     public func stopEncoding(playSessionId: String) async {
         guard let client = getClient() else { return }
-        _ = try? await client.send(
-            Paths.stopEncodingProcess(deviceID: deviceID, playSessionID: playSessionId)
+        _ = try? await client.send(Self.stopEncodingRequest(deviceID: deviceID, playSessionID: playSessionId))
+    }
+
+    /// `DELETE /Videos/ActiveEncodings`, built by hand. The route lives in
+    /// `HlsSegmentController`, which Jellyfin 12.0 hides from the OpenAPI
+    /// specification (`[ApiExplorerSettings(IgnoreApi = true)]`), so
+    /// jellyfin-sdk-swift ≥ 1.0 no longer generates `Paths.stopEncodingProcess`.
+    /// The server still serves it (verified in the `v12.0` source) and it is
+    /// what tears the ffmpeg job down at the end of a transcoded playback, so
+    /// it stays — but per the 12.0 API policy an unlisted route "can be removed
+    /// in any major release without warning", which is why the call above
+    /// tolerates every failure and why the stop REPORT, not this, is the call
+    /// that must land (see `PlaybackReporter.reportStop`). Static + pure so the
+    /// request shape is unit-tested without a client.
+    static func stopEncodingRequest(deviceID: String, playSessionID: String) -> Request<Void> {
+        Request(
+            path: "/Videos/ActiveEncodings",
+            method: "DELETE",
+            query: [("deviceId", deviceID), ("playSessionId", playSessionID)]
         )
     }
 
@@ -615,14 +633,14 @@ extension JellyfinAPIClient {
     // On tvOS, AVAssetResourceLoaderDelegate doesn't work, so ASS tags may appear in subtitles.
     nonisolated(unsafe) fileprivate static let _transcodingProfiles: [TranscodingProfile] = [
         TranscodingProfile(
+            protocol: .hls,
             audioCodec: "aac,ac3,alac,eac3,flac",
-            isBreakOnNonKeyFrames: true,
             container: "mp4",
             context: .streaming,
             enableSubtitlesInManifest: true,
+            isBreakOnNonKeyFrames: true,
             maxAudioChannels: "8",
             minSegments: 2,
-            protocol: .hls,
             type: .video,
             videoCodec: "hevc,h264"
         ),
@@ -717,6 +735,7 @@ extension JellyfinAPIClient {
     // remux) we keep an HLS path so playback isn't impossible.
     nonisolated(unsafe) fileprivate static let _vlcTranscodingProfiles: [TranscodingProfile] = [
         TranscodingProfile(
+            protocol: .hls,
             // NO mp1/mp2/mp3 here on purpose. MPEG audio is legal in the TS
             // segments below (that's what TS was built for), so the original
             // reason is narrower than it was — but it is NOT re-litigated here
@@ -728,7 +747,6 @@ extension JellyfinAPIClient {
             // which stays locked to the transcoded video whatever the segment
             // container.
             audioCodec: "aac,ac3,alac,dts,eac3,flac,opus,vorbis",
-            isBreakOnNonKeyFrames: true,
             // MPEG-TS segments, NOT fMP4. libVLC's MP4 demuxer inspects the fMP4
             // init segment, finds no chunk table (`no chunk defined`, `STTS table
             // of 0 entries` — normal for fragmented MP4, where samples live in
@@ -742,6 +760,7 @@ extension JellyfinAPIClient {
             // seek behaviour disappears by construction.
             container: "ts",
             context: .streaming,
+            isBreakOnNonKeyFrames: true,
             maxAudioChannels: "8",
             // 1, not 2: Jellyfin holds the playlist back until `minSegments`
             // segments have actually been ENCODED (`WaitForMinimumSegmentCount`),
@@ -749,7 +768,6 @@ extension JellyfinAPIClient {
             // play — the dominant cost of starting a forced-transcode AVI. One
             // segment is enough to start; `:network-caching` covers the rest.
             minSegments: 1,
-            protocol: .hls,
             type: .video,
             videoCodec: "hevc,h264"
         ),

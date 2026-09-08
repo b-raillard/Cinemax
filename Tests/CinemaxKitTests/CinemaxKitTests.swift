@@ -252,6 +252,26 @@ struct ServerVersionTests {
     }
 }
 
+// `DELETE /Videos/ActiveEncodings` is hidden from Jellyfin 12.0's OpenAPI
+// spec, so jellyfin-sdk-swift ≥ 1.0 stopped generating it and the client
+// builds the request by hand. The server still serves it; this locks the
+// exact shape it expects (route, verb, both query names), since a typo here
+// would leave every transcode job running until the server's own reaper.
+@Suite("Hand-built hidden routes")
+struct HiddenRouteRequestTests {
+
+    @Test("stopEncoding targets DELETE /Videos/ActiveEncodings with deviceId + playSessionId")
+    func stopEncodingRequestShape() throws {
+        let request = JellyfinAPIClient.stopEncodingRequest(deviceID: "dev-1", playSessionID: "ps-9")
+        #expect(request.url?.path == "/Videos/ActiveEncodings")
+        #expect(request.method.rawValue == "DELETE")
+        let query = try #require(request.query)
+        #expect(query.map(\.0) == ["deviceId", "playSessionId"])
+        #expect(query.map(\.1) == ["dev-1", "ps-9"])
+        #expect(request.body == nil)
+    }
+}
+
 // MARK: - Remote control, receiving side
 
 @Suite("JellyfinSocket frame parsing")

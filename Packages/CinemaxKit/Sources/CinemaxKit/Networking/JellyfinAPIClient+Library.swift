@@ -590,16 +590,11 @@ extension JellyfinAPIClient {
         // Gated on the KNOWN version, never probed: this used to be a speculative
         // `try?` on every server, i.e. one 404 round-trip per detail screen on
         // every 10.x box, and an unknown version (every cold launch until the
-        // background probe lands) must take the fallback too. Hand-built
-        // request — jellyfin-sdk-swift 0.6.0 predates the endpoint.
+        // background probe lands) must take the fallback too.
         if serverSupports(.collectionsReverseLookup) {
-            let direct = Request<BaseItemDtoQueryResult>(
-                path: "/Items/\(itemId)/Collections",
-                method: "GET",
-                query: [("userId", userId)]
-            )
+            let params = Paths.GetItemCollectionsParameters(userID: userId)
             do {
-                let response = try await client.send(direct)
+                let response = try await client.send(Paths.getItemCollections(itemID: itemId, parameters: params))
                 return applyRatingFilter(response.value.items ?? [])
             } catch {
                 notifyIfUnauthorized(error)
