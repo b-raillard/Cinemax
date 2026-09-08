@@ -220,6 +220,36 @@ struct ServerVersionTests {
         #expect(minor.supports(.itemUserDataEndpoint))
         #expect(below.supports(.itemUserDataEndpoint) == false)
     }
+
+    // Jellyfin dropped the `10.` prefix after 10.11: the next release is 12.0
+    // (there is no 10.12). The parser needs no change for it, but a threshold
+    // written as 12.x must order ABOVE every 10.x — which is exactly what a
+    // string compare would get wrong, and what this locks.
+    @Test("Parses the 12.0 forms Jellyfin reports and orders them above 10.x")
+    func twelveOrdersAboveTen() throws {
+        #expect(try #require(ServerVersion("12.0.0")) == ServerVersion(12, 0, 0))
+        #expect(try #require(ServerVersion("12.0")) == ServerVersion(12, 0, 0))
+        #expect(try #require(ServerVersion("12.0.0-rc7")) == ServerVersion(12, 0, 0))
+        #expect(try #require(ServerVersion("v12.0.1")) == ServerVersion(12, 0, 1))
+
+        let twelve = try #require(ServerVersion("12.0.0"))
+        let lastTen = try #require(ServerVersion("10.11.11"))
+        #expect(twelve > lastTen)
+        #expect(twelve.supports(.itemUserDataEndpoint))
+    }
+
+    // `GET /Items/{id}/Collections` ships in 12.0 (jellyfin#15516). A 10.x
+    // server answers 404, so the threshold must refuse the last 10.11 patch and
+    // admit 12.0.0 exactly — including its release candidates.
+    @Test("collectionsReverseLookup admits 12.0 and refuses every 10.x")
+    func collectionsReverseLookupThreshold() throws {
+        #expect(ServerVersion.collectionsReverseLookup == ServerVersion(12, 0, 0))
+        #expect(try #require(ServerVersion("10.11.11")).supports(.collectionsReverseLookup) == false)
+        #expect(try #require(ServerVersion("10.10.7")).supports(.collectionsReverseLookup) == false)
+        #expect(try #require(ServerVersion("12.0.0-rc7")).supports(.collectionsReverseLookup))
+        #expect(try #require(ServerVersion("12.0.0")).supports(.collectionsReverseLookup))
+        #expect(try #require(ServerVersion("12.1.0")).supports(.collectionsReverseLookup))
+    }
 }
 
 // MARK: - Remote control, receiving side

@@ -186,8 +186,10 @@ public protocol LibraryAPI: Sendable {
     func searchPersons(userId: String, searchTerm: String, limit: Int) async throws -> [BaseItemDto]
 
     /// BoxSet collections containing the given item. Uses the server's
-    /// reverse-lookup endpoint when available (post-10.11); older servers
-    /// fall back to matching `tmdbCollectionId` against the boxset list.
+    /// reverse-lookup endpoint when the server is KNOWN to be 12.0+
+    /// (`ServerVersion.collectionsReverseLookup`); 10.x servers — and an
+    /// unknown version — fall back to matching `tmdbCollectionId` against the
+    /// boxset list, without probing the endpoint.
     func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto]
 }
 

@@ -586,18 +586,29 @@ extension JellyfinAPIClient {
 
     public func getCollections(containingItemId itemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] {
         guard let client = getClient() else { throw JellyfinError.notConnected }
-        // Newer servers (post-10.11) have a direct reverse lookup. Hand-built
+        // 12.0+ has a direct reverse lookup (`ServerVersion.collectionsReverseLookup`).
+        // Gated on the KNOWN version, never probed: this used to be a speculative
+        // `try?` on every server, i.e. one 404 round-trip per detail screen on
+        // every 10.x box, and an unknown version (every cold launch until the
+        // background probe lands) must take the fallback too. Hand-built
         // request — jellyfin-sdk-swift 0.6.0 predates the endpoint.
-        let direct = Request<BaseItemDtoQueryResult>(
-            path: "/Items/\(itemId)/Collections",
-            method: "GET",
-            query: [("userId", userId)]
-        )
-        if let response = try? await client.send(direct), let items = response.value.items {
-            return applyRatingFilter(items)
+        if serverSupports(.collectionsReverseLookup) {
+            let direct = Request<BaseItemDtoQueryResult>(
+                path: "/Items/\(itemId)/Collections",
+                method: "GET",
+                query: [("userId", userId)]
+            )
+            do {
+                let response = try await client.send(direct)
+                return applyRatingFilter(response.value.items ?? [])
+            } catch {
+                notifyIfUnauthorized(error)
+                throw error
+            }
         }
-        // Fallback: auto-created collections carry the same TMDb collection
-        // provider id as their member movies — match against the boxset list.
+        // 10.x (or version not yet known): auto-created collections carry the
+        // same TMDb collection provider id as their member movies — match
+        // against the boxset list.
         guard let tmdbCollectionId, !tmdbCollectionId.isEmpty else { return [] }
         do {
             var params = Paths.GetItemsParameters(
