@@ -4,9 +4,9 @@ import Foundation
 ///
 /// Exists because feature gating had no home: `ServerInfo.version` was stored
 /// but never *read* to decide anything, so the one version-dependent call in
-/// the app (`getCollections`' post-10.11 reverse lookup) probed the new
-/// endpoint on every server and ate a 404 round-trip on older ones. Anything
-/// that depends on a server capability should ask this type instead.
+/// the app (`getCollections`' 12.0 reverse lookup) probed the new endpoint on
+/// every server and ate a 404 round-trip on older ones. Anything that depends
+/// on a server capability should ask this type instead.
 ///
 /// String comparison is not an option — `"10.9" > "10.10"` lexicographically —
 /// so every component is compared as an integer.
@@ -69,6 +69,13 @@ public extension ServerVersion {
     /// lightweight per-item userData read used instead of re-fetching a whole
     /// `BaseItemDto` after playback.
     static let itemUserDataEndpoint = ServerVersion(10, 10)
+
+    /// Minimum server version exposing `GET /Items/{id}/Collections`, the
+    /// reverse lookup behind the "Included In" feature (jellyfin#15516). It
+    /// shipped in 12.0 — the release that follows 10.11; there is no 10.12 —
+    /// so a `10.x` server answers 404 and must take the TMDb-id fallback in
+    /// `getCollections` without a round-trip.
+    static let collectionsReverseLookup = ServerVersion(12, 0, 0)
 
     /// Whether this server is at least `required`. Reads better at call sites
     /// than a bare `>=` against a constant whose meaning isn't obvious.
