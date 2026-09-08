@@ -74,7 +74,24 @@ final class MediaDetailViewModel {
     /// just now"). Reverts to the ranked default next time the screen is
     /// opened. Plain stored property with no `didSet` — see the `@Observable`
     /// RULE in CLAUDE.md.
-    var selectedMediaSourceId: String?
+    ///
+    /// Keyed by the id of the item the pick applies to — the RESOLVED play
+    /// target, which for a series is its next-up episode (12.0 lets episodes
+    /// carry alternate versions). A single `String?` would leak a pick made
+    /// for episode 4 onto episode 5 once playback advanced next-up; keyed, the
+    /// row simply finds no pick for the new target and shows the ranked
+    /// default again. Mutated only through `selectMediaSource(_:for:)`.
+    private(set) var selectedMediaSourceIds: [String: String] = [:]
+
+    /// The user's version pick for `itemId`, or `nil` for the ranked default.
+    func selectedMediaSourceId(for itemId: String) -> String? {
+        selectedMediaSourceIds[itemId]
+    }
+
+    /// Records the version the Play button should open for `itemId`.
+    func selectMediaSource(_ sourceId: String, for itemId: String) {
+        selectedMediaSourceIds[itemId] = sourceId
+    }
 
     /// Generation counter to discard stale season results on rapid selection.
     private var seasonGeneration: Int = 0

@@ -376,7 +376,10 @@ extension JellyfinAPIClient {
         let cacheKey = "episodes-\(seasonId)-\(userId)"
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return applyRatingFilter(cached) }
         guard let client = getClient() else { throw JellyfinError.notConnected }
-        let params = Paths.GetEpisodesParameters(userID: userId, fields: [.overview], seasonID: seasonId, enableUserData: true)
+        // `.mediaSources` rides along so an episode can carry its alternate
+        // versions (a 12.0 feature — 10.x returns one source per episode, and
+        // the detail screen's Version row stays hidden on a single source).
+        let params = Paths.GetEpisodesParameters(userID: userId, fields: [.overview, .mediaSources], seasonID: seasonId, enableUserData: true)
         let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
         let items = response.value.items ?? []
         cache.set(cacheKey, value: items, ttl: 10)
@@ -403,6 +406,9 @@ extension JellyfinAPIClient {
             let params = Paths.GetNextUpParameters(
                 userID: userId,
                 limit: 1,
+                // The next-up episode is what a series' Play button opens, so
+                // its versions are what the Version row must rank (12.0).
+                fields: [.mediaSources],
                 seriesID: seriesId,
                 enableUserData: true
             )

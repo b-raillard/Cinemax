@@ -284,7 +284,7 @@ struct MediaDetailScreen: View {
                 previousEpisode: nav.previous,
                 nextEpisode: nav.next,
                 episodeNavigator: nav.navigator,
-                mediaSourceId: viewModel.item.flatMap { selectedSource($0)?.id }
+                mediaSourceId: viewModel.item.flatMap { selectedSourceId(forPlaying: route.itemId, in: $0) }
             )
         }
         #endif
@@ -719,32 +719,62 @@ struct MediaDetailScreen: View {
     /// Looks up precomputed prev/next episode refs from the ViewModel's navigation maps.
     // MARK: - Version picker (multi-source items)
 
-    /// The item's media sources, best first, or empty when there's nothing to
-    /// choose between.
-    ///
-    /// Series are excluded on purpose: their Play button targets an *episode*,
-    /// and `getNextUp` doesn't carry that episode's `mediaSources`, so a row
-    /// rendered from the series' own sources would offer a choice that doesn't
-    /// apply to what's about to play. Multi-version libraries are overwhelmingly
-    /// a movie phenomenon, so this covers the real case without guessing.
+    /// The item whose versions the row ranks: the RESOLVED play target, i.e.
+    /// what the Play button will actually open. For a movie that is the item
+    /// itself; for a series it is the next-up episode — Jellyfin 12.0 lets
+    /// episodes carry alternate versions, and `getNextUp` / `getEpisodes` now
+    /// request `.mediaSources` so the episode arrives with them. A series' own
+    /// `mediaSources` are never consulted: they belong to the parent, not to
+    /// what is about to play. On a 10.x server an episode carries a single
+    /// source, so the row simply never shows for a series there.
+    private func versionTarget(_ item: BaseItemDto) -> BaseItemDto {
+        resolvedPlayTarget(for: item).nextEpisode ?? item
+    }
+
+    /// The play target's media sources, best first, or empty when there's
+    /// nothing to choose between.
     private func versionSources(_ item: BaseItemDto) -> [MediaSourceInfo] {
-        guard viewModel.resolvedType != .series else { return [] }
-        let sources = item.mediaSources ?? []
+        let sources = versionTarget(item).mediaSources ?? []
         guard sources.count > 1 else { return [] }
         return MediaSourceQuality.ranked(sources, maxBitrate: playbackBitrateCeiling)
     }
 
-    /// The source the Play button will open: the user's pick when they've made
-    /// one, else the ranked default. `nil` for single-source items (the badge
-    /// view then falls back to its own ranking, which agrees).
+    /// The source the Play button will open: the user's pick for THIS target
+    /// when they've made one, else the ranked default. `nil` for single-source
+    /// targets (the badge view then falls back to its own ranking, which
+    /// agrees). The pick is keyed by the target's id, so advancing next-up
+    /// drops a pick made for the previous episode instead of carrying it over.
     private func selectedSource(_ item: BaseItemDto) -> MediaSourceInfo? {
         let sources = versionSources(item)
         guard !sources.isEmpty else { return nil }
         return MediaSourceQuality.resolve(
             sources,
-            preferredID: viewModel.selectedMediaSourceId,
+            preferredID: versionTarget(item).id.flatMap(viewModel.selectedMediaSourceId(for:)),
             maxBitrate: playbackBitrateCeiling
         )
+    }
+
+    /// The version pick to hand a player about to open `itemId`, or `nil`
+    /// when the pick belongs to a different item (a Siri / remote request can
+    /// name an episode other than the one the row ranked) — the player then
+    /// takes the ranked default rather than a source id that isn't its own.
+    private func selectedSourceId(forPlaying itemId: String, in item: BaseItemDto) -> String? {
+        guard versionTarget(item).id == itemId else { return nil }
+        return selectedSource(item)?.id
+    }
+
+    /// Row title: « Version », suffixed with the episode CODE (« S01:E01 »)
+    /// when the target is one — the pick applies to that episode, and the row
+    /// sits under a Play button that names only the series. The code alone,
+    /// not the full `episodeLabel`: the title is drawn uppercase in a small
+    /// label and an episode name wraps it onto two lines.
+    private func versionRowTitle(_ item: BaseItemDto) -> String {
+        let target = versionTarget(item)
+        guard target.id != item.id, target.type == .episode,
+              let season = target.parentIndexNumber, let episode = target.indexNumber else {
+            return loc.localized("detail.version")
+        }
+        return "\(loc.localized("detail.version")) · " + String(format: "S%02d:E%02d", season, episode)
     }
 
     /// Mirrors the ceiling the players pass to `getPlaybackInfo`, so the row
@@ -784,7 +814,7 @@ struct MediaDetailScreen: View {
             Button {
                 showVersionPicker = true
             } label: {
-                versionRowLabel(selected, index: selectedIndex, isFocused: versionRowFocused)
+                versionRowLabel(selected, index: selectedIndex, title: versionRowTitle(item), isFocused: versionRowFocused)
             }
             .buttonStyle(.plain)
             .focused($versionRowFocused)
@@ -798,7 +828,7 @@ struct MediaDetailScreen: View {
             ) {
                 ForEach(Array(sources.enumerated()), id: \.offset) { index, source in
                     Button(versionPickerLabel(source, index: index)) {
-                        viewModel.selectedMediaSourceId = source.id
+                        if let id = source.id { viewModel.selectMediaSource(id, for: versionTarget(item).id ?? "") }
                     }
                 }
                 Button(loc.localized("action.cancel"), role: .cancel) {}
@@ -807,7 +837,7 @@ struct MediaDetailScreen: View {
             Menu {
                 ForEach(Array(sources.enumerated()), id: \.offset) { index, source in
                     Button {
-                        viewModel.selectedMediaSourceId = source.id
+                        if let id = source.id { viewModel.selectMediaSource(id, for: versionTarget(item).id ?? "") }
                     } label: {
                         // A checkmark can't be drawn directly in a Menu label, so
                         // the selected row is marked with the system's own
@@ -820,7 +850,7 @@ struct MediaDetailScreen: View {
                     }
                 }
             } label: {
-                versionRowLabel(selected, index: selectedIndex)
+                versionRowLabel(selected, index: selectedIndex, title: versionRowTitle(item))
             }
             .buttonStyle(.plain)
             .padding(.horizontal, contentPadding)
@@ -837,10 +867,10 @@ struct MediaDetailScreen: View {
 
     /// `isFocused` is tvOS-only and unused on iOS (which has no focus engine);
     /// it keeps one label builder shared between both platforms.
-    private func versionRowLabel(_ selected: MediaSourceInfo, index: Int, isFocused: Bool = false) -> some View {
+    private func versionRowLabel(_ selected: MediaSourceInfo, index: Int, title: String, isFocused: Bool = false) -> some View {
         HStack(spacing: CinemaSpacing.spacing3) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(loc.localized("detail.version"))
+                Text(title)
                     .font(CinemaFont.label(.small))
                     .textCase(.uppercase)
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -962,10 +992,10 @@ struct MediaDetailScreen: View {
             itemId: target.itemId.isEmpty ? viewModel.itemId : target.itemId,
             title: target.title,
             startPositionTicks: target.startTicks,
-            // For a series the play target is an episode, whose media sources
-            // aren't the ones the version row ranked (those belong to the
-            // parent) — so the override only travels for the item itself.
-            mediaSourceId: target.nextEpisode == nil ? selectedSource(item)?.id : nil
+            // The row ranks the RESOLVED target's sources (`versionTarget`),
+            // so the pick applies to exactly what travels here — an episode's
+            // own versions for a series, the film's for a movie.
+            mediaSourceId: selectedSource(item)?.id
         )
     }
 
@@ -1039,7 +1069,7 @@ struct MediaDetailScreen: View {
             previousEpisode: nav.previous,
             nextEpisode: nav.next,
             episodeNavigator: nav.navigator,
-            mediaSourceId: viewModel.item.flatMap { selectedSource($0)?.id },
+            mediaSourceId: viewModel.item.flatMap { selectedSourceId(forPlaying: route.itemId, in: $0) },
             using: appState
         )
         #else
