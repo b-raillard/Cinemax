@@ -49,6 +49,16 @@ public final class JellyfinAPIClient: Sendable {
     /// probe is dispatched in the background by `AppState.restoreSession` while
     /// the UI is already live).
     nonisolated(unsafe) private var _serverVersion: ServerVersion?
+    /// The app language every request asks the server to answer in, as the
+    /// app's own code (`"fr"` / `"en"`). Baked into the `URLSessionConfiguration`
+    /// at client construction — `httpAdditionalHeaders` is the only place a
+    /// default header can live with the SDK's client — so a change has to
+    /// rebuild the client; `setPreferredLanguage` does, in place.
+    nonisolated(unsafe) private var _preferredLanguage: String?
+    /// The token the current client was built with, kept so a language change
+    /// can rebuild an authenticated client without a re-login. `nil` while the
+    /// client is the pre-auth one from `connectToServer`.
+    nonisolated(unsafe) private var _accessToken: String?
     /// Fired by `notifyIfUnauthorized` whenever the Jellyfin SDK surfaces an
     /// HTTP 401 from any session-scoped call. Set once at app launch by
     /// `AppState.init()`; the closure must be `@Sendable` because it's
@@ -86,10 +96,71 @@ public final class JellyfinAPIClient: Sendable {
         _serverURL = url
     }
 
+    private func setAccessToken(_ token: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        _accessToken = token
+    }
+
     internal func getServerURL() -> URL? {
         lock.lock()
         defer { lock.unlock() }
         return _serverURL
+    }
+
+    internal func getPreferredLanguage() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _preferredLanguage
+    }
+
+    /// Records the language and, when a client already exists, rebuilds it so
+    /// the new `Accept-Language` applies from the next request. Same server
+    /// and same token, so nothing that `reconnect` resets is reset here: the
+    /// learned `ServerVersion` stays. The response cache IS dropped — its keys
+    /// carry no language, and a cached season list would otherwise keep
+    /// serving the previous locale's stream titles for its TTL.
+    public func setPreferredLanguage(_ languageCode: String?) {
+        lock.lock()
+        _preferredLanguage = languageCode
+        let url = _serverURL
+        let token = _accessToken
+        let hasClient = _jellyfinClient != nil
+        lock.unlock()
+
+        guard hasClient, let url else { return }
+        cache.clear()
+        let client = JellyfinClient(
+            configuration: .init(
+                url: url,
+                accessToken: token,
+                client: "Cinemax",
+                deviceName: deviceName,
+                deviceID: deviceID,
+                version: appVersion
+            ),
+            sessionConfiguration: currentSessionConfiguration()
+        )
+        setClient(client, url: url)
+    }
+
+    /// `Accept-Language` value for an app language code, or `nil` for a blank
+    /// one. The app's two languages get a region-qualified primary with the
+    /// bare code as fallback — Jellyfin matches cultures by name and falls
+    /// back to the parent, so either spelling lands on the right resources.
+    public static func acceptLanguageHeader(for languageCode: String) -> String? {
+        let code = languageCode.trimmingCharacters(in: .whitespaces)
+        guard !code.isEmpty else { return nil }
+        switch code {
+        case "fr": return "fr-FR, fr;q=0.9"
+        case "en": return "en-US, en;q=0.9"
+        default: return code
+        }
+    }
+
+    /// The session configuration for the language currently recorded.
+    private func currentSessionConfiguration() -> URLSessionConfiguration {
+        Self.sessionConfiguration(acceptLanguage: getPreferredLanguage().flatMap(Self.acceptLanguageHeader(for:)))
     }
 
     internal func getMaxContentAge() -> Int {
@@ -196,12 +267,13 @@ public final class JellyfinAPIClient: Sendable {
                 deviceID: deviceID,
                 version: appVersion
             ),
-            sessionConfiguration: Self.fastFailSessionConfiguration
+            sessionConfiguration: currentSessionConfiguration()
         )
 
         let response = try await client.send(Paths.getPublicSystemInfo)
         let info = response.value
 
+        setAccessToken(nil)
         setClient(client, url: url)
         setServerVersion(info.version)
 
@@ -270,8 +342,9 @@ public final class JellyfinAPIClient: Sendable {
                     deviceID: deviceID,
                     version: appVersion
                 ),
-                sessionConfiguration: Self.fastFailSessionConfiguration
+                sessionConfiguration: currentSessionConfiguration()
             )
+            setAccessToken(accessToken)
             setClient(authedClient, url: url)
         }
 
@@ -333,8 +406,9 @@ public final class JellyfinAPIClient: Sendable {
                     deviceID: deviceID,
                     version: appVersion
                 ),
-                sessionConfiguration: Self.fastFailSessionConfiguration
+                sessionConfiguration: currentSessionConfiguration()
             )
+            setAccessToken(accessToken)
             setClient(authedClient, url: url)
         }
 
@@ -388,8 +462,9 @@ public final class JellyfinAPIClient: Sendable {
                 deviceID: deviceID,
                 version: appVersion
             ),
-            sessionConfiguration: Self.fastFailSessionConfiguration
+            sessionConfiguration: currentSessionConfiguration()
         )
+        setAccessToken(accessToken)
         setClient(client, url: url)
     }
 
@@ -409,14 +484,23 @@ public final class JellyfinAPIClient: Sendable {
     /// rarely cacheable to begin with, and freshness is already owned by the
     /// app's own `APICache` (short TTLs + explicit invalidation) — so the HTTP
     /// cache bought nothing and only widened the at-rest footprint.
-    fileprivate static let fastFailSessionConfiguration: URLSessionConfiguration = {
+    ///
+    /// `acceptLanguage`: the `Accept-Language` value every request carries, or
+    /// `nil` for none. Jellyfin 12.0 localizes per request from it (media-stream
+    /// `DisplayTitle`s, activity strings — jellyfin PR #16488); 10.x has no
+    /// request-localization middleware and ignores the header, which is why
+    /// this needs no `ServerVersion` gate.
+    internal static func sessionConfiguration(acceptLanguage: String?) -> URLSessionConfiguration {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 30
         c.timeoutIntervalForResource = 60
         c.waitsForConnectivity = false
         c.urlCache = nil
+        if let acceptLanguage {
+            c.httpAdditionalHeaders = ["Accept-Language": acceptLanguage]
+        }
         return c
-    }()
+    }
 
     private var deviceName: String {
         #if os(tvOS)

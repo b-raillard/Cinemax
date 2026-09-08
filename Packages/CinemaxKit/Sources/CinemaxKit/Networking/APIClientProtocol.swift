@@ -39,12 +39,24 @@ public protocol ServerAPI: Sendable {
     /// only logs out on a confirmed `.invalid`. Never throws; a network error
     /// maps to `.indeterminate` (keep the session).
     func validateSession() async -> SessionValidity
+
+    /// Installs the language every request asks the server to answer in
+    /// (`Accept-Language`). Jellyfin 12.0 localizes per request from it —
+    /// the media-stream `DisplayTitle`s the track pickers print, activity
+    /// strings — while 10.x ignores the header, so no version gate is needed.
+    /// Takes the app's own language code (`"fr"` / `"en"`); an already-built
+    /// client is rebuilt in place so the change applies without a re-login.
+    func setPreferredLanguage(_ languageCode: String?)
 }
 
 public extension ServerAPI {
     /// Default no-op so test mocks that don't care about 401 flow keep
     /// compiling without an explicit override.
     func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void) {}
+
+    /// Default no-op: mocks and headless conformers have no HTTP session to
+    /// tag, and the app never reads the value back through the protocol.
+    func setPreferredLanguage(_ languageCode: String?) {}
 
     /// Default for conformers that don't model auth — `.indeterminate` keeps
     /// the session (never a false logout).
