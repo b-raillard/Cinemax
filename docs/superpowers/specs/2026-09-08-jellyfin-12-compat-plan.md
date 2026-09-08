@@ -127,3 +127,27 @@ Non joués : « Lire sur… » iPhone → Apple TV (l'Apple TV est en *reviewer*
 Leçon de banc, hors périmètre 12.0 : un build simulateur compilé avec `CODE_SIGNING_ALLOWED=NO` n'a pas les entitlements Keychain et « perd » la session (registre vide) — elle réapparaît en réinstallant un build signé (`DEVELOPMENT_TEAM=4T334S4NP6`). Les trois simulateurs du banc y sont passés ce jour.
 
 **Conclusion : Lot A validé en conditions réelles contre 10.11.11 en mode 12.0 (auth legacy coupée). Reste le Lot B, la migration du NAS elle-même, sur ton feu vert.**
+
+## 9. Lot B exécuté + recette 12.0 (2026-09-08, 19:07–19:29)
+
+**Migration du NAS** : `jellyfin/jellyfin:10.11.11` → `12.0` en place (même dossier `jellyfin-server`, même Id serveur `a7b3f572…`, port 8899 inchangé). Pré-vérifications : plugin « Chapter Segments Provider » **5.0.0.0** (targetAbi 12.0.0.0, publié le jour même) ; Seerr déjà prouvé sans auth legacy (§8) ; aucun couple d'utilisateurs ne diffère par la casse (8 comptes). Sauvegarde intégrale `config.bak-10.11.11-20260908` (8,8 Go, 12 min, `jellyfin.db` checkpointé) — **seul retour arrière**. Migration : **28 s** (18 migrations CoreInitialisation + 13 AppInitialisation, dont `DisableLegacyAuthorization` → `EnableLegacyAuthorization=false` désormais la vérité du serveur). Plugin 5.0 posé à la main (zip du dépôt stable + `meta.json` reconstruit, pas d'`unzip` sur UGOS) → `Loaded plugin: Chapter Segments Provider 5.0.0.0`. Scan complet : **6 min 53 s**, seules erreurs = bruit OMDb par épisode. Les deux simulateurs Cinemax (iPhone admin, Apple TV reviewer) se sont **reconnectés seuls** dans la minute suivant le redémarrage.
+
+**Recette 12.0** (iPhone 17 sim, build = main `b1e2203`, oracle = journalisation des requêtes ASP.NET activée temporairement via `config/logging.json`, retirée ensuite) :
+
+| Point | Résultat |
+|---|---|
+| Lecture VLC (MKV DirectPlay, reprise) | OK — `PlaybackInfo` 200, `/stream` 206, `Playing`/`Progress`/`Stopped` 204, `MediaSegments` 200 (plugin 5.0) |
+| Arrêt : `DELETE /Videos/ActiveEncodings` (route masquée, construite à la main) | **204** — la route sert bien en 12.0 |
+| « Dans cette collection » via `GET /Items/{id}/Collections` | **200, sans repli TMDb** — après relance de l'app. Le processus qui avait survécu à la migration gardait `ServerVersion` 10.11.11 et prenait le repli (`/Items?includeItemTypes=BoxSet&fields=ProviderIds`) : comportement attendu du gate, à connaître |
+| Grille filtrée Non vus + années 2010, tri Nom ↑ | **115 films** ; contrôle apparié SQL sur la base 12.0 ET sur la sauvegarde 10.11 : **115 / 115** |
+| Ancre A–Z (lettre M) | OK — `nameStartsWithOrGreater`, « 115 films · à partir de M » |
+| Recherche (`/Items?searchTerm` + `/Persons`) | OK — 13 résultats « pirates » ; « Dune » → 1 série, conforme à la base (aucun film Dune, idem en 10.11) |
+| Fiche personne (`/Items/{id}` + `personIds=`) | OK — Johnny Depp, 8 titres |
+| Affiches / vignettes de chapitres | 94 × 200, 6 × 404 (éléments sans image) |
+| Socket `/socket?ApiKey=`, capacités `Sessions/Capabilities/Full` | 101 / 204 après relance |
+| Erreurs serveur depuis 19:07 (hors OMDb) | **0** |
+| Erreurs côté app (OSLog) | uniquement les `Cancellation (0x8)` libVLC à l'ouverture (bruit connu) |
+
+Non joués : « Lire sur… » et session en arrière-plan (Apple TV en *reviewer*, résolveur mono-compte par conception), Watch Together à deux comptes, Top Shelf, transcode forcé AVI, proxy loopback (tous validés en §8 sous les mêmes conditions d'auth ; seule la version du serveur change).
+
+**Conclusion : Cinemax `main` validé contre Jellyfin 12.0.0 en conditions réelles. Prochain lot = les améliorations propres à 12.0 (§6).**
