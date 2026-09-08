@@ -383,7 +383,7 @@ struct MetadataGeneralTab: View {
         )
     }
 
-    /// Studios are `[NameGuidPair]?` but users only edit names. Round-trip
+    /// Studios are `[NameIDPair]?` but users only edit names. Round-trip
     /// preserves existing GUIDs for rows that match by name; new chips
     /// get a nil GUID which the server then fills in on save.
     private var studioNamesBinding: Binding<[String]> {
@@ -395,7 +395,7 @@ struct MetadataGeneralTab: View {
                     if let match = existing.first(where: { $0.name == name }) {
                         return match
                     }
-                    return NameGuidPair(id: nil, name: name)
+                    return NameIDPair(id: nil, name: name)
                 }
             }
         )

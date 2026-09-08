@@ -72,7 +72,7 @@ extension JellyfinAPIClient: SyncPlayAPI {
     }
 
     public func syncPlayReady(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {
-        try await syncPlaySend(Paths.syncPlayReady(ReadyRequestDto(
+        try await syncPlaySend(Paths.syncPlayReady(PlaybackQueueStateInfo(
             isPlaying: isPlaying,
             playlistItemID: playlistItemId,
             positionTicks: positionTicks,
@@ -81,7 +81,7 @@ extension JellyfinAPIClient: SyncPlayAPI {
     }
 
     public func syncPlayBuffering(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {
-        try await syncPlaySend(Paths.syncPlayBuffering(BufferRequestDto(
+        try await syncPlaySend(Paths.syncPlayBuffering(PlaybackQueueStateInfo(
             isPlaying: isPlaying,
             playlistItemID: playlistItemId,
             positionTicks: positionTicks,
@@ -117,7 +117,7 @@ extension JellyfinAPIClient: SyncPlayAPI {
     /// discipline. Two overloads because `Get` types empty-bodied operations as
     /// `Request<Void>` and `Void` is not `Decodable`, so one generic can't cover
     /// both.
-    private func syncPlaySend<T: Decodable>(_ request: Request<T>) async throws -> T {
+    private func syncPlaySend<T: Decodable & Sendable>(_ request: Request<T>) async throws -> T {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         do {
             return try await client.send(request).value

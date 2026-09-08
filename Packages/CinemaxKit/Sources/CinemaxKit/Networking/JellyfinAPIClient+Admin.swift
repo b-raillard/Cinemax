@@ -12,7 +12,7 @@ extension JellyfinAPIClient {
 
     public func deleteDevice(id: String) async throws {
         guard let client = getClient() else { throw JellyfinError.notConnected }
-        _ = try await client.send(Paths.deleteDevice(id: id))
+        _ = try await client.send(Paths.deleteDevice(id: [id]))
     }
 
     // MARK: - Admin
@@ -48,8 +48,8 @@ extension JellyfinAPIClient {
         let body = UpdateUserPassword(
             currentPassword: nil,
             currentPw: nil,
-            newPw: resetPassword ? nil : newPassword,
-            isResetPassword: resetPassword
+            isResetPassword: resetPassword,
+            newPw: resetPassword ? nil : newPassword
         )
         _ = try await client.send(Paths.updateUserPassword(userID: id, body))
     }
@@ -281,8 +281,7 @@ extension JellyfinAPIClient {
 
     public func downloadRemoteImage(itemId: String, type: JellyfinAPI.ImageType, imageURL: String) async throws {
         guard let client = getClient() else { throw JellyfinError.notConnected }
-        let params = Paths.DownloadRemoteImageParameters(type: type, imageURL: imageURL)
-        _ = try await client.send(Paths.downloadRemoteImage(itemID: itemId, parameters: params))
+        _ = try await client.send(Paths.downloadRemoteImage(itemID: itemId, type: type, imageURL: imageURL))
         cache.clear()
     }
 

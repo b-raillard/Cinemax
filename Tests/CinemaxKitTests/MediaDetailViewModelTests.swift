@@ -18,7 +18,7 @@ private func makeEpisode(id: String, name: String) -> BaseItemDto {
 /// something to flip (episodes are fetched with `enableUserData: true`).
 private func makeWatchableEpisode(id: String, name: String, played: Bool) -> BaseItemDto {
     var ep = makeEpisode(id: id, name: name)
-    var userData = UserItemDataDto()
+    var userData = UserItemDataDto(key: "test")
     userData.isPlayed = played
     ep.userData = userData
     return ep
@@ -37,7 +37,7 @@ private func makeMovie(id: String, played: Bool) -> BaseItemDto {
     var item = BaseItemDto()
     item.id = id
     item.type = .movie
-    var userData = UserItemDataDto()
+    var userData = UserItemDataDto(key: "test")
     userData.isPlayed = played
     item.userData = userData
     return item
@@ -47,7 +47,7 @@ private func makeSeries(id: String, played: Bool) -> BaseItemDto {
     var item = BaseItemDto()
     item.id = id
     item.type = .series
-    var userData = UserItemDataDto()
+    var userData = UserItemDataDto(key: "test")
     userData.isPlayed = played
     item.userData = userData
     return item
@@ -196,7 +196,7 @@ struct MediaDetailViewModelTests {
     @Test("refreshAfterPlayback for a movie uses the lightweight userData read when the server supports it")
     func refreshAfterPlaybackMovieUsesLightweightUserData() async {
         let api = MockAPIClient()
-        var fresh = UserItemDataDto()
+        var fresh = UserItemDataDto(key: "test")
         fresh.isPlayed = true
         fresh.isFavorite = true
         fresh.playbackPositionTicks = 42

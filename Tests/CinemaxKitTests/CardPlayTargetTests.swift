@@ -11,7 +11,7 @@ struct CardPlayTargetTests {
         var ep = BaseItemDto()
         ep.id = id
         ep.name = name
-        var data = UserItemDataDto()
+        var data = UserItemDataDto(key: "test")
         data.playbackPositionTicks = positionTicks
         data.isPlayed = isPlayed
         ep.userData = data

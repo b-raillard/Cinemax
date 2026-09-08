@@ -38,7 +38,7 @@ private func makeHeroEpisode(
     ep.indexNumber = index
     ep.seasonID = seasonId
     ep.seriesID = "series1"
-    var data = UserItemDataDto()
+    var data = UserItemDataDto(key: "test")
     data.playbackPositionTicks = positionTicks
     data.isPlayed = isPlayed
     ep.userData = data

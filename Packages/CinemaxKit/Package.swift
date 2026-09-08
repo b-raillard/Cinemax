@@ -11,7 +11,7 @@ let package = Package(
         .library(name: "CinemaxKit", targets: ["CinemaxKit"])
     ],
     dependencies: [
-        .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift.git", .upToNextMajor(from: "0.4.1")),
+        .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift.git", .upToNextMajor(from: "3.1.0")),
         .package(url: "https://github.com/kean/Nuke.git", .upToNextMajor(from: "12.8.0")),
         // Same package the SDK builds on — needed to hand-roll requests for
         // endpoints newer than the generated Paths (e.g. /Items/{id}/Collections).
