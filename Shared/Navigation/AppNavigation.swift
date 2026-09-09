@@ -922,10 +922,23 @@ struct AppNavigation: View {
         .onOpenURL { url in
             appState.handleDeepLink(url)
         }
+        // A language change rebuilds the HTTP client with the new
+        // `Accept-Language` and drops the response cache — its keys carry no
+        // language, so a cached season list would otherwise keep serving the
+        // previous locale's track titles for its TTL.
+        .onChange(of: loc.languageCode) { _, code in
+            appState.apiClient.setPreferredLanguage(code)
+        }
         .task {
             // Let the confirm-before-logout coordinator see real connectivity
             // (captured weakly so the closure can't extend NetworkMonitor's life).
             appState.isOnlineProvider = { [weak network] in network?.isOnline ?? true }
+            // The language rides every request as `Accept-Language` (Jellyfin
+            // 12.0 localizes the media-stream titles the track pickers print
+            // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds
+            // the client, so the first authenticated request already carries
+            // it; `onChange(of: loc.languageCode)` below keeps it current.
+            appState.apiClient.setPreferredLanguage(loc.languageCode)
             await appState.restoreSession()
             hasCheckedSession = true
             // Baseline attach so the menu editor has an API client even with

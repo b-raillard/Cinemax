@@ -327,7 +327,7 @@ extension JellyfinAPIClient {
     /// contains the freshly-negotiated stream URL — including the `ApiKey`
     /// query item — so a shared-session cache file would hold both at rest.
     /// Mirrors `syncPlaySession` and the SDK clients'
-    /// `fastFailSessionConfiguration` (`urlCache = nil`, bounded timeouts,
+    /// `sessionConfiguration(acceptLanguage:)` (`urlCache = nil`, bounded timeouts,
     /// `waitsForConnectivity = false`); the per-request `timeoutInterval = 20`
     /// set by the caller still wins over the configuration default.
     private static let playbackInfoSession: URLSession = {
@@ -339,6 +339,13 @@ extension JellyfinAPIClient {
         config.waitsForConnectivity = false
         return URLSession(configuration: config)
     }()
+
+    /// Attaches the `Accept-Language` the SDK client would send, to a request
+    /// built outside it. Internal for `AcceptLanguageTests`.
+    internal static func applyAcceptLanguage(to request: inout URLRequest, languageCode: String?) {
+        guard let value = languageCode.flatMap(acceptLanguageHeader(for:)) else { return }
+        request.setValue(value, forHTTPHeaderField: "Accept-Language")
+    }
 
     /// Raw HTTP POST to PlaybackInfo, captures the full response body for diagnosis.
     private func rawPostPlaybackInfo(
@@ -364,6 +371,12 @@ extension JellyfinAPIClient {
         }
         let fields = rawFields.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
         request.setValue("MediaBrowser \(fields)", forHTTPHeaderField: "Authorization")
+        // This POST bypasses the SDK client's `URLSessionConfiguration`, so the
+        // app language has to be re-attached by hand — and THIS is the request
+        // whose response carries the media-stream `DisplayTitle`s the track
+        // pickers print (`MediaTrackInfo.label`), i.e. the one place the
+        // header is user-visible. Jellyfin 12.0 localizes it; 10.x ignores it.
+        Self.applyAcceptLanguage(to: &request, languageCode: getPreferredLanguage())
 
         // Encode the body
         let encoder = JSONEncoder()

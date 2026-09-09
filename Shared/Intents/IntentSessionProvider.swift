@@ -82,6 +82,12 @@ enum IntentSessionProvider {
     ///
     /// **The ceiling is not optional here.** Without it an intent would surface
     /// titles the app itself hides, making Siri a way around parental controls.
+    /// The app's language setting, read the way `LocalizationManager` stores
+    /// it — this runs without a scene, so the manager itself is unavailable.
+    static func preferredLanguage(defaults: UserDefaults = .standard) -> String {
+        defaults.string(forKey: SettingsKey.appLanguage) ?? SettingsKey.Default.appLanguage
+    }
+
     static func makeSession(
         keychain: some SecureStorageProtocol = KeychainService(),
         defaults: UserDefaults = .standard
@@ -91,6 +97,9 @@ enum IntentSessionProvider {
             return nil
         }
         let api = JellyfinAPIClient()
+        // Same language the app runs in: a 12.0 server localizes per request,
+        // and an intent's results should read like the app's, not the server's.
+        api.setPreferredLanguage(preferredLanguage(defaults: defaults))
         api.reconnect(url: context.serverURL, accessToken: context.accessToken)
         api.applyContentRatingLimit(maxAge: contentRatingLimit(defaults: defaults))
         return IntentSession(context: context, api: api)
