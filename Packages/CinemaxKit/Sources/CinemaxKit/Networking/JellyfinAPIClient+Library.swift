@@ -590,6 +590,35 @@ extension JellyfinAPIClient {
 
     // MARK: - Collections
 
+    public func getLibraryCollections(userId: String, libraryIds: [String]) async throws -> [BaseItemDto] {
+        // Gated on the KNOWN version, never probed (same discipline as
+        // `getCollections`): on 10.x the query below is not merely unsupported,
+        // it answers with the WHOLE server's collections — one series library
+        // would show 58 film sagas — and an unknown version (every cold launch
+        // until the background probe lands) must stay silent too.
+        guard serverSupports(.libraryScopedCollections), !libraryIds.isEmpty else { return [] }
+        var merged: [BaseItemDto] = []
+        var seen = Set<String>()
+        // Sequential on purpose: one library per tab in practice, two at most
+        // (a user with several film libraries), and the order of the result is
+        // re-derived below anyway.
+        for libraryId in libraryIds {
+            let page = try await getItems(
+                userId: userId,
+                parentId: libraryId,
+                includeItemTypes: [.boxSet],
+                sortBy: [.sortName],
+                sortOrder: [.ascending],
+                limit: 40
+            )
+            for item in page.items {
+                guard let id = item.id, seen.insert(id).inserted else { continue }
+                merged.append(item)
+            }
+        }
+        return merged.sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending }
+    }
+
     public func getCollections(containingItemId itemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         // 12.0+ has a direct reverse lookup (`ServerVersion.collectionsReverseLookup`).

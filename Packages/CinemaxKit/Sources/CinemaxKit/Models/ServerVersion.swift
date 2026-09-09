@@ -77,6 +77,16 @@ public extension ServerVersion {
     /// `getCollections` without a round-trip.
     static let collectionsReverseLookup = ServerVersion(12, 0, 0)
 
+    /// Minimum server version on which `GET /Items?includeItemTypes=BoxSet&
+    /// parentId=<library>` returns the collections whose MEMBERS live in that
+    /// library (the server resolves it through `linkedChildAncestorIds`,
+    /// 12.0). On 10.x the same query silently DROPS `parentId` for BoxSets
+    /// and answers with every collection on the server — so below this
+    /// version the library-scoped query must not be issued at all: it would
+    /// not degrade, it would put the whole catalogue's collections under
+    /// every library, including a series library that holds none.
+    static let libraryScopedCollections = ServerVersion(12, 0, 0)
+
     /// Whether this server is at least `required`. Reads better at call sites
     /// than a bare `>=` against a constant whose meaning isn't obvious.
     func supports(_ required: ServerVersion) -> Bool { self >= required }

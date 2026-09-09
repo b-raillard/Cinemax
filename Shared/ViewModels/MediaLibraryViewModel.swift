@@ -48,6 +48,15 @@ final class MediaLibraryViewModel {
     var genres: [String] = []
     var itemsByGenre: [String: [BaseItemDto]] = [:]
 
+    /// The collections (BoxSets) whose members live in THIS library, for the
+    /// browse layout's « Collections » row. Empty on 10.x and while the
+    /// server version is unknown (`LibraryAPI.getLibraryCollections` stays
+    /// silent there), and empty for a library holding none — a series library
+    /// on a server whose sagas are all films draws no row. Loaded as a side
+    /// task off the first paint (`loadCollections`), failing silently: a
+    /// missing row is the ordinary state, never an error over a loaded page.
+    var collections: [BaseItemDto] = []
+
     // Filtered flat list
     let filteredLoader = PaginatedLoader<BaseItemDto>(pageSize: 40, identity: { $0.id })
 
@@ -260,6 +269,9 @@ final class MediaLibraryViewModel {
             Task { [weak self] in
                 await self?.loadHeroNavigation(using: appState)
             }
+            Task { [weak self] in
+                await self?.loadCollections(using: appState, userId: userId)
+            }
         } catch {
             if Self.isCancellation(error) {
                 logger.debug("Library load cancelled — leaving state for the superseding load")
@@ -412,6 +424,31 @@ final class MediaLibraryViewModel {
     /// Targets the resolved EPISODE rather than the series so the navigator and
     /// the media always describe the same thing. `getNextUp` and `getEpisodes`
     /// are both 10 s-cached, so this is usually free.
+    /// Fills `collections` for the browse layout's « Collections » row.
+    ///
+    /// Which libraries to ask is `LibraryCollectionsScope`'s call: a
+    /// library-mode tab names its view (`parentId`), while the default Films /
+    /// Séries tabs carry no id and resolve to every user view of the matching
+    /// kind — those tabs used to be the one place a scoped query had no scope.
+    /// `getUserViews` is only spent on that second shape. Every failure mode
+    /// (no session, no matching view, a failed fetch, a 10.x server) leaves
+    /// the row absent; the write is equality-guarded so a refresh landing on
+    /// identical data invalidates nothing.
+    func loadCollections(using appState: AppState, userId: String) async {
+        do {
+            let views: [BaseItemDto] = parentId == nil
+                ? try await appState.apiClient.getUserViews(userId: userId)
+                : []
+            let ids = LibraryCollectionsScope.libraryIds(parentId: parentId, itemType: itemType, views: views)
+            let items = try await appState.apiClient.getLibraryCollections(userId: userId, libraryIds: ids)
+            if items.map(\.id) != collections.map(\.id) { collections = items }
+            logger.debug("library-collections scope=\(ids.count, privacy: .public) rows=\(items.count, privacy: .public)")
+        } catch {
+            if Self.isCancellation(error) { return }
+            logger.debug("library-collections skipped: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     func loadHeroNavigation(using appState: AppState) async {
         guard let userId = appState.currentUserId,
               let hero = heroItem,
