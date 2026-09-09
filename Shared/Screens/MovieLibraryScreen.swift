@@ -349,12 +349,54 @@ struct MediaLibraryScreen: View {
                 }
             }
 
+            if !viewModel.collections.isEmpty {
+                libraryCollectionsRow
+                    .padding(.bottom, CinemaSpacing.spacing6)
+            }
+
             if !viewModel.genres.isEmpty {
                 browseGenresSection
                     .padding(.bottom, CinemaSpacing.spacing6)
             }
 
             Spacer(minLength: 80)
+        }
+    }
+
+    /// The collections whose members live in this library (12.0+ only — see
+    /// `MediaLibraryViewModel.collections`). Sits between the genre rows and
+    /// the browse-genres grid: a saga is a way INTO the library, like a genre,
+    /// not a way out of it. A collection opens its own fiche — the one with
+    /// the members list and « Tout lire » — never a scoped grid, and its card
+    /// carries no context menu for the same reason Home's rail carries none.
+    private var libraryCollectionsRow: some View {
+        ContentRow(
+            title: loc.localized("library.collections"),
+            data: viewModel.collections,
+            id: \.id
+        ) { collection in
+            NavigationLink {
+                if let id = collection.id {
+                    MediaDetailScreen(itemId: id, itemType: .boxSet)
+                }
+            } label: {
+                PosterCard(
+                    title: collection.name ?? "",
+                    imageURL: collection.id.map {
+                        appState.imageBuilder.imageURL(
+                            itemId: $0, imageType: .primary,
+                            maxWidth: 300, tag: collection.primaryImageTagValue
+                        )
+                    },
+                    subtitle: collection.childCount.map { loc.collectionCount($0) }
+                )
+            }
+            #if os(tvOS)
+            .buttonStyle(CinemaTVCardButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .frame(width: skeletonPosterWidth)
         }
     }
 

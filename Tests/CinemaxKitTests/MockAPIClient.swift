@@ -616,6 +616,17 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
     func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] { [] }
 
+    /// Stub + capture for the library browse layout's « Collections » row.
+    /// The real client answers `[]` below 12.0 without a request; the mock
+    /// stands in for a 12.0 server and records which library ids were asked.
+    var stubbedLibraryCollections: [BaseItemDto] = []
+    private(set) var libraryCollectionsRequestedIds: [[String]] = []
+    func getLibraryCollections(userId: String, libraryIds: [String]) async throws -> [BaseItemDto] {
+        recordLock.withLock { libraryCollectionsRequestedIds.append(libraryIds) }
+        if shouldThrow { throw stubbedError }
+        return libraryIds.isEmpty ? [] : stubbedLibraryCollections
+    }
+
     // MARK: - Media Segments
 
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto] { [] }

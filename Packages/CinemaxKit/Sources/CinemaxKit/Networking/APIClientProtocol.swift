@@ -191,6 +191,14 @@ public protocol LibraryAPI: Sendable {
     /// unknown version — fall back to matching `tmdbCollectionId` against the
     /// boxset list, without probing the endpoint.
     func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto]
+
+    /// BoxSet collections whose members live in the given libraries, merged
+    /// and name-sorted. Issued ONLY when the server is KNOWN to be 12.0+
+    /// (`ServerVersion.libraryScopedCollections`): a 10.x server ignores
+    /// `parentId` for BoxSets and would answer with every collection it has,
+    /// so below the threshold — and while the version is unknown — this
+    /// returns `[]` without a round-trip. Empty `libraryIds` also answers `[]`.
+    func getLibraryCollections(userId: String, libraryIds: [String]) async throws -> [BaseItemDto]
 }
 
 /// Playback: stream resolution, intro/outro segments, and Jellyfin progress reporting.

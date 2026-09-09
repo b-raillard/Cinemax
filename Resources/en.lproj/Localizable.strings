@@ -103,6 +103,7 @@
 "library.loading.series" = "Loading series…";
 "library.itemCount" = "%d items";
 "library.itemCount.one" = "%d item";
+"library.collections" = "Collections";
 "library.collections.empty" = "No collections here yet";
 "library.playlists.empty" = "No playlists here yet";
 "empty.home.title" = "Your library is empty";

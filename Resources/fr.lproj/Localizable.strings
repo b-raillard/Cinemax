@@ -103,6 +103,7 @@
 "library.loading.series" = "Chargement des séries…";
 "library.itemCount" = "%d éléments";
 "library.itemCount.one" = "%d élément";
+"library.collections" = "Collections";
 "library.collections.empty" = "Aucune collection pour le moment";
 "library.playlists.empty" = "Aucune playlist pour le moment";
 "empty.home.title" = "Votre bibliothèque est vide";
