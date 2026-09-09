@@ -20,8 +20,17 @@ struct ErrorStateView: View {
             CinemaButton(title: retryTitle, style: .ghost) {
                 onRetry()
             }
-            .frame(width: 160)
+            .frame(width: retryWidth)
         }
+    }
+
+    /// Same reasoning as `EmptyStateView.actionWidth`.
+    private var retryWidth: CGFloat {
+        #if os(tvOS)
+        CinemaTVLayout.ctaWidth
+        #else
+        160
+        #endif
     }
 }
 

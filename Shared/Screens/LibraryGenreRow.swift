@@ -43,7 +43,7 @@ struct LibraryGenreRow: View {
 
     private var posterCardWidth: CGFloat {
         #if os(tvOS)
-        200
+        CinemaTVLayout.posterCardWidth
         #else
         AdaptiveLayout.posterCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif

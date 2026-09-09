@@ -35,12 +35,22 @@ struct EmptyStateView: View {
                 CinemaButton(title: actionTitle, style: .ghost) {
                     onAction()
                 }
-                .frame(width: 200)
+                .frame(width: actionWidth)
                 .padding(.top, CinemaSpacing.spacing2)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, CinemaSpacing.spacing10)
+    }
+
+    /// The standard tvOS CTA width — a 200 pt pill read as a different control
+    /// from the 240 pt Done sitting in the same cover's header.
+    private var actionWidth: CGFloat {
+        #if os(tvOS)
+        CinemaTVLayout.ctaWidth
+        #else
+        200
+        #endif
     }
 }
 

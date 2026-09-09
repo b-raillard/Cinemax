@@ -123,15 +123,18 @@ struct RemotePlaySheet: View {
                             .font(CinemaFont.headline(.large))
                             .foregroundStyle(CinemaColor.onSurface)
                         Spacer()
-                        CinemaButton(title: loc.localized("action.done"), style: .ghost) { dismiss() }
-                            .frame(width: 240)
+                        // Accent, like every other cover's Done — this one and
+                        // « Lire sur… » were the only two drawn as ghosts.
+                        CinemaButton(title: loc.localized("action.done"), style: .accent) { dismiss() }
+                            .frame(width: CinemaTVLayout.ctaWidth)
                     }
                     .focusSection()
 
                     itemHeader
                     targetList
                 }
-                .padding(CinemaSpacing.spacing8)
+                .padding(.horizontal, CinemaTVLayout.pagePadding)
+                .padding(.vertical, CinemaSpacing.spacing8)
             }
         }
         .task { await reload() }

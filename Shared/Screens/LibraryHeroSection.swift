@@ -148,9 +148,6 @@ struct LibraryHeroSection: View {
                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                 }
                 .foregroundStyle(CinemaColor.onSurface)
-                #if os(tvOS)
-                .frame(maxWidth: .infinity)
-                #endif
                 .padding(.vertical, heroButtonVerticalPadding)
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 #if os(iOS)
@@ -160,11 +157,13 @@ struct LibraryHeroSection: View {
             }
             #if os(tvOS)
             .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
-            .frame(width: heroButtonWidth)
             #else
             .buttonStyle(.plain)
-            .fixedSize()
             #endif
+            // Intrinsic width, like Home's hero: the two heroes are neighbouring
+            // tabs and this one drew a 240 + 240 pair where Home draws 220 +
+            // natural.
+            .fixedSize()
             .accessibilityLabel(String(format: loc.localized("accessibility.moreInfoAbout"), item.name ?? ""))
         }
         #if os(tvOS)
@@ -232,7 +231,7 @@ struct LibraryHeroSection: View {
 
     private var maxOverviewWidth: CGFloat {
         #if os(tvOS)
-        600
+        CinemaTVLayout.heroOverviewMaxWidth
         #else
         300
         #endif
@@ -240,7 +239,7 @@ struct LibraryHeroSection: View {
 
     private var heroButtonWidth: CGFloat {
         #if os(tvOS)
-        240
+        CinemaTVLayout.heroPlayButtonWidth
         #else
         160
         #endif
@@ -248,7 +247,7 @@ struct LibraryHeroSection: View {
 
     private var heroButtonFontSize: CGFloat {
         #if os(tvOS)
-        28
+        CinemaTVLayout.ctaLabelFontSize
         #else
         CinemaScale.pt(16)
         #endif

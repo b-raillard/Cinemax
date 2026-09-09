@@ -108,22 +108,22 @@ struct TVAccessoryActionButton: View {
 
     @Environment(ThemeManager.self) private var themeManager
 
-    /// Fixed so the row's geometry never depends on how long a translation is.
-    private let width: CGFloat = 150
-
     var body: some View {
         Button(action: action) {
-            VStack(spacing: CinemaSpacing.spacing2) {
+            VStack(spacing: CinemaSpacing.spacing1) {
                 Image(systemName: systemImage)
-                    .font(.system(size: CinemaScale.pt(28), weight: .bold))
+                    .font(.system(size: CinemaScale.pt(22), weight: .bold))
                 Text(label)
                     .font(CinemaFont.label(.medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .foregroundStyle(isActive ? themeManager.accent : CinemaColor.onSurface)
-            .frame(width: width)
-            .padding(.vertical, CinemaSpacing.spacing3)
+            // The same height as the Play CTA it sits beside: sized from its own
+            // glyph + label it came out ~50 % taller than Play and set the whole
+            // row's rhythm — and grew further with the font-size slider while
+            // Play, a fixed 28 pt, stayed put.
+            .frame(width: CinemaTVLayout.accessoryButtonWidth, height: CinemaTVLayout.actionRowHeight)
         }
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
         .accessibilityLabel(accessibilityLabel)

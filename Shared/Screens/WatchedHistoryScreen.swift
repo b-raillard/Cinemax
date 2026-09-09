@@ -197,9 +197,10 @@ struct WatchedHistoryScreen: View {
             ) {
                 dismiss()
             }
-            .frame(width: 240)
+            .frame(width: CinemaTVLayout.ctaWidth)
         }
-        .padding(.horizontal, CinemaSpacing.spacing10)
+        // The page margin: the title sat 56 pt left of the grid's first column.
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
         .padding(.top, CinemaSpacing.spacing8)
         .padding(.bottom, CinemaSpacing.spacing5)
         // Without this, up-presses from the first grid row never reach the Done

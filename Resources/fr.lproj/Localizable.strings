@@ -301,6 +301,7 @@
 
 "detail.play" = "Lecture";
 "detail.playFromBeginning" = "Lire depuis le début";
+"detail.playFromBeginning.short" = "Depuis le début";
 "detail.castCrew" = "Casting";
 "detail.moreLikeThis" = "Titres similaires";
 "detail.episode" = "Épisode %d";

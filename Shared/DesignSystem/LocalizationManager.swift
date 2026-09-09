@@ -104,6 +104,13 @@ final class LocalizationManager {
         }
         return localized("home.remainingTime.minutes", minutes)
     }
+
+    /// "1 saison" / "3 saisons" — the fiche's metadata line printed
+    /// « 1 saisons » while the library hero, two taps away, already said
+    /// « 1 saison » through the `tvShows.season` key this reuses.
+    func seasonCount(_ count: Int) -> String {
+        count == 1 ? localized("tvShows.season", count) : localized("tvShows.seasonsPlural", count)
+    }
 }
 
 // MARK: - Bundle Extension

@@ -8,6 +8,9 @@ import SwiftUI
 ///
 /// iOS presents it as a `.sheet`, tvOS as a `.fullScreenCover` — the same split
 /// the login Quick Connect sheet uses (tvOS `.sheet` renders a cramped modal).
+/// The tvOS body wears the one chrome every tvOS modal shares
+/// (`WatchedHistoryScreen`): header row with the title and an accent Cancel
+/// button, content below at the page margin, Menu dismisses.
 struct QuickConnectAuthorizeSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -19,20 +22,13 @@ struct QuickConnectAuthorizeSheet: View {
     @FocusState private var codeFieldFocused: Bool
 
     var body: some View {
-        VStack(spacing: CinemaSpacing.spacing6) {
-            header
-
-            if viewModel.didAuthorize {
-                successState
-            } else {
-                formState
-            }
-
-            Spacer(minLength: 0)
+        Group {
+            #if os(tvOS)
+            tvOSBody
+            #else
+            iOSBody
+            #endif
         }
-        .padding(CinemaSpacing.spacing6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(CinemaColor.surface.ignoresSafeArea())
         #if os(iOS)
         // Bring up the number pad straight away — the user came here to type a
         // code. On tvOS we DON'T auto-focus: it would force-open the full-screen
@@ -53,7 +49,21 @@ struct QuickConnectAuthorizeSheet: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - iOS
+
+    #if !os(tvOS)
+    private var iOSBody: some View {
+        VStack(spacing: CinemaSpacing.spacing6) {
+            header
+
+            stateContent
+
+            Spacer(minLength: 0)
+        }
+        .padding(CinemaSpacing.spacing6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(CinemaColor.surface.ignoresSafeArea())
+    }
 
     private var header: some View {
         VStack(spacing: CinemaSpacing.spacing4) {
@@ -78,6 +88,74 @@ struct QuickConnectAuthorizeSheet: View {
             Text(loc.localized("quickConnect.authorize.title"))
                 .font(.system(size: CinemaScale.pt(24), weight: .black))
                 .foregroundStyle(CinemaColor.onSurface)
+        }
+    }
+    #endif
+
+    // MARK: - tvOS
+
+    #if os(tvOS)
+    private var tvOSBody: some View {
+        ZStack {
+            CinemaColor.surface.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                tvHeader
+
+                // The header carries the title, so the column keeps only the
+                // glyph above the form.
+                VStack(spacing: CinemaSpacing.spacing6) {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: CinemaScale.pt(40)))
+                        .foregroundStyle(themeManager.accent)
+
+                    stateContent
+                }
+                .frame(maxWidth: CinemaTVLayout.readingMaxWidth)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, CinemaTVLayout.pagePadding)
+                .padding(.top, CinemaSpacing.spacing6)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .onExitCommand { dismiss() }
+    }
+
+    private var tvHeader: some View {
+        HStack(alignment: .center) {
+            Text(loc.localized("quickConnect.authorize.title"))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Spacer(minLength: CinemaSpacing.spacing6)
+
+            CinemaButton(
+                title: loc.localized("action.cancel"),
+                style: .accent
+            ) {
+                dismiss()
+            }
+            .frame(width: CinemaTVLayout.ctaWidth)
+        }
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        .padding(.top, CinemaSpacing.spacing8)
+        .padding(.bottom, CinemaSpacing.spacing5)
+        // Without this, up-presses from the code field never reach the Cancel
+        // button (separate container — same rule as the Home/Library hero).
+        .focusSection()
+    }
+    #endif
+
+    // MARK: - Shared
+
+    @ViewBuilder
+    private var stateContent: some View {
+        if viewModel.didAuthorize {
+            successState
+        } else {
+            formState
         }
     }
 

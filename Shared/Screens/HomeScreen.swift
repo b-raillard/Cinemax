@@ -493,7 +493,7 @@ struct HomeScreen: View {
             Text(genre)
                 .font(CinemaFont.headline(.small))
                 .foregroundStyle(CinemaColor.onSurface)
-                .padding(.horizontal, CinemaSpacing.spacing6)
+                .padding(.horizontal, skeletonPadding)
 
             Button {
                 Task { await viewModel.retryGenre(genre, using: appState) }
@@ -516,11 +516,13 @@ struct HomeScreen: View {
                 .clipShape(Capsule())
             }
             #if os(tvOS)
-            .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+            .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
             #else
             .buttonStyle(.plain)
             #endif
-            .padding(.horizontal, CinemaSpacing.spacing6)
+            // The page margin `ContentRow` uses, so a failed row's title stays in
+            // the column of its neighbours (it sat 80 pt left of them on tvOS).
+            .padding(.horizontal, skeletonPadding)
         }
     }
 

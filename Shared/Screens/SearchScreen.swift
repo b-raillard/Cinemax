@@ -226,8 +226,18 @@ struct SearchScreen: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        #if os(tvOS)
+                        // A small disc so the chip-level focus stroke has a
+                        // shape to trace; `.plain` alone showed no focus.
+                        .padding(CinemaSpacing.spacing1)
+                        .background(CinemaColor.surfaceContainerHigh, in: Circle())
+                        #endif
                 }
+                #if os(tvOS)
+                .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+                #else
                 .buttonStyle(.plain)
+                #endif
                 .accessibilityLabel(loc.localized("accessibility.clearSearch"))
             }
         }
@@ -337,26 +347,18 @@ struct SearchScreen: View {
         // to be empty before this reads as "nothing found".
         } else if viewModel.results.isEmpty && viewModel.personResults.isEmpty && viewModel.hasSearched {
             Spacer()
-            VStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: CinemaScale.pt(48)))
-                    .foregroundStyle(CinemaColor.outlineVariant)
-                    .accessibilityHidden(true)
-                Text(loc.localized("search.noResults"))
-                    .font(CinemaFont.headline(.small))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-            }
+            EmptyStateView(
+                systemImage: "magnifyingglass",
+                title: loc.localized("search.noResults")
+            )
             Spacer()
         } else if viewModel.results.isEmpty && viewModel.personResults.isEmpty {
             Spacer()
             VStack(spacing: CinemaSpacing.spacing4) {
-                Image(systemName: "sparkle.magnifyingglass")
-                    .font(.system(size: CinemaScale.pt(48)))
-                    .foregroundStyle(CinemaColor.outlineVariant)
-                    .accessibilityHidden(true)
-                Text(loc.localized("search.searchLibrary"))
-                    .font(CinemaFont.headline(.small))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                EmptyStateView(
+                    systemImage: "sparkle.magnifyingglass",
+                    title: loc.localized("search.searchLibrary")
+                )
 
                 // Past queries as one-tap chips (gated on the Privacy toggle).
                 if saveSearchHistory, !viewModel.recentSearches.isEmpty {
@@ -510,7 +512,9 @@ struct SearchScreen: View {
                 Text(label)
                     .font(.system(size: surpriseLabelSize, weight: .semibold))
             }
-            .foregroundStyle(themeManager.onAccent)
+            // Accent CTA: saturated `accentContainer` + `.white`, like every
+            // other accent CTA (`CinemaButton(style: .accent)`).
+            .foregroundStyle(.white)
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
             .background(themeManager.accentContainer)
@@ -552,7 +556,7 @@ struct SearchScreen: View {
 
     private var surpriseIconSize: CGFloat {
         #if os(tvOS)
-        24
+        CinemaScale.pt(24)
         #else
         16
         #endif
@@ -560,7 +564,7 @@ struct SearchScreen: View {
 
     private var surpriseLabelSize: CGFloat {
         #if os(tvOS)
-        22
+        CinemaScale.pt(22)
         #else
         15
         #endif

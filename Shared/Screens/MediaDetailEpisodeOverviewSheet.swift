@@ -20,7 +20,16 @@ struct EpisodeOverviewSheet: View {
     @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        #if os(tvOS)
+        tvOSBody
+        #else
+        iOSBody
+        #endif
+    }
+
+    #if !os(tvOS)
+    private var iOSBody: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             HStack(alignment: .center) {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
@@ -52,11 +61,68 @@ struct EpisodeOverviewSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(24)
+        .padding(CinemaSpacing.spacing5)
         .background(CinemaColor.surface.ignoresSafeArea())
-        #if os(iOS)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        #endif
     }
+    #endif
+
+    #if os(tvOS)
+    /// tvOS chrome — the one shape every tvOS modal shares
+    /// (`WatchedHistoryScreen`): header row with the title and an accent Done
+    /// button, prose below at the page margin capped to a readable measure,
+    /// Menu dismisses. The round `.plain` xmark had no focus treatment at all
+    /// on tvOS.
+    private var tvOSBody: some View {
+        ZStack {
+            CinemaColor.surface.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                tvHeader
+
+                ScrollView {
+                    // Focusable so the remote can reach and scroll a long
+                    // overview, washed so that focus is VISIBLE when it lands
+                    // here — the wash sits inside `.focusable()`, same as the
+                    // fiche's synopsis.
+                    Text(item.overview)
+                        .font(CinemaFont.body)
+                        .frame(maxWidth: CinemaTVLayout.readingMaxWidth, alignment: .leading)
+                        .tvFocusableProse()
+                        .focusable()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, CinemaTVLayout.pagePadding)
+                        .padding(.bottom, CinemaSpacing.spacing8)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .onExitCommand { dismiss() }
+    }
+
+    private var tvHeader: some View {
+        HStack(alignment: .center) {
+            Text(item.title)
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Spacer(minLength: CinemaSpacing.spacing6)
+
+            CinemaButton(
+                title: loc.localized("action.done"),
+                style: .accent
+            ) {
+                dismiss()
+            }
+            .frame(width: CinemaTVLayout.ctaWidth)
+        }
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        .padding(.top, CinemaSpacing.spacing8)
+        .padding(.bottom, CinemaSpacing.spacing5)
+        // Without this, up-presses from the prose never reach the Done button
+        // (separate container — same rule as the Home/Library hero).
+        .focusSection()
+    }
+    #endif
 }
