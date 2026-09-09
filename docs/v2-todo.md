@@ -5,6 +5,8 @@ feature.
 
 ## User-facing Profile Settings screen (iOS)
 
+> **Shipped in 2.0.0** (PR #137, `ProfileScreen`, both platforms): password change through `AuthAPI.changeOwnPassword` + server-side audio / subtitle language preferences. Avatar upload is still not built. Kept below as the original spec.
+
 **Removed in v1:** the "Réglages du profil" row in Settings → Compte was a
 stub with an empty action closure — flagged by App Store review as
 unresponsive. Removed in `Shared/Screens/Settings/SettingsScreen+iOS.swift`
