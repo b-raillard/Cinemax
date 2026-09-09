@@ -31,43 +31,104 @@ struct UserSwitchSheet: View {
     @State private var manualUsername: String = ""
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                CinemaColor.surface.ignoresSafeArea()
-
-                if showManualEntry {
-                    manualEntryStep
-                } else if let user = selectedUser {
-                    passwordStep(for: user)
-                } else if isLoading {
-                    LoadingStateView()
-                } else if users.isEmpty {
-                    EmptyStateView(
-                        systemImage: "person.crop.circle.badge.questionmark",
-                        title: loc.localized("switchAccount.noPublicUsers.title"),
-                        subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
-                        actionTitle: loc.localized("switchAccount.signInManually"),
-                        onAction: { enterManualMode() }
-                    )
-                } else {
-                    userGrid
-                }
-            }
-            .navigationTitle(loc.localized("settings.switchAccount"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+        Group {
+            #if os(tvOS)
+            tvOSChrome
+            #else
+            iOSChrome
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(loc.localized("action.cancel")) { dismiss() }
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                }
-            }
         }
         .task {
             await loadUsers()
         }
     }
+
+    // MARK: - Chrome
+
+    /// The step currently on screen — shared by both chromes.
+    private var stepContent: some View {
+        ZStack {
+            CinemaColor.surface.ignoresSafeArea()
+
+            if showManualEntry {
+                manualEntryStep
+            } else if let user = selectedUser {
+                passwordStep(for: user)
+            } else if isLoading {
+                LoadingStateView()
+            } else if users.isEmpty {
+                EmptyStateView(
+                    systemImage: "person.crop.circle.badge.questionmark",
+                    title: loc.localized("switchAccount.noPublicUsers.title"),
+                    subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
+                    actionTitle: loc.localized("switchAccount.signInManually"),
+                    onAction: { enterManualMode() }
+                )
+            } else {
+                userGrid
+            }
+        }
+    }
+
+    #if !os(tvOS)
+    private var iOSChrome: some View {
+        NavigationStack {
+            stepContent
+                .navigationTitle(loc.localized("settings.switchAccount"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(loc.localized("action.cancel")) { dismiss() }
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    }
+                }
+        }
+    }
+    #endif
+
+    #if os(tvOS)
+    /// tvOS full-screen-cover chrome — the one shape every tvOS modal shares
+    /// (`WatchedHistoryScreen`): header row with the title and an accent
+    /// button, content below, Menu dismisses. A `.toolbar` item renders as a
+    /// broken empty pill on tvOS, which is what the Cancel button used to be.
+    private var tvOSChrome: some View {
+        ZStack {
+            CinemaColor.surface.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                tvHeader
+                stepContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .onExitCommand { dismiss() }
+    }
+
+    private var tvHeader: some View {
+        HStack(alignment: .center) {
+            Text(loc.localized("settings.switchAccount"))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Spacer(minLength: CinemaSpacing.spacing6)
+
+            CinemaButton(
+                title: loc.localized("action.cancel"),
+                style: .accent
+            ) {
+                dismiss()
+            }
+            .frame(width: CinemaTVLayout.ctaWidth)
+        }
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        .padding(.top, CinemaSpacing.spacing8)
+        .padding(.bottom, CinemaSpacing.spacing5)
+        // Without this, up-presses from the first grid row never reach the
+        // header button (separate container — same rule as the Home hero).
+        .focusSection()
+    }
+    #endif
 
     // MARK: - Step 1: Pick a user
 
@@ -78,18 +139,50 @@ struct UserSwitchSheet: View {
                     userTile(user)
                 }
             }
-            .padding(CinemaSpacing.spacing4)
+            .padding(.horizontal, gridHorizontalPadding)
+            .padding(.vertical, CinemaSpacing.spacing4)
 
-            Button {
+            textActionButton(
+                loc.localized("switchAccount.useDifferentAccount"),
+                color: themeManager.accent
+            ) {
                 enterManualMode()
-            } label: {
-                Text(loc.localized("switchAccount.useDifferentAccount"))
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(themeManager.accent)
             }
-            .buttonStyle(.plain)
             .padding(.bottom, CinemaSpacing.spacing4)
         }
+        #if os(tvOS)
+        // The tiles carry `CinemaTVCardButtonStyle`, which grows on focus —
+        // without this the edge tiles' scaled ring is clipped.
+        .scrollClipDisabled()
+        #endif
+    }
+
+    /// A text-only secondary action. `.plain` gives it NO focus treatment on
+    /// tvOS — focus landed on it invisibly — so there it wears a chip
+    /// (surface capsule + `TVFilterChipButtonStyle`, the documented row/chip
+    /// level); iOS keeps the bare text.
+    @ViewBuilder
+    private func textActionButton(
+        _ title: String, color: Color, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(color)
+                #if os(tvOS)
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.vertical, CinemaSpacing.spacing2)
+                .background(CinemaColor.surfaceContainer)
+                .clipShape(Capsule())
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
+        .buttonStyle(.plain)
+        #endif
     }
 
     @ViewBuilder
@@ -175,16 +268,14 @@ struct UserSwitchSheet: View {
             .disabled(isAuthenticating)
             .padding(.horizontal, CinemaSpacing.spacing4)
 
-            Button {
+            textActionButton(
+                loc.localized("action.cancel"),
+                color: CinemaColor.onSurfaceVariant
+            ) {
                 selectedUser = nil
                 password = ""
                 authError = nil
-            } label: {
-                Text(loc.localized("action.cancel"))
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
-            .buttonStyle(.plain)
 
             Spacer()
         }
@@ -264,14 +355,12 @@ struct UserSwitchSheet: View {
                       || password.isEmpty)
             .padding(.horizontal, CinemaSpacing.spacing4)
 
-            Button {
+            textActionButton(
+                loc.localized("action.cancel"),
+                color: CinemaColor.onSurfaceVariant
+            ) {
                 exitManualMode()
-            } label: {
-                Text(loc.localized("action.cancel"))
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
-            .buttonStyle(.plain)
 
             Spacer()
         }
@@ -368,6 +457,15 @@ struct UserSwitchSheet: View {
         140
         #else
         80
+        #endif
+    }
+
+    /// The grid sits at the page margin on tvOS, like every full-page grid.
+    private var gridHorizontalPadding: CGFloat {
+        #if os(tvOS)
+        CinemaTVLayout.pagePadding
+        #else
+        CinemaSpacing.spacing4
         #endif
     }
 }

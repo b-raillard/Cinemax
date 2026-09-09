@@ -366,6 +366,7 @@ struct LoginScreen: View {
         }
     }
 
+    @MainActor
     private func helperLink(icon: String, title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
@@ -374,8 +375,21 @@ struct LoginScreen: View {
             }
             .font(CinemaFont.label(.medium))
             .foregroundStyle(CinemaColor.onSurfaceVariant)
+            #if os(tvOS)
+            // « Pastille » focus level: a capsule carrying the shared chip
+            // stroke. A bare `.plain` link had no focus treatment at all, and
+            // this is the Quick Connect / discovery / servers-list entry.
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing2)
+            .background(CinemaColor.surfaceContainer)
+            .clipShape(Capsule())
+            #endif
         }
+        #if os(tvOS)
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        #else
         .buttonStyle(.plain)
+        #endif
     }
 
     // MARK: - Shared Components

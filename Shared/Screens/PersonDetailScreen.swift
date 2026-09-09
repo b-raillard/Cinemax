@@ -28,7 +28,7 @@ struct PersonDetailScreen: View {
     #endif
 
     #if os(tvOS)
-    private let portraitSize: CGFloat = 280
+    private let portraitSize: CGFloat = CinemaTVLayout.personPortraitSize
     private let cardWidth: CGFloat = CinemaTVLayout.filmographyCardWidth
     /// The page margin, so the portrait, the biography and the filmography
     /// rails share one left edge. `ContentRow` draws its rails at the tvOS page
@@ -78,6 +78,11 @@ struct PersonDetailScreen: View {
             }
             .padding(.vertical, CinemaSpacing.spacing6)
         }
+        #if os(tvOS)
+        // The filmography rails' focused card grows 1.06×; without this the
+        // vertical scroll clips that growth at its own edges.
+        .scrollClipDisabled()
+        #endif
         .background(CinemaColor.surface)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -109,16 +114,22 @@ struct PersonDetailScreen: View {
             // contain. A circular ring, since the rectangular `cinemaFocus()`
             // is the wrong shape for a portrait — same reason `CastCircle`
             // draws its own.
+            // Card level, like `CastCircle`: ring + accent halo + card timing.
             .overlay(
                 Circle().strokeBorder(
                     themeManager.accent.opacity(portraitFocused ? CinemaTVFocus.strokeOpacity : 0),
                     lineWidth: CinemaTVFocus.cardRingWidth
                 )
             )
+            .shadow(
+                color: themeManager.accent.opacity(portraitFocused ? CinemaTVFocus.haloOpacity : 0),
+                radius: CinemaTVFocus.haloRadius,
+                y: 6
+            )
             .focusable()
             .focused($portraitFocused)
             .focusEffectDisabled()
-            .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: portraitFocused)
+            .animation(motionEffects ? .easeInOut(duration: CinemaTVFocus.cardDuration) : nil, value: portraitFocused)
             #endif
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {

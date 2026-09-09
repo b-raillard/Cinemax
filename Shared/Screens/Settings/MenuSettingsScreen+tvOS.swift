@@ -255,8 +255,10 @@ extension MenuSettingsScreen {
                         .padding(.vertical, CinemaSpacing.spacing2)
                         .background(
                             RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                                .strokeBorder(themeManager.accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
+                                .strokeBorder(themeManager.accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0), lineWidth: CinemaTVFocus.strokeWidth)
                         )
+                        .brightness(isFocused ? CinemaTVFocus.rowBrightness : 0)
+                        .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: isFocused)
                 }
                 .buttonStyle(.plain)
                 .focusEffectDisabled()
@@ -304,8 +306,10 @@ extension MenuSettingsScreen {
                 .frame(width: 44, height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                        .strokeBorder(themeManager.accent.opacity(isFocused ? 0.8 : 0), lineWidth: 1.5)
+                        .strokeBorder(themeManager.accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0), lineWidth: CinemaTVFocus.strokeWidth)
                 )
+                .brightness(isFocused ? CinemaTVFocus.rowBrightness : 0)
+                .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: isFocused)
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()

@@ -72,9 +72,9 @@ struct ServerDiscoverySheet: View {
             VStack(spacing: 0) {
                 header
                 stateContent
-                    .frame(maxWidth: 1400)
+                    .frame(maxWidth: CinemaTVLayout.formMaxWidth)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, CinemaSpacing.spacing10)
+                    .padding(.horizontal, CinemaTVLayout.pagePadding)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -95,7 +95,7 @@ struct ServerDiscoverySheet: View {
             ) {
                 dismiss()
             }
-            .frame(width: 240)
+            .frame(width: CinemaTVLayout.ctaWidth)
             .focused($focusedField, equals: .done)
             .onMoveCommand { direction in
                 if direction == .down, focusedField == .done {
@@ -103,7 +103,7 @@ struct ServerDiscoverySheet: View {
                 }
             }
         }
-        .padding(.horizontal, CinemaSpacing.spacing10)
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
         .padding(.top, CinemaSpacing.spacing8)
         .padding(.bottom, CinemaSpacing.spacing5)
     }

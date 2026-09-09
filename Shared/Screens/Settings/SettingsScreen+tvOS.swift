@@ -137,7 +137,7 @@ extension SettingsScreen {
                     tvCategoryButton(category)
                 }
             }
-            .padding(.horizontal, CinemaSpacing.spacing10)
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
 
             Spacer()
 
@@ -145,10 +145,10 @@ extension SettingsScreen {
             // reachable by pressing down past the last category pill; plain
             // vertical stack, no .focusSection() needed)
             tvSystemInfoBar
-                .padding(.horizontal, CinemaSpacing.spacing10)
+                .padding(.horizontal, CinemaTVLayout.pagePadding)
 
             tvLicensesButton
-                .padding(.horizontal, CinemaSpacing.spacing10)
+                .padding(.horizontal, CinemaTVLayout.pagePadding)
                 .padding(.bottom, CinemaSpacing.spacing8)
         }
     }
@@ -266,6 +266,23 @@ extension SettingsScreen {
                             .font(CinemaFont.headline(.medium))
                     }
                     .foregroundStyle(backFocused ? themeManager.accent : CinemaColor.onSurface)
+                    // Row-level focus (`CinemaTVFocus` stroke + brightness) —
+                    // text colour alone was the only signal. The stroke BLEEDS
+                    // OUTWARD through negative padding on the overlay rather
+                    // than insetting the label, so the label keeps its left
+                    // edge aligned with the rows below whether or not it holds
+                    // focus — same technique as `TVFocusableProseModifier`.
+                    .brightness(backFocused ? CinemaTVFocus.rowBrightness : 0)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: CinemaRadius.large)
+                            .strokeBorder(
+                                themeManager.accent.opacity(backFocused ? CinemaTVFocus.strokeOpacity : 0),
+                                lineWidth: CinemaTVFocus.strokeWidth
+                            )
+                            .padding(.horizontal, -CinemaSpacing.spacing3)
+                            .padding(.vertical, -CinemaSpacing.spacing2)
+                    }
+                    .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: backFocused)
                 }
                 .buttonStyle(.plain)
                 .focusEffectDisabled()
@@ -501,6 +518,23 @@ extension SettingsScreen {
                             .font(CinemaFont.headline(.medium))
                     }
                     .foregroundStyle(backFocused ? themeManager.accent : CinemaColor.onSurface)
+                    // Row-level focus (`CinemaTVFocus` stroke + brightness) —
+                    // text colour alone was the only signal. The stroke BLEEDS
+                    // OUTWARD through negative padding on the overlay rather
+                    // than insetting the label, so the label keeps its left
+                    // edge aligned with the rows below whether or not it holds
+                    // focus — same technique as `TVFocusableProseModifier`.
+                    .brightness(backFocused ? CinemaTVFocus.rowBrightness : 0)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: CinemaRadius.large)
+                            .strokeBorder(
+                                themeManager.accent.opacity(backFocused ? CinemaTVFocus.strokeOpacity : 0),
+                                lineWidth: CinemaTVFocus.strokeWidth
+                            )
+                            .padding(.horizontal, -CinemaSpacing.spacing3)
+                            .padding(.vertical, -CinemaSpacing.spacing2)
+                    }
+                    .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: backFocused)
                 }
                 .buttonStyle(.plain)
                 .focusEffectDisabled()

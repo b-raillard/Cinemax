@@ -374,31 +374,38 @@ struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         #endif
-        .sheet(isPresented: $showLicenses) {
-            LicensesView()
-        }
-        .sheet(isPresented: $showUserSwitch) {
-            UserSwitchSheet()
-                .environment(appState)
-                .environment(themeManager)
-                .environment(loc)
-        }
         // tvOS `.sheet` renders a cramped modal (same reason the login Quick
         // Connect sheet uses `.fullScreenCover` there), so split the
-        // presentation by platform.
+        // presentation by platform. Licences and the user switcher used to sit
+        // outside this split and rendered as that cramped modal on tvOS.
         #if os(iOS)
+        .sheet(isPresented: $showLicenses) { licensesSheet }
+        .sheet(isPresented: $showUserSwitch) { userSwitchSheet }
         .sheet(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .sheet(isPresented: $showServers) { serversSheet }
         .sheet(isPresented: $showProfile) { profileSheet }
         #else
+        .fullScreenCover(isPresented: $showLicenses) { licensesSheet }
+        .fullScreenCover(isPresented: $showUserSwitch) { userSwitchSheet }
         .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .fullScreenCover(isPresented: $showServers) { serversSheet }
         .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
+    }
+
+    private var licensesSheet: some View {
+        LicensesView()
+    }
+
+    private var userSwitchSheet: some View {
+        UserSwitchSheet()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
     }
 
     /// Signs out of the active server and reports what happened. The auto-hop

@@ -708,6 +708,7 @@
 
 "detail.play" = "Play";
 "detail.playFromBeginning" = "Play from beginning";
+"detail.playFromBeginning.short" = "From the start";
 "detail.castCrew" = "Cast & Crew";
 "detail.moreLikeThis" = "More Like This";
 "detail.episode" = "Episode %d";

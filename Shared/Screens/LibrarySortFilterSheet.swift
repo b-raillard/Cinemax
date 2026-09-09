@@ -120,7 +120,9 @@ struct LibrarySortFilterSheet: View {
                     .padding(.top, CinemaSpacing.spacing2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .scrollClipDisabled()
+                // Deliberately clipped: nothing in here grows on focus (chips and
+                // rows are the "rangée" level), and with the clip disabled the
+                // decade chips scrolled straight under the footer's buttons.
 
                 // Footer actions — same pattern as AdminFormScreen / DestructiveConfirmSheet:
                 // primary accent on the right, ghost reset on the left, both `CinemaButton`.
@@ -130,13 +132,13 @@ struct LibrarySortFilterSheet: View {
                         onApply()
                         dismiss()
                     }
-                    .frame(maxWidth: 360)
+                    .frame(maxWidth: CinemaTVLayout.ctaWidth)
 
                     CinemaButton(title: loc.localized("action.apply"), style: .accent, icon: "checkmark") {
                         onApply()
                         dismiss()
                     }
-                    .frame(maxWidth: 360)
+                    .frame(maxWidth: CinemaTVLayout.ctaWidth)
                 }
                 .padding(.horizontal, sheetHorizontalPadding)
                 .padding(.vertical, CinemaSpacing.spacing5)
@@ -503,7 +505,7 @@ struct LibrarySortFilterSheet: View {
 
     private var chipHorizontalPadding: CGFloat {
         #if os(tvOS)
-        18
+        CinemaSpacing.spacing3
         #else
         CinemaSpacing.spacing3
         #endif
@@ -511,7 +513,7 @@ struct LibrarySortFilterSheet: View {
 
     private var chipVerticalPadding: CGFloat {
         #if os(tvOS)
-        10
+        CinemaSpacing.spacing2
         #else
         CinemaSpacing.spacing2
         #endif

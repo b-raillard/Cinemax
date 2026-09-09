@@ -133,6 +133,8 @@ enum CinemaTVLayout {
     /// Filmography card on the person page — wider than a rail poster because
     /// the page carries only two rows.
     static let filmographyCardWidth: CGFloat = 220
+    /// Circular portrait at the top of the person page.
+    static let personPortraitSize: CGFloat = 280
     /// 16:9 episode still in the detail fiche's episode row.
     static let episodeThumbnailWidth: CGFloat = 200
 
@@ -160,12 +162,24 @@ enum CinemaTVLayout {
     /// `CinemaScale.pt` value, so the primary CTA keeps its weight whatever the
     /// user's font-size setting.
     static let ctaLabelFontSize: CGFloat = 28
+    /// One height for every control in the fiche's action row — the Play CTA,
+    /// « Depuis le début » and the icon-over-label accessories. They used to
+    /// size themselves (≈77 pt for Play, ≈115 pt for an accessory), so the
+    /// row's rhythm was set by its secondary controls.
+    static let actionRowHeight: CGFloat = 80
+    /// Width of one accessory (favourite, watched, playlist…) beside Play.
+    /// Fixed so the row's geometry never depends on how long a translation is.
+    static let accessoryButtonWidth: CGFloat = 150
 
     // MARK: Prose
 
     /// Caps a paragraph's measure. Unbounded, a synopsis ran the full 1920 px —
     /// roughly 200 characters a line, which is unreadable at 3 m.
     static let readingMaxWidth: CGFloat = 1100
+    /// Caps a settings-style column (server list, privacy rows, help text) on a
+    /// full-screen cover. Wider than `readingMaxWidth` because rows carry a
+    /// control at their trailing edge, not just prose.
+    static let formMaxWidth: CGFloat = 1400
 
     // MARK: Title logo
 

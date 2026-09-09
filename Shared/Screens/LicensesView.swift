@@ -6,6 +6,17 @@ struct LicensesView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        #if os(tvOS)
+        tvOSChrome
+        #else
+        iOSChrome
+        #endif
+    }
+
+    // MARK: - Chrome
+
+    #if !os(tvOS)
+    private var iOSChrome: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -22,7 +33,6 @@ struct LicensesView: View {
             }
             .background(CinemaColor.surface.ignoresSafeArea())
             .navigationTitle(loc.localized("settings.licenses"))
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -32,9 +42,74 @@ struct LicensesView: View {
                     }
                 }
             }
-            #endif
         }
     }
+    #endif
+
+    #if os(tvOS)
+    /// tvOS full-screen-cover chrome — the one shape every tvOS modal shares
+    /// (`WatchedHistoryScreen`): header row with the title and an accent Done
+    /// button, content below at the page margin, Menu dismisses. A `.toolbar`
+    /// / `.navigationTitle` renders nothing usable on tvOS, which is how this
+    /// screen came to have no dismiss control at all there.
+    private var tvOSChrome: some View {
+        ZStack {
+            CinemaColor.surface.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                tvHeader
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                        Text(loc.localized("settings.licenses.description"))
+                            .font(CinemaFont.dynamicBody)
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .padding(.bottom, CinemaSpacing.spacing2)
+
+                        // A tvOS `ScrollView` with no focusable content cannot
+                        // scroll, so each card takes focus; the prose wash is
+                        // what makes that focus visible while scrolling.
+                        ForEach(licenses, id: \.name) { license in
+                            licenseCard(license)
+                                .tvFocusableProse()
+                                .focusable()
+                        }
+                    }
+                    .frame(maxWidth: CinemaTVLayout.readingMaxWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CinemaTVLayout.pagePadding)
+                    .padding(.bottom, CinemaSpacing.spacing8)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .onExitCommand { dismiss() }
+    }
+
+    private var tvHeader: some View {
+        HStack(alignment: .center) {
+            Text(loc.localized("settings.licenses"))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Spacer(minLength: CinemaSpacing.spacing6)
+
+            CinemaButton(
+                title: loc.localized("action.done"),
+                style: .accent
+            ) {
+                dismiss()
+            }
+            .frame(width: CinemaTVLayout.ctaWidth)
+        }
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        .padding(.top, CinemaSpacing.spacing8)
+        .padding(.bottom, CinemaSpacing.spacing5)
+        // Without this, up-presses from the first card never reach the Done
+        // button (separate container — same rule as the Home/Library hero).
+        .focusSection()
+    }
+    #endif
 
     @ViewBuilder
     func licenseCard(_ license: OSSLicense) -> some View {
@@ -133,19 +208,19 @@ struct LicensesView: View {
         [
             OSSLicense(
                 name: "Jellyfin SDK Swift",
-                version: "0.6.0",
+                version: "3.1.0",
                 url: "github.com/jellyfin/jellyfin-sdk-swift",
                 text: "Copyright (c) Jellyfin & Jellyfin Contributors\n\n" + mplLicense
             ),
             OSSLicense(
                 name: "libVLC",
-                version: "4.0",
+                version: "4.0.6",
                 url: "code.videolan.org/videolan/vlc",
                 text: "Copyright (c) VideoLAN and the VLC Authors\n\n" + lgplLicense
             ),
             OSSLicense(
                 name: "SwiftVLC",
-                version: "0.3.0",
+                version: "1.0.0",
                 url: "github.com/harflabs/SwiftVLC",
                 text: "Copyright (c) 2025 Omar Albeik\n\n" + mitLicense
             ),

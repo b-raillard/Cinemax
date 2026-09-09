@@ -76,9 +76,9 @@ struct ConnectedDevicesList: View {
                 }
             }
             #if os(tvOS)
-            .padding(.horizontal, CinemaSpacing.spacing10)
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
             .padding(.vertical, CinemaSpacing.spacing6)
-            .frame(maxWidth: 1400, alignment: .leading)
+            .frame(maxWidth: CinemaTVLayout.formMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
             #else
             .padding(CinemaSpacing.spacing4)

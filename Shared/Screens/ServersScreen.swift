@@ -523,13 +523,13 @@ struct ServersScreen: View {
                         ) {
                             addServer()
                         }
-                        .frame(width: 480)
+                        .frame(width: CinemaTVLayout.ctaWidth * 2)
                         .focused($focusedItem, equals: .add)
                         .padding(.top, CinemaSpacing.spacing4)
                     }
-                    .padding(.horizontal, CinemaSpacing.spacing10)
+                    .padding(.horizontal, CinemaTVLayout.pagePadding)
                     .padding(.bottom, CinemaSpacing.spacing10)
-                    .frame(maxWidth: 1400, alignment: .leading)
+                    .frame(maxWidth: CinemaTVLayout.formMaxWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .scrollClipDisabled()
@@ -551,9 +551,9 @@ struct ServersScreen: View {
             CinemaButton(title: loc.localized("action.done"), style: .accent) {
                 dismiss()
             }
-            .frame(width: 240)
+            .frame(width: CinemaTVLayout.ctaWidth)
         }
-        .padding(.horizontal, CinemaSpacing.spacing10)
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
         .padding(.top, CinemaSpacing.spacing8)
         .padding(.bottom, CinemaSpacing.spacing5)
         // Without this, up-presses from the first card never reach Done

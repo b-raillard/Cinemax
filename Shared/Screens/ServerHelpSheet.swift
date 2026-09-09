@@ -59,9 +59,9 @@ struct ServerHelpSheet: View {
 
                 ScrollView {
                     contentBody
-                        .padding(.horizontal, CinemaSpacing.spacing10)
+                        .padding(.horizontal, CinemaTVLayout.pagePadding)
                         .padding(.bottom, CinemaSpacing.spacing10)
-                        .frame(maxWidth: 1400, alignment: .leading)
+                        .frame(maxWidth: CinemaTVLayout.formMaxWidth, alignment: .leading)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -85,9 +85,9 @@ struct ServerHelpSheet: View {
             ) {
                 dismiss()
             }
-            .frame(width: 240)
+            .frame(width: CinemaTVLayout.ctaWidth)
         }
-        .padding(.horizontal, CinemaSpacing.spacing10)
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
         .padding(.top, CinemaSpacing.spacing8)
         .padding(.bottom, CinemaSpacing.spacing5)
     }

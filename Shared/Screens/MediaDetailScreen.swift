@@ -213,10 +213,21 @@ struct MediaDetailScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             Task { await viewModel.load(using: appState, loc: loc, cardActions: cardActions) }
         }
+        // tvOS `.sheet` renders a cramped narrow modal — same split as every
+        // other modal on this screen (`WatchTogetherPresentation`, the version
+        // dialog): a full-screen cover there, a sheet on iOS.
+        #if os(iOS)
         .sheet(item: $episodeOverview) { ep in
             EpisodeOverviewSheet(item: ep)
                 .environment(themeManager)
         }
+        #else
+        .fullScreenCover(item: $episodeOverview) { ep in
+            EpisodeOverviewSheet(item: ep)
+                .environment(themeManager)
+                .environment(loc)
+        }
+        #endif
         .modifier(WatchTogetherPresentation(
             sheet: $watchTogetherSheet,
             appState: appState,
@@ -531,8 +542,15 @@ struct MediaDetailScreen: View {
                 contentMode: .fit
             )
             // Height-led: a logo's width varies enormously between titles, so
-            // pinning the width would make one mark tower over the next.
-            .frame(maxWidth: CinemaTVLayout.logoMaxWidth, maxHeight: CinemaTVLayout.logoHeight, alignment: .leading)
+            // pinning the width would make one mark tower over the next. The
+            // height is a FIXED proposal rather than a ceiling, so a `.fit`
+            // image can never fall back to its natural pixel size. Known limit,
+            // not fixable here: a logo asset whose mark fills a corner of a
+            // mostly-transparent canvas (measured 2026-09-09 on the demo
+            // library: 94 × 32 px of ink on a 700 × 238 canvas) still renders
+            // as a sliver — that is the artwork, and the fix is a better logo.
+            .frame(height: CinemaTVLayout.logoHeight)
+            .frame(maxWidth: CinemaTVLayout.logoMaxWidth, alignment: .leading)
             .accessibilityLabel(item.name ?? "")
         } else {
             titleText(item)
@@ -710,7 +728,7 @@ struct MediaDetailScreen: View {
                 let minutes = ticks.jellyfinMinutes
                 return minutes > 60 ? loc.localized("detail.runtime.hours", minutes / 60, minutes % 60) : loc.localized("detail.runtime.minutes", minutes)
             },
-            viewModel.resolvedType == .series ? item.childCount.map { loc.localized("detail.seasons", $0) } : nil
+            viewModel.resolvedType == .series ? item.childCount.map { loc.seasonCount($0) } : nil
         ].compactMap { $0 }
     }
 
@@ -1174,7 +1192,8 @@ struct MediaDetailScreen: View {
             playLabel: loc.localized(
                 viewModel.resolvedType == .boxSet ? "detail.collection.playAll" : "detail.play"
             ),
-            playFromBeginningLabel: loc.localized("detail.playFromBeginning"),
+            playFromBeginningLabel: loc.localized(playFromBeginningKey),
+            playFromBeginningAccessibilityLabel: loc.localized("detail.playFromBeginning"),
             buttonFontSize: buttonFontSize,
             buttonVerticalPadding: buttonVerticalPadding,
             playButtonWidth: playButtonWidth,
@@ -1535,6 +1554,9 @@ struct MediaDetailScreen: View {
                     }
                     .padding(.horizontal, contentPadding)
                 }
+                // The focus stroke on the first / last pill sits on the row's
+                // edge; without this the scroll view clips it.
+                .scrollClipDisabled()
             }
             // Season bulk "mark watched" (F10) — cascades to every episode
             // server-side. Confirmed via the dialog attached below.
@@ -1752,9 +1774,20 @@ struct MediaDetailScreen: View {
         #endif
     }
 
+    /// « Depuis le début » on tvOS, where the button sits beside Play in one
+    /// row and the full « Lire depuis le début » only fit by truncating; the
+    /// full phrase stays on iOS, where the two buttons split a whole line.
+    private var playFromBeginningKey: String {
+        #if os(tvOS)
+        "detail.playFromBeginning.short"
+        #else
+        "detail.playFromBeginning"
+        #endif
+    }
+
     private var buttonFontSize: CGFloat {
         #if os(tvOS)
-        28 // documented Play-label exception — fixed on tvOS
+        CinemaTVLayout.ctaLabelFontSize // documented Play-label exception — fixed on tvOS
         #else
         CinemaScale.pt(18)
         #endif
@@ -1832,6 +1865,7 @@ private struct PlayActionButtonsSection: View, Equatable {
 
     let playLabel: String
     let playFromBeginningLabel: String
+    let playFromBeginningAccessibilityLabel: String
 
     let buttonFontSize: CGFloat
     let buttonVerticalPadding: CGFloat
@@ -1856,6 +1890,7 @@ private struct PlayActionButtonsSection: View, Equatable {
             && lhs.mediaSourceId == rhs.mediaSourceId
             && lhs.playLabel == rhs.playLabel
             && lhs.playFromBeginningLabel == rhs.playFromBeginningLabel
+            && lhs.playFromBeginningAccessibilityLabel == rhs.playFromBeginningAccessibilityLabel
             && lhs.buttonFontSize == rhs.buttonFontSize
             && lhs.buttonVerticalPadding == rhs.buttonVerticalPadding
             && lhs.playButtonWidth == rhs.playButtonWidth
@@ -1902,16 +1937,25 @@ private struct PlayActionButtonsSection: View, Equatable {
                     lectureButton.frame(width: playButtonWidth)
                 }
                 #else
-                // tvOS keeps the buttons stacked (natural up/down focus order).
-                lectureButton
-                    .frame(width: playButtonWidth)
-                    // Exposes this row's center to the parent HStack so the
-                    // heart / watched accessories center on the Play button
-                    // (custom alignment IDs propagate through nested stacks).
-                    .alignmentGuide(.playActionRow) { $0[VerticalAlignment.center] }
+                // tvOS: Play and « Depuis le début » share ONE row, at the row's
+                // height. Stacked, the second button hung alone under Play while
+                // the accessories — centred on Play via `.playActionRow` — floated
+                // mid-column, and a 240 pt pill truncated « Lire depuis le… ».
+                // Natural width for the secondary: the row has the room, and a
+                // fixed width is what produced the ellipsis.
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    lectureButton
+                        .frame(width: playButtonWidth, height: CinemaTVLayout.actionRowHeight)
+                        // Exposes this row's center to the parent HStack so the
+                        // heart / watched accessories center on the Play button
+                        // (custom alignment IDs propagate through nested stacks).
+                        .alignmentGuide(.playActionRow) { $0[VerticalAlignment.center] }
 
-                if showResume {
-                    playFromBeginningButton.frame(width: playButtonWidth)
+                    if showResume {
+                        playFromBeginningButton
+                            .frame(height: CinemaTVLayout.actionRowHeight)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                 }
                 #endif
             }
@@ -1936,6 +1980,11 @@ private struct PlayActionButtonsSection: View, Equatable {
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
+            #if os(tvOS)
+            // Fills the row height so the style's fill and ring cover the whole
+            // 80 pt control, not just the label's own extent.
+            .frame(maxHeight: .infinity)
+            #endif
             .padding(.vertical, buttonVerticalPadding)
             .padding(.horizontal, CinemaSpacing.spacing4)
             #if os(iOS)
@@ -1967,6 +2016,9 @@ private struct PlayActionButtonsSection: View, Equatable {
             }
             .foregroundStyle(CinemaColor.onSurface)
             .frame(maxWidth: .infinity)
+            #if os(tvOS)
+            .frame(maxHeight: .infinity)
+            #endif
             .padding(.vertical, buttonVerticalPadding)
             .padding(.horizontal, CinemaSpacing.spacing4)
             #if os(iOS)
@@ -1979,6 +2031,9 @@ private struct PlayActionButtonsSection: View, Equatable {
         #else
         .buttonStyle(.plain)
         #endif
+        // The visible label is the short form on tvOS; VoiceOver keeps the
+        // full action.
+        .accessibilityLabel(playFromBeginningAccessibilityLabel)
     }
 }
 

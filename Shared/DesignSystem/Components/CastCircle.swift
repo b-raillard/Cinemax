@@ -30,10 +30,16 @@ struct CastCircle: View {
             #if os(tvOS)
             .overlay(
                 Circle()
-                    .strokeBorder(themeManager.accent.opacity(isFocused ? 1 : 0), lineWidth: 3)
+                    .strokeBorder(
+                        themeManager.accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0),
+                        lineWidth: CinemaTVFocus.cardRingWidth
+                    )
             )
-            .shadow(color: themeManager.accent.opacity(isFocused ? 0.4 : 0), radius: 14, x: 0, y: 6)
-            .animation(motionEnabled ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+            .shadow(
+                color: themeManager.accent.opacity(isFocused ? CinemaTVFocus.haloOpacity : 0),
+                radius: CinemaTVFocus.haloRadius, x: 0, y: 6
+            )
+            .animation(motionEnabled ? .easeInOut(duration: CinemaTVFocus.cardDuration) : nil, value: isFocused)
             #endif
 
             Text(name)
