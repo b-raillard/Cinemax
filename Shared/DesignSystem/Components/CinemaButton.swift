@@ -4,6 +4,15 @@ enum CinemaButtonStyle {
     case primary
     case ghost
     case accent
+    /// Irreversible actions only — the confirm button of
+    /// `DestructiveConfirmSheet`, and nothing else. Reversible destructives
+    /// (revoke a device, uninstall a plugin) stay on a `.confirmationDialog`
+    /// with a `.destructive` role, per the admin scaffolding rules.
+    ///
+    /// Tonal rather than saturated (`errorContainer` fill + `onErrorContainer`
+    /// label) because it has to read in both modes: `error` itself is a light
+    /// salmon in dark mode, where a white label on it fails contrast outright.
+    case destructive
 }
 
 struct CinemaButton: View {
@@ -63,7 +72,11 @@ struct CinemaButton: View {
     /// a light selection tap. Skip when isLoading so multi-tap during async
     /// work doesn't fire repeated haptics.
     private var hapticForStyle: SensoryFeedback {
-        isLoading ? .selection : (style == .accent ? .impact(weight: .medium) : .selection)
+        if isLoading { return .selection }
+        switch style {
+        case .accent, .destructive: return .impact(weight: .medium)
+        case .primary, .ghost:      return .selection
+        }
     }
     #endif
 
@@ -81,6 +94,8 @@ struct CinemaButton: View {
                 )
         case .accent:
             themeManager.accentContainer
+        case .destructive:
+            CinemaColor.errorContainer
         }
     }
 
@@ -89,6 +104,7 @@ struct CinemaButton: View {
         case .primary: CinemaColor.onPrimary
         case .ghost: CinemaColor.onSurface
         case .accent: .white
+        case .destructive: CinemaColor.onErrorContainer
         }
     }
 
@@ -164,6 +180,8 @@ struct CinemaTVButtonStyle: ButtonStyle {
                 )
         case .accent:
             themeManager.accentContainer
+        case .destructive:
+            CinemaColor.errorContainer
         }
     }
 
@@ -173,6 +191,9 @@ struct CinemaTVButtonStyle: ButtonStyle {
         switch cinemaStyle {
         case .accent:          Color.white.opacity(0.65)
         case .ghost, .primary: themeManager.accent
+        // A white ring vanishes on the pale `errorContainer` of light mode,
+        // so the destructive style rings in `error` itself.
+        case .destructive:     CinemaColor.error
         }
     }
 
@@ -180,9 +201,10 @@ struct CinemaTVButtonStyle: ButtonStyle {
     /// the accent button keeps its container tint; primary stays neutral.
     private var focusHaloColor: Color {
         switch cinemaStyle {
-        case .primary: CinemaColor.primary
-        case .ghost:   themeManager.accent
-        case .accent:  themeManager.accentContainer
+        case .primary:     CinemaColor.primary
+        case .ghost:       themeManager.accent
+        case .accent:      themeManager.accentContainer
+        case .destructive: CinemaColor.error
         }
     }
 }

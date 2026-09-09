@@ -353,3 +353,98 @@ struct JellyfinSocketParsingTests {
         #expect(message.text == "Hello")
     }
 }
+
+/// The type-to-confirm phrase guarding `DestructiveConfirmSheet`.
+///
+/// The defect these lock: iOS's smart punctuation rewrites the apostrophe as
+/// the user types it, so a raw `caseInsensitiveCompare` against the server's
+/// own spelling of « L'Odyssée » could never match and the delete button stayed
+/// disabled for ever — with no visible reason, the two apostrophe glyphs being
+/// a few pixels apart. Every title carrying one was undeletable.
+@Suite("Confirm phrase — type-to-confirm matching")
+struct ConfirmPhraseTests {
+
+    // MARK: - The reported defect
+
+    @Test("A typographic apostrophe confirms a straight-quoted title")
+    func smartQuoteMatchesStraightTitle() {
+        // What the keyboard produced ↔ what Jellyfin stores.
+        #expect(ConfirmPhrase.matches(typed: "L\u{2019}Odyssée", required: "L'Odyssée"))
+    }
+
+    @Test("And the reverse: a straight apostrophe confirms a typographic title")
+    func straightQuoteMatchesSmartTitle() {
+        // A provider that stores the typographic form is the same trap with the
+        // sides swapped — the keyboard is not the only source of the mismatch.
+        #expect(ConfirmPhrase.matches(typed: "L'Odyssée", required: "L\u{2019}Odyssée"))
+    }
+
+    @Test("A no-break space before a colon still confirms")
+    func narrowNoBreakSpaceMatches() {
+        // French metadata routinely carries U+202F / U+00A0 before a colon.
+        // No keyboard produces either, so the plain space the user types has to
+        // count.
+        #expect(ConfirmPhrase.matches(
+            typed: "Mission : Impossible",
+            required: "Mission\u{202F}: Impossible"
+        ))
+        #expect(ConfirmPhrase.matches(
+            typed: "Mission : Impossible",
+            required: "Mission\u{00A0}: Impossible"
+        ))
+    }
+
+    @Test("An en dash confirms against a typed hyphen")
+    func dashFormsFold() {
+        #expect(ConfirmPhrase.matches(typed: "Spider-Man", required: "Spider\u{2013}Man"))
+    }
+
+    // MARK: - The friction the sheet exists to create
+
+    @Test("A different title never confirms")
+    func differentTitleRefused() {
+        #expect(!ConfirmPhrase.matches(typed: "L'Iliade", required: "L'Odyssée"))
+        #expect(!ConfirmPhrase.matches(typed: "L'Odyss", required: "L'Odyssée"))
+        #expect(!ConfirmPhrase.matches(typed: "L'Odyssée 2", required: "L'Odyssée"))
+    }
+
+    @Test("An empty field never confirms — including for an untitled item")
+    func emptyNeverConfirms() {
+        #expect(!ConfirmPhrase.matches(typed: "", required: "L'Odyssée"))
+        #expect(!ConfirmPhrase.matches(typed: "   ", required: "L'Odyssée"))
+        // The one outcome worse than refusing a legitimate delete: accepting an
+        // untouched field as assent to an irreversible action.
+        #expect(!ConfirmPhrase.matches(typed: "", required: ""))
+        #expect(!ConfirmPhrase.matches(typed: "  ", required: "   "))
+    }
+
+    @Test("Case and surrounding whitespace are forgiven, the words are not")
+    func caseAndTrimmingForgiven() {
+        #expect(ConfirmPhrase.matches(typed: "  l'odyssée  ", required: "L'Odyssée"))
+        #expect(ConfirmPhrase.matches(typed: "L'ODYSSÉE", required: "L'Odyssée"))
+        // Collapsed, not deleted: the words still have to be separated.
+        #expect(ConfirmPhrase.matches(typed: "Blade  Runner", required: "Blade Runner"))
+        #expect(!ConfirmPhrase.matches(typed: "BladeRunner", required: "Blade Runner"))
+    }
+
+    @Test("Accents are forgiven; every other character still has to be typed")
+    func diacriticsForgiven() {
+        // A confirmation control, not an authentication one: an English
+        // keyboard must not make a French title undeletable. Ten deliberate
+        // characters still stand between a tap and a deletion.
+        #expect(ConfirmPhrase.matches(typed: "L'Odyssee", required: "L'Odyssée"))
+        #expect(!ConfirmPhrase.matches(typed: "L'Odysse", required: "L'Odyssée"))
+    }
+
+    // MARK: - normalize
+
+    @Test("normalize folds punctuation and collapses whitespace runs")
+    func normalizeFolds() {
+        #expect(ConfirmPhrase.normalize("  L\u{2019}Odyssée  ") == "L'Odyssée")
+        #expect(ConfirmPhrase.normalize("A\u{2014}B") == "A-B")
+        #expect(ConfirmPhrase.normalize("a\t\n b") == "a b")
+        #expect(ConfirmPhrase.normalize("   ").isEmpty)
+        // Case and diacritics are `matches`'s business, not the fold's.
+        #expect(ConfirmPhrase.normalize("Été") == "Été")
+    }
+}

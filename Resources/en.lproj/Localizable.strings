@@ -241,6 +241,7 @@
 "admin.form.discardChanges.message" = "Unsaved changes will be lost.";
 "admin.form.discard" = "Discard";
 "admin.destructive.typeToConfirm" = "To confirm, type \"%@\" below:";
+"admin.destructive.mismatch" = "What you typed doesn't match.";
 
 // MARK: - Admin — Landings
 
