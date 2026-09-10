@@ -118,7 +118,22 @@ extension JellyfinAPIClient {
         /// is one request whatever the catalogue's size.
         nameStartsWithOrGreater: String? = nil,
         limit: Int? = nil,
-        startIndex: Int? = nil
+        startIndex: Int? = nil,
+        /// Whether the server should also COUNT the full matching set.
+        ///
+        /// `totalRecordCount` costs the server a second query (a `COUNT` over
+        /// the whole match, ignoring `limit`), and most callers never read the
+        /// `totalCount` this returns — Home's rails, Search, a person's
+        /// filmography and a collection's children all take a fixed-size page
+        /// and display it. Only `PaginatedLoader` (which derives
+        /// `hasLoadedAll` from it) and `MediaLibraryViewModel` (whose header
+        /// prints « 503 films ») need it, so they keep the default.
+        ///
+        /// Pass `false` and `totalCount` comes back `0`: that is the server
+        /// saying "didn't count", never "no results". Never pass `false` from
+        /// a caller that paginates — a `hasLoadedAll` derived from 0 would end
+        /// pagination on the first page.
+        enableTotalRecordCount: Bool = true
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -143,6 +158,7 @@ extension JellyfinAPIClient {
             params.enableUserData = true
             params.enableImageTypes = [.primary, .backdrop, .thumb]
             params.imageTypeLimit = 1
+            params.enableTotalRecordCount = enableTotalRecordCount
             let response = try await client.send(Paths.getItems(parameters: params))
             let result = response.value
             return (result.items ?? [], result.totalRecordCount ?? 0)
@@ -287,16 +303,23 @@ extension JellyfinAPIClient {
         return applyRatingFilter(items)
     }
 
+    /// One `/Items` search pass. `LibrarySearchRanker` fans several of these
+    /// out per keystroke (the full phrase plus each significant word), so the
+    /// per-request budget matters more here than anywhere else: no
+    /// `totalRecordCount` (nothing reads a count — results are ranked and
+    /// truncated locally), and one image tag of one type, since a search cell
+    /// draws a 2:3 poster and nothing else.
     public func searchItems(
         userId: String,
         searchTerm: String,
         includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
-        limit: Int = 20
+        limit: Int = 20,
+        enableTotalRecordCount: Bool = true
     ) async throws -> [BaseItemDto] {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
-            let params = Paths.GetItemsParameters(
+            var params = Paths.GetItemsParameters(
                 userID: userId,
                 maxOfficialRating: maxOfficialRating,
                 limit: limit,
@@ -304,6 +327,9 @@ extension JellyfinAPIClient {
                 searchTerm: searchTerm,
                 includeItemTypes: includeItemTypes
             )
+            params.enableTotalRecordCount = enableTotalRecordCount
+            params.enableImageTypes = [.primary]
+            params.imageTypeLimit = 1
             let response = try await client.send(Paths.getItems(parameters: params))
             return response.value.items ?? []
         } catch {
@@ -433,9 +459,18 @@ extension JellyfinAPIClient {
     /// ordinary Jellyfin item with its own media sources, so it plays through
     /// the normal player path on every platform.
     public func getLocalTrailers(itemId: String, userId: String) async throws -> [BaseItemDto] {
+        // Probed on every detail-screen open on tvOS, to decide whether to draw
+        // the trailer button — and it answers empty for most items. What the
+        // server holds beside an item changes only on a library scan, so a
+        // 5-minute per-item TTL is generous and still collapses a browsing
+        // session (open a title, play, come back) into one request. No userData
+        // in the payload, so no mutator has to sweep this key.
+        let cacheKey = "trailers-\(itemId)-\(userId)-\(getMaxContentAge())"
+        if let cached: [BaseItemDto] = cache.get(cacheKey) { return applyRatingFilter(cached) }
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let response = try await client.send(Paths.getLocalTrailers(itemID: itemId, userID: userId))
+            cache.set(cacheKey, value: response.value, ttl: 300)
             // Filtered like every other item-returning method here. A trailer is
             // a child of an already-visible item and carries no rating of its
             // own, so this admits them all today — the point is that the
@@ -519,6 +554,9 @@ extension JellyfinAPIClient {
                 sortBy: [.premiereDate]
             )
             params.personIDs = [personId]
+            // Returns items only — no caller can read a count, so there is no
+            // reason to make the server run the COUNT query for one.
+            params.enableTotalRecordCount = false
             let response = try await client.send(Paths.getItems(parameters: params))
             return applyRatingFilter(response.value.items ?? [])
         } catch {
@@ -605,23 +643,52 @@ extension JellyfinAPIClient {
         // same TMDb collection provider id as their member movies — match
         // against the boxset list.
         guard let tmdbCollectionId, !tmdbCollectionId.isEmpty else { return [] }
+        // That list is the WHOLE server's boxsets, and it was re-fetched on
+        // every film's detail screen — on every 10.x server, and during the
+        // "version unknown" window of every cold launch. It changes only when
+        // someone edits collections, so a 5-minute TTL keyed on the user (and
+        // the rating cap, like every key here) collapses a browsing session's
+        // worth of those into one request. Cached BEFORE the TMDb match so the
+        // entry serves every film, not just this one; the filter and the rating
+        // filter both run on the way out.
+        let cacheKey = "boxsets-\(userId)-\(getMaxContentAge())"
+        if let cached: [BaseItemDto] = cache.get(cacheKey) {
+            return applyRatingFilter(Self.boxsets(cached, matchingTmdbCollectionId: tmdbCollectionId))
+        }
         do {
             var params = Paths.GetItemsParameters(
                 userID: userId,
                 isRecursive: true,
                 includeItemTypes: [.boxSet]
             )
+            // Only the provider ids are read from this list, plus whatever the
+            // resulting CARD needs (name + poster tag, which come with every
+            // item). No userData — a collection has none worth reading here —
+            // and no image fan-out beyond the primary.
             params.fields = [.providerIDs]
+            params.enableUserData = false
+            params.enableImageTypes = [.primary]
+            params.imageTypeLimit = 1
             let response = try await client.send(Paths.getItems(parameters: params))
-            let matching = (response.value.items ?? []).filter { boxset in
-                boxset.providerIDs?.contains { key, value in
-                    key.caseInsensitiveCompare("TmdbCollection") == .orderedSame && value == tmdbCollectionId
-                } ?? false
-            }
-            return applyRatingFilter(matching)
+            let boxsets = response.value.items ?? []
+            cache.set(cacheKey, value: boxsets, ttl: 300)
+            return applyRatingFilter(Self.boxsets(boxsets, matchingTmdbCollectionId: tmdbCollectionId))
         } catch {
             notifyIfUnauthorized(error)
             throw error
+        }
+    }
+
+    /// The boxsets of `list` carrying `tmdbCollectionId` as their TMDb
+    /// collection provider id — how a 10.x server's auto-created collections
+    /// are recognised, since it has no reverse lookup. Shared by the cached and
+    /// the freshly-fetched path so the two can't drift; `nonisolated static`
+    /// because it only reads its parameters.
+    nonisolated static func boxsets(_ list: [BaseItemDto], matchingTmdbCollectionId id: String) -> [BaseItemDto] {
+        list.filter { boxset in
+            boxset.providerIDs?.contains { key, value in
+                key.caseInsensitiveCompare("TmdbCollection") == .orderedSame && value == id
+            } ?? false
         }
     }
 

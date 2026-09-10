@@ -245,10 +245,15 @@ struct MediaDetailScreen: View {
             WatchTogetherLobby(
                 itemId: intent.itemId,
                 title: intent.title,
+                // `backdropPixelWidth`, the same width this screen's own
+                // backdrop asks for — `screenPixelWidth` is uncapped, so on an
+                // iPad Pro the lobby requested a width nothing else did and
+                // re-downloaded the image the fiche behind it had just cached
+                // (Nuke keys on the URL).
                 backdropURL: viewModel.item?.backdropItemID.map {
                     appState.imageBuilder.imageURL(
                         itemId: $0, imageType: .backdrop,
-                        maxWidth: ImageURLBuilder.screenPixelWidth,
+                        maxWidth: ImageURLBuilder.backdropPixelWidth,
                         tag: viewModel.item?.backdropImageTagValue
                     )
                 },

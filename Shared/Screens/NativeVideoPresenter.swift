@@ -648,6 +648,12 @@ final class NativeVideoPresenter {
                 self.skipSegments.onTick(currentTime: time.seconds)
                 self.playbackReporter.onTick()
                 let engineRate = Double(self.playerVC?.player?.rate ?? 0)
+                // Frames are flowing — release the chapter thumbnails parked by
+                // `ChapterController.fetchAndApply` so their GETs don't compete
+                // with the stream's own opening (the `pendingChapterThumbnails`
+                // lesson from the VLC path). One-shot on the controller's side,
+                // so no guard is needed here.
+                if engineRate > 0 { self.chapters.startDeferredMarkers() }
                 self.nowPlaying.update(
                     elapsed: time.seconds,
                     duration: self.currentItemDurationSeconds(),

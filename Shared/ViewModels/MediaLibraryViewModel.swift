@@ -238,13 +238,19 @@ final class MediaLibraryViewModel {
             // descending (newest first) rather than `.random`: a random sort is
             // an un-indexed full shuffle the server re-runs on every load, and
             // the coherent newest-first ordering is the intended behavior.
+            //
+            // `limit: 1`, because only `.items.first` is ever read — 20 items
+            // were fetched (with overview, genres, userData and three image
+            // tags each) to display one. The count is unaffected: it is the
+            // total BEFORE `limit`, which is exactly why one query can serve
+            // both — so `enableTotalRecordCount` must stay on here.
             async let heroResult = appState.apiClient.getItems(
                 userId: userId,
                 parentId: parentId,
                 includeItemTypes: typeFilter,
                 sortBy: [.dateCreated],
                 sortOrder: [.descending],
-                limit: 20
+                limit: 1
             )
 
             let fetchedGenres = try await genresResult

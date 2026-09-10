@@ -48,23 +48,47 @@ public enum ExtensionSessionBridge {
         // early-return below, so an upgraded install's leftover plaintext copy
         // is deleted even when the session itself hasn't changed.
         scrubLegacyDefaultsCopy()
+
+        let incoming: Session? = {
+            guard let serverURL, let accessToken, !accessToken.isEmpty,
+                  let userId, !userId.isEmpty else { return nil }
+            return Session(serverURL: serverURL, accessToken: accessToken, userId: userId)
+        }()
+
+        // In-process memo, checked BEFORE the Keychain. `refreshCurrentUser()`
+        // calls this on every foreground — and `SecItemCopyMatching` is a
+        // synchronous XPC round-trip to `securityd` made from the main actor,
+        // i.e. the same class of main-thread hop as `AVAudioSession`'s. Once
+        // this process has published a session, it knows what the store holds
+        // without asking: nothing else writes that item (the extensions only
+        // ever read it), so a repeat publish of the same session is provably a
+        // no-op. The Keychain stays the authority for the FIRST publish of each
+        // process, which is the case a fresh launch has to get right.
+        if let memo = lastPublishedInProcess, memo.value == incoming {
+            logger.debug("ExtensionBridge ▸ session unchanged (memo), skipped")
+            return
+        }
+
         let keychain = KeychainService()
         let existingKeychainData = keychain.readSharedSession()
-        if let serverURL, let accessToken, !accessToken.isEmpty, let userId, !userId.isEmpty {
-            let session = Session(serverURL: serverURL, accessToken: accessToken, userId: userId)
+        if let session = incoming {
             guard !isCurrent(session: session, keychainData: existingKeychainData) else {
+                rememberPublished(session)
                 logger.debug("ExtensionBridge ▸ session unchanged, skipped")
                 return
             }
+            rememberPublished(session)
             // Sole store: the shared, device-only Keychain group — the token
             // is never written in plaintext nor included in device backups.
             if let data = try? JSONEncoder().encode(session) { keychain.saveSharedSession(data) }
-            logger.info("ExtensionBridge ▸ session published host=\(serverURL.host() ?? "?", privacy: .public)")
+            logger.info("ExtensionBridge ▸ session published host=\(session.serverURL.host() ?? "?", privacy: .public)")
         } else {
             guard !isCurrent(session: nil, keychainData: existingKeychainData) else {
+                rememberPublished(nil)
                 logger.debug("ExtensionBridge ▸ session unchanged, skipped")
                 return
             }
+            rememberPublished(nil)
             keychain.deleteSharedSession()
             logger.info("ExtensionBridge ▸ session cleared")
         }
@@ -111,6 +135,39 @@ public enum ExtensionSessionBridge {
     /// The legacy plaintext copy is deliberately NOT an input — it's scrubbed
     /// unconditionally by `scrubLegacyDefaultsCopy()`, never republished.
     /// Internal + testable via `@testable import`.
+    /// What this process last wrote (or cleared) in the shared Keychain item.
+    ///
+    /// A box rather than a bare `Session?` so "published nothing yet" and
+    /// "published a cleared session" stay distinguishable — the first must
+    /// still consult the Keychain, the second must not. Lock-guarded because
+    /// `publish` is nonisolated and `KeychainService` is callable from any
+    /// actor; `nonisolated(unsafe)` for the same reason `JellyfinAPIClient`'s
+    /// fields are, with the same invariant: no access outside these two
+    /// helpers.
+    private struct PublishedMemo: Sendable { let value: Session? }
+    private static let memoLock = NSLock()
+    nonisolated(unsafe) private static var _lastPublishedInProcess: PublishedMemo?
+
+    private static var lastPublishedInProcess: PublishedMemo? {
+        memoLock.lock()
+        defer { memoLock.unlock() }
+        return _lastPublishedInProcess
+    }
+
+    private static func rememberPublished(_ session: Session?) {
+        memoLock.lock()
+        _lastPublishedInProcess = PublishedMemo(value: session)
+        memoLock.unlock()
+    }
+
+    /// Test seam: drops the in-process memo so a test can exercise the
+    /// Keychain-consulting path it would otherwise short-circuit.
+    static func resetPublishMemoForTesting() {
+        memoLock.lock()
+        _lastPublishedInProcess = nil
+        memoLock.unlock()
+    }
+
     static func isCurrent(session: Session?, keychainData: Data?) -> Bool {
         guard let session else {
             // Clearing: only current if the store is already empty — a stale

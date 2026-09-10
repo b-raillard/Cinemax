@@ -161,6 +161,25 @@ final class HomeViewModel {
             case upcoming([BaseItemDto]); case collections([BaseItemDto])
         }
 
+        // A rail the user has switched off is not fetched. Every branch below
+        // used to run unconditionally, so « Prochainement » and « Collections »
+        // — both OFF by default — cost two requests on every Home load of every
+        // default install, and turning a rail off in Settings saved nothing at
+        // all. Read once, here, rather than per branch: one coherent snapshot
+        // of the layout this load is building.
+        //
+        // Resume and Recently Added are deliberately absent from the gate:
+        // they also feed `heroItem` below, and the hero is never gated.
+        let rails = (
+            nextUp: HomeRailPreferences.showNextUp,
+            favorites: HomeRailPreferences.showFavorites,
+            playlists: HomeRailPreferences.showPlaylists,
+            upcoming: HomeRailPreferences.showUpcoming,
+            collections: HomeRailPreferences.showCollections,
+            genreRows: HomeRailPreferences.showGenreRows,
+            watchingNow: HomeRailPreferences.showWatchingNow
+        )
+
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
                 do {
@@ -193,7 +212,8 @@ final class HomeViewModel {
                     includeItemTypes: [.movie, .series],
                     sortBy: [.dateCreated],
                     sortOrder: [.descending],
-                    limit: Self.recentlyAddedLimit
+                    limit: Self.recentlyAddedLimit,
+                    enableTotalRecordCount: false
                 ).items
                 let showsWithNewEpisodes = try? await appState.apiClient.getSeriesWithRecentEpisodes(
                     userId: userId, limit: Self.newEpisodeShowsLimit
@@ -207,59 +227,71 @@ final class HomeViewModel {
                     newTitles: newTitles ?? []
                 ))
             }
-            group.addTask {
-                do {
-                    return .favorites(try await appState.apiClient.getItems(
-                        userId: userId,
-                        includeItemTypes: [.movie, .series],
-                        sortBy: [.dateCreated],
-                        sortOrder: [.descending],
-                        isFavorite: true,
-                        limit: 20
-                    ).items)
-                } catch {
-                    logger.warning("Home favorites fetch failed: \(error.localizedDescription, privacy: .public)")
-                    return nil
+            if rails.favorites {
+                group.addTask {
+                    do {
+                        return .favorites(try await appState.apiClient.getItems(
+                            userId: userId,
+                            includeItemTypes: [.movie, .series],
+                            sortBy: [.dateCreated],
+                            sortOrder: [.descending],
+                            isFavorite: true,
+                            limit: 20,
+                            enableTotalRecordCount: false
+                        ).items)
+                    } catch {
+                        logger.warning("Home favorites fetch failed: \(error.localizedDescription, privacy: .public)")
+                        return nil
+                    }
                 }
             }
-            group.addTask {
-                do {
-                    return .nextUp(try await appState.apiClient.getNextUpEpisodes(userId: userId, limit: 20))
-                } catch {
-                    logger.warning("Home next-up fetch failed: \(error.localizedDescription, privacy: .public)")
-                    return nil
+            if rails.nextUp {
+                group.addTask {
+                    do {
+                        return .nextUp(try await appState.apiClient.getNextUpEpisodes(userId: userId, limit: 20))
+                    } catch {
+                        logger.warning("Home next-up fetch failed: \(error.localizedDescription, privacy: .public)")
+                        return nil
+                    }
                 }
             }
-            group.addTask {
-                do {
-                    return .playlists(try await appState.apiClient.getPlaylists(userId: userId))
-                } catch {
-                    logger.warning("Home playlists fetch failed: \(error.localizedDescription, privacy: .public)")
-                    return nil
+            if rails.playlists {
+                group.addTask {
+                    do {
+                        return .playlists(try await appState.apiClient.getPlaylists(userId: userId))
+                    } catch {
+                        logger.warning("Home playlists fetch failed: \(error.localizedDescription, privacy: .public)")
+                        return nil
+                    }
                 }
             }
-            group.addTask {
-                do {
-                    return .upcoming(try await appState.apiClient.getUpcomingEpisodes(userId: userId, limit: 20))
-                } catch {
-                    logger.warning("Home upcoming fetch failed: \(error.localizedDescription, privacy: .public)")
-                    return nil
+            if rails.upcoming {
+                group.addTask {
+                    do {
+                        return .upcoming(try await appState.apiClient.getUpcomingEpisodes(userId: userId, limit: 20))
+                    } catch {
+                        logger.warning("Home upcoming fetch failed: \(error.localizedDescription, privacy: .public)")
+                        return nil
+                    }
                 }
             }
-            group.addTask {
-                do {
-                    // No `parentId`: the user's collections wherever they live,
-                    // rather than those of one library.
-                    return .collections(try await appState.apiClient.getItems(
-                        userId: userId,
-                        includeItemTypes: [.boxSet],
-                        sortBy: [.sortName],
-                        sortOrder: [.ascending],
-                        limit: 20
-                    ).items)
-                } catch {
-                    logger.warning("Home collections fetch failed: \(error.localizedDescription, privacy: .public)")
-                    return nil
+            if rails.collections {
+                group.addTask {
+                    do {
+                        // No `parentId`: the user's collections wherever they live,
+                        // rather than those of one library.
+                        return .collections(try await appState.apiClient.getItems(
+                            userId: userId,
+                            includeItemTypes: [.boxSet],
+                            sortBy: [.sortName],
+                            sortOrder: [.ascending],
+                            limit: 20,
+                            enableTotalRecordCount: false
+                        ).items)
+                    } catch {
+                        logger.warning("Home collections fetch failed: \(error.localizedDescription, privacy: .public)")
+                        return nil
+                    }
                 }
             }
             for await result in group {
@@ -287,8 +319,15 @@ final class HomeViewModel {
         // Genre rows + active sessions depend on nothing from the episode-nav
         // phase below — run them concurrently with the navigation builds (each
         // method only mutates its own state slice, serialized on the main actor).
-        async let genreRowsDone: Void = loadGenreRows(userId: userId, appState: appState)
-        async let sessionsDone: Void = loadActiveSessions(userId: userId, appState: appState)
+        // Both are skipped when their rail is off: the genre fan-out is the
+        // single most expensive thing on this screen (up to 8 queries), and the
+        // « En direct » pair costs two more.
+        async let genreRowsDone: Void = rails.genreRows
+            ? loadGenreRows(userId: userId, appState: appState)
+            : ()
+        async let sessionsDone: Void = rails.watchingNow
+            ? loadActiveSessions(userId: userId, appState: appState)
+            : ()
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
         // Watching and Next Up. Fetch every referenced season's episode list
@@ -453,10 +492,64 @@ final class HomeViewModel {
                 sortBy: [.dateCreated],
                 sortOrder: [.descending],
                 isFavorite: true,
-                limit: 20
+                limit: 20,
+                enableTotalRecordCount: false
             ).items
         } catch {
             logger.warning("Favorites refresh failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// A Home rail whose content `load()` skips when the user has switched it
+    /// off. `HomeScreen` asks for one by name when the matching `home.show*`
+    /// key flips back ON, so a rail the user has just enabled fills in without
+    /// a full reload — and without it, enabling one showed an empty row until
+    /// the next tier-1 refresh or app launch, which reads as a broken setting.
+    ///
+    /// Only the rails `load()` actually gates are listed. Continue Watching and
+    /// Recently Added are always fetched (they feed the hero), so enabling
+    /// those rails has data to render already.
+    enum Rail: CaseIterable {
+        case nextUp, favorites, playlists, upcoming, collections, genreRows, watchingNow
+    }
+
+    /// Fetches one rail's content, now. Each case is an existing single-purpose
+    /// fetch — nothing here flips `isLoading`, so the user keeps their scroll
+    /// position (the same discipline as `refreshLiveRow` / `reloadGenreRows`).
+    func refreshRail(_ rail: Rail, using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        switch rail {
+        case .nextUp: await refreshNextUp(using: appState)
+        case .favorites: await refreshFavorites(using: appState)
+        case .playlists: await refreshPlaylists(using: appState)
+        case .upcoming: await refreshUpcoming(using: appState)
+        case .collections: await refreshCollections(using: appState)
+        case .genreRows: await loadGenreRows(userId: userId, appState: appState)
+        case .watchingNow: await loadActiveSessions(userId: userId, appState: appState)
+        }
+    }
+
+    /// Re-fetches just the « Prochainement » row. Companion to
+    /// `refreshPlaylists`, for the rail-enabled path.
+    private func refreshUpcoming(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        if let items = try? await appState.apiClient.getUpcomingEpisodes(userId: userId, limit: 20) {
+            upcomingItems = items
+        }
+    }
+
+    /// Re-fetches just the « Collections » row.
+    private func refreshCollections(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        if let result = try? await appState.apiClient.getItems(
+            userId: userId,
+            includeItemTypes: [.boxSet],
+            sortBy: [.sortName],
+            sortOrder: [.ascending],
+            limit: 20,
+            enableTotalRecordCount: false
+        ) {
+            collections = result.items
         }
     }
 
@@ -557,7 +650,16 @@ final class HomeViewModel {
     /// Fetches active sessions and filters down to ones with a currently-playing item,
     /// excluding the logged-in user (their own "resume" already covers that).
     private func loadActiveSessions(userId: String, appState: AppState) async {
-        currentUserName = appState.currentUser?.name
+        // Equality-guarded, all three of them: `HomeScreen` re-runs this every
+        // 20 s while Accueil is the visible tab, and `@Observable` fires
+        // `withMutation` even for an identical value — so an unchanged poll was
+        // invalidating the « En direct » row's focusable cards four times a
+        // minute on tvOS, where that pulls focus off whatever the user is on.
+        // `SessionInfoDto` is `Hashable` and `SyncPlayGroup` is `Equatable`, so
+        // the comparison is the server's own answer, not a digest of it.
+        if currentUserName != appState.currentUser?.name {
+            currentUserName = appState.currentUser?.name
+        }
 
         // Two sources, two per-user permissions — neither of them
         // `isAdministrator` any more. `GET /SyncPlay/List` is governed by the
@@ -596,8 +698,10 @@ final class HomeViewModel {
 
         // Each source fails on its own: a dead `/Sessions` must not take the
         // groups down with it, and vice versa.
-        activeSessions = await sessions
-        syncPlayGroups = await groups
+        let freshSessions = await sessions
+        let freshGroups = await groups
+        if activeSessions != freshSessions { activeSessions = freshSessions }
+        if syncPlayGroups != freshGroups { syncPlayGroups = freshGroups }
     }
 
     /// Re-fetches only the genre rows — fired from `HomeScreen` when the user
@@ -721,7 +825,10 @@ final class HomeViewModel {
             isFavorite: nil,
             filters: nil,
             limit: 10,
-            startIndex: nil
+            startIndex: nil,
+            // Only `.items` is read, and this runs once per genre row — up to 8
+            // COUNT queries per Home load before this.
+            enableTotalRecordCount: false
         )
         return response.items
     }

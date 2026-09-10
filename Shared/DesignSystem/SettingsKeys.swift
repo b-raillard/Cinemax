@@ -179,6 +179,40 @@ enum LibraryBrowseLayout: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Which Home rails the user has left switched on.
+///
+/// `HomeViewModel` is not a `View`, so it can't hold `@AppStorage` (and
+/// wouldn't want the reactivity: it reads these once, at the top of a load).
+/// It reads `UserDefaults` directly — the same arrangement as
+/// `HomeGenrePreferences` — and that is exactly why this exists rather than a
+/// bare `UserDefaults.standard.bool(forKey:)` at each site: an **absent** key
+/// reads back as `false` there, while most of these default to `true`, so a
+/// fresh install would come up with every rail it has never been told about
+/// switched off. `isOn` falls back to the `SettingsKey.Default` value whenever
+/// no value has been stored.
+///
+/// The rails whose keys are read here are the ones `HomeViewModel.load()` can
+/// skip fetching. `home.showContinueWatching` and `home.showRecentlyAdded`
+/// are deliberately NOT among them: those two fetches also feed `heroItem`
+/// (`resumeItems.first ?? latestItems.first`), and the hero is never gated —
+/// skipping them because the rails are off would blank the top of the screen.
+enum HomeRailPreferences {
+    /// Whether `key` is switched on, honouring the registered default for an
+    /// absent value. `default` must be that key's `SettingsKey.Default`.
+    static func isOn(_ key: String, default defaultValue: Bool) -> Bool {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return defaultValue }
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
+    static var showNextUp: Bool { isOn(SettingsKey.homeShowNextUp, default: SettingsKey.Default.homeShowNextUp) }
+    static var showFavorites: Bool { isOn(SettingsKey.homeShowFavorites, default: SettingsKey.Default.homeShowFavorites) }
+    static var showPlaylists: Bool { isOn(SettingsKey.homeShowPlaylists, default: SettingsKey.Default.homeShowPlaylists) }
+    static var showUpcoming: Bool { isOn(SettingsKey.homeShowUpcoming, default: SettingsKey.Default.homeShowUpcoming) }
+    static var showCollections: Bool { isOn(SettingsKey.homeShowCollections, default: SettingsKey.Default.homeShowCollections) }
+    static var showGenreRows: Bool { isOn(SettingsKey.homeShowGenreRows, default: SettingsKey.Default.homeShowGenreRows) }
+    static var showWatchingNow: Bool { isOn(SettingsKey.homeShowWatchingNow, default: SettingsKey.Default.homeShowWatchingNow) }
+}
+
 /// Read/write helper for the user-configurable Home genre rows
 /// (`SettingsKey.homeSelectedGenres`). Centralizes the JSON encoding and the
 /// "empty string = never configured" sentinel so `HomeViewModel` (not a View,

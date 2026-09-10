@@ -161,7 +161,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     private(set) var playOnSessionCalls: [(sessionId: String, itemIds: [String], startPositionTicks: Int?, mediaSourceId: String?)] = []
     var playOnSessionError: Error?
 
-    func getControllableSessions(userId: String) async throws -> [SessionInfoDto] {
+    func getControllableSessions(userId: String, cached: Bool) async throws -> [SessionInfoDto] {
         recordLock.withLock { controllableSessionsCallCount += 1 }
         if let controllableSessionsError { throw controllableSessionsError }
         return stubbedControllableSessions
@@ -392,8 +392,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         sortBy: [ItemSortBy]?,
         sortOrder: [JellyfinAPI.SortOrder]?,
         isFavorite: Bool?,
-        limit: Int?
+        limit: Int?,
+        /// Whether the caller asked the server to COUNT the match. A caller
+        /// that paginates (or prints a total) must leave this `true`; one that
+        /// only renders a fixed page should pass `false`.
+        enableTotalRecordCount: Bool
     )] = []
+
+    /// `enableTotalRecordCount` of every `searchItems` call, in order.
+    private(set) var searchCountFlags: [Bool] = []
 
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock { getResumeItemsCallCount += 1 }
@@ -424,7 +431,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         sortBy: [ItemSortBy]?, sortOrder: [JellyfinAPI.SortOrder]?,
         genres: [String]?, years: [Int]?, isFavorite: Bool?,
         filters: [ItemFilter]?, nameStartsWithOrGreater: String?,
-        limit: Int?, startIndex: Int?
+        limit: Int?, startIndex: Int?, enableTotalRecordCount: Bool
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         recordLock.withLock {
             if isFavorite == true { favoriteFetchCount += 1 }
@@ -432,7 +439,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             getItemsCalls.append((startIndex: startIndex, limit: limit))
             getItemsQueries.append((
                 includeItemTypes: includeItemTypes, sortBy: sortBy,
-                sortOrder: sortOrder, isFavorite: isFavorite, limit: limit
+                sortOrder: sortOrder, isFavorite: isFavorite, limit: limit,
+                enableTotalRecordCount: enableTotalRecordCount
             ))
         }
         if shouldThrow { throw stubbedError }
@@ -494,6 +502,18 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// implementations so hand-written mocks compile without stubbing the
     /// whole slice — this overrides only the read the rail depends on.
     var stubbedPlaylists: [BaseItemDto] = []
+    /// `/Shows/Upcoming` — the « Prochainement » rail. The protocol carries a
+    /// no-op default, so this exists only for the rail-gating tests, which have
+    /// to tell "fetched and empty" from "not fetched".
+    var stubbedUpcomingItems: [BaseItemDto] = []
+    private(set) var getUpcomingEpisodesCallCount = 0
+
+    func getUpcomingEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto] {
+        recordLock.withLock { getUpcomingEpisodesCallCount += 1 }
+        if shouldThrow { throw stubbedError }
+        return stubbedUpcomingItems
+    }
+
     private(set) var getPlaylistsCallCount = 0
     func getPlaylists(userId: String) async throws -> [BaseItemDto] {
         recordLock.withLock { getPlaylistsCallCount += 1 }
@@ -529,7 +549,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return []
     }
 
-    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int) async throws -> [BaseItemDto] {
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, enableTotalRecordCount: Bool) async throws -> [BaseItemDto] {
+        recordLock.withLock { searchCountFlags.append(enableTotalRecordCount) }
         if let handler = searchItemsHandler {
             return try await handler(searchTerm)
         }

@@ -123,6 +123,21 @@ struct HomeScreen: View {
         .onChange(of: selectedGenresJSON) {
             Task { await viewModel.reloadGenreRows(using: appState) }
         }
+        // A rail the user has just switched back ON has no content: `load()`
+        // skips fetching a disabled rail, so without this the row would stay
+        // empty until the next tier-1 refresh or app launch — which reads as a
+        // broken setting. Only the rails that just APPEARED are fetched, one
+        // targeted request each, never a reload (which would flip `isLoading`
+        // and cost the user their scroll position).
+        //
+        // One `onChange` over a set rather than seven over `Bool`s: seven
+        // modifiers on this body defeat the type-checker outright ("unable to
+        // type-check this expression in reasonable time").
+        .onChange(of: enabledRails) { was, now in
+            for rail in now.subtracting(was) {
+                Task { await viewModel.refreshRail(rail, using: appState) }
+            }
+        }
         // Widget / Top Shelf deep link: push the item's detail. Attached at
         // the screen root (NOT inside the lazy scroll content — see the
         // lazy-container navigation RULE).
@@ -259,6 +274,22 @@ struct HomeScreen: View {
         let id = "favorites"
     }
 
+    /// The rails currently switched on, among those `HomeViewModel.load()`
+    /// skips fetching when they're off. Continue Watching and Recently Added
+    /// are absent on purpose: they also feed the hero, so they are always
+    /// fetched and enabling their rail has data to render already.
+    private var enabledRails: Set<HomeViewModel.Rail> {
+        var rails: Set<HomeViewModel.Rail> = []
+        if showNextUp { rails.insert(.nextUp) }
+        if showFavorites { rails.insert(.favorites) }
+        if showPlaylists { rails.insert(.playlists) }
+        if showUpcoming { rails.insert(.upcoming) }
+        if showCollections { rails.insert(.collections) }
+        if showGenreRows { rails.insert(.genreRows) }
+        if showWatchingNow { rails.insert(.watchingNow) }
+        return rails
+    }
+
     /// Warms Nuke's cache for every card the loaded rows will render. URLs
     /// mirror the cards' own requests exactly (same `maxWidth` + `tag`) —
     /// a parameter mismatch would warm a different cache entry (see
@@ -280,6 +311,16 @@ struct HomeScreen: View {
         prefetcher.prefetch((viewModel.resumeItems + viewModel.nextUpItems).map { item in
             item.backdropItemID.map { builder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue) }
         })
+
+        // The three newer rails draw the same 2:3 poster at the same width and
+        // were simply never added here, so their cards downloaded on first
+        // scroll while every older row was already warm. « Prochainement »
+        // cards open the SERIES and show its poster like any other card.
+        prefetcher.prefetch(
+            (viewModel.playlists + viewModel.collections + viewModel.upcomingItems).map { item in
+                item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
+            }
+        )
     }
 
     /// True when there's no hero, no resume items, no recently added items, and no genre rows.
