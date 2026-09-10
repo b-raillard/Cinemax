@@ -194,7 +194,10 @@ final class FolderBrowseViewModel {
                     userId: userId,
                     parentId: parentId,
                     sortBy: [.sortName],
-                    sortOrder: [.ascending]
+                    sortOrder: [.ascending],
+                    // `.items` seul : cet écran liste des dossiers, il n'affiche
+                    // ni total ni pagination.
+                    enableTotalRecordCount: false
                 ).items
             case .playlists:
                 folders = try await appState.apiClient.getPlaylists(userId: userId)

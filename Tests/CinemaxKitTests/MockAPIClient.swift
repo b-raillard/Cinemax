@@ -396,7 +396,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         /// Whether the caller asked the server to COUNT the match. A caller
         /// that paginates (or prints a total) must leave this `true`; one that
         /// only renders a fixed page should pass `false`.
-        enableTotalRecordCount: Bool
+        enableTotalRecordCount: Bool,
+        /// Recorded so a test can pick out a genre-row query unambiguously —
+        /// the library's fan-out issues one per genre and they are otherwise
+        /// indistinguishable from the grid's own query.
+        genres: [String]?
     )] = []
 
     /// `enableTotalRecordCount` of every `searchItems` call, in order.
@@ -440,7 +444,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             getItemsQueries.append((
                 includeItemTypes: includeItemTypes, sortBy: sortBy,
                 sortOrder: sortOrder, isFavorite: isFavorite, limit: limit,
-                enableTotalRecordCount: enableTotalRecordCount
+                enableTotalRecordCount: enableTotalRecordCount, genres: genres
             ))
         }
         if shouldThrow { throw stubbedError }

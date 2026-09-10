@@ -342,7 +342,11 @@ final class MediaLibraryViewModel {
                             sortBy: [snapshot.sortBy],
                             sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
                             genres: [genre],
-                            limit: limit
+                            limit: limit,
+                            // Seul `.items` est lu (voir `GenreResult`), et ceci
+                            // part une fois par genre — jusqu'à 8 COUNT serveur
+                            // par ouverture d'onglet en disposition « parcourir ».
+                            enableTotalRecordCount: false
                         )
                         return GenreResult(genre: genre, items: result.items)
                     }

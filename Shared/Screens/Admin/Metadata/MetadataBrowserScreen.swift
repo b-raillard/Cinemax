@@ -200,7 +200,12 @@ struct MetadataLibraryItemsScreen: View {
                 isFavorite: nil,
                 filters: nil,
                 limit: 500,
-                startIndex: nil
+                startIndex: nil,
+                // Le total est déjà jeté (`let (fetched, _)`). C'est le site le
+                // plus exposé des trois : `includeItemTypes: nil` et un dossier
+                // volumineux le mettent dans le régime où le COUNT se paie —
+                // mesuré à +42,9 ms sur 6 657 lignes.
+                enableTotalRecordCount: false
             )
             items = fetched
         } catch {
