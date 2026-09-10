@@ -193,6 +193,11 @@ public final class JellyfinAPIClient: Sendable {
         getServerVersion()?.supports(required) ?? false
     }
 
+    /// `ServerAPI` witness — the learned version, `nil` while unknown. See the
+    /// protocol declaration for why the UI gets the raw value rather than
+    /// `serverSupports(_:)`.
+    public func knownServerVersion() -> ServerVersion? { getServerVersion() }
+
     public func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void) {
         lock.lock()
         defer { lock.unlock() }

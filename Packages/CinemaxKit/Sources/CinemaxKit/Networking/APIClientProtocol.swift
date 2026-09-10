@@ -47,6 +47,15 @@ public protocol ServerAPI: Sendable {
     /// Takes the app's own language code (`"fr"` / `"en"`); an already-built
     /// client is rebuilt in place so the change applies without a re-login.
     func setPreferredLanguage(_ languageCode: String?)
+
+    /// The connected server's version, once learned (`connectToServer` /
+    /// `fetchServerInfo`, including the cache-hit path), else `nil`. The UI
+    /// layer needs it to gate a control on the server's own capabilities —
+    /// `serverSupports(_:)` stays internal because it collapses "too old" and
+    /// "not known yet" into one `false`, and a gate that must distinguish the
+    /// two (a feature REMOVED by a later version, e.g.
+    /// `ServerVersion.upnpPortForwarding`) has to see the `nil`.
+    func knownServerVersion() -> ServerVersion?
 }
 
 public extension ServerAPI {
@@ -61,6 +70,10 @@ public extension ServerAPI {
     /// Default for conformers that don't model auth — `.indeterminate` keeps
     /// the session (never a false logout).
     func validateSession() async -> SessionValidity { .indeterminate }
+
+    /// Default `nil`: a mock has no server to have learned a version from, and
+    /// every gate must already handle "unknown".
+    func knownServerVersion() -> ServerVersion? { nil }
 }
 
 /// Authentication, user listing, and active-session queries.

@@ -618,7 +618,7 @@ extension JellyfinAPIClient {
     }
 
     // Cached constant arrays — built once at class load time, reused on every playback request.
-    nonisolated(unsafe) fileprivate static let _directPlayProfiles: [DirectPlayProfile] = [
+    fileprivate static let _directPlayProfiles: [DirectPlayProfile] = [
         DirectPlayProfile(
             audioCodec: "aac,ac3,alac,eac3,flac",
             container: "mp4,m4v",
@@ -644,7 +644,7 @@ extension JellyfinAPIClient {
     // AVKit shows them natively in ONE unified Subtitles menu on both iOS and tvOS.
     // On iOS, HLSManifestLoader strips ASS/SSA tags from WebVTT segments.
     // On tvOS, AVAssetResourceLoaderDelegate doesn't work, so ASS tags may appear in subtitles.
-    nonisolated(unsafe) fileprivate static let _transcodingProfiles: [TranscodingProfile] = [
+    fileprivate static let _transcodingProfiles: [TranscodingProfile] = [
         TranscodingProfile(
             protocol: .hls,
             audioCodec: "aac,ac3,alac,eac3,flac",
@@ -671,7 +671,7 @@ extension JellyfinAPIClient {
     // `-codec:v copy` into HLS fMP4 — which starts in well under a second. Apple TV 4K
     // natively decodes HEVC Main 10 and Dolby Vision Profile 5/8 (incl. the HDR10/HLG/SDR
     // cross-compatible variants); when DV isn't engaged the HDR10 base layer still plays.
-    nonisolated(unsafe) fileprivate static let _codecProfiles: [CodecProfile] = [
+    fileprivate static let _codecProfiles: [CodecProfile] = [
         CodecProfile(
             codec: "hevc",
             conditions: [
@@ -701,7 +701,7 @@ extension JellyfinAPIClient {
             type: .video
         ),
     ]
-    nonisolated(unsafe) fileprivate static let _subtitleProfiles: [SubtitleProfile] = [
+    fileprivate static let _subtitleProfiles: [SubtitleProfile] = [
         SubtitleProfile(format: "srt",    method: .hls),
         SubtitleProfile(format: "subrip", method: .hls),
         SubtitleProfile(format: "vtt",    method: .hls),
@@ -735,7 +735,7 @@ extension JellyfinAPIClient {
     // with NO transcode — preserving 4K / HEVC 10-bit / Dolby Vision and
     // eliminating the slow-transcode segment thrash that froze AVPlayer.
     // Mirrors Swiftfin's `_swiftfinDirectPlayProfiles`.
-    nonisolated(unsafe) fileprivate static let _vlcDirectPlayProfiles: [DirectPlayProfile] = [
+    fileprivate static let _vlcDirectPlayProfiles: [DirectPlayProfile] = [
         DirectPlayProfile(
             audioCodec: "aac,ac3,alac,amr_nb,amr_wb,dts,eac3,flac,mp1,mp2,mp3,nellymoser,opus,pcm_alaw,pcm_bluray,pcm_dvd,pcm_mulaw,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_u8,speex,truehd,vorbis,wavpack,wmalossless,wmapro,wmav1,wmav2",
             container: nil, // any container — VLC handles mkv/avi/ts/webm/…
@@ -746,7 +746,7 @@ extension JellyfinAPIClient {
     // Last-resort fallback only — VLC direct-plays essentially everything, but
     // if the server still insists on transcoding (e.g. a codec it can't even
     // remux) we keep an HLS path so playback isn't impossible.
-    nonisolated(unsafe) fileprivate static let _vlcTranscodingProfiles: [TranscodingProfile] = [
+    fileprivate static let _vlcTranscodingProfiles: [TranscodingProfile] = [
         TranscodingProfile(
             protocol: .hls,
             // NO mp1/mp2/mp3 here on purpose. MPEG audio is legal in the TS
@@ -786,7 +786,7 @@ extension JellyfinAPIClient {
         ),
     ]
     // VLC renders embedded text subtitles itself; image subs delivered as-is.
-    nonisolated(unsafe) fileprivate static let _vlcSubtitleProfiles: [SubtitleProfile] = [
+    fileprivate static let _vlcSubtitleProfiles: [SubtitleProfile] = [
         SubtitleProfile(format: "ass",    method: .embed),
         SubtitleProfile(format: "ssa",    method: .embed),
         SubtitleProfile(format: "srt",    method: .embed),

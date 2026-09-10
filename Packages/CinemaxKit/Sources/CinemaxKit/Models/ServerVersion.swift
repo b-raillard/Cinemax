@@ -87,6 +87,16 @@ public extension ServerVersion {
     /// every library, including a series library that holds none.
     static let libraryScopedCollections = ServerVersion(12, 0, 0)
 
+    /// First server version on which `NetworkConfiguration.enableUPnP` is
+    /// DEAD: 12.0 marks it `[Obsolete("No longer supported")]` and forwards no
+    /// port, so the admin toggle is a control that silently does nothing there.
+    /// A threshold read the other way round from the rest of this list — the
+    /// feature exists BELOW it — so its gate is `version < upnpPortForwarding`
+    /// on a KNOWN version, and an unknown version hides the row (the usual
+    /// "unknown means unsupported" discipline, which here means "don't offer a
+    /// switch we can't promise does anything").
+    static let upnpPortForwarding = ServerVersion(12, 0, 0)
+
     /// Whether this server is at least `required`. Reads better at call sites
     /// than a bare `>=` against a constant whose meaning isn't obvious.
     func supports(_ required: ServerVersion) -> Bool { self >= required }

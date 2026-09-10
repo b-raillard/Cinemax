@@ -106,12 +106,14 @@ struct AdminDashboardScreen: View {
                 infoRow(loc.localized("admin.dashboard.serverName"), value: info.serverName ?? "—", isFirst: true)
                 iOSSettingsDivider
                 infoRow(loc.localized("admin.dashboard.serverVersion"), value: info.version ?? "—")
-                iOSSettingsDivider
-                infoRow(loc.localized("admin.dashboard.operatingSystem"), value: info.operatingSystemDisplayName ?? info.operatingSystem ?? "—")
-                if let arch = info.systemArchitecture {
-                    iOSSettingsDivider
-                    infoRow(loc.localized("admin.dashboard.architecture"), value: arch)
-                }
+                // RULE — no OS / architecture rows. Jellyfin 12.0 marks
+                // `OperatingSystem`, `OperatingSystemDisplayName` and
+                // `SystemArchitecture` `[Obsolete("This is no longer set")]` and
+                // serialises them as `""`, `""` and a hardcoded `"X64"` — so on a
+                // modern server the OS row rendered BLANK (an empty string is
+                // non-nil, so the `?? "—"` placeholder never fired) and the
+                // architecture row confidently reported x86 on an ARM box. A row
+                // that lies is worse than a row that is absent.
                 if let localAddress = info.localAddress {
                     iOSSettingsDivider
                     infoRow(loc.localized("admin.dashboard.localAddress"), value: localAddress)

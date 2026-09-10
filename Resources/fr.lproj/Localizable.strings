@@ -467,8 +467,6 @@
 "admin.dashboard.serverInfo" = "Informations du serveur";
 "admin.dashboard.serverName" = "Nom";
 "admin.dashboard.serverVersion" = "Version";
-"admin.dashboard.operatingSystem" = "Système";
-"admin.dashboard.architecture" = "Architecture";
 "admin.dashboard.localAddress" = "Adresse locale";
 "admin.dashboard.restartPending" = "Redémarrage en attente";
 "admin.dashboard.serverInfoUnavailable" = "Informations indisponibles.";
