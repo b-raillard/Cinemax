@@ -320,7 +320,16 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
+      # `Fixtures/` holds raw server responses captured from a real Jellyfin and
+      # decoded with the SDK's own decoder (`ServerDTODecodingFixtureTests`).
+      # Declared as a resource rather than swept with the Swift sources, so the
+      # JSON is copied into the bundle instead of being fed to the compiler.
       - path: Tests/CinemaxKitTests
+        excludes:
+          - "Fixtures/**"
+      - path: Tests/CinemaxKitTests/Fixtures
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: Cinemax
     settings:

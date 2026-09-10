@@ -354,7 +354,7 @@ final class HomeViewModel {
         for episodeItems: [BaseItemDto],
         userId: String,
         appState: AppState
-    ) async -> [String: [BaseItemDto]] {
+    ) async -> [String: [EpisodeReference]] {
         guard !episodeItems.isEmpty else { return [:] }
 
         // Dedup first — one entry per unique season across BOTH rails.
@@ -374,13 +374,17 @@ final class HomeViewModel {
         // fire ~40 concurrent `getEpisodes` at a self-hosted server — while the
         // genre fan-out is running alongside it.
         let concurrencyLimit = 6
-        var seasonEpisodes: [String: [BaseItemDto]] = [:]
+        var seasonEpisodes: [String: [EpisodeReference]] = [:]
         for start in stride(from: 0, to: seasons.count, by: concurrencyLimit) {
             let chunk = seasons[start..<min(start + concurrencyLimit, seasons.count)]
-            await withTaskGroup(of: (String, [BaseItemDto])?.self) { group in
+            await withTaskGroup(of: (String, [EpisodeReference])?.self) { group in
                 for season in chunk {
                     group.addTask {
-                        guard let eps = try? await appState.apiClient.getEpisodes(
+                        // `getEpisodeRefs`, not `getEpisodes`: the only thing
+                        // derived from this is prev/next (id + title). The full
+                        // DTO made this the app's largest payload — 9.0× bigger
+                        // on a 23-episode season, up to 40 seasons per load.
+                        guard let eps = try? await appState.apiClient.getEpisodeRefs(
                             seriesId: season.seriesId, seasonId: season.seasonId, userId: userId
                         ) else { return nil }
                         return (season.seasonId, eps)
@@ -401,7 +405,7 @@ final class HomeViewModel {
     /// resolved once up front by `fetchSeasonEpisodes`.
     private func buildNavigationMap(
         for episodeItems: [BaseItemDto],
-        seasonEpisodes: [String: [BaseItemDto]]
+        seasonEpisodes: [String: [EpisodeReference]]
     ) -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
         guard !episodeItems.isEmpty else { return [:] }
 

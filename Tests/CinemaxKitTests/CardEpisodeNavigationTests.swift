@@ -53,8 +53,11 @@ struct CardEpisodeNavigationTests {
         #expect(next == "e3")
         #expect(nav?.navigator != nil)
         // La saison est déjà connue de la carte : une seule requête, et aucun
-        // `getItem` préalable.
-        #expect(api.getEpisodesCallCount == 1)
+        // `getItem` préalable. Et c'est la requête ALLÉGÉE (`getEpisodeRefs`) —
+        // seuls l'ordre, les identifiants et les titres servent ici, et la
+        // version complète mesurait 9,0× plus gros sur une saison.
+        #expect(api.getEpisodeRefsCallCount == 1)
+        #expect(api.getEpisodesCallCount == 0)
         #expect(api.getItemCallCount == 0)
     }
 
@@ -148,6 +151,7 @@ struct CardEpisodeNavigationTests {
         )
 
         #expect(nav == nil)
+        #expect(api.getEpisodeRefsCallCount == 0)
         #expect(api.getEpisodesCallCount == 0)
     }
 

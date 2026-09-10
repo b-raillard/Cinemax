@@ -54,6 +54,36 @@ func precomputeEpisodeRefs(_ episodes: [BaseItemDto]) -> (refs: [EpisodeRef], in
     return (refs, indexByID)
 }
 
+/// Overload over `EpisodeReference` — the lean (id, title) shape
+/// `LibraryAPI.getEpisodeRefs` returns.
+///
+/// `EpisodeRef` and `EpisodeReference` carry the same two fields and are
+/// deliberately not merged: `EpisodeRef` is the app-side navigation currency
+/// (it travels into the players alongside an `EpisodeNavigator`), while
+/// `EpisodeReference` is what CinemaxKit can return without the app's types.
+/// This is the one place the two meet.
+func precomputeEpisodeRefs(_ episodes: [EpisodeReference]) -> (refs: [EpisodeRef], indexByID: [String: Int]) {
+    var refs: [EpisodeRef] = []
+    refs.reserveCapacity(episodes.count)
+    var indexByID: [String: Int] = [:]
+    indexByID.reserveCapacity(episodes.count)
+    for episode in episodes {
+        indexByID[episode.id] = refs.count
+        refs.append(EpisodeRef(id: episode.id, title: episode.name))
+    }
+    return (refs, indexByID)
+}
+
+/// Builds prev/next navigation from the lean ref list. Convenience mirror of
+/// the `[BaseItemDto]` overload above.
+func buildEpisodeNavigation(
+    for episodeId: String,
+    in episodes: [EpisodeReference]
+) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
+    let (refs, indexByID) = precomputeEpisodeRefs(episodes)
+    return buildEpisodeNavigation(for: episodeId, refs: refs, indexByID: indexByID)
+}
+
 /// Overload for precomputed refs. Caller owns the `(refs, indexByID)` pair
 /// (built once via `precomputeEpisodeRefs`) and reuses it across episodes in
 /// the same season.
