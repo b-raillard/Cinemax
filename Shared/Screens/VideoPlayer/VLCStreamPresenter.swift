@@ -3743,11 +3743,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func scheduleHideControls() {
         hideControlsWorkItem?.cancel()
-        // DIAG (recette) — the 4 s auto-hide is shorter than one automated UI
-        // round-trip, so no synthetic gesture can ever reach a HUD control (the
-        // reason A3–A7 were "out of automation reach"). Pinning the HUD open
-        // makes the scrub bar drivable from a test harness.
-        if ProcessInfo.processInfo.environment["CINEMAX_HUD_NO_AUTOHIDE"] == "1" { return }
         // Never auto-hide while a track/chapter picker is up — the controls must
         // stay put behind it so focus returns somewhere sensible.
         if pickerPresented { return }

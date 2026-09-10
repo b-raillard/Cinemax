@@ -65,7 +65,6 @@ These layer `UIFontMetrics` on top, so the final size is `baseSize × appScale �
 
 ```swift
 CinemaFont.dynamicBody           // 17 pt + UIFontMetrics(.body)
-CinemaFont.dynamicBodyLarge      // 19 pt + UIFontMetrics(.body)
 
 CinemaFont.dynamicLabel(.large)  // 19 pt + UIFontMetrics(.callout)
 CinemaFont.dynamicLabel(.medium) // 16 pt + UIFontMetrics(.subheadline)
@@ -89,7 +88,7 @@ Is this a one-word display heading on a hero / landing? ────────
 Is this a screen / section title? ─────────────────────────────────→ headline(.medium)
 
 Is this reading-heavy body text (detail overview, license page,
- settings descriptions, episode synopsis)? ────────────────────────→ dynamicBody or dynamicBodyLarge
+ settings descriptions, episode synopsis)? ────────────────────────→ dynamicBody
 
 Is this a one-line fixed piece of body copy (metadata, inline
  status, single-line card title)? ─────────────────────────────────→ body or bodyLarge

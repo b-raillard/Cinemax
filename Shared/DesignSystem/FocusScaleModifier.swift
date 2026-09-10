@@ -25,7 +25,8 @@ struct CinemaFocusModifier: ViewModifier {
                         lineWidth: CinemaTVFocus.cardRingWidth
                     )
             )
-            // Accent-tinted halo (was a near-invisible grey `surfaceTint` glow)
+            // Accent-tinted halo (was a near-invisible grey glow, off a
+            // `surfaceTint` token since deleted)
             // for relief, over a darker ambient shadow that lifts the card off
             // the background without any vertical translation.
             .shadow(

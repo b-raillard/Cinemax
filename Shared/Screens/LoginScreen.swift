@@ -1,8 +1,5 @@
 import SwiftUI
 import CinemaxKit
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct LoginScreen: View {
     @Environment(AppState.self) private var appState
@@ -91,19 +88,19 @@ struct LoginScreen: View {
     @ViewBuilder
     private var serverEscapeHatch: some View {
         if appState.isAddingServer {
-            helperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
+            PreAuthHelperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
                 Task { await appState.restorePreviousServer() }
             }
         } else if appState.pendingRollbackServer != nil {
-            helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
+            PreAuthHelperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
                 Task { await appState.restorePreviousServer() }
             }
         } else if appState.servers.count > 1 {
-            helperLink(icon: "server.rack", title: loc.localized("login.myServers")) {
+            PreAuthHelperLink(icon: "server.rack", title: loc.localized("login.myServers")) {
                 showServers = true
             }
         } else {
-            helperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
+            PreAuthHelperLink(icon: "arrow.backward", title: loc.localized("login.changeServer")) {
                 appState.disconnectServer()
             }
         }
@@ -114,7 +111,7 @@ struct LoginScreen: View {
     @ViewBuilder
     private var quickConnectButton: some View {
         if viewModel.quickConnectEnabled {
-            helperLink(icon: "qrcode", title: loc.localized("quickConnect.button")) {
+            PreAuthHelperLink(icon: "qrcode", title: loc.localized("quickConnect.button")) {
                 showQuickConnect = true
             }
         }
@@ -183,7 +180,7 @@ struct LoginScreen: View {
                         )
 
                         if let error = viewModel.errorMessage {
-                            errorBanner(error)
+                            PreAuthErrorBanner(message: error)
                         }
                     }
 
@@ -301,7 +298,7 @@ struct LoginScreen: View {
                     )
 
                     if let error = viewModel.errorMessage {
-                        errorBanner(error)
+                        PreAuthErrorBanner(message: error)
                     }
                 }
                 .padding(CinemaSpacing.spacing4)
@@ -342,56 +339,6 @@ struct LoginScreen: View {
     /// `.padding(.horizontal, spacing4)` (22pt each side) on a standard 390–440pt iPhone.
     private var formMaxWidth: CGFloat { 350 }
 
-    private func triggerEasterEgg() {
-        let result = AccentEasterEgg.tap(
-            currentAccentKey: themeManager.accentColorKey,
-            previousTapCount: easterEggTaps,
-            rainbowAlreadyUnlocked: rainbowUnlocked
-        )
-        easterEggTaps += 1
-        themeManager.accentColorKey = result.nextAccentKey
-        if result.unlockedRainbow {
-            rainbowUnlocked = true
-            #if os(iOS)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            #endif
-            toasts.success(
-                loc.localized("easterEgg.rainbow.title"),
-                message: loc.localized("easterEgg.rainbow.message")
-            )
-        } else {
-            #if os(iOS)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            #endif
-        }
-    }
-
-    @MainActor
-    private func helperLink(icon: String, title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                Text(title)
-            }
-            .font(CinemaFont.label(.medium))
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            #if os(tvOS)
-            // « Pastille » focus level: a capsule carrying the shared chip
-            // stroke. A bare `.plain` link had no focus treatment at all, and
-            // this is the Quick Connect / discovery / servers-list entry.
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .padding(.vertical, CinemaSpacing.spacing2)
-            .background(CinemaColor.surfaceContainer)
-            .clipShape(Capsule())
-            #endif
-        }
-        #if os(tvOS)
-        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-        #else
-        .buttonStyle(.plain)
-        #endif
-    }
-
     // MARK: - Shared Components
 
     private var backgroundGlow: some View {
@@ -410,19 +357,18 @@ struct LoginScreen: View {
         }
     }
 
-    private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(CinemaColor.error)
-            Text(message)
-                .font(CinemaFont.label(.small))
-                .foregroundStyle(CinemaColor.error)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                .fill(CinemaColor.errorContainer.opacity(0.2))
+    // The easter egg's side effects (cycle the accent, persist the unlock,
+    // haptic, toast) live in `PreAuthChrome.swift` alongside the error banner
+    // and the helper link — these two screens are one journey and carried
+    // byte-identical copies of all three. The tap count stays per-screen
+    // `@State` and the unlock flag stays `@AppStorage`, hence the bindings.
+    private func triggerEasterEgg() {
+        PreAuthEasterEgg.tap(
+            tapCount: $easterEggTaps,
+            rainbowUnlocked: $rainbowUnlocked,
+            themeManager: themeManager,
+            toasts: toasts,
+            loc: loc
         )
     }
 

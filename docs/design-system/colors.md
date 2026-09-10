@@ -66,7 +66,6 @@ All values `Color.dynamic(light: 0xRRGGBB, dark: 0xRRGGBB)`. Source: `Shared/Des
 | `surfaceContainerHigh` | `#E2E2E5` | `#1F2020` | Elevated card, icon-badge bg |
 | `surfaceContainerHighest` | `#D9D9DD` | `#252626` | Top-of-stack element |
 | `surfaceVariant` | `#E2E2E5` | `#252626` | Glass-panel overlay tint |
-| `surfaceBright` | `#FFFFFF` | `#2C2C2C` | Highlighted surface, rare |
 
 ```text
 Tonal hierarchy (dark mode):
@@ -90,7 +89,6 @@ Tonal hierarchy (dark mode):
 | --- | --- | --- | --- |
 | `onSurface` | `#14161A` | `#E7E5E4` | Primary text |
 | `onSurfaceVariant` | `#55585E` | `#ACABAA` | Secondary text, labels, metadata |
-| `onBackground` | `#14161A` | `#E7E5E4` | Text on full-bleed surfaces |
 
 ### Primary / Secondary — neutral action greys
 
@@ -99,11 +97,9 @@ Used by `CinemaButton(style: .primary)` and the few places that need a high-cont
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
 | `primary` | `#3A3B3D` | `#C6C6C7` | `CinemaGradient.primaryButton` start |
-| `primaryDim` | `#4A4B4D` | `#B8B9B9` | Dimmed primary, unused at time of writing |
 | `primaryContainer` | `#D0D1D4` | `#454747` | `CinemaGradient.primaryButton` end |
 | `onPrimary` | `#FFFFFF` | `#3F4041` | Text on primary button |
 | `secondary` | `#55585E` | `#9D9E9E` | Secondary label, rarely direct |
-| `secondaryContainer` | `#C8CACE` | `#3A3C3C` | Secondary button backgrounds |
 
 ### Tertiary — **legacy, do not use for new code**
 
@@ -130,12 +126,6 @@ Don't reach for these to build hierarchy. Use tonal surface shifts.
 | `errorContainer` | `#FADBD8` | `#7F2927` | Error toast / badge background, `CinemaButton(style: .destructive)` fill |
 | `onErrorContainer` | `#7B1A12` | `#FF9993` | Text on `errorContainer`, `CinemaButton(style: .destructive)` label |
 | `success` | `#1F9D45` | `#34C759` | Success icon, connected-status dot |
-
-### Other
-
-| Token | Light | Dark | Use |
-| --- | --- | --- | --- |
-| `surfaceTint` | `#3A3B3D` | `#C6C6C7` | Shadow colour for elevated surfaces |
 
 ---
 

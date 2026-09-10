@@ -714,7 +714,6 @@
 "detail.runtime.hours" = "%dh %dm";
 "detail.runtime.minutes" = "%dm";
 "detail.runtime.min" = "%d min";
-"detail.seasons" = "%d Seasons";
 "detail.season" = "Season";
 "detail.seeMore" = "See more";
 "detail.studio" = "Studio";
@@ -1082,7 +1081,6 @@
 "profile.password.new" = "New password";
 "profile.password.confirm" = "Confirm new password";
 "profile.password.mismatch" = "The two new passwords do not match.";
-"profile.password.tooShort" = "The new password is empty.";
 "profile.password.changed" = "Password changed";
 "profile.password.rejected" = "The server refused the change. Check the current password.";
 "profile.preferences.section" = "Playback preferences";

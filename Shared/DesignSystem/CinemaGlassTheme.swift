@@ -43,22 +43,18 @@ enum CinemaColor {
     static let surfaceContainerHigh    = Color.dynamic(light: 0xE2E2E5, dark: 0x1F2020)
     static let surfaceContainerHighest = Color.dynamic(light: 0xD9D9DD, dark: 0x252626)
     static let surfaceVariant          = Color.dynamic(light: 0xE2E2E5, dark: 0x252626)
-    static let surfaceBright           = Color.dynamic(light: 0xFFFFFF, dark: 0x2C2C2C)
 
     // Text
     static let onSurface        = Color.dynamic(light: 0x14161A, dark: 0xE7E5E4)
     static let onSurfaceVariant = Color.dynamic(light: 0x55585E, dark: 0xACABAA)
-    static let onBackground     = Color.dynamic(light: 0x14161A, dark: 0xE7E5E4)
 
     // Primary
     static let primary          = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
-    static let primaryDim       = Color.dynamic(light: 0x4A4B4D, dark: 0xB8B9B9)
     static let primaryContainer = Color.dynamic(light: 0xD0D1D4, dark: 0x454747)
     static let onPrimary        = Color.dynamic(light: 0xFFFFFF, dark: 0x3F4041)
 
     // Secondary
     static let secondary          = Color.dynamic(light: 0x55585E, dark: 0x9D9E9E)
-    static let secondaryContainer = Color.dynamic(light: 0xC8CACE, dark: 0x3A3C3C)
 
     // Outline
     static let outline        = Color.dynamic(light: 0xB0B1B5, dark: 0x767575)
@@ -71,9 +67,6 @@ enum CinemaColor {
 
     // Success
     static let success = Color.dynamic(light: 0x1F9D45, dark: 0x34C759)
-
-    // Surface tint
-    static let surfaceTint = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
 }
 
 // MARK: - Global UI Scale
@@ -159,11 +152,6 @@ enum CinemaFont {
     /// Reading-optimized body font. Scales with both app `uiScale` and OS Dynamic Type.
     static var dynamicBody: Font {
         .system(size: scaledPoint(17, relativeTo: .body), weight: .regular)
-    }
-
-    /// Larger reading font for overviews / detail screens.
-    static var dynamicBodyLarge: Font {
-        .system(size: scaledPoint(19, relativeTo: .body), weight: .regular)
     }
 
     /// Dynamic Type-aware label font. Follows the same `large / medium / small`

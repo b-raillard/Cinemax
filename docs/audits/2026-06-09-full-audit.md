@@ -2,7 +2,7 @@
 
 _Audit réalisé sur la branche `claude/project-audit-refactor-h90z81`. Cinq passes spécialisées en parallèle : sécurité, performance, qualité/factorisation, concurrence Swift 6, design system + localisation — suivies de l'application des correctifs sur cette même branche, d'une revue croisée du diff (7 angles) et de l'ajout de tests unitaires._
 
-> **Contexte** : deux audits antérieurs ([AUDIT.md](AUDIT.md) 2026-04-24 et [Audit_post_vlc.md](Audit_post_vlc.md) 2026-05-19) avaient été largement traités. Cet audit (1) vérifie que leurs correctifs n'ont pas régressé, (2) audite à neuf le code ajouté depuis (proxy IPv6, menu personnalisable, Now Playing, évolutions VLC).
+> **Contexte** : deux audits antérieurs ([2026-04-24-full-audit.md](2026-04-24-full-audit.md) 2026-04-24 et [2026-05-19-post-vlc-audit.md](2026-05-19-post-vlc-audit.md) 2026-05-19) avaient été largement traités. Cet audit (1) vérifie que leurs correctifs n'ont pas régressé, (2) audite à neuf le code ajouté depuis (proxy IPv6, menu personnalisable, Now Playing, évolutions VLC).
 >
 > ⚠️ **Limite d'environnement** : cet audit a été réalisé dans un environnement Linux **sans toolchain Xcode/Swift**. Aucune compilation ni exécution de tests n'a pu être faite ici. Chaque correctif a été vérifié par relecture croisée (agents de revue indépendants sur le diff complet), mais **une build iOS + tvOS et un passage de la suite de tests sur Mac sont requis avant merge** — voir « Étapes de validation » en fin de rapport.
 > De plus, des fichiers ont été ajoutés/supprimés : **exécuter `xcodegen generate` après pull** (le `project.pbxproj` versionné ne les connaît pas encore).

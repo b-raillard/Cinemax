@@ -1,5 +1,7 @@
 # Light Mode Implementation Plan
 
+> **ARCHIVE (déplacé ici le 2026-09-10).** Plan exécuté : `CinemaColor` résout dynamiquement via `Color.dynamic(light:dark:)` et le mode clair est livré. Conservé comme trace de la décision, pas comme travail à faire.
+
 Goal: implement a working light theme for Cinemax. The toggle (`themeManager.darkModeEnabled`) and Settings UI already exist; today flipping it only switches `.preferredColorScheme()` but every color in the app is hardcoded dark. The job is to make `CinemaColor` (and a small set of stragglers) resolve dynamically against the current `ColorScheme` so the entire UI flips with one switch.
 
 ---

@@ -1,8 +1,5 @@
 import SwiftUI
 import CinemaxKit
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct ServerSetupScreen: View {
     @Environment(AppState.self) private var appState
@@ -110,7 +107,7 @@ struct ServerSetupScreen: View {
                     #endif
 
                     if let error = viewModel.errorMessage {
-                        errorBanner(error)
+                        PreAuthErrorBanner(message: error)
                     }
 
                     if isHTTPURL(viewModel.serverURL) {
@@ -135,11 +132,11 @@ struct ServerSetupScreen: View {
 
                 // Helper links
                 HStack(spacing: CinemaSpacing.spacing6) {
-                    helperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
+                    PreAuthHelperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
                         showDiscoverySheet = true
                     }
                     helperDivider(height: 20)
-                    helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
+                    PreAuthHelperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
                         showHelpSheet = true
                     }
                     if appState.isAddingServer {
@@ -220,7 +217,7 @@ struct ServerSetupScreen: View {
                     #endif
 
                     if let error = viewModel.errorMessage {
-                        errorBanner(error)
+                        PreAuthErrorBanner(message: error)
                     }
 
                     if isHTTPURL(viewModel.serverURL) {
@@ -246,11 +243,11 @@ struct ServerSetupScreen: View {
                     .disabled(viewModel.isConnecting)
 
                     HStack(spacing: CinemaSpacing.spacing4) {
-                        helperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
+                        PreAuthHelperLink(icon: "wifi.router", title: loc.localized("server.findOnNetwork")) {
                             showDiscoverySheet = true
                         }
                         helperDivider(height: 16)
-                        helperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
+                        PreAuthHelperLink(icon: "questionmark.circle", title: loc.localized("server.howToFind")) {
                             showHelpSheet = true
                         }
                     }
@@ -321,51 +318,26 @@ struct ServerSetupScreen: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(CinemaColor.error)
-            Text(message)
-                .font(CinemaFont.label(.small))
-                .foregroundStyle(CinemaColor.error)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                .fill(CinemaColor.errorContainer.opacity(0.2))
-        )
-    }
-
+    // The easter egg's side effects (cycle the accent, persist the unlock,
+    // haptic, toast) live in `PreAuthChrome.swift` alongside the error banner
+    // and the helper link — these two screens are one journey and carried
+    // byte-identical copies of all three. The tap count stays per-screen
+    // `@State` and the unlock flag stays `@AppStorage`, hence the bindings.
     private func triggerEasterEgg() {
-        let result = AccentEasterEgg.tap(
-            currentAccentKey: themeManager.accentColorKey,
-            previousTapCount: easterEggTaps,
-            rainbowAlreadyUnlocked: rainbowUnlocked
+        PreAuthEasterEgg.tap(
+            tapCount: $easterEggTaps,
+            rainbowUnlocked: $rainbowUnlocked,
+            themeManager: themeManager,
+            toasts: toasts,
+            loc: loc
         )
-        easterEggTaps += 1
-        themeManager.accentColorKey = result.nextAccentKey
-        if result.unlockedRainbow {
-            rainbowUnlocked = true
-            #if os(iOS)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            #endif
-            toasts.success(
-                loc.localized("easterEgg.rainbow.title"),
-                message: loc.localized("easterEgg.rainbow.message")
-            )
-        } else {
-            #if os(iOS)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            #endif
-        }
     }
 
     /// Abandons an in-flight "add a server" and returns to the server the user
     /// came from. Only rendered while `AppState.isAddingServer` — in first-run
     /// mode there is nothing to go back to.
     private var cancelAddLink: some View {
-        helperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
+        PreAuthHelperLink(icon: "xmark", title: loc.localized("server.cancelAdd")) {
             Task { await appState.restorePreviousServer() }
         }
     }
@@ -380,7 +352,7 @@ struct ServerSetupScreen: View {
     }
 
     private var myServersLink: some View {
-        helperLink(icon: "server.rack", title: loc.localized("login.myServers")) {
+        PreAuthHelperLink(icon: "server.rack", title: loc.localized("login.myServers")) {
             showServersSheet = true
         }
     }
@@ -397,32 +369,6 @@ struct ServerSetupScreen: View {
         Divider()
             .frame(height: height)
             .overlay(CinemaColor.outlineVariant.opacity(0.3))
-    }
-
-    @MainActor
-    private func helperLink(icon: String, title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                Text(title)
-            }
-            .font(CinemaFont.label(.medium))
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            #if os(tvOS)
-            // « Pastille » focus level: a capsule carrying the shared chip
-            // stroke. A bare `.plain` link had no focus treatment at all, and
-            // this is the Quick Connect / discovery / servers-list entry.
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .padding(.vertical, CinemaSpacing.spacing2)
-            .background(CinemaColor.surfaceContainer)
-            .clipShape(Capsule())
-            #endif
-        }
-        #if os(tvOS)
-        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-        #else
-        .buttonStyle(.plain)
-        #endif
     }
 
     private var statusPill: some View {

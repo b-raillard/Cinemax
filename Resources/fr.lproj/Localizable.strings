@@ -308,7 +308,6 @@
 "detail.runtime.hours" = "%dh %dm";
 "detail.runtime.minutes" = "%dm";
 "detail.runtime.min" = "%d min";
-"detail.seasons" = "%d saisons";
 "detail.season" = "Saison";
 "detail.seeMore" = "Voir plus";
 "detail.studio" = "Studio";
@@ -1084,7 +1083,6 @@
 "profile.password.new" = "Nouveau mot de passe";
 "profile.password.confirm" = "Confirmer le nouveau mot de passe";
 "profile.password.mismatch" = "Les deux nouveaux mots de passe ne correspondent pas.";
-"profile.password.tooShort" = "Le nouveau mot de passe est vide.";
 "profile.password.changed" = "Mot de passe modifié";
 "profile.password.rejected" = "Le serveur a refusé le changement. Vérifiez le mot de passe actuel.";
 "profile.preferences.section" = "Préférences de lecture";

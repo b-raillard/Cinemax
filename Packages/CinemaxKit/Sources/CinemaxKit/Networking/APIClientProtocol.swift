@@ -137,10 +137,20 @@ public protocol AuthAPI: Sendable {
 /// Library queries: items, genres, search, series/seasons/episodes.
 public protocol LibraryAPI: Sendable {
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto]
-    func getLatestMedia(userId: String, parentId: String?, limit: Int) async throws -> [BaseItemDto]
-    /// Shows that just received episodes (grouped `/Items/Latest` over
-    /// `[.episode]`). Distinct from `getLatestMedia`, which mixes every kind
-    /// and lets one show's episode import swamp the result.
+    /// Shows that just received episodes: a grouped `/Items/Latest` scoped to
+    /// `[.episode]`, filtered back down to `.series`.
+    ///
+    /// Home's "Recently Added" rail is the union of this and a date-added
+    /// `getItems` over `[.movie, .series]` (`HomeViewModel.mergeRecentlyAdded`),
+    /// each with its own budget. It is deliberately NOT a bare
+    /// `/Items/Latest`: unscoped, that endpoint scans raw items — episodes
+    /// included — and groups them under their series, so a library ingesting
+    /// one show's back catalogue fills the whole scan with its episodes and
+    /// they collapse into a SINGLE card. The row then looks empty while
+    /// faithfully reporting that the newest N items all belong to one series.
+    /// The unscoped wrapper that made that mistake reachable was deleted on
+    /// 2026-09-10 (it had no caller), which is what turns the rule from a
+    /// convention into something the API surface no longer lets you express.
     func getSeriesWithRecentEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
     func getItems(
         userId: String,
@@ -472,8 +482,6 @@ public protocol SyncPlayAPI: RealtimeSocketAPI {
     func syncPlayPause() async throws
     /// Broadcasts a resume (`POST /SyncPlay/Unpause`).
     func syncPlayUnpause() async throws
-    /// Broadcasts a stop (`POST /SyncPlay/Stop`).
-    func syncPlayStop() async throws
     /// Broadcasts a seek to the given tick position (`POST /SyncPlay/Seek`).
     func syncPlaySeek(positionTicks: Int) async throws
 
@@ -499,7 +507,6 @@ public extension SyncPlayAPI {
     func syncPlayLeaveGroup() async throws {}
     func syncPlayPause() async throws {}
     func syncPlayUnpause() async throws {}
-    func syncPlayStop() async throws {}
     func syncPlaySeek(positionTicks: Int) async throws {}
     func syncPlayReady(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {}
     func syncPlayBuffering(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {}
@@ -654,9 +661,6 @@ public extension LibraryAPI {
 
     func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
         try await getResumeItems(userId: userId, limit: limit)
-    }
-    func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
-        try await getLatestMedia(userId: userId, parentId: parentId, limit: limit)
     }
     func getSeriesWithRecentEpisodes(userId: String, limit: Int = 8) async throws -> [BaseItemDto] {
         try await getSeriesWithRecentEpisodes(userId: userId, limit: limit)

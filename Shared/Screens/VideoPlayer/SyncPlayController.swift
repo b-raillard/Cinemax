@@ -46,7 +46,6 @@ final class SyncPlayController {
     @ObservationIgnored private(set) var currentPlaylistItemId: String?
 
     var isInGroup: Bool { group != nil }
-    var participantCount: Int { participants.count }
     var groupName: String? { group?.name }
     /// The group is held while a participant finishes buffering. Everyone's
     /// picture is frozen; this is what lets the player say so instead of
