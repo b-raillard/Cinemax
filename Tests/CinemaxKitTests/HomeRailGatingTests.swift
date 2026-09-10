@@ -190,6 +190,29 @@ struct HomeRailGatingTests {
         #expect(vm.heroItem?.name == "Newest")
     }
 
+    /// The library's own genre fan-out: one query per genre, up to 8, on every
+    /// tab open in the default "browse" layout — and `GenreResult` keeps only
+    /// `.items`. Measured on the reference server (2026-09-10), a COUNT costs
+    /// ~3 ms on a 257-film genre slice and +42,9 ms on a 6 657-row match, so
+    /// this is scaling insurance rather than a win on a small catalogue.
+    @Test("the library genre rows ask for no totalRecordCount")
+    func libraryGenreRowsAskForNoCount() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action", "Drame"]
+        api.stubbedItems = [makeItem(name: "Un film")]
+        api.stubbedTotalCount = 503
+        let vm = MediaLibraryViewModel(itemType: .movie)
+
+        await vm.loadInitial(using: makeAppState(api: api), loc: LocalizationManager())
+
+        let genreQueries = api.getItemsQueries.filter { ($0.genres?.isEmpty == false) }
+        #expect(genreQueries.isEmpty == false, "the fan-out must actually have run")
+        #expect(genreQueries.allSatisfy { $0.enableTotalRecordCount == false })
+        // Paired control: the hero query on the same load still counts, because
+        // the header prints that total.
+        #expect(api.getItemsQueries.contains { $0.genres == nil && $0.enableTotalRecordCount })
+    }
+
     /// The search fan-out is the heaviest per-keystroke cost in the app: one
     /// request per significant word, none of which reads a total.
     @Test("the search fan-out asks for no totalRecordCount")
