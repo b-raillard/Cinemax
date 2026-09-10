@@ -98,6 +98,7 @@ What it does:
 | Primary action button | `Button { } label: { … }.buttonStyle(CinemaTVButtonStyle(cinemaStyle: .primary))` — handled by `CinemaButton(style: .primary)` |
 | Accent button | `CinemaButton(style: .accent)` |
 | Ghost button | `CinemaButton(style: .ghost)` |
+| Destructive button | `CinemaButton(style: .destructive)` — rings and haloes in `error`, since a white ring vanishes on light mode's pale `errorContainer` |
 | Filter chip (single-select capsule) | `.buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))` |
 | Poster / Wide card | `Button { … } label: { Card() }.buttonStyle(CinemaTVCardButtonStyle())` + `.cinemaFocus()` on inner card |
 | Settings row | `Button { … } label: { … }.tvSettingsFocusable(isFocused:, accent:, colorScheme: themeManager.darkModeEnabled ? .dark : .light)` |

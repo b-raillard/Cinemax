@@ -433,6 +433,7 @@
 "admin.form.discardChanges.message" = "Les modifications non enregistrées seront perdues.";
 "admin.form.discard" = "Abandonner";
 "admin.destructive.typeToConfirm" = "Pour confirmer, saisissez « %@ » ci-dessous :";
+"admin.destructive.mismatch" = "Le texte saisi ne correspond pas.";
 
 // MARK: - Admin — Landings
 

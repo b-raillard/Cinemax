@@ -25,13 +25,13 @@ For each component below: file, signature, purpose, platform, dependencies, anat
   ```swift
   CinemaButton(
       title: String,
-      style: CinemaButtonStyle = .primary,  // .primary | .ghost | .accent
+      style: CinemaButtonStyle = .primary,  // .primary | .ghost | .accent | .destructive
       icon: String? = nil,                  // SF Symbol name, trails the title
       isLoading: Bool = false,
       action: @escaping () -> Void
   )
   ```
-- **Purpose**: The app's only button. Three styles cover 95 % of needs.
+- **Purpose**: The app's only button. Four styles cover every case.
 - **Platform**: both. iOS uses a plain SwiftUI button with `RoundedRectangle` background. tvOS uses `CinemaTVButtonStyle` with focus scale/shadow.
 - **Dependencies**: `ThemeManager` (accent), `CinemaGradient` (primary style), `CinemaColor.outline` (ghost border).
 - **Anatomy**: `HStack` of `ProgressView` (when loading) or `Text + optional Image`. Full-width, `spacing4` horizontal padding. Vertical padding iOS 11 / tvOS 22. Corner radius `.large` (16).
@@ -39,6 +39,7 @@ For each component below: file, signature, purpose, platform, dependencies, anat
   - `.primary` — `primaryButton` gradient, `onPrimary` text. Default.
   - `.ghost` — `.ultraThinMaterial` + `outline.opacity(0.2)` stroke, `onSurface` text.
   - `.accent` — `accentContainer` fill, `.white` text (intentional — `.white` on saturated containers is fine, see [conventions.md § Hardcoded colours](./conventions.md#hardcoded-whiteblack)).
+  - `.destructive` — `errorContainer` fill, `onErrorContainer` text. **Irreversible actions only**: the confirm button of `DestructiveConfirmSheet`, and nothing else — reversible destructives (revoke a device, uninstall a plugin) stay on a `.confirmationDialog` with a `.destructive` role. Tonal rather than saturated because it has to read in both modes: `error` itself is a light salmon in dark mode, where a white label on it fails contrast outright. Before it existed the sheet used `.primary` + a `.tint(CinemaColor.error)` that `CinemaButton` never reads (it draws its own background), so the app's single most destructive control was rendered in neutral grey — and at the disabled `0.5` opacity it was illegible over the dark sheet, which is how "the delete button looks dead" was reported.
 - **Notes**:
   - `isLoading` replaces the label with a `ProgressView` tinted to match `textColor`.
   - Title uses `.tracking(-0.3)`, `.lineLimit(1)`, `.minimumScaleFactor(0.7)` — the last is your safety net for long French strings.

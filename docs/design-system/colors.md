@@ -127,8 +127,8 @@ Don't reach for these to build hierarchy. Use tonal surface shifts.
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
 | `error` | `#C0392B` | `#EE7D77` | Error text, destructive icon |
-| `errorContainer` | `#FADBD8` | `#7F2927` | Error toast / badge background |
-| `onErrorContainer` | `#7B1A12` | `#FF9993` | Text on `errorContainer` |
+| `errorContainer` | `#FADBD8` | `#7F2927` | Error toast / badge background, `CinemaButton(style: .destructive)` fill |
+| `onErrorContainer` | `#7B1A12` | `#FF9993` | Text on `errorContainer`, `CinemaButton(style: .destructive)` label |
 | `success` | `#1F9D45` | `#34C759` | Success icon, connected-status dot |
 
 ### Other
