@@ -63,10 +63,6 @@ extension JellyfinAPIClient: SyncPlayAPI {
         try await syncPlaySend(Paths.syncPlayUnpause)
     }
 
-    public func syncPlayStop() async throws {
-        try await syncPlaySend(Paths.syncPlayStop)
-    }
-
     public func syncPlaySeek(positionTicks: Int) async throws {
         try await syncPlaySend(Paths.syncPlaySeek(SeekRequestDto(positionTicks: positionTicks)))
     }

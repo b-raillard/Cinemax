@@ -413,7 +413,7 @@ quitté depuis plusieurs secondes peut donc encore basculer le compteur qui gate
 ## Partie 2 — Nouveautés proposées
 
 Légende effort : ⭐ léger (quelques jours) · ⭐⭐ moyen · ⭐⭐⭐ gros chantier.
-Les numéros (#N) renvoient aux propositions de `docs/jellyfin-api-analysis.md`
+Les numéros (#N) renvoient aux propositions de `docs/audits/2026-08-02-jellyfin-api-analysis.md`
 quand elles y existent (statut : 3, 6, 9, 10 déjà livrées).
 
 ### A. Lecture — le cœur de l'app

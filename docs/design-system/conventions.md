@@ -48,7 +48,7 @@ Always `CinemaFont.*`. The one documented exception is `CinemaButton.fontSize` (
 ### Dynamic Type only on reading surfaces
 
 - Hero / display / headline → fixed variants.
-- Body / detail / settings rows / list cells → `dynamicBody` / `dynamicBodyLarge` / `dynamicLabel(_:)`.
+- Body / detail / settings rows / list cells → `dynamicBody` / `dynamicLabel(_:)`.
 
 ### `.minimumScaleFactor` is a safety net, not a solution
 

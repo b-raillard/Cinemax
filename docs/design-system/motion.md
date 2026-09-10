@@ -87,7 +87,7 @@ What it does:
 
 - **iPhone**: no-op (no hover).
 - **iPad** (pointer): `.hoverEffect(motionEnabled ? .lift : .highlight)`. Pointer over the card gently scales + shadows when motion is on; when off, just dims.
-- **tvOS**: adds a 2 pt accent `strokeBorder` with radius `.large`, and a `surfaceTint` shadow. Both gated on `isFocused`. No scale — scale is applied by the button style, not the focus modifier.
+- **tvOS**: adds an accent `strokeBorder` at `CinemaTVFocus.cardRingWidth` with radius `.large`, then an accent halo over a black ambient shadow (`haloRadius`/`haloOpacity`, `ambientRadius`/`ambientOpacity`). All gated on `isFocused`. No scale — scale is applied by the button style, not the focus modifier.
 
 **Do not compose `.cinemaFocus()` with a scale-applying button style on the same view** — the scale comes from one place, the ring from the other, and doubling either produces a wobble.
 
@@ -107,7 +107,7 @@ What it does:
 Baseline tvOS button behaviour (`CinemaTVButtonStyle`):
 
 - `scaleEffect(1.05)` when focused, `0.95` when pressed
-- Shadow matching the button style (primary → primary color, ghost → surfaceTint, accent → accentContainer)
+- An accent focus ring plus a 3 pt lift and a ghost-fill brighten; no per-style drop shadow (the grey `surfaceTint` one it used to carry was invisible, and the token was deleted on 2026-09-10)
 - Focus animation 0.2 s, press animation 0.1 s
 - All gated on `motionEnabled`
 

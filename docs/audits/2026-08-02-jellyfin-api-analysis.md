@@ -1,5 +1,7 @@
 # Analyse de la surface API Jellyfin — Cinemax
 
+> **ARCHIVE (déplacé ici le 2026-09-10).** Écrit contre `jellyfin-sdk-swift` **0.6.0** ; l'app est depuis passée au SDK **3.1.0** (génération 12.0). Les numéros de route, les noms de types de requête et les constats de couverture sont donc datés. Référence à jour : `docs/audits/2026-09-10-post-sdk-3.1-platform-audit.md`.
+
 > Analyse réalisée contre `jellyfin-sdk-swift` **0.6.0** (révision `e7bb3b7`, celle épinglée dans
 > `Package.resolved`) et l'état du code sur `claude/jellyfin-api-analysis-k8es2e`.
 > Objectif : mesurer ce que l'app consomme, ce que le serveur expose et qu'elle ignore, et

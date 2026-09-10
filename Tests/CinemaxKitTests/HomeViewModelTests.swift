@@ -165,12 +165,13 @@ struct HomeViewModelTests {
 
         await vm.load(using: makeAppState(api: api))
 
-        // The row used to call `/Items/Latest`, which scans raw items — episodes
-        // included — and groups them under their series. One show's back-catalogue
-        // import then filled the whole scan and collapsed into a SINGLE card, so
-        // the row looked empty while faithfully reporting the newest items.
-        #expect(api.getLatestMediaCallCount == 0)
-
+        // The row must not be a bare `/Items/Latest`: unscoped, that endpoint
+        // scans raw items — episodes included — and groups them under their
+        // series, so one show's back-catalogue import filled the whole scan and
+        // collapsed into a SINGLE card, leaving the row looking empty while
+        // faithfully reporting the newest items. The wrapper that expressed that
+        // query was deleted (2026-09-10), so the rule is now structural: what is
+        // asserted below is the shape the row DOES use.
         let recentlyAdded = api.getItemsQueries.first {
             $0.includeItemTypes == [.movie, .series] && $0.isFavorite == nil
         }
@@ -415,9 +416,16 @@ struct HomeViewModelTests {
         #expect(api.getResumeItemsCallCount == 1)
         #expect(api.getNextUpEpisodesCallCount == 1)
         #expect(api.favoriteFetchCount == 1)
-        // Left the heavy catalogue fetches untouched.
-        #expect(api.getLatestMediaCallCount == 0)
+        // Left the heavy catalogue fetches untouched — genres, and the
+        // "Recently Added" query, which since the row stopped being a bare
+        // `/Items/Latest` is a `[.movie, .series]` `getItems`. It must be told
+        // apart from the FAVORITES rail, which queries the same two kinds and
+        // legitimately runs here — hence `isFavorite == nil`, the same
+        // discriminator the full-load test uses.
         #expect(api.getGenresCallCount == 0)
+        #expect(api.getItemsQueries.contains {
+            $0.includeItemTypes == [.movie, .series] && $0.isFavorite == nil
+        } == false)
         // And the rails reflect server truth.
         #expect(vm.resumeItems.count == 1)
         #expect(vm.nextUpItems.count == 1)

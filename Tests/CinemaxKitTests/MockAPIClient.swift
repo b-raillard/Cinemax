@@ -370,7 +370,6 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     // Call counters — let tests assert which fetches a targeted refresh touches.
     private(set) var getResumeItemsCallCount = 0
-    private(set) var getLatestMediaCallCount = 0
     /// The letter the last `/Items` page was anchored on — `nil` for an
     /// ordinary page. Drives the A–Z jump-bar tests (defect M).
     private(set) var lastNameAnchor: String?
@@ -400,12 +399,6 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         recordLock.withLock { getResumeItemsCallCount += 1 }
         if shouldThrow { throw stubbedError }
         return stubbedResumeItems
-    }
-
-    func getLatestMedia(userId: String, parentId: String?, limit: Int) async throws -> [BaseItemDto] {
-        recordLock.withLock { getLatestMediaCallCount += 1 }
-        if shouldThrow { throw stubbedError }
-        return stubbedLatestItems
     }
 
     /// Shows that just received episodes — the second source of Home's

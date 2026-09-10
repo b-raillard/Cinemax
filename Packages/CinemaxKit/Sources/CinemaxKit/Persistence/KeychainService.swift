@@ -321,14 +321,12 @@ public struct KeychainService: Sendable {
             return id
         }
 
-        // Migrate from UserDefaults or create a new identifier
-        let id: String
-        if let legacy = UserDefaults.standard.string(forKey: "cinemax_device_id") {
-            id = legacy
-            UserDefaults.standard.removeObject(forKey: "cinemax_device_id")
-        } else {
-            id = UUID().uuidString
-        }
+        // No Keychain item yet — mint one. There used to be a migration from a
+        // `UserDefaults["cinemax_device_id"]` default here; git history shows no
+        // build ever WROTE that key (only this read and its removal, present
+        // since the initial commit), so the branch was unreachable and was
+        // deleted on 2026-09-10.
+        let id = UUID().uuidString
 
         let saveQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

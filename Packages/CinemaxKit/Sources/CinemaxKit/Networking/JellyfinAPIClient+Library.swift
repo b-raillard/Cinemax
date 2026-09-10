@@ -100,41 +100,6 @@ extension JellyfinAPIClient {
         }
     }
 
-    /// **Home's "Recently Added" rail deliberately does NOT use this.** This
-    /// endpoint scans raw items — episodes included — and groups them under
-    /// their series (`groupItems` defaults to true, and no `includeItemTypes`
-    /// is sent). A library that ingests one series' back catalogue therefore
-    /// fills the whole scan with its episodes, which collapse into a SINGLE
-    /// card: the row looks empty while faithfully reporting that the newest N
-    /// items on the server all belong to one show. `HomeViewModel` combines a
-    /// date-added `getItems` over `[.movie, .series]` with
-    /// `getSeriesWithRecentEpisodes` instead — two sources, each with its own
-    /// budget, so no single show can crowd the row out. Kept for callers that
-    /// genuinely want the server's own unfiltered "latest" semantics.
-    public func getLatestMedia(userId: String, parentId: String? = nil, limit: Int = 16) async throws -> [BaseItemDto] {
-        let cacheKey = "latest-\(userId)-\(parentId ?? "all")-\(limit)-\(getMaxContentAge())"
-        if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
-
-        do {
-            guard let client = getClient() else { throw JellyfinError.notConnected }
-            let params = Paths.GetLatestMediaParameters(
-                userID: userId,
-                parentID: parentId,
-                enableImages: true,
-                imageTypeLimit: 1,
-                enableUserData: true,
-                limit: limit
-            )
-            let response = try await client.send(Paths.getLatestMedia(parameters: params))
-            let result = applyRatingFilter(response.value)
-            cache.set(cacheKey, value: result, ttl: 60)
-            return result
-        } catch {
-            notifyIfUnauthorized(error)
-            throw error
-        }
-    }
-
     public func getItems(
         userId: String,
         parentId: String? = nil,
