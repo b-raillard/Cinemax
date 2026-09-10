@@ -328,7 +328,8 @@ final class SearchViewModel {
                 userId: userId,
                 includeItemTypes: [.movie],
                 sortBy: [.random],
-                limit: 1
+                limit: 1,
+                enableTotalRecordCount: false
             )
             return response.items.first
         } catch {
@@ -343,7 +344,8 @@ final class SearchViewModel {
                 userId: userId,
                 includeItemTypes: [.series],
                 sortBy: [.random],
-                limit: 1
+                limit: 1,
+                enableTotalRecordCount: false
             )
             return response.items.first
         } catch {

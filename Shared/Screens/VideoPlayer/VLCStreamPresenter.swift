@@ -764,10 +764,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         default:
             landed = moved // the playhead is moving again: real frames
         }
-        // DIAG (recette loader) — the inputs that decide whether the settle
-        // window keeps holding the spinner. Only ever logged while a window is
-        // open (the guard above returns early otherwise), so volume is bounded.
-        logger.notice("""
+        // The inputs that decide whether the settle window keeps holding the
+        // spinner. Only logged while a window is open, but that is still ~4
+        // lines a second for as long as a seek takes to land — up to 120
+        // PERSISTED lines per seek at the 30 s backstop. `.debug` keeps it
+        // available under a live `log stream` without writing it to the store.
+        logger.debug("""
             seek-settle state=\(String(describing: self.player.state), privacy: .public) \
             now=\(now, privacy: .public) moved=\(moved, privacy: .public) \
             ticks=\(self.seekLoadingProgressTicks, privacy: .public) \
@@ -2325,7 +2327,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let artworkId = item.seriesID ?? item.id
         guard let artworkId else { return }
         let tag = item.seriesID != nil ? item.seriesPrimaryImageTag : item.primaryImageTagValue
-        let url = builder.imageURL(itemId: artworkId, imageType: .primary, maxWidth: 240, tag: tag)
+        // 300, not 240: Nuke keys on the URL, so a width nobody else asks for is
+        // a fresh download of a poster the grid has already cached (the same
+        // discipline as `PosterPrefetcher`). 300 is what every card requests.
+        let url = builder.imageURL(itemId: artworkId, imageType: .primary, maxWidth: 300, tag: tag)
         contextArtworkTask?.cancel()
         contextArtworkTask = Task { @MainActor [weak self] in
             guard let data = await Self.loadImage(url: url, token: token),

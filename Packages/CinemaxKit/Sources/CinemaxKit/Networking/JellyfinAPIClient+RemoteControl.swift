@@ -28,7 +28,23 @@ extension JellyfinAPIClient: RemoteControlAPI {
     /// Deliberately uncached: the whole point of a target list is that it
     /// reflects which devices are awake *right now*, and a 10 s TTL would keep
     /// hiding an Apple TV the user just switched on.
-    public func getControllableSessions(userId: String) async throws -> [SessionInfoDto] {
+    /// The sessions « Lire sur… » can target.
+    ///
+    /// **RULE — `cached` is for the on-SCREEN probe only, never for the sheet.**
+    /// The detail screen runs this on every open purely to decide whether to
+    /// DRAW the button, and the answer is almost always the same (usually
+    /// empty — a session exists only while Jellyfin actually runs on the other
+    /// device), so that probe takes a short TTL. The picker sheet must stay
+    /// uncached: its list is what a command is sent against, so a device that
+    /// slept in between has to fall out of it first — which is exactly why it
+    /// re-probes on open at all (see `MediaDetailRemotePlay`).
+    ///
+    /// 30 s, not the usual 10: nothing here is userData, so no mutator
+    /// invalidates it, and a device waking up is allowed to take half a minute
+    /// to make the button appear.
+    public func getControllableSessions(userId: String, cached: Bool = false) async throws -> [SessionInfoDto] {
+        let cacheKey = "controllable-sessions-\(userId)"
+        if cached, let hit: [SessionInfoDto] = cache.get(cacheKey) { return hit }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetSessionsParameters(
             controllableByUserID: userId,
@@ -36,6 +52,7 @@ extension JellyfinAPIClient: RemoteControlAPI {
         )
         do {
             let response = try await client.send(Paths.getSessions(parameters: params))
+            if cached { cache.set(cacheKey, value: response.value, ttl: 30) }
             return response.value
         } catch {
             notifyIfUnauthorized(error)

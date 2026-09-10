@@ -156,7 +156,14 @@ enum LibrarySearchRanker {
         await withTaskGroup(of: [BaseItemDto]?.self) { group in
             for term in uniqueTerms {
                 group.addTask {
-                    try? await api.searchItems(userId: userId, searchTerm: term, includeItemTypes: includeItemTypes, limit: 30)
+                    // No count: this fan-out issues one request per
+                    // significant word on every keystroke, and the union is
+                    // scored and truncated locally — nothing reads a total.
+                    try? await api.searchItems(
+                        userId: userId, searchTerm: term,
+                        includeItemTypes: includeItemTypes, limit: 30,
+                        enableTotalRecordCount: false
+                    )
                 }
             }
             for await result in group {

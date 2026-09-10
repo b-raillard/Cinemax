@@ -434,7 +434,8 @@ final class MediaDetailViewModel {
             parentId: id,
             sortBy: [.premiereDate],
             sortOrder: [.ascending],
-            limit: 100
+            limit: 100,
+            enableTotalRecordCount: false
         ).items) ?? []
         guard !members.isEmpty else { return }
         collectionChildren = members
@@ -453,7 +454,8 @@ final class MediaDetailViewModel {
             parentId: boxsetId,
             sortBy: [.premiereDate],
             sortOrder: [.ascending],
-            limit: 20
+            limit: 20,
+            enableTotalRecordCount: false
         ).items) ?? []
         let others = members.filter { $0.id != id }
         guard !others.isEmpty else { return }
@@ -486,7 +488,9 @@ final class MediaDetailViewModel {
         guard let userId = appState.currentUserId else { return }
         let generation = loadGeneration
         do {
-            let sessions = try await appState.apiClient.getControllableSessions(userId: userId)
+            // `cached: true` — this probe only decides whether the button is
+            // DRAWN, and the sheet re-probes uncached when it opens.
+            let sessions = try await appState.apiClient.getControllableSessions(userId: userId, cached: true)
             remoteTargets = RemotePlayTarget.resolve(
                 sessions: sessions,
                 currentUserId: userId,

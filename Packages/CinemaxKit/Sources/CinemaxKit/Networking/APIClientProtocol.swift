@@ -164,13 +164,20 @@ public protocol LibraryAPI: Sendable {
         filters: [ItemFilter]?,
         nameStartsWithOrGreater: String?,
         limit: Int?,
-        startIndex: Int?
+        startIndex: Int?,
+        /// `false` tells the server not to COUNT the full matching set (a
+        /// second query over the whole match) and makes `totalCount` come back
+        /// `0` — "didn't count", never "no results". Only a caller that reads
+        /// the count needs `true`: `PaginatedLoader` (it derives `hasLoadedAll`
+        /// from it) and `MediaLibraryViewModel`'s header. See the
+        /// implementation for the rest of the contract.
+        enableTotalRecordCount: Bool
     ) async throws -> (items: [BaseItemDto], totalCount: Int)
     func getGenres(userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?) async throws -> [String]
     func getUserViews(userId: String) async throws -> [BaseItemDto]
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
-    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int) async throws -> [BaseItemDto]
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, enableTotalRecordCount: Bool) async throws -> [BaseItemDto]
 
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
@@ -549,7 +556,10 @@ public protocol RemoteControlAPI: RealtimeSocketAPI {
     /// `controllableByUserId` filter, so **no elevated rights are needed** —
     /// unlike the bare `getActiveSessions` query, which the server limits to
     /// the caller's own sessions for a non-admin (see the note on that method).
-    func getControllableSessions(userId: String) async throws -> [SessionInfoDto]
+    /// `cached: true` serves a 30 s TTL — for the on-SCREEN probe that only
+    /// decides whether to draw the button. The picker sheet must pass
+    /// `false` (the default): its list is what a command is sent against.
+    func getControllableSessions(userId: String, cached: Bool) async throws -> [SessionInfoDto]
 
     /// Tells a session to play an item now (`PlayNow`). Fire-and-forget by
     /// design: this app sends and stops there — see the "Remote control"
@@ -583,7 +593,7 @@ public protocol RemoteControlAPI: RealtimeSocketAPI {
 }
 
 public extension RemoteControlAPI {
-    func getControllableSessions(userId: String) async throws -> [SessionInfoDto] { [] }
+    func getControllableSessions(userId: String, cached: Bool = false) async throws -> [SessionInfoDto] { [] }
     func playOnSession(
         sessionId: String,
         itemIds: [String],
@@ -677,14 +687,16 @@ public extension LibraryAPI {
         filters: [ItemFilter]? = nil,
         nameStartsWithOrGreater: String? = nil,
         limit: Int? = nil,
-        startIndex: Int? = nil
+        startIndex: Int? = nil,
+        enableTotalRecordCount: Bool = true
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         try await getItems(
             userId: userId, parentId: parentId, includeItemTypes: includeItemTypes,
             sortBy: sortBy, sortOrder: sortOrder, genres: genres, years: years,
             isFavorite: isFavorite, filters: filters,
             nameStartsWithOrGreater: nameStartsWithOrGreater,
-            limit: limit, startIndex: startIndex
+            limit: limit, startIndex: startIndex,
+            enableTotalRecordCount: enableTotalRecordCount
         )
     }
     func getGenres(
@@ -707,9 +719,13 @@ public extension LibraryAPI {
         userId: String,
         searchTerm: String,
         includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
-        limit: Int = 20
+        limit: Int = 20,
+        enableTotalRecordCount: Bool = true
     ) async throws -> [BaseItemDto] {
-        try await searchItems(userId: userId, searchTerm: searchTerm, includeItemTypes: includeItemTypes, limit: limit)
+        try await searchItems(
+            userId: userId, searchTerm: searchTerm, includeItemTypes: includeItemTypes,
+            limit: limit, enableTotalRecordCount: enableTotalRecordCount
+        )
     }
     func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
         try await getPersonItems(personId: personId, userId: userId, limit: limit)
