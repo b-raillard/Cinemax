@@ -70,6 +70,15 @@ public extension ServerVersion {
     /// `BaseItemDto` after playback.
     static let itemUserDataEndpoint = ServerVersion(10, 10)
 
+    /// Minimum server version exposing `GET /MediaSegments/{itemId}`, the route
+    /// behind Skip Intro / Skip Credits. It shipped in 10.10 along with the
+    /// media-segments subsystem; a 10.9 server has no such route and answers
+    /// 404 for every item, i.e. one failed request plus one log line per
+    /// playback. Gated rather than left to degrade: the caller's own answer for
+    /// "this item has no segments" is an empty list, so refusing to ask is
+    /// byte-identical to the 404's outcome and costs nothing.
+    static let mediaSegments = ServerVersion(10, 10)
+
     /// Minimum server version exposing `GET /Items/{id}/Collections`, the
     /// reverse lookup behind the "Included In" feature (jellyfin#15516). It
     /// shipped in 12.0 — the release that follows 10.11; there is no 10.12 —

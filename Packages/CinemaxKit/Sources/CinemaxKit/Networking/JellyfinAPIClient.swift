@@ -187,6 +187,14 @@ public final class JellyfinAPIClient: Sendable {
         _serverVersion = parsed
     }
 
+    /// Whether `url` names the server the client is already pointed at, in the
+    /// registry's own equivalence class (`ServerURLNormalizer.dedupKey`). A
+    /// client with no URL yet is not "the same server" as anything.
+    private func isSameServer(as url: URL) -> Bool {
+        guard let current = getServerURL() else { return false }
+        return ServerURLNormalizer.dedupKey(current) == ServerURLNormalizer.dedupKey(url)
+    }
+
     /// Whether the connected server is known to be at least `required`.
     /// Conservative by construction: an unknown version answers `false`.
     internal func serverSupports(_ required: ServerVersion) -> Bool {
@@ -453,11 +461,25 @@ public final class JellyfinAPIClient: Sendable {
     public func reconnect(url: URL, accessToken: String) {
         cache.clear()
         // A reconnect can repoint the client at a DIFFERENT server (multi-server
-        // switch), so the learned version stops being true here. Clearing sends
+        // switch), and the learned version stops being true then: clearing sends
         // every capability gate back to its conservative path until the
-        // `fetchServerInfo` that follows re-learns it; keeping the old value
-        // would let a 10.11 feature fire against a 10.8 box.
-        setServerVersion(nil)
+        // `fetchServerInfo` that follows re-learns it, because keeping the old
+        // value would let a 12.0 feature fire against a 10.9 box.
+        //
+        // But a reconnect onto the SAME server is the common case — a user
+        // switch (`UserSwitchSheet`) and a refused switch's rollback both go
+        // through here with the URL already pointed at — and nothing re-learns
+        // the version on those paths. Clearing it there left the rest of the
+        // process on "version unknown", which every gate reads as *unsupported*:
+        // the library Collections row, the `/Items/{id}/Collections` reverse
+        // lookup, the lightweight `fetchUserData` and the UPnP row all
+        // disappeared in silence on a 12.0 server after switching account. Same
+        // server ⇒ same version, so it is kept. Equality is the registry's own
+        // `dedupKey`, not raw `URL` equality, so a trailing slash or an
+        // uppercase host doesn't read as a different server.
+        if !isSameServer(as: url) {
+            setServerVersion(nil)
+        }
         let client = JellyfinClient(
             configuration: .init(
                 url: url,
