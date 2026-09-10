@@ -662,7 +662,19 @@ extension JellyfinAPIClient {
 
     // MARK: - Media Segments
 
+    /// Intro / outro segments for an item, or `[]` when the server can't have
+    /// them.
+    ///
+    /// Returns `[]` — without touching the network — below
+    /// `ServerVersion.mediaSegments` and while the version hasn't been learned
+    /// yet, the same shape as `getItemUserData`. An empty list is already what
+    /// the sole consumer (`SkipSegmentController`) treats as "no skip buttons",
+    /// which is also what a 10.9 server's 404 produced: the gate removes a
+    /// failed request and a log line per playback, and changes nothing the user
+    /// can see. The Intro Skipper plugin is a separate precondition — a 12.0
+    /// server without it also answers with an empty list.
     public func getMediaSegments(itemId: String, includeSegmentTypes: [JellyfinAPI.MediaSegmentType]? = nil) async throws -> [MediaSegmentDto] {
+        guard serverSupports(.mediaSegments) else { return [] }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let response = try await client.send(Paths.getItemSegments(itemID: itemId, includeSegmentTypes: includeSegmentTypes))
         return response.value.items ?? []

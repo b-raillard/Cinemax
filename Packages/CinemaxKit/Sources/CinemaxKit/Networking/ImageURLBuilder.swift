@@ -111,13 +111,29 @@ public struct ImageURLBuilder: Sendable {
         return components.url ?? serverURL
     }
 
+    /// A user's avatar, at `GET /UserImage?userId=` — the route the 12.0 spec
+    /// carries (and the only one jellyfin-sdk-swift generates,
+    /// `Paths.getUserImage`). The old `/Users/{userId}/Images/Primary` is
+    /// absent from that spec; it is still ROUTED on a 12.0 server (measured on
+    /// 2026-09-10 against Jellyfin 12.0: it answers 400 for a bogus id, where
+    /// an absent route answers 404), so this is hygiene, not a fix for a
+    /// broken avatar. No `ServerVersion` gate: `/UserImage` exists from 10.9,
+    /// which is the app's floor.
+    ///
+    /// Hand-built rather than routed through `Paths.getUserImage` for the two
+    /// usual reasons: the URL is handed to Nuke rather than sent by the SDK's
+    /// client, and it must keep the sub-path of a sub-path-hosted server
+    /// (`setEndpointPath(_:preservingBasePathOf:)`). `maxWidth` / `quality`
+    /// are kept — the server's image pipeline reads them here exactly as it did
+    /// on the old route, even though the SDK's typed parameters model only
+    /// `userId` / `tag` / `format`.
     public func userImageURL(userId: String, tag: String? = nil, maxWidth: Int? = nil) -> URL {
         guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
             return serverURL
         }
-        components.setEndpointPath("/Users/\(userId)/Images/Primary", preservingBasePathOf: serverURL)
+        components.setEndpointPath("/UserImage", preservingBasePathOf: serverURL)
 
-        var queryItems: [URLQueryItem] = []
+        var queryItems: [URLQueryItem] = [URLQueryItem(name: "userId", value: userId)]
         if let maxWidth {
             queryItems.append(URLQueryItem(name: "maxWidth", value: String(maxWidth)))
         }
@@ -125,7 +141,7 @@ public struct ImageURLBuilder: Sendable {
             queryItems.append(URLQueryItem(name: "tag", value: tag))
         }
         queryItems.append(URLQueryItem(name: "quality", value: "90"))
-        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        components.queryItems = queryItems
 
         return components.url ?? serverURL
     }

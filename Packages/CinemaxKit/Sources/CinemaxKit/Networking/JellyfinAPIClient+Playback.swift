@@ -651,7 +651,6 @@ extension JellyfinAPIClient {
             container: "mp4",
             context: .streaming,
             enableSubtitlesInManifest: true,
-            isBreakOnNonKeyFrames: true,
             maxAudioChannels: "8",
             minSegments: 2,
             type: .video,
@@ -773,7 +772,6 @@ extension JellyfinAPIClient {
             // seek behaviour disappears by construction.
             container: "ts",
             context: .streaming,
-            isBreakOnNonKeyFrames: true,
             maxAudioChannels: "8",
             // 1, not 2: Jellyfin holds the playlist back until `minSegments`
             // segments have actually been ENCODED (`WaitForMinimumSegmentCount`),
