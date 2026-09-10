@@ -166,12 +166,26 @@ struct AdminNetworkScreen: View {
                 label: loc.localized("admin.network.autoDiscovery"),
                 binding: boolBinding(\.isAutoDiscovery)
             )
-            iOSSettingsDivider
-            toggleRow(
-                icon: "antenna.radiowaves.left.and.right",
-                label: loc.localized("admin.network.upnp"),
-                binding: boolBinding(\.enableUPnP)
-            )
+            // RULE — the UPnP toggle is shown ONLY on a server known to be
+            // below 12.0. Jellyfin 12.0 marks `EnableUPnP`
+            // `[Obsolete("No longer supported")]`: it accepts the write and
+            // forwards no port, so the switch would be a control that silently
+            // does nothing. Below that the server really does forward, so the
+            // row stays. An UNKNOWN version hides it — the same "unknown means
+            // unsupported" discipline as every other `ServerVersion` gate,
+            // which here reads as "don't offer a switch we can't promise
+            // does anything". Either way the stored value is never touched:
+            // the save is a read-modify-write of the whole configuration.
+            if let version = appState.apiClient.knownServerVersion(),
+               version < ServerVersion.upnpPortForwarding {
+                iOSSettingsDivider
+                UPnPToggleRow(
+                    viewModel: viewModel,
+                    accent: themeManager.accent,
+                    animated: motionEffects,
+                    loc: loc
+                )
+            }
             iOSSettingsDivider
             toggleRow(
                 icon: "network",
@@ -330,4 +344,43 @@ struct AdminNetworkScreen: View {
 private extension String {
     var orEmDash: String { isEmpty ? "—" : self }
 }
+
+/// The UPnP row, alone in its own `View` for one reason: its `body` carries
+/// `@available(*, deprecated)`.
+///
+/// `NetworkConfiguration.enableUPnP` is deprecated in the SDK, and Swift has no
+/// pragma to silence a single deprecation — the only suppression the language
+/// offers is that a reference made INSIDE a deprecated declaration is not
+/// flagged. Wrapping it in a deprecated helper merely moves the warning to the
+/// helper's call site; the chain only terminates at a declaration nothing in
+/// our own code calls, i.e. a protocol witness. `body` is that witness (SwiftUI
+/// calls it, we never do), so the warning stops here and the annotation doubles
+/// as the explanation. The `Binding` is built inline for the same reason — a
+/// separate computed property would sit outside the deprecated context and
+/// warn again.
+///
+/// Kept rather than deleted because the field is live on every server below
+/// 12.0, which is what `AdminNetworkScreen` gates on before rendering this.
+private struct UPnPToggleRow: View {
+    let viewModel: AdminNetworkViewModel
+    let accent: Color
+    let animated: Bool
+    let loc: LocalizationManager
+
+    @available(*, deprecated, message: "Reads NetworkConfiguration.enableUPnP, [Obsolete] on Jellyfin 12.0 — deliberate, and version-gated by AdminNetworkScreen.")
+    var body: some View {
+        iOSToggleRow(
+            icon: "antenna.radiowaves.left.and.right",
+            label: loc.localized("admin.network.upnp"),
+            value: Binding(
+                get: { viewModel.edited?.enableUPnP ?? false },
+                set: { viewModel.edited?.enableUPnP = $0 }
+            ),
+            accent: accent,
+            animated: animated,
+            loc: loc
+        )
+    }
+}
+
 #endif

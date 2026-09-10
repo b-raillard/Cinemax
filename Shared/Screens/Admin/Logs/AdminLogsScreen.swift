@@ -35,7 +35,7 @@ struct AdminLogsScreen: View {
                 AdminSectionGroup {
                     ForEach(Array(viewModel.files.enumerated()), id: \.element.name) { index, file in
                         NavigationLink {
-                            AdminLogViewerScreen(fileName: file.name ?? "")
+                            AdminLogViewerScreen(fileName: file.name)
                         } label: {
                             logRow(file)
                         }
@@ -67,7 +67,7 @@ struct AdminLogsScreen: View {
             HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
                 iOSRowIcon(systemName: "doc.text", color: themeManager.accent)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(file.name ?? "—")
+                    Text(file.name)
                         .font(.system(size: CinemaScale.pt(14), design: .monospaced))
                         .foregroundStyle(CinemaColor.onSurface)
                         .lineLimit(1)
