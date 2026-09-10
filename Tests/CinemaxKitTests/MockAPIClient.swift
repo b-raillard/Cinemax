@@ -585,6 +585,28 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         }
         return []
     }
+
+    /// The lean (id, title) episode list. Counted SEPARATELY from
+    /// `getEpisodesCallCount` so a test can prove which of the two a navigation
+    /// path asks for — that distinction is the whole point of the split (the
+    /// full DTO measured 9.0× larger on one season).
+    private(set) var getEpisodeRefsCallCount = 0
+    /// Season id → refs. Falls back to mapping `getEpisodesHandler`'s answer so
+    /// existing fixtures keep working without being rewritten.
+    var getEpisodeRefsHandler: (@Sendable (String) async throws -> [EpisodeReference])?
+
+    func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference] {
+        recordLock.withLock { getEpisodeRefsCallCount += 1 }
+        if let handler = getEpisodeRefsHandler {
+            return try await handler(seasonId)
+        }
+        if let handler = getEpisodesHandler {
+            return try await handler(seasonId).compactMap { item in
+                item.id.map { EpisodeReference(id: $0, name: item.name ?? "") }
+            }
+        }
+        return []
+    }
     var stubbedNextUp: BaseItemDto?
     /// Drapeau **dédié**, distinct de `shouldThrow` : plusieurs suites existantes
     /// activent `shouldThrow` tout en laissant `getNextUp` réussir, et les faire

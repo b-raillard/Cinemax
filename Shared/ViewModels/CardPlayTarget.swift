@@ -308,9 +308,9 @@ enum CardEpisodeNavigationResolver {
         await withCheckedContinuation { (continuation: CheckedContinuation<CardPlaybackNavigation?, Never>) in
             let race = ProbeRace(continuation)
             // The loser is deliberately NOT cancelled, same argument as the
-            // next-up probe: `getEpisodes` fills its 10 s `episodes-` cache
-            // only once the response lands, so cancelling would throw away
-            // precisely what makes the next play on this season instant.
+            // next-up probe: `getEpisodeRefs` fills its 300 s `episoderefs-`
+            // cache only once the response lands, so cancelling would throw
+            // away precisely what makes the next play on this season instant.
             Task {
                 race.resume(await probe(
                     episodeId: episodeId, seriesId: seriesId, seasonId: seasonId,
@@ -332,7 +332,7 @@ enum CardEpisodeNavigationResolver {
         var season = seasonId
         // A search hit carries `seriesID`/`seasonID` already; a series card
         // whose next-up probe handed back an episode id carries neither, and
-        // a season is what `getEpisodes` is keyed on. One 10 s-cached,
+        // a season is what `getEpisodeRefs` is keyed on. One 10 s-cached,
         // single-flighted `getItem` closes the gap — and reports no season at
         // all when the target is still the series itself (the next-up probe
         // timed out), which is what makes that case a clean `nil`.
@@ -342,7 +342,9 @@ enum CardEpisodeNavigationResolver {
             season = season ?? item.seasonID
         }
         guard let series, let season else { return nil }
-        guard let episodes = try? await api.getEpisodes(
+        // `getEpisodeRefs`: only prev/next is derived here, and that needs an
+        // ordered list of ids and titles — nothing the full episode DTO adds.
+        guard let episodes = try? await api.getEpisodeRefs(
             seriesId: series, seasonId: season, userId: userId
         ) else { return nil }
 

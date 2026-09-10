@@ -181,6 +181,12 @@ public protocol LibraryAPI: Sendable {
 
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
+    /// A season's episodes as (id, title) pairs only — what prev/next episode
+    /// navigation needs. **Prefer this over `getEpisodes` wherever the full DTO
+    /// is not read**: the same season measured 9.0× smaller without the fields
+    /// `getEpisodes` asks for. Its cache key is outside `userDataCachePrefixes`
+    /// because the payload carries no userData at all; see the implementation.
+    func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference]
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto?
 
     /// Next-up episodes across ALL in-progress series (the global "Next Up"

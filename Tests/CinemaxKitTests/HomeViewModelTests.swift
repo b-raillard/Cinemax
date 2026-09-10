@@ -369,11 +369,15 @@ struct HomeViewModelTests {
 
         await vm.load(using: appState)
         #expect(vm.resumeNavigation["ep-2"] != nil, "pré-condition : la navigation existe déjà")
-        let before = api.getEpisodesCallCount
+        // La navigation passe par `getEpisodeRefs` (charge utile allégée), pas
+        // par `getEpisodes` : les deux compteurs sont suivis pour que ce test ne
+        // devienne pas vide si un chemin repassait à la version complète.
+        let before = api.getEpisodeRefsCallCount
 
         await vm.refreshUserDataRails(using: appState)
 
-        #expect(api.getEpisodesCallCount == before, "aucune saison re-demandée")
+        #expect(api.getEpisodeRefsCallCount == before, "aucune saison re-demandée")
+        #expect(api.getEpisodesCallCount == 0, "la navigation n'utilise jamais la version complète")
     }
 
     @Test("Next Up fetch failure leaves nextUpItems empty without failing the load")

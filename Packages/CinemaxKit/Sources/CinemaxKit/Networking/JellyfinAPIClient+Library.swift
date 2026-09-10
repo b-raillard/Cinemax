@@ -377,6 +377,53 @@ extension JellyfinAPIClient {
         return applyRatingFilter(items)
     }
 
+    /// Just the (id, title) pairs of a season's episodes, in order — what
+    /// episode NAVIGATION needs, and nothing more.
+    ///
+    /// Separate from `getEpisodes` rather than a parameter on it, because the
+    /// two answer different questions and must cache separately. The detail
+    /// screen needs the full DTO (overview, media sources, per-episode
+    /// userData); Home's navigation maps, `fillMissingEpisodeNavigation` and
+    /// `CardEpisodeNavigationResolver` need an ordered list of ids and titles
+    /// and throw the rest away. Measured against Jellyfin 12.0 on 2026-09-10,
+    /// a 23-episode season of *Arrow* is 164 069 bytes with the fields the app
+    /// asks for and 18 292 without — 9.0× — and a single Home load resolves up
+    /// to 40 distinct seasons.
+    ///
+    /// **RULE — this key is deliberately OUTSIDE `userDataCachePrefixes`, and
+    /// its TTL is 300 s rather than 10.** The `episodes-` key is swept by every
+    /// userData mutator because its payload carries watched marks and resume
+    /// positions. This payload carries **none**: `enableUserData: false` and no
+    /// `fields`, so there is nothing a played-toggle could make stale. An
+    /// episode's id and title change only on a library re-scan. Adding this
+    /// prefix to that sweep list would merely re-fetch an identical answer
+    /// after every watched toggle anywhere in the app.
+    ///
+    /// No rating filter, also deliberately: this serves the prev/next buttons
+    /// of an episode the user is ALREADY watching, and the list must stay
+    /// contiguous — a hole punched in the middle of a season by a rating cap
+    /// would make "next" skip an episode rather than refuse to show it.
+    /// `getPlaybackInfo` remains the authority on what may actually be played.
+    public func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference] {
+        let cacheKey = "episoderefs-\(seasonId)-\(userId)"
+        if let cached: [EpisodeReference] = cache.get(cacheKey) { return cached }
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        var params = Paths.GetEpisodesParameters(userID: userId, fields: [], seasonID: seasonId, enableUserData: false)
+        params.enableImages = false
+        do {
+            let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
+            let refs = (response.value.items ?? []).compactMap { item -> EpisodeReference? in
+                guard let id = item.id else { return nil }
+                return EpisodeReference(id: id, name: item.name ?? "")
+            }
+            cache.set(cacheKey, value: refs, ttl: 300)
+            return refs
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     public func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
         // Short-TTL cache mirroring `getEpisodes`: a series-detail open fires
         // this alongside `getItem`/`getSeasons`, and the tvOS post-playback
