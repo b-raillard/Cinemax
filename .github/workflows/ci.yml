@@ -100,3 +100,31 @@ jobs:
       - name: Run SwiftLint
         run: swiftlint --strict --quiet
         continue-on-error: true
+
+  # Dependency drift + SBOM (#187). Plain Python 3 on Linux: no Xcode, no
+  # toolchain install. `check` fails when Package.resolved, the recorded list
+  # in docs/dependencies/checksums.md, CinemaxKit's own Package.resolved, the
+  # versions hard-coded in LicensesView, or a binary artifact's declared
+  # checksum drift apart — see that doc for what SwiftPM already verifies.
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check pins, licences and binary artifacts
+        run: python3 scripts/dependency-audit.py check
+
+      # Generated on every run so a broken generator shows up in the PR that
+      # breaks it; uploaded only for main.
+      - name: Generate CycloneDX SBOM
+        run: python3 scripts/dependency-audit.py sbom --output cinemax-sbom.cdx.json
+
+      - name: Upload SBOM
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cinemax-sbom
+          path: cinemax-sbom.cdx.json
