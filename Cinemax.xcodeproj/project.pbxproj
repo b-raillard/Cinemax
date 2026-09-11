@@ -50,6 +50,7 @@
 		18D5366C4AD5FA663CF6EC03 /* TVButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */; };
 		18D85464EB601F8113743C4D /* ProgressBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3DF8C441837A8A10C480077 /* ProgressBarView.swift */; };
 		191EC9FD132D05DA77649F4B /* MenuSettingsScreen+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726F34A0F8B1ADDDFE4FE4C3 /* MenuSettingsScreen+iOS.swift */; };
+		1B27523E864E079848527148 /* CardZoomTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26CE1748D76D350ED628CCA3 /* CardZoomTransition.swift */; };
 		1B2805729588F4621128103B /* PlayerEngineSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15453ED6A1F2D12B3E0F09DE /* PlayerEngineSurface.swift */; };
 		1B6075E5B54067D4015EC06F /* LoginViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */; };
 		1BE6E3C085D620D4F697285D /* MediaDetailButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554633B7F0AE3A72EE4B56BB /* MediaDetailButtonStyles.swift */; };
@@ -411,6 +412,7 @@
 		E283DEC1BE44B3671AEF1E74 /* CardActionPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C683E40EA41CFFB115C0AD25 /* CardActionPresenter.swift */; };
 		E33B8B9DA68A84DFEE1E03EF /* TVBackNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F3FB6BF53E15B2FC37932C6 /* TVBackNavigationTests.swift */; };
 		E47F32A6D835E3546B9E083C /* PrivacySecurityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B000BF38B945DD465445ED /* PrivacySecurityScreen.swift */; };
+		E4A3A72FC2982891437CC1E2 /* CardZoomTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26CE1748D76D350ED628CCA3 /* CardZoomTransition.swift */; };
 		E4AF1097C891473701C8C2C9 /* LoadingStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863021FF6B842EE2A0E27CA /* LoadingStateView.swift */; };
 		E61CB24A8F271963C9893633 /* IdentifyResultsGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74AE99230CEB07F7CC4FCCFA /* IdentifyResultsGridView.swift */; };
 		E640A4F60FCA400B8023ACDE /* SyncPlayJoinAndReadyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36E29B188D5730A3ED5B0FB8 /* SyncPlayJoinAndReadyTests.swift */; };
@@ -557,6 +559,7 @@
 		25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminUserDetailViewModel.swift; sourceTree = "<group>"; };
 		25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
 		25DBC840D04F02A6587A96D6 /* AdminLandingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLandingScreen.swift; sourceTree = "<group>"; };
+		26CE1748D76D350ED628CCA3 /* CardZoomTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardZoomTransition.swift; sourceTree = "<group>"; };
 		2704DEBD38156198513A11C4 /* RemoteCommandController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteCommandController.swift; sourceTree = "<group>"; };
 		280786386ED204F8AAAF36B6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2BAFD25D98FA0E18A0F441F5 /* ContentRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRow.swift; sourceTree = "<group>"; };
@@ -1238,6 +1241,7 @@
 				F701053A07C8B6B1D912E9E6 /* Components */,
 				6972E29F4227F16D517B124A /* AccentOption.swift */,
 				A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */,
+				26CE1748D76D350ED628CCA3 /* CardZoomTransition.swift */,
 				5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */,
 				D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */,
 				E9A353B49C5117D5F686F07B /* GlassModifiers.swift */,
@@ -1725,6 +1729,7 @@
 				A5BDB9B097C212892B4AEB36 /* BaseItemDto+Metadata.swift in Sources */,
 				22936040699583C5F2D4E834 /* CardActionPresenter.swift in Sources */,
 				3D0E046C8271F43AF4140A28 /* CardPlayTarget.swift in Sources */,
+				E4A3A72FC2982891437CC1E2 /* CardZoomTransition.swift in Sources */,
 				8BEED9AD5A4971DD030806F0 /* CastCircle.swift in Sources */,
 				27A0E4768C9B9FBFAEB53C0A /* ChapterController.swift in Sources */,
 				310D172DE17EC3F22A5DFA95 /* ChipEditor.swift in Sources */,
@@ -1927,6 +1932,7 @@
 				E71BC25CBB98F5DF97065B98 /* BaseItemDto+Metadata.swift in Sources */,
 				E283DEC1BE44B3671AEF1E74 /* CardActionPresenter.swift in Sources */,
 				4D3A0363BBAF768FB4D88343 /* CardPlayTarget.swift in Sources */,
+				1B27523E864E079848527148 /* CardZoomTransition.swift in Sources */,
 				DDE0943D46488F809421872D /* CastCircle.swift in Sources */,
 				A9D6725E2CCEBE03D23B82CA /* ChapterController.swift in Sources */,
 				F7DB378B44C1CB5274C228BA /* ChipEditor.swift in Sources */,
