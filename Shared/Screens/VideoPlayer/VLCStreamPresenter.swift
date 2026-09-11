@@ -472,6 +472,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // progress timer nothing will ever invalidate).
     private var navGeneration = 0
 
+    /// Our slot in `RemotePlaystateRouter` (inbound pause / seek / stop from
+    /// another Jellyfin session). Handed back on teardown; the router ignores a
+    /// stale token, so a late teardown cannot evict the player that replaced us.
+    private var remotePlaystateToken = 0
+
     // App-lifecycle wake resilience. When the device sleeps (Apple TV / phone
     // locked) mid-playback, the stream socket dies AND the OS invalidates the
     // hardware VideoToolbox decode session + the audio session. On resume we
@@ -578,6 +583,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         scheduleHideControls()
         setupLifecycleObservers()
         bindSyncPlay()
+        remotePlaystateToken = RemotePlaystateRouter.shared.register { [weak self] command in
+            self?.applyRemotePlaystate(command) ?? false
+        }
     }
 
     #if os(iOS)
@@ -597,6 +605,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func teardown() {
         isTearingDown = true
+        RemotePlaystateRouter.shared.unregister(remotePlaystateToken)
         unbindSyncPlay()
         setLoading(false)
         cancelOpenWatchdog()
@@ -3205,6 +3214,63 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         setPlayPauseIcon(playing: willPlay)
         #endif
         scheduleHideControls()
+    }
+
+    // MARK: - Remote control (inbound Playstate, #176)
+
+    /// Applies a transport command another Jellyfin session sent this device.
+    /// `RemotePlaystateRouter` has already refused it while a Watch Together
+    /// group owns the playhead, which is why nothing here goes through
+    /// `syncPlay`. Returns whether the command was applied (for the router's
+    /// `CINEMAX-REMOTE` log line).
+    private func applyRemotePlaystate(_ command: RemotePlaystateCommand) -> Bool {
+        guard !isTearingDown else { return false }
+        switch command.kind {
+        case .pause:
+            return setPlayingFromRemote(false)
+        case .unpause:
+            return setPlayingFromRemote(true)
+        case .playPause:
+            return setPlayingFromRemote(!enginePlaying)
+        case .seek:
+            // Through `engineSeek`, the funnel every seek path shares: the
+            // near-end clamp (libVLC refuses a seek to `lengthMs` and never
+            // recovers) and the settle window that holds the spinner. Refused
+            // before the demuxer exists — the resume seek owns that window,
+            // and libVLC would drop a seek into a media not yet open.
+            guard let ticks = command.seekPositionTicks, mediaConfirmedOpen else { return false }
+            // A local ±N burst still waiting to commit must not land after it.
+            cancelPendingSeekCommit()
+            engineSeek(ms: Int32(clamping: ticks / 10_000))
+            refreshTimeUISoon()
+            return true
+        case .stop:
+            // The close button's exit, so `viewWillDisappear` owns the stop
+            // report + teardown as for any dismissal. Asked of the PRESENTING
+            // controller: an alert or picker stacked on top of the player would
+            // otherwise absorb the dismissal and leave the player standing.
+            (presentingViewController ?? self).dismiss(animated: true)
+            return true
+        case .nextTrack:
+            guard episodeNavigator != nil, let next = nextEpisode else { return false }
+            navigateToEpisode(next)
+            return true
+        case .previousTrack:
+            guard episodeNavigator != nil, let previous = previousEpisode else { return false }
+            navigateToEpisode(previous)
+            return true
+        }
+    }
+
+    /// Same visible feedback as a local press (`playPauseTapped`), minus its
+    /// SyncPlay branch — a remote command never reaches here in a group.
+    private func setPlayingFromRemote(_ play: Bool) -> Bool {
+        if play { enginePlay() } else { enginePause() }
+        flashCenterGlyph(playing: play)
+        #if os(iOS)
+        setPlayPauseIcon(playing: play)
+        #endif
+        return true
     }
 
     // MARK: - SyncPlay ("Watch Together")

@@ -80,6 +80,7 @@
 		2964BFC251FD8E8BF4D76B6C /* LibraryCollectionsScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAE341711C920F2F12128C51 /* LibraryCollectionsScope.swift */; };
 		2B7E9256978164A8A6FC72B5 /* CardMenuOptimisticStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF37181D8DDD93D930FE74E7 /* CardMenuOptimisticStateTests.swift */; };
 		2BC23AB09D961A04A91415F7 /* AppNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78377E8E832D65F7226A2A06 /* AppNavigation.swift */; };
+		2C49D0AA24B3404FEAF8940A /* RemotePlaystateRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A465A5F06A8149C5E3FB68E /* RemotePlaystateRouter.swift */; };
 		2C598521E34C029BD36C4A3C /* AdminActivityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */; };
 		2CBC178E02BABE6865247534 /* ServerRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5D9387C11356CF0140347C /* ServerRegistryTests.swift */; };
 		2E1A085843FA335D04A9B52B /* ToastCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5610FD34CD71B2F9E4D65FC6 /* ToastCenter.swift */; };
@@ -235,6 +236,7 @@
 		7885F6C774A599528CADE04B /* AdminNetworkScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55122A5776984A5A63808F80 /* AdminNetworkScreen.swift */; };
 		79D5D2069D273B8F869EAB67 /* VideoResumeSeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EF0DA1A754825C8A1CE6C2 /* VideoResumeSeekTests.swift */; };
 		7A87DBDBFBB8645F373C66EB /* AdvancedAdminLandingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13082AD25DB233BD0E63DB1C /* AdvancedAdminLandingScreen.swift */; };
+		7A9F88310B8B0897460DBB98 /* RemotePlaystateRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1330270587AFAB19C600176 /* RemotePlaystateRouterTests.swift */; };
 		7AE0754EFCA26F6B9EF3E3A5 /* CinemaxWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7B95F6AD4D4FADB0685A8A81 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */; };
 		7CF24A796713A4992BC74C3B /* RatingBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C632FC97E86299EBCAA2CA /* RatingBadge.swift */; };
@@ -255,6 +257,7 @@
 		86280CCCB1F5B8F2F64E0DF2 /* ExtensionSessionContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */; };
 		86526F1D7EA8C308D75CD1FE /* WatchedHistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE70722EFBCE65782C560AB /* WatchedHistoryScreen.swift */; };
 		86AC24861A35CA8EDFE28605 /* AdminPluginsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762983CA570B7EB3C9E1F65 /* AdminPluginsScreen.swift */; };
+		880679762A2ABF35AF9B5B62 /* RemotePlaystateRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A465A5F06A8149C5E3FB68E /* RemotePlaystateRouter.swift */; };
 		88F9D715BA01E84DCB310C87 /* PlayerTimeFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C78DE5E6487FF7D0204D485 /* PlayerTimeFormatTests.swift */; };
 		89BD7033117AAC2AD4EF269E /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 03A665C8AC6BE9D36AD43C7F /* InfoPlist.strings */; };
 		89E70B6249FE96008E832974 /* SleepTimerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74EFA596296688A96C374135 /* SleepTimerController.swift */; };
@@ -646,6 +649,7 @@
 		7724055A1E25C1AF01224893 /* IntentSessionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentSessionProvider.swift; sourceTree = "<group>"; };
 		78377E8E832D65F7226A2A06 /* AppNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigation.swift; sourceTree = "<group>"; };
 		78A064C067BC85456FB2FE3A /* AudioTrackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTrackPolicy.swift; sourceTree = "<group>"; };
+		7A465A5F06A8149C5E3FB68E /* RemotePlaystateRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlaystateRouter.swift; sourceTree = "<group>"; };
 		7B900079191219FB59520FA9 /* MediaEntityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaEntityID.swift; sourceTree = "<group>"; };
 		7CE70722EFBCE65782C560AB /* WatchedHistoryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchedHistoryScreen.swift; sourceTree = "<group>"; };
 		7D53C46CC9C173E104ABA41C /* MediaQualityBadges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaQualityBadges.swift; sourceTree = "<group>"; };
@@ -763,6 +767,7 @@
 		DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailViewModel.swift; sourceTree = "<group>"; };
 		DDE7C8046FBDB91EFDDC0805 /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
 		DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryViewModel.swift; sourceTree = "<group>"; };
+		E1330270587AFAB19C600176 /* RemotePlaystateRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlaystateRouterTests.swift; sourceTree = "<group>"; };
 		E15F2D44D68F8FD79A6A7488 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentProvider.swift; sourceTree = "<group>"; };
 		E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		E5BE8C3505764A69391252DD /* MediaDetailSimilarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailSimilarSection.swift; sourceTree = "<group>"; };
@@ -1069,6 +1074,7 @@
 				F5015BA3559E63C6E9845F2B /* PlayMethodTests.swift */,
 				53363AB0D63349A37334B381 /* QuickConnectAuthorizeViewModelTests.swift */,
 				E9B0EBFA7FD313F6CEB0E3A2 /* RemoteImageCatalogTests.swift */,
+				E1330270587AFAB19C600176 /* RemotePlaystateRouterTests.swift */,
 				82A628B8872B47A31F501C42 /* RemotePlayTargetTests.swift */,
 				4E7EF991448FA04C0201CBBD /* SearchRelevanceTests.swift */,
 				7F79C18163C57966CF114BD2 /* SearchViewModelTests.swift */,
@@ -1270,6 +1276,7 @@
 				BEE8ECEE461A97A3A4667563 /* PlayerTimeFormat.swift */,
 				A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */,
 				2704DEBD38156198513A11C4 /* RemoteCommandController.swift */,
+				7A465A5F06A8149C5E3FB68E /* RemotePlaystateRouter.swift */,
 				0CC9FEFF022E1379C8523576 /* SeekCoalescer.swift */,
 				4D0C0F047D7CB697E80F4CA5 /* SkipSegmentController.swift */,
 				74EFA596296688A96C374135 /* SleepTimerController.swift */,
@@ -1660,6 +1667,7 @@
 				0ED6BB9632625BE9F922F728 /* QuickConnectAuthorizeViewModelTests.swift in Sources */,
 				A2EEBAC2676A4F47DC3FC75D /* RemoteImageCatalogTests.swift in Sources */,
 				A2055D7AD7A62A82F1577608 /* RemotePlayTargetTests.swift in Sources */,
+				7A9F88310B8B0897460DBB98 /* RemotePlaystateRouterTests.swift in Sources */,
 				AB379BDB42B5C1F4D687B681 /* SearchRelevanceTests.swift in Sources */,
 				330E22BA7BBD29DD3BE0D93A /* SearchViewModelTests.swift in Sources */,
 				71B23336490FEFD9143B5D99 /* SeekCoalescerTests.swift in Sources */,
@@ -1827,6 +1835,7 @@
 				8408A487C19DAB3D82498B24 /* RatingBadge.swift in Sources */,
 				15B101DB7D9B770EAD24E7CA /* RemoteCommandController.swift in Sources */,
 				AA4DDAF31F9D034643D75B42 /* RemoteControlListener.swift in Sources */,
+				880679762A2ABF35AF9B5B62 /* RemotePlaystateRouter.swift in Sources */,
 				72281CF32299F9545AA48ED7 /* SearchScreen.swift in Sources */,
 				B80500609E8D56844738FB4A /* SearchViewModel.swift in Sources */,
 				CCA01F1FD9DF944BFDEBD578 /* SeekCoalescer.swift in Sources */,
@@ -2030,6 +2039,7 @@
 				7CF24A796713A4992BC74C3B /* RatingBadge.swift in Sources */,
 				B54B725BA68563ACADEC4B8C /* RemoteCommandController.swift in Sources */,
 				45719ED14139C973DE7C3681 /* RemoteControlListener.swift in Sources */,
+				2C49D0AA24B3404FEAF8940A /* RemotePlaystateRouter.swift in Sources */,
 				A38CC2D23545EA9986CB053F /* SearchScreen.swift in Sources */,
 				1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */,
 				F9A891C275B494CA3A05BF0C /* SeekCoalescer.swift in Sources */,
