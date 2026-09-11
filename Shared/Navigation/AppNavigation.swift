@@ -251,19 +251,19 @@ final class AppState {
     /// runs the search; `pendingDeepLinkTabId` gets the user to that tab.
     var pendingIntentSearchQuery: String?
 
+    /// Both carriers — the custom scheme the app's own extensions emit and the
+    /// Universal Links form (`https://<host>/item/{id}`, delivered by iOS only
+    /// after the host's AASA verified this app) — read through the one pure
+    /// `DeepLinkRoute.parse`, which also applies `isValidItemId`: a malformed
+    /// link is dropped before it can drive a lookup with attacker-controlled
+    /// path text. `onOpenURL` receives Universal Links as well as scheme URLs.
     func handleDeepLink(_ url: URL) {
-        guard url.scheme == "cinemax" else { return }
-        switch url.host() {
-        case "item":
-            let id = url.lastPathComponent
-            // Defense-in-depth: only dispatch a well-formed Jellyfin item id
-            // (32-char undashed hex OR a canonical dashed GUID) so a malformed
-            // deep link can't drive a lookup with attacker-controlled path text.
-            guard Self.isValidItemId(id) else { return }
+        switch DeepLinkRoute.parse(url, isValidItemId: Self.isValidItemId) {
+        case .item(let id):
             pendingDeepLinkItemId = id
-        case "home":
+        case .home:
             pendingDeepLinkTabId = "home"
-        default:
+        case nil:
             break
         }
     }

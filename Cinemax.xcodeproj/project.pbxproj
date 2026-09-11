@@ -198,6 +198,7 @@
 		64406006E2A4AB13FDE38E19 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = AF177D070920EC62E7827637 /* Localizable.strings */; };
 		648763482602FDCD12A8DC88 /* AdminActivityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */; };
 		649F44415009AA3AFB1D1FE3 /* CinemaxKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223258AFA0F2668369423520 /* CinemaxKitTests.swift */; };
+		64A394D73AB4F4C287A45113 /* DeepLinkRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DAD3A324A7F68226FB0DDA /* DeepLinkRoute.swift */; };
 		64A7DF8F29071518577C6233 /* MediaDetailEpisodeMetadataLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D70C7B71261C61B6B142FD1 /* MediaDetailEpisodeMetadataLine.swift */; };
 		67ED44E95613EB7B1F5836D7 /* AdminPlaybackScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C56CCEB123ABB29AC4D2A8 /* AdminPlaybackScreen.swift */; };
 		68A6C69AD81208E75BA03CF8 /* UserSwitchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF66FBCB52822C36CFD91DA /* UserSwitchSheet.swift */; };
@@ -415,6 +416,7 @@
 		E61CB24A8F271963C9893633 /* IdentifyResultsGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74AE99230CEB07F7CC4FCCFA /* IdentifyResultsGridView.swift */; };
 		E640A4F60FCA400B8023ACDE /* SyncPlayJoinAndReadyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36E29B188D5730A3ED5B0FB8 /* SyncPlayJoinAndReadyTests.swift */; };
 		E66E3D28456AEB594F4B16DD /* SyncPlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB21434207D275C5DE4B7E1 /* SyncPlayController.swift */; };
+		E68BC301A4506550C9902CC0 /* DeepLinkRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DAD3A324A7F68226FB0DDA /* DeepLinkRoute.swift */; };
 		E6A483EBAE295BA9DF0BD577 /* PosterPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD74C7044AE82EE6BA3DDAB0 /* PosterPrefetcher.swift */; };
 		E6B2BB0C27B3C1FCDB145884 /* SettingsScreen+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66D79E78292DF655B3F508E /* SettingsScreen+iOS.swift */; };
 		E6C2C97AB4AD05D3A7D95087 /* AdminScheduledTasksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2101C4E32EEC83662C75D00 /* AdminScheduledTasksScreen.swift */; };
@@ -453,6 +455,7 @@
 		FA0D8EAA93AE77CCF5E5D66B /* MediaDetailEpisodeOverviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 520518BCFA8AF149838E5906 /* MediaDetailEpisodeOverviewSheet.swift */; };
 		FA853F39728C4E3652D2C5E5 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C346F0B7AFF504DA6593370E /* HomeViewModel.swift */; };
 		FB0B24DF085E61FD16E5F70A /* BackdropFallbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A855157B1CDF9464CA308220 /* BackdropFallbackView.swift */; };
+		FB1668964FB3B0CCF483EADC /* DeepLinkRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7EA60E10D3E173579C547E /* DeepLinkRouteTests.swift */; };
 		FB6FC7ADD24BFD093F9D6098 /* NativeVideoPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07FE737816B4F86FC1A9D144 /* NativeVideoPresenter.swift */; };
 		FC1B2E5E3AD07540A82FD198 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7245AC0008EF86CB3AF4972B /* PrivacyInfo.xcprivacy */; };
 		FC977C55710C5DEB48C5A122 /* TVButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */; };
@@ -586,6 +589,7 @@
 		4306C11E79B9A2CFADC83D03 /* AdminApiKeysViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminApiKeysViewModel.swift; sourceTree = "<group>"; };
 		43B577BCED94F9831A8C8171 /* IdentifyScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifyScreen.swift; sourceTree = "<group>"; };
 		461BC0222941D069E3A1AE4B /* AdminLogsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLogsScreen.swift; sourceTree = "<group>"; };
+		47DAD3A324A7F68226FB0DDA /* DeepLinkRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkRoute.swift; sourceTree = "<group>"; };
 		48BB9B833D705FD5AFFFB56B /* LibrarySortFilterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySortFilterSheet.swift; sourceTree = "<group>"; };
 		4AC195F26167266BFFE287F1 /* CinemaxWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxWidget.swift; sourceTree = "<group>"; };
 		4D0C0F047D7CB697E80F4CA5 /* SkipSegmentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkipSegmentController.swift; sourceTree = "<group>"; };
@@ -613,6 +617,7 @@
 		59CE3A78C397CC15A81F1635 /* GlassTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTextField.swift; sourceTree = "<group>"; };
 		5AD9477588ED431D8A6A0878 /* IdentifyFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifyFormView.swift; sourceTree = "<group>"; };
 		5B79C648FDB6E0DBCD80CAEB /* AdminDevicesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminDevicesViewModel.swift; sourceTree = "<group>"; };
+		5B7EA60E10D3E173579C547E /* DeepLinkRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkRouteTests.swift; sourceTree = "<group>"; };
 		5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaGlassTheme.swift; sourceTree = "<group>"; };
 		5C8261D26852CF6D06906E30 /* MediaDetailWatchTogether.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailWatchTogether.swift; sourceTree = "<group>"; };
 		5CBC186E640142D8D47F4DA0 /* PlaybackLiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackLiveActivityController.swift; sourceTree = "<group>"; };
@@ -1033,6 +1038,7 @@
 				223258AFA0F2668369423520 /* CinemaxKitTests.swift */,
 				FD278965A93E87A5F881AA1A /* CollectionDetailTests.swift */,
 				0E8781EB49CEE6EFE3A6560A /* ContentRatingClassifierTests.swift */,
+				5B7EA60E10D3E173579C547E /* DeepLinkRouteTests.swift */,
 				0E6386886CB94DB7929168B0 /* EpisodeRefsPayloadTests.swift */,
 				1474EC26BDBFC7AADD6A8C35 /* EpisodeVersionSelectionTests.swift */,
 				150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */,
@@ -1216,6 +1222,7 @@
 			isa = PBXGroup;
 			children = (
 				78377E8E832D65F7226A2A06 /* AppNavigation.swift */,
+				47DAD3A324A7F68226FB0DDA /* DeepLinkRoute.swift */,
 				DC1B61BF8E4B4D7BFFEEDF40 /* MainTabView.swift */,
 				6E2E6BDC1B376722400F1A3C /* MenuConfig.swift */,
 				51EA3ACED7C511625904B26B /* TVBackNavigation.swift */,
@@ -1624,6 +1631,7 @@
 				649F44415009AA3AFB1D1FE3 /* CinemaxKitTests.swift in Sources */,
 				4A40DDFE0D1CE9C8640B5A05 /* CollectionDetailTests.swift in Sources */,
 				159B117FA5F3216DC9B21917 /* ContentRatingClassifierTests.swift in Sources */,
+				FB1668964FB3B0CCF483EADC /* DeepLinkRouteTests.swift in Sources */,
 				C0D6B65C1C636AF7198BBF71 /* EpisodeRefsPayloadTests.swift in Sources */,
 				F36B4E9B1B749857BC88C89E /* EpisodeVersionSelectionTests.swift in Sources */,
 				86280CCCB1F5B8F2F64E0DF2 /* ExtensionSessionContractTests.swift in Sources */,
@@ -1736,6 +1744,7 @@
 				CD8E6C6DE6EC7575C36BE5DB /* CinemaxStreamProxy.swift in Sources */,
 				99AD4FD1823DDEAE384019A4 /* CinemaxTVApp.swift in Sources */,
 				4E6ACB12C22F88F40EF8DC8A /* ContentRow.swift in Sources */,
+				E68BC301A4506550C9902CC0 /* DeepLinkRoute.swift in Sources */,
 				83A446B71A40107299A25266 /* DestructiveConfirmSheet.swift in Sources */,
 				B8D3F4C802A068C1080367C5 /* EmptyStateView.swift in Sources */,
 				F5C609E838767D61F28175C1 /* EndOfSeriesOverlayController.swift in Sources */,
@@ -1938,6 +1947,7 @@
 				4E55226485AA00B496FF1CD2 /* CinemaxIntents.swift in Sources */,
 				F9C5CED88AB7F8798BA4A5E2 /* CinemaxStreamProxy.swift in Sources */,
 				629034F00C9B9A91F1DFDFAF /* ContentRow.swift in Sources */,
+				64A394D73AB4F4C287A45113 /* DeepLinkRoute.swift in Sources */,
 				CFADE9D9D322D20A81C56A8F /* DestructiveConfirmSheet.swift in Sources */,
 				28247D55CC29D95670733239 /* EmptyStateView.swift in Sources */,
 				437AA27B26EE2A52E222B7BB /* EndOfSeriesOverlayController.swift in Sources */,
