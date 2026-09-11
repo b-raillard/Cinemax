@@ -42,6 +42,11 @@ struct HomeScreen: View {
     @State private var seriesDestination: SeriesDestination?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
+    /// Whether Watch Together can work at all: only the VLC presenter binds
+    /// SyncPlay. Observed here (rather than read once through
+    /// `SyncPlayController.isEngineSupported`) so the « En direct » row's
+    /// dimmed cards and footnote follow the setting the moment it flips.
+    @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
     /// Raw JSON of the user's picked genres. Held here only to observe changes
     /// made in Settings → Interface → Home page and refresh the rows live.
     @AppStorage(SettingsKey.homeSelectedGenres) private var selectedGenresJSON: String = ""
@@ -846,20 +851,54 @@ struct HomeScreen: View {
     /// the item artwork + "Name is watching" label, and navigates to the item's detail
     /// screen on tap. Hidden entirely when the server has no other active sessions.
     private var watchingNowRow: some View {
-        ContentRow(
-            title: loc.localized("home.watchingNow"),
-            // Feed the entries themselves — NEVER a snapshot of their indices.
-            // `reload()` empties the underlying arrays before refetching, and
-            // Observation invalidates the already-instantiated LazyHStack
-            // children directly: they re-run their body against the emptied
-            // array while still holding the old index snapshot, trapping with
-            // "Index out of range".
-            data: viewModel.liveEntries,
-            id: \.id
-        ) { entry in
-            liveCard(entry)
-                .frame(width: wideCardWidth)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            ContentRow(
+                title: loc.localized("home.watchingNow"),
+                // Feed the entries themselves — NEVER a snapshot of their indices.
+                // `reload()` empties the underlying arrays before refetching, and
+                // Observation invalidates the already-instantiated LazyHStack
+                // children directly: they re-run their body against the emptied
+                // array while still holding the old index snapshot, trapping with
+                // "Index out of range".
+                data: viewModel.liveEntries,
+                id: \.id
+            ) { entry in
+                liveCard(entry)
+                    .frame(width: wideCardWidth)
+            }
+
+            // Said once, under the row, and only when a card's join is
+            // actually blocked — a row holding only the viewer's own group (its
+            // action is « Quitter », which works on any engine) or only solo
+            // cards owes nobody an explanation.
+            if LiveSessionsRow.needsEngineFootnote(
+                viewModel.liveEntries,
+                localGroupId: SyncPlayController.shared.group?.id,
+                engineSupported: !forceNativeAVPlayer
+            ) {
+                engineFootnote
+            }
         }
+    }
+
+    /// Why the dimmed group cards cannot be joined, and the one setting that
+    /// changes it. Before this, the precondition was only ever stated AFTER a
+    /// press, in a toast (#165).
+    private var engineFootnote: some View {
+        Label {
+            Text(loc.localized("syncplay.needsVLC.footnote"))
+        } icon: {
+            Image(systemName: "info.circle")
+        }
+        .font(CinemaFont.label(.small))
+        .foregroundStyle(CinemaColor.onSurfaceVariant)
+        .fixedSize(horizontal: false, vertical: true)
+        // The row's own gutter, so the note sits under its first card.
+        #if os(tvOS)
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        #else
+        .padding(.horizontal, CinemaSpacing.spacing6)
+        #endif
     }
 
     @ViewBuilder
@@ -888,7 +927,15 @@ struct HomeScreen: View {
         // kill while the membership survives server-side, and reading only the
         // local copy then labelled the card « Rejoindre » — offering to join a
         // group the account has never left.
-        let isMine = entry.viewerIsParticipant || SyncPlayController.shared.group?.id == groupId
+        let localGroupId = SyncPlayController.shared.group?.id
+        let isMine = entry.isViewerIn(localGroupId: localGroupId)
+        // With the native player forced, JOINING cannot work (no SyncPlay
+        // binding there). The card stays a focusable button — `.disabled` would
+        // drop it out of the tvOS focus chain, see below — but reads as
+        // unavailable, and the row's footnote says why. A press still reaches
+        // `joinLiveSession`, whose refusal toast is the backstop. Never applied
+        // to a group the viewer is IN: leaving must always work.
+        let joinBlocked = entry.isJoinBlocked(localGroupId: localGroupId, engineSupported: !forceNativeAVPlayer)
         let alone = entry.participants.isEmpty
         return Button {
             if isMine { leaveLiveSession() } else { joinLiveSession(groupId: groupId) }
@@ -917,6 +964,8 @@ struct HomeScreen: View {
                 detail: liveDetail(entry)
             )
             .overlay(alignment: .topLeading) { livePill(isTogether: true) }
+            .saturation(joinBlocked ? 0 : 1)
+            .opacity(joinBlocked ? 0.5 : 1)
         }
         #if os(tvOS)
         .buttonStyle(CinemaTVCardButtonStyle())
@@ -942,6 +991,9 @@ struct HomeScreen: View {
                     participantSummary(entry.participants)
                 )
         )
+        // VoiceOver never sees the dimming; the hint carries the same reason
+        // the footnote does.
+        .accessibilityHint(joinBlocked ? loc.localized("syncplay.needsVLC") : "")
     }
 
     /// Somebody watching alone. Unchanged behaviour: it opens their title.
