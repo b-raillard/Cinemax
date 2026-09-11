@@ -217,7 +217,8 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         SWIFT_STRICT_CONCURRENCY: complete
     scheme:
-      testTargets: []
+      testTargets:
+        - CinemaxTVTests
 
   # Continue-Watching home-screen widget. Dependency-free by design (no
   # CinemaxKit — widget memory budgets are tight): reads the session snapshot
@@ -336,3 +337,32 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.tests
+
+  # The SAME sources, hosted by the tvOS app. Most shipped regressions were
+  # tvOS-only (focus, Menu routing, tvOS branches of shared view models), and
+  # the iOS bundle can never see an `#if os(tvOS)` line. Rules shared with
+  # CinemaxTests: no `package: CinemaxKit` here either (double-links `Get`),
+  # and the fixtures ride the same folder reference.
+  #
+  # Module name: the tvOS app's module is `CinemaxTV`, and every test file says
+  # `@testable import Cinemax`. `-module-alias` makes that import resolve to
+  # `CinemaxTV` in this bundle only (SE-0339), so the 48 test files stay
+  # untouched and the app keeps its own module name. Tests that reference
+  # iOS-only types (Intents, Admin, Live Activity) are gated `#if os(iOS)`.
+  CinemaxTVTests:
+    type: bundle.unit-test
+    platform: tvOS
+    sources:
+      - path: Tests/CinemaxKitTests
+        excludes:
+          - "Fixtures/**"
+      - path: Tests/CinemaxKitTests/Fixtures
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: CinemaxTV
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.tvtests
+        OTHER_SWIFT_FLAGS: "$(inherited) -module-alias Cinemax=CinemaxTV"
