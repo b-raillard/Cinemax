@@ -940,6 +940,9 @@
 "syncplay.lobby.invite.sentToast" = "%@ a été prévenu";
 "syncplay.lobby.start" = "Lancer la lecture";
 "syncplay.lobby.leave" = "Quitter la séance";
+"syncplay.leaveConfirm.title" = "Quitter la séance ?";
+"syncplay.leaveConfirm.message" = "Fermer le lecteur vous fait quitter la séance. Les autres participants continueront sans vous.";
+"syncplay.leaveConfirm.leave" = "Quitter la séance";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";
