@@ -390,6 +390,10 @@
 "player.skipCredits" = "Passer le générique";
 "player.speed" = "Vitesse";
 "player.audioDelay" = "Délai audio";
+"player.audio.silentSuffix" = "(muet sur Apple)";
+"player.audio.silent.title" = "Piste muette sur Apple";
+"player.audio.silent.suggestion" = "Apple ne propose aucune sortie Dolby TrueHD : cette piste restera silencieuse. Essayez « %@ ».";
+"player.audio.silent.noAlternative" = "Apple ne propose aucune sortie Dolby TrueHD : cette piste restera silencieuse.";
 "player.subtitleDelay" = "Délai des sous-titres";
 "player.delay.reset" = "Réinitialiser (0 ms)";
 "player.stats" = "Statistiques";
