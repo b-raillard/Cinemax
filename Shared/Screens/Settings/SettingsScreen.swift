@@ -204,6 +204,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowPlaylists) var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
     @AppStorage(SettingsKey.homeShowUpcoming) var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
     @AppStorage(SettingsKey.homeShowCollections) var showCollections: Bool = SettingsKey.Default.homeShowCollections
+    @AppStorage(SettingsKey.homeShowBecauseYouWatched) var showBecauseYouWatched: Bool = SettingsKey.Default.homeShowBecauseYouWatched
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
@@ -303,6 +304,8 @@ struct SettingsScreen: View {
             .init(id: "homePlaylists", icon: "music.note.list", label: loc.localized("settings.homePage.playlists"), value: $showPlaylists),
             .init(id: "homeCollections", icon: "rectangle.stack", label: loc.localized("settings.homePage.collections"), value: $showCollections),
             .init(id: "homeUpcoming", icon: "calendar", label: loc.localized("settings.homePage.upcoming"), value: $showUpcoming),
+            // Same order as on Home: just above the genre rows.
+            .init(id: "homeBecauseYouWatched", icon: "wand.and.stars", label: loc.localized("settings.homePage.becauseYouWatched"), value: $showBecauseYouWatched),
             .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows)
         ]
         // "En direct" now governs TWO things: other users' active sessions

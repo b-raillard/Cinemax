@@ -52,6 +52,7 @@
 "home.watchingNow.playing" = "%@ is watching";
 "settings.homePage.watchingNow" = "Watching Now";
 "home.recentlyAdded" = "Recently Added";
+"home.becauseYouWatched" = "Because you watched %@";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
 "home.genreRow.failed" = "Couldn't load";
@@ -688,6 +689,7 @@
 "settings.homePage.continueWatching" = "Continue Watching";
 "settings.homePage.nextUp" = "Next Up";
 "settings.homePage.recentlyAdded" = "Recently Added";
+"settings.homePage.becauseYouWatched" = "Because You Watched…";
 "settings.homePage.genreRows" = "Genre Rows";
 "settings.homePage.genreRows.choose" = "Choose genres";
 "settings.homePage.genreRows.hint" = "Genres shown as rows on Home";
