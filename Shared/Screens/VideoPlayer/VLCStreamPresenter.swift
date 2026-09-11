@@ -435,6 +435,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var segments: [MediaSegmentDto] = []
     private var segmentFetchTask: Task<Void, Never>?
     private var activeSegmentType: MediaSegmentType?
+    /// Opt-in auto-skip (#160). Read once per media open, next to the segment
+    /// fetch, so a toggle flipped mid-session applies at the next episode.
+    private var autoSkip: AutoSkipPreferences = .off
+    /// Segments this media has already skipped on its own (`AutoSkipPolicy.key`),
+    /// so a rewind into the intro is honoured rather than skipped again. Reset
+    /// with the segments.
+    private var autoSkippedSegmentKeys: Set<String> = []
     private let skipButton = UIButton(type: .system)
 
     // P3: sleep timer
@@ -1059,6 +1066,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         segmentFetchTask?.cancel()
         segments = []
         activeSegmentType = nil
+        autoSkippedSegmentKeys = []
+        autoSkip = AutoSkipPreferences.current()
         skipButton.isHidden = true
         let client = apiClient
         let id = itemId
@@ -1080,6 +1089,40 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let start = Double(segment.startTicks ?? 0) / 10_000_000
             let end = Double(segment.endTicks ?? 0) / 10_000_000
             guard end > start, currentTime >= start, currentTime < end - 1 else { continue }
+            // Opt-in auto-skip, decided BEFORE the button / countdown-card
+            // logic so a skipped segment never draws either. Once per segment
+            // per media (`autoSkippedSegmentKeys`), never while a seek is still
+            // settling — the playhead reported inside the segment may be the
+            // echo of a target the engine has not reached yet.
+            let canHandOff = autoPlayNext && nextEpisode != nil && episodeNavigator != nil
+                && !nextUpCancelledForThisItem
+            let key = AutoSkipPolicy.key(type: segment.type, startTicks: segment.startTicks)
+            let action = AutoSkipPolicy.decide(
+                segmentType: segment.type,
+                autoSkipIntro: autoSkip.intro, autoSkipCredits: autoSkip.credits,
+                alreadySkipped: autoSkippedSegmentKeys.contains(key),
+                isPlaying: enginePlaying && seekLoadingTargetMs == nil,
+                inSyncPlayGroup: syncPlay.isInGroup,
+                canHandOffToNext: canHandOff
+            )
+            if action != .none {
+                autoSkippedSegmentKeys.insert(key)
+                activeSegmentType = nil
+                skipButton.isHidden = true
+                nextUpCard?.hide()
+                logger.notice("auto-skip type=\(segment.type?.rawValue ?? "?", privacy: .public) action=\(String(describing: action), privacy: .public) from=\(Int(currentTime), privacy: .public)s to=\(Int(end), privacy: .public)s")
+                switch action {
+                case .handOffToNext:
+                    if let next = nextEpisode { navigateToEpisode(next, isAutoplay: true) }
+                case .seekToEnd:
+                    showSkipHUD(loc.localized(segment.type == .intro ? "player.autoSkipped.intro" : "player.autoSkipped.credits"), duration: 1.6)
+                    userEngineSeek(ms: Int32(end * 1000))
+                    refreshTimeUISoon()
+                case .none:
+                    break
+                }
+                return
+            }
             // Outro with auto-play armed → the countdown card replaces "Skip
             // credits" (skipping to the end would just trigger the same nav) —
             // but only once the count is one a viewer can read as a countdown.
