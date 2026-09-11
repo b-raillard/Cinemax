@@ -645,6 +645,17 @@
 "settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Fast sleep timer (15 s)";
 "settings.debug.skipToEnd" = "Skip-to-end button";
+"settings.debug.exportDiagnostics" = "Export diagnostics";
+"settings.debug.exportDiagnostics.subtitle" = "Last 30 minutes of this session's log, tokens removed";
+"settings.debug.exportDiagnostics.preparing" = "Preparing the report…";
+"settings.debug.exportDiagnostics.failed" = "Couldn't prepare the report — tap to retry";
+"settings.debug.exportDiagnostics.share" = "Share the report";
+"settings.debug.exportDiagnostics.ready" = "Log lines: %d · ready to share";
+"settings.debug.exportDiagnostics.tvUnavailable" = "Not available on Apple TV: no share sheet, no MetricKit";
+"settings.debug.metricKit" = "MetricKit reports";
+"settings.debug.metricKit.summary" = "Crashes: %d · Hangs: %d · Metrics: %d";
+"settings.debug.metricKit.none" = "No report received yet";
+"settings.debug.diagnostics.footer" = "The report holds this session's log and the MetricKit reports, with access tokens removed. Nothing leaves the device unless you share it. MetricKit delivers its reports to TestFlight and App Store builds only, at most once every 24 hours.";
 "debug.skipToEnd" = "⏭ Skip to end (Debug)";
 "settings.interface" = "Interface";
 "settings.playback" = "Playback";

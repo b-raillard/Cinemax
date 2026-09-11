@@ -43,7 +43,7 @@ enum VLCEngineLog {
             for await entry in VLCInstance.shared.logStream(minimumLevel: .debug) {
                 if entry.level >= .warning {
                     let module = entry.module ?? "?"
-                    let message = scrubbed(entry.message)
+                    let message = LogScrubber.scrubbed(entry.message)
                     if entry.level == .error {
                         logger.error("libVLC [\(module, privacy: .public)] \(message, privacy: .public)")
                     } else {
@@ -113,49 +113,8 @@ enum VLCEngineLog {
         }
     }
 
-    /// libVLC logs the URLs it opens, and ours carry the account token as an
-    /// `ApiKey` query item (libVLC can't reliably inject the auth header), so a
-    /// raw message would write that token into the system log. Same rule as
-    /// `redactedURL` on the API side — strip it before anything is emitted.
-    ///
-    /// Both spellings, case-insensitively: `authedURL` appends `ApiKey`, the
-    /// server writes `&ApiKey=` into every `TranscodingUrl` itself, and the
-    /// legacy `api_key` may still appear in a URL we didn't author. Until
-    /// 2026-09 the marker was `api_key=` alone, so the token of every
-    /// forced-transcode HLS open reached the system log in clear.
-    static func scrubbed(_ message: String) -> String {
-        guard let first = nextMarker(in: Substring(message)) else { return message }
-        var result = ""
-        var rest = Substring(message)
-        var marker: Range<Substring.Index>? = first
-        while let found = marker {
-            result += String(rest[..<found.upperBound])
-            result += "***"
-            let value = rest[found.upperBound...]
-            let end = value.firstIndex { valueTerminators.contains($0) } ?? value.endIndex
-            rest = value[end...]
-            marker = nextMarker(in: rest)
-        }
-        return result + String(rest)
-    }
-
-    private static let tokenMarkers = ["ApiKey=", "api_key="]
-
-    /// The earliest token marker in `text`, whichever spelling it uses.
-    private static func nextMarker(in text: Substring) -> Range<Substring.Index>? {
-        tokenMarkers
-            .compactMap { text.range(of: $0, options: .caseInsensitive) }
-            .min { $0.lowerBound < $1.lowerBound }
-    }
-
-    /// Where a token value stops. Deliberately a deny-list of characters a
-    /// Jellyfin token (alphanumeric) can never contain: a missing entry only
-    /// swallows some surrounding log text, whereas an over-eager terminator
-    /// would end the value mid-token and leave the tail in the log.
-    private static let valueTerminators: Set<Character> = [
-        "&", "#", " ", "\t", "\n", "\r", "'", "\"", "`",
-        "(", ")", "[", "]", "{", "}", "<", ">", ",", ";", "|", "\\",
-    ]
+    // Token scrubbing lives in `LogScrubber` (Shared/Diagnostics), the SSOT
+    // shared with the diagnostics export — never re-implement it here.
 }
 
 /// The engine facts the log stream has learned about the CURRENT media: which

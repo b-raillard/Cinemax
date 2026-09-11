@@ -239,6 +239,17 @@
 "settings.debug" = "Débogage";
 "settings.debug.fastSleepTimer" = "Veille rapide (15 s)";
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
+"settings.debug.exportDiagnostics" = "Exporter les diagnostics";
+"settings.debug.exportDiagnostics.subtitle" = "Journal des 30 dernières minutes de la session, sans jeton";
+"settings.debug.exportDiagnostics.preparing" = "Préparation du rapport…";
+"settings.debug.exportDiagnostics.failed" = "Préparation impossible — touchez pour réessayer";
+"settings.debug.exportDiagnostics.share" = "Partager le rapport";
+"settings.debug.exportDiagnostics.ready" = "Lignes de journal : %d · prêt à partager";
+"settings.debug.exportDiagnostics.tvUnavailable" = "Indisponible sur Apple TV : ni feuille de partage ni MetricKit";
+"settings.debug.metricKit" = "Rapports MetricKit";
+"settings.debug.metricKit.summary" = "Plantages : %d · Blocages : %d · Métriques : %d";
+"settings.debug.metricKit.none" = "Aucun rapport reçu";
+"settings.debug.diagnostics.footer" = "Le rapport contient le journal de la session en cours et les rapports MetricKit, nettoyés des jetons d'accès. Rien ne quitte l'appareil sans votre partage. MetricKit ne livre ses rapports qu'aux versions TestFlight et App Store, au plus une fois par 24 h.";
 "debug.skipToEnd" = "⏭ Aller à la fin (Debug)";
 "settings.interface" = "Interface";
 "settings.playback" = "Lecture";
