@@ -191,7 +191,13 @@ struct SettingsScreen: View {
     }
 
     // Shared stored properties — keys + defaults live in SettingsKey
-    @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects
+    /// The app's own Motion Effects switch — what the toggle row writes. Every
+    /// animation on this screen reads `motionEffects` below instead, which also
+    /// honours the system's Reduce Motion.
+    @AppStorage(SettingsKey.motionEffects) var motionEffectsSetting: Bool = SettingsKey.Default.motionEffects
+    @Environment(\.motionEffectsEnabled) var motionEffects
+    /// Drives the Motion Effects row's "the system setting overrides this" line.
+    @Environment(\.accessibilityReduceMotion) var systemReduceMotion
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer

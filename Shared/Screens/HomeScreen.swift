@@ -356,6 +356,7 @@ struct HomeScreen: View {
         ScrollView {
             EmptyStateView(
                 systemImage: "tv.slash",
+                illustration: .emptyLibrary,
                 title: loc.localized("empty.home.title"),
                 subtitle: loc.localized("empty.home.subtitle"),
                 actionTitle: loc.localized("action.refresh")

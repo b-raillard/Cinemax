@@ -1,9 +1,37 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Motion Effects Environment Key
 
 extension EnvironmentValues {
+    /// The EFFECTIVE motion preference: the app's own Motion Effects toggle AND
+    /// the system's Reduce Motion being off. Written once at the root
+    /// (`AppNavigation`) through `MotionEffects.isEnabled`; every animation in
+    /// the app reads this, never the raw `@AppStorage` key.
     @Entry var motionEffectsEnabled: Bool = true
+}
+
+/// Single source of truth for "may this app animate right now?".
+///
+/// Two inputs: the app's Motion Effects toggle (`SettingsKey.motionEffects`)
+/// and the system's Reduce Motion (Accessibility → Motion). Either one turning
+/// motion off wins — a user who asked the OS for less motion must not have to
+/// find a second switch inside the app, and the app toggle keeps working on
+/// its own for people who only dislike Cinemax's effects.
+enum MotionEffects {
+    /// Pure combination rule, unit-tested (`MotionEffectsTests`).
+    nonisolated static func isEnabled(appToggle: Bool, systemReduceMotion: Bool) -> Bool {
+        appToggle && !systemReduceMotion
+    }
+
+    /// For readers that have no SwiftUI environment (the rainbow accent tick
+    /// in `ThemeManager`, the sign-in success dwell in `LoginViewModel`).
+    /// Views read `\.motionEffectsEnabled` instead.
+    @MainActor static var isEnabledNow: Bool {
+        let appToggle = UserDefaults.standard.object(forKey: SettingsKey.motionEffects) as? Bool
+            ?? SettingsKey.Default.motionEffects
+        return isEnabled(appToggle: appToggle, systemReduceMotion: UIAccessibility.isReduceMotionEnabled)
+    }
 }
 
 // MARK: - Cinema Focus Modifier

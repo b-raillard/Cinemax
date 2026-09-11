@@ -337,7 +337,8 @@ struct SearchScreen: View {
             Spacer()
             ErrorStateView(
                 message: loc.localized("search.error.network"),
-                retryTitle: loc.localized("action.retry")
+                retryTitle: loc.localized("action.retry"),
+                illustration: .offline
             ) {
                 viewModel.search(using: appState)
             }
@@ -349,6 +350,7 @@ struct SearchScreen: View {
             Spacer()
             EmptyStateView(
                 systemImage: "magnifyingglass",
+                illustration: .noResults,
                 title: loc.localized("search.noResults")
             )
             Spacer()
