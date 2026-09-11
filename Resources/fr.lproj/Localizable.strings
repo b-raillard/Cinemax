@@ -969,6 +969,14 @@
 "login.myServers" = "Mes serveurs";
 "servers.checking" = "Vérification…";
 "servers.alreadyCurrent" = "Vous êtes déjà connecté à %@";
+"servers.rename" = "Renommer";
+"servers.rename.title" = "Renommer le serveur";
+"servers.rename.message" = "Ce nom ne s'affiche que sur cet appareil. Laissez le champ vide pour reprendre celui du serveur (« %@ »).";
+"servers.renamed" = "Serveur renommé en « %@ »";
+"servers.renameReset" = "Nom du serveur rétabli : %@";
+"servers.reorder" = "Ordonner";
+"servers.moveUp" = "Monter";
+"servers.moveDown" = "Descendre";
 
 /* MARK: - App Intents (Siri & Raccourcis)
    Lus par le système via LocalizedStringResource, hors LocalizationManager —

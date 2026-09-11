@@ -240,8 +240,10 @@ struct SettingsScreen: View {
         appState.keychain.getUserSession()?.username ?? "User"
     }
 
+    /// The user's own label for the active server wins over the name the
+    /// server reports — a rename in « Mes serveurs » must show here too.
     var serverName: String {
-        appState.serverInfo?.name ?? "Jellyfin Server"
+        appState.activeServerNameOverride ?? appState.serverInfo?.name ?? "Jellyfin Server"
     }
 
     var serverAddress: String {
@@ -414,7 +416,7 @@ struct SettingsScreen: View {
     func performLogout() async {
         let outcome = await appState.logout(reason: .userInitiated)
         if case .switchedTo(let entry) = outcome {
-            toasts.success(loc.localized("servers.switchedTo", entry.name))
+            toasts.success(loc.localized("servers.switchedTo", entry.displayName))
         }
     }
 

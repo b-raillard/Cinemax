@@ -73,8 +73,24 @@ enum SettingsKey {
     /// concern, not an interface one).
     static let searchSaveHistory = "search.saveHistory"
     /// JSON `[String]` — most-recent-first list of past queries. Not a user
-    /// setting; written only through `SearchViewModel`'s mutators.
+    /// setting; written only through `SearchHistoryStore`.
+    ///
+    /// Since history became per-server this bare key is the LEGACY global
+    /// list: read once by the migration, and still the read/write destination
+    /// while no server is active (same degrade as the `menu.*` keys). Each
+    /// server's own list lives under `searchRecentQueries(serverId:)`.
     static let searchRecentQueries = "search.recentQueries"
+    /// `search.recentQueries.<serverId>` — one server's history. The prefix is
+    /// the legacy key plus a dot, which is what `SearchHistoryStore.clearAll`
+    /// sweeps.
+    static func searchRecentQueries(serverId: String) -> String {
+        "\(searchRecentQueries).\(serverId)"
+    }
+    /// The server id that inherited the legacy global history. Its presence is
+    /// what makes the migration one-shot — see `SearchHistoryStore`.
+    /// Deliberately OUTSIDE the `search.recentQueries.` prefix, so a history
+    /// wipe can never mistake it for a server's list.
+    static let searchRecentQueriesMigratedTo = "search.recentQueriesMigratedTo"
 
     // Library landing (iOS + tvOS)
     /// `"browse"` (default) shows the cinematic hero + genre rows ("By genre");
