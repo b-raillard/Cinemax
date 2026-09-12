@@ -108,6 +108,10 @@ struct MediaDetailScreen: View {
     /// and `navigationDestination` placed inside lazy containers is
     /// silently dropped by the runtime.
     @State private var adminPushIntent: AdminMenuPushIntent?
+    /// Height the hero's title logo gets, or `nil` while the hero is too narrow
+    /// to carry one — measured off the hero itself by `backdropSection`, see
+    /// `AdaptiveLayout.detailLogoHeight(forHero:)`.
+    @State private var heroLogoHeight: CGFloat?
     #endif
     /// tvOS picks versions through a `confirmationDialog` (the app's existing
     /// picker idiom — see the library sort menu); iOS uses a native `Menu`, so
@@ -529,16 +533,16 @@ struct MediaDetailScreen: View {
 
     // MARK: - Backdrop
 
-    /// The hero's title: the provider's logo artwork where it exists, the item
-    /// name otherwise.
+    /// The hero's title: the provider's logo artwork where it exists AND the
+    /// hero has room for it, the item name otherwise.
     ///
-    /// tvOS only. On iPhone the logo would have to shrink to a width where its
-    /// own typography stops being legible, and the text title already reads
-    /// well at arm's length.
+    /// tvOS always has room. iOS only from `AdaptiveLayout.detailLogoMinHeroWidth`
+    /// (iPad, iPhone in landscape): narrower, the logo would shrink to a width
+    /// where its own typography stops being legible, and the text title already
+    /// reads well at arm's length.
     @ViewBuilder
     private func titleBlock(_ item: BaseItemDto) -> some View {
-        #if os(tvOS)
-        if item.hasLogoImage, let id = item.id {
+        if item.hasLogoImage, let id = item.id, let box = logoBox {
             CinemaLazyImage(
                 url: appState.imageBuilder.imageURL(
                     itemId: id, imageType: .logo,
@@ -558,14 +562,23 @@ struct MediaDetailScreen: View {
             // mostly-transparent canvas (measured 2026-09-09 on the demo
             // library: 94 × 32 px of ink on a 700 × 238 canvas) still renders
             // as a sliver — that is the artwork, and the fix is a better logo.
-            .frame(height: CinemaTVLayout.logoHeight)
-            .frame(maxWidth: CinemaTVLayout.logoMaxWidth, alignment: .leading)
+            .frame(height: box.height)
+            .frame(maxWidth: box.maxWidth, alignment: .leading)
+            // A logo carries no text VoiceOver can read: one element, named
+            // after the work, exactly what the text title would have said.
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.name ?? "")
         } else {
             titleText(item)
         }
+    }
+
+    /// The logo's height-led box, or `nil` where the hero can't carry a logo.
+    private var logoBox: (height: CGFloat, maxWidth: CGFloat)? {
+        #if os(tvOS)
+        (CinemaTVLayout.logoHeight, CinemaTVLayout.logoMaxWidth)
         #else
-        titleText(item)
+        heroLogoHeight.map { ($0, AdaptiveLayout.detailLogoMaxWidth) }
         #endif
     }
 
@@ -636,6 +649,14 @@ struct MediaDetailScreen: View {
         // or Split View windows. Full-screen sizes resolve to `backdropHeight`.
         .containerRelativeFrame(.vertical) { length, _ in
             min(backdropHeight, length * 0.55)
+        }
+        // Measured AFTER the clamp, so the logo is sized against the hero the
+        // user actually sees — wide enough to carry one at all, and short
+        // enough that it must shrink (iPhone in landscape).
+        .onGeometryChange(for: CGFloat?.self) { proxy in
+            AdaptiveLayout.detailLogoHeight(forHero: proxy.size)
+        } action: { height in
+            heroLogoHeight = height
         }
         #endif
         .clipped()
