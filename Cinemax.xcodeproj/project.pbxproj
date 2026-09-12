@@ -54,6 +54,7 @@
 		1727EDD9DA195084B90AEC28 /* ServersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */; };
 		172A4AE31E117BAB19C89CA6 /* PosterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE5FB096BB1BE0581798DFD /* PosterCard.swift */; };
 		173F19747EE155F10F3B6115 /* AlphabeticalJumpBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9B086604524FCFB71F0E15 /* AlphabeticalJumpBar.swift */; };
+		181C00BB6E77B5C5E98EA4D2 /* SearchHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15F9148D1A7E942A03D74547 /* SearchHistoryTests.swift */; };
 		18D5366C4AD5FA663CF6EC03 /* TVButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */; };
 		18D85464EB601F8113743C4D /* ProgressBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3DF8C441837A8A10C480077 /* ProgressBarView.swift */; };
 		191EC9FD132D05DA77649F4B /* MenuSettingsScreen+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726F34A0F8B1ADDDFE4FE4C3 /* MenuSettingsScreen+iOS.swift */; };
@@ -92,6 +93,7 @@
 		2964BFC251FD8E8BF4D76B6C /* LibraryCollectionsScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAE341711C920F2F12128C51 /* LibraryCollectionsScope.swift */; };
 		2B7E9256978164A8A6FC72B5 /* CardMenuOptimisticStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF37181D8DDD93D930FE74E7 /* CardMenuOptimisticStateTests.swift */; };
 		2BC23AB09D961A04A91415F7 /* AppNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78377E8E832D65F7226A2A06 /* AppNavigation.swift */; };
+		2BDC9B398235BA7FCBB906F7 /* DeepLinkRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7EA60E10D3E173579C547E /* DeepLinkRouteTests.swift */; };
 		2C598521E34C029BD36C4A3C /* AdminActivityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */; };
 		2CBC178E02BABE6865247534 /* ServerRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5D9387C11356CF0140347C /* ServerRegistryTests.swift */; };
 		2E1A085843FA335D04A9B52B /* ToastCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5610FD34CD71B2F9E4D65FC6 /* ToastCenter.swift */; };
@@ -268,6 +270,7 @@
 		775886D386630AB477D44DBD /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21750E7690B40CFD3168FACA /* LicensesView.swift */; };
 		7885F6C774A599528CADE04B /* AdminNetworkScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55122A5776984A5A63808F80 /* AdminNetworkScreen.swift */; };
 		788D532D6B8D08877027C441 /* VideoResumeSeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EF0DA1A754825C8A1CE6C2 /* VideoResumeSeekTests.swift */; };
+		7901AD1DBFD30997D21ECED4 /* AutoSkipPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE1137AD2C7968254B35D11 /* AutoSkipPolicyTests.swift */; };
 		79D5D2069D273B8F869EAB67 /* VideoResumeSeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EF0DA1A754825C8A1CE6C2 /* VideoResumeSeekTests.swift */; };
 		7A87DBDBFBB8645F373C66EB /* AdvancedAdminLandingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13082AD25DB233BD0E63DB1C /* AdvancedAdminLandingScreen.swift */; };
 		7AE0754EFCA26F6B9EF3E3A5 /* CinemaxWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -2022,12 +2025,14 @@
 				5405F22011150F9A5F0C4087 /* AcceptLanguageTests.swift in Sources */,
 				A3EC3067E9F0F3E4853B6AAF /* AudioTrackPolicyTests.swift in Sources */,
 				466FD883F139E311B17A085D /* AuthedURLTests.swift in Sources */,
+				7901AD1DBFD30997D21ECED4 /* AutoSkipPolicyTests.swift in Sources */,
 				D927ABB17A8DCB79F04A8713 /* CardEpisodeNavigationTests.swift in Sources */,
 				CA3B2A0FBED8394AD6453A13 /* CardMenuOptimisticStateTests.swift in Sources */,
 				48071A8CCB61916431AB03C6 /* CardPlayTargetTests.swift in Sources */,
 				562ECFF99482CFF3CEC6435D /* CinemaxKitTests.swift in Sources */,
 				1D59F52B6832AA18292B2340 /* CollectionDetailTests.swift in Sources */,
 				F4110E73D1D214DA46238685 /* ContentRatingClassifierTests.swift in Sources */,
+				2BDC9B398235BA7FCBB906F7 /* DeepLinkRouteTests.swift in Sources */,
 				BFF59F316BB3ABFD60591E19 /* EpisodeRefsPayloadTests.swift in Sources */,
 				C02F0629760BDF86BF4F446E /* EpisodeVersionSelectionTests.swift in Sources */,
 				1AC4546BF96A650524FCD425 /* ExtensionSessionContractTests.swift in Sources */,
@@ -2064,6 +2069,7 @@
 				4E3E811886FBE324F25B62A9 /* QuickConnectAuthorizeViewModelTests.swift in Sources */,
 				70845724465C8D22DA5A783B /* RemoteImageCatalogTests.swift in Sources */,
 				EE463C75A045C127C206E20C /* RemotePlayTargetTests.swift in Sources */,
+				181C00BB6E77B5C5E98EA4D2 /* SearchHistoryTests.swift in Sources */,
 				D9D6EE23D73CACF3BC17472E /* SearchRelevanceTests.swift in Sources */,
 				3A79D8700DE688CB55F8ACF0 /* SearchViewModelTests.swift in Sources */,
 				E7716088FB4DEE5121D1ABB2 /* SeekCoalescerTests.swift in Sources */,
