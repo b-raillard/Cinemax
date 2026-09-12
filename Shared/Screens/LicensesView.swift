@@ -226,7 +226,7 @@ struct LicensesView: View {
             ),
             OSSLicense(
                 name: "Nuke",
-                version: "12.9.0",
+                version: "13.2.0",
                 url: "github.com/kean/Nuke",
                 text: "Copyright (c) Alexander Grebenyuk\n\n" + mitLicense
             ),

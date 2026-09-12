@@ -12,7 +12,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift.git", .upToNextMajor(from: "3.1.0")),
-        .package(url: "https://github.com/kean/Nuke.git", .upToNextMajor(from: "12.8.0")),
+        .package(url: "https://github.com/kean/Nuke.git", .upToNextMajor(from: "13.2.0")),
         // Same package the SDK builds on — needed to hand-roll requests for
         // endpoints newer than the generated Paths (e.g. /Items/{id}/Collections).
         .package(url: "https://github.com/kean/Get", from: "2.1.6")
