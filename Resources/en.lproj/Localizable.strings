@@ -1035,6 +1035,8 @@
 
 "intent.resume.title" = "Resume watching";
 "intent.resume.description" = "Picks up the last title you started.";
+"intent.resumeControl.title" = "Continue watching";
+"intent.resumeControl.description" = "Opens Cinemax on the last thing you were watching.";
 "intent.resume.shortTitle" = "Resume";
 
 "intent.play.title" = "Play a title";
