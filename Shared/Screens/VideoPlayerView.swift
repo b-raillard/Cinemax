@@ -34,6 +34,14 @@ struct VideoPlayerView: View {
     @State private var errorMessage: String?
 
     var body: some View {
+        // The player host — layout-bound, see `CinemaDynamicType`. (The VLC
+        // HUD itself is UIKit with fixed point sizes, which Dynamic Type never
+        // reaches.)
+        playerBody.layoutBoundDynamicType()
+    }
+
+    @ViewBuilder
+    private var playerBody: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 

@@ -19,6 +19,11 @@ struct CastCircle: View {
     #endif
 
     var body: some View {
+        // Layout-bound — see `CinemaDynamicType`.
+        circleBody.layoutBoundDynamicType()
+    }
+
+    private var circleBody: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
             CinemaLazyImage(
                 url: imageURL,

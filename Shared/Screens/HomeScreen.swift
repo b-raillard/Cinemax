@@ -692,8 +692,13 @@ struct HomeScreen: View {
 
     // MARK: - Hero
 
-    @ViewBuilder
+    /// Layout-bound — see `CinemaDynamicType`.
     private func heroSection(_ item: BaseItemDto) -> some View {
+        heroSectionContent(item).layoutBoundDynamicType()
+    }
+
+    @ViewBuilder
+    private func heroSectionContent(_ item: BaseItemDto) -> some View {
         // `Color.clear` sizing driver pinned to `heroHeight`, with backdrop, gradient,
         // and content layered as overlays. Overlays can't grow the parent frame — so
         // the hero is guaranteed to be exactly `heroHeight` regardless of what the
