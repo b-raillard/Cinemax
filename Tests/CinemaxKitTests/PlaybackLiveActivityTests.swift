@@ -1,3 +1,7 @@
+// iOS-only: `PlaybackActivityAttributes` is compiled into the iOS app target
+// alone (ActivityKit has no tvOS counterpart), so this suite does not exist in
+// the tvOS test bundle.
+#if os(iOS)
 import Foundation
 import Testing
 @testable import Cinemax
@@ -350,3 +354,4 @@ struct PlaybackLiveActivityTests {
         #expect(headline.subtitle.isEmpty)
     }
 }
+#endif

@@ -52,6 +52,7 @@
 "home.watchingNow.playing" = "%@ is watching";
 "settings.homePage.watchingNow" = "Watching Now";
 "home.recentlyAdded" = "Recently Added";
+"home.becauseYouWatched" = "Because you watched %@";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
 "home.genreRow.failed" = "Couldn't load";
@@ -688,6 +689,8 @@
 "settings.fontSize" = "Text Size";
 "settings.4kRendering" = "4K UI Rendering";
 "settings.autoPlayNextEpisode" = "Auto-play Next Episode";
+"settings.autoSkipIntro" = "Auto-skip Intro";
+"settings.autoSkipCredits" = "Auto-skip Credits";
 "settings.forceNativeAVPlayer" = "Use Native Player";
 "settings.playback.liveActivity" = "Live Activity";
 "settings.systemSettings" = "System Settings";
@@ -699,6 +702,7 @@
 "settings.homePage.continueWatching" = "Continue Watching";
 "settings.homePage.nextUp" = "Next Up";
 "settings.homePage.recentlyAdded" = "Recently Added";
+"settings.homePage.becauseYouWatched" = "Because You Watched…";
 "settings.homePage.genreRows" = "Genre Rows";
 "settings.homePage.genreRows.choose" = "Choose genres";
 "settings.homePage.genreRows.hint" = "Genres shown as rows on Home";
@@ -805,8 +809,14 @@
 "player.pip" = "Picture in Picture";
 "player.skipIntro" = "Skip Intro";
 "player.skipCredits" = "Skip Credits";
+"player.autoSkipped.intro" = "Intro skipped";
+"player.autoSkipped.credits" = "Credits skipped";
 "player.speed" = "Speed";
 "player.audioDelay" = "Audio delay";
+"player.audio.silentSuffix" = "(silent on Apple)";
+"player.audio.silent.title" = "Silent on Apple";
+"player.audio.silent.suggestion" = "Apple offers no Dolby TrueHD output, so this track will stay silent. Try “%@”.";
+"player.audio.silent.noAlternative" = "Apple offers no Dolby TrueHD output, so this track will stay silent.";
 "player.subtitleDelay" = "Subtitle delay";
 "player.delay.reset" = "Reset (0 ms)";
 "player.stats" = "Statistics";
@@ -949,6 +959,7 @@
 "syncplay.lobby.start" = "Start playback";
 "syncplay.lobby.leave" = "Leave session";
 "syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
+"syncplay.needsVLC.footnote" = "\"Native player\" is on: to join a session, turn it off in Settings → Playback.";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Remove from Continue Watching";
@@ -978,6 +989,14 @@
 "login.myServers" = "My servers";
 "servers.checking" = "Checking…";
 "servers.alreadyCurrent" = "You're already connected to %@";
+"servers.rename" = "Rename";
+"servers.rename.title" = "Rename server";
+"servers.rename.message" = "This name only shows on this device. Leave the field empty to go back to the server's own (“%@”).";
+"servers.renamed" = "Server renamed to “%@”";
+"servers.renameReset" = "Server name restored: %@";
+"servers.reorder" = "Reorder";
+"servers.moveUp" = "Move up";
+"servers.moveDown" = "Move down";
 
 /* MARK: - App Intents (Siri & Shortcuts)
    Read by the system through LocalizedStringResource, outside
