@@ -970,10 +970,13 @@ struct AppNavigation: View {
             appToggle: motionEffects,
             systemReduceMotion: systemReduceMotion
         ))
-        // Respect the user's OS Dynamic Type setting while capping at a size
-        // that won't collapse layouts (hero titles, tab bar). The app also has
-        // its own `uiScale` in Settings > Interface > Font Size for finer control.
-        .dynamicTypeSize(.xSmall ... .accessibility2)
+        // No Dynamic Type cap here, deliberately: a ROOT cap shrank every screen
+        // — the reading ones included — for the three largest accessibility
+        // sizes, i.e. exactly the users who asked for bigger text. The surfaces
+        // whose layout genuinely cannot follow cap THEMSELVES through
+        // `.layoutBoundDynamicType()` (heroes, cards, the tab bar, the player
+        // host); see `CinemaDynamicType`. The app's own `uiScale`
+        // (Settings > Interface > Font Size) still multiplies on top.
         .preferredColorScheme(themeManager.colorScheme)
         // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
         // AppState — MainTabView switches to Home, HomeScreen pushes detail.

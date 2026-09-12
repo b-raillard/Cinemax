@@ -214,6 +214,32 @@ final class TVScrubBar: UIView {
 }
 #endif
 
+#if os(iOS)
+/// The iOS scrub bar.
+///
+/// VoiceOver's adjust gesture (swipe up / down) on the scrub bar has to become a
+/// SEEK, and on a stock `UISlider` nothing here would make it one: whatever the
+/// gesture does to the slider's value, `scrubberChanged` bails unless the slider
+/// is actually being dragged (see its own RULE), so the playhead never moves.
+/// Honouring it through the value would also mean a direct engine seek outside
+/// the coalesced path. So the gesture is handed over as a ±1 step, which the
+/// presenter maps to the same ±10 s skip the transport buttons use (`iosSkipBack`
+/// / `iosSkipForward` → `seek(bySeconds:)` → `accumulateSeek`), and the value is
+/// left alone — the presenter repaints it from the playhead.
+///
+/// What a stock slider does with that gesture is deliberately NOT asserted:
+/// `accessibilityIncrement()` on a detached `UISlider` does not move its value
+/// (measured 2026-09-12), because UIKit implements adjustment on an accessibility
+/// element a view outside a window never realises. `PlayerAccessibilityTests`
+/// carries that finding instead of a control it cannot honestly write.
+final class PlayerScrubSlider: UISlider {
+    var onAccessibilityStep: ((Int) -> Void)?
+
+    override func accessibilityIncrement() { onAccessibilityStep?(1) }
+    override func accessibilityDecrement() { onAccessibilityStep?(-1) }
+}
+#endif
+
 /// Chapter strip cell. On tvOS, custom buttons get no system focus appearance,
 /// so it draws its own: a clear lift + white ring on the thumbnail + un-dimming
 /// so the focused chapter is unmistakable. On iOS it never receives focus, so

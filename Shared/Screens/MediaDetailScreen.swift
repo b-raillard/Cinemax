@@ -596,8 +596,15 @@ struct MediaDetailScreen: View {
             .lineLimit(2)
     }
 
-    @ViewBuilder
+    /// Layout-bound: a hero clamped to a viewport fraction cannot follow Dynamic
+    /// Type past `CinemaDynamicType.layoutCap` without pushing its own badges
+    /// and title out of the frame. The synopsis lives OUTSIDE it and scales fully.
     private func backdropSection(_ item: BaseItemDto) -> some View {
+        backdropSectionContent(item).layoutBoundDynamicType()
+    }
+
+    @ViewBuilder
+    private func backdropSectionContent(_ item: BaseItemDto) -> some View {
         ZStack(alignment: .bottomLeading) {
             if item.hasBackdropImage, let backdropId = item.backdropItemID {
                 CinemaLazyImage(
