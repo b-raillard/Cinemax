@@ -271,6 +271,8 @@
 "settings.fontSize" = "Taille du texte";
 "settings.4kRendering" = "Rendu 4K";
 "settings.autoPlayNextEpisode" = "Enchaîner les épisodes";
+"settings.autoSkipIntro" = "Passer l'intro automatiquement";
+"settings.autoSkipCredits" = "Passer le générique automatiquement";
 "settings.forceNativeAVPlayer" = "Lecteur natif";
 "settings.playback.liveActivity" = "Activité en direct";
 "settings.systemSettings" = "Réglages système";
@@ -388,6 +390,8 @@
 "player.pip" = "Image dans l'image";
 "player.skipIntro" = "Passer l'intro";
 "player.skipCredits" = "Passer le générique";
+"player.autoSkipped.intro" = "Intro passée";
+"player.autoSkipped.credits" = "Générique passé";
 "player.speed" = "Vitesse";
 "player.audioDelay" = "Délai audio";
 "player.subtitleDelay" = "Délai des sous-titres";

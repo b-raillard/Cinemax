@@ -194,6 +194,8 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
+    @AppStorage(SettingsKey.autoSkipIntro) var autoSkipIntro: Bool = SettingsKey.Default.autoSkipIntro
+    @AppStorage(SettingsKey.autoSkipCredits) var autoSkipCredits: Bool = SettingsKey.Default.autoSkipCredits
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
     @AppStorage(SettingsKey.playbackLiveActivity) var playbackLiveActivity: Bool = SettingsKey.Default.playbackLiveActivity
     @AppStorage(SettingsKey.remoteControlEnabled) var remoteControlEnabled: Bool = SettingsKey.Default.remoteControlEnabled
@@ -281,6 +283,10 @@ struct SettingsScreen: View {
         var rows: [SettingsToggleRow] = [
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
+            // Both opt-in: the skip button stays the default, these make it
+            // press itself (once per segment — see `AutoSkipPolicy`).
+            .init(id: "autoSkipIntro", icon: "forward.frame", label: loc.localized("settings.autoSkipIntro"), value: $autoSkipIntro),
+            .init(id: "autoSkipCredits", icon: "forward.end.alt", label: loc.localized("settings.autoSkipCredits"), value: $autoSkipCredits),
             .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer),
             // Both platforms: an iPhone is a legitimate (if rarer) target too,
             // and the opt-out has to exist wherever the capability is published.

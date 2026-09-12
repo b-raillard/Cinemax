@@ -19,6 +19,11 @@ enum SettingsKey {
     static let motionEffects = "motionEffects"
     static let render4K = "render4K"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
+    /// Opt-in: the player skips a detected intro / outro segment on its own,
+    /// once per segment (`AutoSkipPolicy`). Off by default so the skip button
+    /// stays the behaviour an untouched install gets.
+    static let autoSkipIntro = "playback.autoSkipIntro"
+    static let autoSkipCredits = "playback.autoSkipCredits"
     static let subtitleTextSize = "playback.subtitleTextSize"
     static let sleepTimerDefaultMinutes = "sleepTimerDefaultMinutes"
     /// When `true`, online playback uses the native `AVPlayer` engine (AVKit
@@ -129,6 +134,8 @@ enum SettingsKey {
         static let motionEffects = true
         static let render4K = true
         static let autoPlayNextEpisode = true
+        static let autoSkipIntro = false
+        static let autoSkipCredits = false
         /// 100 % — the engine's own default, so an untouched install renders
         /// subtitles exactly as it did before this setting existed.
         static let subtitleTextSize = 100
