@@ -150,6 +150,9 @@ struct MediaDetailScreen: View {
     /// away — so an ordinary Play press, which shares the same players, never
     /// fires the callback above.
     @State private var intentPlaybackInFlight = false
+    /// Card → fiche zoom (iOS) for the carousels below, one surface per
+    /// section since a title can sit in two of them — see `CardZoom`.
+    @Namespace private var zoomNamespace
 
     init(
         itemId: String,
@@ -502,6 +505,7 @@ struct MediaDetailScreen: View {
                     viewModel.collectionName ?? ""
                 )
             ).equatable()
+            .cardZoomScope(zoomNamespace, surface: "detail.partOf")
         }
 
         // What a collection CONTAINS — the section a BoxSet's fiche exists for,
@@ -514,11 +518,13 @@ struct MediaDetailScreen: View {
                 cardWidth: similarCardWidth,
                 titleOverride: loc.localized("detail.collection.contents")
             ).equatable()
+            .cardZoomScope(zoomNamespace, surface: "detail.contents")
         }
 
         // Similar items
         if !viewModel.similarItems.isEmpty {
             MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
+                .cardZoomScope(zoomNamespace, surface: "detail.similar")
         }
     }
 

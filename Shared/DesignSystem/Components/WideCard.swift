@@ -14,6 +14,10 @@ struct WideCard: View {
     /// state and age can sit under the participants without crowding
     /// `subtitle`, which is `lineLimit(1)` and already spoken for.
     var detail: String? = nil
+    /// Origin of the iOS zoom into the fiche this card pushes — see
+    /// `CardZoom`. `nil` keeps the default push (and every card that plays
+    /// rather than pushes a fiche).
+    var zoomSource: CardZoom? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -36,6 +40,7 @@ struct WideCard: View {
                 // here (a backdrop usually matches this 16:9 box), but a source
                 // that doesn't still overflows and stays hit-testable.
                 .contentShape(Rectangle())
+                .cardZoomSource(zoomSource)
                 .cinemaFocus()
                 .accessibilityHidden(true)
 
