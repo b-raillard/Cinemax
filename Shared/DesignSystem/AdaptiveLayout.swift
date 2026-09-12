@@ -177,6 +177,11 @@ enum CinemaTVLayout {
 
     // MARK: Calls to action
 
+    /// One key of the parental-lock PIN pad. Square, and large enough that the
+    /// focus ring of a key never touches its neighbours' — the pad is driven
+    /// with a remote, where a mis-focused digit is a wrong PIN.
+    static let pinKeySize: CGFloat = 120
+
     /// Standard button width for a sheet's confirm/dismiss action.
     static let ctaWidth: CGFloat = 240
     /// A hero's Play button — narrower than `ctaWidth` because it sits beside a

@@ -805,6 +805,13 @@ struct AppNavigation: View {
     /// second `/socket` connection, which the server would treat as the same
     /// session and feed duplicate commands.
     private static let sharedRemoteControl = RemoteControlListener()
+    /// Owns the parental-controls lock. A process singleton for two reasons:
+    /// it reads the Keychain at `init` (a synchronous `securityd` XPC hop on the
+    /// main actor, the same cost that puts `MenuConfigStore` in this set), and
+    /// its `isUnlocked` flag is session state — a scene-event recreation would
+    /// either re-open a gate the parent had closed or drop an unlock they are
+    /// mid-way through using. See the RULE on `ParentalLockController`.
+    private static let sharedParentalLock = ParentalLockController()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -812,6 +819,7 @@ struct AppNavigation: View {
     @State private var toasts = ToastCenter()
     @State private var network = AppNavigation.sharedNetworkMonitor
     @State private var menuConfig = AppNavigation.sharedMenuConfig
+    @State private var parentalLock = AppNavigation.sharedParentalLock
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
@@ -942,6 +950,7 @@ struct AppNavigation: View {
         .environment(network)
         .environment(menuConfig)
         .environment(settingsNav)
+        .environment(parentalLock)
         .environment(playlistPresenter)
         // "Add to a playlist" is raised from poster context menus inside lazy
         // grids, where a presentation attached to the cell dies when it scrolls
@@ -1169,6 +1178,11 @@ struct AppNavigation: View {
                 // on a play command anyway, and holding a WebSocket open is a
                 // standing battery / radio-wake cost. Re-established on `.active`.
                 remoteControl.stop()
+                // Close the parental gate. `.background` and NOT `.inactive`:
+                // the latter also fires for an app-switcher peek, a Control
+                // Center swipe or a notification banner, and re-asking for the
+                // PIN after one of those reads as the lock misfiring.
+                parentalLock.lockForBackground()
             } else if newPhase == .active {
                 // Network conditions may have changed while backgrounded —
                 // re-evaluate whether the proxy is needed for this server.

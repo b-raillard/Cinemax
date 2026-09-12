@@ -31,15 +31,23 @@ struct PrivacySecurityScreen: View {
     @AppStorage(SettingsKey.searchSaveHistory) private var saveSearchHistory: Bool = SettingsKey.Default.searchSaveHistory
     @Environment(\.motionEffectsEnabled) private var motionEffects
 
+    /// Non-optional on purpose — see the RULE on `ParentalLockGate`.
+    @Environment(ParentalLockController.self) private var parentalLock
+
     @State private var showClearContinueWatchingAlert = false
     @State private var showClearImageCacheAlert = false
     @State private var isClearingContinueWatching = false
+    /// Drives the in-place two-step PIN enrolment (set a PIN, or change it).
+    @State private var isEnrollingLock = false
 
     #if os(tvOS)
     /// One case per focusable row so `.tvSettingsFocusable` can paint the
     /// accent border on the focused row instead of the system white platter.
     private enum FocusTarget: Hashable {
         case age(Int)
+        case lockEnable
+        case lockBiometrics
+        case lockChange
         case searchHistory
         case devices
         case clearContinueWatching
@@ -76,12 +84,30 @@ struct PrivacySecurityScreen: View {
 
     // MARK: - Chrome
 
+    /// Everything on this screen sits behind the parental lock, not just the age
+    /// row — one prompt instead of one per tap, and the rest of the screen
+    /// (connected devices, clearing Reprendre, the search-history switch) is not
+    /// a child's business either. The chrome stays OUTSIDE the gate so Done is
+    /// always reachable: a challenge nobody can dismiss would be a trap.
     private var sectionsBody: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-            parentalControlsSection
-            searchHistorySection
-            connectedDevicesLink
-            maintenanceSection
+        ParentalLockGate {
+            if isEnrollingLock {
+                // Replaces the page rather than stacking under it: the pad is
+                // tall, and on tvOS a page mixing it with a dozen other
+                // focusables is a focus maze for a two-step task.
+                ParentalLockEnrollView { didEnroll in
+                    isEnrollingLock = false
+                    if didEnroll { toasts.success(loc.localized("privacy.lock.enabled")) }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                    parentalControlsSection
+                    lockSection
+                    searchHistorySection
+                    connectedDevicesLink
+                    maintenanceSection
+                }
+            }
         }
     }
 
@@ -227,6 +253,157 @@ struct PrivacySecurityScreen: View {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedRow, equals: .age(option.age))
+        #endif
+    }
+
+    // MARK: - Lock
+
+    /// Turns the age cap above from a suggestion into a control: without it
+    /// anybody holding the device can set it back to « Sans restriction » in
+    /// three taps.
+    ///
+    /// The footer points at the server's own per-user `maxParentalRating`
+    /// deliberately. This lock covers the app on this device; deleting and
+    /// reinstalling drops both the cap and the stored session (so signing back
+    /// in costs the Jellyfin password), but a limit that no client can lift at
+    /// all is a server-side one, and saying so is more useful than implying this
+    /// is airtight.
+    private var lockSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            sectionHeader(loc.localized("privacy.lock"))
+
+            #if os(tvOS)
+            VStack(spacing: CinemaSpacing.spacing2) {
+                lockRows
+            }
+            #else
+            VStack(spacing: 0) {
+                lockRows
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            #endif
+
+            Text(loc.localized("privacy.lock.footer"))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .padding(.horizontal, CinemaSpacing.spacing2)
+                .padding(.top, CinemaSpacing.spacing1)
+        }
+    }
+
+    @ViewBuilder
+    private var lockRows: some View {
+        lockToggleRow(
+            icon: "lock.shield",
+            label: loc.localized("privacy.lock.enable"),
+            subtitle: loc.localized(parentalLock.isEnabled ? "privacy.lock.disable" : "privacy.lock.enable.subtitle"),
+            isOn: parentalLock.isEnabled,
+            focusTarget: .lockEnable
+        ) {
+            if parentalLock.isEnabled {
+                parentalLock.disable()
+                toasts.info(loc.localized("privacy.lock.disabled"))
+            } else {
+                isEnrollingLock = true
+            }
+        }
+
+        if parentalLock.isEnabled {
+            #if !os(tvOS)
+            if ParentalLockController.biometricsAvailable {
+                rowDivider
+                lockToggleRow(
+                    icon: "faceid",
+                    label: loc.localized("privacy.lock.biometrics"),
+                    subtitle: loc.localized("privacy.lock.biometrics.subtitle"),
+                    isOn: parentalLock.biometricsEnabled,
+                    focusTarget: .lockBiometrics
+                ) {
+                    parentalLock.setBiometricsEnabled(!parentalLock.biometricsEnabled)
+                }
+            }
+            rowDivider
+            #endif
+
+            lockToggleRow(
+                icon: "number.square",
+                label: loc.localized("privacy.lock.change"),
+                subtitle: nil,
+                isOn: nil,
+                focusTarget: .lockChange
+            ) {
+                isEnrollingLock = true
+            }
+        }
+    }
+
+    /// One lock row. `isOn == nil` renders an action row (chevron) instead of a
+    /// toggle — the two shapes differ only by their trailing accessory, and a
+    /// second near-identical builder would drift from this one.
+    @ViewBuilder
+    private func lockToggleRow(
+        icon: String,
+        label: String,
+        subtitle: String?,
+        isOn: Bool?,
+        focusTarget: FocusTargetAlias,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            action()
+            Haptics.tap()
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                rowIcon(systemName: icon, color: themeManager.accent)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .font(CinemaFont.label(.large))
+                        .foregroundStyle(CinemaColor.onSurface)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(CinemaFont.label(.medium))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+
+                Spacer()
+
+                if let isOn {
+                    CinemaToggleIndicator(isOn: isOn, accent: themeManager.accent, animated: motionEffects)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: CinemaScale.pt(15), weight: .semibold))
+                        .foregroundStyle(CinemaColor.outlineVariant)
+                }
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            #if os(tvOS)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(
+                isFocused: focusedRow == focusTarget,
+                accent: themeManager.accent,
+                animated: motionEffects,
+                colorScheme: tvFocusColorScheme
+            )
+            #else
+            .contentShape(Rectangle())
+            #endif
+        }
+        .buttonStyle(.plain)
+        // Collapse to one VoiceOver element with toggle semantics — the bare
+        // `CinemaToggleIndicator` is purely visual (same pattern as the search
+        // history row above).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(isOn.map { loc.localized($0 ? "a11y.toggle.on" : "a11y.toggle.off") } ?? "")
+        .accessibilityAddTraits(isOn == nil ? [] : .isToggle)
+        #if os(tvOS)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedRow, equals: focusTarget)
         #endif
     }
 
@@ -416,6 +593,19 @@ struct PrivacySecurityScreen: View {
             showClearImageCacheAlert = true
         }
     }
+
+    /// Focus-target parameter type for the lock rows. On tvOS it is the real
+    /// `FocusTarget`; on iOS there is no focus machinery, so the rows take the
+    /// same shape and ignore it — one builder, one signature.
+    #if os(tvOS)
+    private typealias FocusTargetAlias = FocusTarget
+    #else
+    private enum FocusTargetAlias {
+        case lockEnable
+        case lockBiometrics
+        case lockChange
+    }
+    #endif
 
     #if os(tvOS)
     private typealias RowFocusTarget = FocusTarget
