@@ -104,6 +104,8 @@ struct FavoritesScreen: View {
     #endif
     @State private var viewModel = FavoritesViewModel()
     @State private var prefetcher = PosterPrefetcher()
+    /// Card → fiche zoom (iOS) — see `CardZoom`.
+    @Namespace private var zoomNamespace
 
     var body: some View {
         ZStack {
@@ -228,10 +230,12 @@ struct FavoritesScreen: View {
             if let type = item.type { parts.append(type.rawValue) }
             return parts.joined(separator: " · ")
         }()
+        let zoom = CardZoom(zoomNamespace, surface: "favorites", itemId: item.id)
 
         NavigationLink {
             if let id = item.id {
                 MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             PosterCard(
@@ -242,7 +246,8 @@ struct FavoritesScreen: View {
                     positionTicks: item.userData?.playbackPositionTicks,
                     runtimeTicks: item.runTimeTicks,
                     isPlayed: item.userData?.isPlayed
-                )
+                ),
+                zoomSource: zoom
             )
         }
         #if os(tvOS)

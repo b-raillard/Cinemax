@@ -55,6 +55,7 @@ You don't need to do anything if you use:
 - `CinemaTVButtonStyle`, `CinemaTVCardButtonStyle`, `TVFilterChipButtonStyle`
 - `CinemaToggleIndicator` (takes an explicit `animated` parameter passed at call site)
 - `ToastOverlay`
+- `cardZoomDestination(_:)` (`CardZoomTransition.swift`) — the iOS card → fiche zoom falls back to the default push when motion is off
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
 

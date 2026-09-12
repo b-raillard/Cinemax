@@ -948,6 +948,9 @@
 "syncplay.lobby.invite.sentToast" = "%@ has been notified";
 "syncplay.lobby.start" = "Start playback";
 "syncplay.lobby.leave" = "Leave session";
+"syncplay.leaveConfirm.title" = "Leave the session?";
+"syncplay.leaveConfirm.message" = "Closing the player takes you out of the session. The other participants will carry on without you.";
+"syncplay.leaveConfirm.leave" = "Leave session";
 "syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
 "syncplay.needsVLC.footnote" = "\"Native player\" is on: to join a session, turn it off in Settings → Playback.";
 
