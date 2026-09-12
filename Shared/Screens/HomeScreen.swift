@@ -71,6 +71,10 @@ struct HomeScreen: View {
     /// False until Home's own first appearance has been served by `load()`, so
     /// the arrival refresh below doesn't duplicate it on a cold launch.
     @State private var liveRowPrimed = false
+    /// Card → fiche zoom (iOS). One namespace for the whole screen; every rail
+    /// tags its cards with its own surface, because the same title routinely
+    /// sits in several rails at once — see `CardZoom`.
+    @Namespace private var zoomNamespace
 
     var body: some View {
         ZStack {
@@ -365,6 +369,7 @@ struct HomeScreen: View {
         ScrollView {
             EmptyStateView(
                 systemImage: "tv.slash",
+                illustration: .emptyLibrary,
                 title: loc.localized("empty.home.title"),
                 subtitle: loc.localized("empty.home.subtitle"),
                 actionTitle: loc.localized("action.refresh")
@@ -537,7 +542,7 @@ struct HomeScreen: View {
     @ViewBuilder
     private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
         ContentRow(title: genre, data: items, id: \.id) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.genre.\(genre)")
                 .frame(width: posterCardWidth)
         }
     }
@@ -1017,8 +1022,12 @@ struct HomeScreen: View {
     @ViewBuilder
     private func soloCard(_ entry: LiveSessionsRow.Entry) -> some View {
         if let id = entry.itemId {
+            // Keyed on the ENTRY, not the item: two people watching the same
+            // film alone are two cards on this row.
+            let zoom = CardZoom(zoomNamespace, surface: "home.live", itemId: entry.id)
             NavigationLink {
                 MediaDetailScreen(itemId: id, itemType: entry.itemType ?? .movie)
+                    .cardZoomDestination(zoom)
             } label: {
                 WideCard(
                     title: entry.title ?? "",
@@ -1037,7 +1046,8 @@ struct HomeScreen: View {
                     // whether Xavier is ahead of them. A film has no such
                     // line, so the name keeps the subtitle there.
                     subtitle: entry.episodeLabel ?? watcherLine(entry),
-                    detail: entry.episodeLabel == nil ? nil : watcherLine(entry)
+                    detail: entry.episodeLabel == nil ? nil : watcherLine(entry),
+                    zoomSource: zoom
                 )
                 .overlay(alignment: .topLeading) { livePill(isTogether: false) }
             }
@@ -1339,7 +1349,7 @@ struct HomeScreen: View {
             data: viewModel.latestItems,
             id: \.id
         ) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.recent")
                 .frame(width: posterCardWidth)
         }
     }
@@ -1355,7 +1365,7 @@ struct HomeScreen: View {
             data: viewModel.favoriteItems,
             id: \.id
         ) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.favorites")
                 .frame(width: posterCardWidth)
         }
     }
@@ -1370,7 +1380,7 @@ struct HomeScreen: View {
             data: rail.items,
             id: \.id
         ) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.becauseYouWatched")
                 .frame(width: posterCardWidth)
         }
     }
@@ -1435,9 +1445,11 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func collectionCard(_ collection: BaseItemDto) -> some View {
+        let zoom = CardZoom(zoomNamespace, surface: "home.collections", itemId: collection.id)
         NavigationLink {
             if let id = collection.id {
                 MediaDetailScreen(itemId: id, itemType: .boxSet)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             PosterCard(
@@ -1448,7 +1460,8 @@ struct HomeScreen: View {
                         maxWidth: 300, tag: collection.primaryImageTagValue
                     )
                 },
-                subtitle: collection.childCount.map { loc.collectionCount($0) }
+                subtitle: collection.childCount.map { loc.collectionCount($0) },
+                zoomSource: zoom
             )
         }
         #if os(tvOS)
@@ -1488,11 +1501,15 @@ struct HomeScreen: View {
             )
         }()
 
+        // Keyed on the EPISODE (the card), not the series it opens: two
+        // upcoming episodes of one show are two cards on this rail.
+        let zoom = CardZoom(zoomNamespace, surface: "home.upcoming", itemId: episode.id)
         NavigationLink {
             // The SERIES, not the episode: an unaired episode has no fiche
             // worth opening, and the series is what the user is following.
             if let id = episode.seriesID ?? episode.id {
                 MediaDetailScreen(itemId: id, itemType: .series)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             WideCard(
@@ -1503,7 +1520,8 @@ struct HomeScreen: View {
                         maxWidth: 600, tag: episode.backdropImageTagValue
                     )
                 },
-                subtitle: subtitle
+                subtitle: subtitle,
+                zoomSource: zoom
             )
         }
         #if os(tvOS)
@@ -1514,17 +1532,21 @@ struct HomeScreen: View {
     }
 
     @ViewBuilder
-    private func recentlyAddedCard(_ item: BaseItemDto) -> some View {
+    /// `surface` names the rail the card sits on (Recently Added, Favorites, a
+    /// genre) — the same title can be in several of them, see `CardZoom`.
+    private func recentlyAddedCard(_ item: BaseItemDto, surface: String) -> some View {
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
             if let type = item.type { parts.append(type.rawValue) }
             return parts.joined(separator: " · ")
         }()
+        let zoom = CardZoom(zoomNamespace, surface: surface, itemId: item.id)
 
         NavigationLink {
             if let id = item.id {
                 MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             PosterCard(
@@ -1535,7 +1557,8 @@ struct HomeScreen: View {
                     positionTicks: item.userData?.playbackPositionTicks,
                     runtimeTicks: item.runTimeTicks,
                     isPlayed: item.userData?.isPlayed
-                )
+                ),
+                zoomSource: zoom
             )
         }
         #if os(tvOS)

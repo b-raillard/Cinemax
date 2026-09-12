@@ -239,6 +239,14 @@ final class NativeVideoPresenter {
         return true
     }
 
+    /// The diagnostics export's `last_playback` line (see `PlaybackDiagnostics`).
+    /// AVKit has no loopback proxy, hence no route.
+    private func recordPlaybackDiagnostics(_ info: PlaybackInfo) {
+        PlaybackDiagnostics.record(
+            engine: "native", playMethod: info.playMethod, container: info.sourceContainer, route: nil
+        )
+    }
+
     func present(info: PlaybackInfo) {
         self.playbackInfo = info
 
@@ -259,6 +267,7 @@ final class NativeVideoPresenter {
         self.currentAudioIndex = info.selectedAudioIndex
         self.currentSubtitleIndex = info.selectedSubtitleIndex
         self.currentPlayMethod = info.playMethod
+        recordPlaybackDiagnostics(info)
 
         // Start with nil item — native player chrome appears immediately while
         // we fetch and filter the HLS manifest in the background.
@@ -536,6 +545,7 @@ final class NativeVideoPresenter {
         self.audioTracks = info.audioTracks
         self.subtitleTracks = info.subtitleTracks
         self.currentPlayMethod = info.playMethod
+        recordPlaybackDiagnostics(info)
 
         let playerItem = makePlayerItem(for: info)
         applyTitleMetadata(to: playerItem, title: self.title)
@@ -599,6 +609,7 @@ final class NativeVideoPresenter {
             self.currentAudioIndex = info.selectedAudioIndex
             self.currentSubtitleIndex = info.selectedSubtitleIndex
             self.currentPlayMethod = info.playMethod
+            self.recordPlaybackDiagnostics(info)
 
             // The episode we're leaving can have died during a device sleep, which
             // also deactivated the session — re-assert it before AVKit gets the new

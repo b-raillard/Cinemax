@@ -109,8 +109,9 @@ final class VLCStreamPresenter: NSObject {
     // MARK: - Helpers
 
     /// libVLC can't reliably inject arbitrary HTTP headers across versions, so
-    /// authenticate via Jellyfin's `ApiKey` query param instead of the
-    /// `Authorization: MediaBrowser Token=…` header AVURLAsset uses.
+    /// when a URL libVLC opens must carry the account token, it rides Jellyfin's
+    /// `ApiKey` query param instead of the `Authorization: MediaBrowser Token=…`
+    /// header AVURLAsset uses. Stream opens decide THAT through `streamURL`.
     ///
     /// `ApiKey`, never `api_key`: the latter is a legacy spelling that Jellyfin
     /// 12.0 rejects by default (`EnableLegacyAuthorization = false`), while
@@ -119,18 +120,45 @@ final class VLCStreamPresenter: NSObject {
     /// the case-insensitive presence test — comparing against `api_key` alone
     /// sent the forced-transcode URL out with the token under both names.
     nonisolated static func authedURL(_ url: URL, token: String?) -> URL {
-        guard let token, !token.isEmpty,
+        guard let token, !token.isEmpty, !carriesApiKey(url),
               var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         var items = comps.queryItems ?? []
-        let carriesToken = items.contains { item in
+        items.append(URLQueryItem(name: "ApiKey", value: token))
+        comps.queryItems = items
+        return comps.url ?? url
+    }
+
+    /// Whether `url` already names a token in its query, under either spelling.
+    nonisolated static func carriesApiKey(_ url: URL) -> Bool {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return items.contains { item in
             let name = item.name.lowercased()
             return name == "apikey" || name == "api_key"
         }
-        if !carriesToken {
-            items.append(URLQueryItem(name: "ApiKey", value: token))
-        }
-        comps.queryItems = items
-        return comps.url ?? url
+    }
+
+    /// The URL a stream open hands on — to libVLC directly, or to the loopback
+    /// proxy as its origin target. The ONE place that decides whether the
+    /// account token rides the query string (#184):
+    ///
+    /// | route  | first open        | retry after a failure |
+    /// |--------|-------------------|-----------------------|
+    /// | direct | no token          | `ApiKey`              |
+    /// | proxy  | no token (header) | no token (header)     |
+    ///
+    /// - DirectPlay `/Videos/{id}/stream` carries no `[Authorize]` on any server
+    ///   the app supports (`VideosController`, 10.9 → 12.0; streamed anonymously
+    ///   on 10.11.11), so the token there did nothing but land in reverse-proxy
+    ///   and CDN access logs.
+    /// - A DIRECT retry puts it back, so a future server that adds `[Authorize]`
+    ///   to that route costs one failed attempt, never a dead playback.
+    /// - Through the proxy the token never needs to be in the URL: the proxy
+    ///   sends it to the origin as an `Authorization` header, retry included.
+    /// - A forced-transcode `TranscodingUrl` arrives with the server's OWN
+    ///   `ApiKey` (and `authToken == nil`): untouched on every row, never doubled.
+    nonisolated static func streamURL(_ url: URL, token: String?, isRetry: Bool, viaProxy: Bool) -> URL {
+        guard isRetry, !viaProxy else { return url }
+        return authedURL(url, token: token)
     }
 
     private static func topMostViewController() -> UIViewController? {
@@ -560,6 +588,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Pending "show the waiting scrim" — cancelled if the group settles first.
     private var syncPlayWaitingWork: DispatchWorkItem?
     private static let syncPlayWaitingDelay: TimeInterval = 0.35
+    /// « Quitter la séance ? » while it is on screen (#175). Weak, and also
+    /// cleared by both of its actions: the tvOS Menu peel and `pressesBegan`
+    /// read it to stand down behind the alert, so it must not outlive it.
+    private weak var leaveConfirmationAlert: UIAlertController?
 
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
@@ -951,10 +983,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         setLoading(false)
     }
 
+    /// What the diagnostics export reports as the last open: engine, the
+    /// server's play method, the source container and whether the loopback
+    /// proxy carries the stream — the two questions a remote stall report
+    /// raises first, and neither was visible in a TestFlight log.
+    private func recordPlaybackDiagnostics() {
+        PlaybackDiagnostics.record(
+            engine: "vlc", playMethod: info.playMethod, container: info.sourceContainer,
+            route: usingProxy ? .proxy : .direct
+        )
+    }
+
     /// Builds the SwiftVLC `Media` for a streamed URL with `network-caching`
     /// (matches the VLCKit path).
     private func makeMedia(_ url: URL) -> Media? {
         guard let media = try? Media(url: url) else { return nil }
+        // Every fresh open funnels through here with `info` and `usingProxy`
+        // already describing it — the one place the export's `last_playback`
+        // line can be kept true (the error retry below records its own).
+        recordPlaybackDiagnostics()
         // 5 s read-ahead (was 3 s): a deeper cushion rides out a transient
         // origin drop and, crucially, gives the proxy's transparent
         // reconnect time to re-establish the upstream BEFORE the buffer
@@ -1299,7 +1346,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self?.startSleepTimerIfNeeded()
         })
         alert.addAction(UIAlertAction(title: loc.localized("sleep.prompt.stop"), style: .destructive) { [weak self] _ in
-            self?.dismiss(animated: true)
+            self?.closePlayer(.user)
         })
         present(alert, animated: true)
     }
@@ -1978,6 +2025,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // « Quitter la séance ? » is up. A presented controller's next responder
+        // is the controller that presented it, so a press the alert does not
+        // consume can still bubble here — where Menu would run the peel's
+        // bare-video branch (a second question) and play/pause would wake a
+        // HUD behind the alert. Stand down entirely until it is answered.
+        if leaveConfirmationAlert != nil {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         // Menu (or keyboard Escape on the simulator) → peel one layer. Handled
         // HERE too (not only via the recognizer): when the HUD is hidden no
         // control is focused, so `pressesBegan` is the path that fires. Routing
@@ -2276,6 +2332,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `controlsVisible` flag, which can disagree with what's on screen and was
     /// the source of the "Menu re-opens the HUD instead of quitting" loop.
     private func handleMenu() {
+        // « Quitter la séance ? » is up: the alert owns Menu (its « Annuler »
+        // is the cancel action), and a peel firing behind it would reach the
+        // bare-video branch below and ask a second time.
+        guard leaveConfirmationAlert == nil else { return }
         let now = Date()
         if now.timeIntervalSince(lastMenuHandledAt) < 0.2 { return }
         lastMenuHandledAt = now
@@ -2291,7 +2351,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             hideControlsWorkItem?.cancel()
             hideControlsImmediately()
         } else {
-            dismiss(animated: true)
+            closePlayer(.user)
         }
     }
 
@@ -3269,8 +3329,41 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// it serves an HLS tree as readily as a single file, and the manifest
     /// refusal that used to live here would defeat the only working path on a
     /// network where `getaddrinfo` fails.
-    private func proxiedURLIfUsable(for authed: URL, token: String?) -> URL? {
-        StreamTransportPolicy.shared.proxiedURL(for: authed, token: token)
+    private func proxiedURLIfUsable(for target: URL, token: String?) -> URL? {
+        StreamTransportPolicy.shared.proxiedURL(for: target, token: token)
+    }
+
+    /// The URL to open for `info` on all four open paths (fresh open, error
+    /// retry, wake re-resolve, episode nav): through the loopback proxy when
+    /// `tryProxy` and it can start, else direct. Where the token goes is
+    /// `VLCStreamPresenter.streamURL`'s call, keyed on `didRetry` — the flag
+    /// that bounds the retry, so the token comes back on exactly the one
+    /// attempt that follows a failure, and only `noteMediaOpened()` stands it
+    /// down again.
+    private func streamOpenURL(for info: PlaybackInfo, tryProxy: Bool) -> (url: URL, viaProxy: Bool) {
+        let isRetry = didRetry
+        let token = info.authToken
+        let opened: (url: URL, viaProxy: Bool)
+        if tryProxy,
+           let proxied = proxiedURLIfUsable(
+               for: VLCStreamPresenter.streamURL(info.url, token: token, isRetry: isRetry, viaProxy: true),
+               token: token
+           ) {
+            opened = (proxied, true)
+        } else {
+            opened = (VLCStreamPresenter.streamURL(info.url, token: token, isRetry: isRetry, viaProxy: false), false)
+        }
+        // Where the token went — never the token itself.
+        let auth: String
+        if opened.viaProxy, token?.isEmpty == false {
+            auth = "en-tête"
+        } else if VLCStreamPresenter.carriesApiKey(opened.url) {
+            auth = "ApiKey dans l'URL"
+        } else {
+            auth = "aucun"
+        }
+        logger.notice("CINEMAX-STREAM ▸ ouverture \(isRetry ? "après échec" : "initiale", privacy: .public) voie=\(opened.viaProxy ? "proxy" : "directe", privacy: .public) jeton=\(auth, privacy: .public)")
+        return opened
     }
 
     private func startPlayback() {
@@ -3286,18 +3379,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         resolvedIsEpisode = nil
         audioDelayMsState = 0
         subtitleDelayMsState = 0
-        let url: URL
-        let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
         // Broken-IPv6 server (decided in the background), direct already
         // failed this session, or a seek-heavy container (AVI…): route via
         // the loopback proxy; fall back to the direct URL if it can't start.
-        if shouldRouteThroughProxy,
-           let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
-            url = proxied
-            usingProxy = true
-        } else {
-            url = authed
-        }
+        let (url, viaProxy) = streamOpenURL(for: info, tryProxy: shouldRouteThroughProxy)
+        usingProxy = viaProxy
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
         activateSessionThenPlay(media)
@@ -3609,8 +3695,68 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return .cinemaHex(option.palette.accentDark)
     }
 
+    // MARK: - Closing while in a group (#175)
+
+    /// The one way this presenter closes itself. `origin` says who asked, which
+    /// is what decides whether a Watch Together member is asked first — see
+    /// `SyncPlayLeaveConfirmation`. The interactive swipe keeps its own
+    /// `dismiss(animated: false)` (the slide IS the exit animation) and asks
+    /// through `askBeforeLeavingGroupIfNeeded` directly.
+    private func closePlayer(_ origin: SyncPlayLeaveConfirmation.CloseOrigin) {
+        if askBeforeLeavingGroupIfNeeded(origin) { return }
+        dismiss(animated: true)
+    }
+
+    /// Raises « Quitter la séance ? » when this close would leave a group the
+    /// viewer never said to leave. Returns `true` when the close became that
+    /// question — the caller must then NOT dismiss.
+    ///
+    /// The alert only ever presents over the player. It is a separate
+    /// presentation whose own dismissal is its own (`isBeingDismissed` is true
+    /// on the ALERT, never on this controller), and presenting it does not
+    /// take the player's view out of the hierarchy, so `viewWillDisappear`'s
+    /// teardown — and with it `playbackDidDismiss` → `leaveGroup` — runs only
+    /// when « Quitter la séance » calls the same `dismiss` as before. That
+    /// handler runs after the alert has gone, which is what lets `dismiss`
+    /// target this controller rather than the alert (the error and sleep
+    /// alerts already rely on it). « Annuler » changes nothing: playback is not
+    /// paused and the group is not touched.
+    @discardableResult
+    private func askBeforeLeavingGroupIfNeeded(_ origin: SyncPlayLeaveConfirmation.CloseOrigin) -> Bool {
+        guard SyncPlayLeaveConfirmation.mustConfirm(isInGroup: syncPlay.isInGroup, origin: origin) else {
+            return false
+        }
+        // Already asking: a second request (✕ tapped twice, Menu mashed) is the
+        // same question, never a second alert stacked on the first.
+        if leaveConfirmationAlert != nil { return true }
+        syncPlay.trace("fermeture du lecteur : confirmation demandée")
+        let alert = UIAlertController(
+            title: loc.localized("syncplay.leaveConfirm.title"),
+            message: loc.localized("syncplay.leaveConfirm.message"),
+            preferredStyle: .alert
+        )
+        // `.cancel`: that is the action the tvOS Menu button maps to.
+        alert.addAction(UIAlertAction(title: loc.localized("action.cancel"), style: .cancel) { [weak self] _ in
+            guard let self else { return }
+            self.leaveConfirmationAlert = nil
+            // The Menu press that cancelled must not also reach the peel.
+            self.lastMenuHandledAt = Date()
+            self.syncPlay.trace("fermeture du lecteur : annulée — la séance continue")
+        })
+        alert.addAction(UIAlertAction(title: loc.localized("syncplay.leaveConfirm.leave"), style: .destructive) { [weak self] _ in
+            guard let self else { return }
+            self.leaveConfirmationAlert = nil
+            self.syncPlay.trace("fermeture du lecteur : séance quittée")
+            self.dismiss(animated: true)
+        })
+        leaveConfirmationAlert = alert
+        present(alert, animated: true)
+        return true
+    }
+
     /// Detaches from the controller and, since v1 ties the group's lifetime to
-    /// the player, leaves the group. Called from `teardown` (user dismiss).
+    /// the player, leaves the group. Called from `teardown`, i.e. on EVERY
+    /// close — a user close has been confirmed upstream by `closePlayer`.
     private func unbindSyncPlay() {
         syncPlay.onSessionChanged = nil
         syncPlay.unbindPlayback()
@@ -3686,17 +3832,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.nextEpisode = nav?.1
             self.refreshEpisodeButtons()
             self.titleLabel.text = ref.title
-            let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
-            let url: URL
             // Carry the proxy across episodes when the server needs it.
-            if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = self.proxiedURLIfUsable(for: authed, token: vlcInfo.authToken) {
-                url = proxied
-                self.usingProxy = true
-            } else {
-                url = authed
-                self.usingProxy = false
-            }
+            let (url, viaProxy) = self.streamOpenURL(
+                for: vlcInfo, tryProxy: self.usingProxy || self.shouldRouteThroughProxy
+            )
+            self.usingProxy = viaProxy
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.beginOpenLoading()
             // The episode we're leaving can have died during a device sleep, which
@@ -3768,7 +3908,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default) { [weak self] _ in
-                self?.dismiss(animated: true)
+                self?.closePlayer(.system)
             })
             present(alert, animated: true)
             return
@@ -3781,7 +3921,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     #if os(iOS)
     @objc private func closeTapped() {
-        dismiss(animated: true)
+        closePlayer(.user)
     }
 
     /// Native Picture-in-Picture via SwiftVLC's libVLC pixel-buffer →
@@ -3852,6 +3992,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         case .ended, .cancelled:
             let flick = g.velocity(in: view).y > 900
             if g.state == .ended, ty > height * 0.25 || flick {
+                // In a Watch Together group the release is a question, not a
+                // close: the surface springs back under « Quitter la séance ? »
+                // and only the alert's destructive action dismisses — with an
+                // ordinary animated dismiss, since the slide has been undone.
+                if askBeforeLeavingGroupIfNeeded(.user) {
+                    springBackFromDismissPan()
+                    return
+                }
                 UIView.animate(withDuration: 0.22, delay: 0, options: .curveEaseIn) {
                     self.view.transform = CGAffineTransform(translationX: 0, y: height)
                     self.view.alpha = 0
@@ -3861,15 +4009,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.dismiss(animated: false)
                 }
             } else {
-                UIView.animate(withDuration: 0.3, delay: 0,
-                               usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
-                    self.view.transform = .identity
-                    self.view.alpha = 1
-                    self.view.layer.cornerRadius = 0
-                }
+                springBackFromDismissPan()
             }
         default:
             break
+        }
+    }
+
+    /// Returns the dragged surface to rest — a release short of the threshold,
+    /// or one turned into the leave question.
+    private func springBackFromDismissPan() {
+        UIView.animate(withDuration: 0.3, delay: 0,
+                       usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+            self.view.transform = .identity
+            self.view.alpha = 1
+            self.view.layer.cornerRadius = 0
         }
     }
 
@@ -4227,7 +4381,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if episodeNavigator != nil {
             showEndOfSeriesOverlay()
         } else {
-            dismiss(animated: true)
+            closePlayer(.system)
         }
     }
 
@@ -4279,7 +4433,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: self.loc.localized("player.finishedSeries.done"), style: .default) { [weak self] _ in
-                self?.dismiss(animated: true)
+                self?.closePlayer(.user)
             })
             self.present(alert, animated: true)
             #endif
@@ -4379,7 +4533,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func endOfSeriesDoneTapped() {
-        dismiss(animated: true)
+        closePlayer(.user)
     }
     #endif
 
@@ -4389,7 +4543,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
-            let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
             // A direct attempt failed: pin the rest of the session to the proxy
             // so we stop re-rolling the dice on the flaky direct path. This is
             // unconditional again now that the proxy can serve a manifest —
@@ -4398,16 +4551,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // (measured: libVLC `cannot resolve` while URLSession returns 200).
             if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
             // Always retry via the proxy (direct is the path that stalls on
-            // broken IPv6); fall back to direct only if it can't start.
-            let url: URL
-            if let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
-                url = proxied
-                usingProxy = true
-            } else {
-                url = authed
-            }
+            // broken IPv6, and the proxy authenticates by header); fall back to
+            // direct only if it can't start — the one open that carries
+            // `ApiKey` (see `streamURL`).
+            let (url, viaProxy) = streamOpenURL(for: info, tryProxy: true)
+            if viaProxy { usingProxy = true }
             if let media = try? Media(url: url) {
                 media.addOption(":network-caching=5000")
+                recordPlaybackDiagnostics()
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
                 // of restarting at 0. The initial resume-seek already fired,
@@ -4438,7 +4589,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default) { [weak self] _ in
-            self?.dismiss(animated: true)
+            self?.closePlayer(.system)
         })
         present(alert, animated: true)
         errorAlert = alert
@@ -4632,16 +4783,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didApplyServerTrackDefaults = false
             self.mediaLengthMs = 0
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
-            let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
-            let url: URL
-            if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = self.proxiedURLIfUsable(for: authed, token: fresh.authToken) {
-                url = proxied
-                self.usingProxy = true
-            } else {
-                url = authed
-                self.usingProxy = false
-            }
+            let (url, viaProxy) = self.streamOpenURL(
+                for: fresh, tryProxy: self.usingProxy || self.shouldRouteThroughProxy
+            )
+            self.usingProxy = viaProxy
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.beginOpenLoading()
             // Re-assert the playback session BEFORE replay: the system deactivated
