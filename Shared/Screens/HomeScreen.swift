@@ -1379,7 +1379,7 @@ struct HomeScreen: View {
             data: rail.items,
             id: \.id
         ) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.becauseYouWatched")
                 .frame(width: posterCardWidth)
         }
     }
