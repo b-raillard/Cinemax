@@ -352,6 +352,48 @@ struct JellyfinSocketParsingTests {
         #expect(message.header == nil)
         #expect(message.text == "Hello")
     }
+
+    @Test("Parses every Playstate command the app honours")
+    func parsesPlaystate() throws {
+        for kind in RemotePlaystateCommand.Kind.allCases where kind != .seek {
+            let command = try #require(JellyfinSocket.parsePlaystate(["Command": kind.rawValue]))
+            #expect(command.kind == kind)
+            #expect(command.seekPositionTicks == nil)
+        }
+        let seek = try #require(JellyfinSocket.parsePlaystate([
+            "Command": "Seek",
+            "SeekPositionTicks": NSNumber(value: 6_000_000_000),
+            "ControllingUserId": "abc"
+        ]))
+        #expect(seek.kind == .seek)
+        #expect(seek.seekPositionTicks == 6_000_000_000)
+    }
+
+    @Test("Playstate matching is case-insensitive")
+    func playstateCaseInsensitive() throws {
+        // jellyfin-web posts `stop` / `nextTrack` / `seek` in camel case.
+        #expect(try #require(JellyfinSocket.parsePlaystate(["Command": "nexttrack"])).kind == .nextTrack)
+        #expect(try #require(JellyfinSocket.parsePlaystate(["Command": "PLAYPAUSE"])).kind == .playPause)
+    }
+
+    @Test("A Playstate seek without a usable target is refused rather than sent to 0")
+    func playstateSeekNeedsTarget() {
+        #expect(JellyfinSocket.parsePlaystate(["Command": "Seek"]) == nil)
+        #expect(JellyfinSocket.parsePlaystate([
+            "Command": "Seek",
+            "SeekPositionTicks": NSNumber(value: -1)
+        ]) == nil)
+    }
+
+    @Test("Playstate commands the app does not execute are dropped at parse time")
+    func unhonouredPlaystateDropped() {
+        // Rewind / FastForward assume a rate-changing transport this app does
+        // not have; an unknown future value must not be guessed at either.
+        #expect(JellyfinSocket.parsePlaystate(["Command": "Rewind"]) == nil)
+        #expect(JellyfinSocket.parsePlaystate(["Command": "FastForward"]) == nil)
+        #expect(JellyfinSocket.parsePlaystate(["Command": "Teleport"]) == nil)
+        #expect(JellyfinSocket.parsePlaystate([:]) == nil)
+    }
 }
 
 /// The type-to-confirm phrase guarding `DestructiveConfirmSheet`.

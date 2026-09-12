@@ -6,12 +6,13 @@ import Foundation
 // The mirror image of `RemotePlayTarget` / `playOnSession`, which cover the
 // sending side.
 //
-// Deliberately narrow: only the two messages this app actually honors are
-// modelled. Jellyfin's socket also carries `Playstate` (pause / unpause / seek /
-// stop) and the full `GeneralCommand` vocabulary, and modelling those without
-// executing them would be worse than ignoring them — a sender would render
-// transport controls that silently do nothing. See the capability declaration in
-// `JellyfinAPIClient+RemoteControl.publishCapabilities` for the matching promise.
+// Deliberately narrow: only the messages this app actually honors are
+// modelled — `Play`, `DisplayMessage`, and (since #176) the `Playstate`
+// commands the players execute. The rest of the `GeneralCommand` vocabulary is
+// ignored, and modelling it without executing it would be worse than ignoring
+// it — a sender would render controls that silently do nothing. See the
+// capability declaration in `JellyfinAPIClient+RemoteControl.publishCapabilities`
+// for the matching promise.
 
 /// A `Play` message: another session asking this device to start something.
 public struct RemotePlayRequest: Sendable, Equatable {
@@ -47,6 +48,36 @@ public struct RemoteDisplayMessage: Sendable, Equatable {
     public init(header: String?, text: String) {
         self.header = header
         self.text = text
+    }
+}
+
+/// A `Playstate` message: another session driving THIS device's transport —
+/// what the Jellyfin web dashboard's remote bar sends when someone presses
+/// pause, drags the scrubber or asks for the next episode.
+///
+/// Only the commands the players execute are modelled. `Rewind` /
+/// `FastForward` are dropped at parse time: a sender that shows them assumes a
+/// rate-changing transport this app does not have, and mapping them onto a
+/// fixed skip would be a guess.
+public struct RemotePlaystateCommand: Sendable, Equatable {
+    public enum Kind: String, Sendable, CaseIterable {
+        case pause = "Pause"
+        case unpause = "Unpause"
+        case playPause = "PlayPause"
+        case seek = "Seek"
+        case stop = "Stop"
+        case nextTrack = "NextTrack"
+        case previousTrack = "PreviousTrack"
+    }
+
+    public let kind: Kind
+    /// Set on `.seek` only, where it is required — a seek with no usable
+    /// target is refused at parse time. Jellyfin ticks: 10 000 per millisecond.
+    public let seekPositionTicks: Int?
+
+    public init(kind: Kind, seekPositionTicks: Int? = nil) {
+        self.kind = kind
+        self.seekPositionTicks = seekPositionTicks
     }
 }
 

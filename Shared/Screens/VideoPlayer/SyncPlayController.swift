@@ -469,7 +469,7 @@ final class SyncPlayController {
         switch message {
         case .syncPlayCommand(let command): schedule(command)
         case .syncPlayGroupUpdate(let update): apply(update)
-        case .play, .displayMessage, .userUpdated: break
+        case .play, .displayMessage, .playstate, .userUpdated: break
         }
     }
 
