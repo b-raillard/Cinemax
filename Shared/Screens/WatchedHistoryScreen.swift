@@ -113,6 +113,9 @@ struct WatchedHistoryScreen: View {
     /// screen's own `NavigationStack` but outside the results `LazyVGrid`,
     /// where the cards that fire it live.
     @State private var seriesDestination: SeriesDestination?
+    /// Card → fiche zoom (iOS), inside this screen's own `NavigationStack` —
+    /// see `CardZoom`.
+    @Namespace private var zoomNamespace
 
     var body: some View {
         NavigationStack {
@@ -295,16 +298,19 @@ struct WatchedHistoryScreen: View {
         let cardTitle = item.type == .episode
             ? (item.seriesName ?? item.name ?? "")
             : (item.name ?? "")
+        let zoom = CardZoom(zoomNamespace, surface: "watchedHistory", itemId: item.id)
 
         NavigationLink {
             if let id = item.id {
                 MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             PosterCard(
                 title: cardTitle,
                 imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
-                subtitle: subtitle
+                subtitle: subtitle,
+                zoomSource: zoom
             )
         }
         #if os(tvOS)

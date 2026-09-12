@@ -28,6 +28,9 @@ struct SearchScreen: View {
     /// ignores `navigationDestination(item:)` inside the results `LazyVGrid`,
     /// where the cards that fire it live.
     @State private var seriesDestination: SeriesDestination?
+    /// Card → fiche zoom (iOS). Owned by the screen, handed to the result
+    /// cards through `cardZoomScope` — see `CardZoom`.
+    @Namespace private var zoomNamespace
 
     private struct SurpriseDestination: Identifiable, Hashable {
         let id: String
@@ -390,6 +393,9 @@ struct SearchScreen: View {
             // Without this the `Equatable` conformance is inert — SwiftUI only
             // consults a custom `==` when the view is wrapped in `.equatable()`.
             .equatable()
+            // Card → fiche zoom (iOS). The results are de-duplicated by id, so
+            // one surface is enough here.
+            .cardZoomScope(zoomNamespace, surface: "search.results")
         }
     }
 
@@ -847,12 +853,17 @@ private struct SearchResultCard: View, Equatable {
     /// "Go to series" contract.
     let onGoToSeries: (String) -> Void
 
+    /// Published by `SearchScreen` on the grid — see `CardZoom`.
+    @Environment(\.cardZoomScope) private var zoomScope
+
     var body: some View {
         let subtitle = Self.subtitle(for: item)
+        let zoom = zoomScope?.zoom(for: item.id)
 
         NavigationLink {
             if let id = item.id {
                 MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             PosterCard(
@@ -865,7 +876,8 @@ private struct SearchResultCard: View, Equatable {
                     positionTicks: item.userData?.playbackPositionTicks,
                     runtimeTicks: item.runTimeTicks,
                     isPlayed: item.userData?.isPlayed
-                )
+                ),
+                zoomSource: zoom
             )
         }
         #if os(tvOS)

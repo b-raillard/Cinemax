@@ -96,6 +96,8 @@ struct LibraryPosterCard: View {
 /// already-computed values), while `LibraryPosterCard.body` never does.
 private struct PosterCardContent: View {
     @Environment(AppState.self) private var appState
+    /// Published by the host screen (grid / genre row) — see `CardZoom`.
+    @Environment(\.cardZoomScope) private var zoomScope
 
     let item: BaseItemDto
     let itemType: BaseItemKind
@@ -127,11 +129,13 @@ private struct PosterCardContent: View {
     #endif
 
     var body: some View {
+        let zoom = zoomScope?.zoom(for: item.id)
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             ZStack(alignment: .bottomTrailing) {
                 NavigationLink {
                     if let id = item.id {
                         MediaDetailScreen(itemId: id, itemType: itemType)
+                            .cardZoomDestination(zoom)
                     }
                 } label: {
                     Color.clear
@@ -148,6 +152,7 @@ private struct PosterCardContent: View {
                         // hit-testable past the clip, so the neighbouring card
                         // steals long presses aimed at this one's right half.
                         .contentShape(Rectangle())
+                        .cardZoomSource(zoom)
                         .cinemaFocus()
                 }
                 #if os(tvOS)
