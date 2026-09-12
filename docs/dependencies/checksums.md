@@ -50,7 +50,7 @@ Source: `Cinemax.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.reso
 |---|---|---|
 | `get` | `2.2.1` | `31249885da1052872e0ac91a2943f62567c0d96d` |
 | `jellyfin-sdk-swift` | `3.1.0` | `50be9e583438be414a15d4bba933ff64b6769a91` |
-| `nuke` | `12.9.0` | `83e19143355b02e9261edb2323b3e1e93287ebb9` |
+| `nuke` | `13.2.0` | `30f7a7e72e0607d304fbf69c799474bd5fb6d1ce` |
 | `swift-atomics` | `1.3.1` | `0442cb5a3f98ab802acb777929fdb446bda11a34` |
 | `swift-collections` | `1.6.0` | `a0cb0954ecb21e4e31b0070e6ed5674e8556685a` |
 | `swift-nio` | `2.102.0` | `a931f2c1de8dd49381ce3bf2e279d033f68d8865` |
