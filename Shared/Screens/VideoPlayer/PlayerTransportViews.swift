@@ -267,6 +267,9 @@ final class TVOptionPanel: UIView {
     struct Option {
         let title: String
         let isSelected: Bool
+        /// SF Symbol drawn at the row's TRAILING edge — a property of the option
+        /// itself (the TrueHD « muet sur Apple » tag), independent of selection.
+        var badgeSymbol: String? = nil
         let action: () -> Void
     }
 
@@ -399,8 +402,30 @@ final class TVOptionPanel: UIView {
         cfg.imagePlacement = .leading
         cfg.imagePadding = 16
         cfg.titleAlignment = .leading
+        // Room for the trailing badge, so a long track label wraps before it.
+        if option.badgeSymbol != nil { cfg.contentInsets.trailing += 48 }
         let button = TVOptionRow(type: .custom)
         button.configuration = cfg
+        if let symbol = option.badgeSymbol {
+            // Trailing, NOT the leading image slot: that slot is the selection
+            // mark, and a silent track can be the one currently selected.
+            // Decorative — the row's accessibility label already carries the
+            // suffix text that says the same thing.
+            let badge = UIImageView(image: UIImage(
+                systemName: symbol,
+                withConfiguration: UIImage.SymbolConfiguration(textStyle: .body)
+            ))
+            badge.translatesAutoresizingMaskIntoConstraints = false
+            badge.tintColor = UIColor.white.withAlphaComponent(0.7)
+            badge.contentMode = .scaleAspectFit
+            badge.isUserInteractionEnabled = false
+            badge.isAccessibilityElement = false
+            button.addSubview(badge)
+            NSLayoutConstraint.activate([
+                badge.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -40),
+                badge.centerYAnchor.constraint(equalTo: button.centerYAnchor)
+            ])
+        }
         button.contentHorizontalAlignment = .leading
         button.tag = index
         // The former "  ✓" suffix was at least SPOKEN; a `cfg.image` is not, so

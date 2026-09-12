@@ -149,6 +149,17 @@ final class VLCStreamPresenter: NSObject {
     }
 }
 
+/// One row of a player picker. `badge` is an SF Symbol the tvOS
+/// `TVOptionPanel` draws at the row's trailing edge; the iOS action sheet has
+/// no public image slot on `UIAlertAction`, so there the title text alone
+/// carries the tag.
+private struct PickerOption {
+    let title: String
+    let selected: Bool
+    var badge: String? = nil
+    let action: () -> Void
+}
+
 // MARK: - View controller
 
 private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
@@ -213,6 +224,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let progress = UIProgressView(progressViewStyle: .default)
     private let skipHUD = UILabel()
     private var skipHUDHide: DispatchWorkItem?
+    /// Multi-line notice for something the user must READ — the explanation a
+    /// hand-picked TrueHD track gets. Not `ToastCenter`: its overlay is mounted
+    /// in SwiftUI at the app root, i.e. UNDER this `.overFullScreen` controller,
+    /// so a toast raised during playback is never seen. Not `skipHUD` either,
+    /// a fixed-height single line that truncates a sentence.
+    private let noticeView = UIView()
+    private let noticeGlyph = UIImageView()
+    private let noticeTitle = UILabel()
+    private let noticeMessage = UILabel()
+    private var noticeHide: DispatchWorkItem?
 
     // Shared rich-HUD elements — the iOS HUD now mirrors the tvOS transport
     // (same visual language): an always-on chapter strip, a native-style
@@ -435,6 +456,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var segments: [MediaSegmentDto] = []
     private var segmentFetchTask: Task<Void, Never>?
     private var activeSegmentType: MediaSegmentType?
+    /// Opt-in auto-skip (#160). Read once per media open, next to the segment
+    /// fetch, so a toggle flipped mid-session applies at the next episode.
+    private var autoSkip: AutoSkipPreferences = .off
+    /// Segments this media has already skipped on its own (`AutoSkipPolicy.key`),
+    /// so a rewind into the intro is honoured rather than skipped again. Reset
+    /// with the segments.
+    private var autoSkippedSegmentKeys: Set<String> = []
     private let skipButton = UIButton(type: .system)
 
     // P3: sleep timer
@@ -609,6 +637,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingTapWork?.cancel()
         cancelPendingSeekCommit()
         skipHUDHide?.cancel()
+        noticeHide?.cancel()
         centerGlyphHide?.cancel()
         skipGlyphHide?.cancel()
         pendingTimeRefreshes.forEach { $0.cancel() }
@@ -1059,6 +1088,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         segmentFetchTask?.cancel()
         segments = []
         activeSegmentType = nil
+        autoSkippedSegmentKeys = []
+        autoSkip = AutoSkipPreferences.current()
         skipButton.isHidden = true
         let client = apiClient
         let id = itemId
@@ -1080,6 +1111,40 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let start = Double(segment.startTicks ?? 0) / 10_000_000
             let end = Double(segment.endTicks ?? 0) / 10_000_000
             guard end > start, currentTime >= start, currentTime < end - 1 else { continue }
+            // Opt-in auto-skip, decided BEFORE the button / countdown-card
+            // logic so a skipped segment never draws either. Once per segment
+            // per media (`autoSkippedSegmentKeys`), never while a seek is still
+            // settling — the playhead reported inside the segment may be the
+            // echo of a target the engine has not reached yet.
+            let canHandOff = autoPlayNext && nextEpisode != nil && episodeNavigator != nil
+                && !nextUpCancelledForThisItem
+            let key = AutoSkipPolicy.key(type: segment.type, startTicks: segment.startTicks)
+            let action = AutoSkipPolicy.decide(
+                segmentType: segment.type,
+                autoSkipIntro: autoSkip.intro, autoSkipCredits: autoSkip.credits,
+                alreadySkipped: autoSkippedSegmentKeys.contains(key),
+                isPlaying: enginePlaying && seekLoadingTargetMs == nil,
+                inSyncPlayGroup: syncPlay.isInGroup,
+                canHandOffToNext: canHandOff
+            )
+            if action != .none {
+                autoSkippedSegmentKeys.insert(key)
+                activeSegmentType = nil
+                skipButton.isHidden = true
+                nextUpCard?.hide()
+                logger.notice("auto-skip type=\(segment.type?.rawValue ?? "?", privacy: .public) action=\(String(describing: action), privacy: .public) from=\(Int(currentTime), privacy: .public)s to=\(Int(end), privacy: .public)s")
+                switch action {
+                case .handOffToNext:
+                    if let next = nextEpisode { navigateToEpisode(next, isAutoplay: true) }
+                case .seekToEnd:
+                    showSkipHUD(loc.localized(segment.type == .intro ? "player.autoSkipped.intro" : "player.autoSkipped.credits"), duration: 1.6)
+                    userEngineSeek(ms: Int32(end * 1000))
+                    refreshTimeUISoon()
+                case .none:
+                    break
+                }
+                return
+            }
             // Outro with auto-play armed → the countdown card replaces "Skip
             // credits" (skipping to the end would just trigger the same nav) —
             // but only once the count is one a viewer can read as a countdown.
@@ -1396,6 +1461,56 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         skipHUD.clipsToBounds = true
         skipHUD.alpha = 0
         view.addSubview(skipHUD)
+
+        // Notice (`showNotice`). On `view`, outside `controlsContainer`, so it
+        // outlives the HUD's 4 s auto-hide; and non-interactive, like every
+        // overlay on `view`, or its rectangle becomes a dead zone for the
+        // dismiss pan and the HUD tap (the stats panel's lesson).
+        noticeView.translatesAutoresizingMaskIntoConstraints = false
+        noticeView.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+        noticeView.layer.cornerRadius = 16
+        noticeView.alpha = 0
+        noticeView.isUserInteractionEnabled = false
+        noticeGlyph.tintColor = .white
+        noticeGlyph.contentMode = .scaleAspectFit
+        noticeGlyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: hudFont * 0.9, weight: .semibold)
+        noticeGlyph.setContentHuggingPriority(.required, for: .horizontal)
+        noticeGlyph.setContentCompressionResistancePriority(.required, for: .horizontal)
+        noticeTitle.font = .systemFont(ofSize: hudFont * 0.85, weight: .bold)
+        noticeTitle.textColor = .white
+        noticeTitle.numberOfLines = 0
+        noticeMessage.font = .systemFont(ofSize: hudFont * 0.72, weight: .regular)
+        noticeMessage.textColor = UIColor.white.withAlphaComponent(0.85)
+        noticeMessage.numberOfLines = 0
+        let noticeText = UIStackView(arrangedSubviews: [noticeTitle, noticeMessage])
+        noticeText.axis = .vertical
+        noticeText.spacing = 4
+        let noticeRow = UIStackView(arrangedSubviews: [noticeGlyph, noticeText])
+        noticeRow.axis = .horizontal
+        noticeRow.alignment = .center
+        noticeRow.spacing = hudFont * 0.6
+        noticeRow.translatesAutoresizingMaskIntoConstraints = false
+        noticeView.addSubview(noticeRow)
+        view.addSubview(noticeView)
+        #if os(tvOS)
+        let noticeMaxW: CGFloat = 1000
+        #else
+        let noticeMaxW: CGFloat = 520
+        #endif
+        let noticePad = hudFont * 0.8
+        NSLayoutConstraint.activate([
+            noticeRow.topAnchor.constraint(equalTo: noticeView.topAnchor, constant: noticePad * 0.75),
+            noticeRow.bottomAnchor.constraint(equalTo: noticeView.bottomAnchor, constant: -noticePad * 0.75),
+            noticeRow.leadingAnchor.constraint(equalTo: noticeView.leadingAnchor, constant: noticePad),
+            noticeRow.trailingAnchor.constraint(equalTo: noticeView.trailingAnchor, constant: -noticePad),
+            noticeView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            // Above the centre, where `skipHUD` and the seek-settle spinner sit:
+            // the re-anchoring seek a track switch fires raises that spinner at
+            // exactly the moment this notice appears.
+            noticeView.bottomAnchor.constraint(equalTo: view.centerYAnchor, constant: -(hudH / 2 + 16)),
+            noticeView.widthAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.widthAnchor, constant: -48),
+            noticeView.widthAnchor.constraint(lessThanOrEqualToConstant: noticeMaxW)
+        ])
 
         let safe = view.safeAreaLayoutGuide
         #if os(tvOS)
@@ -2469,6 +2584,23 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 
+    /// The player's own toast: a glyph, a title and a wrapped sentence, above
+    /// the centre, auto-hidden after `duration`. Announced to VoiceOver, since
+    /// the view itself is non-interactive and would otherwise never be read.
+    private func showNotice(symbol: String, title: String, message: String, duration: TimeInterval = 6) {
+        noticeHide?.cancel()
+        noticeGlyph.image = UIImage(systemName: symbol)
+        noticeTitle.text = title
+        noticeMessage.text = message
+        UIView.animate(withDuration: 0.2) { self.noticeView.alpha = 1 }
+        UIAccessibility.post(notification: .announcement, argument: "\(title). \(message)")
+        let work = DispatchWorkItem { [weak self] in
+            UIView.animate(withDuration: 0.3) { self?.noticeView.alpha = 0 }
+        }
+        noticeHide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+    }
+
     /// Native-style ±N s indicator (N = `PlayerSkipConfig.intervalSeconds`),
     /// briefly flashed with a small bounce.
     private func showSkipGlyph(forward: Bool) {
@@ -2609,6 +2741,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func presentPicker(_ title: String,
                                sourceView: UIView? = nil,
                                _ options: [(title: String, selected: Bool, action: () -> Void)]) {
+        presentPicker(title, sourceView: sourceView,
+                      options: options.map { PickerOption(title: $0.title, selected: $0.selected, action: $0.action) })
+    }
+
+    private func presentPicker(_ title: String, sourceView: UIView? = nil, options: [PickerOption]) {
         pickerPresented = true
         hideControlsWorkItem?.cancel()
         #if os(tvOS)
@@ -2649,7 +2786,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Builds or re-renders the option panel. Re-rendering an already-visible
     /// panel is the delay-nudge path: the title carries the running value, so
     /// it has to change without the sheet blinking out and back.
-    private func presentOptionPanel(title: String, options: [(title: String, selected: Bool, action: () -> Void)]) {
+    private func presentOptionPanel(title: String, options: [PickerOption]) {
         optionPanelGeneration += 1
         optionPanelActions = options.map { $0.action }
 
@@ -2702,7 +2839,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         panel.render(
             title: title,
-            options: options.map { TVOptionPanel.Option(title: $0.title, isSelected: $0.selected, action: $0.action) }
+            options: options.map {
+                TVOptionPanel.Option(title: $0.title, isSelected: $0.selected, badgeSymbol: $0.badge, action: $0.action)
+            }
         )
         view.layoutIfNeeded()
         setNeedsFocusUpdate()
@@ -2758,14 +2897,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func openAudioMenu() {
-        var opts: [(String, Bool, () -> Void)] = []
+        var opts: [PickerOption] = []
         for (i, track) in player.audioTracks.enumerated() {
             let selected = player.selectedAudioTrack == track
-            opts.append((displayLabel(forAudioOrdinal: i, track: track), selected, { [weak self] in
+            // A TrueHD / MLP track is TAGGED, never hidden or refused: libVLC on
+            // Apple plays it silent, but sources are sometimes mis-tagged and the
+            // user may know better. See `AudioTrackPolicy`.
+            let silent = AudioTrackPolicy.isSilent(ordinal: i, in: info.audioTracks)
+            var label = displayLabel(forAudioOrdinal: i, track: track)
+            if silent { label += " " + loc.localized("player.audio.silentSuffix") }
+            opts.append(PickerOption(title: label, selected: selected, badge: silent ? "speaker.slash" : nil) { [weak self] in
                 self?.selectAudioTrack(track)
-            }))
+                self?.explainIfSilent(ordinal: i)
+            })
         }
-        opts.append(("\(loc.localized("player.audioDelay")) — \(Self.formatDelay(audioDelayMsState))", false, { [weak self] in
+        opts.append(PickerOption(
+            title: "\(loc.localized("player.audioDelay")) — \(Self.formatDelay(audioDelayMsState))",
+            selected: false
+        ) { [weak self] in
             // Synchronous on tvOS so the generation bumps before `onSelect`
             // decides, which keeps the one panel and re-renders it in place.
             #if os(tvOS)
@@ -2773,8 +2922,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #else
             DispatchQueue.main.async { self?.openAudioDelayMenu() }
             #endif
-        }))
-        presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, opts)
+        })
+        presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, options: opts)
+    }
+
+    /// Explains a hand-picked track this engine plays silent and names the
+    /// audible alternative. The suggestion comes from the SAME replacement
+    /// `AudioTrackPolicy` uses for the automatic default, so the two can never
+    /// point at different tracks. The pick itself stands — this only explains.
+    private func explainIfSilent(ordinal: Int) {
+        guard case .silent(let suggested) = AudioTrackPolicy.manualPickVerdict(
+            ordinal: ordinal, tracks: info.audioTracks
+        ) else { return }
+        let message: String
+        if let suggested, suggested < info.audioTracks.count {
+            message = loc.localized("player.audio.silent.suggestion", info.audioTracks[suggested].label)
+        } else {
+            message = loc.localized("player.audio.silent.noAlternative")
+        }
+        logger.notice("CINEMAX-AUDIO ▸ piste muette choisie à la main [\(ordinal, privacy: .public)] suggestion=\(String(describing: suggested), privacy: .public)")
+        showNotice(symbol: "speaker.slash.fill", title: loc.localized("player.audio.silent.title"), message: message)
     }
 
     /// Switches the audio track and re-anchors playback at the switch position.
