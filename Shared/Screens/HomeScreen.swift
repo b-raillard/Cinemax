@@ -27,6 +27,7 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowPlaylists) private var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
     @AppStorage(SettingsKey.homeShowUpcoming) private var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
     @AppStorage(SettingsKey.homeShowCollections) private var showCollections: Bool = SettingsKey.Default.homeShowCollections
+    @AppStorage(SettingsKey.homeShowBecauseYouWatched) private var showBecauseYouWatched: Bool = SettingsKey.Default.homeShowBecauseYouWatched
     @State private var deepLinkTarget: DeepLinkTarget?
     /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
@@ -285,6 +286,7 @@ struct HomeScreen: View {
         if showPlaylists { rails.insert(.playlists) }
         if showUpcoming { rails.insert(.upcoming) }
         if showCollections { rails.insert(.collections) }
+        if showBecauseYouWatched { rails.insert(.becauseYouWatched) }
         if showGenreRows { rails.insert(.genreRows) }
         if showWatchingNow { rails.insert(.watchingNow) }
         return rails
@@ -298,8 +300,10 @@ struct HomeScreen: View {
     private func prefetchCardImages() {
         let builder = appState.imageBuilder
 
-        // 2:3 posters — recently added, favorites, genre rows (cards request maxWidth 300).
+        // 2:3 posters — recently added, favorites, « Parce que vous avez vu »,
+        // genre rows (all drawn by `recentlyAddedCard`, maxWidth 300).
         var posterItems = viewModel.latestItems + viewModel.favoriteItems
+            + (viewModel.becauseYouWatched?.items ?? [])
         for row in viewModel.genreRows {
             if case .items(let items) = row.state { posterItems += items }
         }
@@ -477,6 +481,14 @@ struct HomeScreen: View {
 
                     if showUpcoming, !viewModel.upcomingItems.isEmpty {
                         upcomingRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
+                    // « Parce que vous avez vu … » — just above the genre rows:
+                    // both are discovery, and it fills in during phase 2 like
+                    // them, so arriving late shifts nothing already painted.
+                    if showBecauseYouWatched, let rail = viewModel.becauseYouWatched {
+                        becauseYouWatchedRow(rail)
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
@@ -1289,6 +1301,21 @@ struct HomeScreen: View {
             showViewAll: true,
             onViewAll: { favoritesDestination = FavoritesDestination() },
             data: viewModel.favoriteItems,
+            id: \.id
+        ) { item in
+            recentlyAddedCard(item)
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    // MARK: - Because You Watched
+
+    /// Titles similar to the last movie (or series) the user played. Same card
+    /// as Recently Added — poster, status overlay and the shared context menu.
+    private func becauseYouWatchedRow(_ rail: BecauseYouWatchedRail) -> some View {
+        ContentRow(
+            title: loc.localized("home.becauseYouWatched", rail.seedTitle),
+            data: rail.items,
             id: \.id
         ) { item in
             recentlyAddedCard(item)

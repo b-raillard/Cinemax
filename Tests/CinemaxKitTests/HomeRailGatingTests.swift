@@ -30,6 +30,7 @@ struct HomeRailGatingTests {
     private func setRails(
         nextUp: Bool = true, favorites: Bool = true, playlists: Bool = true,
         upcoming: Bool = true, collections: Bool = true,
+        becauseYouWatched: Bool = true,
         genreRows: Bool = true, watchingNow: Bool = true
     ) {
         let defaults = UserDefaults.standard
@@ -38,6 +39,7 @@ struct HomeRailGatingTests {
         defaults.set(playlists, forKey: SettingsKey.homeShowPlaylists)
         defaults.set(upcoming, forKey: SettingsKey.homeShowUpcoming)
         defaults.set(collections, forKey: SettingsKey.homeShowCollections)
+        defaults.set(becauseYouWatched, forKey: SettingsKey.homeShowBecauseYouWatched)
         defaults.set(genreRows, forKey: SettingsKey.homeShowGenreRows)
         defaults.set(watchingNow, forKey: SettingsKey.homeShowWatchingNow)
     }
@@ -47,9 +49,15 @@ struct HomeRailGatingTests {
         for key in [
             SettingsKey.homeShowNextUp, SettingsKey.homeShowFavorites,
             SettingsKey.homeShowPlaylists, SettingsKey.homeShowUpcoming,
-            SettingsKey.homeShowCollections, SettingsKey.homeShowGenreRows,
-            SettingsKey.homeShowWatchingNow,
+            SettingsKey.homeShowCollections, SettingsKey.homeShowBecauseYouWatched,
+            SettingsKey.homeShowGenreRows, SettingsKey.homeShowWatchingNow,
         ] { defaults.removeObject(forKey: key) }
+    }
+
+    /// The query that seeds « Parce que vous avez vu … » — the only Home
+    /// query carrying the `.isPlayed` filter.
+    private func isSeedQuery(_ filters: [ItemFilter]?) -> Bool {
+        filters?.contains(.isPlayed) == true
     }
 
     // MARK: - P1 — a rail that is off is not fetched
@@ -57,11 +65,15 @@ struct HomeRailGatingTests {
     @Test("a rail switched off issues no request for it")
     func disabledRailsAreNotFetched() async {
         setRails(nextUp: false, favorites: false, playlists: false,
-                 upcoming: false, collections: false, genreRows: false, watchingNow: false)
+                 upcoming: false, collections: false, becauseYouWatched: false,
+                 genreRows: false, watchingNow: false)
         defer { clearRails() }
 
         let api = MockAPIClient()
         api.stubbedResumeItems = [makeItem(name: "Resuming")]
+        // A played item exists, so the rail WOULD have something to show —
+        // the negative below is about the switch, not about an empty history.
+        api.stubbedLastPlayedItems = [makeItem(name: "Watched")]
         let vm = HomeViewModel()
 
         await vm.load(using: makeAppState(api: api))
@@ -71,6 +83,8 @@ struct HomeRailGatingTests {
         #expect(api.getPlaylistsCallCount == 0)
         #expect(api.getGenresCallCount == 0)
         #expect(api.getItemsQueries.contains { $0.includeItemTypes == [.boxSet] } == false)
+        #expect(api.getItemsQueries.contains { isSeedQuery($0.filters) } == false)
+        #expect(api.getSimilarItemsCallCount == 0)
 
         // The hero is never gated, so the two rails that feed it are fetched
         // whatever their switch says — this is the load-bearing half of the
@@ -90,6 +104,7 @@ struct HomeRailGatingTests {
 
         let api = MockAPIClient()
         api.stubbedGenres = ["Action"]
+        api.stubbedLastPlayedItems = [makeItem(name: "Watched")]
         let vm = HomeViewModel()
 
         await vm.load(using: makeAppState(api: api))
@@ -99,6 +114,8 @@ struct HomeRailGatingTests {
         #expect(api.getPlaylistsCallCount == 1)
         #expect(api.getGenresCallCount == 1)
         #expect(api.getItemsQueries.filter { $0.includeItemTypes == [.boxSet] }.count == 1)
+        #expect(api.getItemsQueries.filter { isSeedQuery($0.filters) }.count == 1)
+        #expect(api.getSimilarItemsCallCount == 1)
     }
 
     /// The re-activation path: `HomeScreen` asks for one rail by name when its
@@ -127,6 +144,178 @@ struct HomeRailGatingTests {
         #expect(vm.isLoading == loadingBefore)
     }
 
+    // MARK: - « Parce que vous avez vu … » (#170)
+
+    private func makeEpisode(id: String, seriesId: String, seriesName: String) -> BaseItemDto {
+        var item = makeItem(name: id)
+        item.type = .episode
+        item.seriesID = seriesId
+        item.seriesName = seriesName
+        return item
+    }
+
+    private func makePlayed(_ name: String) -> BaseItemDto {
+        var item = makeItem(name: name)
+        var data = UserItemDataDto(key: "test")
+        data.isPlayed = true
+        item.userData = data
+        return item
+    }
+
+    @Test("an episode seeds the rail with its SERIES; the seed query is one item, uncounted")
+    func episodeSeedsItsSeries() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedLastPlayedItems = [makeEpisode(id: "ep-4", seriesId: "arrow", seriesName: "Arrow")]
+        api.stubbedSimilarItems = [makeItem(name: "Flash"), makeItem(name: "Legends")]
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(api.similarItemsRequests.map { $0.itemId } == ["arrow"])
+        #expect(api.similarItemsRequests.first?.limit == HomeViewModel.becauseYouWatchedLimit)
+        #expect(vm.becauseYouWatched?.seedTitle == "Arrow")
+        #expect(vm.becauseYouWatched?.items.map(\.id) == ["Flash", "Legends"])
+
+        let seed = api.getItemsQueries.first { isSeedQuery($0.filters) }
+        #expect(seed?.includeItemTypes == [.movie, .episode])
+        #expect(seed?.sortBy == [.datePlayed])
+        #expect(seed?.sortOrder == [.descending])
+        #expect(seed?.limit == 1)
+        #expect(seed?.enableTotalRecordCount == false)
+    }
+
+    @Test("watched titles and anything in Continue Watching never reach the rail")
+    func railExcludesWatchedAndInProgress() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedLastPlayedItems = [makeItem(name: "Seed")]
+        api.stubbedResumeItems = [
+            makeEpisode(id: "show-ep", seriesId: "Show", seriesName: "Show"),
+            makeItem(name: "Resumed film"),
+        ]
+        api.stubbedSimilarItems = [
+            makeItem(name: "Seed"),          // the seed itself
+            makePlayed("Already seen"),      // played
+            makeItem(name: "Resumed film"),  // in Continue Watching
+            makeItem(name: "Show"),          // series of a resumed episode
+            makeItem(name: "Fresh"),
+            makeItem(name: "Fresh"),         // duplicate
+        ]
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(vm.becauseYouWatched?.items.map(\.id) == ["Fresh"])
+    }
+
+    @Test("with no played item the rail hides itself and asks for nothing similar")
+    func railHiddenWithoutPlayedItem() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedLastPlayedItems = []
+        api.stubbedSimilarItems = [makeItem(name: "Orphan")]
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(vm.becauseYouWatched == nil)
+        #expect(api.getSimilarItemsCallCount == 0)
+    }
+
+    @Test("the rail hides itself when every similar title is filtered out")
+    func railHiddenWhenEverythingFiltered() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedLastPlayedItems = [makeItem(name: "Seed")]
+        api.stubbedSimilarItems = [makePlayed("Seen 1"), makePlayed("Seen 2")]
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(api.getSimilarItemsCallCount == 1, "the control: the request did go out")
+        #expect(vm.becauseYouWatched == nil)
+    }
+
+    @Test("refreshRail(.becauseYouWatched) fills the rail alone, without a reload")
+    func refreshRailFillsBecauseYouWatched() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedLastPlayedItems = [makeItem(name: "Seed")]
+        api.stubbedSimilarItems = [makeItem(name: "Fresh")]
+        let vm = HomeViewModel()
+        let loadingBefore = vm.isLoading
+
+        await vm.refreshRail(.becauseYouWatched, using: makeAppState(api: api))
+
+        #expect(vm.becauseYouWatched?.items.map(\.id) == ["Fresh"])
+        #expect(api.getResumeItemsCallCount == 0)
+        #expect(api.getGenresCallCount == 0)
+        #expect(vm.isLoading == loadingBefore)
+    }
+
+    /// Finishing a film posts tier-2, and that is precisely when the seed
+    /// should move on to it.
+    @Test("the tier-2 refresh re-seeds the rail")
+    func tierTwoReseedsBecauseYouWatched() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedLastPlayedItems = [makeItem(name: "First")]
+        api.stubbedSimilarItems = [makeItem(name: "Like first")]
+        let appState = makeAppState(api: api)
+        let vm = HomeViewModel()
+
+        await vm.load(using: appState)
+        #expect(vm.becauseYouWatched?.seedTitle == "First")
+
+        api.stubbedLastPlayedItems = [makeItem(name: "Second")]
+        api.stubbedSimilarItems = [makeItem(name: "Like second")]
+        await vm.refreshUserDataRails(using: appState)
+
+        #expect(vm.becauseYouWatched?.seedTitle == "Second")
+        #expect(vm.becauseYouWatched?.items.map(\.id) == ["Like second"])
+        #expect(api.similarItemsRequests.map { $0.itemId } == ["First", "Second"])
+    }
+
+    @Test("switched off, the tier-2 refresh issues no request for the rail")
+    func tierTwoSkipsDisabledBecauseYouWatched() async {
+        setRails(becauseYouWatched: false)
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedLastPlayedItems = [makeItem(name: "Seed")]
+        let vm = HomeViewModel()
+
+        await vm.refreshUserDataRails(using: makeAppState(api: api))
+
+        #expect(api.getResumeItemsCallCount == 1, "the control: the tier-2 refresh did run")
+        #expect(api.getItemsQueries.contains { isSeedQuery($0.filters) } == false)
+        #expect(api.getSimilarItemsCallCount == 0)
+    }
+
+    @Test("a movie seeds itself; an episode with no series seeds nothing")
+    func seedRule() {
+        let movie = makeItem(name: "Dune")
+        #expect(HomeViewModel.becauseYouWatchedSeed(from: movie)?.id == "Dune")
+        #expect(HomeViewModel.becauseYouWatchedSeed(from: movie)?.title == "Dune")
+
+        var orphan = makeItem(name: "ep")
+        orphan.type = .episode
+        #expect(HomeViewModel.becauseYouWatchedSeed(from: orphan) == nil)
+    }
+
     // MARK: - P2 / P5 — who asks the server to COUNT
 
     /// `totalRecordCount` is a second server-side query over the whole match.
@@ -139,6 +328,7 @@ struct HomeRailGatingTests {
 
         let api = MockAPIClient()
         api.stubbedGenres = ["Action"]
+        api.stubbedLastPlayedItems = [makeItem(name: "Watched")]
         let vm = HomeViewModel()
 
         await vm.load(using: makeAppState(api: api))
@@ -146,6 +336,8 @@ struct HomeRailGatingTests {
         let counted = api.getItemsQueries.filter { $0.enableTotalRecordCount }
         #expect(counted.isEmpty, "Home asked for a count on \(counted.count) query/queries")
         #expect(api.getItemsQueries.isEmpty == false, "the assertion above must not pass vacuously")
+        #expect(api.getItemsQueries.contains { isSeedQuery($0.filters) },
+                "the « Parce que vous avez vu » seed query must be among those checked")
     }
 
     /// The paired control, and the half that must never regress: a caller that

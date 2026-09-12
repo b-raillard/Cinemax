@@ -52,6 +52,10 @@ enum SettingsKey {
     static let homeShowPlaylists = "home.showPlaylists"
     static let homeShowUpcoming = "home.showUpcoming"
     static let homeShowCollections = "home.showCollections"
+    /// « Parce que vous avez vu … » — `getSimilarItems` seeded by the most
+    /// recently played movie (or the series of the most recently played
+    /// episode). See `HomeViewModel.loadBecauseYouWatched`.
+    static let homeShowBecauseYouWatched = "home.showBecauseYouWatched"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
     /// JSON `[String]` — the genres the user picked to surface as Home rows.
@@ -154,6 +158,10 @@ enum SettingsKey {
         /// nothing on first launch, and Home is already seven rows deep.
         static let homeShowUpcoming = false
         static let homeShowCollections = false
+        /// On by default: unlike « Prochainement » / « Collections », it hides
+        /// itself whenever it has nothing to say (no played item yet, or no
+        /// similar title left once the watched ones are filtered out).
+        static let homeShowBecauseYouWatched = true
         static let homeShowGenreRows = true
         static let homeShowWatchingNow = true
 
@@ -216,6 +224,7 @@ enum HomeRailPreferences {
     static var showPlaylists: Bool { isOn(SettingsKey.homeShowPlaylists, default: SettingsKey.Default.homeShowPlaylists) }
     static var showUpcoming: Bool { isOn(SettingsKey.homeShowUpcoming, default: SettingsKey.Default.homeShowUpcoming) }
     static var showCollections: Bool { isOn(SettingsKey.homeShowCollections, default: SettingsKey.Default.homeShowCollections) }
+    static var showBecauseYouWatched: Bool { isOn(SettingsKey.homeShowBecauseYouWatched, default: SettingsKey.Default.homeShowBecauseYouWatched) }
     static var showGenreRows: Bool { isOn(SettingsKey.homeShowGenreRows, default: SettingsKey.Default.homeShowGenreRows) }
     static var showWatchingNow: Bool { isOn(SettingsKey.homeShowWatchingNow, default: SettingsKey.Default.homeShowWatchingNow) }
 }

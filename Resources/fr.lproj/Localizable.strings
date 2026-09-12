@@ -52,6 +52,7 @@
 "home.watchingNow.playing" = "%@ regarde";
 "settings.homePage.watchingNow" = "En direct";
 "home.recentlyAdded" = "Ajouts récents";
+"home.becauseYouWatched" = "Parce que vous avez vu %@";
 "home.remainingTime.hours" = "%dh %dm restantes";
 "home.remainingTime.minutes" = "%dm restantes";
 "home.genreRow.failed" = "Échec du chargement";
@@ -284,6 +285,7 @@
 "settings.homePage.continueWatching" = "Reprendre";
 "settings.homePage.nextUp" = "À suivre";
 "settings.homePage.recentlyAdded" = "Ajouts récents";
+"settings.homePage.becauseYouWatched" = "Parce que vous avez vu…";
 "settings.homePage.genreRows" = "Rangées par genre";
 "settings.homePage.genreRows.choose" = "Choisir les genres";
 "settings.homePage.genreRows.hint" = "Genres affichés en rangées sur l'accueil";
