@@ -157,6 +157,7 @@
 		42CFC3433671EA9FF58357BF /* JellyfinSocketHubTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D455572B09131C62FDAE5239 /* JellyfinSocketHubTests.swift */; };
 		42E4CC5F5F29B460AB2ACE87 /* SyncPlayJoinAndReadyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36E29B188D5730A3ED5B0FB8 /* SyncPlayJoinAndReadyTests.swift */; };
 		437AA27B26EE2A52E222B7BB /* EndOfSeriesOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A17484ECAEA652B7D37B7EB /* EndOfSeriesOverlayController.swift */; };
+		438CA4F1427C2C17CC63D3B3 /* ResumeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A479BA024A9C77374F3D6FD0 /* ResumeControl.swift */; };
 		440F1A1C85E6FD6EE6D99210 /* MediaEntityIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B34A20D825429EC76C315C5 /* MediaEntityIDTests.swift */; };
 		448262BCA9FEDBA39DC7281F /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = B24D9A92B2BDADFB669CDF12 /* Fixtures */; };
 		44929C0B213F8238949E0721 /* AdminLandingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25DBC840D04F02A6587A96D6 /* AdminLandingScreen.swift */; };
@@ -183,6 +184,7 @@
 		4B7E73007A559CA15B9D34CE /* MetadataCastTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADEAE9BB3E538E792AD643F8 /* MetadataCastTab.swift */; };
 		4B8CB9B948D7854AFF2056AB /* OnboardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F59501C280CEEAA31D397E59 /* OnboardingScreen.swift */; };
 		4BA32C19B8DB53FD7343DE69 /* DiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8119FB81D7402C131E9B1DB0 /* DiagnosticsTests.swift */; };
+		4BB363D67E3FE00015B30D10 /* ResumeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A479BA024A9C77374F3D6FD0 /* ResumeControl.swift */; };
 		4BE51C7C783DC5665E32AB27 /* MediaDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */; };
 		4D3A0363BBAF768FB4D88343 /* CardPlayTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C21D7C91F182C22D9040E2 /* CardPlayTarget.swift */; };
 		4D5B8748F3B92D962091BC9A /* MetadataActionsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E4A7D171BFFC2140105DE2 /* MetadataActionsTab.swift */; };
@@ -833,6 +835,7 @@
 		A361F11FB81621F3F110778D /* OnboardingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPolicy.swift; sourceTree = "<group>"; };
 		A39CFEB21A7A6E968468DF9A /* CinemaxTV.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CinemaxTV.entitlements; sourceTree = "<group>"; };
 		A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTransportViews.swift; sourceTree = "<group>"; };
+		A479BA024A9C77374F3D6FD0 /* ResumeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumeControl.swift; sourceTree = "<group>"; };
 		A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServersScreen.swift; sourceTree = "<group>"; };
 		A548CB9FD413FC2170099AEF /* MediaDetailEpisodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailEpisodeRow.swift; sourceTree = "<group>"; };
 		A5E3375B86131BF66AFD5CAC /* LibraryGenreRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryGenreRow.swift; sourceTree = "<group>"; };
@@ -1481,6 +1484,7 @@
 				FE7B0E3A0FE5F8EDC417ED90 /* PlaybackActivityAttributes.swift */,
 				40009AD5DD766349EDADD8F6 /* PlaybackLiveActivityWidget.swift */,
 				7245AC0008EF86CB3AF4972B /* PrivacyInfo.xcprivacy */,
+				A479BA024A9C77374F3D6FD0 /* ResumeControl.swift */,
 			);
 			path = CinemaxWidget;
 			sourceTree = "<group>";
@@ -1821,6 +1825,7 @@
 				2E41DA320C3BAD16BED4FBFD /* JellyfinLite.swift in Sources */,
 				1BEC97214A543D9D696CD223 /* PlaybackActivityAttributes.swift in Sources */,
 				1E20DE4CAAE8A504D6900A25 /* PlaybackLiveActivityWidget.swift in Sources */,
+				438CA4F1427C2C17CC63D3B3 /* ResumeControl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2362,6 +2367,7 @@
 				B54B725BA68563ACADEC4B8C /* RemoteCommandController.swift in Sources */,
 				45719ED14139C973DE7C3681 /* RemoteControlListener.swift in Sources */,
 				2C49D0AA24B3404FEAF8940A /* RemotePlaystateRouter.swift in Sources */,
+				4BB363D67E3FE00015B30D10 /* ResumeControl.swift in Sources */,
 				57BCFF75FEA4B7B069FDB780 /* SearchHistoryStore.swift in Sources */,
 				A38CC2D23545EA9986CB053F /* SearchScreen.swift in Sources */,
 				1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */,
@@ -2584,6 +2590,7 @@
 				PRODUCT_NAME = Cinemax;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) CINEMAX_APP";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2717,6 +2724,7 @@
 				PRODUCT_NAME = Cinemax;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) CINEMAX_APP";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				TARGETED_DEVICE_FAMILY = "1,2";

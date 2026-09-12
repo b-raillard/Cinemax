@@ -1037,6 +1037,8 @@
 
 "intent.resume.title" = "Reprendre ma lecture";
 "intent.resume.description" = "Relance le dernier titre commencé.";
+"intent.resumeControl.title" = "Reprendre la lecture";
+"intent.resumeControl.description" = "Ouvre Cinemax sur le dernier titre commencé.";
 "intent.resume.shortTitle" = "Reprendre";
 
 "intent.play.title" = "Lire un titre";
