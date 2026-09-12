@@ -111,6 +111,25 @@ final class LocalizationManager {
     func seasonCount(_ count: Int) -> String {
         count == 1 ? localized("tvShows.season", count) : localized("tvShows.seasonsPlural", count)
     }
+
+    /// "1 essai" / "3 essais" left before the parental lock's next back-off
+    /// window. Only called with `count > 0` — at zero the window is already open
+    /// and `parentalLockThrottle` is what the user needs to read.
+    func parentalLockAttemptsLeft(_ count: Int) -> String {
+        count <= 1
+            ? localized("privacy.lock.wrong.remainingOne")
+            : localized("privacy.lock.wrong.remainingMany", count)
+    }
+
+    /// "Réessayez dans 30 s" / "… dans 5 min". Rounds minutes UP so the message
+    /// never promises a retry that is still a few seconds away, and clamps to at
+    /// least 1 s so a window closing this instant doesn't print "0 s".
+    func parentalLockThrottle(secondsRemaining seconds: Int) -> String {
+        if seconds >= 60 {
+            return localized("privacy.lock.throttled.minutes", (seconds + 59) / 60)
+        }
+        return localized("privacy.lock.throttled.seconds", max(1, seconds))
+    }
 }
 
 // MARK: - Bundle Extension

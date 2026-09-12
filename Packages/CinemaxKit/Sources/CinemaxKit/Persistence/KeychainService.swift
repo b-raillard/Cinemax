@@ -143,6 +143,39 @@ public struct KeychainService: Sendable {
     // members, and a copy on each conformer would let the test mock's version
     // drift from the one that actually ships. See the RULE there.
 
+    // MARK: - Parental-controls lock
+
+    /// Account holding the JSON `ParentalLockCredential`.
+    static let parentalLockAccount = "parental_lock"
+
+    /// The enrolled parental-controls lock, or `nil` when none is set.
+    ///
+    /// **App-private, and deliberately NOT in the shared extension group**: the
+    /// widget and Top Shelf have nothing to unlock, and handing them a verifier
+    /// would only widen where it can be read from.
+    ///
+    /// A decode failure returns `nil`, i.e. "no lock". That is fail-OPEN, and it
+    /// is the right way round here: the alternative strands the parent in a
+    /// screen they can never unlock because a blob became unreadable, while the
+    /// thing this protects is a content filter, not a credential. The Keychain
+    /// item is written whole (`save` is delete-then-add) so a partial write
+    /// cannot produce that state in the first place.
+    public func getParentalLock() -> ParentalLockCredential? {
+        guard let data = getData(for: Self.parentalLockAccount) else { return nil }
+        return try? JSONDecoder().decode(ParentalLockCredential.self, from: data)
+    }
+
+    /// Persists the credential, counters included — `ParentalLockPolicy.verify`
+    /// returns the updated value precisely so the back-off survives a force-quit.
+    public func saveParentalLock(_ credential: ParentalLockCredential) throws {
+        try save(data: JSONEncoder().encode(credential), for: Self.parentalLockAccount)
+    }
+
+    /// Removes the lock. Reached only from behind an unlocked gate.
+    public func deleteParentalLock() {
+        delete(for: Self.parentalLockAccount)
+    }
+
     // MARK: - Shared extension session (Keychain access group)
 
     /// Account name of the single shared item the extensions read. Mirrors the

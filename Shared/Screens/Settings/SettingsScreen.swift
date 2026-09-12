@@ -159,6 +159,9 @@ struct SettingsScreen: View {
     /// `AppNavigation`, which never remounts during normal usage, so the
     /// sub-navigation depth survives the Settings remount.
     @Environment(SettingsNavCoordinator.self) var settingsNav
+    /// Forwarded into `privacySecuritySheet` — that sheet is a separate
+    /// presentation context and re-injects its environment by hand.
+    @Environment(ParentalLockController.self) var parentalLock
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
@@ -524,6 +527,10 @@ struct SettingsScreen: View {
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+            // Required, not optional: `ParentalLockGate` reads this
+            // non-optionally on purpose, so a forgotten injection traps here
+            // instead of silently unprotecting the screen. See the RULE there.
+            .environment(parentalLock)
     }
 
     private var quickConnectAuthorizeSheet: some View {

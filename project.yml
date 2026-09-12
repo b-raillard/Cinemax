@@ -136,6 +136,11 @@ targets:
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
         NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi."
+        # Face ID / Touch ID is offered ONLY as a shortcut past the parental
+        # lock's PIN — the PIN always stays a valid path, so a refusal here
+        # costs a shortcut, never access. tvOS carries no counterpart: it has
+        # no biometric sensor.
+        NSFaceIDUsageDescription: "Cinemax can use Face ID to unlock the parental controls instead of typing your PIN."
         # Base `UISupportedInterfaceOrientations` is required by the App Store
         # validator (iPad multitasking check) even when iPhone/iPad variants
         # are provided; the variants still override on their device class.

@@ -40,6 +40,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Cinemax can use Face ID to unlock the parental controls instead of typing your PIN.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi.</string>
 	<key>NSMicrophoneUsageDescription</key>
