@@ -1165,6 +1165,19 @@
 "subtitleSize.large" = "Large";
 "subtitleSize.extraLarge" = "Extra large";
 "subtitleSize.huge" = "Huge";
+"settings.subtitleColor" = "Subtitle colour";
+"settings.subtitleOutline" = "Subtitle outline";
+"settings.subtitleBackground" = "Subtitle background";
+"settings.subtitleStyle.footer" = "Applies to the next playback, not the one in progress. No effect on the native player, which follows the system's accessibility settings.";
+"subtitleColor.white" = "White";
+"subtitleColor.yellow" = "Yellow";
+"subtitleColor.cyan" = "Cyan";
+"subtitleOutline.none" = "None";
+"subtitleOutline.normal" = "Normal";
+"subtitleOutline.thick" = "Thick";
+"subtitleBackground.none" = "None";
+"subtitleBackground.translucent" = "Translucent";
+"subtitleBackground.opaque" = "Opaque";
 
 /* Profile screen. */
 "profile.title" = "Profile";

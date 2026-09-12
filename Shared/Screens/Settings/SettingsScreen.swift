@@ -229,6 +229,11 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.dimUnfocusedPosters) var dimUnfocusedPosters: Bool = SettingsKey.Default.dimUnfocusedPosters
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.subtitleTextSize) var subtitleTextSize: Int = SettingsKey.Default.subtitleTextSize
+    /// Subtitle appearance (#162). Stored as raw strings so `@AppStorage` needs no
+    /// `RawRepresentable` dance; read as a whole through `SubtitleStyleOptions`.
+    @AppStorage(SettingsKey.subtitleColor) var subtitleColor: String = SettingsKey.Default.subtitleColor
+    @AppStorage(SettingsKey.subtitleOutline) var subtitleOutline: String = SettingsKey.Default.subtitleOutline
+    @AppStorage(SettingsKey.subtitleBackground) var subtitleBackground: String = SettingsKey.Default.subtitleBackground
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
     @AppStorage(SettingsKey.rainbowUnlocked) var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
@@ -248,6 +253,9 @@ struct SettingsScreen: View {
     @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
     @State var showSubtitleSizePicker = false
+    @State var showSubtitleColorPicker = false
+    @State var showSubtitleOutlinePicker = false
+    @State var showSubtitleBackgroundPicker = false
     @State var showLibraryLayoutPicker = false
     #endif
 

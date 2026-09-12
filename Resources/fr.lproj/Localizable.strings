@@ -1167,6 +1167,19 @@
 "subtitleSize.large" = "Grande";
 "subtitleSize.extraLarge" = "Très grande";
 "subtitleSize.huge" = "Énorme";
+"settings.subtitleColor" = "Couleur des sous-titres";
+"settings.subtitleOutline" = "Contour des sous-titres";
+"settings.subtitleBackground" = "Fond des sous-titres";
+"settings.subtitleStyle.footer" = "S'applique à la lecture suivante, pas à celle en cours. Sans effet sur le lecteur natif, qui suit les réglages d'accessibilité du système.";
+"subtitleColor.white" = "Blanc";
+"subtitleColor.yellow" = "Jaune";
+"subtitleColor.cyan" = "Cyan";
+"subtitleOutline.none" = "Aucun";
+"subtitleOutline.normal" = "Normal";
+"subtitleOutline.thick" = "Épais";
+"subtitleBackground.none" = "Aucun";
+"subtitleBackground.translucent" = "Translucide";
+"subtitleBackground.opaque" = "Opaque";
 
 /* Écran Profil. */
 "profile.title" = "Profil";

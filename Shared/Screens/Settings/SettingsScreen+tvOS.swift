@@ -465,6 +465,37 @@ extension SettingsScreen {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(playbackToggleRows)
             tvSubtitleSizeRow
+            tvSubtitleStyleRow(
+                id: "subtitleColor",
+                title: loc.localized("settings.subtitleColor"),
+                icon: "paintpalette",
+                selection: $subtitleColor,
+                isPresented: $showSubtitleColorPicker,
+                fallback: SubtitleColorOption.white
+            )
+            tvSubtitleStyleRow(
+                id: "subtitleOutline",
+                title: loc.localized("settings.subtitleOutline"),
+                icon: "square.on.square.dashed",
+                selection: $subtitleOutline,
+                isPresented: $showSubtitleOutlinePicker,
+                fallback: SubtitleOutlineOption.normal
+            )
+            tvSubtitleStyleRow(
+                id: "subtitleBackground",
+                title: loc.localized("settings.subtitleBackground"),
+                icon: "rectangle.fill",
+                selection: $subtitleBackground,
+                isPresented: $showSubtitleBackgroundPicker,
+                fallback: SubtitleBackgroundOption.none
+            )
+            // Instance arguments cannot change on a live libVLC instance, so the
+            // three rows above land at the next playback — said out loud rather
+            // than left to be discovered.
+            Text(loc.localized("settings.subtitleStyle.footer"))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .padding(.horizontal, CinemaSpacing.spacing4)
             tvSleepTimerRow
 
             tvSectionLabel(loc.localized("settings.debug"))
@@ -785,6 +816,55 @@ extension SettingsScreen {
             ForEach(SubtitleTextSizeOption.allCases) { option in
                 Button(loc.localized(option.localizationKey)) {
                     subtitleTextSize = option.rawValue
+                }
+            }
+        }
+    }
+
+    /// One appearance picker (colour / outline / background), generic over the
+    /// three enums — the tvOS twin of `iOSSubtitleStyleRow`, same reason.
+    @ViewBuilder
+    func tvSubtitleStyleRow<Option: SubtitleStylePickerOption>(
+        id: String,
+        title: String,
+        icon: String,
+        selection: Binding<String>,
+        isPresented: Binding<Bool>,
+        fallback: Option
+    ) -> some View {
+        let isFocused = focusedItem == .toggle(id)
+        let selected = Option(rawValue: selection.wrappedValue) ?? fallback
+        Button {
+            isPresented.wrappedValue = true
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Image(systemName: icon)
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(width: 24)
+                Text(title)
+                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                Text(loc.localized(selected.localizationKey))
+                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(CinemaFont.label(.small))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: isFocused, accent: themeManager.accent, animated: motionEffects, colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedItem, equals: .toggle(id))
+        .confirmationDialog(title, isPresented: isPresented) {
+            ForEach(Array(Option.allCases)) { option in
+                Button(loc.localized(option.localizationKey)) {
+                    selection.wrappedValue = option.rawValue
                 }
             }
         }
