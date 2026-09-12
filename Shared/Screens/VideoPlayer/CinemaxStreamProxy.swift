@@ -82,9 +82,11 @@ final class StreamTransportPolicy {
     }
 
     /// Loopback URL VLC should open for `target`, or nil if the proxy can't be
-    /// brought up (caller then uses the direct URL). `target` must already carry
-    /// auth (`ApiKey` query param); `token` is also sent as a header for servers
-    /// that prefer it.
+    /// brought up (caller then uses the direct URL). `token` is what
+    /// authenticates the origin fetch — it is sent as an `Authorization` header
+    /// on every upstream request (reconnects included), so a DirectPlay `target`
+    /// carries no `ApiKey` in its query (`VLCStreamPresenter.streamURL`). A
+    /// transcode `target` keeps the server's own `ApiKey`, forwarded verbatim.
     func proxiedURL(for target: URL, token: String?) -> URL? {
         proxy.localURL(for: target, token: token)
     }
