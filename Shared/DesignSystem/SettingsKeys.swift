@@ -19,6 +19,11 @@ enum SettingsKey {
     static let motionEffects = "motionEffects"
     static let render4K = "render4K"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
+    /// Opt-in: the player skips a detected intro / outro segment on its own,
+    /// once per segment (`AutoSkipPolicy`). Off by default so the skip button
+    /// stays the behaviour an untouched install gets.
+    static let autoSkipIntro = "playback.autoSkipIntro"
+    static let autoSkipCredits = "playback.autoSkipCredits"
     static let subtitleTextSize = "playback.subtitleTextSize"
     static let sleepTimerDefaultMinutes = "sleepTimerDefaultMinutes"
     /// When `true`, online playback uses the native `AVPlayer` engine (AVKit
@@ -47,6 +52,10 @@ enum SettingsKey {
     static let homeShowPlaylists = "home.showPlaylists"
     static let homeShowUpcoming = "home.showUpcoming"
     static let homeShowCollections = "home.showCollections"
+    /// « Parce que vous avez vu … » — `getSimilarItems` seeded by the most
+    /// recently played movie (or the series of the most recently played
+    /// episode). See `HomeViewModel.loadBecauseYouWatched`.
+    static let homeShowBecauseYouWatched = "home.showBecauseYouWatched"
     static let homeShowGenreRows = "home.showGenreRows"
     static let homeShowWatchingNow = "home.showWatchingNow"
     /// JSON `[String]` — the genres the user picked to surface as Home rows.
@@ -73,8 +82,24 @@ enum SettingsKey {
     /// concern, not an interface one).
     static let searchSaveHistory = "search.saveHistory"
     /// JSON `[String]` — most-recent-first list of past queries. Not a user
-    /// setting; written only through `SearchViewModel`'s mutators.
+    /// setting; written only through `SearchHistoryStore`.
+    ///
+    /// Since history became per-server this bare key is the LEGACY global
+    /// list: read once by the migration, and still the read/write destination
+    /// while no server is active (same degrade as the `menu.*` keys). Each
+    /// server's own list lives under `searchRecentQueries(serverId:)`.
     static let searchRecentQueries = "search.recentQueries"
+    /// `search.recentQueries.<serverId>` — one server's history. The prefix is
+    /// the legacy key plus a dot, which is what `SearchHistoryStore.clearAll`
+    /// sweeps.
+    static func searchRecentQueries(serverId: String) -> String {
+        "\(searchRecentQueries).\(serverId)"
+    }
+    /// The server id that inherited the legacy global history. Its presence is
+    /// what makes the migration one-shot — see `SearchHistoryStore`.
+    /// Deliberately OUTSIDE the `search.recentQueries.` prefix, so a history
+    /// wipe can never mistake it for a server's list.
+    static let searchRecentQueriesMigratedTo = "search.recentQueriesMigratedTo"
 
     // Library landing (iOS + tvOS)
     /// `"browse"` (default) shows the cinematic hero + genre rows ("By genre");
@@ -129,6 +154,8 @@ enum SettingsKey {
         static let motionEffects = true
         static let render4K = true
         static let autoPlayNextEpisode = true
+        static let autoSkipIntro = false
+        static let autoSkipCredits = false
         /// 100 % — the engine's own default, so an untouched install renders
         /// subtitles exactly as it did before this setting existed.
         static let subtitleTextSize = 100
@@ -147,6 +174,10 @@ enum SettingsKey {
         /// nothing on first launch, and Home is already seven rows deep.
         static let homeShowUpcoming = false
         static let homeShowCollections = false
+        /// On by default: unlike « Prochainement » / « Collections », it hides
+        /// itself whenever it has nothing to say (no played item yet, or no
+        /// similar title left once the watched ones are filtered out).
+        static let homeShowBecauseYouWatched = true
         static let homeShowGenreRows = true
         static let homeShowWatchingNow = true
 
@@ -209,6 +240,7 @@ enum HomeRailPreferences {
     static var showPlaylists: Bool { isOn(SettingsKey.homeShowPlaylists, default: SettingsKey.Default.homeShowPlaylists) }
     static var showUpcoming: Bool { isOn(SettingsKey.homeShowUpcoming, default: SettingsKey.Default.homeShowUpcoming) }
     static var showCollections: Bool { isOn(SettingsKey.homeShowCollections, default: SettingsKey.Default.homeShowCollections) }
+    static var showBecauseYouWatched: Bool { isOn(SettingsKey.homeShowBecauseYouWatched, default: SettingsKey.Default.homeShowBecauseYouWatched) }
     static var showGenreRows: Bool { isOn(SettingsKey.homeShowGenreRows, default: SettingsKey.Default.homeShowGenreRows) }
     static var showWatchingNow: Bool { isOn(SettingsKey.homeShowWatchingNow, default: SettingsKey.Default.homeShowWatchingNow) }
 }

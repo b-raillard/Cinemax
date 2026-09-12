@@ -140,8 +140,14 @@ final class SyncPlayController {
     /// has no SyncPlay integration at all. With the native player forced, a
     /// group would form server-side and nothing would ever move — a silent
     /// no-op, which is precisely the failure mode this feature had too much of.
-    /// Callers refuse with an explanation rather than hiding the button, because
-    /// a documented feature that is simply absent teaches the user nothing.
+    ///
+    /// The UI now states the precondition BEFORE the press (#165): the fiche's
+    /// « Ensemble » entry is hidden and Home's joinable group cards are dimmed
+    /// under a footnote naming the setting. Both entry points still refuse
+    /// through this with `syncplay.needsVLC` — the backstop for anything that
+    /// reaches them regardless (a stale render, a future caller). Views read
+    /// the same key through `@AppStorage` so they re-render when it flips; this
+    /// accessor is for code that only needs the value at the moment it acts.
     static var isEngineSupported: Bool {
         !UserDefaults.standard.bool(forKey: SettingsKey.forceNativeAVPlayer)
     }

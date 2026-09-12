@@ -154,6 +154,72 @@ struct ServerRegistryTests {
         #expect(first == second)
     }
 
+    /// Placed entries lead in `sortIndex` order — the ACTIVE one included,
+    /// since promoting it would undo the user's arrangement on every switch —
+    /// and unplaced ones (servers added after the reorder) follow by the
+    /// automatic rule.
+    @Test("Mixed sortIndex: placed entries first by index, the rest by the automatic rule")
+    func sortingMixedSortIndex() {
+        var a = entry("A", "https://a.local", daysAgo: 9)
+        a.sortIndex = 1
+        var b = entry("B", "https://b.local", daysAgo: 8)
+        b.sortIndex = 0
+        let c = entry("C", "https://c.local", daysAgo: 5)      // unplaced, active
+        let d = entry("D", "https://d.local", daysAgo: 1)      // unplaced, most recent
+
+        #expect(ServerRegistry.sorted([a, b, c, d], activeId: c.id).map(\.name) == ["B", "A", "C", "D"])
+        // Being active does not lift a placed entry above a lower index.
+        #expect(ServerRegistry.sorted([a, b, c, d], activeId: a.id).map(\.name) == ["B", "A", "D", "C"])
+        // Input order is irrelevant.
+        #expect(ServerRegistry.sorted([d, c, b, a], activeId: c.id).map(\.name) == ["B", "A", "C", "D"])
+    }
+
+    @Test("Equal sortIndex breaks on id, so the order stays total")
+    func sortingEqualIndexTotal() {
+        var a = entry("A", "https://a.local")
+        a.sortIndex = 0
+        var b = entry("B", "https://b.local")
+        b.sortIndex = 0
+        #expect(ServerRegistry.sorted([a, b], activeId: nil).map(\.id) == ServerRegistry.sorted([b, a], activeId: nil).map(\.id))
+    }
+
+    // MARK: Manual order
+
+    @Test("applyingOrder writes dense indexes, ignores unknown / repeated ids, leaves the rest unplaced")
+    func applyingOrder() {
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local")
+        let c = entry("C", "https://c.local")
+
+        let placed = ServerRegistry.applyingOrder([c.id, "ghost", a.id, c.id], to: [a, b, c])
+
+        #expect(placed.map(\.id) == [a.id, b.id, c.id])          // storage order untouched
+        #expect(placed.first { $0.id == c.id }?.sortIndex == 0)
+        #expect(placed.first { $0.id == a.id }?.sortIndex == 1)
+        #expect(placed.first { $0.id == b.id }?.sortIndex == nil)
+        #expect(ServerRegistry.sorted(placed, activeId: b.id).map(\.name) == ["C", "A", "B"])
+    }
+
+    // MARK: Rename
+
+    @Test("displayName prefers the user's label, else the server's name")
+    func displayName() {
+        var e = entry("NAS", "https://a.local")
+        #expect(e.displayName == "NAS")
+        e.displayNameOverride = "Salon"
+        #expect(e.displayName == "Salon")
+    }
+
+    @Test("Rename input is trimmed, capped, and clears on empty or on the server's own name")
+    func normalizedOverride() {
+        #expect(ServerEntry.normalizedDisplayNameOverride("  Salon \n", serverName: "NAS") == "Salon")
+        #expect(ServerEntry.normalizedDisplayNameOverride("   ", serverName: "NAS") == nil)
+        #expect(ServerEntry.normalizedDisplayNameOverride(nil, serverName: "NAS") == nil)
+        #expect(ServerEntry.normalizedDisplayNameOverride(" NAS ", serverName: "NAS") == nil)
+        let long = String(repeating: "x", count: 200)
+        #expect(ServerEntry.normalizedDisplayNameOverride(long, serverName: "NAS")?.count == ServerEntry.maxDisplayNameLength)
+    }
+
     // MARK: Upsert / dedup
 
     @Test("Upserting an equivalent URL updates in place, preserving the id")
@@ -169,6 +235,57 @@ struct ServerRegistryTests {
         #expect(result[0].name == "New name")
         #expect(result[0].serverVersion == "10.9.0")
         #expect(result[0].lastUsedAt > existing.lastUsedAt)   // timestamp only moves forward
+    }
+
+    /// The acceptance case of the rename feature: what a reachability sweep or
+    /// a login learns about a server must never cost the user their label or
+    /// their order.
+    @Test("Upsert keeps the stored label and position over discovered metadata")
+    func upsertPreservesUserOwnedFields() {
+        var existing = entry("Jellyfin Server", "https://host/jellyfin", daysAgo: 5)
+        existing.displayNameOverride = "Salon"
+        existing.sortIndex = 2
+        var discovered = entry("NAS de Bastien", "https://host/jellyfin")
+        discovered.serverVersion = "12.0.0"
+
+        let result = ServerRegistry.upsert(discovered, into: [existing])
+
+        #expect(result.count == 1)
+        #expect(result[0].name == "NAS de Bastien")            // metadata DOES move
+        #expect(result[0].serverVersion == "12.0.0")
+        #expect(result[0].displayNameOverride == "Salon")      // the user's label doesn't
+        #expect(result[0].sortIndex == 2)
+        #expect(result[0].displayName == "Salon")
+    }
+
+    /// `pendingRollbackServer` and a switch target are snapshots captured
+    /// before the user may have renamed: they must lose to the stored entry,
+    /// in BOTH directions (a stale label, and a stale absence of one).
+    @Test("Upsert ignores a stale snapshot's label and position")
+    func upsertIgnoresStaleSnapshot() {
+        var stored = entry("NAS", "https://host")
+        stored.displayNameOverride = "Salon"
+        stored.sortIndex = 0
+        var staleWithOld = stored
+        staleWithOld.displayNameOverride = "Ancien nom"
+        staleWithOld.sortIndex = 5
+        var staleWithout = stored
+        staleWithout.displayNameOverride = nil
+        staleWithout.sortIndex = nil
+
+        for snapshot in [staleWithOld, staleWithout] {
+            let result = ServerRegistry.upsert(snapshot, into: [stored])
+            #expect(result[0].displayNameOverride == "Salon")
+            #expect(result[0].sortIndex == 0)
+        }
+    }
+
+    @Test("A brand-new entry keeps whatever it carries")
+    func upsertNewEntryKeepsOwnFields() {
+        var incoming = entry("B", "https://b.local")
+        incoming.displayNameOverride = "Bureau"
+        let result = ServerRegistry.upsert(incoming, into: [entry("A", "https://a.local")])
+        #expect(result.last?.displayNameOverride == "Bureau")
     }
 
     @Test("Upserting a different URL appends")
@@ -231,9 +348,34 @@ struct ServerRegistryTests {
 
     @Test("ServerEntry round-trips through JSON")
     func codableRoundTrip() throws {
-        let original = entry("A", "https://host/jellyfin")
+        var original = entry("A", "https://host/jellyfin")
         let decoded = try JSONDecoder().decode(ServerEntry.self, from: JSONEncoder().encode(original))
         #expect(decoded == original)
+        original.displayNameOverride = "Salon"
+        original.sortIndex = 3
+        let decodedWithOverrides = try JSONDecoder().decode(ServerEntry.self, from: JSONEncoder().encode(original))
+        #expect(decodedWithOverrides == original)
+    }
+
+    /// A registry written by a build that predates rename / reorder is what
+    /// every upgraded install holds in its Keychain. If it failed to decode,
+    /// `KeychainService.getServers()` would answer `[]` — every server gone.
+    /// The payload is the exact key set the previous `ServerEntry` encoded.
+    @Test("A registry stored before rename/reorder still decodes")
+    func legacyRegistryDecodes() throws {
+        let json = """
+        [{"id":"4F0C2B9E-1111-2222-3333-444455556666","name":"NAS","url":"https://host/jellyfin",
+          "serverID":"srv1","accessToken":"tok","userId":"user1","username":"Alice",
+          "serverVersion":"10.11.11","lastUsedAt":770000000}]
+        """
+        let entries = try JSONDecoder().decode([ServerEntry].self, from: Data(json.utf8))
+
+        #expect(entries.count == 1)
+        #expect(entries[0].name == "NAS")
+        #expect(entries[0].accessToken == "tok")
+        #expect(entries[0].displayNameOverride == nil)
+        #expect(entries[0].sortIndex == nil)
+        #expect(entries[0].displayName == "NAS")
     }
 
     @Test("hasSession vs hasUsableSession")
@@ -586,6 +728,87 @@ struct MultiServerAppStateTests {
 
         await app.removeServer(b)
         #expect(app.servers.map(\.id) == [a.id])
+    }
+
+    // MARK: rename / reorder
+
+    /// The issue's acceptance case, end to end: the servers screen's
+    /// reachability sweep writes discovered name / version back through
+    /// `updateServerMetadata`, and the label must survive it.
+    @Test("A rename survives the reachability sweep's metadata write-back")
+    func renameSurvivesReachabilitySweep() {
+        let kc = MockKeychain()
+        let a = entry("Jellyfin Server", "https://a.local")
+        let app = makeState(keychain: kc, servers: [a], activeId: a.id)
+
+        app.renameServer(id: a.id, to: "Salon")
+        app.updateServerMetadata(id: a.id, name: "NAS de Bastien", version: "12.0.0")
+
+        let stored = app.servers.first { $0.id == a.id }
+        #expect(stored?.name == "NAS de Bastien")
+        #expect(stored?.serverVersion == "12.0.0")
+        #expect(stored?.displayName == "Salon")
+        #expect(kc.savedServers.first?.displayNameOverride == "Salon")   // persisted
+        #expect(app.activeServerNameOverride == "Salon")
+    }
+
+    @Test("A rename survives a switch away and back (the upsert path)")
+    func renameSurvivesSwitch() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local", userId: "user2")
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+
+        app.renameServer(id: b.id, to: "Bureau")
+        // `b` is a snapshot from BEFORE the rename — exactly what a caller
+        // holding an entry hands to `switchTo`.
+        #expect(await app.switchTo(b) == .commit)
+
+        #expect(app.servers.first { $0.id == b.id }?.displayName == "Bureau")
+    }
+
+    @Test("Renaming to empty or to the server's own name clears the label")
+    func renameClears() {
+        let a = entry("NAS", "https://a.local")
+        let app = makeState(servers: [a], activeId: a.id)
+
+        app.renameServer(id: a.id, to: "Salon")
+        app.renameServer(id: a.id, to: "   ")
+        #expect(app.servers[0].displayNameOverride == nil)
+
+        app.renameServer(id: a.id, to: "Salon")
+        app.renameServer(id: a.id, to: "NAS")
+        #expect(app.servers[0].displayNameOverride == nil)
+        #expect(app.renameServer(id: "ghost", to: "x") == nil)
+    }
+
+    @Test("reorderServers persists a manual order that sorting honours")
+    func reorderPersists() {
+        let kc = MockKeychain()
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local")
+        let c = entry("C", "https://c.local")
+        let app = makeState(keychain: kc, servers: [a, b, c], activeId: a.id)
+
+        app.reorderServers(orderedIds: [c.id, a.id, b.id])
+
+        #expect(ServerRegistry.sorted(app.servers, activeId: app.activeServerId).map(\.name) == ["C", "A", "B"])
+        #expect(kc.savedServers.first { $0.id == c.id }?.sortIndex == 0)
+    }
+
+    @Test("Removing a server drops its search history")
+    func removeServerDropsHistory() async {
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local")
+        let app = makeState(servers: [a, b], activeId: a.id)
+        let key = SettingsKey.searchRecentQueries(serverId: b.id)
+        SearchHistoryStore.save(["dune"], serverId: b.id)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+
+        await app.removeServer(b)
+
+        #expect(UserDefaults.standard.object(forKey: key) == nil)
     }
 
     // MARK: upsertActiveEntry

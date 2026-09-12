@@ -35,14 +35,58 @@ public enum ServerRegistry {
         return entries.max { $0.lastUsedAt < $1.lastUsedAt }
     }
 
-    /// Display order: active first, then most-recently-used. Ties break on `id`
-    /// so the order is total and the list never reshuffles between renders.
+    /// Display order.
+    ///
+    /// Entries the user placed by hand (`sortIndex != nil`) come first, in
+    /// ascending `sortIndex`. Every other entry follows by the automatic rule:
+    /// active first, then most-recently-used. With no manual index anywhere —
+    /// every registry until the user first reorders — that is exactly the
+    /// automatic rule, unchanged.
+    ///
+    /// Manual entries lead deliberately, active one included: once the user has
+    /// arranged the list, promoting whichever server they happen to be on would
+    /// undo their arrangement on every switch (the active card is marked by its
+    /// wash and pill, not by its position). The only unplaced entries a manual
+    /// list can hold are servers added AFTER the reorder, which then land at
+    /// the end. Ties break on `id` in both groups, so the order is total and the
+    /// list never reshuffles between renders.
     public static func sorted(_ entries: [ServerEntry], activeId: String?) -> [ServerEntry] {
         entries.sorted { lhs, rhs in
-            if lhs.id == activeId { return true }
-            if rhs.id == activeId { return false }
-            if lhs.lastUsedAt != rhs.lastUsedAt { return lhs.lastUsedAt > rhs.lastUsedAt }
-            return lhs.id < rhs.id
+            switch (lhs.sortIndex, rhs.sortIndex) {
+            case let (l?, r?):
+                if l != r { return l < r }
+                return lhs.id < rhs.id
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                if lhs.id == activeId { return true }
+                if rhs.id == activeId { return false }
+                if lhs.lastUsedAt != rhs.lastUsedAt { return lhs.lastUsedAt > rhs.lastUsedAt }
+                return lhs.id < rhs.id
+            }
+        }
+    }
+
+    /// Writes a manual order: each id in `orderedIds` gets its position as
+    /// `sortIndex`; an entry the list doesn't name is left unplaced (`nil`).
+    /// Unknown and repeated ids are ignored, so the indexes stay dense and
+    /// unique. Storage order is untouched — only `sortIndex` moves.
+    ///
+    /// Callers pass the COMPLETE displayed order (the list after the user's
+    /// move), never a delta: a single swap written as two indexes would collide
+    /// with the untouched entries' old ones.
+    public static func applyingOrder(_ orderedIds: [String], to entries: [ServerEntry]) -> [ServerEntry] {
+        let known = Set(entries.map(\.id))
+        var position: [String: Int] = [:]
+        for id in orderedIds where known.contains(id) && position[id] == nil {
+            position[id] = position.count
+        }
+        return entries.map { entry in
+            var placed = entry
+            placed.sortIndex = position[entry.id]
+            return placed
         }
     }
 
@@ -54,6 +98,17 @@ public enum ServerRegistry {
     /// move forward. Field merging (e.g. carrying an already-discovered server
     /// name over a placeholder) is the caller's job — this stays a replace so
     /// its behavior is obvious at the call site.
+    ///
+    /// **RULE — the two user-owned fields (`displayNameOverride`, `sortIndex`)
+    /// are the exception: they are ALWAYS taken from the stored entry, never
+    /// from `entry`.** Every caller of `upsert` is describing what it learned
+    /// about the server — a login, a switch, a rollback — and none of them owns
+    /// the user's label or position. Worse, several hand in a snapshot captured
+    /// before the user acted (`pendingRollbackServer`, a switch target resolved
+    /// before a rename): taking its fields would silently revert a rename the
+    /// moment the user switched servers. Only `AppState.renameServer` /
+    /// `reorderServers` write them, in place. A NEW entry (no URL match) keeps
+    /// whatever it carries, which is normally `nil`.
     public static func upsert(_ entry: ServerEntry, into entries: [ServerEntry]) -> [ServerEntry] {
         let key = ServerURLNormalizer.dedupKey(entry.url)
         guard let index = entries.firstIndex(where: { ServerURLNormalizer.dedupKey($0.url) == key }) else {
@@ -70,7 +125,9 @@ public enum ServerRegistry {
             userId: entry.userId,
             username: entry.username,
             serverVersion: entry.serverVersion,
-            lastUsedAt: entry.lastUsedAt
+            lastUsedAt: entry.lastUsedAt,
+            displayNameOverride: existing.displayNameOverride,   // user-owned (RULE above)
+            sortIndex: existing.sortIndex                        // user-owned (RULE above)
         )
         merged.lastUsedAt = max(existing.lastUsedAt, entry.lastUsedAt)
         updated[index] = merged

@@ -262,16 +262,34 @@ final class SearchViewModel {
     /// the current query — the screen fires `search(using:)` from `.onChange`.
     var scope: SearchScope = .all
 
-    /// Most-recent-first queries shown as chips on the empty search screen.
-    /// Persisted as JSON under `SettingsKey.searchRecentQueries`; mutate only
-    /// through `recordRecentSearch` / `clearRecentSearches` (explicit-mutator
-    /// pattern — see the `@Observable`+`didSet` RULE). Loaded in `init` —
-    /// the `@Observable` macro rejects `Self.`-qualified calls in stored
-    /// property initializers ("covariant 'Self'" diagnostic).
+    /// Most-recent-first queries shown as chips on the empty search screen —
+    /// the ACTIVE server's list (`SearchHistoryStore`). Mutate only through
+    /// `loadHistory(forServer:)` / `recordRecentSearch` / `clearRecentSearches`
+    /// (explicit-mutator pattern — see the `@Observable`+`didSet` RULE). Empty
+    /// until the screen calls `loadHistory(forServer:)`: the view model is built
+    /// before the screen knows which server it is on, and loading a guess would
+    /// flash another server's chips.
     private(set) var recentSearches: [String] = []
 
-    init() {
-        recentSearches = Self.loadRecentSearches()
+    /// The server `recentSearches` belongs to. `nil` ⇒ not loaded yet, or no
+    /// server active (legacy global list).
+    private var historyServerId: String?
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// Points the history at `serverId`'s list, migrating the legacy global
+    /// list into it first if that has never happened. Called by the screen on
+    /// appear and on every server switch — cheap (one defaults read), and
+    /// equality-guarded so a re-attach with nothing changed fires no render.
+    func loadHistory(forServer serverId: String?) {
+        SearchHistoryStore.migrateLegacyIfNeeded(into: serverId, defaults: defaults)
+        historyServerId = serverId
+        let list = SearchHistoryStore.load(serverId: serverId, defaults: defaults)
+        if list != recentSearches { recentSearches = list }
     }
 
     // Voice search state (iOS only)
@@ -376,6 +394,9 @@ final class SearchViewModel {
         // that surfaces something other than the requested type isn't a filter.
         // Narrowed scopes don't even spend the request.
         let includePersons = scope == .all
+        // The server the query runs against, captured NOW: a switch landing
+        // while it is in flight must not file this query under the new server.
+        let historyServer = appState.activeServerId
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
@@ -408,50 +429,38 @@ final class SearchViewModel {
             // already collapses keystroke noise into the final query. A failed
             // fetch never records (the query may be perfectly valid).
             if !outcome.failed && !outcome.items.isEmpty {
-                self?.recordRecentSearch(query)
+                self?.recordRecentSearch(query, serverId: historyServer)
             }
         }
     }
 
     // MARK: Recent searches
 
-    private static let maxRecentSearches = 8
-
     /// Whether history capture is enabled (Privacy & Security toggle).
     /// Read straight from UserDefaults because `@AppStorage` can't live on an
     /// `@Observable` class; `object(forKey:)` keeps the default-true semantics
     /// (`bool(forKey:)` would default to false for fresh installs).
-    private static var isHistoryEnabled: Bool {
-        UserDefaults.standard.object(forKey: SettingsKey.searchSaveHistory) as? Bool
+    private var isHistoryEnabled: Bool {
+        defaults.object(forKey: SettingsKey.searchSaveHistory) as? Bool
             ?? SettingsKey.Default.searchSaveHistory
     }
 
-    private static func loadRecentSearches() -> [String] {
-        guard let data = UserDefaults.standard.data(forKey: SettingsKey.searchRecentQueries),
-              let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-        return list
+    /// Files `query` under the server it was run against. When that is not the
+    /// list on screen (a switch landed mid-search), the stored list is updated
+    /// and the chips are left alone.
+    private func recordRecentSearch(_ query: String, serverId: String?) {
+        guard isHistoryEnabled else { return }
+        let showing = serverId == historyServerId
+        let base = showing ? recentSearches : SearchHistoryStore.load(serverId: serverId, defaults: defaults)
+        let list = SearchHistoryStore.recording(query, into: base)
+        SearchHistoryStore.save(list, serverId: serverId, defaults: defaults)
+        if showing { recentSearches = list }
     }
 
-    private func recordRecentSearch(_ query: String) {
-        guard Self.isHistoryEnabled else { return }
-        var list = recentSearches.filter { $0.caseInsensitiveCompare(query) != .orderedSame }
-        list.insert(query, at: 0)
-        if list.count > Self.maxRecentSearches {
-            list = Array(list.prefix(Self.maxRecentSearches))
-        }
-        recentSearches = list
-        persistRecentSearches()
-    }
-
+    /// Clears the list on screen — this server's only.
     func clearRecentSearches() {
         recentSearches = []
-        UserDefaults.standard.removeObject(forKey: SettingsKey.searchRecentQueries)
-    }
-
-    private func persistRecentSearches() {
-        if let data = try? JSONEncoder().encode(recentSearches) {
-            UserDefaults.standard.set(data, forKey: SettingsKey.searchRecentQueries)
-        }
+        SearchHistoryStore.clear(serverId: historyServerId, defaults: defaults)
     }
 
     // MARK: Voice search (iOS only)
