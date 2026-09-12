@@ -28,7 +28,6 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowUpcoming) private var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
     @AppStorage(SettingsKey.homeShowCollections) private var showCollections: Bool = SettingsKey.Default.homeShowCollections
     @AppStorage(SettingsKey.homeShowBecauseYouWatched) private var showBecauseYouWatched: Bool = SettingsKey.Default.homeShowBecauseYouWatched
-    @State private var deepLinkTarget: DeepLinkTarget?
     /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
     /// hoisted to the screen root per the lazy-container navigation RULE.
@@ -148,12 +147,11 @@ struct HomeScreen: View {
                 Task { await viewModel.refreshRail(rail, using: appState) }
             }
         }
-        // Widget / Top Shelf deep link: push the item's detail. Attached at
-        // the screen root (NOT inside the lazy scroll content — see the
-        // lazy-container navigation RULE).
-        .navigationDestination(item: $deepLinkTarget) { target in
-            MediaDetailScreen(itemId: target.id, itemType: .movie)
-        }
+        // NOTE — Home deliberately hosts NO deep-link destination any more
+        // (#171): an item deep link is presented modally by `MainTabView`, the
+        // only route that survives this stack already having a fiche pushed.
+        // See the one-route RULE on its `pendingDeepLinkItemId` observer.
+        //
         // "View All" on the Favorites row → full favorites grid. Hoisted to the
         // screen root (NOT inside the lazy scroll content — lazy-container RULE).
         .navigationDestination(item: $favoritesDestination) { _ in
@@ -181,12 +179,8 @@ struct HomeScreen: View {
         // "Go to series" from an episode card's context menu. Hoisted to the
         // screen root for the same reason as `favoritesDestination` above.
         .seriesDestinationHost($seriesDestination)
-        .onChange(of: appState.pendingDeepLinkItemId) { _, newValue in
-            consumeDeepLink(newValue)
-        }
         .onAppear {
             isVisible = true
-            consumeDeepLink(appState.pendingDeepLinkItemId)
             // Consume any refresh deferred while hidden. A pending full reload
             // subsumes a pending targeted refresh — run only the heavier one.
             if pendingFullReload {
@@ -248,25 +242,6 @@ struct HomeScreen: View {
             await viewModel.reload(using: appState)
             prefetchCardImages()
         }
-    }
-
-    /// Moves the pending deep link into the local push binding. `itemType`
-    /// is nominal — `MediaDetailViewModel` resolves the real kind from the
-    /// fetched item.
-    private func consumeDeepLink(_ itemId: String?) {
-        guard let itemId else { return }
-        // An inbound playback request belongs to `MainTabView`'s modal route —
-        // pushing it here silently fails whenever this stack already has a
-        // detail on top. Same predicate on both sides, so exactly one of the
-        // two observers acts. See the note on `MainTabView`'s deep-link
-        // `onChange`.
-        guard !appState.isPendingIntentPlayback(itemId) else { return }
-        appState.pendingDeepLinkItemId = nil
-        deepLinkTarget = DeepLinkTarget(id: itemId)
-    }
-
-    private struct DeepLinkTarget: Identifiable, Hashable {
-        let id: String
     }
 
     /// Identity token for the Favorites "View All" push. A fresh instance each

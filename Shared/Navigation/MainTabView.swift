@@ -104,48 +104,41 @@ struct MainTabView: View {
             iOSTabLayout(tabs: menuConfig.resolvedTabs)
             #endif
         }
-        // Widget / Top Shelf deep link → land on Home, whose
-        // `navigationDestination` pushes the item detail. If the user's
-        // custom menu has no Home tab to route through, present the detail
-        // modally from the tab root so the link is honored under any menu
-        // configuration.
+        // **RULE — an item deep link has ONE route, and it is this modal.**
+        // Widget poster, Top Shelf selection, App Intent, inbound « Lire sur… »,
+        // Watch Together join: every one of them presents `MediaDetailScreen`
+        // modally from the tab root, whatever the menu configuration is.
         //
-        // `initial: true` is load-bearing for **cold launch** (app opened
-        // FROM a widget/Top Shelf tap): `onOpenURL` → `handleDeepLink` sets
-        // `pendingDeepLinkItemId` during scene connect, but `MainTabView`
-        // only mounts after `restoreSession()` flips `hasCheckedSession`, so
-        // the id is already non-nil at mount and a plain `.onChange` never
-        // fires for that baseline. When a Home tab exists this branch only
-        // selects it and `HomeScreen.onAppear` stays the primary consumer;
-        // when it doesn't, `HomeScreen` never mounts to catch it, so without
-        // the initial fire the pending id would sit unconsumed forever. The
-        // no-Home branch is the only one that clears the id + presents, so
-        // there is no double-navigation when a Home tab is present.
+        // Home's `navigationDestination(item:)` cannot serve any of them:
+        // re-assigning that binding does **not** swap the top of the stack, and
+        // Home cannot pop a `NavigationLink` push because the stack belongs to
+        // THIS view — so a link arriving while a fiche was already pushed
+        // cleared its pending state and did nothing at all, with no navigation
+        // and no error (verified: the second link left the screen untouched).
+        // Playback requests were moved here first; a plain widget / Top Shelf
+        // link kept the push route "to preserve widget UX", and kept the defect
+        // with it (#171). Routing both the same way removes the defect AND the
+        // variant — a menu without a Home tab already had no other route, so
+        // this is now one behaviour instead of three.
+        //
+        // The fiche a deep link opens is a vehicle, not a destination, which is
+        // the same reading that already makes this modal dismiss itself when
+        // the playback it was raised for ends (`onIntentPlaybackFinished`).
+        //
+        // `initial: true` is load-bearing for **cold launch** (app opened FROM a
+        // widget/Top Shelf tap): `onOpenURL` → `handleDeepLink` sets
+        // `pendingDeepLinkItemId` during scene connect, but `MainTabView` only
+        // mounts after `restoreSession()` flips `hasCheckedSession`, so the id
+        // is already non-nil at mount and a plain `.onChange` never fires for
+        // that baseline.
+        //
+        // One observer, so nothing has to stay in step with a second one: the
+        // `isPendingIntentPlayback(_:)` predicate that used to split the two
+        // routes was deleted with the branch it arbitrated.
         .onChange(of: appState.pendingDeepLinkItemId, initial: true) { _, newValue in
             guard let newValue else { return }
-            // An inbound PLAYBACK request (remote control « Lire sur… », or an
-            // App Intent) always takes the modal route, Home tab or not.
-            //
-            // Routing it through Home's `navigationDestination(item:)` drops it
-            // whenever a detail is ALREADY pushed there: re-assigning that
-            // binding does not swap the top of the stack, and Home cannot pop a
-            // `NavigationLink` push because the stack belongs to this view. The
-            // symptom was a command that arrived, cleared its state, and did
-            // nothing visible — no navigation, no playback, no error. The modal
-            // is independent of that stack, so it lands under any condition.
-            //
-            // `HomeScreen.consumeDeepLink` tests the SAME predicate and skips
-            // these, so exactly one of the two observers ever acts on a given
-            // id, whichever order SwiftUI delivers them in.
-            if appState.isPendingIntentPlayback(newValue) {
-                appState.pendingDeepLinkItemId = nil
-                deepLinkFallback = DeepLinkFallback(id: newValue)
-            } else if menuConfig.resolvedTabs.contains(where: { $0.id == "home" }) {
-                selectedTabID = "home"
-            } else {
-                appState.pendingDeepLinkItemId = nil
-                deepLinkFallback = DeepLinkFallback(id: newValue)
-            }
+            appState.pendingDeepLinkItemId = nil
+            deepLinkFallback = DeepLinkFallback(id: newValue)
         }
         // "See all" widget tile → just land on the tab, no push.
         .onChange(of: appState.pendingDeepLinkTabId) { _, newValue in

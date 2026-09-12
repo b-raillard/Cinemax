@@ -199,11 +199,10 @@ final class AppState {
     /// tap / Top Shelf selection), or set alongside `pendingIntentPlaybackItemId`
     /// by an intent / inbound remote-control command.
     ///
-    /// Two consumers, split by `isPendingIntentPlayback(_:)`: a plain deep link
-    /// goes to `HomeScreen`, which pushes the detail and clears it (`MainTabView`
-    /// switches to the Home tab first); a playback request goes to
-    /// `MainTabView`'s modal fallback instead, which is the only route that
-    /// survives Home already having a detail pushed.
+    /// **ONE consumer**: `MainTabView`, which presents the detail modally from
+    /// the tab root and clears this. Home used to push it instead when a Home
+    /// tab existed, and that route drops the link whenever a fiche is already
+    /// pushed there — see the one-route RULE on that observer (#171).
     var pendingDeepLinkItemId: String?
     /// Tab id from a `cinemax://home` deep link (widget "See all" tile).
     /// Consumed by `MainTabView`, which switches tabs and clears it.
@@ -235,17 +234,12 @@ final class AppState {
     /// `SyncPlayJoinStart` for the rule and the measurement.
     var pendingIntentPlaybackStartTicks: Int?
 
-    /// True when `itemId` is the item a pending **playback** request names.
-    ///
-    /// The routing SSOT for that request: `MainTabView` sends these to its
-    /// modal fallback and `HomeScreen.consumeDeepLink` skips them, so exactly
-    /// one of the two acts on a given id whichever order SwiftUI delivers the
-    /// two `onChange` handlers in. Both sides must keep asking THIS — an
-    /// inlined `pendingIntentPlaybackItemId == id` in one of them is how the
-    /// two drift apart into either a double navigation or a dropped command.
-    func isPendingIntentPlayback(_ itemId: String) -> Bool {
-        pendingIntentPlaybackItemId == itemId
-    }
+    // NOTE — `isPendingIntentPlayback(_:)` lived here as the routing SSOT that
+    // kept two deep-link observers in step: `MainTabView` sent playback
+    // requests to its modal and `HomeScreen.consumeDeepLink` skipped them. Both
+    // callers are gone (#171) — every item deep link now takes the one modal
+    // route — so the predicate had nothing left to arbitrate and was deleted
+    // rather than left as a second, unread opinion on where a link should go.
 
     /// Search term raised by an App Intent. `SearchScreen` consumes it once and
     /// runs the search; `pendingDeepLinkTabId` gets the user to that tab.
