@@ -39,6 +39,17 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "22DADD4EF7DB0FCE687777CD"
+               BuildableName = "CinemaxTVTests.xctest"
+               BlueprintName = "CinemaxTVTests"
+               ReferencedContainer = "container:Cinemax.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

@@ -14,7 +14,8 @@ jobs:
   build:
     name: Build & Test
     runs-on: macos-26
-    timeout-minutes: 45
+    # Two test bundles now (iOS + tvOS), built and run serially.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +65,11 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-
 
+      # Both test steps tee the raw log and then require swift-testing's own
+      # summary line with a non-zero count, plus one suite that exists only on
+      # that platform. xcodebuild can report success after running ZERO
+      # swift-testing tests (the `-only-testing` trap in CLAUDE.md), so the exit
+      # code alone does not prove the suite ran.
       - name: Build & test (iOS)
         run: |
           set -o pipefail
@@ -73,18 +79,26 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
             -skipPackagePluginValidation \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            | xcbeautify
+            2>&1 | tee "$RUNNER_TEMP/ios-test.log" | xcbeautify
+          grep -E '^✔ Test run with [1-9][0-9]* tests in [0-9]+ suites passed' "$RUNNER_TEMP/ios-test.log"
+          grep -F '✔ Suite "PlaybackLiveActivity" passed' "$RUNNER_TEMP/ios-test.log"
 
-      - name: Build (tvOS)
+      # Serial with the iOS step on purpose: both write the same DerivedData,
+      # and two concurrent xcodebuilds race on its build.db ("database is
+      # locked"). The CinemaxTV scheme carries CinemaxTVTests — the same
+      # Tests/CinemaxKitTests sources, hosted by CinemaxTV.app.
+      - name: Build & test (tvOS)
         run: |
           set -o pipefail
-          xcodebuild build \
+          xcodebuild test \
             -project Cinemax.xcodeproj \
             -scheme CinemaxTV \
             -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' \
             -skipPackagePluginValidation \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            | xcbeautify
+            2>&1 | tee "$RUNNER_TEMP/tvos-test.log" | xcbeautify
+          grep -E '^✔ Test run with [1-9][0-9]* tests in [0-9]+ suites passed' "$RUNNER_TEMP/tvos-test.log"
+          grep -F '✔ Suite "tvOS layout metrics" passed' "$RUNNER_TEMP/tvos-test.log"
 
   lint:
     name: SwiftLint
