@@ -227,6 +227,14 @@
 "privacy.clearImageCache" = "Vider le cache d'images";
 "privacy.clearImageCache.subtitle" = "Libère le cache disque (~500 Mo).";
 "privacy.clearImageCache.confirm" = "Les images seront retéléchargées à la demande.";
+"server.certificate.title" = "Certificat non reconnu";
+"server.certificate.explain" = "Ce serveur présente un certificat qu'aucune autorité connue ne signe. Vérifiez l'empreinte sur votre serveur avant d'accepter : elle est ce qui sera épinglé.";
+"server.certificate.untrusted" = "Le certificat de ce serveur n'est pas reconnu.";
+"server.certificate.changed" = "Le certificat de ce serveur a CHANGÉ depuis votre approbation.";
+"server.certificate.host" = "Hôte";
+"server.certificate.subject" = "Sujet";
+"server.certificate.fingerprint" = "Empreinte SHA-256";
+"server.certificate.trust" = "Faire confiance à ce certificat";
 "privacy.lock" = "Verrouillage";
 "privacy.lock.enable" = "Protéger par un code";
 "privacy.lock.enable.subtitle" = "Demande le code pour ouvrir cet écran, limite d'âge comprise.";

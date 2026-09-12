@@ -1,4 +1,5 @@
 import AVFoundation
+import CinemaxKit
 
 /// Intercepts HLS requests via a `cinemax-https://` custom scheme:
 /// 1. Strips `#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS` from playlists (in-band CEA-608/708 CC)
@@ -31,7 +32,7 @@ final class HLSManifestLoader: NSObject, AVAssetResourceLoaderDelegate, @uncheck
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.waitsForConnectivity = false
-        return URLSession(configuration: config)
+        return URLSession(configuration: config, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
     }()
 
     func resourceLoader(

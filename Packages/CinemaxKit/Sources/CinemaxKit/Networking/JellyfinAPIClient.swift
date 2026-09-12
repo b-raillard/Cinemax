@@ -355,7 +355,11 @@ public final class JellyfinAPIClient: Sendable {
                     deviceID: deviceID,
                     version: appVersion
                 ),
-                sessionConfiguration: currentSessionConfiguration()
+                sessionConfiguration: currentSessionConfiguration(),
+                // One explicit certificate approval covers every session in the
+                // app. Must be the TASK-level delegate — see the RULE on
+                // `ServerTrustDelegate`.
+                sessionDelegate: ServerTrustDelegate.shared
             )
             setAccessToken(accessToken)
             setClient(authedClient, url: url)
@@ -419,7 +423,11 @@ public final class JellyfinAPIClient: Sendable {
                     deviceID: deviceID,
                     version: appVersion
                 ),
-                sessionConfiguration: currentSessionConfiguration()
+                sessionConfiguration: currentSessionConfiguration(),
+                // One explicit certificate approval covers every session in the
+                // app. Must be the TASK-level delegate — see the RULE on
+                // `ServerTrustDelegate`.
+                sessionDelegate: ServerTrustDelegate.shared
             )
             setAccessToken(accessToken)
             setClient(authedClient, url: url)

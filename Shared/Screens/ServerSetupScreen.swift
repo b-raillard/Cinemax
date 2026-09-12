@@ -110,6 +110,10 @@ struct ServerSetupScreen: View {
                         PreAuthErrorBanner(message: error)
                     }
 
+                    if let certificate = viewModel.pendingCertificate {
+                        certificateTrustPanel(certificate)
+                    }
+
                     if isHTTPURL(viewModel.serverURL) {
                         httpWarningBanner
                     }
@@ -220,6 +224,10 @@ struct ServerSetupScreen: View {
                         PreAuthErrorBanner(message: error)
                     }
 
+                    if let certificate = viewModel.pendingCertificate {
+                        certificateTrustPanel(certificate)
+                    }
+
                     if isHTTPURL(viewModel.serverURL) {
                         httpWarningBanner
                     }
@@ -267,6 +275,72 @@ struct ServerSetupScreen: View {
     }
 
     // MARK: - Shared Components
+
+    /// Explicit approval for a certificate no known authority signs.
+    ///
+    /// Shows the SHA-256 fingerprint as the thing to check, because it is the
+    /// thing that gets pinned — and the only field that identifies the
+    /// certificate rather than describing it. Rendered inline under the error
+    /// banner rather than as a presentation: it belongs to the failure the user
+    /// is looking at, and a modal here would have to survive the retry.
+    @ViewBuilder
+    private func certificateTrustPanel(_ certificate: ServerCertificateSummary) -> some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                Image(systemName: "lock.trianglebadge.exclamationmark")
+                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                    .foregroundStyle(CinemaColor.error)
+                Text(loc.localized("server.certificate.title"))
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+            }
+
+            Text(loc.localized("server.certificate.explain"))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .multilineTextAlignment(.leading)
+
+            certificateField(loc.localized("server.certificate.host"), certificate.host)
+            if let subject = certificate.subject, !subject.isEmpty {
+                certificateField(loc.localized("server.certificate.subject"), subject)
+            }
+            certificateField(
+                loc.localized("server.certificate.fingerprint"),
+                certificate.formattedFingerprint,
+                monospaced: true
+            )
+
+            CinemaButton(
+                title: loc.localized("server.certificate.trust"),
+                style: .accent,
+                isLoading: viewModel.isConnecting
+            ) {
+                Task { await viewModel.trustPendingCertificate(using: appState, loc: loc) }
+            }
+            #if os(tvOS)
+            .frame(width: CinemaTVLayout.ctaWidth)
+            #endif
+        }
+        .padding(CinemaSpacing.spacing4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassPanel(cornerRadius: CinemaRadius.large)
+    }
+
+    @ViewBuilder
+    private func certificateField(_ label: String, _ value: String, monospaced: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(CinemaFont.label(.small))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .tracking(1.1)
+            Text(value)
+                .font(monospaced
+                      ? .system(size: CinemaScale.pt(13), weight: .medium, design: .monospaced)
+                      : CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurface)
+                .multilineTextAlignment(.leading)
+        }
+    }
 
     private var backgroundGlow: some View {
         ZStack {

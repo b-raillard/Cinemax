@@ -645,6 +645,11 @@ final class AppState {
         // a re-added server mints a fresh id — so keeping it would only leave
         // that library's queries on the device.
         SearchHistoryStore.clear(serverId: entry.id)
+        // Its certificate approval goes with it: a pin outliving its server
+        // would silently pre-approve whatever answers on that host:port later.
+        if let key = ServerCertificateTrust.trustKey(for: entry.url) {
+            ServerTrustDelegate.shared.forget(trustKey: key)
+        }
     }
 
     /// Signs out of the ACTIVE server. See `LogoutReason` for the two behaviors.
@@ -864,6 +869,15 @@ struct AppNavigation: View {
         let memoryCache = ImageCache()
         memoryCache.costLimit = 256 * 1024 * 1024 // 256 MB decoded images
         config.imageCache = memoryCache
+        // Posters and backdrops come from the same server as everything else, so
+        // they need the same explicit certificate approval — otherwise a
+        // self-signed server would sign in and browse with every image blank.
+        // The existing `DataLoader` is MUTATED, never replaced: `withDataCache`
+        // above already configured its session (notably `urlCache`), and a fresh
+        // `DataLoader()` would silently restore Nuke's default HTTP cache on top
+        // of the 500 MB data cache. Nuke's own documentation prescribes exactly
+        // this line for handling authentication challenges.
+        (config.dataLoader as? DataLoader)?.delegate = ServerTrustDelegate.shared
         ImagePipeline.shared = ImagePipeline(configuration: config)
     }()
 

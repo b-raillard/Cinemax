@@ -337,7 +337,10 @@ extension JellyfinAPIClient {
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         config.waitsForConnectivity = false
-        return URLSession(configuration: config)
+        // The PlaybackInfo POST is the first thing every playback does; without
+        // the trust delegate it would be the one call that still fails on an
+        // approved self-signed server.
+        return URLSession(configuration: config, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
     }()
 
     /// Attaches the `Accept-Language` the SDK client would send, to a request

@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Security
 import OSLog
+import CinemaxKit
 
 private let proxyLog = Logger(subsystem: "com.cinemax", category: "StreamProxy")
 
@@ -288,7 +289,15 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         let dq = OperationQueue()
         dq.maxConcurrentOperationCount = 8
         dq.name = "com.cinemax.streamproxy.delegate"
-        session = URLSession(configuration: cfg, delegate: nil, delegateQueue: dq)
+        // A SESSION delegate purely for the TLS challenge. Every request here
+        // also installs `UpstreamHandler` as its own per-TASK delegate, and that
+        // type implements no challenge callback — so URLSession falls back to
+        // this one for server trust and the backpressure machinery is untouched.
+        // This is also what makes libVLC playback work against a self-signed
+        // server: libVLC has its own TLS stack with no per-connection trust
+        // hook, so such a server is routed through this proxy, which fetches
+        // through URLSession and therefore through this delegate.
+        session = URLSession(configuration: cfg, delegate: ServerTrustDelegate.shared, delegateQueue: dq)
     }
 
     /// Warm the loopback listener so it's ready before the first play.

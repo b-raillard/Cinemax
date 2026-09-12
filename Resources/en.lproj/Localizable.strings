@@ -227,6 +227,14 @@
 "privacy.clearImageCache" = "Clear Image Cache";
 "privacy.clearImageCache.subtitle" = "Frees the on-disk cache (~500 MB).";
 "privacy.clearImageCache.confirm" = "Images will be re-downloaded on demand.";
+"server.certificate.title" = "Unrecognised certificate";
+"server.certificate.explain" = "This server presents a certificate no known authority signs. Check the fingerprint on your server before accepting — it is what will be pinned.";
+"server.certificate.untrusted" = "This server's certificate is not recognised.";
+"server.certificate.changed" = "This server's certificate has CHANGED since you approved it.";
+"server.certificate.host" = "Host";
+"server.certificate.subject" = "Subject";
+"server.certificate.fingerprint" = "SHA-256 fingerprint";
+"server.certificate.trust" = "Trust this certificate";
 "privacy.lock" = "Lock";
 "privacy.lock.enable" = "Protect with a PIN";
 "privacy.lock.enable.subtitle" = "Asks for the PIN to open this screen, age limit included.";
