@@ -974,10 +974,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         setLoading(false)
     }
 
+    /// What the diagnostics export reports as the last open: engine, the
+    /// server's play method, the source container and whether the loopback
+    /// proxy carries the stream — the two questions a remote stall report
+    /// raises first, and neither was visible in a TestFlight log.
+    private func recordPlaybackDiagnostics() {
+        PlaybackDiagnostics.record(
+            engine: "vlc", playMethod: info.playMethod, container: info.sourceContainer,
+            route: usingProxy ? .proxy : .direct
+        )
+    }
+
     /// Builds the SwiftVLC `Media` for a streamed URL with `network-caching`
     /// (matches the VLCKit path).
     private func makeMedia(_ url: URL) -> Media? {
         guard let media = try? Media(url: url) else { return nil }
+        // Every fresh open funnels through here with `info` and `usingProxy`
+        // already describing it — the one place the export's `last_playback`
+        // line can be kept true (the error retry below records its own).
+        recordPlaybackDiagnostics()
         // 5 s read-ahead (was 3 s): a deeper cushion rides out a transient
         // origin drop and, crucially, gives the proxy's transparent
         // reconnect time to re-establish the upstream BEFORE the buffer
@@ -4477,6 +4492,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if viaProxy { usingProxy = true }
             if let media = try? Media(url: url) {
                 media.addOption(":network-caching=5000")
+                recordPlaybackDiagnostics()
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
                 // of restarting at 0. The initial resume-seek already fired,

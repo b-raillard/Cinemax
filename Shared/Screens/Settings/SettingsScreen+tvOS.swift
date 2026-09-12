@@ -458,6 +458,22 @@ extension SettingsScreen {
             tvSectionLabel(loc.localized("settings.debug"))
                 .padding(.top, CinemaSpacing.spacing4)
             tvToggleList(debugToggleRows)
+            // tvOS has no share sheet and no MetricKit (every MetricKit class
+            // is `API_UNAVAILABLE(tvos)`), so the export is iOS-only. The row
+            // stays so the limitation is stated rather than silently absent;
+            // pressing it repeats the explanation instead of doing nothing.
+            tvActionRow(
+                id: "diagnostics",
+                icon: "doc.text.magnifyingglass",
+                label: loc.localized("settings.debug.exportDiagnostics"),
+                subtitle: loc.localized("settings.debug.exportDiagnostics.tvUnavailable"),
+                action: {
+                    toasts.info(
+                        loc.localized("settings.debug.exportDiagnostics"),
+                        message: loc.localized("settings.debug.exportDiagnostics.tvUnavailable")
+                    )
+                }
+            )
         }
     }
 
