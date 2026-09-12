@@ -42,6 +42,27 @@ extension JellyfinAPIClient {
 
     // MARK: - Media Queries
 
+    /// Continue Watching. **RULE — the query MUST carry `mediaTypes: [.video]`**:
+    /// without it a Jellyfin 12.0 server also answers with the **Season and the
+    /// Series** of a part-watched episode, and Home renders this list verbatim,
+    /// so « Reprendre » drew a season card and a series card next to the episode
+    /// — and `heroItem` (`resumeItems.first ?? …`) could land on one of them,
+    /// i.e. on an item with no media source to play.
+    ///
+    /// Measured 2026-09-12 against throwaway servers, the app's exact query
+    /// shape: 10.10.7 and 10.11.11 answer `movie, episode`; **12.0.0 answers
+    /// `movie, episode, Season 1, the Series`**, the last two at position 0.
+    /// The filter is what the 12.0 fixture explains: those two entries carry
+    /// `MediaType: "Unknown"` while both playable ones carry `"Video"`.
+    ///
+    /// `mediaTypes` rather than `includeItemTypes: [.movie, .episode]` or
+    /// `excludeItemTypes: [.season, .series]` — all three were measured and all
+    /// three fix 12.0. It wins on two counts: the Widget's hand-built copy of
+    /// this route (`JellyfinLite.fetchResumeItems`) **already sends
+    /// `mediaTypes=Video`**, so this makes the app agree with its own extension
+    /// instead of introducing a second spelling of one rule; and it says
+    /// "playable video" rather than enumerating kinds, so a future playable kind
+    /// is included by default instead of being silently dropped by an allow-list.
     public func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
         let cacheKey = "resume-\(userId)-\(limit)-\(getMaxContentAge())"
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
@@ -51,6 +72,7 @@ extension JellyfinAPIClient {
             let params = Paths.GetResumeItemsParameters(
                 userID: userId,
                 limit: limit,
+                mediaTypes: [.video],
                 enableUserData: true,
                 enableImageTypes: [.primary, .backdrop, .thumb]
             )

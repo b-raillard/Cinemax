@@ -190,6 +190,65 @@ struct ServerDTODecodingFixtureTests {
         }
     }
 
+    /// #209 — the wire difference the app's own query shape exposes, pinned the
+    /// way `movieUserDataItemID` pins 10.10's `Guid.Empty`: **12.0 also answers
+    /// with the Season AND the Series** of a part-watched episode, both at
+    /// position 0; 10.10 and 10.11 answer with the two playable items alone.
+    ///
+    /// It matters because Home renders this list VERBATIM, so those two entries
+    /// reached « Reprendre » as cards with no media source behind them, and
+    /// `heroItem` (`resumeItems.first ?? latestItems.first`) could make one of
+    /// them the hero of the whole screen.
+    ///
+    /// These fixtures were captured with the app's **pre-fix** shape (no
+    /// `mediaTypes`), which is what makes them evidence about the SERVER rather
+    /// than about the client — and what keeps this test meaningful now that the
+    /// client filters. Re-measured live on 2026-09-12 against throwaway
+    /// 10.10.7 / 10.11.11 / 12.0.0 servers: same shape, same three answers.
+    @Test("Continue Watching carries the Season and the Series on 12.0 only", arguments: FixtureServer.allCases)
+    func resumeCarriesNonPlayableEntriesOn12Only(_ server: FixtureServer) throws {
+        let result = try decode(BaseItemDtoQueryResult.self, server, "Resume")
+        let kinds = Set(try #require(result.items).compactMap(\.type))
+
+        switch server {
+        case .jellyfin10_10, .jellyfin10_11:
+            #expect(kinds == [.movie, .episode])
+        case .jellyfin12_0:
+            #expect(kinds == [.movie, .episode, .season, .series])
+        }
+    }
+
+    /// The property `getResumeItems`' `mediaTypes: [.video]` rests on, asserted
+    /// on every generation at once: the server tags the playable entries
+    /// `"Video"` and tags the two folders `"Unknown"`. Without this the
+    /// parameter would be a fix nobody can explain from the repository.
+    ///
+    /// `mediaTypes` was chosen over `includeItemTypes: [.movie, .episode]` and
+    /// `excludeItemTypes: [.season, .series]` — all three measured, all three
+    /// fix 12.0 — because the Widget's hand-built copy of this route
+    /// (`JellyfinLite.fetchResumeItems`) already sends it, and because it says
+    /// "playable video" instead of enumerating kinds that an allow-list would
+    /// have to be extended for.
+    @Test("MediaType.video selects exactly the playable entries", arguments: FixtureServer.allCases)
+    func videoMediaTypeSelectsThePlayableEntries(_ server: FixtureServer) throws {
+        let result = try decode(BaseItemDtoQueryResult.self, server, "Resume")
+        let items = try #require(result.items)
+
+        let playable = items.filter { $0.mediaType == .video }
+        #expect(playable.isEmpty == false)
+        #expect(Set(playable.compactMap(\.type)) == [.movie, .episode])
+
+        // The converse, so the filter is proven to remove only folders: every
+        // entry it drops is a Season or a Series tagged `Unknown`.
+        for dropped in items where dropped.mediaType != .video {
+            #expect(
+                dropped.mediaType == .unknown,
+                "\(server): \(dropped.type?.rawValue ?? "?") carries MediaType \(dropped.mediaType?.rawValue ?? "<absent>")"
+            )
+            #expect(dropped.type == .season || dropped.type == .series)
+        }
+    }
+
     @Test("Next Up decodes, with a key on the episode", arguments: FixtureServer.allCases)
     func nextUpDecodes(_ server: FixtureServer) throws {
         let result = try decode(BaseItemDtoQueryResult.self, server, "NextUp")
