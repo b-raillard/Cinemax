@@ -143,6 +143,36 @@ public struct KeychainService: Sendable {
     // members, and a copy on each conformer would let the test mock's version
     // drift from the one that actually ships. See the RULE there.
 
+    // MARK: - Explicitly trusted server certificates
+
+    /// Account holding `[trustKey: sha256HexFingerprint]`.
+    static let trustedCertificatesAccount = "trusted_certificates"
+
+    /// Leaf certificates the user explicitly approved, keyed by `host:port`
+    /// (`ServerCertificateTrust.trustKey`).
+    ///
+    /// **Keyed by HOST, not by `ServerEntry`, and that is a deliberate deviation
+    /// from the issue that proposed the field on the entry.** The approval has
+    /// to happen on `ServerSetupScreen`, BEFORE any entry exists — you cannot
+    /// reach the server to sign in until its certificate is accepted, and the
+    /// entry is only created by a successful login. `host:port` is also exactly
+    /// what a TLS challenge hands the delegate, so no resolution step can
+    /// disagree with the lookup.
+    ///
+    /// App-private: the extensions read their own copy of the session blob and
+    /// are not covered by this item.
+    public func getTrustedCertificates() -> [String: String] {
+        guard let data = getData(for: Self.trustedCertificatesAccount) else { return [:] }
+        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    }
+
+    /// Written whole (the private `save` is delete-then-add), so a partial write
+    /// cannot leave half a pin map.
+    public func saveTrustedCertificates(_ pins: [String: String]) {
+        guard let data = try? JSONEncoder().encode(pins) else { return }
+        try? save(data: data, for: Self.trustedCertificatesAccount)
+    }
+
     // MARK: - Parental-controls lock
 
     /// Account holding the JSON `ParentalLockCredential`.

@@ -12,6 +12,56 @@ final class ServerSetupViewModel {
     var errorMessage: String?
     var serverInfo: ServerInfo?
 
+    /// The certificate the last failure would be approving, when that failure was
+    /// about the certificate AND the trust delegate recorded the leaf it refused.
+    /// `nil` for every other failure, so the ordinary error banner is unchanged.
+    var pendingCertificate: ServerCertificateSummary?
+
+    /// `true` when the host already carried an approval and is now presenting a
+    /// DIFFERENT certificate — worth saying out loud rather than re-prompting as
+    /// if it were the first time.
+    var pendingCertificateIsRotation = false
+
+    /// The URLSession failures that mean « the certificate is the problem ».
+    ///
+    /// Wider than the `-1202` the issue named, on purpose: a NAS certificate that
+    /// is self-signed AND out of date reports `-1201`, a private-CA one reports
+    /// `-1203`, and some stacks surface `-1200` instead. All of them are answered
+    /// by the same explicit approval, and none of them is a network problem the
+    /// user could fix by retrying.
+    static let certificateErrorCodes: Set<Int> = [
+        NSURLErrorSecureConnectionFailed,            // -1200
+        NSURLErrorServerCertificateHasBadDate,       // -1201
+        NSURLErrorServerCertificateUntrusted,        // -1202
+        NSURLErrorServerCertificateHasUnknownRoot,   // -1203
+        NSURLErrorServerCertificateNotYetValid       // -1204
+    ]
+
+    /// Whether `error` is one of those, directly or as the underlying error of a
+    /// wrapper. The SDK's transport errors arrive both ways depending on the
+    /// call path, and testing only the outer `NSError` misses the wrapped case.
+    /// Internal so `ServerCertificateTrustTests` can lock it.
+    static func isCertificateError(_ error: Error) -> Bool {
+        let outer = error as NSError
+        if outer.domain == NSURLErrorDomain, certificateErrorCodes.contains(outer.code) { return true }
+        if let underlying = outer.userInfo[NSUnderlyingErrorKey] as? NSError,
+           underlying.domain == NSURLErrorDomain {
+            return certificateErrorCodes.contains(underlying.code)
+        }
+        return false
+    }
+
+    /// Records the approval and retries at once. The user has just pressed a
+    /// button that says « trust this certificate »; making them press Connect
+    /// again would read as the approval not having taken.
+    func trustPendingCertificate(using appState: AppState, loc: LocalizationManager) async {
+        guard let pending = pendingCertificate else { return }
+        ServerTrustDelegate.shared.trust(fingerprint: pending.fingerprint, forTrustKey: pending.trustKey)
+        pendingCertificate = nil
+        pendingCertificateIsRotation = false
+        await connect(using: appState, loc: loc)
+    }
+
     func connect(using appState: AppState, loc: LocalizationManager) async {
         let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -53,6 +103,8 @@ final class ServerSetupViewModel {
 
         isConnecting = true
         errorMessage = nil
+        pendingCertificate = nil
+        pendingCertificateIsRotation = false
 
         do {
             let info = try await appState.apiClient.connectToServer(url: url)
@@ -74,7 +126,21 @@ final class ServerSetupViewModel {
             appState.hasServer = true
         } catch {
             logger.error("Server connect failed: \(error.localizedDescription, privacy: .public)")
-            errorMessage = loc.localized("server.connectFailed")
+            // A certificate failure is offered an explicit approval instead of a
+            // dead end — the alternative the user is otherwise pushed toward is
+            // plain `http://`, which is strictly worse than pinning a leaf they
+            // checked. Everything else keeps the generic message verbatim.
+            if Self.isCertificateError(error), let key = ServerCertificateTrust.trustKey(for: url) {
+                pendingCertificateIsRotation = ServerTrustDelegate.shared.isPinned(trustKey: key)
+                pendingCertificate = ServerTrustDelegate.shared.pendingApproval(forTrustKey: key)
+            }
+            if pendingCertificate != nil {
+                errorMessage = loc.localized(
+                    pendingCertificateIsRotation ? "server.certificate.changed" : "server.certificate.untrusted"
+                )
+            } else {
+                errorMessage = loc.localized("server.connectFailed")
+            }
         }
 
         isConnecting = false

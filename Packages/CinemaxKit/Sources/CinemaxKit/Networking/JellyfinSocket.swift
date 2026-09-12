@@ -67,7 +67,14 @@ public actor JellyfinSocket {
 
     public init(url: URL) {
         self.url = url
-        self.session = URLSession(configuration: .default)
+        // `wss://` to a self-signed server needs the same explicit approval as
+        // every REST call, or « Lire sur… » and Watch Together would be the two
+        // features that stayed broken after the user trusted the certificate.
+        self.session = URLSession(
+            configuration: .default,
+            delegate: ServerTrustDelegate.shared,
+            delegateQueue: nil
+        )
         let (s, c) = AsyncStream<JellyfinSocketMessage>.makeStream()
         self.stream = s
         self.continuation = c

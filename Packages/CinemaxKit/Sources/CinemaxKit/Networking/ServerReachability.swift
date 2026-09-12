@@ -86,7 +86,10 @@ public enum ServerReachability {
         configuration.allowsCellularAccess = true
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: configuration)
+        // Same explicit certificate approval as every other session: without it
+        // a self-signed server's status dot would read « injoignable » on a
+        // server the app is otherwise happily talking to.
+        return URLSession(configuration: configuration, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
     }()
 }
 
@@ -175,6 +178,9 @@ public enum ServerSessionRevoker {
         configuration.timeoutIntervalForResource = requestTimeout
         configuration.waitsForConnectivity = false
         configuration.urlCache = nil
-        return URLSession(configuration: configuration)
+        // Same explicit certificate approval as every other session: without it
+        // a self-signed server's status dot would read « injoignable » on a
+        // server the app is otherwise happily talking to.
+        return URLSession(configuration: configuration, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
     }()
 }
