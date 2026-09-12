@@ -398,6 +398,14 @@
 // MARK: - Video Player
 
 "player.preparing" = "Préparation du flux...";
+// VoiceOver — icon-only player controls (see PlayerHUDAccessibility)
+"player.a11y.skipBack" = "Reculer de %d secondes";
+"player.a11y.skipForward" = "Avancer de %d secondes";
+"player.a11y.play" = "Lire";
+"player.a11y.pause" = "Mettre en pause";
+"player.a11y.loading" = "Chargement";
+"player.a11y.position" = "%@ sur %@";
+
 "player.audio" = "Audio";
 "player.subtitles" = "Sous-titres";
 "player.subtitles.off" = "Désactivé";

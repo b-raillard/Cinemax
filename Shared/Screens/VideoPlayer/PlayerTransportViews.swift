@@ -217,15 +217,21 @@ final class TVScrubBar: UIView {
 #if os(iOS)
 /// The iOS scrub bar.
 ///
-/// A plain `UISlider` answers VoiceOver's adjust gesture (swipe up / down) by
-/// moving its OWN value, and nothing in the presenter turns that into a seek —
-/// `scrubberChanged` bails unless the slider is being dragged — so the gesture
-/// only moved the thumb while the film played on. Honouring it through the
-/// value would also have been a direct engine seek outside the coalesced path.
-/// Here the gesture is handed over as a ±1 step, which the presenter maps to
-/// the same ±10 s skip the transport buttons use (`iosSkipBack` /
-/// `iosSkipForward` → `seek(bySeconds:)` → `accumulateSeek`). The value is left
-/// alone: the presenter repaints it from the playhead.
+/// VoiceOver's adjust gesture (swipe up / down) on the scrub bar has to become a
+/// SEEK, and on a stock `UISlider` nothing here would make it one: whatever the
+/// gesture does to the slider's value, `scrubberChanged` bails unless the slider
+/// is actually being dragged (see its own RULE), so the playhead never moves.
+/// Honouring it through the value would also mean a direct engine seek outside
+/// the coalesced path. So the gesture is handed over as a ±1 step, which the
+/// presenter maps to the same ±10 s skip the transport buttons use (`iosSkipBack`
+/// / `iosSkipForward` → `seek(bySeconds:)` → `accumulateSeek`), and the value is
+/// left alone — the presenter repaints it from the playhead.
+///
+/// What a stock slider does with that gesture is deliberately NOT asserted:
+/// `accessibilityIncrement()` on a detached `UISlider` does not move its value
+/// (measured 2026-09-12), because UIKit implements adjustment on an accessibility
+/// element a view outside a window never realises. `PlayerAccessibilityTests`
+/// carries that finding instead of a control it cannot honestly write.
 final class PlayerScrubSlider: UISlider {
     var onAccessibilityStep: ((Int) -> Void)?
 

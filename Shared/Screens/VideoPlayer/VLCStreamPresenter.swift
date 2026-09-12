@@ -321,6 +321,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var nextUpCard: NextUpCountdownView?
     private var nextUpCancelledForThisItem = false
 
+    /// VoiceOver strings for every icon-only HUD control (`PlayerAccessibility`).
+    /// Built once: the labels are fixed for the player's lifetime, and the app's
+    /// language cannot change while it is on screen.
+    ///
+    /// Cross-platform on purpose — the loading spinner is shared chrome, and a
+    /// tvOS viewer using VoiceOver needs its label as much as an iPhone one.
+    private lazy var hudA11y = PlayerHUDAccessibility { [self] key in loc.localized(key) }
+    /// Spoken durations for the scrub control's `accessibilityValue` — read on
+    /// the 1 s tick, so the formatter is built once and injected.
+    private lazy var spokenTime = PlayerTimeFormat.makeSpokenFormatter(languageCode: loc.languageCode)
+
     #if os(iOS)
     private let closeButton = UIButton(type: .system)
     private let playPauseButton = UIButton(type: .system)
@@ -331,7 +342,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let prevButton = UIButton(type: .system)
     private let nextButton = UIButton(type: .system)
     private let transportRow = UIStackView()
-    private let slider = UISlider()
+    /// `PlayerScrubSlider`, not a plain `UISlider` — see its own doc comment:
+    /// VoiceOver's adjust gesture has to become a SEEK, and on a stock slider
+    /// nothing here would make it one (`scrubberChanged` bails unless the slider
+    /// is really being dragged).
+    private let slider = PlayerScrubSlider()
     private var isScrubbing = false
     /// Interactive swipe-down-to-dismiss: the whole player surface follows the
     /// finger; releasing past the threshold (or flicking down) closes the
@@ -1645,6 +1660,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // swipe-down started in the middle simply never began, for as long as
         // the spinner was up.
         loadingIndicator.isUserInteractionEnabled = false
+        // Not hit-testable (above) but still ANNOUNCED: a spinner is the only
+        // thing on screen while the engine opens, and without a label VoiceOver
+        // describes the wait as an empty black screen. Accessibility and
+        // hit-testing are independent — this element is reachable by the rotor
+        // and inert to touch, which is exactly what is wanted.
+        loadingIndicator.isAccessibilityElement = true
+        loadingIndicator.accessibilityLabel = hudA11y.loading
+        loadingIndicator.accessibilityTraits = .updatesFrequently
         view.addSubview(loadingIndicator)
         NSLayoutConstraint.activate([
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -1767,6 +1790,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         slider.addTarget(self, action: #selector(scrubberTouchDown), for: .touchDown)
         slider.addTarget(self, action: #selector(scrubberChanged), for: .valueChanged)
         slider.addTarget(self, action: #selector(scrubberDone), for: [.touchUpInside, .touchUpOutside])
+        slider.accessibilityLabel = hudA11y.scrubBar
+        // VoiceOver's adjust gesture (swipe up / down) is handed over as a ±1
+        // step and routed through the SAME coalesced skip the transport buttons
+        // use — never a direct engine seek, and never the slider's own value,
+        // which `scrubberChanged` ignores unless the user is really dragging.
+        slider.onAccessibilityStep = { [weak self] step in
+            guard let self else { return }
+            step > 0 ? iosSkipForward() : iosSkipBack()
+        }
         controlsContainer.addSubview(slider)
 
         // Close (✕) — part of the HUD, so it fades in/out with the controls.
@@ -1808,7 +1840,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         configureIOS(prevButton, "backward.end.fill", pt: 24, loc.localized("player.previousEpisode"))
         prevButton.addTarget(self, action: #selector(prevEpisodeTapped), for: .touchUpInside)
-        configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, loc.localized("player.skipIntro"))
+        configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, hudA11y.skipBack)
         skipBackButton.addTarget(self, action: #selector(iosSkipBack), for: .touchUpInside)
 
         var ppCfg = UIButton.Configuration.plain()
@@ -1817,9 +1849,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         ppCfg.baseForegroundColor = .white
         playPauseButton.configuration = ppCfg
         playPauseButton.translatesAutoresizingMaskIntoConstraints = false
+        // The one HUD control that carried NO label at all: an icon-only button
+        // VoiceOver announced as "bouton". Its label follows the glyph, so it is
+        // re-set by `setPlayPauseIcon(playing:)` rather than only here.
+        playPauseButton.accessibilityLabel = hudA11y.pause
         playPauseButton.addTarget(self, action: #selector(playPauseTapped), for: .touchUpInside)
 
-        configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, loc.localized("player.skipCredits"))
+        configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, hudA11y.skipForward)
         skipFwdButton.addTarget(self, action: #selector(iosSkipForward), for: .touchUpInside)
         configureIOS(nextButton, "forward.end.fill", pt: 24, loc.localized("player.nextEpisode"))
         nextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
@@ -2775,9 +2811,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     #if os(tvOS)
     private func updateScrubBar(progress: Float) {
         tvScrub.setProgress(progress)
-        // Keep VoiceOver's spoken value in sync with the playhead. `timeLabel`
-        // is set immediately before every call site, so it's the current time.
-        tvScrub.accessibilityValue = timeLabel.text
+        // The spoken value is deliberately NOT written here any more. It used to
+        // be `timeLabel.text` — the clock string `12:04`, which VoiceOver reads
+        // as a time of day rather than a position. `writeTimeLabels` owns it
+        // now: it holds the position in milliseconds, which is what spelling it
+        // out requires, and BOTH call sites of this method are preceded by
+        // exactly that call with the same position (the tvOS scrub release and
+        // `paintPosition`), so nothing is left stale by the move.
     }
 
     /// Positions + populates the trickplay bubble during a touch-surface scrub.
@@ -4174,6 +4214,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         config.image = UIImage(systemName: playing ? "pause.fill" : "play.fill",
                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .bold))
         playPauseButton.configuration = config
+        // The glyph shows what the press WILL do, and so must the label: a
+        // button drawn as ⏸ is the one that pauses.
+        playPauseButton.accessibilityLabel = playing ? hudA11y.pause : hudA11y.play
     }
     #endif
 
@@ -4863,6 +4906,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         timeLabel.text = PlayerTimeFormat.ms(ms)
         durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - ms))
         lastPaintedPosition = (ms / 1000, lengthMs)
+        // The scrub control's spoken value rides the SOLE label writer, so it
+        // cannot drift from what is on screen — and it is WORDS, never the clock
+        // string the labels show: VoiceOver reads `12:04` as a time of day.
+        // tvOS used to assign `timeLabel.text` here-abouts (inside
+        // `updateScrubBar`) and had exactly that defect.
+        let spokenPosition = hudA11y.position(
+            elapsed: PlayerTimeFormat.spoken(ms, using: spokenTime),
+            total: lengthMs > 0 ? PlayerTimeFormat.spoken(lengthMs, using: spokenTime) : nil
+        )
+        #if os(iOS)
+        slider.accessibilityValue = spokenPosition
+        #else
+        tvScrub.accessibilityValue = spokenPosition
+        #endif
     }
 
     /// Writes one position to the time labels and the platform scrub control.

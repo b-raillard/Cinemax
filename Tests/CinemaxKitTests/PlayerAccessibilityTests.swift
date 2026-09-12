@@ -91,13 +91,15 @@ struct PlayerAccessibilityTests {
     #if os(iOS)
     @Test("VoiceOver adjust on the scrub slider asks for a skip and leaves the value alone")
     func scrubSliderAdjust() {
-        // Paired control: a plain UISlider answers the adjust gesture by moving
-        // its OWN value — which the presenter never turns into a seek.
-        let plain = UISlider()
-        plain.value = 0.5
-        plain.accessibilityIncrement()
-        #expect(plain.value != 0.5)
-
+        // There is deliberately NO paired control on a stock `UISlider`, and
+        // that absence is measured rather than lazy: `accessibilityIncrement()`
+        // on a DETACHED slider does not move its value (2026-09-12 — the
+        // assertion `plain.value != 0.5` failed), because UIKit implements
+        // adjustment on the accessibility element, which a view outside a
+        // window never realises. So "what a stock slider does with the adjust
+        // gesture" is not observable from a unit test; what IS observable is
+        // that this subclass hands the gesture over and leaves its own value
+        // alone, which is the property the presenter depends on.
         let slider = PlayerScrubSlider()
         slider.value = 0.5
         var steps: [Int] = []

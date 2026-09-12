@@ -805,6 +805,14 @@
 
 "player.preparing" = "Preparing stream...";
 "player.audio" = "Audio";
+// VoiceOver — icon-only player controls (see PlayerHUDAccessibility)
+"player.a11y.skipBack" = "Back %d seconds";
+"player.a11y.skipForward" = "Forward %d seconds";
+"player.a11y.play" = "Play";
+"player.a11y.pause" = "Pause";
+"player.a11y.loading" = "Loading";
+"player.a11y.position" = "%@ of %@";
+
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
 "player.pip" = "Picture in Picture";
