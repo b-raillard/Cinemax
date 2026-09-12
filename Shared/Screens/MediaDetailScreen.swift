@@ -64,23 +64,16 @@ struct MediaDetailScreen: View {
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
     @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
-    /// Watch Together (SyncPlay) is not production-ready yet. This kill-switch
-    /// Whether this account may START a session from a title's page.
-    ///
-    /// This replaced a compile-time kill-switch that had been `false` since
-    /// 2026-07-15. The gate is now the server's own `UserPolicy.syncPlayAccess`
-    /// — Jellyfin has always modelled the permission (`None` / `JoinGroups` /
-    /// `CreateAndJoinGroups`) and the client simply never asked, so it offered
-    /// the feature to accounts the server would then refuse. `canCreate` is the
-    /// stricter of the two rights: an account that may only *join* still sees
-    /// sessions in the Home row, it just cannot open one here.
+    /// Read through `@AppStorage`, not `SyncPlayController.isEngineSupported`,
+    /// so flipping « Lecteur natif » re-renders the action row.
+    @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
+
     /// Opens the Watch Together sheet, or explains why it cannot work.
     ///
-    /// The refusal is a toast rather than a hidden button on purpose: only the
-    /// VLC path binds a `PlaybackBridge`, so with the native player forced a
-    /// group would form server-side and nothing would ever move. Hiding the
-    /// control would leave the user with a feature that is documented,
-    /// permitted by their server, and simply absent — with nothing to act on.
+    /// The entry is no longer drawn when the native player is forced (see
+    /// `watchTogetherEnabled`), so this refusal is a BACKSTOP: only the VLC
+    /// path binds a `PlaybackBridge`, and a group formed with the native player
+    /// would sit server-side with nothing ever moving.
     private func presentWatchTogether(for item: BaseItemDto, nextEp: BaseItemDto?) {
         guard SyncPlayController.isEngineSupported else {
             toast.error(loc.localized("syncplay.title"), message: loc.localized("syncplay.needsVLC"))
@@ -89,8 +82,19 @@ struct MediaDetailScreen: View {
         watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
     }
 
+    /// Whether this fiche offers to START a session.
+    ///
+    /// Two conditions. (1) The server's own `UserPolicy.syncPlayAccess` —
+    /// `canCreate` is the stricter of the two rights: an account that may only
+    /// *join* still sees sessions in the Home row, it just cannot open one here.
+    /// This replaced a compile-time kill-switch that had been `false` since
+    /// 2026-07-15. (2) The playback engine (#165): with « Lecteur natif » on,
+    /// `NativeVideoPresenter` has no SyncPlay binding, so the entry is hidden
+    /// rather than drawn and then refused on press. Home's « En direct » row is
+    /// where the precondition is SAID (dimmed group cards + a footnote naming
+    /// the setting) — this screen has nothing to join, only something to start.
     private var watchTogetherEnabled: Bool {
-        LiveSessionsRow.canCreate(appState.currentUser?.policy?.syncPlayAccess)
+        !forceNativeAVPlayer && LiveSessionsRow.canCreate(appState.currentUser?.policy?.syncPlayAccess)
     }
     #if os(iOS)
     @State private var watchTogetherPlay: WatchTogetherIntent?
@@ -104,6 +108,10 @@ struct MediaDetailScreen: View {
     /// and `navigationDestination` placed inside lazy containers is
     /// silently dropped by the runtime.
     @State private var adminPushIntent: AdminMenuPushIntent?
+    /// Height the hero's title logo gets, or `nil` while the hero is too narrow
+    /// to carry one — measured off the hero itself by `backdropSection`, see
+    /// `AdaptiveLayout.detailLogoHeight(forHero:)`.
+    @State private var heroLogoHeight: CGFloat?
     #endif
     /// tvOS picks versions through a `confirmationDialog` (the app's existing
     /// picker idiom — see the library sort menu); iOS uses a native `Menu`, so
@@ -525,16 +533,16 @@ struct MediaDetailScreen: View {
 
     // MARK: - Backdrop
 
-    /// The hero's title: the provider's logo artwork where it exists, the item
-    /// name otherwise.
+    /// The hero's title: the provider's logo artwork where it exists AND the
+    /// hero has room for it, the item name otherwise.
     ///
-    /// tvOS only. On iPhone the logo would have to shrink to a width where its
-    /// own typography stops being legible, and the text title already reads
-    /// well at arm's length.
+    /// tvOS always has room. iOS only from `AdaptiveLayout.detailLogoMinHeroWidth`
+    /// (iPad, iPhone in landscape): narrower, the logo would shrink to a width
+    /// where its own typography stops being legible, and the text title already
+    /// reads well at arm's length.
     @ViewBuilder
     private func titleBlock(_ item: BaseItemDto) -> some View {
-        #if os(tvOS)
-        if item.hasLogoImage, let id = item.id {
+        if item.hasLogoImage, let id = item.id, let box = logoBox {
             CinemaLazyImage(
                 url: appState.imageBuilder.imageURL(
                     itemId: id, imageType: .logo,
@@ -554,14 +562,23 @@ struct MediaDetailScreen: View {
             // mostly-transparent canvas (measured 2026-09-09 on the demo
             // library: 94 × 32 px of ink on a 700 × 238 canvas) still renders
             // as a sliver — that is the artwork, and the fix is a better logo.
-            .frame(height: CinemaTVLayout.logoHeight)
-            .frame(maxWidth: CinemaTVLayout.logoMaxWidth, alignment: .leading)
+            .frame(height: box.height)
+            .frame(maxWidth: box.maxWidth, alignment: .leading)
+            // A logo carries no text VoiceOver can read: one element, named
+            // after the work, exactly what the text title would have said.
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.name ?? "")
         } else {
             titleText(item)
         }
+    }
+
+    /// The logo's height-led box, or `nil` where the hero can't carry a logo.
+    private var logoBox: (height: CGFloat, maxWidth: CGFloat)? {
+        #if os(tvOS)
+        (CinemaTVLayout.logoHeight, CinemaTVLayout.logoMaxWidth)
         #else
-        titleText(item)
+        heroLogoHeight.map { ($0, AdaptiveLayout.detailLogoMaxWidth) }
         #endif
     }
 
@@ -632,6 +649,14 @@ struct MediaDetailScreen: View {
         // or Split View windows. Full-screen sizes resolve to `backdropHeight`.
         .containerRelativeFrame(.vertical) { length, _ in
             min(backdropHeight, length * 0.55)
+        }
+        // Measured AFTER the clamp, so the logo is sized against the hero the
+        // user actually sees — wide enough to carry one at all, and short
+        // enough that it must shrink (iPhone in landscape).
+        .onGeometryChange(for: CGFloat?.self) { proxy in
+            AdaptiveLayout.detailLogoHeight(forHero: proxy.size)
+        } action: { height in
+            heroLogoHeight = height
         }
         #endif
         .clipped()

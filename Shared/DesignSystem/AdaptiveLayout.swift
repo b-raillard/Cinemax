@@ -89,6 +89,30 @@ enum AdaptiveLayout {
     static func detailBackdropHeight(for form: Form) -> CGFloat {
         form == .regular ? 460 : 310
     }
+
+    // MARK: - Detail hero title logo
+
+    /// The fiche draws the work's LOGO instead of its text title only when its
+    /// hero is at least this wide (iPad, iPhone in landscape): narrower, the
+    /// mark would shrink past its own legibility. Keyed on the measured width,
+    /// not the size class — an iPhone in landscape is still `.compact`.
+    static let detailLogoMinHeroWidth: CGFloat = 600
+    /// 0.6 × tvOS's `CinemaTVLayout.logoHeight` / `logoMaxWidth` (160 / 700 pt):
+    /// the same height-led box, scaled to arm's length.
+    static let detailLogoHeight: CGFloat = 96
+    static let detailLogoMaxWidth: CGFloat = 420
+    /// Ceiling on the logo as a share of the CLAMPED hero height. An iPhone in
+    /// landscape clamps the hero to ~200 pt (see `containerRelativeFrame` in
+    /// `MediaDetailScreen.backdropSection`); a full 96 pt mark there would push
+    /// the badges row out of the top of the clipped hero.
+    static let detailLogoMaxHeroFraction: CGFloat = 0.3
+
+    /// Height of the fiche's title logo for a hero of `size`, or `nil` when
+    /// the hero is too narrow to carry one (the text title stands instead).
+    static func detailLogoHeight(forHero size: CGSize) -> CGFloat? {
+        guard size.width >= detailLogoMinHeroWidth else { return nil }
+        return min(detailLogoHeight, size.height * detailLogoMaxHeroFraction)
+    }
 }
 
 // MARK: - tvOS layout metrics
