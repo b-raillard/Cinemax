@@ -6,16 +6,18 @@ How animations and focus indicators behave, and how the app honors the user's mo
 
 ## The motion-effects flag
 
-Users can disable every animation in the app via **Settings → Interface → Motion Effects**. Backed by `@AppStorage(SettingsKey.motionEffects)` (default `true`). Plumbed through a SwiftUI environment key:
+Users can disable every animation in the app via **Settings → Appearance → Motion Effects**, and the system's **Reduce Motion** (Accessibility → Motion) does the same on its own. The app toggle is backed by `@AppStorage(SettingsKey.motionEffects)` (default `true`); the two are combined by one pure rule and plumbed through a SwiftUI environment key:
 
 ```swift
 // Shared/DesignSystem/FocusScaleModifier.swift
-private struct MotionEffectsEnabledKey: EnvironmentKey {
-    static let defaultValue: Bool = true
+extension EnvironmentValues {
+    @Entry var motionEffectsEnabled: Bool = true
 }
 
-extension EnvironmentValues {
-    var motionEffectsEnabled: Bool { ... }
+enum MotionEffects {
+    static func isEnabled(appToggle: Bool, systemReduceMotion: Bool) -> Bool {
+        appToggle && !systemReduceMotion
+    }
 }
 ```
 
@@ -23,8 +25,14 @@ Set once at the app root:
 
 ```swift
 // AppNavigation
-.environment(\.motionEffectsEnabled, motionEffects)   // from @AppStorage
+@Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+.environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
+    appToggle: motionEffects,              // @AppStorage
+    systemReduceMotion: systemReduceMotion
+))
 ```
+
+Views always read `\.motionEffectsEnabled`, never the `@AppStorage` key — the raw key would ignore Reduce Motion. Code with no environment (the rainbow accent tick, the sign-in dwell) uses `MotionEffects.isEnabledNow`. While Reduce Motion is on, the Motion Effects row keeps showing the user's own preference and adds a line saying the system setting wins.
 
 ### Using it in your own view
 

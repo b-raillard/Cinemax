@@ -686,6 +686,7 @@
 "menu.library.empty" = "No video libraries available";
 "menu.library.empty.subtitle" = "Check your connection or ask your administrator to share a library.";
 "settings.motionEffects" = "Motion Effects";
+"settings.motionEffects.systemOverride" = "Reduce Motion is on in the device settings, so effects stay off.";
 "settings.fontSize" = "Text Size";
 "settings.4kRendering" = "4K UI Rendering";
 "settings.autoPlayNextEpisode" = "Auto-play Next Episode";

@@ -157,6 +157,7 @@ struct FavoritesScreen: View {
         } else if viewModel.loader.items.isEmpty {
             EmptyStateView(
                 systemImage: "heart",
+                illustration: .noFavorites,
                 title: loc.localized("favorites.empty.title"),
                 subtitle: loc.localized("favorites.empty.subtitle")
             )

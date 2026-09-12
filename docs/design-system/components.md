@@ -214,6 +214,7 @@ These four cover every "not the happy path" surface. Use them — don't build ad
   ```swift
   EmptyStateView(
       systemImage: String,
+      illustration: CinemaIllustration? = nil,
       title: String,
       subtitle: String? = nil,
       actionTitle: String? = nil,
@@ -221,7 +222,7 @@ These four cover every "not the happy path" surface. Use them — don't build ad
   )
   ```
 - **Purpose**: Legitimate empty collection (zero items, no search matches, filters match nothing).
-- **Anatomy**: 56 pt semi-transparent icon → headline title → optional body subtitle → optional 200 pt-wide ghost `CinemaButton`.
+- **Anatomy**: 56 pt semi-transparent icon (or a 112 pt `CinemaIllustration` when one is passed) → headline title → optional body subtitle → optional 200 pt-wide ghost `CinemaButton`.
 - **Notes**: For request failures use `ErrorStateView` instead. For "no results after filter", pass a Clear Filters action.
 
 ### `ErrorStateView`
@@ -229,11 +230,19 @@ These four cover every "not the happy path" surface. Use them — don't build ad
 - **File**: `Shared/DesignSystem/Components/ErrorStateView.swift`
 - **Signature**:
   ```swift
-  ErrorStateView(message: String, retryTitle: String, onRetry: @escaping () -> Void)
+  ErrorStateView(message: String, retryTitle: String, illustration: CinemaIllustration? = nil, onRetry: @escaping () -> Void)
   ```
 - **Purpose**: A request failed and the user should retry.
-- **Anatomy**: 48 pt `exclamationmark.triangle.fill` in `CinemaColor.error` → message text → 160 pt ghost retry button.
-- **Notes**: For per-row inline errors (e.g. one failed genre row on Home), render an inline retry capsule — not this full-area view.
+- **Anatomy**: 48 pt `exclamationmark.triangle` in `CinemaColor.error` (or a `CinemaIllustration`) → message text → 160 pt ghost retry button.
+- **Notes**: For per-row inline errors (e.g. one failed genre row on Home), render an inline retry capsule — not this full-area view. Pass `illustration: .offline` only when the message itself says the server can't be reached.
+
+### `CinemaIllustration`
+
+- **File**: `Shared/DesignSystem/Components/CinemaIllustration.swift`
+- **Signature**: `CinemaIllustrationView(kind: CinemaIllustration, baseSize: CGFloat = 112)`; kinds `.emptyLibrary`, `.noResults`, `.offline`, `.noFavorites`.
+- **Purpose**: A little character for the empty / error states, without raster assets.
+- **Anatomy**: soft accent radial halo → one or two neutral tiles (`surfaceContainerHigh` / `surfaceContainerHighest`) → one accent gesture (`themeManager.accent` / `accentContainer` → `accentDim`). Filled shapes only, no strokes; static; `accessibilityHidden`. Sized through `CinemaScale.pt`, so it follows the tvOS 1.4× base and the text-size slider.
+- **Notes**: Reach for it through `EmptyStateView(illustration:)` / `ErrorStateView(illustration:)` rather than on its own. A new kind should keep to the same grammar — halo, neutral tiles, one accent gesture.
 
 ### `ToastOverlay`
 

@@ -1,11 +1,16 @@
 import SwiftUI
 
-/// Standard empty state: SF Symbol + title + optional subtitle + optional action button.
+/// Standard empty state: SF Symbol (or a themed illustration) + title + optional
+/// subtitle + optional action button.
 ///
 /// Use when a collection is legitimately empty — no library items, no filtered matches,
 /// no resume entries — as opposed to `ErrorStateView` which signals a request failure.
 struct EmptyStateView: View {
     let systemImage: String
+    /// Optional `CinemaIllustration` drawn in place of `systemImage`. `nil` —
+    /// the default — keeps the SF Symbol, so a call site that doesn't opt in
+    /// looks exactly as before.
+    var illustration: CinemaIllustration? = nil
     let title: String
     var subtitle: String? = nil
     var actionTitle: String? = nil
@@ -13,10 +18,15 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(spacing: CinemaSpacing.spacing3) {
-            Image(systemName: systemImage)
-                .font(.system(size: CinemaScale.pt(56), weight: .regular))
-                .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.7))
-                .accessibilityHidden(true)
+            if let illustration {
+                CinemaIllustrationView(kind: illustration)
+                    .padding(.bottom, CinemaSpacing.spacing1)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: CinemaScale.pt(56), weight: .regular))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.7))
+                    .accessibilityHidden(true)
+            }
 
             Text(title)
                 .font(CinemaFont.headline(.small))

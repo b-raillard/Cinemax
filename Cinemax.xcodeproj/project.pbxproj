@@ -196,6 +196,7 @@
 		5268C36D803C151025ABFF22 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */; };
 		52D9F71CE7412B0B293AF0AF /* LibraryCollectionsRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68373EC6A78E3A4BDD527E69 /* LibraryCollectionsRowTests.swift */; };
 		52F51831022AFCDC5833B695 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */; };
+		5304504904282010ED3A1400 /* CinemaIllustration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96ADE87168AF0370A64A5B6 /* CinemaIllustration.swift */; };
 		53C1963BDCD2235326155AE6 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5F40A4DB82730AD3871CB7 /* SettingsScreen.swift */; };
 		5405F22011150F9A5F0C4087 /* AcceptLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D2110246789FDDD6EC3AE0 /* AcceptLanguageTests.swift */; };
 		54ABC261EA095B616920C206 /* MediaItemQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC029829C85BBFD16FF3B63F /* MediaItemQuery.swift */; };
@@ -234,6 +235,7 @@
 		62F7E3C1CAB9A895D8A5D456 /* SettingsNavCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D8C4660090ABCAD7FF2FA16 /* SettingsNavCoordinator.swift */; };
 		6349F4F7D8D0F28F0831E2E1 /* AdminSectionGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0798A7868A025E73D1891D8B /* AdminSectionGroup.swift */; };
 		6397545252AE02187DB3C89B /* LiveSessionsRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D2A9F35E1D6BEA91DE6A5B4 /* LiveSessionsRow.swift */; };
+		63D44454058FEFC66951D656 /* CinemaIllustration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96ADE87168AF0370A64A5B6 /* CinemaIllustration.swift */; };
 		64406006E2A4AB13FDE38E19 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = AF177D070920EC62E7827637 /* Localizable.strings */; };
 		648763482602FDCD12A8DC88 /* AdminActivityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */; };
 		649F44415009AA3AFB1D1FE3 /* CinemaxKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223258AFA0F2668369423520 /* CinemaxKitTests.swift */; };
@@ -292,6 +294,7 @@
 		7FB1C0EDE50B3335093F475C /* ThemeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61944A0EB692FE3706F500B /* ThemeManager.swift */; };
 		80E280BB3BDB1809D638838A /* SyncPlayJoinStart.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFCA029CD82A0FFB73FB4C6C /* SyncPlayJoinStart.swift */; };
 		810327697D0FB00F2EBBA2F5 /* MetadataBrowserScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F10EC9288051CE15DC9B29 /* MetadataBrowserScreen.swift */; };
+		8105E34A1FA7F853D18E35A9 /* MotionEffectsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A95C622F89111741037C483 /* MotionEffectsTests.swift */; };
 		821767BF1E1F02D6444B38B2 /* PlaylistDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C9B065C554B6040FB46EC23 /* PlaylistDetailScreen.swift */; };
 		82907A8055F41FD0E791C49E /* VLCStreamPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D742BCF96212F6A06B3E40 /* VLCStreamPresenter.swift */; };
 		83A446B71A40107299A25266 /* DestructiveConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D219D83E0BF87FF74FAE367 /* DestructiveConfirmSheet.swift */; };
@@ -381,6 +384,7 @@
 		A931903AADD015C680539D9E /* MetadataBrowserScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F10EC9288051CE15DC9B29 /* MetadataBrowserScreen.swift */; };
 		A9D6725E2CCEBE03D23B82CA /* ChapterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA375893B142E24F3FA77C9E /* ChapterController.swift */; };
 		AA4DDAF31F9D034643D75B42 /* RemoteControlListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31F5013676DD3F552285849 /* RemoteControlListener.swift */; };
+		AA98D129EC7E095811145E53 /* MotionEffectsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A95C622F89111741037C483 /* MotionEffectsTests.swift */; };
 		AABF8842303AD2AF9D598A4D /* PlaylistReorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13CD4B7F8A56ABCDC093DF80 /* PlaylistReorderTests.swift */; };
 		AAEF60BDBE78467FBFBE4846 /* SeekSettleTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39BC644E17A2B44D0C1F6083 /* SeekSettleTrackerTests.swift */; };
 		AB379BDB42B5C1F4D687B681 /* SearchRelevanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E7EF991448FA04C0201CBBD /* SearchRelevanceTests.swift */; };
@@ -741,6 +745,7 @@
 		6972E29F4227F16D517B124A /* AccentOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccentOption.swift; sourceTree = "<group>"; };
 		699F44C0B4291FD30BD8C62F /* LibraryPaginationIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPaginationIdentityTests.swift; sourceTree = "<group>"; };
 		69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModelTests.swift; sourceTree = "<group>"; };
+		6A95C622F89111741037C483 /* MotionEffectsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionEffectsTests.swift; sourceTree = "<group>"; };
 		6B63AFBF054B1A7A1253C755 /* AdminFormScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminFormScreen.swift; sourceTree = "<group>"; };
 		6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminActivityScreen.swift; sourceTree = "<group>"; };
 		6C9E3A0CDA86FD6E609A719F /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -837,6 +842,7 @@
 		B57A1FF6A68786670C9AAFFA /* LibrarySearchRankerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySearchRankerTests.swift; sourceTree = "<group>"; };
 		B5C675F04EABA7C6F9C6292F /* CinemaxIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxIntents.swift; sourceTree = "<group>"; };
 		B66D79E78292DF655B3F508E /* SettingsScreen+iOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsScreen+iOS.swift"; sourceTree = "<group>"; };
+		B96ADE87168AF0370A64A5B6 /* CinemaIllustration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaIllustration.swift; sourceTree = "<group>"; };
 		BA0B2775D4776FF99A90FB12 /* WideCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WideCard.swift; sourceTree = "<group>"; };
 		BAF45837A14E93AA0A9739F5 /* SettingsTVAccentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTVAccentPicker.swift; sourceTree = "<group>"; };
 		BCC43AE61EC4C83ED88C63C1 /* CinemaxTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CinemaxTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1194,6 +1200,7 @@
 				E7750ED007F8E5EC5ADD00E1 /* MetadataEditorEditPreservationTests.swift */,
 				EA980637A2C18CE127E6C9AD /* MetadataRemoteImagePickerTests.swift */,
 				C3734234693F4D6519876963 /* MockAPIClient.swift */,
+				6A95C622F89111741037C483 /* MotionEffectsTests.swift */,
 				8635A30F9E6F82CEC1D61220 /* PaginatedLoaderInterlockTests.swift */,
 				FBE2E14250CD6922B3BBC473 /* PlaybackEndDecisionTests.swift */,
 				99AA5E9A037D38A7DC744653 /* PlaybackLiveActivityTests.swift */,
@@ -1500,6 +1507,7 @@
 				A855157B1CDF9464CA308220 /* BackdropFallbackView.swift */,
 				A6663B7C168DECE8F2BAC327 /* CastCircle.swift */,
 				CCD86E8274D7D248752E886F /* CinemaButton.swift */,
+				B96ADE87168AF0370A64A5B6 /* CinemaIllustration.swift */,
 				A0F3D66A0647688B34958DEF /* CinemaLazyImage.swift */,
 				38AC0B18ACCE5C2EBA766E08 /* CinemaToggleIndicator.swift */,
 				2BAFD25D98FA0E18A0F441F5 /* ContentRow.swift */,
@@ -1828,6 +1836,7 @@
 				B968ABF0D1BEB4352EF41594 /* MetadataEditorEditPreservationTests.swift in Sources */,
 				8A057CF8D181280C021DC721 /* MetadataRemoteImagePickerTests.swift in Sources */,
 				35122F5994E5D72202EDF022 /* MockAPIClient.swift in Sources */,
+				8105E34A1FA7F853D18E35A9 /* MotionEffectsTests.swift in Sources */,
 				D08268540C9EDC8F9038A7A5 /* PaginatedLoaderInterlockTests.swift in Sources */,
 				A10493105D97CBA1AA49C895 /* PlayMethodTests.swift in Sources */,
 				01C9E480102E95C10CD5EDBD /* PlaybackEndDecisionTests.swift in Sources */,
@@ -1913,6 +1922,7 @@
 				310D172DE17EC3F22A5DFA95 /* ChipEditor.swift in Sources */,
 				3674658960C75FB68F6576B9 /* CinemaButton.swift in Sources */,
 				DFDBEF3D856DD4B602C58F59 /* CinemaGlassTheme.swift in Sources */,
+				63D44454058FEFC66951D656 /* CinemaIllustration.swift in Sources */,
 				EA0632228FDBF2CE744BDE18 /* CinemaLazyImage.swift in Sources */,
 				6EAE740222EA7B865B13DBE2 /* CinemaToggleIndicator.swift in Sources */,
 				556CE0103B594F6C9F8768E0 /* CinemaxIntents.swift in Sources */,
@@ -2114,6 +2124,7 @@
 				A81200195BF6A58309CBB25F /* MetadataEditorEditPreservationTests.swift in Sources */,
 				983D6441EEC1BB32C613BDE5 /* MetadataRemoteImagePickerTests.swift in Sources */,
 				3EB8F38A74E3F983B33DD677 /* MockAPIClient.swift in Sources */,
+				AA98D129EC7E095811145E53 /* MotionEffectsTests.swift in Sources */,
 				DB5E03C5DB9C938F6385E74F /* PaginatedLoaderInterlockTests.swift in Sources */,
 				EE20A3152028C6B2F20B58D7 /* PlayMethodTests.swift in Sources */,
 				F34C44A59AB1EE19A91B71D9 /* PlaybackEndDecisionTests.swift in Sources */,
@@ -2199,6 +2210,7 @@
 				F7DB378B44C1CB5274C228BA /* ChipEditor.swift in Sources */,
 				33E221E051D6B7D1422D4552 /* CinemaButton.swift in Sources */,
 				2FE40D74DA7EDE3249D0D17B /* CinemaGlassTheme.swift in Sources */,
+				5304504904282010ED3A1400 /* CinemaIllustration.swift in Sources */,
 				BB60281C449D13F7F5398F6F /* CinemaLazyImage.swift in Sources */,
 				8CEDBFDF0D342D653C8FA840 /* CinemaToggleIndicator.swift in Sources */,
 				5782D05B40C908DB8241AAE6 /* CinemaxApp.swift in Sources */,

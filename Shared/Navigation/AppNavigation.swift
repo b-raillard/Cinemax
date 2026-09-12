@@ -832,6 +832,11 @@ struct AppNavigation: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
+    /// The system's Reduce Motion. Combined with the app toggle into the ONE
+    /// value the whole tree reads (`\.motionEffectsEnabled`), so turning it on in
+    /// iOS / tvOS Settings stops the hero carousel, the Ken Burns drift and every
+    /// pulse without touching the app's own switch.
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     /// Drives `RemoteControlListener`. Read here rather than inside the listener
     /// so flipping the toggle in Settings re-runs `onChange` and withdraws (or
     /// re-publishes) the capability declaration immediately.
@@ -961,7 +966,10 @@ struct AppNavigation: View {
             loc: loc,
             toast: toasts
         ))
-        .environment(\.motionEffectsEnabled, motionEffects)
+        .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
+            appToggle: motionEffects,
+            systemReduceMotion: systemReduceMotion
+        ))
         // Respect the user's OS Dynamic Type setting while capping at a size
         // that won't collapse layouts (hero titles, tab bar). The app also has
         // its own `uiScale` in Settings > Interface > Font Size for finer control.
@@ -1194,6 +1202,10 @@ struct AppNavigation: View {
             // Restart/stop the rainbow accent animation task when the user
             // toggles Motion Effects — the task otherwise only re-checks the
             // flag on each tick.
+            themeManager.motionEffectsDidChange()
+        }
+        .onChange(of: systemReduceMotion) { _, _ in
+            // Same nudge for the system switch, which the tick also reads.
             themeManager.motionEffectsDidChange()
         }
     }

@@ -330,11 +330,15 @@ extension SettingsScreen {
 
             tvLanguagePicker
 
+            // The row keeps the app's own preference; when the system's Reduce
+            // Motion is on it wins anyway, and the subtitle says so — otherwise
+            // a switch reading "on" over a still screen looks broken.
             tvGlassToggle(
                 icon: "sparkles",
                 label: loc.localized("settings.motionEffects"),
                 key: "motion",
-                value: $motionEffects
+                value: $motionEffectsSetting,
+                subtitle: systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : nil
             )
 
             tvFontSizeRow
@@ -817,7 +821,7 @@ extension SettingsScreen {
         }
     }
 
-    func tvGlassToggle(icon: String, label: String, key: String, value: Binding<Bool>) -> some View {
+    func tvGlassToggle(icon: String, label: String, key: String, value: Binding<Bool>, subtitle: String? = nil) -> some View {
         let isFocused = focusedItem == .toggle(key)
 
         return Button {
@@ -829,9 +833,18 @@ extension SettingsScreen {
                     .foregroundStyle(themeManager.accent)
                     .frame(width: 24)
 
-                Text(label)
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(CinemaColor.onSurface)
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                    Text(label)
+                        .font(.system(size: CinemaScale.pt(20), weight: .medium))
+                        .foregroundStyle(CinemaColor.onSurface)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(CinemaFont.label(.medium))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.vertical, subtitle == nil ? 0 : CinemaSpacing.spacing2)
 
                 Spacer()
 
@@ -850,6 +863,7 @@ extension SettingsScreen {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
         .accessibilityValue(loc.localized(value.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+        .accessibilityHint(subtitle ?? "")
         .accessibilityAddTraits(.isToggle)
         .accessibilityAction {
             value.wrappedValue.toggle()
