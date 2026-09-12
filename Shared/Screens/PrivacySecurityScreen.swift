@@ -219,6 +219,11 @@ struct PrivacySecurityScreen: View {
         Button {
             maxContentAge = option.age
             appState.apiClient.applyContentRatingLimit(maxAge: option.age)
+            // The widget and the Top Shelf read the cap from the shared session
+            // blob, and nothing else republishes it on a settings change — so
+            // without this the new ceiling would only reach them at the next
+            // login or foreground (#230).
+            appState.republishExtensionSession()
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
         } label: {
             HStack {

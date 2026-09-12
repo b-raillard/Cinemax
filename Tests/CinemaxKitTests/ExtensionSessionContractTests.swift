@@ -66,6 +66,70 @@ struct ExtensionSessionContractTests {
         #expect(session.serverURL == URL(string: "https://jelly.example.com"))
         #expect(session.accessToken == "tok-123")
         #expect(session.userId == "user-abc")
+        // A blob written before the parental cap existed must decode, with the
+        // cap absent rather than the whole decode failing — that is what keeps an
+        // upgraded install's widget working until the app next publishes (#230).
+        #expect(session.maxContentAge == nil)
+    }
+
+    @Test("Le plafond parental fait l'aller-retour et n'ajoute qu'une clé")
+    func parentalCapRoundTrips() throws {
+        let capped = ExtensionSessionBridge.Session(
+            serverURL: URL(string: "https://jelly.example.com")!,
+            accessToken: "tok-123",
+            userId: "user-abc",
+            maxContentAge: 12
+        )
+        let data = try JSONEncoder().encode(capped)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        // Les trois clés historiques restent présentes : les extensions les
+        // décodent en non-optionnel, donc en perdre une les casserait toutes.
+        #expect(Set(["serverURL", "accessToken", "userId"]).isSubset(of: Set(object.keys)))
+        #expect(object.keys.contains("maxContentAge"))
+        let back = try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: data)
+        #expect(back.maxContentAge == 12)
+    }
+
+    @Test("La forme de fil AVEC plafond se décode telle que les extensions la lisent")
+    func decodesWireShapeWithCap() throws {
+        let json = Data("""
+        {"serverURL":"https://jelly.example.com","accessToken":"tok-123","userId":"user-abc","maxContentAge":16}
+        """.utf8)
+        let session = try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: json)
+        #expect(session.maxContentAge == 16)
+    }
+
+    /// Verrouille la table classification → âge que **trois** binaires portent à
+    /// la main (l'app via `ContentRatingClassifier`, le widget via
+    /// `JellyfinLite.ContentRating`, le Top Shelf via la sienne) — même raison
+    /// que les trois copies de la forme de session : les extensions ne peuvent
+    /// pas lier CinemaxKit, et les tests ne peuvent pas atteindre leur code.
+    /// Ce test fixe donc les verdicts attendus côté app ; une copie qui dérive se
+    /// repère en comparant sa table à celle-ci.
+    @Test("Verdicts du plafond parental, communs aux trois copies", arguments: [
+        // (classification, plafond, doit passer)
+        ("TV-MA", 12, false),
+        ("PG-13", 12, false),
+        ("PG", 12, true),
+        ("-18", 16, false),
+        ("-12", 16, true),
+        ("FSK-16", 16, true),
+        ("TOUS PUBLICS", 10, true),
+        ("G", 10, true),
+        // Absente ou inconnue ⇒ passe : un épisode hérite sa classification de
+        // sa série et arrive `nil`, donc filtrer sur une donnée manquante
+        // viderait la plupart des catalogues.
+        ("", 10, true),
+        ("CLASSIFICATION-INCONNUE", 10, true)
+    ])
+    func parentalCapVerdicts(_ rating: String, _ maxAge: Int, _ shouldPass: Bool) {
+        #expect(ContentRatingClassifier.passes(rating: rating.isEmpty ? nil : rating, maxAge: maxAge) == shouldPass)
+    }
+
+    @Test("Un plafond nul ou absent laisse tout passer")
+    func zeroCapPassesEverything() {
+        #expect(ContentRatingClassifier.passes(rating: "NC-17", maxAge: 0))
+        #expect(ContentRatingClassifier.passes(rating: "TV-MA", maxAge: 0))
     }
 
     // Only runs where the shared access group resolves — i.e. a signed context

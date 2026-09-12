@@ -33,17 +33,38 @@ public enum ExtensionSessionBridge {
         public let serverURL: URL
         public let accessToken: String
         public let userId: String
+        /// The user's `privacy.maxContentAge` ceiling, so the extensions can
+        /// apply the SAME cap the app applies (#230). `0`/`nil` = unrestricted.
+        ///
+        /// **Optional, and it has to stay optional**: a blob written by a build
+        /// that predates this field must keep decoding, and the extensions read
+        /// it with `try? JSONDecoder().decode` — a required field would turn
+        /// every upgraded install's widget into "not connected" until the next
+        /// publish. It rides HERE because the cap lives in app-private
+        /// `UserDefaults` the extensions cannot read, and this blob is the only
+        /// channel that already exists.
+        public let maxContentAge: Int?
 
-        public init(serverURL: URL, accessToken: String, userId: String) {
+        /// `maxContentAge` defaults here — unlike on `publish`, which must never
+        /// let a call site forget it. Only `publish` builds one in production;
+        /// the default exists so a test can state just the fields it cares about.
+        public init(serverURL: URL, accessToken: String, userId: String, maxContentAge: Int? = nil) {
             self.serverURL = serverURL
             self.accessToken = accessToken
             self.userId = userId
+            self.maxContentAge = maxContentAge
         }
     }
 
     /// Publishes the current session, or clears it when any part is nil
     /// (logout / disconnect).
-    public static func publish(serverURL: URL?, accessToken: String?, userId: String?) {
+    ///
+    /// `maxContentAge` carries **no default value**, deliberately: a defaulted
+    /// `nil` would let a future publish site forget the parental cap and ship a
+    /// widget that silently ignores it — exactly the defect #230 exists to
+    /// close. A new call site gets a compile error instead, the same discipline
+    /// as `MediaCardContextMenu`'s required `artwork:`.
+    public static func publish(serverURL: URL?, accessToken: String?, userId: String?, maxContentAge: Int?) {
         // Runs on BOTH paths (publish + clear) and *before* the skip
         // early-return below, so an upgraded install's leftover plaintext copy
         // is deleted even when the session itself hasn't changed.
@@ -52,7 +73,12 @@ public enum ExtensionSessionBridge {
         let incoming: Session? = {
             guard let serverURL, let accessToken, !accessToken.isEmpty,
                   let userId, !userId.isEmpty else { return nil }
-            return Session(serverURL: serverURL, accessToken: accessToken, userId: userId)
+            return Session(
+                serverURL: serverURL,
+                accessToken: accessToken,
+                userId: userId,
+                maxContentAge: maxContentAge
+            )
         }()
 
         // In-process memo, checked BEFORE the Keychain. `refreshCurrentUser()`
