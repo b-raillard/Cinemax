@@ -807,6 +807,20 @@
 "player.audio" = "Audio";
 // VoiceOver — icon-only player controls (see PlayerHUDAccessibility)
 "player.a11y.skipBack" = "Back %d seconds";
+// MARK: - First-run onboarding
+"onboarding.skip" = "Skip";
+"onboarding.next" = "Next";
+"onboarding.back" = "Back";
+"onboarding.start" = "Get started";
+"onboarding.page" = "Page %d of %d";
+"onboarding.server.title" = "Your own server";
+"onboarding.server.body" = "Cinemax plays the library of a Jellyfin server — yours. On the same network the app can find it by itself; otherwise its address is all it needs.";
+"onboarding.quickConnect.title" = "Sign in without typing";
+"onboarding.quickConnect.body" = "Quick Connect shows a code you approve from a device already signed in. It earns its keep on the Apple TV, where typing a password with the remote is a chore.";
+"onboarding.personalize.title" = "Make it yours";
+"onboarding.personalize.body" = "The bottom menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
+"settings.discoverApp" = "Discover the app";
+
 "player.a11y.skipForward" = "Forward %d seconds";
 "player.a11y.play" = "Play";
 "player.a11y.pause" = "Pause";

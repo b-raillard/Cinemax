@@ -333,6 +333,9 @@ extension SettingsScreen {
                 navigationRow(icon: "server.rack", label: loc.localized("settings.servers")) {
                     showServers = true
                 }
+                navigationRow(icon: "sparkles", label: loc.localized("settings.discoverApp")) {
+                    showOnboarding = true
+                }
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
 
