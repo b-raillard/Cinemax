@@ -64,23 +64,16 @@ struct MediaDetailScreen: View {
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
     @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
-    /// Watch Together (SyncPlay) is not production-ready yet. This kill-switch
-    /// Whether this account may START a session from a title's page.
-    ///
-    /// This replaced a compile-time kill-switch that had been `false` since
-    /// 2026-07-15. The gate is now the server's own `UserPolicy.syncPlayAccess`
-    /// — Jellyfin has always modelled the permission (`None` / `JoinGroups` /
-    /// `CreateAndJoinGroups`) and the client simply never asked, so it offered
-    /// the feature to accounts the server would then refuse. `canCreate` is the
-    /// stricter of the two rights: an account that may only *join* still sees
-    /// sessions in the Home row, it just cannot open one here.
+    /// Read through `@AppStorage`, not `SyncPlayController.isEngineSupported`,
+    /// so flipping « Lecteur natif » re-renders the action row.
+    @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
+
     /// Opens the Watch Together sheet, or explains why it cannot work.
     ///
-    /// The refusal is a toast rather than a hidden button on purpose: only the
-    /// VLC path binds a `PlaybackBridge`, so with the native player forced a
-    /// group would form server-side and nothing would ever move. Hiding the
-    /// control would leave the user with a feature that is documented,
-    /// permitted by their server, and simply absent — with nothing to act on.
+    /// The entry is no longer drawn when the native player is forced (see
+    /// `watchTogetherEnabled`), so this refusal is a BACKSTOP: only the VLC
+    /// path binds a `PlaybackBridge`, and a group formed with the native player
+    /// would sit server-side with nothing ever moving.
     private func presentWatchTogether(for item: BaseItemDto, nextEp: BaseItemDto?) {
         guard SyncPlayController.isEngineSupported else {
             toast.error(loc.localized("syncplay.title"), message: loc.localized("syncplay.needsVLC"))
@@ -89,8 +82,19 @@ struct MediaDetailScreen: View {
         watchTogetherSheet = watchTogetherIntent(for: item, nextEp: nextEp)
     }
 
+    /// Whether this fiche offers to START a session.
+    ///
+    /// Two conditions. (1) The server's own `UserPolicy.syncPlayAccess` —
+    /// `canCreate` is the stricter of the two rights: an account that may only
+    /// *join* still sees sessions in the Home row, it just cannot open one here.
+    /// This replaced a compile-time kill-switch that had been `false` since
+    /// 2026-07-15. (2) The playback engine (#165): with « Lecteur natif » on,
+    /// `NativeVideoPresenter` has no SyncPlay binding, so the entry is hidden
+    /// rather than drawn and then refused on press. Home's « En direct » row is
+    /// where the precondition is SAID (dimmed group cards + a footnote naming
+    /// the setting) — this screen has nothing to join, only something to start.
     private var watchTogetherEnabled: Bool {
-        LiveSessionsRow.canCreate(appState.currentUser?.policy?.syncPlayAccess)
+        !forceNativeAVPlayer && LiveSessionsRow.canCreate(appState.currentUser?.policy?.syncPlayAccess)
     }
     #if os(iOS)
     @State private var watchTogetherPlay: WatchTogetherIntent?

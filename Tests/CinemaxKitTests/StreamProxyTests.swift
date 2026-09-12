@@ -166,6 +166,50 @@ struct StreamProxyTests {
             == "https://h.example/a/b/stream")
     }
 
+    // MARK: - Manifest retry before head (pure) — #164
+
+    @Test("playlists are recognised by their last path component, whatever the case")
+    func manifestPathClassification() {
+        for path in ["master.m3u8", "main.m3u8", "hls1/main.m3u8", "MAIN.M3U8",
+                     "/videos/e3415c16/master.m3u8", "main.m3u8?PlaySessionId=abc"] {
+            #expect(CinemaxStreamProxy.isManifest(path: path), "\(path) is a playlist")
+        }
+        for path in ["hls1/main/0.ts", "hls1/main/0.mp4", "stream", "/Videos/abc/stream",
+                     "main.m3u8.part", "m3u8", "main.m3u8/0.ts", ""] {
+            #expect(!CinemaxStreamProxy.isManifest(path: path), "\(path) is not a playlist")
+        }
+    }
+
+    @Test("a manifest the origin dropped before its head is re-issued once")
+    func manifestFailureBeforeHeadIsRetriedOnce() {
+        // HTTP/2 RST on the playlist fetch: nothing has reached libVLC yet, so a
+        // re-issue is invisible, and it is the only retry that manifest gets.
+        let rst = URLError(.networkConnectionLost)
+        #expect(CinemaxStreamProxy.shouldRetryBeforeHead(
+            isManifest: true, headerSent: false, error: rst, retriesLeft: 1))
+        // Bounded: the budget is one.
+        #expect(!CinemaxStreamProxy.shouldRetryBeforeHead(
+            isManifest: true, headerSent: false, error: rst, retriesLeft: 0))
+    }
+
+    @Test("everything else keeps its existing handling")
+    func onlyManifestsFailingBeforeHeadAreRetried() {
+        let rst = URLError(.networkConnectionLost)
+        // A segment: libVLC re-requests failed segments on its own.
+        #expect(!CinemaxStreamProxy.shouldRetryBeforeHead(
+            isManifest: false, headerSent: false, error: rst, retriesLeft: 1))
+        // Head already sent: the mid-stream reconnect owns it, and a re-issue
+        // would send a second head into the same connection.
+        #expect(!CinemaxStreamProxy.shouldRetryBeforeHead(
+            isManifest: true, headerSent: true, error: rst, retriesLeft: 1))
+        // libVLC walked away (the connection closed and the task was cancelled).
+        #expect(!CinemaxStreamProxy.shouldRetryBeforeHead(
+            isManifest: true, headerSent: false, error: URLError(.cancelled), retriesLeft: 1))
+        // Clean completion.
+        #expect(!CinemaxStreamProxy.shouldRetryBeforeHead(
+            isManifest: true, headerSent: false, error: nil, retriesLeft: 1))
+    }
+
     // MARK: - Transport policy
 
     @Test("an unresolvable host pins the session to the proxy; a resolvable one doesn't")
