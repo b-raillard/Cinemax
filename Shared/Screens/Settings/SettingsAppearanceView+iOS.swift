@@ -15,6 +15,10 @@ struct IOSAppearanceDetailView: View {
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @AppStorage(SettingsKey.motionEffects) private var motionEffectsStorage: Bool = SettingsKey.Default.motionEffects
+    /// When on, the system wins over `motionEffectsStorage` (see
+    /// `MotionEffects.isEnabled`) — the row says so rather than showing a
+    /// switch that reads "on" over a screen that no longer moves.
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
     private let fontScaleOptions: [Double] = [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30]
 
@@ -96,9 +100,17 @@ struct IOSAppearanceDetailView: View {
                     HStack {
                         iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
 
-                        Text(loc.localized("settings.motionEffects"))
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
+                        VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                            Text(loc.localized("settings.motionEffects"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                            if systemReduceMotion {
+                                Text(loc.localized("settings.motionEffects.systemOverride"))
+                                    .font(CinemaFont.dynamicLabel(.small))
+                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
 
                         Spacer()
 
@@ -106,13 +118,14 @@ struct IOSAppearanceDetailView: View {
                             motionEffectsStorage.toggle()
                             Haptics.tap()
                         } label: {
-                            CinemaToggleIndicator(isOn: motionEffectsStorage, accent: themeManager.accent, animated: motionEffectsStorage)
+                            CinemaToggleIndicator(isOn: motionEffectsStorage, accent: themeManager.accent, animated: motionEffects)
                         }
                         .buttonStyle(.plain)
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(loc.localized("settings.motionEffects"))
                     .accessibilityValue(loc.localized(motionEffectsStorage ? "a11y.toggle.on" : "a11y.toggle.off"))
+                    .accessibilityHint(systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : "")
                     .accessibilityAddTraits(.isToggle)
                     .accessibilityAction {
                         motionEffectsStorage.toggle()

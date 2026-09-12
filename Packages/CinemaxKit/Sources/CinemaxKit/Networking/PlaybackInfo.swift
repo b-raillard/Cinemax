@@ -21,7 +21,9 @@ public struct PlaybackInfo: Sendable {
     public let subtitleTracks: [MediaTrackInfo]
     public let selectedAudioIndex: Int?    // default or caller-requested audio stream index
     public let selectedSubtitleIndex: Int? // default or caller-requested subtitle index (-1 = off)
-    /// Access token for Authorization header injection into AVURLAsset.
+    /// Access token for Authorization header injection (AVURLAsset, the VLC
+    /// loopback proxy). Never part of `url`: the VLC path appends it as `ApiKey`
+    /// only on a direct retry (`VLCStreamPresenter.streamURL`).
     /// Nil for transcoding URLs where Jellyfin already embeds the token in the path.
     public let authToken: String?
     /// Source container as the server reports it (e.g. "avi", "mkv"), for

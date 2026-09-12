@@ -82,9 +82,11 @@ final class StreamTransportPolicy {
     }
 
     /// Loopback URL VLC should open for `target`, or nil if the proxy can't be
-    /// brought up (caller then uses the direct URL). `target` must already carry
-    /// auth (`ApiKey` query param); `token` is also sent as a header for servers
-    /// that prefer it.
+    /// brought up (caller then uses the direct URL). `token` is what
+    /// authenticates the origin fetch — it is sent as an `Authorization` header
+    /// on every upstream request (reconnects included), so a DirectPlay `target`
+    /// carries no `ApiKey` in its query (`VLCStreamPresenter.streamURL`). A
+    /// transcode `target` keeps the server's own `ApiKey`, forwarded verbatim.
     func proxiedURL(for target: URL, token: String?) -> URL? {
         proxy.localURL(for: target, token: token)
     }
@@ -444,8 +446,9 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         let label = "\(method) \(range ?? "full")"
         let (rangeStart, rangeEnd) = Self.parseRange(range)
         let handler = UpstreamHandler(conn: conn, isHead: method == "HEAD", label: label,
-                                      session: session, url: upstream, token: entry.token,
-                                      rangeStart: rangeStart, rangeEnd: rangeEnd)
+                                      session: session, request: req, url: upstream, token: entry.token,
+                                      rangeStart: rangeStart, rangeEnd: rangeEnd,
+                                      isManifest: Self.isManifest(path: route.rest))
         let task = session.dataTask(with: req)
         handler.task = task
         task.delegate = handler
@@ -606,6 +609,36 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         let end = endStr.isEmpty ? nil : Int(endStr)
         return (start, end)
     }
+
+    // MARK: Manifest retry (pure — unit-tested)
+
+    /// Whether a path names an HLS playlist: its last component ends in
+    /// `.m3u8`, case-insensitively. A query, if present, is ignored. Used by the
+    /// proxy for the loopback `rest`, and by the player for the URL it opens,
+    /// so both sides agree on what counts as a manifest.
+    static func isManifest(path: String) -> Bool {
+        let pathOnly = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+            .first.map(String.init) ?? path
+        guard !pathOnly.hasSuffix("/"), let last = pathOnly.split(separator: "/").last else { return false }
+        let name = last.lowercased()
+        return name.hasSuffix(".m3u8") && name != ".m3u8"
+    }
+
+    /// Whether an upstream request that failed BEFORE its response head
+    /// reached libVLC is re-issued instead of answered with a 502.
+    ///
+    /// Only a playlist earns it. libVLC re-requests a failed segment on its
+    /// own, but it has no playlist-level retry, so a manifest lost to an origin
+    /// HTTP/2 RST is a dead open. Nothing has been written to the loopback
+    /// connection yet, so a re-issue is invisible to libVLC. Bounded by the
+    /// handler's budget of one. After the head, the mid-stream reconnect owns
+    /// the failure. A cancellation means libVLC walked away, so nobody is
+    /// waiting for the answer.
+    static func shouldRetryBeforeHead(isManifest: Bool, headerSent: Bool,
+                                      error: Error?, retriesLeft: Int) -> Bool {
+        guard isManifest, !headerSent, retriesLeft > 0, let error else { return false }
+        return (error as? URLError)?.code != .cancelled
+    }
 }
 
 /// Per-request bridge: streams a `URLSession` response into the VLC-facing
@@ -628,12 +661,19 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
     private let isHead: Bool
     private let label: String
     private let session: URLSession
+    /// The original upstream request, re-issued verbatim when a manifest fails
+    /// before its head (see `CinemaxStreamProxy.shouldRetryBeforeHead`).
+    private let request: URLRequest
     private let url: URL
     private let token: String?
     /// Start byte of the original request (so a reconnect resumes at
     /// `rangeStart + bytesDelivered`). -1 ⇒ a suffix range we won't resume.
     private let rangeStart: Int
     private let rangeEnd: Int?
+    /// The request is an HLS playlist, the one kind libVLC never re-requests.
+    private let isManifest: Bool
+    /// One re-issue for a manifest the origin dropped before its head.
+    private var manifestRetriesLeft = 1
     // `task` is read on the netQueue (conn state handler) and written on the
     // delegate queue (reconnect), so it needs its own lock; the remaining
     // counters are touched only from per-task delegate callbacks, which are
@@ -658,16 +698,18 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         set { taskLock.withLock { _task = newValue } }
     }
 
-    init(conn: NWConnection, isHead: Bool, label: String, session: URLSession,
-         url: URL, token: String?, rangeStart: Int, rangeEnd: Int?) {
+    init(conn: NWConnection, isHead: Bool, label: String, session: URLSession, request: URLRequest,
+         url: URL, token: String?, rangeStart: Int, rangeEnd: Int?, isManifest: Bool) {
         self.conn = conn
         self.isHead = isHead
         self.label = label
         self.session = session
+        self.request = request
         self.url = url
         self.token = token
         self.rangeStart = rangeStart
         self.rangeEnd = rangeEnd
+        self.isManifest = isManifest
         super.init()
         // If VLC drops the connection, stop pulling bytes from the origin.
         conn.stateUpdateHandler = { [weak self] state in
@@ -738,7 +780,18 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         if let error, code != .cancelled {
             proxyLog.error("StreamProxy ▸ \(self.label, privacy: .public) upstream error: \(error.localizedDescription, privacy: .public)")
         }
-        // Never started (no head yet): surface a gateway error so libVLC retries.
+        // A playlist lost before its head (origin HTTP/2 RST on the manifest
+        // fetch): libVLC never re-requests one, so the 502 below would be a
+        // dead open on a frozen 0:00. Nothing has reached libVLC yet, so a
+        // re-issue is invisible. Once — see `shouldRetryBeforeHead`.
+        if CinemaxStreamProxy.shouldRetryBeforeHead(isManifest: isManifest, headerSent: headerSent,
+                                                    error: error, retriesLeft: manifestRetriesLeft) {
+            retryBeforeHead()
+            return
+        }
+        // Never started (no head yet): surface a gateway error. libVLC
+        // re-requests a failed segment; a failed manifest fails the open, which
+        // the player's own retry then owns.
         if error != nil, !headerSent {
             conn.send(content: Data("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n".utf8),
                       isComplete: true, completion: .contentProcessed { [conn] _ in conn.cancel() })
@@ -774,6 +827,18 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         awaitingResumeHead = true
         proxyLog.log("StreamProxy ▸ \(self.label, privacy: .public) reconnecting at byte \(resumeFrom) (\(self.reconnectsLeft) retries left)")
         let t = session.dataTask(with: req)
+        task = t
+        t.delegate = self
+        t.resume()
+    }
+
+    /// Re-issue the original request for a manifest whose upstream failed before
+    /// any head was written. Unlike `reconnect()`, nothing has reached libVLC,
+    /// so the new response's head is forwarded as if it were the first.
+    private func retryBeforeHead() {
+        manifestRetriesLeft -= 1
+        proxyLog.log("StreamProxy ▸ \(self.label, privacy: .public) manifest failed before its head — re-issuing once")
+        let t = session.dataTask(with: request)
         task = t
         t.delegate = self
         t.resume()

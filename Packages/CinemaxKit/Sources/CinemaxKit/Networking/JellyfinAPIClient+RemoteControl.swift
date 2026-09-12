@@ -104,10 +104,19 @@ extension JellyfinAPIClient: RemoteControlAPI {
     /// for the wrong engine.
     ///
     /// `supportedCommands` lists only `DisplayMessage`, and that restraint is
-    /// the point: `Play` (the "start this now" message) is not a
-    /// `GeneralCommandType` and needs no declaration, while advertising
-    /// transport commands the app doesn't execute would render dead controls in
-    /// the sender's UI. `JellyfinSocket` honors exactly what is promised here.
+    /// the point: advertising a `GeneralCommandType` the app doesn't execute
+    /// would render a dead control in the sender's UI. Neither `Play` ("start
+    /// this now") nor `Playstate` (pause / unpause / seek / stop / next /
+    /// previous, honored since #176) is a `GeneralCommandType`, and neither
+    /// needs a declaration: Jellyfin's `SessionManager.SendPlaystateCommand`
+    /// only looks the session up (plus `AssertCanControl` on the sender), a
+    /// session is `SupportsRemoteControl` exactly when `supportsMediaControl` is
+    /// set and a socket controller is attached, and jellyfin-web's remote player
+    /// sends Playstate without consulting `SupportedCommands` (verified against
+    /// jellyfin `master` + jellyfin-web `sessionPlayer`, 2026-09-11). The
+    /// `GeneralCommandType.playState` case exists in the enum but nothing on the
+    /// server reads it — adding it would declare nothing. `JellyfinSocket`
+    /// honors exactly what is promised here.
     /// `supportsMediaControl: false` is how the user's opt-out is expressed:
     /// re-posting with the flag cleared removes this device from every picker
     /// immediately, whereas simply not posting would leave the session's

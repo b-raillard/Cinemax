@@ -21,6 +21,8 @@ struct PersonDetailScreen: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var hasLoaded = false
+    /// Card → fiche zoom (iOS) — see `CardZoom`.
+    @Namespace private var zoomNamespace
     #if os(tvOS)
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.motionEffectsEnabled) private var motionEffects
@@ -155,9 +157,12 @@ struct PersonDetailScreen: View {
 
     private func filmographyRow(title: String, items: [BaseItemDto]) -> some View {
         ContentRow(title: title, data: items, id: \.id) { item in
+            // One surface per rail (Films / Séries) — see `CardZoom`.
+            let zoom = CardZoom(zoomNamespace, surface: "person.\(title)", itemId: item.id)
             NavigationLink {
                 if let id = item.id {
                     MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                        .cardZoomDestination(zoom)
                 }
             } label: {
                 PosterCard(
@@ -170,7 +175,8 @@ struct PersonDetailScreen: View {
                         positionTicks: item.userData?.playbackPositionTicks,
                         runtimeTicks: item.runTimeTicks,
                         isPlayed: item.userData?.isPlayed
-                    )
+                    ),
+                    zoomSource: zoom
                 )
                 .frame(width: cardWidth)
             }
