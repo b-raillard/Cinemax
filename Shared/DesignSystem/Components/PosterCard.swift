@@ -8,6 +8,9 @@ struct PosterCard: View {
     /// a surface that has no `userData` to offer (a collection folder, a
     /// filmography entry) simply shows nothing.
     var status: MediaCardStatus = .none
+    /// Origin of the iOS zoom into the fiche this card pushes — see
+    /// `CardZoom`. `nil` keeps the default push.
+    var zoomSource: CardZoom? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -36,6 +39,7 @@ struct PosterCard: View {
                 // card spanning x=16→128.7, built the menu of the card at
                 // x=144.7. Applies to every card that clips a filled image.
                 .contentShape(Rectangle())
+                .cardZoomSource(zoomSource)
                 .cinemaFocus()
 
             Text("M\nM")

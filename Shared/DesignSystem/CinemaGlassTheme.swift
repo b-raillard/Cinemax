@@ -154,6 +154,22 @@ enum CinemaFont {
         .system(size: scaledPoint(17, relativeTo: .body), weight: .regular)
     }
 
+    /// `dynamicBody`, BOUNDED — for reading text sealed inside a box that cannot
+    /// grow (a fixed-width card in a carousel). The cap is a multiple of the
+    /// app-scaled base, so the user's own `uiScale` still applies underneath it.
+    ///
+    /// It has to clamp here rather than ride the enclosing
+    /// `.layoutBoundDynamicType()`: that modifier bounds SwiftUI's environment,
+    /// while this font asks `UIFontMetrics` for the SYSTEM preferred size and
+    /// never consults the environment. Prefer plain `dynamicBody` wherever the
+    /// text owns its own space — see `CinemaDynamicType`.
+    static var dynamicBodyLayoutBound: Font {
+        let base = 17 * CinemaScale.factor
+        let scaled = UIFontMetrics(forTextStyle: .body).scaledValue(for: base)
+        return .system(size: min(scaled, base * CinemaDynamicType.layoutBoundMaxGrowth).rounded(),
+                       weight: .regular)
+    }
+
     /// Dynamic Type-aware label font. Follows the same `large / medium / small`
     /// sizing as `label(_:)` but scales with OS text-size preference.
     static func dynamicLabel(_ size: LabelSize = .medium) -> Font {

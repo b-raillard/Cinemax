@@ -646,6 +646,17 @@
 "settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Fast sleep timer (15 s)";
 "settings.debug.skipToEnd" = "Skip-to-end button";
+"settings.debug.exportDiagnostics" = "Export diagnostics";
+"settings.debug.exportDiagnostics.subtitle" = "Last 30 minutes of this session's log, tokens removed";
+"settings.debug.exportDiagnostics.preparing" = "Preparing the report…";
+"settings.debug.exportDiagnostics.failed" = "Couldn't prepare the report — tap to retry";
+"settings.debug.exportDiagnostics.share" = "Share the report";
+"settings.debug.exportDiagnostics.ready" = "Log lines: %d · ready to share";
+"settings.debug.exportDiagnostics.tvUnavailable" = "Not available on Apple TV: no share sheet, no MetricKit";
+"settings.debug.metricKit" = "MetricKit reports";
+"settings.debug.metricKit.summary" = "Crashes: %d · Hangs: %d · Metrics: %d";
+"settings.debug.metricKit.none" = "No report received yet";
+"settings.debug.diagnostics.footer" = "The report holds this session's log and the MetricKit reports, with access tokens removed. Nothing leaves the device unless you share it. MetricKit delivers its reports to TestFlight and App Store builds only, at most once every 24 hours.";
 "debug.skipToEnd" = "⏭ Skip to end (Debug)";
 "settings.interface" = "Interface";
 "settings.playback" = "Playback";
@@ -675,6 +686,7 @@
 "menu.library.empty" = "No video libraries available";
 "menu.library.empty.subtitle" = "Check your connection or ask your administrator to share a library.";
 "settings.motionEffects" = "Motion Effects";
+"settings.motionEffects.systemOverride" = "Reduce Motion is on in the device settings, so effects stay off.";
 "settings.fontSize" = "Text Size";
 "settings.4kRendering" = "4K UI Rendering";
 "settings.autoPlayNextEpisode" = "Auto-play Next Episode";
@@ -793,6 +805,28 @@
 
 "player.preparing" = "Preparing stream...";
 "player.audio" = "Audio";
+// VoiceOver — icon-only player controls (see PlayerHUDAccessibility)
+"player.a11y.skipBack" = "Back %d seconds";
+// MARK: - First-run onboarding
+"onboarding.skip" = "Skip";
+"onboarding.next" = "Next";
+"onboarding.back" = "Back";
+"onboarding.start" = "Get started";
+"onboarding.page" = "Page %d of %d";
+"onboarding.server.title" = "Your own server";
+"onboarding.server.body" = "Cinemax plays the library of a Jellyfin server — yours. On the same network the app can find it by itself; otherwise its address is all it needs.";
+"onboarding.quickConnect.title" = "Sign in without typing";
+"onboarding.quickConnect.body" = "Quick Connect shows a code you approve from a device already signed in. It earns its keep on the Apple TV, where typing a password with the remote is a chore.";
+"onboarding.personalize.title" = "Make it yours";
+"onboarding.personalize.body" = "The bottom menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
+"settings.discoverApp" = "Discover the app";
+
+"player.a11y.skipForward" = "Forward %d seconds";
+"player.a11y.play" = "Play";
+"player.a11y.pause" = "Pause";
+"player.a11y.loading" = "Loading";
+"player.a11y.position" = "%@ of %@";
+
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
 "player.pip" = "Picture in Picture";
@@ -947,6 +981,9 @@
 "syncplay.lobby.invite.sentToast" = "%@ has been notified";
 "syncplay.lobby.start" = "Start playback";
 "syncplay.lobby.leave" = "Leave session";
+"syncplay.leaveConfirm.title" = "Leave the session?";
+"syncplay.leaveConfirm.message" = "Closing the player takes you out of the session. The other participants will carry on without you.";
+"syncplay.leaveConfirm.leave" = "Leave session";
 "syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
 "syncplay.needsVLC.footnote" = "\"Native player\" is on: to join a session, turn it off in Settings → Playback.";
 
@@ -998,6 +1035,8 @@
 
 "intent.resume.title" = "Resume watching";
 "intent.resume.description" = "Picks up the last title you started.";
+"intent.resumeControl.title" = "Continue watching";
+"intent.resumeControl.description" = "Opens Cinemax on the last thing you were watching.";
 "intent.resume.shortTitle" = "Resume";
 
 "intent.play.title" = "Play a title";

@@ -31,10 +31,15 @@ private let logger = Logger(subsystem: "com.cinemax", category: "RemoteControl")
 /// the same tick for the sender this app ships (its `remotePlayIntent` reads
 /// that very position) and is the more correct answer for any other sender.
 ///
-/// Deliberately NOT handled: `Playstate` (pause / seek / stop from the sender).
-/// The capability declaration advertises only what is honored here, so no sender
-/// renders a transport control that does nothing — and this app's own sender is
-/// send-only by design anyway (see the "Remote control" RULE in CLAUDE.md).
+/// `Playstate` (pause / unpause / play-pause / seek / stop / next / previous
+/// from the sender, #176) is handed to the player on screen through
+/// `RemotePlaystateRouter`, and ignored while a Watch Together group owns the
+/// playhead. It needs no capability declaration beyond `supportsMediaControl`:
+/// Jellyfin delivers it to any session that supports media control and holds a
+/// socket, and the web client's remote bar sends it without consulting
+/// `SupportedCommands`. This app's own sender stays send-only by design (see
+/// the "Remote control" RULE in CLAUDE.md) — being controllable and offering
+/// controls are two different features.
 @MainActor
 final class RemoteControlListener {
     /// Our handle on the shared socket. Nil when not listening.
@@ -151,6 +156,15 @@ final class RemoteControlListener {
             }
             appState.pendingIntentPlaybackItemId = itemId
             appState.pendingDeepLinkItemId = itemId
+        case .playstate(let command):
+            // To whichever player is on screen, if any. A Watch Together group
+            // owns the playhead, so a sender's transport is ignored there
+            // rather than applied locally and drifting this participant out of
+            // lockstep with everyone else. The router logs every outcome.
+            RemotePlaystateRouter.shared.route(
+                command,
+                inSyncPlayGroup: SyncPlayController.shared.isInGroup
+            )
         case .userUpdated:
             // An administrator saved this account's user record. Re-read it so
             // the permission gates (`syncPlayAccess`, `canSeeOthers`) stop
