@@ -52,6 +52,7 @@
 "home.watchingNow.playing" = "%@ regarde";
 "settings.homePage.watchingNow" = "En direct";
 "home.recentlyAdded" = "Ajouts récents";
+"home.becauseYouWatched" = "Parce que vous avez vu %@";
 "home.remainingTime.hours" = "%dh %dm restantes";
 "home.remainingTime.minutes" = "%dm restantes";
 "home.genreRow.failed" = "Échec du chargement";
@@ -239,6 +240,17 @@
 "settings.debug" = "Débogage";
 "settings.debug.fastSleepTimer" = "Veille rapide (15 s)";
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
+"settings.debug.exportDiagnostics" = "Exporter les diagnostics";
+"settings.debug.exportDiagnostics.subtitle" = "Journal des 30 dernières minutes de la session, sans jeton";
+"settings.debug.exportDiagnostics.preparing" = "Préparation du rapport…";
+"settings.debug.exportDiagnostics.failed" = "Préparation impossible — touchez pour réessayer";
+"settings.debug.exportDiagnostics.share" = "Partager le rapport";
+"settings.debug.exportDiagnostics.ready" = "Lignes de journal : %d · prêt à partager";
+"settings.debug.exportDiagnostics.tvUnavailable" = "Indisponible sur Apple TV : ni feuille de partage ni MetricKit";
+"settings.debug.metricKit" = "Rapports MetricKit";
+"settings.debug.metricKit.summary" = "Plantages : %d · Blocages : %d · Métriques : %d";
+"settings.debug.metricKit.none" = "Aucun rapport reçu";
+"settings.debug.diagnostics.footer" = "Le rapport contient le journal de la session en cours et les rapports MetricKit, nettoyés des jetons d'accès. Rien ne quitte l'appareil sans votre partage. MetricKit ne livre ses rapports qu'aux versions TestFlight et App Store, au plus une fois par 24 h.";
 "debug.skipToEnd" = "⏭ Aller à la fin (Debug)";
 "settings.interface" = "Interface";
 "settings.playback" = "Lecture";
@@ -268,9 +280,12 @@
 "menu.library.empty" = "Aucune bibliothèque vidéo disponible";
 "menu.library.empty.subtitle" = "Vérifiez votre connexion ou demandez à votre administrateur de partager une bibliothèque.";
 "settings.motionEffects" = "Effets de mouvement";
+"settings.motionEffects.systemOverride" = "« Réduire les animations » est activé dans les réglages de l'appareil : les effets restent coupés.";
 "settings.fontSize" = "Taille du texte";
 "settings.4kRendering" = "Rendu 4K";
 "settings.autoPlayNextEpisode" = "Enchaîner les épisodes";
+"settings.autoSkipIntro" = "Passer l'intro automatiquement";
+"settings.autoSkipCredits" = "Passer le générique automatiquement";
 "settings.forceNativeAVPlayer" = "Lecteur natif";
 "settings.playback.liveActivity" = "Activité en direct";
 "settings.systemSettings" = "Réglages système";
@@ -282,6 +297,7 @@
 "settings.homePage.continueWatching" = "Reprendre";
 "settings.homePage.nextUp" = "À suivre";
 "settings.homePage.recentlyAdded" = "Ajouts récents";
+"settings.homePage.becauseYouWatched" = "Parce que vous avez vu…";
 "settings.homePage.genreRows" = "Rangées par genre";
 "settings.homePage.genreRows.choose" = "Choisir les genres";
 "settings.homePage.genreRows.hint" = "Genres affichés en rangées sur l'accueil";
@@ -388,8 +404,14 @@
 "player.pip" = "Image dans l'image";
 "player.skipIntro" = "Passer l'intro";
 "player.skipCredits" = "Passer le générique";
+"player.autoSkipped.intro" = "Intro passée";
+"player.autoSkipped.credits" = "Générique passé";
 "player.speed" = "Vitesse";
 "player.audioDelay" = "Délai audio";
+"player.audio.silentSuffix" = "(muet sur Apple)";
+"player.audio.silent.title" = "Piste muette sur Apple";
+"player.audio.silent.suggestion" = "Apple ne propose aucune sortie Dolby TrueHD : cette piste restera silencieuse. Essayez « %@ ».";
+"player.audio.silent.noAlternative" = "Apple ne propose aucune sortie Dolby TrueHD : cette piste restera silencieuse.";
 "player.subtitleDelay" = "Délai des sous-titres";
 "player.delay.reset" = "Réinitialiser (0 ms)";
 "player.stats" = "Statistiques";
@@ -918,6 +940,7 @@
 "syncplay.session.unknownTitle" = "Séance en cours";
 "syncplay.session.a11y" = "Séance : %@, avec %@. Rejoindre.";
 "syncplay.needsVLC" = "Regarder ensemble ne fonctionne qu'avec le lecteur VLC. Désactivez « Lecteur natif » dans Réglages → Lecture.";
+"syncplay.needsVLC.footnote" = "« Lecteur natif » est activé : pour rejoindre une séance, désactivez-le dans Réglages → Lecture.";
 "syncplay.session.mine" = "Vous y êtes · avec %@";
 "syncplay.session.mine.alone" = "Vous y êtes · personne d'autre";
 "syncplay.session.a11y.mine" = "Séance en cours : %@, avec %@. Quitter.";
@@ -940,6 +963,9 @@
 "syncplay.lobby.invite.sentToast" = "%@ a été prévenu";
 "syncplay.lobby.start" = "Lancer la lecture";
 "syncplay.lobby.leave" = "Quitter la séance";
+"syncplay.leaveConfirm.title" = "Quitter la séance ?";
+"syncplay.leaveConfirm.message" = "Fermer le lecteur vous fait quitter la séance. Les autres participants continueront sans vous.";
+"syncplay.leaveConfirm.leave" = "Quitter la séance";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";
@@ -969,6 +995,14 @@
 "login.myServers" = "Mes serveurs";
 "servers.checking" = "Vérification…";
 "servers.alreadyCurrent" = "Vous êtes déjà connecté à %@";
+"servers.rename" = "Renommer";
+"servers.rename.title" = "Renommer le serveur";
+"servers.rename.message" = "Ce nom ne s'affiche que sur cet appareil. Laissez le champ vide pour reprendre celui du serveur (« %@ »).";
+"servers.renamed" = "Serveur renommé en « %@ »";
+"servers.renameReset" = "Nom du serveur rétabli : %@";
+"servers.reorder" = "Ordonner";
+"servers.moveUp" = "Monter";
+"servers.moveDown" = "Descendre";
 
 /* MARK: - App Intents (Siri & Raccourcis)
    Lus par le système via LocalizedStringResource, hors LocalizationManager —

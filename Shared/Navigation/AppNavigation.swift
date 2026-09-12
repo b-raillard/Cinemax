@@ -251,19 +251,19 @@ final class AppState {
     /// runs the search; `pendingDeepLinkTabId` gets the user to that tab.
     var pendingIntentSearchQuery: String?
 
+    /// Both carriers — the custom scheme the app's own extensions emit and the
+    /// Universal Links form (`https://<host>/item/{id}`, delivered by iOS only
+    /// after the host's AASA verified this app) — read through the one pure
+    /// `DeepLinkRoute.parse`, which also applies `isValidItemId`: a malformed
+    /// link is dropped before it can drive a lookup with attacker-controlled
+    /// path text. `onOpenURL` receives Universal Links as well as scheme URLs.
     func handleDeepLink(_ url: URL) {
-        guard url.scheme == "cinemax" else { return }
-        switch url.host() {
-        case "item":
-            let id = url.lastPathComponent
-            // Defense-in-depth: only dispatch a well-formed Jellyfin item id
-            // (32-char undashed hex OR a canonical dashed GUID) so a malformed
-            // deep link can't drive a lookup with attacker-controlled path text.
-            guard Self.isValidItemId(id) else { return }
+        switch DeepLinkRoute.parse(url, isValidItemId: Self.isValidItemId) {
+        case .item(let id):
             pendingDeepLinkItemId = id
-        case "home":
+        case .home:
             pendingDeepLinkTabId = "home"
-        default:
+        case nil:
             break
         }
     }
@@ -325,6 +325,16 @@ final class AppState {
     /// The entry whose session is mirrored into the legacy Keychain items.
     var currentActiveEntry: ServerEntry? {
         ServerRegistry.activeEntry(in: servers, activeId: activeServerId)
+    }
+
+    /// The user's own label for the server the app is ON, when they gave one.
+    /// Keyed on `activeServerId`, never `currentActiveEntry` — its MRU fallback
+    /// names a server the app isn't on while signed out. Note it does NOT name
+    /// a re-login target either (`beginReLogin` leaves `activeServerId` on the
+    /// previous server), which is why `LoginScreen` keeps the server's own name.
+    var activeServerNameOverride: String? {
+        guard let activeServerId else { return nil }
+        return servers.first { $0.id == activeServerId }?.displayNameOverride
     }
 
     /// Hydrates the observable registry from the Keychain. Called once from
@@ -445,6 +455,33 @@ final class AppState {
         if let serverID, !serverID.isEmpty { entry.serverID = serverID }
         guard entry != servers[index] else { return }   // no spurious Observation cycle
         servers[index] = entry
+        persistRegistry()
+    }
+
+    /// Gives a registered server the user's own label (local to this device).
+    /// Empty input — or input identical to the server's own name — clears the
+    /// label, so the entry follows the server's name again
+    /// (`ServerEntry.normalizedDisplayNameOverride`). One of the two writers of
+    /// the user-owned fields `ServerRegistry.upsert` preserves.
+    @discardableResult
+    func renameServer(id: String, to raw: String) -> ServerEntry? {
+        guard let index = servers.firstIndex(where: { $0.id == id }) else { return nil }
+        var entry = servers[index]
+        entry.displayNameOverride = ServerEntry.normalizedDisplayNameOverride(raw, serverName: entry.name)
+        guard entry != servers[index] else { return entry }   // no spurious Observation cycle
+        servers[index] = entry
+        persistRegistry()
+        return entry
+    }
+
+    /// Stores a manual order for the servers list — `orderedIds` is the
+    /// COMPLETE list as displayed after the user's move (see
+    /// `ServerRegistry.applyingOrder`). The other writer of the user-owned
+    /// fields `ServerRegistry.upsert` preserves.
+    func reorderServers(orderedIds: [String]) {
+        let reordered = ServerRegistry.applyingOrder(orderedIds, to: servers)
+        guard reordered != servers else { return }
+        servers = reordered
         persistRegistry()
     }
 
@@ -610,6 +647,10 @@ final class AppState {
         revokeSessionInBackground(for: entry)
         servers.removeAll { $0.id == entry.id }
         persistRegistry()
+        // Its search history goes with it. Nothing could ever read it again —
+        // a re-added server mints a fresh id — so keeping it would only leave
+        // that library's queries on the device.
+        SearchHistoryStore.clear(serverId: entry.id)
     }
 
     /// Signs out of the ACTIVE server. See `LogoutReason` for the two behaviors.
@@ -791,6 +832,11 @@ struct AppNavigation: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
+    /// The system's Reduce Motion. Combined with the app toggle into the ONE
+    /// value the whole tree reads (`\.motionEffectsEnabled`), so turning it on in
+    /// iOS / tvOS Settings stops the hero carousel, the Ken Burns drift and every
+    /// pulse without touching the app's own switch.
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     /// Drives `RemoteControlListener`. Read here rather than inside the listener
     /// so flipping the toggle in Settings re-runs `onChange` and withdraws (or
     /// re-publishes) the capability declaration immediately.
@@ -832,10 +878,19 @@ struct AppNavigation: View {
             }
         }
     }
+    /// MetricKit subscription, once per process for the same reason as
+    /// `configurePipeline`: scene events recreate this struct. iOS only — every
+    /// MetricKit class is `API_UNAVAILABLE(tvos)`. See `MetricKitSubscriber`.
+    private static let registerMetricKit: Void = {
+        MetricKitSubscriber.register()
+    }()
     #endif
 
     init() {
         _ = Self.configurePipeline
+        #if os(iOS)
+        _ = Self.registerMetricKit
+        #endif
     }
 
     var body: some View {
@@ -911,13 +966,17 @@ struct AppNavigation: View {
             loc: loc,
             toast: toasts
         ))
-        .environment(\.motionEffectsEnabled, motionEffects)
-        // No Dynamic Type cap here: a root cap shrank every screen — the
-        // reading ones included — for users on the three largest accessibility
-        // sizes. The surfaces whose layout cannot follow cap THEMSELVES through
-        // `.layoutBoundDynamicType()` (heroes, cards, rails, the player host);
-        // see `CinemaDynamicType`. The app's own `uiScale` (Settings > Font
-        // Size) still multiplies on top of everything.
+        .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
+            appToggle: motionEffects,
+            systemReduceMotion: systemReduceMotion
+        ))
+        // No Dynamic Type cap here, deliberately: a ROOT cap shrank every screen
+        // — the reading ones included — for the three largest accessibility
+        // sizes, i.e. exactly the users who asked for bigger text. The surfaces
+        // whose layout genuinely cannot follow cap THEMSELVES through
+        // `.layoutBoundDynamicType()` (heroes, cards, the tab bar, the player
+        // host); see `CinemaDynamicType`. The app's own `uiScale`
+        // (Settings > Interface > Font Size) still multiplies on top.
         .preferredColorScheme(themeManager.colorScheme)
         // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
         // AppState — MainTabView switches to Home, HomeScreen pushes detail.
@@ -960,6 +1019,9 @@ struct AppNavigation: View {
             // active id and the known ids are available here.
             menuConfig.activate(serverId: appState.activeServerId,
                                 knownServerIds: Set(appState.servers.map(\.id)))
+            // Search history is per-server too: the first server that activates
+            // after the upgrade inherits the old global list, once.
+            SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
             // A joined group learns WHAT to watch only from the socket's
             // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
             // it through the same in-process pair an App Intent and a remote
@@ -1024,6 +1086,8 @@ struct AppNavigation: View {
             // target server's own profile is loaded wholesale.
             menuConfig.activate(serverId: newId,
                                 knownServerIds: Set(appState.servers.map(\.id)))
+            // No-op once the legacy search history has found its server.
+            SearchHistoryStore.migrateLegacyIfNeeded(into: newId)
         }
         .onChange(of: appState.serverURL) { _, new in
             // Re-decide stream transport for the new server (or clear on logout).
@@ -1141,6 +1205,10 @@ struct AppNavigation: View {
             // Restart/stop the rainbow accent animation task when the user
             // toggles Motion Effects — the task otherwise only re-checks the
             // flag on each tick.
+            themeManager.motionEffectsDidChange()
+        }
+        .onChange(of: systemReduceMotion) { _, _ in
+            // Same nudge for the system switch, which the tick also reads.
             themeManager.motionEffectsDidChange()
         }
     }

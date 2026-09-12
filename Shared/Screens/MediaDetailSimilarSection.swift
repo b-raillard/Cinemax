@@ -15,6 +15,8 @@ struct MediaDetailSimilarSection: View, Equatable {
 
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
+    /// Published by `MediaDetailScreen`, one surface per section — see `CardZoom`.
+    @Environment(\.cardZoomScope) private var zoomScope
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         // SwiftUI calls `==` on the main actor during view diffing —
@@ -42,12 +44,14 @@ struct MediaDetailSimilarSection: View, Equatable {
             data: items,
             id: \.id
         ) { item in
+            let zoom = zoomScope?.zoom(for: item.id)
             NavigationLink {
                 if let id = item.id {
                     MediaDetailScreen(
                         itemId: id,
                         itemType: item.type ?? .movie
                     )
+                    .cardZoomDestination(zoom)
                 }
             } label: {
                 PosterCard(
@@ -58,7 +62,8 @@ struct MediaDetailSimilarSection: View, Equatable {
                         positionTicks: item.userData?.playbackPositionTicks,
                         runtimeTicks: item.runTimeTicks,
                         isPlayed: item.userData?.isPlayed
-                    )
+                    ),
+                    zoomSource: zoom
                 )
                 .frame(width: cardWidth)
             }
