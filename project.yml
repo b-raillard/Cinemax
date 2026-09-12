@@ -73,6 +73,13 @@ targets:
         # Store distribution.
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.cinemax.shared
+        # Universal Links (iOS only — tvOS has none). The host must serve
+        # `/.well-known/apple-app-site-association` at its ROOT (see
+        # docs/universal-links/README.md) and match
+        # `DeepLinkRoute.universalLinkHost`. Requires "Associated Domains"
+        # on the App ID; automatic signing adds it.
+        com.apple.developer.associated-domains:
+          - applinks:b-raillard.github.io
     info:
       path: iOS/Info.plist
       properties:
