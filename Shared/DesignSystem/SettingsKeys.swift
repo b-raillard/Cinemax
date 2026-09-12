@@ -145,6 +145,12 @@ enum SettingsKey {
     // Easter eggs
     static let rainbowUnlocked = "easterEgg.rainbowUnlocked"
 
+    // First-run onboarding
+    /// `true` once the first-run onboarding has been finished or skipped — or
+    /// once a launch found a server already known (an upgrade from a version
+    /// without onboarding). Read through `OnboardingPolicy` only.
+    static let onboardingSeen = "onboarding.seen"
+
     enum Default {
         static let darkMode = true
         static let accentColor = "green"
@@ -195,6 +201,8 @@ enum SettingsKey {
         static let debugShowSkipToEnd = false
 
         static let rainbowUnlocked = false
+
+        static let onboardingSeen = false
     }
 }
 

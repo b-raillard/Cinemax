@@ -22,6 +22,9 @@ public enum JellyfinSocketMessage: Sendable, Equatable {
     case play(RemotePlayRequest)
     /// Inbound `DisplayMessage` general command.
     case displayMessage(RemoteDisplayMessage)
+    /// Inbound transport command (pause / unpause / seek / stop / next /
+    /// previous) from another client's remote-control UI.
+    case playstate(RemotePlaystateCommand)
     /// The signed-in account's own user record changed server-side — in
     /// practice, an administrator editing its policy.
     ///
@@ -164,8 +167,12 @@ public actor JellyfinSocket {
             if let d = obj["Data"] as? [String: Any], let message = Self.parseDisplayMessage(d) {
                 continuation.yield(.displayMessage(message))
             }
+        case "Playstate":
+            if let d = obj["Data"] as? [String: Any], let command = Self.parsePlaystate(d) {
+                continuation.yield(.playstate(command))
+            }
         default:
-            // `Playstate`, `UserDataChanged`, `LibraryChanged`, `Sessions`, … —
+            // `UserDataChanged`, `LibraryChanged`, `Sessions`, … —
             // deliberately unhandled. Adding a case here is how a new consumer
             // joins, not by opening a second socket.
             break
@@ -262,6 +269,23 @@ public actor JellyfinSocket {
               !text.isEmpty else { return nil }
         let header = (arguments["Header"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         return RemoteDisplayMessage(header: (header?.isEmpty == false) ? header : nil, text: text)
+    }
+
+    /// `Playstate` → `{ Command, SeekPositionTicks, ControllingUserId }`
+    /// (`PlaystateRequest`). Matched case-insensitively: jellyfin-web posts
+    /// `stop` / `nextTrack` / `seek` in camel case, and while the server
+    /// forwards the enum's own spelling today, nothing promises it. Returns
+    /// `nil` for anything the app does not execute (`Rewind`, `FastForward`,
+    /// an unknown future value) and for a `Seek` with no usable target — a
+    /// seek to a guessed 0 would restart the film.
+    static func parsePlaystate(_ d: [String: Any]) -> RemotePlaystateCommand? {
+        guard let raw = d["Command"] as? String,
+              let kind = RemotePlaystateCommand.Kind.allCases.first(where: {
+                  $0.rawValue.caseInsensitiveCompare(raw) == .orderedSame
+              }) else { return nil }
+        guard kind == .seek else { return RemotePlaystateCommand(kind: kind) }
+        guard let ticks = (d["SeekPositionTicks"] as? NSNumber)?.intValue, ticks >= 0 else { return nil }
+        return RemotePlaystateCommand(kind: .seek, seekPositionTicks: ticks)
     }
 
     // MARK: - Keep-alive

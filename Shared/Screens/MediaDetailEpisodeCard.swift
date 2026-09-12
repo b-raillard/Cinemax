@@ -46,6 +46,14 @@ struct MediaDetailEpisodeCard: View, Equatable {
     }
 
     var body: some View {
+        // A fixed-width card in a horizontal carousel — layout-bound, see
+        // `CinemaDynamicType`. The full synopsis is one tap away in
+        // `EpisodeOverviewSheet`, which scales all the way up.
+        cardBody.layoutBoundDynamicType()
+    }
+
+    @ViewBuilder
+    private var cardBody: some View {
         if let id = episode.id {
             let overview = episode.overview.flatMap { $0.isEmpty ? nil : $0 }
             let isPlayed = episode.userData?.isPlayed ?? false
@@ -131,7 +139,7 @@ struct MediaDetailEpisodeCard: View, Equatable {
 
                     if let ov = overview {
                         Text(ov)
-                            .font(CinemaFont.dynamicBody)
+                            .font(CinemaFont.dynamicBodyLayoutBound)
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .lineLimit(3)
                             .padding(.top, 2)
