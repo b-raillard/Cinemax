@@ -119,9 +119,18 @@ final class ServersViewModel {
 ///
 /// **iOS uses a native `List`** — a deliberate exception to the app's
 /// "hand-rolled rows" idiom, mandated by the swipe-to-delete requirement
-/// (`.swipeActions` only exists on `List`). The glass card look is preserved via
+/// (`.swipeActions` only exists on `List`) and by reordering (`.onMove` and its
+/// ≡ handle exist nowhere else). The glass card look is preserved via
 /// `.listStyle(.plain)` + cleared row backgrounds / separators. Same kind of
 /// explicit exception as `MenuSettingsScreen+iOS`'s native `List` + `Picker`.
+///
+/// **Rename and reorder are local and user-owned** (`ServerEntry.displayNameOverride`
+/// / `sortIndex`): every row prints `displayName`, and the two fields survive
+/// the probe's metadata write-back and every `upsert` — see the RULE on
+/// `ServerRegistry.upsert`. Reorder follows `PlaylistDetailScreen`'s idiom:
+/// iOS drags in an explicit « Ordonner » edit mode (never forced on — every row
+/// is a switch target, and an always-editing `List` would swallow the tap),
+/// tvOS carries « Monter » / « Descendre » in each card's context menu.
 struct ServersScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -143,9 +152,16 @@ struct ServersScreen: View {
     @State private var pendingSwitchId: String?
     @State private var pendingDeleteId: String?
     @State private var switchingId: String?
+    /// Id of the entry being renamed (same freshness RULE as the two above).
+    @State private var pendingRenameId: String?
+    @State private var renameText = ""
+    #if !os(tvOS)
+    @State private var editMode: EditMode = .inactive
+    #endif
 
-    /// Active first, then most-recently-used (total order — the list never
-    /// reshuffles between renders).
+    /// The user's manual order when there is one, else active first then
+    /// most-recently-used (total order — the list never reshuffles between
+    /// renders). See `ServerRegistry.sorted`.
     private var entries: [ServerEntry] {
         ServerRegistry.sorted(appState.servers, activeId: appState.activeServerId)
     }
@@ -155,6 +171,11 @@ struct ServersScreen: View {
     }
 
     private func name(for id: String) -> String {
+        appState.servers.first(where: { $0.id == id })?.displayName ?? ServerEntry.fallbackName
+    }
+
+    /// The name the SERVER reports — what an empty rename falls back to.
+    private func serverOwnName(for id: String) -> String {
         appState.servers.first(where: { $0.id == id })?.name ?? ServerEntry.fallbackName
     }
 
@@ -199,6 +220,22 @@ struct ServersScreen: View {
         } message: { id in
             Text(loc.localized("servers.delete.confirm", name(for: id)))
         }
+        .alert(
+            loc.localized("servers.rename.title"),
+            isPresented: Binding(
+                get: { pendingRenameId != nil },
+                set: { if !$0 { pendingRenameId = nil } }
+            ),
+            presenting: pendingRenameId
+        ) { id in
+            // The placeholder is the server's own name — exactly what an empty
+            // field falls back to.
+            TextField(serverOwnName(for: id), text: $renameText)
+            Button(loc.localized("action.save")) { commitRename(id: id) }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        } message: { id in
+            Text(loc.localized("servers.rename.message", serverOwnName(for: id)))
+        }
     }
 
     // MARK: - Actions
@@ -213,7 +250,7 @@ struct ServersScreen: View {
 
         switch await appState.switchTo(entry) {
         case .commit:
-            toasts.success(loc.localized("servers.switchedTo", entry.name))
+            toasts.success(loc.localized("servers.switchedTo", entry.displayName))
             dismiss()
         case .offline:
             toasts.error(loc.localized("servers.offline"))
@@ -232,7 +269,35 @@ struct ServersScreen: View {
               entry.id != appState.activeServerId else { return }
         await appState.removeServer(entry)
         viewModel.forget(id: id)
-        toasts.success(loc.localized("servers.deleted", entry.name))
+        toasts.success(loc.localized("servers.deleted", entry.displayName))
+    }
+
+    /// Opens the rename alert pre-filled with the name currently shown.
+    private func beginRename(id: String) {
+        renameText = appState.servers.first(where: { $0.id == id })?.displayName ?? ""
+        pendingRenameId = id
+    }
+
+    /// Toasts only on a real change — saving the field untouched says nothing.
+    private func commitRename(id: String) {
+        let before = appState.servers.first(where: { $0.id == id })?.displayNameOverride
+        guard let updated = appState.renameServer(id: id, to: renameText),
+              updated.displayNameOverride != before else { return }
+        if updated.displayNameOverride == nil {
+            toasts.success(loc.localized("servers.renameReset", updated.name))
+        } else {
+            toasts.success(loc.localized("servers.renamed", updated.displayName))
+        }
+    }
+
+    /// Moves one card a step up (`-1`) or down (`+1`) — tvOS's « Monter » /
+    /// « Descendre ». Always writes the COMPLETE displayed order, the only
+    /// shape `ServerRegistry.applyingOrder` accepts.
+    private func move(id: String, by offset: Int) {
+        var ids = entries.map(\.id)
+        guard let from = ids.firstIndex(of: id), ids.indices.contains(from + offset) else { return }
+        ids.swapAt(from, from + offset)
+        appState.reorderServers(orderedIds: ids)
     }
 
     /// Hands the pre-auth flow over to "add" mode — the root swaps to
@@ -252,7 +317,7 @@ struct ServersScreen: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: CinemaSpacing.spacing2) {
-                    Text(entry.name)
+                    Text(entry.displayName)
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurface)
                         .lineLimit(1)
@@ -286,7 +351,7 @@ struct ServersScreen: View {
     /// Locally drawn identity badge — never `UserAvatar` (see the RULE in the
     /// type header: `imageBuilder` points at the active server).
     private func initialBadge(for entry: ServerEntry) -> some View {
-        let source = entry.username?.isEmpty == false ? entry.username! : entry.name
+        let source = entry.username?.isEmpty == false ? entry.username! : entry.displayName
         return ZStack {
             Circle()
                 .fill(themeManager.accentContainer)
@@ -437,10 +502,27 @@ struct ServersScreen: View {
         }
         .navigationTitle(loc.localized("servers.title"))
         .navigationBarTitleDisplayMode(.inline)
+        .environment(\.editMode, $editMode)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(loc.localized("action.done")) { dismiss() }
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            // Hidden while reordering, so the bar never carries two
+            // « Terminé » with different meanings (dismiss vs. end editing).
+            if !editMode.isEditing {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(loc.localized("action.done")) { dismiss() }
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                }
+            }
+            if entries.count > 1 {
+                ToolbarItem(placement: .primaryAction) {
+                    // NOT the system `EditButton`: it takes its title from the
+                    // DEVICE language, not the app's own (see PlaylistDetailScreen).
+                    Button {
+                        withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                    } label: {
+                        Text(loc.localized(editMode.isEditing ? "action.done" : "servers.reorder"))
+                    }
+                    .tint(themeManager.accent)
+                }
             }
         }
     }
@@ -450,10 +532,36 @@ struct ServersScreen: View {
             ForEach(entries, id: \.id) { entry in
                 iOSRow(entry)
             }
+            .onMove(perform: moveHandler)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .environment(\.defaultMinListRowHeight, 1)
+    }
+
+    /// Only while « Ordonner » is on: outside edit mode a long press is the
+    /// row's context menu (rename), not a drag. Spelled as a typed optional —
+    /// an inline `isEditing ? moveRows : nil` defeats the type checker.
+    private var moveHandler: ((IndexSet, Int) -> Void)? {
+        guard editMode.isEditing else { return nil }
+        return { offsets, destination in moveRows(from: offsets, to: destination) }
+    }
+
+    /// `.onMove` hands an insertion point in the pre-move list; `Array.move`
+    /// speaks the same convention, so no `PlaylistReorder`-style correction is
+    /// needed — the result is the complete new order.
+    private func moveRows(from offsets: IndexSet, to destination: Int) {
+        var ids = entries.map(\.id)
+        ids.move(fromOffsets: offsets, toOffset: destination)
+        appState.reorderServers(orderedIds: ids)
+    }
+
+    private func renameAction(_ entry: ServerEntry) -> some View {
+        Button {
+            beginRename(id: entry.id)
+        } label: {
+            Label(loc.localized("servers.rename"), systemImage: "pencil")
+        }
     }
 
     @ViewBuilder
@@ -470,9 +578,26 @@ struct ServersScreen: View {
                 .contentShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
         }
         .buttonStyle(.plain)
-        // The active card is not a switch target, and no second switch may
-        // start while one is in flight.
-        .disabled(active || switchingId != nil)
+        // The active card is not a switch target, no second switch may start
+        // while one is in flight, and a tap mid-reorder must not open the
+        // switch dialog.
+        .disabled(active || switchingId != nil || editMode.isEditing)
+        // Applied OUTSIDE `.disabled`: the environment flows down, so the menu
+        // stays reachable on the active card — the one most worth renaming.
+        .contextMenu {
+            renameAction(entry)
+            if !active {
+                Button(role: .destructive) {
+                    pendingDeleteId = entry.id
+                } label: {
+                    Label(loc.localized("servers.delete"), systemImage: "trash")
+                }
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            renameAction(entry)
+                .tint(themeManager.accent)
+        }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(
@@ -508,11 +633,12 @@ struct ServersScreen: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                        if entries.isEmpty {
+                        let ordered = entries
+                        if ordered.isEmpty {
                             emptyState
                         } else {
-                            ForEach(entries, id: \.id) { entry in
-                                tvRow(entry)
+                            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, entry in
+                                tvRow(entry, index: index, count: ordered.count)
                             }
                         }
 
@@ -561,14 +687,16 @@ struct ServersScreen: View {
         .focusSection()
     }
 
-    /// One focusable unit per server (never per sub-element). Delete rides a
-    /// `.contextMenu` (long-press-select) — tvOS has no swipe.
+    /// One focusable unit per server (never per sub-element). Rename, the two
+    /// moves and delete ride a `.contextMenu` (long-press-select) — tvOS has no
+    /// swipe and no drag, the same answer `PlaylistDetailScreen` gives.
     ///
     /// The active card stays focusable and merely inert (the guard lives in the
-    /// action, not in `.disabled`): it sorts first, and a disabled first row
-    /// would make focus skip it and read as a missing card.
+    /// action, not in `.disabled`): a disabled card would make focus skip it
+    /// and read as a missing card — and its context menu, rename included,
+    /// would be unreachable.
     @ViewBuilder
-    private func tvRow(_ entry: ServerEntry) -> some View {
+    private func tvRow(_ entry: ServerEntry, index: Int, count: Int) -> some View {
         let active = isActive(entry)
         Button {
             // The active card is focusable but not a switch target. Say so
@@ -576,7 +704,7 @@ struct ServersScreen: View {
             // all reads as a broken row on tvOS, where there is no hover or
             // disabled styling to explain it.
             guard !active else {
-                toasts.info(loc.localized("servers.alreadyCurrent", entry.name))
+                toasts.info(loc.localized("servers.alreadyCurrent", entry.displayName))
                 return
             }
             guard switchingId == nil else { return }
@@ -598,6 +726,25 @@ struct ServersScreen: View {
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .server(entry.id))
         .contextMenu {
+            Button {
+                beginRename(id: entry.id)
+            } label: {
+                Label(loc.localized("servers.rename"), systemImage: "pencil")
+            }
+            if index > 0 {
+                Button {
+                    move(id: entry.id, by: -1)
+                } label: {
+                    Label(loc.localized("servers.moveUp"), systemImage: "arrow.up")
+                }
+            }
+            if index < count - 1 {
+                Button {
+                    move(id: entry.id, by: 1)
+                } label: {
+                    Label(loc.localized("servers.moveDown"), systemImage: "arrow.down")
+                }
+            }
             if !active {
                 Button(role: .destructive) {
                     pendingDeleteId = entry.id

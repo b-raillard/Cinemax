@@ -318,7 +318,9 @@ struct PrivacySecurityScreen: View {
     private func toggleSearchHistory() {
         saveSearchHistory.toggle()
         if !saveSearchHistory {
-            UserDefaults.standard.removeObject(forKey: SettingsKey.searchRecentQueries)
+            // Every server's list, not just the active one: turning capture off
+            // is a privacy promise, and history is per-server now.
+            SearchHistoryStore.clearAll()
         }
     }
 
