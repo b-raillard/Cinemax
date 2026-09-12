@@ -7,8 +7,33 @@ on:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Main gets a group PER COMMIT; a branch keeps one group per ref.
+  #
+  # TWO separate GitHub behaviours were destroying main's own verification, and
+  # `cancel-in-progress` alone only addresses the first:
+  #   1. it cancels the RUNNING run when a newer one joins the group, and main's
+  #      group key used to be a constant (`refs/heads/main`) — so merge N+1
+  #      killed merge N's CI and that commit stayed on main with no result.
+  #   2. GitHub keeps at most ONE pending run per group (`queue: single`, the
+  #      default) and documents that "any existing pending job or workflow in
+  #      the same concurrency group will be canceled and the new queued job or
+  #      workflow will take its place" — so merely queueing instead of
+  #      cancelling would STILL lose every intermediate commit of a burst of 3+.
+  # A per-SHA group settles both: each main run is alone in its group, nothing
+  # cancels it and nothing queues behind it, and a burst verifies in parallel
+  # rather than serially.
+  #
+  # Measured 2026-09-12 on a burst of four merges: `59da476` and `41fce51` ended
+  # `completed/cancelled` and `eb4723b` cancelled `d49a55f`. That is how
+  # `ea96635` came to sit on main carrying a genuinely stale `project.pbxproj`
+  # (three test files missing from the test target) and became the base of four
+  # Dependabot PRs, all four red on a fault none of them had introduced; eight
+  # older cancelled main runs say it had been happening for a while.
+  #
+  # PR behaviour is deliberately UNCHANGED: pushing to a branch still cancels
+  # that branch's previous run, which is what keeps the runner pool free.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
