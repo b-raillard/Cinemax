@@ -29,6 +29,38 @@ final class ContentProvider: TVTopShelfContentProvider {
         let serverURL: URL
         let accessToken: String
         let userId: String
+        /// The app's `privacy.maxContentAge` ceiling. Optional so a blob written
+        /// by a build predating it still decodes — keep in sync with
+        /// `ExtensionSessionBridge.Session`.
+        let maxContentAge: Int?
+    }
+
+    /// Minimal copy of CinemaxKit's `ContentRatingClassifier`: this extension
+    /// deliberately links no package, so the table is duplicated here — the same
+    /// precedent as the three hand-copied `Session` shapes. Locked by the
+    /// extension-parity cases in `ExtensionSessionContractTests`.
+    private enum ContentRating {
+        private static let ageMap: [String: Int] = [
+            "G": 0, "PG": 10, "PG-13": 13, "R": 17, "NC-17": 18,
+            "TV-Y": 0, "TV-Y7": 7, "TV-G": 0, "TV-PG": 10, "TV-14": 14, "TV-MA": 17,
+            "U": 0, "12": 12, "12A": 12, "15": 15, "18": 18,
+            "-10": 10, "-12": 12, "-16": 16, "-18": 18,
+            "TOUS PUBLICS": 0,
+            "FSK-0": 0, "FSK-6": 6, "FSK-12": 12, "FSK-16": 16, "FSK-18": 18
+        ]
+
+        /// Unknown or missing ⇒ `0`, i.e. permissive — the app's own rule, since
+        /// an episode routinely inherits its rating from its series and arrives
+        /// absent.
+        static func age(forRating rating: String?) -> Int {
+            guard let rating else { return 0 }
+            return ageMap[rating.trimmingCharacters(in: .whitespaces).uppercased()] ?? 0
+        }
+
+        static func passes(rating: String?, maxAge: Int?) -> Bool {
+            guard let maxAge, maxAge > 0 else { return true }
+            return age(forRating: rating) <= maxAge
+        }
     }
 
     private struct ItemsResponse: Decodable, Sendable {
@@ -42,9 +74,11 @@ final class ContentProvider: TVTopShelfContentProvider {
         let seriesName: String?
         let seriesId: String?
         let parentBackdropItemId: String?
+        let officialRating: String?
         enum CodingKeys: String, CodingKey {
             case id = "Id", name = "Name", seriesName = "SeriesName"
             case seriesId = "SeriesId", parentBackdropItemId = "ParentBackdropItemId"
+            case officialRating = "OfficialRating"
         }
     }
 
@@ -194,7 +228,13 @@ final class ContentProvider: TVTopShelfContentProvider {
         comps.queryItems = [
             URLQueryItem(name: "userId", value: session.userId),
             URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "mediaTypes", value: "Video")
+            URLQueryItem(name: "mediaTypes", value: "Video"),
+            // `OfficialRating` is asked for EXPLICITLY rather than relying on the
+            // server's default field set: measured on the captured fixtures of
+            // all three supported generations, `/UserItems/Resume` returns it
+            // unasked but `/Shows/NextUp` returns it on none — so the app-side
+            // habit of not asking is not a guarantee to inherit here.
+            URLQueryItem(name: "fields", value: "OfficialRating")
         ]
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
@@ -202,7 +242,11 @@ final class ContentProvider: TVTopShelfContentProvider {
         guard let (data, resp) = try? await httpSession.data(for: request),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
-        return decoded.items
+        // The Apple TV shelf is the family screen: without this, a title rated
+        // above the user's cap reached it with no interaction at all (#230).
+        return decoded.items.filter {
+            ContentRating.passes(rating: $0.officialRating, maxAge: session.maxContentAge)
+        }
     }
 
     /// The ONE place the token legitimately stays in a URL: these URLs are handed

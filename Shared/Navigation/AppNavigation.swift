@@ -162,7 +162,15 @@ final class AppState {
         // Single hook covering all three session-establishing paths (login,
         // user switch, restore): hand the session to the widget / Top Shelf
         // extensions via the App Group.
-        ExtensionSessionBridge.publish(serverURL: serverURL, accessToken: accessToken, userId: currentUserId)
+        // The parental cap travels with the session: it lives in app-private
+        // `UserDefaults`, which the extensions cannot read, so without this the
+        // widget and the Top Shelf display titles the app itself hides (#230).
+        ExtensionSessionBridge.publish(
+            serverURL: serverURL,
+            accessToken: accessToken,
+            userId: currentUserId,
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        )
         guard let id = currentUserId else {
             currentUser = nil
             isAdministrator = false
@@ -636,6 +644,25 @@ final class AppState {
     /// Removes a NON-active server. The active one is never deletable — the user
     /// has to switch away first (mirrors the "THIS DEVICE" rule in the connected
     /// devices list).
+    /// Re-publishes the extension session snapshot so the widget and the Top
+    /// Shelf pick up a changed parental cap.
+    ///
+    /// Needed because `refreshCurrentUser()` — the only publisher — runs on
+    /// session-establishing paths and on foreground, NOT when the user edits the
+    /// cap. Without this the extensions would keep the old ceiling until the next
+    /// login or app foreground, i.e. the setting would look applied and not be.
+    /// `publish` is already idempotent (in-process memo + field-wise Keychain
+    /// compare), and the cap is part of `Session`, so an unchanged cap costs
+    /// nothing and a changed one is written and pokes both extensions.
+    func republishExtensionSession() {
+        ExtensionSessionBridge.publish(
+            serverURL: serverURL,
+            accessToken: accessToken,
+            userId: currentUserId,
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        )
+    }
+
     func removeServer(_ entry: ServerEntry) async {
         guard entry.id != activeServerId else { return }
         revokeSessionInBackground(for: entry)
@@ -667,7 +694,7 @@ final class AppState {
         if let active { clearSession(of: active) }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
-        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil)
+        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil)
         serverTransitionGeneration &+= 1
         isAuthenticated = false
         currentUserId = nil
