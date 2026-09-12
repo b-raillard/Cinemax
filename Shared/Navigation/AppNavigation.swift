@@ -873,10 +873,19 @@ struct AppNavigation: View {
             }
         }
     }
+    /// MetricKit subscription, once per process for the same reason as
+    /// `configurePipeline`: scene events recreate this struct. iOS only — every
+    /// MetricKit class is `API_UNAVAILABLE(tvos)`. See `MetricKitSubscriber`.
+    private static let registerMetricKit: Void = {
+        MetricKitSubscriber.register()
+    }()
     #endif
 
     init() {
         _ = Self.configurePipeline
+        #if os(iOS)
+        _ = Self.registerMetricKit
+        #endif
     }
 
     var body: some View {

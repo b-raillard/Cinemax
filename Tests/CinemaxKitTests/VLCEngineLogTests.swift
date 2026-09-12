@@ -1,22 +1,24 @@
 import Testing
 @testable import Cinemax
 
-/// `VLCEngineLog.scrubbed` is the guard between libVLC's own log messages and
-/// OSLog. libVLC logs the URLs it opens and ours carry the account token as an
-/// `api_key` query item, so any message reaching the system log must have that
-/// value stripped — the `redactedURL` rule, applied to text we don't author.
-@Suite("VLCEngineLog.scrubbed")
+/// `LogScrubber.scrubbed` (formerly `VLCEngineLog.scrubbed`) is the guard
+/// between libVLC's own log messages and OSLog, and between OSLog and the
+/// diagnostics export. libVLC logs the URLs it opens and ours carry the account
+/// token as an `ApiKey` query item, so any message reaching the system log must
+/// have that value stripped — the `redactedURL` rule, applied to text we don't
+/// author. The export-specific markers are locked in `DiagnosticsTests`.
+@Suite("LogScrubber.scrubbed")
 struct VLCEngineLogTests {
 
     @Test("message without a token is returned untouched")
     func passthrough() {
         let message = "main input error: Your input can't be opened"
-        #expect(VLCEngineLog.scrubbed(message) == message)
+        #expect(LogScrubber.scrubbed(message) == message)
     }
 
     @Test("token value is replaced, and the query items after it survive")
     func stripsTokenKeepingTrailingQuery() {
-        let scrubbed = VLCEngineLog.scrubbed(
+        let scrubbed = LogScrubber.scrubbed(
             "http debug: opening https://h/Videos/1/stream?api_key=abc123&static=true"
         )
         #expect(scrubbed == "http debug: opening https://h/Videos/1/stream?api_key=***&static=true")
@@ -25,25 +27,25 @@ struct VLCEngineLogTests {
 
     @Test("token at end of message is stripped")
     func stripsTokenAtEnd() {
-        let scrubbed = VLCEngineLog.scrubbed("access error: https://h/s?api_key=deadbeef")
+        let scrubbed = LogScrubber.scrubbed("access error: https://h/s?api_key=deadbeef")
         #expect(scrubbed == "access error: https://h/s?api_key=***")
     }
 
     @Test("token followed by a space or quote ends at the delimiter")
     func stopsAtDelimiters() {
         #expect(
-            VLCEngineLog.scrubbed("url 'https://h/s?api_key=tok' failed")
+            LogScrubber.scrubbed("url 'https://h/s?api_key=tok' failed")
                 == "url 'https://h/s?api_key=***' failed"
         )
         #expect(
-            VLCEngineLog.scrubbed("api_key=tok some trailing words")
+            LogScrubber.scrubbed("api_key=tok some trailing words")
                 == "api_key=*** some trailing words"
         )
     }
 
     @Test("every occurrence is scrubbed, not just the first")
     func stripsEveryOccurrence() {
-        let scrubbed = VLCEngineLog.scrubbed(
+        let scrubbed = LogScrubber.scrubbed(
             "retry https://h/a?api_key=one&x=1 after https://h/b?api_key=two"
         )
         #expect(scrubbed == "retry https://h/a?api_key=***&x=1 after https://h/b?api_key=***")
@@ -53,7 +55,7 @@ struct VLCEngineLogTests {
 
     @Test("an empty token value stays scrubbed rather than dropping the marker")
     func handlesEmptyValue() {
-        #expect(VLCEngineLog.scrubbed("s?api_key=&x=1") == "s?api_key=***&x=1")
+        #expect(LogScrubber.scrubbed("s?api_key=&x=1") == "s?api_key=***&x=1")
     }
 
     // `ApiKey` is the query name Jellyfin keeps once legacy authorization is
@@ -64,7 +66,7 @@ struct VLCEngineLogTests {
 
     @Test("the ApiKey spelling is scrubbed too")
     func stripsApiKeySpelling() {
-        let scrubbed = VLCEngineLog.scrubbed(
+        let scrubbed = LogScrubber.scrubbed(
             "http debug: opening https://h/Videos/1/stream?ApiKey=abc123&static=true"
         )
         #expect(scrubbed == "http debug: opening https://h/Videos/1/stream?ApiKey=***&static=true")
@@ -73,7 +75,7 @@ struct VLCEngineLogTests {
 
     @Test("the server-emitted transcode URL, which carries ApiKey mid-query, is scrubbed")
     func stripsServerTranscodeURL() {
-        let scrubbed = VLCEngineLog.scrubbed(
+        let scrubbed = LogScrubber.scrubbed(
             "opening https://h/videos/1/master.m3u8?DeviceId=d&MediaSourceId=m&ApiKey=tok&PlaySessionId=p"
         )
         #expect(scrubbed == "opening https://h/videos/1/master.m3u8?DeviceId=d&MediaSourceId=m&ApiKey=***&PlaySessionId=p")
@@ -81,14 +83,14 @@ struct VLCEngineLogTests {
 
     @Test("both spellings in one message are scrubbed, whatever their order")
     func stripsMixedSpellings() {
-        let scrubbed = VLCEngineLog.scrubbed("a?ApiKey=one&api_key=two b?api_key=three&ApiKey=four")
+        let scrubbed = LogScrubber.scrubbed("a?ApiKey=one&api_key=two b?api_key=three&ApiKey=four")
         #expect(scrubbed == "a?ApiKey=***&api_key=*** b?api_key=***&ApiKey=***")
     }
 
     @Test("marker match is case-insensitive, and the message's own spelling is kept")
     func caseInsensitiveMarker() {
-        #expect(VLCEngineLog.scrubbed("s?APIKEY=tok&x=1") == "s?APIKEY=***&x=1")
-        #expect(VLCEngineLog.scrubbed("s?Api_Key=tok") == "s?Api_Key=***")
+        #expect(LogScrubber.scrubbed("s?APIKEY=tok&x=1") == "s?APIKEY=***&x=1")
+        #expect(LogScrubber.scrubbed("s?Api_Key=tok") == "s?Api_Key=***")
     }
 }
 
