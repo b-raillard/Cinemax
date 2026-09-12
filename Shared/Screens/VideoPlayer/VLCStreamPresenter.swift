@@ -109,8 +109,9 @@ final class VLCStreamPresenter: NSObject {
     // MARK: - Helpers
 
     /// libVLC can't reliably inject arbitrary HTTP headers across versions, so
-    /// authenticate via Jellyfin's `ApiKey` query param instead of the
-    /// `Authorization: MediaBrowser Token=…` header AVURLAsset uses.
+    /// when a URL libVLC opens must carry the account token, it rides Jellyfin's
+    /// `ApiKey` query param instead of the `Authorization: MediaBrowser Token=…`
+    /// header AVURLAsset uses. Stream opens decide THAT through `streamURL`.
     ///
     /// `ApiKey`, never `api_key`: the latter is a legacy spelling that Jellyfin
     /// 12.0 rejects by default (`EnableLegacyAuthorization = false`), while
@@ -119,18 +120,45 @@ final class VLCStreamPresenter: NSObject {
     /// the case-insensitive presence test — comparing against `api_key` alone
     /// sent the forced-transcode URL out with the token under both names.
     nonisolated static func authedURL(_ url: URL, token: String?) -> URL {
-        guard let token, !token.isEmpty,
+        guard let token, !token.isEmpty, !carriesApiKey(url),
               var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         var items = comps.queryItems ?? []
-        let carriesToken = items.contains { item in
+        items.append(URLQueryItem(name: "ApiKey", value: token))
+        comps.queryItems = items
+        return comps.url ?? url
+    }
+
+    /// Whether `url` already names a token in its query, under either spelling.
+    nonisolated static func carriesApiKey(_ url: URL) -> Bool {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return items.contains { item in
             let name = item.name.lowercased()
             return name == "apikey" || name == "api_key"
         }
-        if !carriesToken {
-            items.append(URLQueryItem(name: "ApiKey", value: token))
-        }
-        comps.queryItems = items
-        return comps.url ?? url
+    }
+
+    /// The URL a stream open hands on — to libVLC directly, or to the loopback
+    /// proxy as its origin target. The ONE place that decides whether the
+    /// account token rides the query string (#184):
+    ///
+    /// | route  | first open        | retry after a failure |
+    /// |--------|-------------------|-----------------------|
+    /// | direct | no token          | `ApiKey`              |
+    /// | proxy  | no token (header) | no token (header)     |
+    ///
+    /// - DirectPlay `/Videos/{id}/stream` carries no `[Authorize]` on any server
+    ///   the app supports (`VideosController`, 10.9 → 12.0; streamed anonymously
+    ///   on 10.11.11), so the token there did nothing but land in reverse-proxy
+    ///   and CDN access logs.
+    /// - A DIRECT retry puts it back, so a future server that adds `[Authorize]`
+    ///   to that route costs one failed attempt, never a dead playback.
+    /// - Through the proxy the token never needs to be in the URL: the proxy
+    ///   sends it to the origin as an `Authorization` header, retry included.
+    /// - A forced-transcode `TranscodingUrl` arrives with the server's OWN
+    ///   `ApiKey` (and `authToken == nil`): untouched on every row, never doubled.
+    nonisolated static func streamURL(_ url: URL, token: String?, isRetry: Bool, viaProxy: Bool) -> URL {
+        guard isRetry, !viaProxy else { return url }
+        return authedURL(url, token: token)
     }
 
     private static func topMostViewController() -> UIViewController? {
@@ -3292,8 +3320,41 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// it serves an HLS tree as readily as a single file, and the manifest
     /// refusal that used to live here would defeat the only working path on a
     /// network where `getaddrinfo` fails.
-    private func proxiedURLIfUsable(for authed: URL, token: String?) -> URL? {
-        StreamTransportPolicy.shared.proxiedURL(for: authed, token: token)
+    private func proxiedURLIfUsable(for target: URL, token: String?) -> URL? {
+        StreamTransportPolicy.shared.proxiedURL(for: target, token: token)
+    }
+
+    /// The URL to open for `info` on all four open paths (fresh open, error
+    /// retry, wake re-resolve, episode nav): through the loopback proxy when
+    /// `tryProxy` and it can start, else direct. Where the token goes is
+    /// `VLCStreamPresenter.streamURL`'s call, keyed on `didRetry` — the flag
+    /// that bounds the retry, so the token comes back on exactly the one
+    /// attempt that follows a failure, and only `noteMediaOpened()` stands it
+    /// down again.
+    private func streamOpenURL(for info: PlaybackInfo, tryProxy: Bool) -> (url: URL, viaProxy: Bool) {
+        let isRetry = didRetry
+        let token = info.authToken
+        let opened: (url: URL, viaProxy: Bool)
+        if tryProxy,
+           let proxied = proxiedURLIfUsable(
+               for: VLCStreamPresenter.streamURL(info.url, token: token, isRetry: isRetry, viaProxy: true),
+               token: token
+           ) {
+            opened = (proxied, true)
+        } else {
+            opened = (VLCStreamPresenter.streamURL(info.url, token: token, isRetry: isRetry, viaProxy: false), false)
+        }
+        // Where the token went — never the token itself.
+        let auth: String
+        if opened.viaProxy, token?.isEmpty == false {
+            auth = "en-tête"
+        } else if VLCStreamPresenter.carriesApiKey(opened.url) {
+            auth = "ApiKey dans l'URL"
+        } else {
+            auth = "aucun"
+        }
+        logger.notice("CINEMAX-STREAM ▸ ouverture \(isRetry ? "après échec" : "initiale", privacy: .public) voie=\(opened.viaProxy ? "proxy" : "directe", privacy: .public) jeton=\(auth, privacy: .public)")
+        return opened
     }
 
     private func startPlayback() {
@@ -3309,18 +3370,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         resolvedIsEpisode = nil
         audioDelayMsState = 0
         subtitleDelayMsState = 0
-        let url: URL
-        let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
         // Broken-IPv6 server (decided in the background), direct already
         // failed this session, or a seek-heavy container (AVI…): route via
         // the loopback proxy; fall back to the direct URL if it can't start.
-        if shouldRouteThroughProxy,
-           let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
-            url = proxied
-            usingProxy = true
-        } else {
-            url = authed
-        }
+        let (url, viaProxy) = streamOpenURL(for: info, tryProxy: shouldRouteThroughProxy)
+        usingProxy = viaProxy
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
         activateSessionThenPlay(media)
@@ -3712,17 +3766,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.nextEpisode = nav?.1
             self.refreshEpisodeButtons()
             self.titleLabel.text = ref.title
-            let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
-            let url: URL
             // Carry the proxy across episodes when the server needs it.
-            if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = self.proxiedURLIfUsable(for: authed, token: vlcInfo.authToken) {
-                url = proxied
-                self.usingProxy = true
-            } else {
-                url = authed
-                self.usingProxy = false
-            }
+            let (url, viaProxy) = self.streamOpenURL(
+                for: vlcInfo, tryProxy: self.usingProxy || self.shouldRouteThroughProxy
+            )
+            self.usingProxy = viaProxy
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.beginOpenLoading()
             // The episode we're leaving can have died during a device sleep, which
@@ -4429,7 +4477,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
-            let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
             // A direct attempt failed: pin the rest of the session to the proxy
             // so we stop re-rolling the dice on the flaky direct path. This is
             // unconditional again now that the proxy can serve a manifest —
@@ -4438,14 +4485,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // (measured: libVLC `cannot resolve` while URLSession returns 200).
             if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
             // Always retry via the proxy (direct is the path that stalls on
-            // broken IPv6); fall back to direct only if it can't start.
-            let url: URL
-            if let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
-                url = proxied
-                usingProxy = true
-            } else {
-                url = authed
-            }
+            // broken IPv6, and the proxy authenticates by header); fall back to
+            // direct only if it can't start — the one open that carries
+            // `ApiKey` (see `streamURL`).
+            let (url, viaProxy) = streamOpenURL(for: info, tryProxy: true)
+            if viaProxy { usingProxy = true }
             if let media = try? Media(url: url) {
                 media.addOption(":network-caching=5000")
                 recordPlaybackDiagnostics()
@@ -4673,16 +4717,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didApplyServerTrackDefaults = false
             self.mediaLengthMs = 0
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
-            let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
-            let url: URL
-            if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = self.proxiedURLIfUsable(for: authed, token: fresh.authToken) {
-                url = proxied
-                self.usingProxy = true
-            } else {
-                url = authed
-                self.usingProxy = false
-            }
+            let (url, viaProxy) = self.streamOpenURL(
+                for: fresh, tryProxy: self.usingProxy || self.shouldRouteThroughProxy
+            )
+            self.usingProxy = viaProxy
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.beginOpenLoading()
             // Re-assert the playback session BEFORE replay: the system deactivated
