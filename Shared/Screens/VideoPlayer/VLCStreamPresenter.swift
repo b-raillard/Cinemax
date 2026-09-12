@@ -489,9 +489,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // SwiftVLC end-of-media disambiguation: `.stopped` fires for natural end,
     // teardown, AND media swap. `isTearingDown` suppresses end handling during
     // dismissal; `lastPlayStart` ignores the `.stopped` that can follow a
-    // fresh `play(media)` (old media winding down).
+    // fresh `play(media)` (old media winding down). It is nil from the moment
+    // a fresh open begins (`beginOpenLoading()`) until that open's `play()`:
+    // every stop in that gap belongs to the media being replaced, which is
+    // also what keeps a failed attempt's trailing `.stopped` from being handled
+    // a second time once its retry is under way.
     private var isTearingDown = false
-    private var lastPlayStart = Date.distantPast
+    private var lastPlayStart: Date?
 
     // Episode-nav race guard (same pattern as NowPlayingInfoController):
     // bumped at every navigateToEpisode call and re-checked after its awaits so
@@ -905,6 +909,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// episode nav) invalidates "we know a demuxer exists".
     private func beginOpenLoading() {
         mediaConfirmedOpen = false
+        // Until this open reaches its `play()`, any `.stopped` is the media it
+        // replaces winding down — including the trailing stop of an attempt
+        // whose failure is already being retried. See `PlaybackEndPolicy`.
+        lastPlayStart = nil
         // Fresh open ⇒ libVLC re-selects every module; drop facts learned from
         // the previous media so the stats HUD can't show a stale decode chain.
         VLCEngineFacts.shared.reset()
@@ -3329,6 +3337,50 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         openWatchdog = nil
     }
 
+    /// The media libVLC is opening is an HLS playlist (the forced transcode of
+    /// a seek-heavy container). Same test the proxy applies to what it forwards.
+    private var isAdaptiveStream: Bool {
+        CinemaxStreamProxy.isManifest(path: info.url.path)
+    }
+
+    /// Nothing is opening or playing: the engine ended, is ending, or never
+    /// started. What `PlaybackEndPolicy` calls `engineStopped` on a recheck.
+    private var engineIsStopped: Bool {
+        switch player.state {
+        case .stopped, .stopping, .error, .idle: return true
+        case .opening, .buffering, .playing, .paused: return false
+        }
+    }
+
+    /// A never-opened HLS stop that landed inside the media-swap window could be
+    /// the media we just replaced winding down. Ask the policy again once the
+    /// window is over, with the engine's state at that moment: a swap has the
+    /// new media opening by then, a failed open is still stopped. Without this,
+    /// a fast manifest failure fell through to the open watchdog, which gives
+    /// the retry 30 s.
+    ///
+    /// Tied to the `play()` the stop was measured against: a newer open (the
+    /// retry, an episode nav, a wake re-resolve) moves `lastPlayStart`, and the
+    /// recheck then does nothing. It never schedules another recheck.
+    private func scheduleFailedOpenRecheck(after delay: TimeInterval) {
+        guard let attempt = lastPlayStart else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, self.lastPlayStart == attempt else { return }
+            let decision = PlaybackEndPolicy.decide(
+                isTearingDown: self.isTearingDown,
+                secondsSincePlayStart: Date().timeIntervalSince(attempt),
+                currentMs: Int64(self.currentMs), lengthMs: Int64(self.lengthMs),
+                mediaConfirmedOpen: self.mediaConfirmedOpen,
+                isAdaptiveStream: self.isAdaptiveStream,
+                engineStopped: self.engineIsStopped
+            )
+            guard decision == .failedOpen else { return }
+            logger.error("VLC HLS stream of \(self.itemId, privacy: .public) still stopped after the swap window — retrying now")
+            self.handlePlaybackError()
+        }
+    }
+
     /// The media is CONFIRMED open — a real length or a moving playhead, the
     /// only two signals libVLC gives that a demuxer actually exists. Stands the
     /// watchdog down, drops a stale error alert, and renews the retry budget so
@@ -4066,17 +4118,31 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // teardown, error and real EOF arrives here. Log the four gate
             // inputs so a missing end-of-series card can be attributed to the
             // gate rather than guessed at.
+            // nil ⇒ a fresh open has not reached its play() yet (logged as -1).
+            let sincePlay = lastPlayStart.map { Date().timeIntervalSince($0) }
             logger.notice("""
                 end-gate .stopped tearingDown=\(self.isTearingDown, privacy: .public) \
-                sincePlay=\(Date().timeIntervalSince(self.lastPlayStart), format: .fixed(precision: 2), privacy: .public) \
-                currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public)
+                sincePlay=\(sincePlay ?? -1, format: .fixed(precision: 2), privacy: .public) \
+                currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public) \
+                opened=\(self.mediaConfirmedOpen, privacy: .public) hls=\(self.isAdaptiveStream, privacy: .public)
                 """)
             switch PlaybackEndPolicy.decide(
                 isTearingDown: isTearingDown,
-                secondsSincePlayStart: Date().timeIntervalSince(lastPlayStart),
+                secondsSincePlayStart: sincePlay,
                 currentMs: Int64(currentMs), lengthMs: Int64(lengthMs),
-                mediaConfirmedOpen: mediaConfirmedOpen
+                mediaConfirmedOpen: mediaConfirmedOpen,
+                isAdaptiveStream: isAdaptiveStream
             ) {
+            case .failedOpen:
+                // The HLS manifest never produced a demuxer (an origin RST on
+                // the playlist fetch is the measured cause). libVLC reports a
+                // clean stop with no error, so this used to wait out the whole
+                // open watchdog on a frozen 0:00. The retry branch reopens
+                // through the proxy and, on a second failure, shows the alert.
+                logger.error("VLC stopped before the HLS stream of \(self.itemId, privacy: .public) ever opened — retrying now")
+                handlePlaybackError()
+            case .recheck(let delay):
+                scheduleFailedOpenRecheck(after: delay)
             case .ended:
                 handlePlaybackEnded()
             case .unexpectedStop:
@@ -4384,6 +4450,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }
             return
         }
+        // Already given up and on screen: a second signal of the SAME failure
+        // (its trailing `.stopped`, a late watchdog) must neither stack another
+        // alert nor release the server session twice.
+        guard errorAlert == nil else { return }
         logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
         releaseServerSessionAfterFailure()
         setLoading(false) // the error dialog now owns the screen
