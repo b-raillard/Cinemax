@@ -167,6 +167,11 @@ struct SettingsScreen: View {
     @State var showWatchedHistory = false
     @State var showProfile = false
     @State var showServers = false
+    /// The first-run introduction, re-opened from Réglages → Serveur. The
+    /// screen is the same one `AppNavigation` shows at first run — only
+    /// `isReplay` differs, which is what `OnboardingExit` keys the tvOS Menu
+    /// button on.
+    @State var showOnboarding = false
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
     /// "Quick Connect" (authorize) row so we never surface a flow the server
@@ -402,6 +407,7 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .sheet(isPresented: $showServers) { serversSheet }
+        .sheet(isPresented: $showOnboarding) { onboardingSheet }
         .sheet(isPresented: $showProfile) { profileSheet }
         #else
         .fullScreenCover(isPresented: $showLicenses) { licensesSheet }
@@ -410,6 +416,7 @@ struct SettingsScreen: View {
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .fullScreenCover(isPresented: $showServers) { serversSheet }
+        .fullScreenCover(isPresented: $showOnboarding) { onboardingSheet }
         .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
     }
@@ -433,6 +440,14 @@ struct SettingsScreen: View {
         if case .switchedTo(let entry) = outcome {
             toasts.success(loc.localized("servers.switchedTo", entry.displayName))
         }
+    }
+
+    private var onboardingSheet: some View {
+        OnboardingScreen(isReplay: true) { showOnboarding = false }
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
     }
 
     private var serversSheet: some View {

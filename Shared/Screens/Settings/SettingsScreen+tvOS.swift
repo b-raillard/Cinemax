@@ -446,6 +446,14 @@ extension SettingsScreen {
                 showsChevron: true,
                 action: { showServers = true }
             )
+
+            tvActionRow(
+                id: "discover",
+                icon: "sparkles",
+                label: loc.localized("settings.discoverApp"),
+                showsChevron: true,
+                action: { showOnboarding = true }
+            )
         }
     }
 

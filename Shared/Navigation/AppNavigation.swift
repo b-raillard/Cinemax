@@ -841,6 +841,10 @@ struct AppNavigation: View {
     /// so flipping the toggle in Settings re-runs `onChange` and withdraws (or
     /// re-publishes) the capability declaration immediately.
     @AppStorage(SettingsKey.remoteControlEnabled) private var remoteControlEnabled: Bool = SettingsKey.Default.remoteControlEnabled
+    /// Whether the first-run introduction has been finished, skipped, or made
+    /// moot by a launch that already knew a server. Read ONLY through
+    /// `OnboardingPolicy` — see its two decisions.
+    @AppStorage(SettingsKey.onboardingSeen) private var onboardingSeen: Bool = SettingsKey.Default.onboardingSeen
 
     /// SwiftUI may recreate the root `AppNavigation` struct on scene events;
     /// guard the one-time `ImagePipeline.shared` replacement so we don't throw
@@ -898,6 +902,20 @@ struct AppNavigation: View {
             Group {
                 if !hasCheckedSession {
                     launchScreen
+                } else if OnboardingPolicy.shouldShow(
+                    seen: onboardingSeen,
+                    hasRegisteredServer: !appState.servers.isEmpty,
+                    hasServer: appState.hasServer,
+                    isAddingServer: appState.isAddingServer
+                ) {
+                    // Deliberately BELOW the session check and ABOVE the
+                    // no-server branch: before `hasCheckedSession` it would
+                    // flash over a session still being restored on every cold
+                    // launch, and after `ServerSetupScreen` it could never show.
+                    // `OnboardingPolicy` owns who qualifies — an upgrade, a
+                    // logout from the only server and an add from Réglages all
+                    // resolve to false there.
+                    OnboardingScreen(isReplay: false) { onboardingSeen = true }
                 } else if !appState.hasServer {
                     ServerSetupScreen()
                 } else if !appState.isAuthenticated {
@@ -1001,6 +1019,17 @@ struct AppNavigation: View {
             // it; `onChange(of: loc.languageCode)` below keeps it current.
             appState.apiClient.setPreferredLanguage(loc.languageCode)
             await appState.restoreSession()
+            // An install that already knows a server is not a first run whatever
+            // the flag says — it upgraded from a version without onboarding.
+            // Latching here is what keeps that user out for good: without it,
+            // deleting their last server from the list would empty the registry
+            // and the gate above would greet them as a newcomer.
+            if OnboardingPolicy.shouldStampSeen(
+                hasRegisteredServer: !appState.servers.isEmpty,
+                hasServer: appState.hasServer
+            ) {
+                onboardingSeen = true
+            }
             hasCheckedSession = true
             // Baseline attach so the menu editor has an API client even with
             // no session. The library-mode view refresh is NOT triggered here:
