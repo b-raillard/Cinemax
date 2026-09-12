@@ -25,10 +25,38 @@ private let logger = Logger(subsystem: "com.cinemax", category: "libVLC")
 /// ["--verbose=0"])` injected via `Player(instance:)` — the shim's `vsnprintf`
 /// runs before the level filter, so only reduced verbosity avoids it.
 enum VLCEngineLog {
-    /// Idempotent — the `static let` body runs once per process.
-    static func installOnce() { _ = installed }
+    /// Installs the log bridge on ONE libVLC instance, at most once per instance.
+    ///
+    /// **RULE — this takes the instance the player actually uses, and is NOT a
+    /// once-per-process install.** `libvlc_log_set` is per instance, so a player
+    /// built with a dedicated `VLCInstance` (which subtitle styling does — see
+    /// `SubtitleStyleOptions`) would be covered by nothing if this stayed bound
+    /// to `VLCInstance.shared`: the loss is silent and costs `VLCEngineFacts`
+    /// (the HUD's hardware-vs-software decode line, the only ground truth for
+    /// stutter diagnosis) **and** the stderr capture that keeps tokens out of the
+    /// system log via `LogScrubber`. On the default path the argument still IS
+    /// `VLCInstance.shared`, so nothing changes for anybody who has not touched
+    /// the appearance settings.
+    @MainActor
+    static func install(on instance: VLCInstance) {
+        guard installedInstances.insert(ObjectIdentifier(instance)).inserted else { return }
+        // The stream is obtained HERE, on the main actor, and only the stream is
+        // captured by the task below: `AsyncStream` of a Sendable element is
+        // itself Sendable, whereas capturing the instance would be a region
+        // transfer of a non-Sendable class (same discipline as `JellyfinSocket`).
+        consume(instance.logStream(minimumLevel: .debug))
+    }
 
-    private static let installed: Bool = {
+    /// Instances already bridged. Never pruned: an instance whose player is gone
+    /// has released its stream (whose `onTermination` calls `libvlc_log_unset`),
+    /// and an `ObjectIdentifier` of a freed object can only collide with a new
+    /// instance allocated at the same address — which would merely skip a second
+    /// subscription for a stream that is already being consumed. The set holds at
+    /// most one entry per distinct styling configuration used in a session.
+    @MainActor
+    private static var installedInstances: Set<ObjectIdentifier> = []
+
+    private static func consume(_ stream: AsyncStream<LogEntry>) {
         // The stream must be consumed for the process's lifetime: its
         // `onTermination` calls `libvlc_log_unset`, which would hand stderr back.
         //
@@ -40,7 +68,7 @@ enum VLCEngineLog {
         // header note), so the widened subscription only adds the Swift-side
         // triage below — two `hasPrefix` checks on the fast path.
         Task.detached(priority: .utility) {
-            for await entry in VLCInstance.shared.logStream(minimumLevel: .debug) {
+            for await entry in stream {
                 if entry.level >= .warning {
                     let module = entry.module ?? "?"
                     let message = LogScrubber.scrubbed(entry.message)
@@ -62,8 +90,7 @@ enum VLCEngineLog {
                 }
             }
         }
-        return true
-    }()
+    }
 
     /// Parses the core's module-selection lines:
     /// `using video decoder module "videotoolbox"` → `("video decoder", "videotoolbox")`
@@ -115,6 +142,37 @@ enum VLCEngineLog {
 
     // Token scrubbing lives in `LogScrubber` (Shared/Diagnostics), the SSOT
     // shared with the diagnostics export — never re-implement it here.
+}
+
+/// Owns ONE libVLC instance together with its player.
+///
+/// It exists because SwiftVLC keeps `Player.instance` internal to its own
+/// module: the app cannot ask a player which instance it runs on, and
+/// `VLCEngineLog.install(on:)` needs exactly that. Creating both here also means
+/// the log bridge can never be forgotten — it is installed in this initialiser,
+/// beside the instance it belongs to.
+///
+/// **RULE — no styling ⇒ `VLCInstance.shared`.** `SubtitleStyleOptions`
+/// deliberately emits no arguments while the user has changed nothing, and this
+/// initialiser turns that into "reuse the shared instance", so the default path
+/// pays neither libVLC's plugin scan nor a second log subscription. A failed
+/// instance creation also falls back to the shared one: losing a styling
+/// preference is an acceptable outcome, losing playback is not.
+@MainActor
+final class StyledVLCEngine {
+    let instance: VLCInstance
+    let player: Player
+
+    init(style: SubtitleStyleOptions = .current()) {
+        let arguments = style.libVLCArguments
+        if arguments.isEmpty {
+            instance = .shared
+        } else {
+            instance = (try? VLCInstance(arguments: VLCInstance.defaultArguments + arguments)) ?? .shared
+        }
+        player = Player(instance: instance)
+        VLCEngineLog.install(on: instance)
+    }
 }
 
 /// The engine facts the log stream has learned about the CURRENT media: which

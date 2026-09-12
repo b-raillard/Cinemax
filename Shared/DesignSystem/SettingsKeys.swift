@@ -25,6 +25,13 @@ enum SettingsKey {
     static let autoSkipIntro = "playback.autoSkipIntro"
     static let autoSkipCredits = "playback.autoSkipCredits"
     static let subtitleTextSize = "playback.subtitleTextSize"
+    /// Subtitle appearance on the VLC path (#162) — read ONLY through
+    /// `SubtitleStyleOptions`, which turns the three together into libVLC
+    /// instance arguments and emits none at all while they are all at their
+    /// default. Applied at the next player creation, never live.
+    static let subtitleColor = "playback.subtitleColor"
+    static let subtitleOutline = "playback.subtitleOutline"
+    static let subtitleBackground = "playback.subtitleBackground"
     static let sleepTimerDefaultMinutes = "sleepTimerDefaultMinutes"
     /// When `true`, online playback uses the native `AVPlayer` engine (AVKit
     /// chrome) instead of the default VLC engine. VLC DirectPlays MKV/HEVC/DV
@@ -165,6 +172,12 @@ enum SettingsKey {
         /// 100 % — the engine's own default, so an untouched install renders
         /// subtitles exactly as it did before this setting existed.
         static let subtitleTextSize = 100
+        /// The engine's own appearance defaults, so an untouched install passes
+        /// libVLC no styling arguments whatsoever — see the RULE on
+        /// `SubtitleStyleOptions`.
+        static let subtitleColor = "white"
+        static let subtitleOutline = "normal"
+        static let subtitleBackground = "none"
         static let sleepTimerDefaultMinutes = 0
         static let forceNativeAVPlayer = false
         static let playbackLiveActivity = true
