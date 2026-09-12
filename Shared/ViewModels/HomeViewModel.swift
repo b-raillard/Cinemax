@@ -20,6 +20,15 @@ struct GenreRow: Identifiable, Equatable {
     var id: String { genre }
 }
 
+/// The « Parce que vous avez vu … » rail: the title that seeded it (the
+/// series' name when the last played item was an episode) and what the
+/// server finds similar to it, minus what the user has already watched or is
+/// in the middle of. `nil` on the view model means "hide the rail".
+struct BecauseYouWatchedRail: Equatable {
+    let seedTitle: String
+    let items: [BaseItemDto]
+}
+
 @MainActor @Observable
 final class HomeViewModel {
     var heroItem: BaseItemDto?
@@ -45,6 +54,12 @@ final class HomeViewModel {
     /// exposes a Collections view — the same shape that made playlists
     /// unfindable before their own rail.
     var collections: [BaseItemDto] = []
+    /// « Parce que vous avez vu … ». `nil` when there is nothing to show — no
+    /// played item yet, or nothing similar left once the watched and
+    /// in-progress titles are filtered out — so the rail hides itself rather
+    /// than drawing a header over nothing. Written only through
+    /// `setBecauseYouWatched`, which is equality-guarded.
+    var becauseYouWatched: BecauseYouWatchedRail?
     /// Next unwatched episode for every in-progress series — the global
     /// "Next Up" rail. Distinct from `resumeItems` (mid-episode resume points).
     var nextUpItems: [BaseItemDto] = []
@@ -176,6 +191,7 @@ final class HomeViewModel {
             playlists: HomeRailPreferences.showPlaylists,
             upcoming: HomeRailPreferences.showUpcoming,
             collections: HomeRailPreferences.showCollections,
+            becauseYouWatched: HomeRailPreferences.showBecauseYouWatched,
             genreRows: HomeRailPreferences.showGenreRows,
             watchingNow: HomeRailPreferences.showWatchingNow
         )
@@ -328,6 +344,12 @@ final class HomeViewModel {
         async let sessionsDone: Void = rails.watchingNow
             ? loadActiveSessions(userId: userId, appState: appState)
             : ()
+        // Phase 2, not phase 1: its exclusion list is Continue Watching, which
+        // is only known once phase 1 has landed — and the rail sits just above
+        // the genre rows, so filling in late moves nothing already on screen.
+        async let becauseYouWatchedDone: Void = rails.becauseYouWatched
+            ? loadBecauseYouWatched(userId: userId, appState: appState)
+            : ()
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
         // Watching and Next Up. Fetch every referenced season's episode list
@@ -341,7 +363,7 @@ final class HomeViewModel {
         resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
         nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
 
-        _ = await (genreRowsDone, sessionsDone)
+        _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone)
 
         isFullyLoaded = true
     }
@@ -514,7 +536,7 @@ final class HomeViewModel {
     /// Recently Added are always fetched (they feed the hero), so enabling
     /// those rails has data to render already.
     enum Rail: CaseIterable {
-        case nextUp, favorites, playlists, upcoming, collections, genreRows, watchingNow
+        case nextUp, favorites, playlists, upcoming, collections, becauseYouWatched, genreRows, watchingNow
     }
 
     /// Fetches one rail's content, now. Each case is an existing single-purpose
@@ -528,6 +550,7 @@ final class HomeViewModel {
         case .playlists: await refreshPlaylists(using: appState)
         case .upcoming: await refreshUpcoming(using: appState)
         case .collections: await refreshCollections(using: appState)
+        case .becauseYouWatched: await loadBecauseYouWatched(userId: userId, appState: appState)
         case .genreRows: await loadGenreRows(userId: userId, appState: appState)
         case .watchingNow: await loadActiveSessions(userId: userId, appState: appState)
         }
@@ -555,6 +578,105 @@ final class HomeViewModel {
         ) {
             collections = result.items
         }
+    }
+
+    // MARK: - « Parce que vous avez vu … »
+
+    /// How many similar titles are asked for. Before filtering: a heavy viewer
+    /// loses several to the watched / in-progress exclusions.
+    nonisolated static let becauseYouWatchedLimit = 20
+
+    /// What seeds the rail, from the most recently played item: a movie seeds
+    /// itself, an episode seeds its SERIES — « Parce que vous avez vu S01E04 »
+    /// means nothing, and `/Items/{id}/Similar` on an episode finds other
+    /// episodes. `nil` (rail hidden) when the item carries no usable id or
+    /// title, rather than a header naming the wrong thing.
+    ///
+    /// `nonisolated` + pure, like `mergeRecentlyAdded`, so the rule is
+    /// unit-testable without an API.
+    nonisolated static func becauseYouWatchedSeed(from lastPlayed: BaseItemDto) -> (id: String, title: String)? {
+        let id: String?
+        let title: String?
+        if lastPlayed.type == .episode {
+            id = lastPlayed.seriesID
+            title = lastPlayed.seriesName
+        } else {
+            id = lastPlayed.id
+            title = lastPlayed.name
+        }
+        guard let id, !id.isEmpty, let title, !title.isEmpty else { return nil }
+        return (id, title)
+    }
+
+    /// The rail's cards: `similar` minus the seed itself, anything already
+    /// played, and anything in Continue Watching — including the SERIES of a
+    /// resumed episode, since a show the user is halfway through is not a
+    /// recommendation. Id-less items are dropped (a card that can't open its
+    /// fiche is noise here, and `ContentRow` keys on the id); duplicates
+    /// collapse, server order is kept.
+    nonisolated static func becauseYouWatchedItems(
+        similar: [BaseItemDto],
+        seedId: String,
+        resumeItems: [BaseItemDto]
+    ) -> [BaseItemDto] {
+        var excluded: Set<String> = [seedId]
+        for item in resumeItems {
+            if let id = item.id { excluded.insert(id) }
+            if let seriesId = item.seriesID { excluded.insert(seriesId) }
+        }
+        var seen = Set<String>()
+        return similar.filter { item in
+            guard let id = item.id, item.userData?.isPlayed != true else { return false }
+            return !excluded.contains(id) && seen.insert(id).inserted
+        }
+    }
+
+    /// Fetches the rail: the last played movie or episode (one item, no
+    /// count), then what the server finds similar to its seed. Shared by
+    /// `load()` (phase 2), `refreshRail(.becauseYouWatched)` and the tier-2
+    /// refresh. Must run after `resumeItems` is known — it is the exclusion
+    /// list. A failed request leaves the rail as it was (same discipline as
+    /// `refreshCollections`); a SUCCESSFUL answer with nothing to show hides it.
+    private func loadBecauseYouWatched(userId: String, appState: AppState) async {
+        let lastPlayed: BaseItemDto?
+        do {
+            lastPlayed = try await appState.apiClient.getItems(
+                userId: userId,
+                includeItemTypes: [.movie, .episode],
+                sortBy: [.datePlayed],
+                sortOrder: [.descending],
+                filters: [.isPlayed],
+                limit: 1,
+                // Only `.items.first` is read.
+                enableTotalRecordCount: false
+            ).items.first
+        } catch {
+            logger.warning("Home because-you-watched seed fetch failed: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        guard let lastPlayed, let seed = Self.becauseYouWatchedSeed(from: lastPlayed) else {
+            setBecauseYouWatched(nil)
+            return
+        }
+        let similar: [BaseItemDto]
+        do {
+            similar = try await appState.apiClient.getSimilarItems(
+                itemId: seed.id, userId: userId, limit: Self.becauseYouWatchedLimit
+            )
+        } catch {
+            logger.warning("Home because-you-watched similar fetch failed: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        let items = Self.becauseYouWatchedItems(similar: similar, seedId: seed.id, resumeItems: resumeItems)
+        setBecauseYouWatched(items.isEmpty ? nil : BecauseYouWatchedRail(seedTitle: seed.title, items: items))
+    }
+
+    /// Equality-guarded: the tier-2 refresh re-runs this after every watched
+    /// toggle anywhere in the app, and `@Observable` fires `withMutation` even
+    /// for an identical value — which on tvOS invalidates the rail's focusable
+    /// cards under the user (same reason as `loadActiveSessions`' guards).
+    private func setBecauseYouWatched(_ value: BecauseYouWatchedRail?) {
+        if becauseYouWatched != value { becauseYouWatched = value }
     }
 
     /// Lightweight refresh of just the Playlists row — fired by
@@ -588,7 +710,15 @@ final class HomeViewModel {
         async let nextUp: Void = refreshNextUp(using: appState)
         async let favorites: Void = refreshFavorites(using: appState)
         _ = await (resume, nextUp, favorites)
-        await fillMissingEpisodeNavigation(using: appState)
+        // « Parce que vous avez vu … » is userData-dependent twice over: its
+        // SEED is the last played item — finishing a film is exactly when it
+        // should change — and it excludes what is played or in Continue
+        // Watching. After the resume fetch, which it filters against.
+        async let navigation: Void = fillMissingEpisodeNavigation(using: appState)
+        async let recommendations: Void = HomeRailPreferences.showBecauseYouWatched
+            ? refreshRail(.becauseYouWatched, using: appState)
+            : ()
+        _ = await (navigation, recommendations)
     }
 
     /// Builds episode navigation for the rail cards that don't have any yet.

@@ -44,6 +44,10 @@ struct MediaLibraryScreen: View {
     /// Tier-2 counterpart of `pendingReload`. A pending full reload subsumes
     /// this one, and repeated tier-2 events while hidden coalesce into one.
     @State private var pendingUserDataRefresh = false
+    /// Card → fiche zoom (iOS). Owned here, handed to the cards through
+    /// `cardZoomScope` with one surface per row — a film filed under two
+    /// genres is two cards on this screen, see `CardZoom`.
+    @Namespace private var zoomNamespace
 
     /// `nil` for library tabs of Other / Mixed kind — disables the
     /// `includeItemTypes` filter at query time so every item in the parent
@@ -339,6 +343,7 @@ struct MediaLibraryScreen: View {
                             adminPushIntent = AdminMenuPushIntent(item: item, destination: dest)
                         }
                     )
+                    .cardZoomScope(zoomNamespace, surface: "library.genre.\(genre)")
                     .padding(.bottom, CinemaSpacing.spacing6)
                     #else
                     LibraryGenreRow(genre: genre, items: items, itemType: displayKind) {
@@ -375,9 +380,11 @@ struct MediaLibraryScreen: View {
             data: viewModel.collections,
             id: \.id
         ) { collection in
+            let zoom = CardZoom(zoomNamespace, surface: "library.collections", itemId: collection.id)
             NavigationLink {
                 if let id = collection.id {
                     MediaDetailScreen(itemId: id, itemType: .boxSet)
+                        .cardZoomDestination(zoom)
                 }
             } label: {
                 PosterCard(
@@ -388,7 +395,8 @@ struct MediaLibraryScreen: View {
                             maxWidth: 300, tag: collection.primaryImageTagValue
                         )
                     },
-                    subtitle: collection.childCount.map { loc.collectionCount($0) }
+                    subtitle: collection.childCount.map { loc.collectionCount($0) },
+                    zoomSource: zoom
                 )
             }
             #if os(tvOS)
@@ -471,6 +479,7 @@ struct MediaLibraryScreen: View {
                             }
                         }
                         .padding(.horizontal, gridPadding)
+                        .cardZoomScope(zoomNamespace, surface: "library.grid")
 
                         if viewModel.filteredLoader.isLoadingMore {
                             filteredPaginationFooter

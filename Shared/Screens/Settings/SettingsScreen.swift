@@ -191,9 +191,17 @@ struct SettingsScreen: View {
     }
 
     // Shared stored properties — keys + defaults live in SettingsKey
-    @AppStorage(SettingsKey.motionEffects) var motionEffects: Bool = SettingsKey.Default.motionEffects
+    /// The app's own Motion Effects switch — what the toggle row writes. Every
+    /// animation on this screen reads `motionEffects` below instead, which also
+    /// honours the system's Reduce Motion.
+    @AppStorage(SettingsKey.motionEffects) var motionEffectsSetting: Bool = SettingsKey.Default.motionEffects
+    @Environment(\.motionEffectsEnabled) var motionEffects
+    /// Drives the Motion Effects row's "the system setting overrides this" line.
+    @Environment(\.accessibilityReduceMotion) var systemReduceMotion
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
+    @AppStorage(SettingsKey.autoSkipIntro) var autoSkipIntro: Bool = SettingsKey.Default.autoSkipIntro
+    @AppStorage(SettingsKey.autoSkipCredits) var autoSkipCredits: Bool = SettingsKey.Default.autoSkipCredits
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
     @AppStorage(SettingsKey.playbackLiveActivity) var playbackLiveActivity: Bool = SettingsKey.Default.playbackLiveActivity
     @AppStorage(SettingsKey.remoteControlEnabled) var remoteControlEnabled: Bool = SettingsKey.Default.remoteControlEnabled
@@ -204,6 +212,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.homeShowPlaylists) var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
     @AppStorage(SettingsKey.homeShowUpcoming) var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
     @AppStorage(SettingsKey.homeShowCollections) var showCollections: Bool = SettingsKey.Default.homeShowCollections
+    @AppStorage(SettingsKey.homeShowBecauseYouWatched) var showBecauseYouWatched: Bool = SettingsKey.Default.homeShowBecauseYouWatched
     @AppStorage(SettingsKey.homeShowGenreRows) var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
     @AppStorage(SettingsKey.detailShowQualityBadges) var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
@@ -240,8 +249,10 @@ struct SettingsScreen: View {
         appState.keychain.getUserSession()?.username ?? "User"
     }
 
+    /// The user's own label for the active server wins over the name the
+    /// server reports — a rename in « Mes serveurs » must show here too.
     var serverName: String {
-        appState.serverInfo?.name ?? "Jellyfin Server"
+        appState.activeServerNameOverride ?? appState.serverInfo?.name ?? "Jellyfin Server"
     }
 
     var serverAddress: String {
@@ -281,6 +292,10 @@ struct SettingsScreen: View {
         var rows: [SettingsToggleRow] = [
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
+            // Both opt-in: the skip button stays the default, these make it
+            // press itself (once per segment — see `AutoSkipPolicy`).
+            .init(id: "autoSkipIntro", icon: "forward.frame", label: loc.localized("settings.autoSkipIntro"), value: $autoSkipIntro),
+            .init(id: "autoSkipCredits", icon: "forward.end.alt", label: loc.localized("settings.autoSkipCredits"), value: $autoSkipCredits),
             .init(id: "nativePlayer", icon: "play.rectangle.on.rectangle", label: loc.localized("settings.forceNativeAVPlayer"), value: $forceNativeAVPlayer),
             // Both platforms: an iPhone is a legitimate (if rarer) target too,
             // and the opt-out has to exist wherever the capability is published.
@@ -303,6 +318,8 @@ struct SettingsScreen: View {
             .init(id: "homePlaylists", icon: "music.note.list", label: loc.localized("settings.homePage.playlists"), value: $showPlaylists),
             .init(id: "homeCollections", icon: "rectangle.stack", label: loc.localized("settings.homePage.collections"), value: $showCollections),
             .init(id: "homeUpcoming", icon: "calendar", label: loc.localized("settings.homePage.upcoming"), value: $showUpcoming),
+            // Same order as on Home: just above the genre rows.
+            .init(id: "homeBecauseYouWatched", icon: "wand.and.stars", label: loc.localized("settings.homePage.becauseYouWatched"), value: $showBecauseYouWatched),
             .init(id: "homeGenreRows", icon: "square.grid.2x2", label: loc.localized("settings.homePage.genreRows"), value: $showGenreRows)
         ]
         // "En direct" now governs TWO things: other users' active sessions
@@ -414,7 +431,7 @@ struct SettingsScreen: View {
     func performLogout() async {
         let outcome = await appState.logout(reason: .userInitiated)
         if case .switchedTo(let entry) = outcome {
-            toasts.success(loc.localized("servers.switchedTo", entry.name))
+            toasts.success(loc.localized("servers.switchedTo", entry.displayName))
         }
     }
 

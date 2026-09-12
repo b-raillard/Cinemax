@@ -557,8 +557,15 @@ extension SettingsScreen {
 
                 VStack(spacing: 0) {
                     iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
+                    iOSSettingsDivider
+                    DiagnosticsExportRows()
                 }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+
+                Text(loc.localized("settings.debug.diagnostics.footer"))
+                    .font(CinemaFont.dynamicLabel(.small))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .padding(.horizontal, CinemaSpacing.spacing2)
             }
         }
     }

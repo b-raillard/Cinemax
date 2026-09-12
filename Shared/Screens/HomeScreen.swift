@@ -27,6 +27,7 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowPlaylists) private var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
     @AppStorage(SettingsKey.homeShowUpcoming) private var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
     @AppStorage(SettingsKey.homeShowCollections) private var showCollections: Bool = SettingsKey.Default.homeShowCollections
+    @AppStorage(SettingsKey.homeShowBecauseYouWatched) private var showBecauseYouWatched: Bool = SettingsKey.Default.homeShowBecauseYouWatched
     @State private var deepLinkTarget: DeepLinkTarget?
     /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
@@ -42,6 +43,11 @@ struct HomeScreen: View {
     @State private var seriesDestination: SeriesDestination?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
+    /// Whether Watch Together can work at all: only the VLC presenter binds
+    /// SyncPlay. Observed here (rather than read once through
+    /// `SyncPlayController.isEngineSupported`) so the « En direct » row's
+    /// dimmed cards and footnote follow the setting the moment it flips.
+    @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
     /// Raw JSON of the user's picked genres. Held here only to observe changes
     /// made in Settings → Interface → Home page and refresh the rows live.
     @AppStorage(SettingsKey.homeSelectedGenres) private var selectedGenresJSON: String = ""
@@ -65,6 +71,10 @@ struct HomeScreen: View {
     /// False until Home's own first appearance has been served by `load()`, so
     /// the arrival refresh below doesn't duplicate it on a cold launch.
     @State private var liveRowPrimed = false
+    /// Card → fiche zoom (iOS). One namespace for the whole screen; every rail
+    /// tags its cards with its own surface, because the same title routinely
+    /// sits in several rails at once — see `CardZoom`.
+    @Namespace private var zoomNamespace
 
     var body: some View {
         ZStack {
@@ -285,6 +295,7 @@ struct HomeScreen: View {
         if showPlaylists { rails.insert(.playlists) }
         if showUpcoming { rails.insert(.upcoming) }
         if showCollections { rails.insert(.collections) }
+        if showBecauseYouWatched { rails.insert(.becauseYouWatched) }
         if showGenreRows { rails.insert(.genreRows) }
         if showWatchingNow { rails.insert(.watchingNow) }
         return rails
@@ -298,8 +309,10 @@ struct HomeScreen: View {
     private func prefetchCardImages() {
         let builder = appState.imageBuilder
 
-        // 2:3 posters — recently added, favorites, genre rows (cards request maxWidth 300).
+        // 2:3 posters — recently added, favorites, « Parce que vous avez vu »,
+        // genre rows (all drawn by `recentlyAddedCard`, maxWidth 300).
         var posterItems = viewModel.latestItems + viewModel.favoriteItems
+            + (viewModel.becauseYouWatched?.items ?? [])
         for row in viewModel.genreRows {
             if case .items(let items) = row.state { posterItems += items }
         }
@@ -356,6 +369,7 @@ struct HomeScreen: View {
         ScrollView {
             EmptyStateView(
                 systemImage: "tv.slash",
+                illustration: .emptyLibrary,
                 title: loc.localized("empty.home.title"),
                 subtitle: loc.localized("empty.home.subtitle"),
                 actionTitle: loc.localized("action.refresh")
@@ -480,6 +494,14 @@ struct HomeScreen: View {
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
+                    // « Parce que vous avez vu … » — just above the genre rows:
+                    // both are discovery, and it fills in during phase 2 like
+                    // them, so arriving late shifts nothing already painted.
+                    if showBecauseYouWatched, let rail = viewModel.becauseYouWatched {
+                        becauseYouWatchedRow(rail)
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
                     // Genre rows
                     if showGenreRows {
                         ForEach(viewModel.genreRows) { row in
@@ -520,7 +542,7 @@ struct HomeScreen: View {
     @ViewBuilder
     private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
         ContentRow(title: genre, data: items, id: \.id) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.genre.\(genre)")
                 .frame(width: posterCardWidth)
         }
     }
@@ -692,8 +714,13 @@ struct HomeScreen: View {
 
     // MARK: - Hero
 
-    @ViewBuilder
+    /// Layout-bound — see `CinemaDynamicType`.
     private func heroSection(_ item: BaseItemDto) -> some View {
+        heroSectionContent(item).layoutBoundDynamicType()
+    }
+
+    @ViewBuilder
+    private func heroSectionContent(_ item: BaseItemDto) -> some View {
         // `Color.clear` sizing driver pinned to `heroHeight`, with backdrop, gradient,
         // and content layered as overlays. Overlays can't grow the parent frame — so
         // the hero is guaranteed to be exactly `heroHeight` regardless of what the
@@ -846,20 +873,54 @@ struct HomeScreen: View {
     /// the item artwork + "Name is watching" label, and navigates to the item's detail
     /// screen on tap. Hidden entirely when the server has no other active sessions.
     private var watchingNowRow: some View {
-        ContentRow(
-            title: loc.localized("home.watchingNow"),
-            // Feed the entries themselves — NEVER a snapshot of their indices.
-            // `reload()` empties the underlying arrays before refetching, and
-            // Observation invalidates the already-instantiated LazyHStack
-            // children directly: they re-run their body against the emptied
-            // array while still holding the old index snapshot, trapping with
-            // "Index out of range".
-            data: viewModel.liveEntries,
-            id: \.id
-        ) { entry in
-            liveCard(entry)
-                .frame(width: wideCardWidth)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            ContentRow(
+                title: loc.localized("home.watchingNow"),
+                // Feed the entries themselves — NEVER a snapshot of their indices.
+                // `reload()` empties the underlying arrays before refetching, and
+                // Observation invalidates the already-instantiated LazyHStack
+                // children directly: they re-run their body against the emptied
+                // array while still holding the old index snapshot, trapping with
+                // "Index out of range".
+                data: viewModel.liveEntries,
+                id: \.id
+            ) { entry in
+                liveCard(entry)
+                    .frame(width: wideCardWidth)
+            }
+
+            // Said once, under the row, and only when a card's join is
+            // actually blocked — a row holding only the viewer's own group (its
+            // action is « Quitter », which works on any engine) or only solo
+            // cards owes nobody an explanation.
+            if LiveSessionsRow.needsEngineFootnote(
+                viewModel.liveEntries,
+                localGroupId: SyncPlayController.shared.group?.id,
+                engineSupported: !forceNativeAVPlayer
+            ) {
+                engineFootnote
+            }
         }
+    }
+
+    /// Why the dimmed group cards cannot be joined, and the one setting that
+    /// changes it. Before this, the precondition was only ever stated AFTER a
+    /// press, in a toast (#165).
+    private var engineFootnote: some View {
+        Label {
+            Text(loc.localized("syncplay.needsVLC.footnote"))
+        } icon: {
+            Image(systemName: "info.circle")
+        }
+        .font(CinemaFont.label(.small))
+        .foregroundStyle(CinemaColor.onSurfaceVariant)
+        .fixedSize(horizontal: false, vertical: true)
+        // The row's own gutter, so the note sits under its first card.
+        #if os(tvOS)
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        #else
+        .padding(.horizontal, CinemaSpacing.spacing6)
+        #endif
     }
 
     @ViewBuilder
@@ -888,7 +949,15 @@ struct HomeScreen: View {
         // kill while the membership survives server-side, and reading only the
         // local copy then labelled the card « Rejoindre » — offering to join a
         // group the account has never left.
-        let isMine = entry.viewerIsParticipant || SyncPlayController.shared.group?.id == groupId
+        let localGroupId = SyncPlayController.shared.group?.id
+        let isMine = entry.isViewerIn(localGroupId: localGroupId)
+        // With the native player forced, JOINING cannot work (no SyncPlay
+        // binding there). The card stays a focusable button — `.disabled` would
+        // drop it out of the tvOS focus chain, see below — but reads as
+        // unavailable, and the row's footnote says why. A press still reaches
+        // `joinLiveSession`, whose refusal toast is the backstop. Never applied
+        // to a group the viewer is IN: leaving must always work.
+        let joinBlocked = entry.isJoinBlocked(localGroupId: localGroupId, engineSupported: !forceNativeAVPlayer)
         let alone = entry.participants.isEmpty
         return Button {
             if isMine { leaveLiveSession() } else { joinLiveSession(groupId: groupId) }
@@ -917,6 +986,8 @@ struct HomeScreen: View {
                 detail: liveDetail(entry)
             )
             .overlay(alignment: .topLeading) { livePill(isTogether: true) }
+            .saturation(joinBlocked ? 0 : 1)
+            .opacity(joinBlocked ? 0.5 : 1)
         }
         #if os(tvOS)
         .buttonStyle(CinemaTVCardButtonStyle())
@@ -942,6 +1013,9 @@ struct HomeScreen: View {
                     participantSummary(entry.participants)
                 )
         )
+        // VoiceOver never sees the dimming; the hint carries the same reason
+        // the footnote does.
+        .accessibilityHint(joinBlocked ? loc.localized("syncplay.needsVLC") : "")
     }
 
     /// Somebody watching alone. Unchanged behaviour: it opens their title.
@@ -953,8 +1027,12 @@ struct HomeScreen: View {
     @ViewBuilder
     private func soloCard(_ entry: LiveSessionsRow.Entry) -> some View {
         if let id = entry.itemId {
+            // Keyed on the ENTRY, not the item: two people watching the same
+            // film alone are two cards on this row.
+            let zoom = CardZoom(zoomNamespace, surface: "home.live", itemId: entry.id)
             NavigationLink {
                 MediaDetailScreen(itemId: id, itemType: entry.itemType ?? .movie)
+                    .cardZoomDestination(zoom)
             } label: {
                 WideCard(
                     title: entry.title ?? "",
@@ -973,7 +1051,8 @@ struct HomeScreen: View {
                     // whether Xavier is ahead of them. A film has no such
                     // line, so the name keeps the subtitle there.
                     subtitle: entry.episodeLabel ?? watcherLine(entry),
-                    detail: entry.episodeLabel == nil ? nil : watcherLine(entry)
+                    detail: entry.episodeLabel == nil ? nil : watcherLine(entry),
+                    zoomSource: zoom
                 )
                 .overlay(alignment: .topLeading) { livePill(isTogether: false) }
             }
@@ -1275,7 +1354,7 @@ struct HomeScreen: View {
             data: viewModel.latestItems,
             id: \.id
         ) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.recent")
                 .frame(width: posterCardWidth)
         }
     }
@@ -1291,7 +1370,22 @@ struct HomeScreen: View {
             data: viewModel.favoriteItems,
             id: \.id
         ) { item in
-            recentlyAddedCard(item)
+            recentlyAddedCard(item, surface: "home.favorites")
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    // MARK: - Because You Watched
+
+    /// Titles similar to the last movie (or series) the user played. Same card
+    /// as Recently Added — poster, status overlay and the shared context menu.
+    private func becauseYouWatchedRow(_ rail: BecauseYouWatchedRail) -> some View {
+        ContentRow(
+            title: loc.localized("home.becauseYouWatched", rail.seedTitle),
+            data: rail.items,
+            id: \.id
+        ) { item in
+            recentlyAddedCard(item, surface: "home.becauseYouWatched")
                 .frame(width: posterCardWidth)
         }
     }
@@ -1356,9 +1450,11 @@ struct HomeScreen: View {
 
     @ViewBuilder
     private func collectionCard(_ collection: BaseItemDto) -> some View {
+        let zoom = CardZoom(zoomNamespace, surface: "home.collections", itemId: collection.id)
         NavigationLink {
             if let id = collection.id {
                 MediaDetailScreen(itemId: id, itemType: .boxSet)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             PosterCard(
@@ -1369,7 +1465,8 @@ struct HomeScreen: View {
                         maxWidth: 300, tag: collection.primaryImageTagValue
                     )
                 },
-                subtitle: collection.childCount.map { loc.collectionCount($0) }
+                subtitle: collection.childCount.map { loc.collectionCount($0) },
+                zoomSource: zoom
             )
         }
         #if os(tvOS)
@@ -1409,11 +1506,15 @@ struct HomeScreen: View {
             )
         }()
 
+        // Keyed on the EPISODE (the card), not the series it opens: two
+        // upcoming episodes of one show are two cards on this rail.
+        let zoom = CardZoom(zoomNamespace, surface: "home.upcoming", itemId: episode.id)
         NavigationLink {
             // The SERIES, not the episode: an unaired episode has no fiche
             // worth opening, and the series is what the user is following.
             if let id = episode.seriesID ?? episode.id {
                 MediaDetailScreen(itemId: id, itemType: .series)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             WideCard(
@@ -1424,7 +1525,8 @@ struct HomeScreen: View {
                         maxWidth: 600, tag: episode.backdropImageTagValue
                     )
                 },
-                subtitle: subtitle
+                subtitle: subtitle,
+                zoomSource: zoom
             )
         }
         #if os(tvOS)
@@ -1435,17 +1537,21 @@ struct HomeScreen: View {
     }
 
     @ViewBuilder
-    private func recentlyAddedCard(_ item: BaseItemDto) -> some View {
+    /// `surface` names the rail the card sits on (Recently Added, Favorites, a
+    /// genre) — the same title can be in several of them, see `CardZoom`.
+    private func recentlyAddedCard(_ item: BaseItemDto, surface: String) -> some View {
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
             if let type = item.type { parts.append(type.rawValue) }
             return parts.joined(separator: " · ")
         }()
+        let zoom = CardZoom(zoomNamespace, surface: surface, itemId: item.id)
 
         NavigationLink {
             if let id = item.id {
                 MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    .cardZoomDestination(zoom)
             }
         } label: {
             PosterCard(
@@ -1456,7 +1562,8 @@ struct HomeScreen: View {
                     positionTicks: item.userData?.playbackPositionTicks,
                     runtimeTicks: item.runTimeTicks,
                     isPlayed: item.userData?.isPlayed
-                )
+                ),
+                zoomSource: zoom
             )
         }
         #if os(tvOS)

@@ -27,6 +27,12 @@ struct LibraryHeroSection: View {
     var heroPlay: MediaLibraryViewModel.HeroPlay?
 
     var body: some View {
+        // Layout-bound — see `CinemaDynamicType`.
+        heroBody.layoutBoundDynamicType()
+    }
+
+    @ViewBuilder
+    private var heroBody: some View {
         // A `Color.clear` sizing driver pinned to `heroHeight`, with backdrop, gradient,
         // and content all layered as overlays. Overlays CANNOT grow the parent, so the
         // hero is guaranteed to be exactly `heroHeight` tall regardless of what the

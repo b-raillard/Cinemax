@@ -214,6 +214,32 @@ final class TVScrubBar: UIView {
 }
 #endif
 
+#if os(iOS)
+/// The iOS scrub bar.
+///
+/// VoiceOver's adjust gesture (swipe up / down) on the scrub bar has to become a
+/// SEEK, and on a stock `UISlider` nothing here would make it one: whatever the
+/// gesture does to the slider's value, `scrubberChanged` bails unless the slider
+/// is actually being dragged (see its own RULE), so the playhead never moves.
+/// Honouring it through the value would also mean a direct engine seek outside
+/// the coalesced path. So the gesture is handed over as a ±1 step, which the
+/// presenter maps to the same ±10 s skip the transport buttons use (`iosSkipBack`
+/// / `iosSkipForward` → `seek(bySeconds:)` → `accumulateSeek`), and the value is
+/// left alone — the presenter repaints it from the playhead.
+///
+/// What a stock slider does with that gesture is deliberately NOT asserted:
+/// `accessibilityIncrement()` on a detached `UISlider` does not move its value
+/// (measured 2026-09-12), because UIKit implements adjustment on an accessibility
+/// element a view outside a window never realises. `PlayerAccessibilityTests`
+/// carries that finding instead of a control it cannot honestly write.
+final class PlayerScrubSlider: UISlider {
+    var onAccessibilityStep: ((Int) -> Void)?
+
+    override func accessibilityIncrement() { onAccessibilityStep?(1) }
+    override func accessibilityDecrement() { onAccessibilityStep?(-1) }
+}
+#endif
+
 /// Chapter strip cell. On tvOS, custom buttons get no system focus appearance,
 /// so it draws its own: a clear lift + white ring on the thumbnail + un-dimming
 /// so the focused chapter is unmistakable. On iOS it never receives focus, so
@@ -267,6 +293,9 @@ final class TVOptionPanel: UIView {
     struct Option {
         let title: String
         let isSelected: Bool
+        /// SF Symbol drawn at the row's TRAILING edge — a property of the option
+        /// itself (the TrueHD « muet sur Apple » tag), independent of selection.
+        var badgeSymbol: String? = nil
         let action: () -> Void
     }
 
@@ -399,8 +428,30 @@ final class TVOptionPanel: UIView {
         cfg.imagePlacement = .leading
         cfg.imagePadding = 16
         cfg.titleAlignment = .leading
+        // Room for the trailing badge, so a long track label wraps before it.
+        if option.badgeSymbol != nil { cfg.contentInsets.trailing += 48 }
         let button = TVOptionRow(type: .custom)
         button.configuration = cfg
+        if let symbol = option.badgeSymbol {
+            // Trailing, NOT the leading image slot: that slot is the selection
+            // mark, and a silent track can be the one currently selected.
+            // Decorative — the row's accessibility label already carries the
+            // suffix text that says the same thing.
+            let badge = UIImageView(image: UIImage(
+                systemName: symbol,
+                withConfiguration: UIImage.SymbolConfiguration(textStyle: .body)
+            ))
+            badge.translatesAutoresizingMaskIntoConstraints = false
+            badge.tintColor = UIColor.white.withAlphaComponent(0.7)
+            badge.contentMode = .scaleAspectFit
+            badge.isUserInteractionEnabled = false
+            badge.isAccessibilityElement = false
+            button.addSubview(badge)
+            NSLayoutConstraint.activate([
+                badge.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -40),
+                badge.centerYAnchor.constraint(equalTo: button.centerYAnchor)
+            ])
+        }
         button.contentHorizontalAlignment = .leading
         button.tag = index
         // The former "  ✓" suffix was at least SPOKEN; a `cfg.image` is not, so

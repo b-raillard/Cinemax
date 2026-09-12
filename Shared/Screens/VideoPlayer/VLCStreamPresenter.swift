@@ -109,8 +109,9 @@ final class VLCStreamPresenter: NSObject {
     // MARK: - Helpers
 
     /// libVLC can't reliably inject arbitrary HTTP headers across versions, so
-    /// authenticate via Jellyfin's `ApiKey` query param instead of the
-    /// `Authorization: MediaBrowser Token=…` header AVURLAsset uses.
+    /// when a URL libVLC opens must carry the account token, it rides Jellyfin's
+    /// `ApiKey` query param instead of the `Authorization: MediaBrowser Token=…`
+    /// header AVURLAsset uses. Stream opens decide THAT through `streamURL`.
     ///
     /// `ApiKey`, never `api_key`: the latter is a legacy spelling that Jellyfin
     /// 12.0 rejects by default (`EnableLegacyAuthorization = false`), while
@@ -119,18 +120,45 @@ final class VLCStreamPresenter: NSObject {
     /// the case-insensitive presence test — comparing against `api_key` alone
     /// sent the forced-transcode URL out with the token under both names.
     nonisolated static func authedURL(_ url: URL, token: String?) -> URL {
-        guard let token, !token.isEmpty,
+        guard let token, !token.isEmpty, !carriesApiKey(url),
               var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         var items = comps.queryItems ?? []
-        let carriesToken = items.contains { item in
+        items.append(URLQueryItem(name: "ApiKey", value: token))
+        comps.queryItems = items
+        return comps.url ?? url
+    }
+
+    /// Whether `url` already names a token in its query, under either spelling.
+    nonisolated static func carriesApiKey(_ url: URL) -> Bool {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return items.contains { item in
             let name = item.name.lowercased()
             return name == "apikey" || name == "api_key"
         }
-        if !carriesToken {
-            items.append(URLQueryItem(name: "ApiKey", value: token))
-        }
-        comps.queryItems = items
-        return comps.url ?? url
+    }
+
+    /// The URL a stream open hands on — to libVLC directly, or to the loopback
+    /// proxy as its origin target. The ONE place that decides whether the
+    /// account token rides the query string (#184):
+    ///
+    /// | route  | first open        | retry after a failure |
+    /// |--------|-------------------|-----------------------|
+    /// | direct | no token          | `ApiKey`              |
+    /// | proxy  | no token (header) | no token (header)     |
+    ///
+    /// - DirectPlay `/Videos/{id}/stream` carries no `[Authorize]` on any server
+    ///   the app supports (`VideosController`, 10.9 → 12.0; streamed anonymously
+    ///   on 10.11.11), so the token there did nothing but land in reverse-proxy
+    ///   and CDN access logs.
+    /// - A DIRECT retry puts it back, so a future server that adds `[Authorize]`
+    ///   to that route costs one failed attempt, never a dead playback.
+    /// - Through the proxy the token never needs to be in the URL: the proxy
+    ///   sends it to the origin as an `Authorization` header, retry included.
+    /// - A forced-transcode `TranscodingUrl` arrives with the server's OWN
+    ///   `ApiKey` (and `authToken == nil`): untouched on every row, never doubled.
+    nonisolated static func streamURL(_ url: URL, token: String?, isRetry: Bool, viaProxy: Bool) -> URL {
+        guard isRetry, !viaProxy else { return url }
+        return authedURL(url, token: token)
     }
 
     private static func topMostViewController() -> UIViewController? {
@@ -147,6 +175,17 @@ final class VLCStreamPresenter: NSObject {
         }
         return top
     }
+}
+
+/// One row of a player picker. `badge` is an SF Symbol the tvOS
+/// `TVOptionPanel` draws at the row's trailing edge; the iOS action sheet has
+/// no public image slot on `UIAlertAction`, so there the title text alone
+/// carries the tag.
+private struct PickerOption {
+    let title: String
+    let selected: Bool
+    var badge: String? = nil
+    let action: () -> Void
 }
 
 // MARK: - View controller
@@ -213,6 +252,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let progress = UIProgressView(progressViewStyle: .default)
     private let skipHUD = UILabel()
     private var skipHUDHide: DispatchWorkItem?
+    /// Multi-line notice for something the user must READ — the explanation a
+    /// hand-picked TrueHD track gets. Not `ToastCenter`: its overlay is mounted
+    /// in SwiftUI at the app root, i.e. UNDER this `.overFullScreen` controller,
+    /// so a toast raised during playback is never seen. Not `skipHUD` either,
+    /// a fixed-height single line that truncates a sentence.
+    private let noticeView = UIView()
+    private let noticeGlyph = UIImageView()
+    private let noticeTitle = UILabel()
+    private let noticeMessage = UILabel()
+    private var noticeHide: DispatchWorkItem?
 
     // Shared rich-HUD elements — the iOS HUD now mirrors the tvOS transport
     // (same visual language): an always-on chapter strip, a native-style
@@ -272,6 +321,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var nextUpCard: NextUpCountdownView?
     private var nextUpCancelledForThisItem = false
 
+    /// VoiceOver strings for every icon-only HUD control (`PlayerAccessibility`).
+    /// Built once: the labels are fixed for the player's lifetime, and the app's
+    /// language cannot change while it is on screen.
+    ///
+    /// Cross-platform on purpose — the loading spinner is shared chrome, and a
+    /// tvOS viewer using VoiceOver needs its label as much as an iPhone one.
+    private lazy var hudA11y = PlayerHUDAccessibility { [self] key in loc.localized(key) }
+    /// Spoken durations for the scrub control's `accessibilityValue` — read on
+    /// the 1 s tick, so the formatter is built once and injected.
+    private lazy var spokenTime = PlayerTimeFormat.makeSpokenFormatter(languageCode: loc.languageCode)
+
     #if os(iOS)
     private let closeButton = UIButton(type: .system)
     private let playPauseButton = UIButton(type: .system)
@@ -282,7 +342,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let prevButton = UIButton(type: .system)
     private let nextButton = UIButton(type: .system)
     private let transportRow = UIStackView()
-    private let slider = UISlider()
+    /// `PlayerScrubSlider`, not a plain `UISlider` — see its own doc comment:
+    /// VoiceOver's adjust gesture has to become a SEEK, and on a stock slider
+    /// nothing here would make it one (`scrubberChanged` bails unless the slider
+    /// is really being dragged).
+    private let slider = PlayerScrubSlider()
     private var isScrubbing = false
     /// Interactive swipe-down-to-dismiss: the whole player surface follows the
     /// finger; releasing past the threshold (or flicking down) closes the
@@ -435,6 +499,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var segments: [MediaSegmentDto] = []
     private var segmentFetchTask: Task<Void, Never>?
     private var activeSegmentType: MediaSegmentType?
+    /// Opt-in auto-skip (#160). Read once per media open, next to the segment
+    /// fetch, so a toggle flipped mid-session applies at the next episode.
+    private var autoSkip: AutoSkipPreferences = .off
+    /// Segments this media has already skipped on its own (`AutoSkipPolicy.key`),
+    /// so a rewind into the intro is honoured rather than skipped again. Reset
+    /// with the segments.
+    private var autoSkippedSegmentKeys: Set<String> = []
     private let skipButton = UIButton(type: .system)
 
     // P3: sleep timer
@@ -461,9 +532,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // SwiftVLC end-of-media disambiguation: `.stopped` fires for natural end,
     // teardown, AND media swap. `isTearingDown` suppresses end handling during
     // dismissal; `lastPlayStart` ignores the `.stopped` that can follow a
-    // fresh `play(media)` (old media winding down).
+    // fresh `play(media)` (old media winding down). It is nil from the moment
+    // a fresh open begins (`beginOpenLoading()`) until that open's `play()`:
+    // every stop in that gap belongs to the media being replaced, which is
+    // also what keeps a failed attempt's trailing `.stopped` from being handled
+    // a second time once its retry is under way.
     private var isTearingDown = false
-    private var lastPlayStart = Date.distantPast
+    private var lastPlayStart: Date?
 
     // Episode-nav race guard (same pattern as NowPlayingInfoController):
     // bumped at every navigateToEpisode call and re-checked after its awaits so
@@ -471,6 +546,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // and never after teardown (which would restart the engine and re-arm a
     // progress timer nothing will ever invalidate).
     private var navGeneration = 0
+
+    /// Our slot in `RemotePlaystateRouter` (inbound pause / seek / stop from
+    /// another Jellyfin session). Handed back on teardown; the router ignores a
+    /// stale token, so a late teardown cannot evict the player that replaced us.
+    private var remotePlaystateToken = 0
 
     // App-lifecycle wake resilience. When the device sleeps (Apple TV / phone
     // locked) mid-playback, the stream socket dies AND the OS invalidates the
@@ -523,6 +603,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Pending "show the waiting scrim" — cancelled if the group settles first.
     private var syncPlayWaitingWork: DispatchWorkItem?
     private static let syncPlayWaitingDelay: TimeInterval = 0.35
+    /// « Quitter la séance ? » while it is on screen (#175). Weak, and also
+    /// cleared by both of its actions: the tvOS Menu peel and `pressesBegan`
+    /// read it to stand down behind the alert, so it must not outlive it.
+    private weak var leaveConfirmationAlert: UIAlertController?
 
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
@@ -578,6 +662,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         scheduleHideControls()
         setupLifecycleObservers()
         bindSyncPlay()
+        remotePlaystateToken = RemotePlaystateRouter.shared.register { [weak self] command in
+            self?.applyRemotePlaystate(command) ?? false
+        }
     }
 
     #if os(iOS)
@@ -597,6 +684,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func teardown() {
         isTearingDown = true
+        RemotePlaystateRouter.shared.unregister(remotePlaystateToken)
         unbindSyncPlay()
         setLoading(false)
         cancelOpenWatchdog()
@@ -609,6 +697,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingTapWork?.cancel()
         cancelPendingSeekCommit()
         skipHUDHide?.cancel()
+        noticeHide?.cancel()
         centerGlyphHide?.cancel()
         skipGlyphHide?.cancel()
         pendingTimeRefreshes.forEach { $0.cancel() }
@@ -872,6 +961,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// episode nav) invalidates "we know a demuxer exists".
     private func beginOpenLoading() {
         mediaConfirmedOpen = false
+        // Until this open reaches its `play()`, any `.stopped` is the media it
+        // replaces winding down — including the trailing stop of an attempt
+        // whose failure is already being retried. See `PlaybackEndPolicy`.
+        lastPlayStart = nil
         // Fresh open ⇒ libVLC re-selects every module; drop facts learned from
         // the previous media so the stats HUD can't show a stale decode chain.
         VLCEngineFacts.shared.reset()
@@ -905,10 +998,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         setLoading(false)
     }
 
+    /// What the diagnostics export reports as the last open: engine, the
+    /// server's play method, the source container and whether the loopback
+    /// proxy carries the stream — the two questions a remote stall report
+    /// raises first, and neither was visible in a TestFlight log.
+    private func recordPlaybackDiagnostics() {
+        PlaybackDiagnostics.record(
+            engine: "vlc", playMethod: info.playMethod, container: info.sourceContainer,
+            route: usingProxy ? .proxy : .direct
+        )
+    }
+
     /// Builds the SwiftVLC `Media` for a streamed URL with `network-caching`
     /// (matches the VLCKit path).
     private func makeMedia(_ url: URL) -> Media? {
         guard let media = try? Media(url: url) else { return nil }
+        // Every fresh open funnels through here with `info` and `usingProxy`
+        // already describing it — the one place the export's `last_playback`
+        // line can be kept true (the error retry below records its own).
+        recordPlaybackDiagnostics()
         // 5 s read-ahead (was 3 s): a deeper cushion rides out a transient
         // origin drop and, crucially, gives the proxy's transparent
         // reconnect time to re-establish the upstream BEFORE the buffer
@@ -1059,6 +1167,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         segmentFetchTask?.cancel()
         segments = []
         activeSegmentType = nil
+        autoSkippedSegmentKeys = []
+        autoSkip = AutoSkipPreferences.current()
         skipButton.isHidden = true
         let client = apiClient
         let id = itemId
@@ -1080,6 +1190,40 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             let start = Double(segment.startTicks ?? 0) / 10_000_000
             let end = Double(segment.endTicks ?? 0) / 10_000_000
             guard end > start, currentTime >= start, currentTime < end - 1 else { continue }
+            // Opt-in auto-skip, decided BEFORE the button / countdown-card
+            // logic so a skipped segment never draws either. Once per segment
+            // per media (`autoSkippedSegmentKeys`), never while a seek is still
+            // settling — the playhead reported inside the segment may be the
+            // echo of a target the engine has not reached yet.
+            let canHandOff = autoPlayNext && nextEpisode != nil && episodeNavigator != nil
+                && !nextUpCancelledForThisItem
+            let key = AutoSkipPolicy.key(type: segment.type, startTicks: segment.startTicks)
+            let action = AutoSkipPolicy.decide(
+                segmentType: segment.type,
+                autoSkipIntro: autoSkip.intro, autoSkipCredits: autoSkip.credits,
+                alreadySkipped: autoSkippedSegmentKeys.contains(key),
+                isPlaying: enginePlaying && seekLoadingTargetMs == nil,
+                inSyncPlayGroup: syncPlay.isInGroup,
+                canHandOffToNext: canHandOff
+            )
+            if action != .none {
+                autoSkippedSegmentKeys.insert(key)
+                activeSegmentType = nil
+                skipButton.isHidden = true
+                nextUpCard?.hide()
+                logger.notice("auto-skip type=\(segment.type?.rawValue ?? "?", privacy: .public) action=\(String(describing: action), privacy: .public) from=\(Int(currentTime), privacy: .public)s to=\(Int(end), privacy: .public)s")
+                switch action {
+                case .handOffToNext:
+                    if let next = nextEpisode { navigateToEpisode(next, isAutoplay: true) }
+                case .seekToEnd:
+                    showSkipHUD(loc.localized(segment.type == .intro ? "player.autoSkipped.intro" : "player.autoSkipped.credits"), duration: 1.6)
+                    userEngineSeek(ms: Int32(end * 1000))
+                    refreshTimeUISoon()
+                case .none:
+                    break
+                }
+                return
+            }
             // Outro with auto-play armed → the countdown card replaces "Skip
             // credits" (skipping to the end would just trigger the same nav) —
             // but only once the count is one a viewer can read as a countdown.
@@ -1217,7 +1361,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self?.startSleepTimerIfNeeded()
         })
         alert.addAction(UIAlertAction(title: loc.localized("sleep.prompt.stop"), style: .destructive) { [weak self] _ in
-            self?.dismiss(animated: true)
+            self?.closePlayer(.user)
         })
         present(alert, animated: true)
     }
@@ -1397,6 +1541,56 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         skipHUD.alpha = 0
         view.addSubview(skipHUD)
 
+        // Notice (`showNotice`). On `view`, outside `controlsContainer`, so it
+        // outlives the HUD's 4 s auto-hide; and non-interactive, like every
+        // overlay on `view`, or its rectangle becomes a dead zone for the
+        // dismiss pan and the HUD tap (the stats panel's lesson).
+        noticeView.translatesAutoresizingMaskIntoConstraints = false
+        noticeView.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+        noticeView.layer.cornerRadius = 16
+        noticeView.alpha = 0
+        noticeView.isUserInteractionEnabled = false
+        noticeGlyph.tintColor = .white
+        noticeGlyph.contentMode = .scaleAspectFit
+        noticeGlyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: hudFont * 0.9, weight: .semibold)
+        noticeGlyph.setContentHuggingPriority(.required, for: .horizontal)
+        noticeGlyph.setContentCompressionResistancePriority(.required, for: .horizontal)
+        noticeTitle.font = .systemFont(ofSize: hudFont * 0.85, weight: .bold)
+        noticeTitle.textColor = .white
+        noticeTitle.numberOfLines = 0
+        noticeMessage.font = .systemFont(ofSize: hudFont * 0.72, weight: .regular)
+        noticeMessage.textColor = UIColor.white.withAlphaComponent(0.85)
+        noticeMessage.numberOfLines = 0
+        let noticeText = UIStackView(arrangedSubviews: [noticeTitle, noticeMessage])
+        noticeText.axis = .vertical
+        noticeText.spacing = 4
+        let noticeRow = UIStackView(arrangedSubviews: [noticeGlyph, noticeText])
+        noticeRow.axis = .horizontal
+        noticeRow.alignment = .center
+        noticeRow.spacing = hudFont * 0.6
+        noticeRow.translatesAutoresizingMaskIntoConstraints = false
+        noticeView.addSubview(noticeRow)
+        view.addSubview(noticeView)
+        #if os(tvOS)
+        let noticeMaxW: CGFloat = 1000
+        #else
+        let noticeMaxW: CGFloat = 520
+        #endif
+        let noticePad = hudFont * 0.8
+        NSLayoutConstraint.activate([
+            noticeRow.topAnchor.constraint(equalTo: noticeView.topAnchor, constant: noticePad * 0.75),
+            noticeRow.bottomAnchor.constraint(equalTo: noticeView.bottomAnchor, constant: -noticePad * 0.75),
+            noticeRow.leadingAnchor.constraint(equalTo: noticeView.leadingAnchor, constant: noticePad),
+            noticeRow.trailingAnchor.constraint(equalTo: noticeView.trailingAnchor, constant: -noticePad),
+            noticeView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            // Above the centre, where `skipHUD` and the seek-settle spinner sit:
+            // the re-anchoring seek a track switch fires raises that spinner at
+            // exactly the moment this notice appears.
+            noticeView.bottomAnchor.constraint(equalTo: view.centerYAnchor, constant: -(hudH / 2 + 16)),
+            noticeView.widthAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.widthAnchor, constant: -48),
+            noticeView.widthAnchor.constraint(lessThanOrEqualToConstant: noticeMaxW)
+        ])
+
         let safe = view.safeAreaLayoutGuide
         #if os(tvOS)
         // Zero until an image actually lands, so a title with no artwork sits
@@ -1466,6 +1660,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // swipe-down started in the middle simply never began, for as long as
         // the spinner was up.
         loadingIndicator.isUserInteractionEnabled = false
+        // Not hit-testable (above) but still ANNOUNCED: a spinner is the only
+        // thing on screen while the engine opens, and without a label VoiceOver
+        // describes the wait as an empty black screen. Accessibility and
+        // hit-testing are independent — this element is reachable by the rotor
+        // and inert to touch, which is exactly what is wanted.
+        loadingIndicator.isAccessibilityElement = true
+        loadingIndicator.accessibilityLabel = hudA11y.loading
+        loadingIndicator.accessibilityTraits = .updatesFrequently
         view.addSubview(loadingIndicator)
         NSLayoutConstraint.activate([
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -1588,6 +1790,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         slider.addTarget(self, action: #selector(scrubberTouchDown), for: .touchDown)
         slider.addTarget(self, action: #selector(scrubberChanged), for: .valueChanged)
         slider.addTarget(self, action: #selector(scrubberDone), for: [.touchUpInside, .touchUpOutside])
+        slider.accessibilityLabel = hudA11y.scrubBar
+        // VoiceOver's adjust gesture (swipe up / down) is handed over as a ±1
+        // step and routed through the SAME coalesced skip the transport buttons
+        // use — never a direct engine seek, and never the slider's own value,
+        // which `scrubberChanged` ignores unless the user is really dragging.
+        slider.onAccessibilityStep = { [weak self] step in
+            guard let self else { return }
+            step > 0 ? iosSkipForward() : iosSkipBack()
+        }
         controlsContainer.addSubview(slider)
 
         // Close (✕) — part of the HUD, so it fades in/out with the controls.
@@ -1629,7 +1840,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         configureIOS(prevButton, "backward.end.fill", pt: 24, loc.localized("player.previousEpisode"))
         prevButton.addTarget(self, action: #selector(prevEpisodeTapped), for: .touchUpInside)
-        configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, loc.localized("player.skipIntro"))
+        configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, hudA11y.skipBack)
         skipBackButton.addTarget(self, action: #selector(iosSkipBack), for: .touchUpInside)
 
         var ppCfg = UIButton.Configuration.plain()
@@ -1638,9 +1849,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         ppCfg.baseForegroundColor = .white
         playPauseButton.configuration = ppCfg
         playPauseButton.translatesAutoresizingMaskIntoConstraints = false
+        // The one HUD control that carried NO label at all: an icon-only button
+        // VoiceOver announced as "bouton". Its label follows the glyph, so it is
+        // re-set by `setPlayPauseIcon(playing:)` rather than only here.
+        playPauseButton.accessibilityLabel = hudA11y.pause
         playPauseButton.addTarget(self, action: #selector(playPauseTapped), for: .touchUpInside)
 
-        configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, loc.localized("player.skipCredits"))
+        configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, hudA11y.skipForward)
         skipFwdButton.addTarget(self, action: #selector(iosSkipForward), for: .touchUpInside)
         configureIOS(nextButton, "forward.end.fill", pt: 24, loc.localized("player.nextEpisode"))
         nextButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
@@ -1846,6 +2061,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // « Quitter la séance ? » is up. A presented controller's next responder
+        // is the controller that presented it, so a press the alert does not
+        // consume can still bubble here — where Menu would run the peel's
+        // bare-video branch (a second question) and play/pause would wake a
+        // HUD behind the alert. Stand down entirely until it is answered.
+        if leaveConfirmationAlert != nil {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         // Menu (or keyboard Escape on the simulator) → peel one layer. Handled
         // HERE too (not only via the recognizer): when the HUD is hidden no
         // control is focused, so `pressesBegan` is the path that fires. Routing
@@ -2144,6 +2368,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `controlsVisible` flag, which can disagree with what's on screen and was
     /// the source of the "Menu re-opens the HUD instead of quitting" loop.
     private func handleMenu() {
+        // « Quitter la séance ? » is up: the alert owns Menu (its « Annuler »
+        // is the cancel action), and a peel firing behind it would reach the
+        // bare-video branch below and ask a second time.
+        guard leaveConfirmationAlert == nil else { return }
         let now = Date()
         if now.timeIntervalSince(lastMenuHandledAt) < 0.2 { return }
         lastMenuHandledAt = now
@@ -2159,7 +2387,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             hideControlsWorkItem?.cancel()
             hideControlsImmediately()
         } else {
-            dismiss(animated: true)
+            closePlayer(.user)
         }
     }
 
@@ -2469,6 +2697,23 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 
+    /// The player's own toast: a glyph, a title and a wrapped sentence, above
+    /// the centre, auto-hidden after `duration`. Announced to VoiceOver, since
+    /// the view itself is non-interactive and would otherwise never be read.
+    private func showNotice(symbol: String, title: String, message: String, duration: TimeInterval = 6) {
+        noticeHide?.cancel()
+        noticeGlyph.image = UIImage(systemName: symbol)
+        noticeTitle.text = title
+        noticeMessage.text = message
+        UIView.animate(withDuration: 0.2) { self.noticeView.alpha = 1 }
+        UIAccessibility.post(notification: .announcement, argument: "\(title). \(message)")
+        let work = DispatchWorkItem { [weak self] in
+            UIView.animate(withDuration: 0.3) { self?.noticeView.alpha = 0 }
+        }
+        noticeHide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+    }
+
     /// Native-style ±N s indicator (N = `PlayerSkipConfig.intervalSeconds`),
     /// briefly flashed with a small bounce.
     private func showSkipGlyph(forward: Bool) {
@@ -2566,9 +2811,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     #if os(tvOS)
     private func updateScrubBar(progress: Float) {
         tvScrub.setProgress(progress)
-        // Keep VoiceOver's spoken value in sync with the playhead. `timeLabel`
-        // is set immediately before every call site, so it's the current time.
-        tvScrub.accessibilityValue = timeLabel.text
+        // The spoken value is deliberately NOT written here any more. It used to
+        // be `timeLabel.text` — the clock string `12:04`, which VoiceOver reads
+        // as a time of day rather than a position. `writeTimeLabels` owns it
+        // now: it holds the position in milliseconds, which is what spelling it
+        // out requires, and BOTH call sites of this method are preceded by
+        // exactly that call with the same position (the tvOS scrub release and
+        // `paintPosition`), so nothing is left stale by the move.
     }
 
     /// Positions + populates the trickplay bubble during a touch-surface scrub.
@@ -2609,6 +2858,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func presentPicker(_ title: String,
                                sourceView: UIView? = nil,
                                _ options: [(title: String, selected: Bool, action: () -> Void)]) {
+        presentPicker(title, sourceView: sourceView,
+                      options: options.map { PickerOption(title: $0.title, selected: $0.selected, action: $0.action) })
+    }
+
+    private func presentPicker(_ title: String, sourceView: UIView? = nil, options: [PickerOption]) {
         pickerPresented = true
         hideControlsWorkItem?.cancel()
         #if os(tvOS)
@@ -2649,7 +2903,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Builds or re-renders the option panel. Re-rendering an already-visible
     /// panel is the delay-nudge path: the title carries the running value, so
     /// it has to change without the sheet blinking out and back.
-    private func presentOptionPanel(title: String, options: [(title: String, selected: Bool, action: () -> Void)]) {
+    private func presentOptionPanel(title: String, options: [PickerOption]) {
         optionPanelGeneration += 1
         optionPanelActions = options.map { $0.action }
 
@@ -2702,7 +2956,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         panel.render(
             title: title,
-            options: options.map { TVOptionPanel.Option(title: $0.title, isSelected: $0.selected, action: $0.action) }
+            options: options.map {
+                TVOptionPanel.Option(title: $0.title, isSelected: $0.selected, badgeSymbol: $0.badge, action: $0.action)
+            }
         )
         view.layoutIfNeeded()
         setNeedsFocusUpdate()
@@ -2758,14 +3014,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func openAudioMenu() {
-        var opts: [(String, Bool, () -> Void)] = []
+        var opts: [PickerOption] = []
         for (i, track) in player.audioTracks.enumerated() {
             let selected = player.selectedAudioTrack == track
-            opts.append((displayLabel(forAudioOrdinal: i, track: track), selected, { [weak self] in
+            // A TrueHD / MLP track is TAGGED, never hidden or refused: libVLC on
+            // Apple plays it silent, but sources are sometimes mis-tagged and the
+            // user may know better. See `AudioTrackPolicy`.
+            let silent = AudioTrackPolicy.isSilent(ordinal: i, in: info.audioTracks)
+            var label = displayLabel(forAudioOrdinal: i, track: track)
+            if silent { label += " " + loc.localized("player.audio.silentSuffix") }
+            opts.append(PickerOption(title: label, selected: selected, badge: silent ? "speaker.slash" : nil) { [weak self] in
                 self?.selectAudioTrack(track)
-            }))
+                self?.explainIfSilent(ordinal: i)
+            })
         }
-        opts.append(("\(loc.localized("player.audioDelay")) — \(Self.formatDelay(audioDelayMsState))", false, { [weak self] in
+        opts.append(PickerOption(
+            title: "\(loc.localized("player.audioDelay")) — \(Self.formatDelay(audioDelayMsState))",
+            selected: false
+        ) { [weak self] in
             // Synchronous on tvOS so the generation bumps before `onSelect`
             // decides, which keeps the one panel and re-renders it in place.
             #if os(tvOS)
@@ -2773,8 +3039,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #else
             DispatchQueue.main.async { self?.openAudioDelayMenu() }
             #endif
-        }))
-        presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, opts)
+        })
+        presentPicker(loc.localized("player.audio"), sourceView: audioPickerSource, options: opts)
+    }
+
+    /// Explains a hand-picked track this engine plays silent and names the
+    /// audible alternative. The suggestion comes from the SAME replacement
+    /// `AudioTrackPolicy` uses for the automatic default, so the two can never
+    /// point at different tracks. The pick itself stands — this only explains.
+    private func explainIfSilent(ordinal: Int) {
+        guard case .silent(let suggested) = AudioTrackPolicy.manualPickVerdict(
+            ordinal: ordinal, tracks: info.audioTracks
+        ) else { return }
+        let message: String
+        if let suggested, suggested < info.audioTracks.count {
+            message = loc.localized("player.audio.silent.suggestion", info.audioTracks[suggested].label)
+        } else {
+            message = loc.localized("player.audio.silent.noAlternative")
+        }
+        logger.notice("CINEMAX-AUDIO ▸ piste muette choisie à la main [\(ordinal, privacy: .public)] suggestion=\(String(describing: suggested), privacy: .public)")
+        showNotice(symbol: "speaker.slash.fill", title: loc.localized("player.audio.silent.title"), message: message)
     }
 
     /// Switches the audio track and re-anchors playback at the switch position.
@@ -3085,8 +3369,41 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// it serves an HLS tree as readily as a single file, and the manifest
     /// refusal that used to live here would defeat the only working path on a
     /// network where `getaddrinfo` fails.
-    private func proxiedURLIfUsable(for authed: URL, token: String?) -> URL? {
-        StreamTransportPolicy.shared.proxiedURL(for: authed, token: token)
+    private func proxiedURLIfUsable(for target: URL, token: String?) -> URL? {
+        StreamTransportPolicy.shared.proxiedURL(for: target, token: token)
+    }
+
+    /// The URL to open for `info` on all four open paths (fresh open, error
+    /// retry, wake re-resolve, episode nav): through the loopback proxy when
+    /// `tryProxy` and it can start, else direct. Where the token goes is
+    /// `VLCStreamPresenter.streamURL`'s call, keyed on `didRetry` — the flag
+    /// that bounds the retry, so the token comes back on exactly the one
+    /// attempt that follows a failure, and only `noteMediaOpened()` stands it
+    /// down again.
+    private func streamOpenURL(for info: PlaybackInfo, tryProxy: Bool) -> (url: URL, viaProxy: Bool) {
+        let isRetry = didRetry
+        let token = info.authToken
+        let opened: (url: URL, viaProxy: Bool)
+        if tryProxy,
+           let proxied = proxiedURLIfUsable(
+               for: VLCStreamPresenter.streamURL(info.url, token: token, isRetry: isRetry, viaProxy: true),
+               token: token
+           ) {
+            opened = (proxied, true)
+        } else {
+            opened = (VLCStreamPresenter.streamURL(info.url, token: token, isRetry: isRetry, viaProxy: false), false)
+        }
+        // Where the token went — never the token itself.
+        let auth: String
+        if opened.viaProxy, token?.isEmpty == false {
+            auth = "en-tête"
+        } else if VLCStreamPresenter.carriesApiKey(opened.url) {
+            auth = "ApiKey dans l'URL"
+        } else {
+            auth = "aucun"
+        }
+        logger.notice("CINEMAX-STREAM ▸ ouverture \(isRetry ? "après échec" : "initiale", privacy: .public) voie=\(opened.viaProxy ? "proxy" : "directe", privacy: .public) jeton=\(auth, privacy: .public)")
+        return opened
     }
 
     private func startPlayback() {
@@ -3102,18 +3419,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         resolvedIsEpisode = nil
         audioDelayMsState = 0
         subtitleDelayMsState = 0
-        let url: URL
-        let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
         // Broken-IPv6 server (decided in the background), direct already
         // failed this session, or a seek-heavy container (AVI…): route via
         // the loopback proxy; fall back to the direct URL if it can't start.
-        if shouldRouteThroughProxy,
-           let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
-            url = proxied
-            usingProxy = true
-        } else {
-            url = authed
-        }
+        let (url, viaProxy) = streamOpenURL(for: info, tryProxy: shouldRouteThroughProxy)
+        usingProxy = viaProxy
         guard let media = makeMedia(url) else { handlePlaybackError(); return }
         startEventLoop()
         activateSessionThenPlay(media)
@@ -3143,6 +3453,50 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func cancelOpenWatchdog() {
         openWatchdog?.invalidate()
         openWatchdog = nil
+    }
+
+    /// The media libVLC is opening is an HLS playlist (the forced transcode of
+    /// a seek-heavy container). Same test the proxy applies to what it forwards.
+    private var isAdaptiveStream: Bool {
+        CinemaxStreamProxy.isManifest(path: info.url.path)
+    }
+
+    /// Nothing is opening or playing: the engine ended, is ending, or never
+    /// started. What `PlaybackEndPolicy` calls `engineStopped` on a recheck.
+    private var engineIsStopped: Bool {
+        switch player.state {
+        case .stopped, .stopping, .error, .idle: return true
+        case .opening, .buffering, .playing, .paused: return false
+        }
+    }
+
+    /// A never-opened HLS stop that landed inside the media-swap window could be
+    /// the media we just replaced winding down. Ask the policy again once the
+    /// window is over, with the engine's state at that moment: a swap has the
+    /// new media opening by then, a failed open is still stopped. Without this,
+    /// a fast manifest failure fell through to the open watchdog, which gives
+    /// the retry 30 s.
+    ///
+    /// Tied to the `play()` the stop was measured against: a newer open (the
+    /// retry, an episode nav, a wake re-resolve) moves `lastPlayStart`, and the
+    /// recheck then does nothing. It never schedules another recheck.
+    private func scheduleFailedOpenRecheck(after delay: TimeInterval) {
+        guard let attempt = lastPlayStart else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, self.lastPlayStart == attempt else { return }
+            let decision = PlaybackEndPolicy.decide(
+                isTearingDown: self.isTearingDown,
+                secondsSincePlayStart: Date().timeIntervalSince(attempt),
+                currentMs: Int64(self.currentMs), lengthMs: Int64(self.lengthMs),
+                mediaConfirmedOpen: self.mediaConfirmedOpen,
+                isAdaptiveStream: self.isAdaptiveStream,
+                engineStopped: self.engineIsStopped
+            )
+            guard decision == .failedOpen else { return }
+            logger.error("VLC HLS stream of \(self.itemId, privacy: .public) still stopped after the swap window — retrying now")
+            self.handlePlaybackError()
+        }
     }
 
     /// The media is CONFIRMED open — a real length or a moving playhead, the
@@ -3205,6 +3559,63 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         setPlayPauseIcon(playing: willPlay)
         #endif
         scheduleHideControls()
+    }
+
+    // MARK: - Remote control (inbound Playstate, #176)
+
+    /// Applies a transport command another Jellyfin session sent this device.
+    /// `RemotePlaystateRouter` has already refused it while a Watch Together
+    /// group owns the playhead, which is why nothing here goes through
+    /// `syncPlay`. Returns whether the command was applied (for the router's
+    /// `CINEMAX-REMOTE` log line).
+    private func applyRemotePlaystate(_ command: RemotePlaystateCommand) -> Bool {
+        guard !isTearingDown else { return false }
+        switch command.kind {
+        case .pause:
+            return setPlayingFromRemote(false)
+        case .unpause:
+            return setPlayingFromRemote(true)
+        case .playPause:
+            return setPlayingFromRemote(!enginePlaying)
+        case .seek:
+            // Through `engineSeek`, the funnel every seek path shares: the
+            // near-end clamp (libVLC refuses a seek to `lengthMs` and never
+            // recovers) and the settle window that holds the spinner. Refused
+            // before the demuxer exists — the resume seek owns that window,
+            // and libVLC would drop a seek into a media not yet open.
+            guard let ticks = command.seekPositionTicks, mediaConfirmedOpen else { return false }
+            // A local ±N burst still waiting to commit must not land after it.
+            cancelPendingSeekCommit()
+            engineSeek(ms: Int32(clamping: ticks / 10_000))
+            refreshTimeUISoon()
+            return true
+        case .stop:
+            // The close button's exit, so `viewWillDisappear` owns the stop
+            // report + teardown as for any dismissal. Asked of the PRESENTING
+            // controller: an alert or picker stacked on top of the player would
+            // otherwise absorb the dismissal and leave the player standing.
+            (presentingViewController ?? self).dismiss(animated: true)
+            return true
+        case .nextTrack:
+            guard episodeNavigator != nil, let next = nextEpisode else { return false }
+            navigateToEpisode(next)
+            return true
+        case .previousTrack:
+            guard episodeNavigator != nil, let previous = previousEpisode else { return false }
+            navigateToEpisode(previous)
+            return true
+        }
+    }
+
+    /// Same visible feedback as a local press (`playPauseTapped`), minus its
+    /// SyncPlay branch — a remote command never reaches here in a group.
+    private func setPlayingFromRemote(_ play: Bool) -> Bool {
+        if play { enginePlay() } else { enginePause() }
+        flashCenterGlyph(playing: play)
+        #if os(iOS)
+        setPlayPauseIcon(playing: play)
+        #endif
+        return true
     }
 
     // MARK: - SyncPlay ("Watch Together")
@@ -3324,8 +3735,68 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return .cinemaHex(option.palette.accentDark)
     }
 
+    // MARK: - Closing while in a group (#175)
+
+    /// The one way this presenter closes itself. `origin` says who asked, which
+    /// is what decides whether a Watch Together member is asked first — see
+    /// `SyncPlayLeaveConfirmation`. The interactive swipe keeps its own
+    /// `dismiss(animated: false)` (the slide IS the exit animation) and asks
+    /// through `askBeforeLeavingGroupIfNeeded` directly.
+    private func closePlayer(_ origin: SyncPlayLeaveConfirmation.CloseOrigin) {
+        if askBeforeLeavingGroupIfNeeded(origin) { return }
+        dismiss(animated: true)
+    }
+
+    /// Raises « Quitter la séance ? » when this close would leave a group the
+    /// viewer never said to leave. Returns `true` when the close became that
+    /// question — the caller must then NOT dismiss.
+    ///
+    /// The alert only ever presents over the player. It is a separate
+    /// presentation whose own dismissal is its own (`isBeingDismissed` is true
+    /// on the ALERT, never on this controller), and presenting it does not
+    /// take the player's view out of the hierarchy, so `viewWillDisappear`'s
+    /// teardown — and with it `playbackDidDismiss` → `leaveGroup` — runs only
+    /// when « Quitter la séance » calls the same `dismiss` as before. That
+    /// handler runs after the alert has gone, which is what lets `dismiss`
+    /// target this controller rather than the alert (the error and sleep
+    /// alerts already rely on it). « Annuler » changes nothing: playback is not
+    /// paused and the group is not touched.
+    @discardableResult
+    private func askBeforeLeavingGroupIfNeeded(_ origin: SyncPlayLeaveConfirmation.CloseOrigin) -> Bool {
+        guard SyncPlayLeaveConfirmation.mustConfirm(isInGroup: syncPlay.isInGroup, origin: origin) else {
+            return false
+        }
+        // Already asking: a second request (✕ tapped twice, Menu mashed) is the
+        // same question, never a second alert stacked on the first.
+        if leaveConfirmationAlert != nil { return true }
+        syncPlay.trace("fermeture du lecteur : confirmation demandée")
+        let alert = UIAlertController(
+            title: loc.localized("syncplay.leaveConfirm.title"),
+            message: loc.localized("syncplay.leaveConfirm.message"),
+            preferredStyle: .alert
+        )
+        // `.cancel`: that is the action the tvOS Menu button maps to.
+        alert.addAction(UIAlertAction(title: loc.localized("action.cancel"), style: .cancel) { [weak self] _ in
+            guard let self else { return }
+            self.leaveConfirmationAlert = nil
+            // The Menu press that cancelled must not also reach the peel.
+            self.lastMenuHandledAt = Date()
+            self.syncPlay.trace("fermeture du lecteur : annulée — la séance continue")
+        })
+        alert.addAction(UIAlertAction(title: loc.localized("syncplay.leaveConfirm.leave"), style: .destructive) { [weak self] _ in
+            guard let self else { return }
+            self.leaveConfirmationAlert = nil
+            self.syncPlay.trace("fermeture du lecteur : séance quittée")
+            self.dismiss(animated: true)
+        })
+        leaveConfirmationAlert = alert
+        present(alert, animated: true)
+        return true
+    }
+
     /// Detaches from the controller and, since v1 ties the group's lifetime to
-    /// the player, leaves the group. Called from `teardown` (user dismiss).
+    /// the player, leaves the group. Called from `teardown`, i.e. on EVERY
+    /// close — a user close has been confirmed upstream by `closePlayer`.
     private func unbindSyncPlay() {
         syncPlay.onSessionChanged = nil
         syncPlay.unbindPlayback()
@@ -3401,17 +3872,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.nextEpisode = nav?.1
             self.refreshEpisodeButtons()
             self.titleLabel.text = ref.title
-            let authed = VLCStreamPresenter.authedURL(vlcInfo.url, token: vlcInfo.authToken)
-            let url: URL
             // Carry the proxy across episodes when the server needs it.
-            if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = self.proxiedURLIfUsable(for: authed, token: vlcInfo.authToken) {
-                url = proxied
-                self.usingProxy = true
-            } else {
-                url = authed
-                self.usingProxy = false
-            }
+            let (url, viaProxy) = self.streamOpenURL(
+                for: vlcInfo, tryProxy: self.usingProxy || self.shouldRouteThroughProxy
+            )
+            self.usingProxy = viaProxy
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.beginOpenLoading()
             // The episode we're leaving can have died during a device sleep, which
@@ -3483,7 +3948,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default) { [weak self] _ in
-                self?.dismiss(animated: true)
+                self?.closePlayer(.system)
             })
             present(alert, animated: true)
             return
@@ -3496,7 +3961,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     #if os(iOS)
     @objc private func closeTapped() {
-        dismiss(animated: true)
+        closePlayer(.user)
     }
 
     /// Native Picture-in-Picture via SwiftVLC's libVLC pixel-buffer →
@@ -3567,6 +4032,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         case .ended, .cancelled:
             let flick = g.velocity(in: view).y > 900
             if g.state == .ended, ty > height * 0.25 || flick {
+                // In a Watch Together group the release is a question, not a
+                // close: the surface springs back under « Quitter la séance ? »
+                // and only the alert's destructive action dismisses — with an
+                // ordinary animated dismiss, since the slide has been undone.
+                if askBeforeLeavingGroupIfNeeded(.user) {
+                    springBackFromDismissPan()
+                    return
+                }
                 UIView.animate(withDuration: 0.22, delay: 0, options: .curveEaseIn) {
                     self.view.transform = CGAffineTransform(translationX: 0, y: height)
                     self.view.alpha = 0
@@ -3576,15 +4049,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.dismiss(animated: false)
                 }
             } else {
-                UIView.animate(withDuration: 0.3, delay: 0,
-                               usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
-                    self.view.transform = .identity
-                    self.view.alpha = 1
-                    self.view.layer.cornerRadius = 0
-                }
+                springBackFromDismissPan()
             }
         default:
             break
+        }
+    }
+
+    /// Returns the dragged surface to rest — a release short of the threshold,
+    /// or one turned into the leave question.
+    private func springBackFromDismissPan() {
+        UIView.animate(withDuration: 0.3, delay: 0,
+                       usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+            self.view.transform = .identity
+            self.view.alpha = 1
+            self.view.layer.cornerRadius = 0
         }
     }
 
@@ -3735,6 +4214,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         config.image = UIImage(systemName: playing ? "pause.fill" : "play.fill",
                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .bold))
         playPauseButton.configuration = config
+        // The glyph shows what the press WILL do, and so must the label: a
+        // button drawn as ⏸ is the one that pauses.
+        playPauseButton.accessibilityLabel = playing ? hudA11y.pause : hudA11y.play
     }
     #endif
 
@@ -3808,17 +4290,31 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // teardown, error and real EOF arrives here. Log the four gate
             // inputs so a missing end-of-series card can be attributed to the
             // gate rather than guessed at.
+            // nil ⇒ a fresh open has not reached its play() yet (logged as -1).
+            let sincePlay = lastPlayStart.map { Date().timeIntervalSince($0) }
             logger.notice("""
                 end-gate .stopped tearingDown=\(self.isTearingDown, privacy: .public) \
-                sincePlay=\(Date().timeIntervalSince(self.lastPlayStart), format: .fixed(precision: 2), privacy: .public) \
-                currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public)
+                sincePlay=\(sincePlay ?? -1, format: .fixed(precision: 2), privacy: .public) \
+                currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public) \
+                opened=\(self.mediaConfirmedOpen, privacy: .public) hls=\(self.isAdaptiveStream, privacy: .public)
                 """)
             switch PlaybackEndPolicy.decide(
                 isTearingDown: isTearingDown,
-                secondsSincePlayStart: Date().timeIntervalSince(lastPlayStart),
+                secondsSincePlayStart: sincePlay,
                 currentMs: Int64(currentMs), lengthMs: Int64(lengthMs),
-                mediaConfirmedOpen: mediaConfirmedOpen
+                mediaConfirmedOpen: mediaConfirmedOpen,
+                isAdaptiveStream: isAdaptiveStream
             ) {
+            case .failedOpen:
+                // The HLS manifest never produced a demuxer (an origin RST on
+                // the playlist fetch is the measured cause). libVLC reports a
+                // clean stop with no error, so this used to wait out the whole
+                // open watchdog on a frozen 0:00. The retry branch reopens
+                // through the proxy and, on a second failure, shows the alert.
+                logger.error("VLC stopped before the HLS stream of \(self.itemId, privacy: .public) ever opened — retrying now")
+                handlePlaybackError()
+            case .recheck(let delay):
+                scheduleFailedOpenRecheck(after: delay)
             case .ended:
                 handlePlaybackEnded()
             case .unexpectedStop:
@@ -3928,7 +4424,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if episodeNavigator != nil {
             showEndOfSeriesOverlay()
         } else {
-            dismiss(animated: true)
+            closePlayer(.system)
         }
     }
 
@@ -3980,7 +4476,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: self.loc.localized("player.finishedSeries.done"), style: .default) { [weak self] _ in
-                self?.dismiss(animated: true)
+                self?.closePlayer(.user)
             })
             self.present(alert, animated: true)
             #endif
@@ -4080,7 +4576,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func endOfSeriesDoneTapped() {
-        dismiss(animated: true)
+        closePlayer(.user)
     }
     #endif
 
@@ -4090,7 +4586,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
-            let authed = VLCStreamPresenter.authedURL(info.url, token: info.authToken)
             // A direct attempt failed: pin the rest of the session to the proxy
             // so we stop re-rolling the dice on the flaky direct path. This is
             // unconditional again now that the proxy can serve a manifest —
@@ -4099,16 +4594,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // (measured: libVLC `cannot resolve` while URLSession returns 200).
             if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
             // Always retry via the proxy (direct is the path that stalls on
-            // broken IPv6); fall back to direct only if it can't start.
-            let url: URL
-            if let proxied = proxiedURLIfUsable(for: authed, token: info.authToken) {
-                url = proxied
-                usingProxy = true
-            } else {
-                url = authed
-            }
+            // broken IPv6, and the proxy authenticates by header); fall back to
+            // direct only if it can't start — the one open that carries
+            // `ApiKey` (see `streamURL`).
+            let (url, viaProxy) = streamOpenURL(for: info, tryProxy: true)
+            if viaProxy { usingProxy = true }
             if let media = try? Media(url: url) {
                 media.addOption(":network-caching=5000")
+                recordPlaybackDiagnostics()
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
                 // of restarting at 0. The initial resume-seek already fired,
@@ -4126,6 +4619,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }
             return
         }
+        // Already given up and on screen: a second signal of the SAME failure
+        // (its trailing `.stopped`, a late watchdog) must neither stack another
+        // alert nor release the server session twice.
+        guard errorAlert == nil else { return }
         logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
         releaseServerSessionAfterFailure()
         setLoading(false) // the error dialog now owns the screen
@@ -4135,7 +4632,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default) { [weak self] _ in
-            self?.dismiss(animated: true)
+            self?.closePlayer(.system)
         })
         present(alert, animated: true)
         errorAlert = alert
@@ -4329,16 +4826,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didApplyServerTrackDefaults = false
             self.mediaLengthMs = 0
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
-            let authed = VLCStreamPresenter.authedURL(fresh.url, token: fresh.authToken)
-            let url: URL
-            if (self.usingProxy || self.shouldRouteThroughProxy),
-               let proxied = self.proxiedURLIfUsable(for: authed, token: fresh.authToken) {
-                url = proxied
-                self.usingProxy = true
-            } else {
-                url = authed
-                self.usingProxy = false
-            }
+            let (url, viaProxy) = self.streamOpenURL(
+                for: fresh, tryProxy: self.usingProxy || self.shouldRouteThroughProxy
+            )
+            self.usingProxy = viaProxy
             guard let media = self.makeMedia(url) else { self.handlePlaybackError(); return }
             self.beginOpenLoading()
             // Re-assert the playback session BEFORE replay: the system deactivated
@@ -4415,6 +4906,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         timeLabel.text = PlayerTimeFormat.ms(ms)
         durationLabel.text = "-" + PlayerTimeFormat.ms(max(0, lengthMs - ms))
         lastPaintedPosition = (ms / 1000, lengthMs)
+        // The scrub control's spoken value rides the SOLE label writer, so it
+        // cannot drift from what is on screen — and it is WORDS, never the clock
+        // string the labels show: VoiceOver reads `12:04` as a time of day.
+        // tvOS used to assign `timeLabel.text` here-abouts (inside
+        // `updateScrubBar`) and had exactly that defect.
+        let spokenPosition = hudA11y.position(
+            elapsed: PlayerTimeFormat.spoken(ms, using: spokenTime),
+            total: lengthMs > 0 ? PlayerTimeFormat.spoken(lengthMs, using: spokenTime) : nil
+        )
+        #if os(iOS)
+        slider.accessibilityValue = spokenPosition
+        #else
+        tvScrub.accessibilityValue = spokenPosition
+        #endif
     }
 
     /// Writes one position to the time labels and the platform scrub control.

@@ -128,8 +128,9 @@ final class SyncPlayController {
     /// remote log cannot even answer *did the group leave `Waiting`?* — the
     /// first question any report of "rien ne se passe" raises. Same reasoning as
     /// the `CINEMAX-AUDIO` line, and the same discipline: names and ids only,
-    /// never a URL and never a token.
-    private func trace(_ message: String) {
+    /// never a URL and never a token. Internal so the player's leave
+    /// confirmation (#175) traces under the same prefix.
+    func trace(_ message: String) {
         syncLogger.notice("CINEMAX-SYNCPLAY ▸ \(message, privacy: .public)")
     }
 
@@ -139,8 +140,14 @@ final class SyncPlayController {
     /// has no SyncPlay integration at all. With the native player forced, a
     /// group would form server-side and nothing would ever move — a silent
     /// no-op, which is precisely the failure mode this feature had too much of.
-    /// Callers refuse with an explanation rather than hiding the button, because
-    /// a documented feature that is simply absent teaches the user nothing.
+    ///
+    /// The UI now states the precondition BEFORE the press (#165): the fiche's
+    /// « Ensemble » entry is hidden and Home's joinable group cards are dimmed
+    /// under a footnote naming the setting. Both entry points still refuse
+    /// through this with `syncplay.needsVLC` — the backstop for anything that
+    /// reaches them regardless (a stale render, a future caller). Views read
+    /// the same key through `@AppStorage` so they re-render when it flips; this
+    /// accessor is for code that only needs the value at the moment it acts.
     static var isEngineSupported: Bool {
         !UserDefaults.standard.bool(forKey: SettingsKey.forceNativeAVPlayer)
     }
@@ -232,8 +239,11 @@ final class SyncPlayController {
         teardownSession()
     }
 
-    /// Called by the presenter when its player is dismissed by the user. v1
-    /// ties the group's lifetime to the player: closing playback leaves.
+    /// Called by the presenter's teardown, whoever closed the player. v1 ties
+    /// the group's lifetime to the player: closing playback leaves. A USER
+    /// close has already been confirmed by then (« Quitter la séance ? »,
+    /// `SyncPlayLeaveConfirmation`, #175); a system close — error, end of
+    /// media — is deliberately not asked about.
     func playbackDidDismiss() {
         guard isInGroup else { return }
         leaveGroup()
@@ -459,7 +469,7 @@ final class SyncPlayController {
         switch message {
         case .syncPlayCommand(let command): schedule(command)
         case .syncPlayGroupUpdate(let update): apply(update)
-        case .play, .displayMessage, .userUpdated: break
+        case .play, .displayMessage, .playstate, .userUpdated: break
         }
     }
 

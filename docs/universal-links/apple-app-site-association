@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["4T334S4NP6.com.cinemax.ios"],
+        "components": [
+          { "/": "/item/*", "comment": "Cinemax — open a title" },
+          { "/": "/home", "comment": "Cinemax — open the Home tab" }
+        ]
+      }
+    ]
+  }
+}

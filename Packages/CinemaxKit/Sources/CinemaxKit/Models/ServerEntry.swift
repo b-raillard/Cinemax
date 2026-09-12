@@ -14,9 +14,25 @@ import Foundation
 ///   dedup ("is this server already registered?") compares normalized URLs.
 /// - `accessToken == nil` means "registered but signed out" — the card stays in
 ///   the list, ready for a re-login. It is never a reason to drop the entry.
+/// - `displayNameOverride` / `sortIndex` are **user-owned**: written only by
+///   `AppState.renameServer` / `AppState.reorderServers`, never by anything
+///   that learns about the server (login, switch, reachability ping). That is
+///   why `ServerRegistry.upsert` carries them over from the stored entry instead
+///   of taking the incoming one's — see the RULE there.
+///
+/// Every field added after the first shipped registry MUST be optional: the
+/// synthesized `Decodable` reads an absent optional as `nil`, which is what
+/// lets a registry already sitting in the Keychain decode unchanged. A
+/// non-optional addition would fail the whole `[ServerEntry]` decode, and
+/// `KeychainService.getServers()` answers that with `[]` — every registered
+/// server silently gone.
 public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
     /// Display name used until the server tells us its real one.
     public static let fallbackName = "Jellyfin Server"
+
+    /// Upper bound on a user-given name. Long enough for any real label, short
+    /// enough that a pasted paragraph can't blow out a row or a toast.
+    public static let maxDisplayNameLength = 60
 
     /// Locally minted, stable across URL edits. Never Jellyfin's server id.
     public let id: String
@@ -32,6 +48,12 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
     public var username: String?
     public var serverVersion: String?
     public var lastUsedAt: Date
+    /// The user's own label for this server, local to this device. `nil` ⇒ show
+    /// the server's `name` (and follow it when the server renames itself).
+    public var displayNameOverride: String?
+    /// Manual position in the servers list. `nil` ⇒ the entry has never been
+    /// placed by hand and sorts by the automatic rule — see `ServerRegistry.sorted`.
+    public var sortIndex: Int?
 
     public init(
         id: String = UUID().uuidString,
@@ -42,7 +64,9 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
         userId: String? = nil,
         username: String? = nil,
         serverVersion: String? = nil,
-        lastUsedAt: Date = Date()
+        lastUsedAt: Date = Date(),
+        displayNameOverride: String? = nil,
+        sortIndex: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -53,6 +77,31 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
         self.username = username
         self.serverVersion = serverVersion
         self.lastUsedAt = lastUsedAt
+        self.displayNameOverride = displayNameOverride
+        self.sortIndex = sortIndex
+    }
+
+    /// What every surface prints for this server: the user's label when they
+    /// gave one, else the name the server reports.
+    public var displayName: String {
+        if let override = displayNameOverride, !override.isEmpty { return override }
+        return name
+    }
+
+    /// Normalizes raw rename input into the value `displayNameOverride` stores.
+    ///
+    /// Whitespace is trimmed and the result capped at `maxDisplayNameLength`.
+    /// Both "nothing" and "exactly the server's own name" map to `nil` — i.e.
+    /// "no override" — so clearing the field restores the server's name, and a
+    /// label that merely restates it keeps following the server if it is
+    /// renamed server-side later.
+    public static func normalizedDisplayNameOverride(_ raw: String?, serverName: String) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let capped = String(trimmed.prefix(maxDisplayNameLength))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return capped == serverName ? nil : capped
     }
 
     /// `true` when the entry carries a usable token (an empty string counts as

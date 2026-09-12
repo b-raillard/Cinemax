@@ -274,6 +274,10 @@ struct MainTabView: View {
                     .environment(\.tvTabID, tab.id)
                 } label: {
                     Label(tab.displayTitle(loc), systemImage: tab.icon)
+                        // The tab bar sets no font of its own, so it is
+                        // the one surface that really collapses at the
+                        // largest sizes — see `CinemaDynamicType`.
+                        .layoutBoundDynamicType()
                 }
             }
         }
@@ -306,6 +310,10 @@ struct MainTabView: View {
                     }
                 } label: {
                     Label(tab.displayTitle(loc), systemImage: tab.icon)
+                        // The tab bar sets no font of its own, so it is
+                        // the one surface that really collapses at the
+                        // largest sizes — see `CinemaDynamicType`.
+                        .layoutBoundDynamicType()
                 }
             }
         }
