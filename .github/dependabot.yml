@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # Dependabot has no Xcode-project support: it reads Package.swift +
+  # Package.resolved only, so it watches the CinemaxKit package — which is
+  # where jellyfin-sdk-swift, Nuke and Get (plus the swift-nio family the SDK
+  # pulls in) are declared. It can NOT edit the app's own
+  # Cinemax.xcodeproj/.../Package.resolved, which is what CI builds from: a
+  # Dependabot PR therefore fails `scripts/dependency-audit.py check` ("sync")
+  # until someone resolves packages in Xcode and commits both files, bumps
+  # LicensesView and updates docs/dependencies/checksums.md — which is the
+  # review this setup exists to force. See docs/dependencies/checksums.md.
+  - package-ecosystem: "swift"
+    directory: "/Packages/CinemaxKit"
+    schedule:
+      interval: "weekly"
+    ignore:
+      # SwiftVLC is pinned `exactVersion: 1.0.0` on purpose (CLAUDE.md →
+      # Dependencies): it is the playback engine, every tag embeds a libVLC
+      # build, and an upgrade is validated on device, never a routine bump. It
+      # is declared in project.yml, which Dependabot cannot read anyway, so this
+      # rule is a guard for the day it moves into a Package.swift. Dependabot
+      # names Swift packages by their lowercased URL (host + path, no .git).
+      - dependency-name: "github.com/harflabs/swiftvlc"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

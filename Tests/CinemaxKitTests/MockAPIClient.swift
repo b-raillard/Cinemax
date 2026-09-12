@@ -400,8 +400,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         /// Recorded so a test can pick out a genre-row query unambiguously —
         /// the library's fan-out issues one per genre and they are otherwise
         /// indistinguishable from the grid's own query.
-        genres: [String]?
+        genres: [String]?,
+        /// Recorded so Home's « last played » seed query (`[.isPlayed]`) can
+        /// be told apart from every other movie/episode query.
+        filters: [ItemFilter]?
     )] = []
+
+    /// When set, a `getItems` carrying the `.isPlayed` filter answers with this
+    /// list instead of `stubbedItems` — the « Parce que vous avez vu » seed.
+    /// Opt-in so watched-history suites (same filter) keep their own stub.
+    var stubbedLastPlayedItems: [BaseItemDto]?
 
     /// `enableTotalRecordCount` of every `searchItems` call, in order.
     private(set) var searchCountFlags: [Bool] = []
@@ -444,12 +452,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             getItemsQueries.append((
                 includeItemTypes: includeItemTypes, sortBy: sortBy,
                 sortOrder: sortOrder, isFavorite: isFavorite, limit: limit,
-                enableTotalRecordCount: enableTotalRecordCount, genres: genres
+                enableTotalRecordCount: enableTotalRecordCount, genres: genres,
+                filters: filters
             ))
         }
         if shouldThrow { throw stubbedError }
         if let handler = getItemsHandler {
             return try await handler(startIndex)
+        }
+        if let lastPlayed = stubbedLastPlayedItems, filters?.contains(.isPlayed) == true {
+            return (lastPlayed, lastPlayed.count)
         }
         // Home's "Recently Added" rail is a date-added query over movies and
         // series (it used to be `/Items/Latest`, which let one show's episode
@@ -548,9 +560,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     private(set) var getSimilarItemsCallCount = 0
+    /// Every `getSimilarItems` call's seed id and limit, in order.
+    private(set) var similarItemsRequests: [(itemId: String, limit: Int)] = []
+    var stubbedSimilarItems: [BaseItemDto] = []
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] {
-        recordLock.withLock { getSimilarItemsCallCount += 1 }
-        return []
+        recordLock.withLock {
+            getSimilarItemsCallCount += 1
+            similarItemsRequests.append((itemId: itemId, limit: limit))
+        }
+        return stubbedSimilarItems
     }
 
     func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, enableTotalRecordCount: Bool) async throws -> [BaseItemDto] {

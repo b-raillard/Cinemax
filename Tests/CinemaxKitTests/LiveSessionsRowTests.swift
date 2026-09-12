@@ -26,6 +26,50 @@ struct LiveSessionsRowTests {
         return s
     }
 
+    @Test("With the native player forced, joining is blocked — leaving never is (#165)")
+    func joinBlockedByEngine() {
+        let entries = LiveSessionsRow.build(
+            groups: [
+                SyncPlayGroup(id: "g1", name: "Soirée", participants: ["Marie", "Paul"]),
+                // The viewer is in this one: its action is « Quitter ».
+                SyncPlayGroup(id: "g2", name: "Arrow", participants: ["Bastien", "Léa"])
+            ],
+            sessions: [session("s3", user: "Hugo", itemId: "i2", title: "Le Parrain 3")],
+            currentUserName: "Bastien"
+        )
+        let joinable = entries.first { $0.kind == .together(groupId: "g1") }!
+        let mine = entries.first { $0.kind == .together(groupId: "g2") }!
+        let solo = entries.first { $0.kind == .solo(sessionId: "s3") }!
+
+        #expect(joinable.isJoinBlocked(localGroupId: nil, engineSupported: false))
+        #expect(!mine.isJoinBlocked(localGroupId: nil, engineSupported: false))
+        // A solo card has no join action at all.
+        #expect(!solo.isJoinBlocked(localGroupId: nil, engineSupported: false))
+        // VLC: nothing is blocked.
+        #expect(!joinable.isJoinBlocked(localGroupId: nil, engineSupported: true))
+        // This process's own membership counts too, when the server's list
+        // has not caught up yet.
+        #expect(!joinable.isJoinBlocked(localGroupId: "g1", engineSupported: false))
+    }
+
+    @Test("The native-player footnote appears only when a card's join is actually blocked")
+    func engineFootnote() {
+        let mineOnly = LiveSessionsRow.build(
+            groups: [SyncPlayGroup(id: "g2", name: "Arrow", participants: ["Bastien", "Léa"])],
+            sessions: [session("s3", user: "Hugo", itemId: "i2", title: "Le Parrain 3")],
+            currentUserName: "Bastien"
+        )
+        #expect(!LiveSessionsRow.needsEngineFootnote(mineOnly, localGroupId: nil, engineSupported: false))
+
+        let withJoinable = LiveSessionsRow.build(
+            groups: [SyncPlayGroup(id: "g1", name: "Soirée", participants: ["Marie"])],
+            sessions: [],
+            currentUserName: "Bastien"
+        )
+        #expect(LiveSessionsRow.needsEngineFootnote(withJoinable, localGroupId: nil, engineSupported: false))
+        #expect(!LiveSessionsRow.needsEngineFootnote(withJoinable, localGroupId: nil, engineSupported: true))
+    }
+
     @Test("A group folds its members into one card instead of one card each")
     func groupCollapses() {
         let entries = LiveSessionsRow.build(

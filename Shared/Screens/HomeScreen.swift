@@ -27,6 +27,7 @@ struct HomeScreen: View {
     @AppStorage(SettingsKey.homeShowPlaylists) private var showPlaylists: Bool = SettingsKey.Default.homeShowPlaylists
     @AppStorage(SettingsKey.homeShowUpcoming) private var showUpcoming: Bool = SettingsKey.Default.homeShowUpcoming
     @AppStorage(SettingsKey.homeShowCollections) private var showCollections: Bool = SettingsKey.Default.homeShowCollections
+    @AppStorage(SettingsKey.homeShowBecauseYouWatched) private var showBecauseYouWatched: Bool = SettingsKey.Default.homeShowBecauseYouWatched
     @State private var deepLinkTarget: DeepLinkTarget?
     /// Drives the "View All" push from the Favorites row to `FavoritesScreen`.
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
@@ -42,6 +43,11 @@ struct HomeScreen: View {
     @State private var seriesDestination: SeriesDestination?
     @AppStorage(SettingsKey.homeShowGenreRows) private var showGenreRows: Bool = SettingsKey.Default.homeShowGenreRows
     @AppStorage(SettingsKey.homeShowWatchingNow) private var showWatchingNow: Bool = SettingsKey.Default.homeShowWatchingNow
+    /// Whether Watch Together can work at all: only the VLC presenter binds
+    /// SyncPlay. Observed here (rather than read once through
+    /// `SyncPlayController.isEngineSupported`) so the « En direct » row's
+    /// dimmed cards and footnote follow the setting the moment it flips.
+    @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
     /// Raw JSON of the user's picked genres. Held here only to observe changes
     /// made in Settings → Interface → Home page and refresh the rows live.
     @AppStorage(SettingsKey.homeSelectedGenres) private var selectedGenresJSON: String = ""
@@ -289,6 +295,7 @@ struct HomeScreen: View {
         if showPlaylists { rails.insert(.playlists) }
         if showUpcoming { rails.insert(.upcoming) }
         if showCollections { rails.insert(.collections) }
+        if showBecauseYouWatched { rails.insert(.becauseYouWatched) }
         if showGenreRows { rails.insert(.genreRows) }
         if showWatchingNow { rails.insert(.watchingNow) }
         return rails
@@ -302,8 +309,10 @@ struct HomeScreen: View {
     private func prefetchCardImages() {
         let builder = appState.imageBuilder
 
-        // 2:3 posters — recently added, favorites, genre rows (cards request maxWidth 300).
+        // 2:3 posters — recently added, favorites, « Parce que vous avez vu »,
+        // genre rows (all drawn by `recentlyAddedCard`, maxWidth 300).
         var posterItems = viewModel.latestItems + viewModel.favoriteItems
+            + (viewModel.becauseYouWatched?.items ?? [])
         for row in viewModel.genreRows {
             if case .items(let items) = row.state { posterItems += items }
         }
@@ -481,6 +490,14 @@ struct HomeScreen: View {
 
                     if showUpcoming, !viewModel.upcomingItems.isEmpty {
                         upcomingRow
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
+                    // « Parce que vous avez vu … » — just above the genre rows:
+                    // both are discovery, and it fills in during phase 2 like
+                    // them, so arriving late shifts nothing already painted.
+                    if showBecauseYouWatched, let rail = viewModel.becauseYouWatched {
+                        becauseYouWatchedRow(rail)
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
@@ -850,20 +867,54 @@ struct HomeScreen: View {
     /// the item artwork + "Name is watching" label, and navigates to the item's detail
     /// screen on tap. Hidden entirely when the server has no other active sessions.
     private var watchingNowRow: some View {
-        ContentRow(
-            title: loc.localized("home.watchingNow"),
-            // Feed the entries themselves — NEVER a snapshot of their indices.
-            // `reload()` empties the underlying arrays before refetching, and
-            // Observation invalidates the already-instantiated LazyHStack
-            // children directly: they re-run their body against the emptied
-            // array while still holding the old index snapshot, trapping with
-            // "Index out of range".
-            data: viewModel.liveEntries,
-            id: \.id
-        ) { entry in
-            liveCard(entry)
-                .frame(width: wideCardWidth)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            ContentRow(
+                title: loc.localized("home.watchingNow"),
+                // Feed the entries themselves — NEVER a snapshot of their indices.
+                // `reload()` empties the underlying arrays before refetching, and
+                // Observation invalidates the already-instantiated LazyHStack
+                // children directly: they re-run their body against the emptied
+                // array while still holding the old index snapshot, trapping with
+                // "Index out of range".
+                data: viewModel.liveEntries,
+                id: \.id
+            ) { entry in
+                liveCard(entry)
+                    .frame(width: wideCardWidth)
+            }
+
+            // Said once, under the row, and only when a card's join is
+            // actually blocked — a row holding only the viewer's own group (its
+            // action is « Quitter », which works on any engine) or only solo
+            // cards owes nobody an explanation.
+            if LiveSessionsRow.needsEngineFootnote(
+                viewModel.liveEntries,
+                localGroupId: SyncPlayController.shared.group?.id,
+                engineSupported: !forceNativeAVPlayer
+            ) {
+                engineFootnote
+            }
         }
+    }
+
+    /// Why the dimmed group cards cannot be joined, and the one setting that
+    /// changes it. Before this, the precondition was only ever stated AFTER a
+    /// press, in a toast (#165).
+    private var engineFootnote: some View {
+        Label {
+            Text(loc.localized("syncplay.needsVLC.footnote"))
+        } icon: {
+            Image(systemName: "info.circle")
+        }
+        .font(CinemaFont.label(.small))
+        .foregroundStyle(CinemaColor.onSurfaceVariant)
+        .fixedSize(horizontal: false, vertical: true)
+        // The row's own gutter, so the note sits under its first card.
+        #if os(tvOS)
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        #else
+        .padding(.horizontal, CinemaSpacing.spacing6)
+        #endif
     }
 
     @ViewBuilder
@@ -892,7 +943,15 @@ struct HomeScreen: View {
         // kill while the membership survives server-side, and reading only the
         // local copy then labelled the card « Rejoindre » — offering to join a
         // group the account has never left.
-        let isMine = entry.viewerIsParticipant || SyncPlayController.shared.group?.id == groupId
+        let localGroupId = SyncPlayController.shared.group?.id
+        let isMine = entry.isViewerIn(localGroupId: localGroupId)
+        // With the native player forced, JOINING cannot work (no SyncPlay
+        // binding there). The card stays a focusable button — `.disabled` would
+        // drop it out of the tvOS focus chain, see below — but reads as
+        // unavailable, and the row's footnote says why. A press still reaches
+        // `joinLiveSession`, whose refusal toast is the backstop. Never applied
+        // to a group the viewer is IN: leaving must always work.
+        let joinBlocked = entry.isJoinBlocked(localGroupId: localGroupId, engineSupported: !forceNativeAVPlayer)
         let alone = entry.participants.isEmpty
         return Button {
             if isMine { leaveLiveSession() } else { joinLiveSession(groupId: groupId) }
@@ -921,6 +980,8 @@ struct HomeScreen: View {
                 detail: liveDetail(entry)
             )
             .overlay(alignment: .topLeading) { livePill(isTogether: true) }
+            .saturation(joinBlocked ? 0 : 1)
+            .opacity(joinBlocked ? 0.5 : 1)
         }
         #if os(tvOS)
         .buttonStyle(CinemaTVCardButtonStyle())
@@ -946,6 +1007,9 @@ struct HomeScreen: View {
                     participantSummary(entry.participants)
                 )
         )
+        // VoiceOver never sees the dimming; the hint carries the same reason
+        // the footnote does.
+        .accessibilityHint(joinBlocked ? loc.localized("syncplay.needsVLC") : "")
     }
 
     /// Somebody watching alone. Unchanged behaviour: it opens their title.
@@ -1301,6 +1365,21 @@ struct HomeScreen: View {
             id: \.id
         ) { item in
             recentlyAddedCard(item, surface: "home.favorites")
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    // MARK: - Because You Watched
+
+    /// Titles similar to the last movie (or series) the user played. Same card
+    /// as Recently Added — poster, status overlay and the shared context menu.
+    private func becauseYouWatchedRow(_ rail: BecauseYouWatchedRail) -> some View {
+        ContentRow(
+            title: loc.localized("home.becauseYouWatched", rail.seedTitle),
+            data: rail.items,
+            id: \.id
+        ) { item in
+            recentlyAddedCard(item)
                 .frame(width: posterCardWidth)
         }
     }

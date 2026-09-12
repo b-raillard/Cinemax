@@ -28,6 +28,12 @@ final class SkipSegmentController {
     private var segments: [MediaSegmentDto] = []
     private var activeSegmentType: MediaSegmentType?
     private var fetchTask: Task<Void, Never>?
+    /// Opt-in auto-skip (#160), read once per `load`. On this path an outro
+    /// always seeks to the segment's end: `AVPlayerItemDidPlayToEndTime` then
+    /// runs the presenter's own autoplay / end-of-series branch, so there is no
+    /// separate hand-off to make. No SyncPlay binding exists here either.
+    private var autoSkip: AutoSkipPreferences = .off
+    private var autoSkippedSegmentKeys: Set<String> = []
 
     #if os(iOS)
     private var skipButton: UIButton?
@@ -47,6 +53,7 @@ final class SkipSegmentController {
     /// clears previous segments and hides the button.
     func load(for itemId: String) {
         teardown()
+        autoSkip = AutoSkipPreferences.current()
         let client = apiClient
         fetchTask = Task { [weak self] in
             do {
@@ -72,6 +79,27 @@ final class SkipSegmentController {
             guard end > start else { continue }
 
             if currentTime >= start && currentTime < end - 1 {
+                let key = AutoSkipPolicy.key(type: segment.type, startTicks: segment.startTicks)
+                let player = playerVCProvider()?.player
+                let action = AutoSkipPolicy.decide(
+                    segmentType: segment.type,
+                    autoSkipIntro: autoSkip.intro, autoSkipCredits: autoSkip.credits,
+                    alreadySkipped: autoSkippedSegmentKeys.contains(key),
+                    isPlaying: (player?.rate ?? 0) > 0,
+                    inSyncPlayGroup: false,
+                    canHandOffToNext: false
+                )
+                if action != .none, let player {
+                    autoSkippedSegmentKeys.insert(key)
+                    activeSegmentType = nil
+                    hideSkipButton()
+                    logger.notice("auto-skip type=\(segment.type?.rawValue ?? "?", privacy: .public) from=\(Int(currentTime), privacy: .public)s to=\(Int(end), privacy: .public)s")
+                    player.seek(
+                        to: CMTime(seconds: end, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero
+                    )
+                    return
+                }
                 if activeSegmentType != segment.type {
                     activeSegmentType = segment.type
                     showSkipButton(for: segment)
@@ -92,6 +120,7 @@ final class SkipSegmentController {
         fetchTask = nil
         segments = []
         activeSegmentType = nil
+        autoSkippedSegmentKeys = []
         hideSkipButton()
     }
 

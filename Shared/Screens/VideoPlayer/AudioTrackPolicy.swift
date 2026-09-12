@@ -65,15 +65,52 @@ enum AudioTrackPolicy {
         else { return nil }
 
         if isAudible(tracks[serverOrdinal]) { return serverOrdinal }
+        return audibleReplacementOrdinal(for: serverOrdinal, in: tracks) ?? serverOrdinal
+    }
 
-        if let wanted = normalized(tracks[serverOrdinal].language),
+    /// The audible track to offer in place of the one at `ordinal`, or `nil`
+    /// when the source carries no other audible track. Keeps the language
+    /// where an audible track shares it, else falls through to the first
+    /// audible one.
+    ///
+    /// Single-sourced on purpose: the automatic default (`defaultOrdinal`) and
+    /// the suggestion a hand-picked silent track gets (`manualPickVerdict`) both
+    /// go through here, so the player can never open on one track and then
+    /// recommend a different one.
+    static func audibleReplacementOrdinal(for ordinal: Int, in tracks: [MediaTrackInfo]) -> Int? {
+        guard tracks.indices.contains(ordinal) else { return nil }
+        if let wanted = normalized(tracks[ordinal].language),
            let sameLanguage = tracks.indices.first(where: {
-               isAudible(tracks[$0]) && normalized(tracks[$0].language) == wanted
+               $0 != ordinal && isAudible(tracks[$0]) && normalized(tracks[$0].language) == wanted
            }) {
             return sameLanguage
         }
+        return tracks.indices.first(where: { $0 != ordinal && isAudible(tracks[$0]) })
+    }
 
-        return tracks.indices.first(where: { isAudible(tracks[$0]) }) ?? serverOrdinal
+    /// Whether the Jellyfin track at `ordinal` is one this engine renders as
+    /// silence. An ordinal the server did not describe (libVLC can list more
+    /// tracks than Jellyfin reported) is not known to be silent, so it is not.
+    static func isSilent(ordinal: Int, in tracks: [MediaTrackInfo]) -> Bool {
+        tracks.indices.contains(ordinal) && !isAudible(tracks[ordinal])
+    }
+
+    /// What the player says after the user picks a track BY HAND.
+    enum ManualPickVerdict: Equatable {
+        /// Nothing to explain.
+        case audible
+        /// The pick will play silent. `suggestedOrdinal` is the audible track
+        /// to point at instead, `nil` when the source offers none.
+        case silent(suggestedOrdinal: Int?)
+    }
+
+    /// A manual pick is explained, never refused: some sources are mis-tagged
+    /// (a track reported as TrueHD that is not), and the user may know better
+    /// than the metadata. The picker tags silent tracks up front; this is the
+    /// explanation that follows the choice.
+    static func manualPickVerdict(ordinal: Int, tracks: [MediaTrackInfo]) -> ManualPickVerdict {
+        guard isSilent(ordinal: ordinal, in: tracks) else { return .audible }
+        return .silent(suggestedOrdinal: audibleReplacementOrdinal(for: ordinal, in: tracks))
     }
 
     /// Primary subtag, lowercased — servers report `fre`, `fr`, `fr-FR` for the
