@@ -54,6 +54,10 @@ final class NativeVideoPresenter {
     /// iOS Lock Screen / Dynamic Island Live Activity. No-op stub on tvOS
     /// (no ActivityKit) so the call sites below stay platform-free.
     private var liveActivity: PlaybackLiveActivityController!
+    /// Our slot in `RemotePlaystateRouter` (inbound pause / seek / stop from
+    /// another Jellyfin session). Handed back in `cleanup()`; a stale token is
+    /// ignored by the router.
+    private var remotePlaystateToken = 0
 
     // Track state
     private var audioTracks: [MediaTrackInfo] = []
@@ -165,11 +169,14 @@ final class NativeVideoPresenter {
     /// the press out-of-band (no focused control or HUD hidden).
     private func toggleAVPlayerPlayback() {
         guard let player = playerVC?.player else { return }
-        if player.timeControlStatus == .playing {
-            player.pause()
-        } else {
-            player.play()
-        }
+        setAVPlayerPlaying(player.timeControlStatus != .playing, player: player)
+    }
+
+    /// Plays or pauses and re-syncs the Now Playing widget + Live Activity at
+    /// once rather than on the next 1 s tick. Shared by the system play/pause
+    /// command and inbound remote Playstate.
+    private func setAVPlayerPlaying(_ play: Bool, player: AVPlayer) {
+        if play { player.play() } else { player.pause() }
         nowPlaying.update(
             elapsed: player.currentTime().seconds,
             duration: currentItemDurationSeconds(),
@@ -189,6 +196,55 @@ final class NativeVideoPresenter {
         guard let d = playerVC?.player?.currentItem?.duration.seconds,
               d.isFinite, d > 0 else { return nil }
         return d
+    }
+
+    /// Applies a transport command another Jellyfin session sent this device
+    /// (#176). `RemotePlaystateRouter` has already refused it inside a Watch
+    /// Together group — moot on this engine, which never joins one. Returns
+    /// whether the command was applied, for the router's log line.
+    private func applyRemotePlaystate(_ command: RemotePlaystateCommand) -> Bool {
+        guard let player = playerVC?.player else { return false }
+        switch command.kind {
+        case .pause:
+            setAVPlayerPlaying(false, player: player)
+        case .unpause:
+            setAVPlayerPlaying(true, player: player)
+        case .playPause:
+            setAVPlayerPlaying(player.timeControlStatus != .playing, player: player)
+        case .seek:
+            guard let ticks = command.seekPositionTicks, player.currentItem != nil else { return false }
+            // The resume path's own clamp: never past `duration − 1 s`, and a
+            // position of 0 (or below) means the start.
+            let requested = Double(ticks) / 10_000_000
+            let target = Self.safeResumeSeconds(requested, duration: currentItemDurationSeconds() ?? .nan) ?? 0
+            player.seek(
+                to: CMTime(seconds: target, preferredTimescale: 600),
+                toleranceBefore: .zero, toleranceAfter: .zero
+            )
+        case .stop:
+            // The player's own dismissal, so the dismiss detection (iOS
+            // `PlayerHostingVC` / tvOS delegate) owns the stop report and
+            // cleanup. Asked of the PRESENTING controller (for the iOS child
+            // player that is its host's presenter): an alert stacked on the
+            // player — the sleep timer's « Toujours là ? » — would otherwise
+            // absorb the dismissal and leave the player standing.
+            (playerVC?.presentingViewController ?? playerVC)?.dismiss(animated: true)
+        case .nextTrack:
+            guard episodeNavigator != nil, let next = nextEpisode else { return false }
+            navigateToEpisode(next)
+        case .previousTrack:
+            guard episodeNavigator != nil, let previous = previousEpisode else { return false }
+            navigateToEpisode(previous)
+        }
+        return true
+    }
+
+    /// The diagnostics export's `last_playback` line (see `PlaybackDiagnostics`).
+    /// AVKit has no loopback proxy, hence no route.
+    private func recordPlaybackDiagnostics(_ info: PlaybackInfo) {
+        PlaybackDiagnostics.record(
+            engine: "native", playMethod: info.playMethod, container: info.sourceContainer, route: nil
+        )
     }
 
     func present(info: PlaybackInfo) {
@@ -211,6 +267,7 @@ final class NativeVideoPresenter {
         self.currentAudioIndex = info.selectedAudioIndex
         self.currentSubtitleIndex = info.selectedSubtitleIndex
         self.currentPlayMethod = info.playMethod
+        recordPlaybackDiagnostics(info)
 
         // Start with nil item — native player chrome appears immediately while
         // we fetch and filter the HLS manifest in the background.
@@ -233,6 +290,9 @@ final class NativeVideoPresenter {
         #endif
         self.playerVC = vc
         remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
+        remotePlaystateToken = RemotePlaystateRouter.shared.register { [weak self] command in
+            self?.applyRemotePlaystate(command) ?? false
+        }
         nowPlaying.setAuthToken(playbackInfo?.authToken)
         nowPlaying.attach(itemId: itemId, title: title, durationSeconds: nil)
         // Lock Screen / Dynamic Island Live Activity (iOS; no-op on tvOS).
@@ -485,6 +545,7 @@ final class NativeVideoPresenter {
         self.audioTracks = info.audioTracks
         self.subtitleTracks = info.subtitleTracks
         self.currentPlayMethod = info.playMethod
+        recordPlaybackDiagnostics(info)
 
         let playerItem = makePlayerItem(for: info)
         applyTitleMetadata(to: playerItem, title: self.title)
@@ -548,6 +609,7 @@ final class NativeVideoPresenter {
             self.currentAudioIndex = info.selectedAudioIndex
             self.currentSubtitleIndex = info.selectedSubtitleIndex
             self.currentPlayMethod = info.playMethod
+            self.recordPlaybackDiagnostics(info)
 
             // The episode we're leaving can have died during a device sleep, which
             // also deactivated the session — re-assert it before AVKit gets the new
@@ -950,6 +1012,7 @@ final class NativeVideoPresenter {
     }
 
     private func cleanup() {
+        RemotePlaystateRouter.shared.unregister(remotePlaystateToken)
         remoteCommands.detach()
         nowPlaying.detach()
         liveActivity.detach()

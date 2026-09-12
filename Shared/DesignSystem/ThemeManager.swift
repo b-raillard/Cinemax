@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Theme Manager
 //
@@ -69,7 +70,16 @@ final class ThemeManager {
     @ObservationIgnored private var rainbowTask: Task<Void, Never>?
 
     @ObservationIgnored
-    @AppStorage(SettingsKey.motionEffects) private var _motionEffectsEnabled: Bool = SettingsKey.Default.motionEffects
+    @AppStorage(SettingsKey.motionEffects) private var _motionEffectsSetting: Bool = SettingsKey.Default.motionEffects
+
+    /// The app toggle AND the system's Reduce Motion — same rule as the
+    /// `\.motionEffectsEnabled` environment value the views read.
+    private var _motionEffectsEnabled: Bool {
+        MotionEffects.isEnabled(
+            appToggle: _motionEffectsSetting,
+            systemReduceMotion: UIAccessibility.isReduceMotionEnabled
+        )
+    }
 
     var isRainbow: Bool { accentColorKey == "rainbow" }
 

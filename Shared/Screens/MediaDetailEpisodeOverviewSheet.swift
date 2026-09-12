@@ -55,8 +55,9 @@ struct EpisodeOverviewSheet: View {
             }
 
             ScrollView {
+                // Reading prose: follows Dynamic Type all the way up.
                 Text(item.overview)
-                    .font(CinemaFont.body)
+                    .font(CinemaFont.dynamicBody)
                     .foregroundStyle(CinemaColor.onSurface)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

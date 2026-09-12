@@ -56,6 +56,11 @@ targets:
       # It stays under Widgets/ because the extension's whole directory is its
       # source path — the app is the one that has to opt in explicitly.
       - path: Widgets/CinemaxWidget/PlaybackActivityAttributes.swift
+      # The Control Center / Action-button intent, shared the same way and for
+      # the same reason: `ControlWidgetButton(action:)` needs the intent type
+      # inside the extension, which cannot link CinemaxKit — so the type is
+      # shared by source and its body is compiled per target via CINEMAX_APP.
+      - path: Widgets/CinemaxWidget/ResumeControl.swift
     dependencies:
       - package: CinemaxKit
       - package: SwiftVLC
@@ -154,6 +159,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.ios
         PRODUCT_NAME: Cinemax
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Lets a file shared by SOURCE with the widget extension reach app-only
+        # symbols in the APP's copy while still compiling in the extension's —
+        # see `ResumeControl.swift`. `$(inherited)` keeps DEBUG.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) CINEMAX_APP
         SWIFT_EMIT_LOC_STRINGS: YES
         SUPPORTS_MACCATALYST: NO
         SWIFT_STRICT_CONCURRENCY: complete

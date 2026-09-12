@@ -84,11 +84,13 @@ struct PlaybackEndDecisionTests {
         #expect(decision == .ignore)
     }
 
-    @Test("Flux jamais ouvert : c'est le chien de garde d'ouverture qui décide")
+    @Test("Flux direct jamais ouvert : c'est le chien de garde d'ouverture qui décide")
     func neverOpenedIsIgnored() {
         // Le média n'a jamais produit de démuxeur : `noteMediaOpened()` n'a
         // pas été appelé. Traiter ça comme un arrêt inattendu doublerait la
-        // reprise déjà pilotée par le chien de garde d'ouverture.
+        // reprise déjà pilotée par le chien de garde d'ouverture. Hors HLS
+        // seulement : un manifeste jamais ouvert a sa propre issue (voir plus
+        // bas).
         let decision = PlaybackEndPolicy.decide(
             isTearingDown: false, secondsSincePlayStart: 30,
             currentMs: 0, lengthMs: 0, mediaConfirmedOpen: false
@@ -105,6 +107,117 @@ struct PlaybackEndDecisionTests {
             currentMs: 500_000, lengthMs: 0, mediaConfirmedOpen: true
         )
         #expect(decision == .ignore)
+    }
+
+    // MARK: - HLS jamais ouvert (#164 : RST HTTP/2 sur le manifeste)
+    //
+    // Un RST de l'origine sur le manifeste du transcodage forcé : libVLC ne
+    // réessaie pas un manifeste, aucun démuxeur ne naît, et l'arrêt arrive en
+    // `.stopped` propre, sans `.encounteredError`. La reprise attendait tout le
+    // chien de garde d'ouverture (15 s, puis 30 s) sur un écran figé à 0:00.
+
+    @Test("HLS jamais ouvert, hors fenêtre d'échange : échec d'ouverture, reprise immédiate")
+    func neverOpenedHLSIsFailedOpen() {
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 2.3,
+            currentMs: 0, lengthMs: 0, mediaConfirmedOpen: false,
+            isAdaptiveStream: true
+        )
+        #expect(decision == .failedOpen)
+    }
+
+    @Test("HLS jamais ouvert, dans la fenêtre d'échange : on redemande une fois la fenêtre passée")
+    func neverOpenedHLSInsideSwapWindowIsRechecked() {
+        // Un RST rapide fait échouer l'ouverture en moins d'une seconde, là où
+        // l'arrêt peut encore être celui du média qu'on remplace. Ignorer
+        // renverrait au chien de garde (30 s pour la reprise) : on redemande.
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 0.4,
+            currentMs: 0, lengthMs: 0, mediaConfirmedOpen: false,
+            isAdaptiveStream: true
+        )
+        #expect(decision == .recheck(
+            after: PlaybackEndPolicy.minPlayDuration - 0.4 + PlaybackEndPolicy.recheckMargin
+        ))
+    }
+
+    @Test("La relecture tombe hors fenêtre : elle ne peut pas en programmer une troisième")
+    func recheckLandsOutsideTheWindow() {
+        // Ce que la relecture repasse à la politique : le délai écoulé depuis
+        // le play() est au moins la fenêtre plus la marge.
+        let elapsed = PlaybackEndPolicy.minPlayDuration + PlaybackEndPolicy.recheckMargin
+        let stillStopped = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: elapsed,
+            currentMs: 0, lengthMs: 0, mediaConfirmedOpen: false,
+            isAdaptiveStream: true, engineStopped: true
+        )
+        #expect(stillStopped == .failedOpen)
+    }
+
+    @Test("Relecture pendant qu'un nouveau média s'ouvre : c'était un échange, rien à faire")
+    func recheckWithEngineOpeningIsIgnored() {
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 1.25,
+            currentMs: 0, lengthMs: 0, mediaConfirmedOpen: false,
+            isAdaptiveStream: true, engineStopped: false
+        )
+        #expect(decision == .ignore)
+    }
+
+    @Test("Relecture après ouverture confirmée entre-temps : le moteur joue, pas d'arrêt inattendu")
+    func recheckAfterOpenIsIgnored() {
+        // Sans le garde `engineStopped`, un média ouvert entre-temps passerait
+        // par la branche « arrêt inattendu » et relancerait une lecture saine.
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 1.25,
+            currentMs: 1_200, lengthMs: runtime, mediaConfirmedOpen: true,
+            isAdaptiveStream: true, engineStopped: false
+        )
+        #expect(decision == .ignore)
+    }
+
+    @Test("Aucun play() émis pour le nouveau média : l'arrêt est celui du média remplacé")
+    func stopBeforeNewPlayIsIgnored() {
+        // Le `.stopped` final d'une tentative ratée, après son
+        // `.encounteredError` et une fois la reprise lancée : il ne doit pas
+        // compter comme un second échec, sinon l'alerte tomberait par-dessus
+        // la reprise et libérerait la session serveur qu'elle utilise.
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: nil,
+            currentMs: 0, lengthMs: 0, mediaConfirmedOpen: false,
+            isAdaptiveStream: true
+        )
+        #expect(decision == .ignore)
+        // Même garde pour un média ouvert : pas de fin inventée pendant
+        // l'échange d'épisode.
+        #expect(PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: nil,
+            currentMs: runtime, lengthMs: runtime, mediaConfirmedOpen: true
+        ) == .ignore)
+    }
+
+    @Test("Démontage d'un HLS jamais ouvert : silence")
+    func teardownOfNeverOpenedHLSIsIgnored() {
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: true, secondsSincePlayStart: 5,
+            currentMs: 0, lengthMs: 0, mediaConfirmedOpen: false,
+            isAdaptiveStream: true
+        )
+        #expect(decision == .ignore)
+    }
+
+    @Test("HLS ouvert : les issues existantes ne changent pas")
+    func openedHLSKeepsExistingOutcomes() {
+        #expect(PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 440,
+            currentMs: 1_438_478, lengthMs: runtime, mediaConfirmedOpen: true,
+            isAdaptiveStream: true
+        ) == .ended)
+        #expect(PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 228,
+            currentMs: 600_000, lengthMs: runtime, mediaConfirmedOpen: true,
+            isAdaptiveStream: true
+        ) == .unexpectedStop)
     }
 }
 

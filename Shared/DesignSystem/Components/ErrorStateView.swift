@@ -1,17 +1,27 @@
 import SwiftUI
 
-/// Standard error state: warning icon + message text + retry button.
+/// Standard error state: warning icon (or a themed illustration) + message text
+/// + retry button.
 struct ErrorStateView: View {
     let message: String
     let retryTitle: String
+    /// Optional `CinemaIllustration` drawn in place of the warning triangle —
+    /// `.offline` where the message is explicitly "can't reach the server".
+    /// `nil` keeps the triangle.
+    var illustration: CinemaIllustration? = nil
     let onRetry: () -> Void
 
     var body: some View {
         VStack(spacing: CinemaSpacing.spacing3) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: CinemaScale.pt(48)))
-                .foregroundStyle(CinemaColor.error)
-                .accessibilityHidden(true)
+            if let illustration {
+                CinemaIllustrationView(kind: illustration)
+                    .padding(.bottom, CinemaSpacing.spacing1)
+            } else {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: CinemaScale.pt(48)))
+                    .foregroundStyle(CinemaColor.error)
+                    .accessibilityHidden(true)
+            }
             Text(message)
                 .font(CinemaFont.body)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)

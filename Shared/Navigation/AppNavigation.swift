@@ -832,10 +832,19 @@ struct AppNavigation: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
+    /// The system's Reduce Motion. Combined with the app toggle into the ONE
+    /// value the whole tree reads (`\.motionEffectsEnabled`), so turning it on in
+    /// iOS / tvOS Settings stops the hero carousel, the Ken Burns drift and every
+    /// pulse without touching the app's own switch.
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     /// Drives `RemoteControlListener`. Read here rather than inside the listener
     /// so flipping the toggle in Settings re-runs `onChange` and withdraws (or
     /// re-publishes) the capability declaration immediately.
     @AppStorage(SettingsKey.remoteControlEnabled) private var remoteControlEnabled: Bool = SettingsKey.Default.remoteControlEnabled
+    /// Whether the first-run introduction has been finished, skipped, or made
+    /// moot by a launch that already knew a server. Read ONLY through
+    /// `OnboardingPolicy` — see its two decisions.
+    @AppStorage(SettingsKey.onboardingSeen) private var onboardingSeen: Bool = SettingsKey.Default.onboardingSeen
 
     /// SwiftUI may recreate the root `AppNavigation` struct on scene events;
     /// guard the one-time `ImagePipeline.shared` replacement so we don't throw
@@ -873,10 +882,19 @@ struct AppNavigation: View {
             }
         }
     }
+    /// MetricKit subscription, once per process for the same reason as
+    /// `configurePipeline`: scene events recreate this struct. iOS only — every
+    /// MetricKit class is `API_UNAVAILABLE(tvos)`. See `MetricKitSubscriber`.
+    private static let registerMetricKit: Void = {
+        MetricKitSubscriber.register()
+    }()
     #endif
 
     init() {
         _ = Self.configurePipeline
+        #if os(iOS)
+        _ = Self.registerMetricKit
+        #endif
     }
 
     var body: some View {
@@ -884,6 +902,20 @@ struct AppNavigation: View {
             Group {
                 if !hasCheckedSession {
                     launchScreen
+                } else if OnboardingPolicy.shouldShow(
+                    seen: onboardingSeen,
+                    hasRegisteredServer: !appState.servers.isEmpty,
+                    hasServer: appState.hasServer,
+                    isAddingServer: appState.isAddingServer
+                ) {
+                    // Deliberately BELOW the session check and ABOVE the
+                    // no-server branch: before `hasCheckedSession` it would
+                    // flash over a session still being restored on every cold
+                    // launch, and after `ServerSetupScreen` it could never show.
+                    // `OnboardingPolicy` owns who qualifies — an upgrade, a
+                    // logout from the only server and an add from Réglages all
+                    // resolve to false there.
+                    OnboardingScreen(isReplay: false) { onboardingSeen = true }
                 } else if !appState.hasServer {
                     ServerSetupScreen()
                 } else if !appState.isAuthenticated {
@@ -952,11 +984,17 @@ struct AppNavigation: View {
             loc: loc,
             toast: toasts
         ))
-        .environment(\.motionEffectsEnabled, motionEffects)
-        // Respect the user's OS Dynamic Type setting while capping at a size
-        // that won't collapse layouts (hero titles, tab bar). The app also has
-        // its own `uiScale` in Settings > Interface > Font Size for finer control.
-        .dynamicTypeSize(.xSmall ... .accessibility2)
+        .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
+            appToggle: motionEffects,
+            systemReduceMotion: systemReduceMotion
+        ))
+        // No Dynamic Type cap here, deliberately: a ROOT cap shrank every screen
+        // — the reading ones included — for the three largest accessibility
+        // sizes, i.e. exactly the users who asked for bigger text. The surfaces
+        // whose layout genuinely cannot follow cap THEMSELVES through
+        // `.layoutBoundDynamicType()` (heroes, cards, the tab bar, the player
+        // host); see `CinemaDynamicType`. The app's own `uiScale`
+        // (Settings > Interface > Font Size) still multiplies on top.
         .preferredColorScheme(themeManager.colorScheme)
         // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
         // AppState — MainTabView switches to Home, HomeScreen pushes detail.
@@ -981,6 +1019,17 @@ struct AppNavigation: View {
             // it; `onChange(of: loc.languageCode)` below keeps it current.
             appState.apiClient.setPreferredLanguage(loc.languageCode)
             await appState.restoreSession()
+            // An install that already knows a server is not a first run whatever
+            // the flag says — it upgraded from a version without onboarding.
+            // Latching here is what keeps that user out for good: without it,
+            // deleting their last server from the list would empty the registry
+            // and the gate above would greet them as a newcomer.
+            if OnboardingPolicy.shouldStampSeen(
+                hasRegisteredServer: !appState.servers.isEmpty,
+                hasServer: appState.hasServer
+            ) {
+                onboardingSeen = true
+            }
             hasCheckedSession = true
             // Baseline attach so the menu editor has an API client even with
             // no session. The library-mode view refresh is NOT triggered here:
@@ -1185,6 +1234,10 @@ struct AppNavigation: View {
             // Restart/stop the rainbow accent animation task when the user
             // toggles Motion Effects — the task otherwise only re-checks the
             // flag on each tick.
+            themeManager.motionEffectsDidChange()
+        }
+        .onChange(of: systemReduceMotion) { _, _ in
+            // Same nudge for the system switch, which the tick also reads.
             themeManager.motionEffectsDidChange()
         }
     }

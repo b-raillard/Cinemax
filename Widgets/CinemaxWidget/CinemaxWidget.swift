@@ -122,7 +122,15 @@ struct PosterRailProvider: TimelineProvider {
     /// 4-column grid; the last cell is always the "See all" tile, so fetch
     /// one less poster than the grid holds.
     private static func maxPosters(for family: WidgetFamily) -> Int {
-        family == .systemLarge ? 7 : 3
+        switch family {
+        // Lock Screen / StandBy: one item, and no "See all" tile to make room
+        // for — a rectangular accessory fits a title and a line under it, and a
+        // circular one fits a glyph. Without this case they fell into the `3`
+        // branch and paid two poster downloads nothing would ever render.
+        case .accessoryRectangular, .accessoryCircular, .accessoryInline: 1
+        case .systemLarge: 7
+        default: 3
+        }
     }
 
     /// "Recently Added" from two sources, matching the app's Home row.
@@ -195,21 +203,81 @@ struct PosterRailWidgetView: View {
 
     private let columns = 4
 
+    @ViewBuilder
     var body: some View {
+        switch family {
+        case .accessoryRectangular, .accessoryCircular:
+            // Accessory renders are vibrant / monochrome and the system paints
+            // the ground: an opaque background here comes out as a grey slab.
+            accessoryBody.containerBackground(.clear, for: .widget)
+        default:
+            systemBody.containerBackground(.black.gradient, for: .widget)
+        }
+    }
+
+    private var systemBody: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
-            switch entry.state {
-            case .notConnected:
-                message(isFrench ? "Connectez-vous dans Cinemax" : "Sign in to Cinemax")
-            case .unreachable:
-                message(isFrench ? "Serveur Jellyfin inaccessible" : "Jellyfin server unreachable")
-            case .ok where entry.posters.isEmpty:
-                message(entry.kind.emptyMessage(french: isFrench))
-            case .ok:
+            if let stateMessage {
+                message(stateMessage)
+            } else {
                 grid
             }
         }
-        .containerBackground(.black.gradient, for: .widget)
+    }
+
+    /// Lock Screen / StandBy. One item, no header, no "See all" tile — the whole
+    /// view is the tap target (`widgetURL`), because a per-cell `Link` is what
+    /// the grid uses and accessory families do not honour it.
+    @ViewBuilder
+    private var accessoryBody: some View {
+        let poster = entry.posters.first
+        Group {
+            if family == .accessoryCircular {
+                ZStack {
+                    AccessoryWidgetBackground()
+                    Image(systemName: poster == nil ? "play.slash" : "play.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.kind.headerTitle(french: isFrench).uppercased())
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(0.5)
+                    if let poster {
+                        Text(poster.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+                        if let subtitle = poster.subtitle {
+                            Text(subtitle)
+                                .font(.system(size: 11))
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Text(stateMessage ?? "")
+                            .font(.system(size: 11))
+                            .lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        // Nothing to resume ⇒ the Home tab, which is where the lists live.
+        .widgetURL(URL(string: poster.map { "cinemax://item/\($0.id)" } ?? "cinemax://home"))
+    }
+
+    /// The ONE place the three degraded messages are written — the accessory
+    /// families print the same strings, and two copies would drift.
+    /// `nil` means "there is content to show".
+    private var stateMessage: String? {
+        switch entry.state {
+        case .notConnected:
+            isFrench ? "Connectez-vous dans Cinemax" : "Sign in to Cinemax"
+        case .unreachable:
+            isFrench ? "Serveur Jellyfin inaccessible" : "Jellyfin server unreachable"
+        case .ok:
+            entry.posters.isEmpty ? entry.kind.emptyMessage(french: isFrench) : nil
+        }
     }
 
     private var header: some View {
@@ -329,7 +397,12 @@ struct CinemaxContinueWatchingWidget: Widget {
                 ? "Reprenez vos films et séries en cours."
                 : "Jump back into what you were watching."
         )
-        .supportedFamilies([.systemMedium, .systemLarge])
+        // Continue Watching is the ONLY rail that earns the Lock Screen: one
+        // item is all an accessory fits, and "the thing I was watching" is the
+        // one rail whose first item is worth a glance. The other three stay
+        // system-sized — a lock screen showing one arbitrary favourite says
+        // nothing. StandBy inherits these families for free.
+        .supportedFamilies([.systemMedium, .systemLarge, .accessoryRectangular, .accessoryCircular])
     }
 }
 
@@ -391,6 +464,9 @@ struct CinemaxWidgetBundle: WidgetBundle {
         CinemaxFavoritesWidget()
         CinemaxNextUpWidget()
         CinemaxRecentlyAddedWidget()
+        // Control Center / Action button / Lock Screen control — see
+        // ResumeControl.swift for why its intent is shared by source.
+        CinemaxResumeControl()
         // Playback Live Activity (Lock Screen + Dynamic Island) — views and
         // configuration live in PlaybackLiveActivityWidget.swift.
         #if canImport(ActivityKit)
