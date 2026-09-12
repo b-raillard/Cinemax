@@ -67,6 +67,25 @@ enum LiveSessionsRow {
 
         var isTogether: Bool { if case .together = kind { return true }; return false }
 
+        /// Whether the viewer is IN this group — the server's word first, then
+        /// this process's own. The server comes first because the local copy is
+        /// nil after a crash / force-quit / OS kill while the membership
+        /// survives server-side (see `viewerIsParticipant`).
+        func isViewerIn(localGroupId: String?) -> Bool {
+            guard case .together(let groupId) = kind else { return false }
+            return viewerIsParticipant || localGroupId == groupId
+        }
+
+        /// A group card whose JOIN the current playback engine cannot honour.
+        ///
+        /// Only the VLC presenter binds SyncPlay; with the native player forced
+        /// a join would form server-side and nothing would ever move. A card the
+        /// viewer is already IN is never blocked: its action is « Quitter », and
+        /// leaving must always work, whatever the engine.
+        func isJoinBlocked(localGroupId: String?, engineSupported: Bool) -> Bool {
+            !engineSupported && isTogether && !isViewerIn(localGroupId: localGroupId)
+        }
+
         /// Fraction watched, or `nil` when the position is unknown.
         var progress: Double? {
             guard let positionTicks, let runtimeTicks, runtimeTicks > 0 else { return nil }
@@ -180,6 +199,18 @@ enum LiveSessionsRow {
         // whose actionable entries are scattered through it reads as a list of
         // people rather than a list of doors.
         return entries
+    }
+
+    /// Whether the row owes the viewer the "native player" footnote: true as
+    /// soon as ONE card's join is blocked by the engine. Said once under the
+    /// row rather than on each card, whose three lines are already spoken for
+    /// (title, participants, episode · state · age).
+    static func needsEngineFootnote(
+        _ entries: [Entry],
+        localGroupId: String?,
+        engineSupported: Bool
+    ) -> Bool {
+        entries.contains { $0.isJoinBlocked(localGroupId: localGroupId, engineSupported: engineSupported) }
     }
 
     /// Whether the account may take part at all, per the server's own policy.
