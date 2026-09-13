@@ -336,6 +336,9 @@ extension SettingsScreen {
                 navigationRow(icon: "sparkles", label: loc.localized("settings.discoverApp")) {
                     showOnboarding = true
                 }
+                navigationRow(icon: "wand.and.stars", label: loc.localized("settings.whatsNew")) {
+                    showWhatsNew = true
+                }
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
 

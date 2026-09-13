@@ -1202,6 +1202,22 @@
 "profile.preferences.saved" = "Preferences saved";
 "profile.preferences.unavailable" = "Preferences could not be read. Reopen this screen to retry.";
 
+/* What's new — the feature reel */
+"settings.whatsNew" = "What's new";
+"whatsNew.next" = "Next";
+"whatsNew.back" = "Back";
+"whatsNew.skip" = "Skip";
+"whatsNew.done" = "Done";
+"whatsNew.page" = "Page %d of %d";
+"whatsNew.watchTogether.title" = "Watch Together";
+"whatsNew.watchTogether.body" = "Play the same film with other people: pausing, resuming and seeking stay in step. They join the session from the “Live” row on their own home screen.";
+"whatsNew.playOn.title" = "Play on…";
+"whatsNew.playOn.body" = "Send a film to the Apple TV from your phone, at the right position. And Cinemax can now be the target itself.";
+"whatsNew.playlists.title" = "Your playlists";
+"whatsNew.playlists.body" = "Create a list from any poster, reorder it with a drag, find it again on your home screen.";
+"whatsNew.subtitles.title" = "Adjustable subtitles";
+"whatsNew.subtitles.body" = "Colour, outline and box are set under Playback. New settings apply the next time the player opens.";
+
 /* Launch version check */
 "update.available.title" = "A new version is available";
 "update.available.message" = "Cinemax %@ is available on the App Store. You're running version %@.";

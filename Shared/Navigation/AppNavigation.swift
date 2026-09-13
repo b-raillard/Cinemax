@@ -865,6 +865,13 @@ struct AppNavigation: View {
     /// recreation costs nothing — and the standing offer is re-derived from
     /// the stored release rather than held in memory.
     @State private var updateChecker = AppUpdateChecker()
+    /// The « Quoi de neuf » pages this launch owes the user; empty when it owes
+    /// none. Filled once by the `.task` below, cleared by `finishWhatsNew()`.
+    @State private var whatsNewPages: [WhatsNewPage] = []
+    /// Empty string = never stamped. See the key's own note: absent is NOT
+    /// "first run" — it is also every install upgrading from a build that
+    /// predates the reel, which is exactly who it exists for.
+    @AppStorage(SettingsKey.whatsNewLastSeenVersion) private var whatsNewLastSeen: String = ""
     /// When the app last entered the background — drives Part E foreground
     /// re-validation (only after a long gap, e.g. overnight standby).
     @State private var lastBackgroundedAt: Date?
@@ -943,6 +950,16 @@ struct AppNavigation: View {
         #if os(iOS)
         _ = Self.registerMetricKit
         #endif
+    }
+
+    /// Records that this build's « Quoi de neuf » has been seen, and closes it.
+    /// ONE writer for both exits — the reel finishing and the cover being
+    /// dismissed — so the two can never disagree about the stamp.
+    private func finishWhatsNew() {
+        if let stamp = WhatsNewPolicy.stamp(installed: AppUpdateChecker.installedVersion) {
+            whatsNewLastSeen = stamp
+        }
+        whatsNewPages = []
     }
 
     var body: some View {
@@ -1050,6 +1067,29 @@ struct AppNavigation: View {
         // screen. It can only ever speak once `AppUpdateChecker.refresh()` has
         // run, which is gated on the session check below.
         .modifier(AppUpdatePresentation(checker: updateChecker, loc: loc))
+        // « Quoi de neuf » — the first launch on a new version. A full-screen
+        // cover on BOTH platforms: it is a moment, not a settings detail.
+        // Gated on being signed in, so an upgrade that lands on the login
+        // screen shows it once the user is actually in the app rather than
+        // over the sign-in form. The environment is re-injected by hand: a
+        // presentation is its own context and does not carry injected
+        // `@Observable` objects down with it (same reason `onboardingSheet`
+        // does it).
+        .fullScreenCover(isPresented: Binding(
+            get: { !whatsNewPages.isEmpty && appState.isAuthenticated },
+            set: { presented in
+                guard !presented else { return }
+                finishWhatsNew()
+            }
+        )) {
+            WhatsNewScreen(pages: whatsNewPages) { finishWhatsNew() }
+                .environment(themeManager)
+                .environment(loc)
+                .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
+                    appToggle: motionEffects,
+                    systemReduceMotion: systemReduceMotion
+                ))
+        }
         // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
         // AppState — MainTabView switches to Home, HomeScreen pushes detail.
         .onOpenURL { url in
@@ -1113,6 +1153,39 @@ struct AppNavigation: View {
             // restored. `AppUpdatePolicy` owns every rule about whether it
             // speaks at all, and its answer to any uncertainty is silence.
             Task { await updateChecker.refresh() }
+            // « Quoi de neuf » — decided here, in the same main-actor slice as
+            // the onboarding stamp above, because the two answer ONE question
+            // between them and must never both speak. `isFirstRun` is computed
+            // from the very inputs the branch in `body` reads, so the screen
+            // the user is about to see and the decision taken here cannot
+            // disagree. Note `onboardingSeen` has already been latched above
+            // for an upgraded install, which is what makes that user « not a
+            // first run » and therefore the audience for the reel.
+            let installedVersion = AppUpdateChecker.installedVersion
+            let isFirstRun = OnboardingPolicy.shouldShow(
+                seen: onboardingSeen,
+                hasRegisteredServer: !appState.servers.isEmpty,
+                hasServer: appState.hasServer,
+                isAddingServer: appState.isAddingServer
+            )
+            switch WhatsNewPolicy.decide(
+                lastSeenVersion: whatsNewLastSeen.isEmpty ? nil : whatsNewLastSeen,
+                installed: installedVersion,
+                isFirstRun: isFirstRun
+            ) {
+            case .nothing:
+                break
+            case .stampOnly:
+                // A genuine first run, or a version shipping no pages at all.
+                // Moving the stamp is what stops the NEXT version's launch
+                // handing the user everything accumulated since — including
+                // announcements for a version they started on.
+                if let stamp = WhatsNewPolicy.stamp(installed: installedVersion) {
+                    whatsNewLastSeen = stamp
+                }
+            case .show(let pages):
+                whatsNewPages = pages
+            }
             // A joined group learns WHAT to watch only from the socket's
             // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
             // it through the same in-process pair an App Intent and a remote
