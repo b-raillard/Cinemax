@@ -467,6 +467,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var reporter: PlaybackReporter?
     private let remoteCommands: RemoteCommandController
     private let nowPlaying: NowPlayingInfoController
+    /// Watches for a wedged video decoder — the one failure mode no other
+    /// guard in this file can see. See `PictureStallPolicy`.
+    private var pictureStall = PictureStallPolicy()
     private var progressTimer: Timer?
     private var hideControlsWorkItem: DispatchWorkItem?
     private var didSeekToStart = false
@@ -969,6 +972,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Fresh open ⇒ libVLC re-selects every module; drop facts learned from
         // the previous media so the stats HUD can't show a stale decode chain.
         VLCEngineFacts.shared.reset()
+        // Same reasoning for the stall detector's sampling window: its last
+        // picture count belongs to a stream that no longer exists. Its recovery
+        // BUDGET is deliberately not restored here — this method is on the
+        // recovery's own path, see `PictureStallPolicy.resetWindow`.
+        pictureStall.resetWindow()
         // A new media's first position must always repaint, even if it lands on
         // the same whole second as the outgoing one's last painted position.
         lastPaintedPosition = nil
@@ -1125,10 +1133,53 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // `paintPosition`'s two gates (HUD hidden, unchanged whole second)
         // swallow the rest.
         refreshTimeUI()
+        checkPictureStall()
         if statsVisible { refreshStats() }
         if sleepActive {
             sleepRemaining -= 1
             if sleepRemaining <= 0 { fireSleepTimer() }
+        }
+    }
+
+    /// The one guard that watches the PICTURE instead of the clock, the engine
+    /// state or an error — none of which move when the video decoder wedges.
+    /// See `PictureStallPolicy` for the measured signature this recognises.
+    private func checkPictureStall() {
+        switch pictureStall.sample(
+            displayedPictures: player.statistics?.displayedPictures,
+            positionMs: currentMs,
+            isPlaying: enginePlaying,
+            hasVideoTrack: !player.videoTracks.isEmpty,
+            seekSettling: seekLoadingTargetMs != nil,
+            mediaConfirmedOpen: mediaConfirmedOpen
+        ) {
+        case .healthy:
+            break
+        case .stalling(let seconds):
+            // Logged once per episode of stalling, at the threshold: past it the
+            // budget is spent and the counter keeps climbing, which must not
+            // become one log line per second for the rest of the film.
+            guard seconds == PictureStallPolicy.stallSeconds else { return }
+            logger.notice("""
+                picture-stall no recovery left pos=\(Int(self.currentMs / 1000), privacy: .public)s \
+                modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
+                """)
+        case .recover:
+            // Everything worth knowing about WHY, in one line: the picture
+            // counters, the demuxer's own complaints, and the module chain
+            // libVLC selected. This is a net, not a cure — a recurrence has to
+            // be diagnosable from a log rather than reproduced on demand.
+            let stats = player.statistics
+            logger.notice("""
+                picture-stall recover pos=\(Int(self.currentMs / 1000), privacy: .public)s \
+                displayed=\(stats?.displayedPictures ?? 0, privacy: .public) \
+                lost=\(stats?.lostPictures ?? 0, privacy: .public) \
+                late=\(stats?.latePictures ?? 0, privacy: .public) \
+                corrupt=\(stats?.demuxCorrupted ?? 0, privacy: .public) \
+                discont=\(stats?.demuxDiscontinuity ?? 0, privacy: .public) \
+                modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
+                """)
+            _ = reResolveAndResume(from: currentMs)
         }
     }
 
