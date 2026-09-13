@@ -1164,6 +1164,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 picture-stall no recovery left pos=\(Int(self.currentMs / 1000), privacy: .public)s \
                 modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
                 """)
+            // The case worth a document above all others: the picture is frozen
+            // and the app has nothing left to try.
+            DiagnosticsUploader.send(reason: "picture-stall-exhausted", engine: "vlc")
         case .recover:
             // Everything worth knowing about WHY, in one line: the picture
             // counters, the demuxer's own complaints, and the module chain
@@ -1179,6 +1182,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 discont=\(stats?.demuxDiscontinuity ?? 0, privacy: .public) \
                 modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
                 """)
+            // On tvOS this line would otherwise be written where nobody can
+            // read it. Sent BEFORE the rebuild, because the rebuild is what
+            // resets the counters this document is about — and fire-and-forget,
+            // so it can never delay the recovery it describes.
+            DiagnosticsUploader.send(reason: "picture-stall", engine: "vlc")
             _ = reResolveAndResume(from: currentMs)
         }
     }

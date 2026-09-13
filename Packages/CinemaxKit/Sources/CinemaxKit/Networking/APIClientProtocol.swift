@@ -56,6 +56,17 @@ public protocol ServerAPI: Sendable {
     /// two (a feature REMOVED by a later version, e.g.
     /// `ServerVersion.upnpPortForwarding`) has to see the `nil`.
     func knownServerVersion() -> ServerVersion?
+
+    /// Uploads a diagnostic document to the server's own log directory and
+    /// returns the file name it was given, or `nil` when the server refused or
+    /// nothing could be sent.
+    ///
+    /// The one channel that gets a log off a tvOS device: the diagnostics
+    /// export is iOS-only (no share sheet, no MetricKit), so an Apple TV's
+    /// OSLog is unreachable to the person watching. Best effort by
+    /// construction — see the implementation for why a refusal is a legitimate
+    /// server configuration rather than an error to surface.
+    func uploadDiagnostics(_ document: String) async -> String?
 }
 
 public extension ServerAPI {
@@ -74,6 +85,10 @@ public extension ServerAPI {
     /// Default `nil`: a mock has no server to have learned a version from, and
     /// every gate must already handle "unknown".
     func knownServerVersion() -> ServerVersion? { nil }
+
+    /// Default `nil`: a mock has no server to upload to, and every caller must
+    /// already treat "no file name" as the ordinary outcome.
+    func uploadDiagnostics(_ document: String) async -> String? { nil }
 }
 
 /// Authentication, user listing, and active-session queries.

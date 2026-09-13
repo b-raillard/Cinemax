@@ -41,7 +41,6 @@ import Foundation
 /// selected module chain (`VLCEngineFacts`), so a recurrence is diagnosable
 /// from a log instead of needing to be reproduced on demand.
 struct PictureStallPolicy {
-
     /// Consecutive seconds of "clock moving, no new picture" before recovering.
     /// Long enough that a hiccup never costs a re-negotiation, short enough
     /// that the viewer has not yet reached for the remote.
@@ -72,9 +71,11 @@ struct PictureStallPolicy {
     private var lastPositionMs: Int32?
     private var stalledSeconds = 0
     private var healthySeconds = 0
-    private(set) var recoveriesLeft = PictureStallPolicy.recoveryBudget
+    private(set) var recoveriesLeft: Int
 
-    init() {}
+    init() {
+        recoveriesLeft = Self.recoveryBudget
+    }
 
     /// Called at every fresh open (`beginOpenLoading`). Clears the sampling
     /// window — the counters describe a stream that no longer exists — and
