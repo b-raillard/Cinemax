@@ -153,6 +153,21 @@ enum SettingsKey {
     /// without onboarding). Read through `OnboardingPolicy` only.
     static let onboardingSeen = "onboarding.seen"
 
+    // App update check — all four written only through `AppUpdateChecker`.
+    /// When the App Store was last asked (seconds since 1970, `0` = never).
+    /// Throttles the REQUEST only: the decision is re-derived from the stored
+    /// release on every launch, so a standing offer survives the throttle.
+    static let updateLastCheckedAt = "update.lastCheckedAt"
+    /// The newest version string the Store reported, verbatim (`"2.1"` stays
+    /// `"2.1"` — `ServerVersion.description` would print `2.1.0.0` at the user).
+    static let updateLatestVersion = "update.latestVersion"
+    /// That release's Store page.
+    static let updateLatestStoreURL = "update.latestStoreURL"
+    /// The version the user answered « Plus tard » to. Suppresses that version
+    /// alone — a later release asks again, because declining one update is not
+    /// an instruction to stop mentioning every future one.
+    static let updateDeclinedVersion = "update.declinedVersion"
+
     enum Default {
         static let darkMode = true
         static let accentColor = "green"

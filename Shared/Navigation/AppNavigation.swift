@@ -860,6 +860,11 @@ struct AppNavigation: View {
     @State private var cardActions = CardActionPresenter()
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
+    /// Deliberately NOT one of the process singletons above: it holds two
+    /// `UserDefaults` reads and a throttled network hop, so a scene-event
+    /// recreation costs nothing — and the standing offer is re-derived from
+    /// the stored release rather than held in memory.
+    @State private var updateChecker = AppUpdateChecker()
     /// When the app last entered the background — drives Part E foreground
     /// re-validation (only after a long gap, e.g. overnight standby).
     @State private var lastBackgroundedAt: Date?
@@ -1040,6 +1045,11 @@ struct AppNavigation: View {
         // host); see `CinemaDynamicType`. The app's own `uiScale`
         // (Settings > Interface > Font Size) still multiplies on top.
         .preferredColorScheme(themeManager.colorScheme)
+        // « Une nouvelle version est disponible ». Hosted at the root like every
+        // other app-wide presentation, so it survives whichever branch is on
+        // screen. It can only ever speak once `AppUpdateChecker.refresh()` has
+        // run, which is gated on the session check below.
+        .modifier(AppUpdatePresentation(checker: updateChecker, loc: loc))
         // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
         // AppState — MainTabView switches to Home, HomeScreen pushes detail.
         .onOpenURL { url in
@@ -1095,6 +1105,14 @@ struct AppNavigation: View {
             // Search history is per-server too: the first server that activates
             // after the upgrade inherits the old global list, once.
             SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
+            // Ask the App Store whether a newer build exists. In its own Task so
+            // it can never delay the launch it rides on: the lookup is a network
+            // round-trip to Apple, and NOTHING downstream waits for its answer.
+            // Deliberately placed AFTER `hasCheckedSession = true` — an alert
+            // over the launch screen would interrupt a session still being
+            // restored. `AppUpdatePolicy` owns every rule about whether it
+            // speaks at all, and its answer to any uncertainty is silence.
+            Task { await updateChecker.refresh() }
             // A joined group learns WHAT to watch only from the socket's
             // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
             // it through the same in-process pair an App Intent and a remote
@@ -1254,6 +1272,12 @@ struct AppNavigation: View {
                 // Re-open the socket dropped on background and re-declare the
                 // capabilities, since the session may have been reaped while away.
                 remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+                // Re-derive the update decision, and re-ask the Store if a day
+                // has passed. Free on the common path: the decision comes from
+                // the stored release, and the request is behind its own throttle.
+                if hasCheckedSession {
+                    Task { await updateChecker.refresh() }
+                }
             }
         }
         .onChange(of: network.isOnline) { _, online in
