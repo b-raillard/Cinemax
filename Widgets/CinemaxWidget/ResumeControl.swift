@@ -13,8 +13,9 @@ import WidgetKit
 /// needs the intent TYPE visible in the extension, so `openAppWhenRun` alone is
 /// not enough to reuse the app's intent: the type has to exist on both sides.
 ///
-/// So this shim is shared by SOURCE with the app — the same mechanism
-/// `PlaybackActivityAttributes` uses, and the only one available — and its BODY
+/// So this shim is shared by SOURCE with the app — the only mechanism available
+/// for sharing a type with an extension that links none of our frameworks — and
+/// its BODY
 /// is compiled per target through `CINEMAX_APP` (defined on the app target
 /// only): the app forwards to the real intent, which stays the single authority
 /// for what "resume" means (session bootstrap, the `privacy.maxContentAge` cap,

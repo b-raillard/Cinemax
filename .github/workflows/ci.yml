@@ -106,7 +106,7 @@ jobs:
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/ios-test.log" | xcbeautify
           grep -E '^✔ Test run with [1-9][0-9]* tests in [0-9]+ suites passed' "$RUNNER_TEMP/ios-test.log"
-          grep -F '✔ Suite "PlaybackLiveActivity" passed' "$RUNNER_TEMP/ios-test.log"
+          grep -F '✔ Suite "Identify applies the chosen artwork" passed' "$RUNNER_TEMP/ios-test.log"
 
       # Serial with the iOS step on purpose: both write the same DerivedData,
       # and two concurrent xcodebuilds race on its build.db ("database is

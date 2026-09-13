@@ -467,10 +467,5 @@ struct CinemaxWidgetBundle: WidgetBundle {
         // Control Center / Action button / Lock Screen control — see
         // ResumeControl.swift for why its intent is shared by source.
         CinemaxResumeControl()
-        // Playback Live Activity (Lock Screen + Dynamic Island) — views and
-        // configuration live in PlaybackLiveActivityWidget.swift.
-        #if canImport(ActivityKit)
-        CinemaxPlaybackLiveActivity()
-        #endif
     }
 }

@@ -728,7 +728,6 @@
 "settings.autoSkipIntro" = "Auto-skip Intro";
 "settings.autoSkipCredits" = "Auto-skip Credits";
 "settings.forceNativeAVPlayer" = "Use Native Player";
-"settings.playback.liveActivity" = "Live Activity";
 "settings.systemSettings" = "System Settings";
 "settings.version" = "Version %@";
 "settings.deviceName" = "Device Name";

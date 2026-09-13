@@ -81,8 +81,7 @@ enum CardPlayTargetResolver {
     /// How long to wait for the next-up probe before falling through to the
     /// series id itself (`getPlaybackInfo` resolves Series → Episode
     /// server-side anyway). The shared client timeout is 30s and this path
-    /// has zero on-screen feedback while it waits — same shape as
-    /// `PlaybackLiveActivityController.attach`'s `enrichDeadline` race.
+    /// has zero on-screen feedback while it waits.
     static let seriesProbeDeadline: Duration = .milliseconds(1500)
 
     static func resolve(
@@ -117,8 +116,7 @@ enum CardPlayTargetResolver {
         // the deadline's *decision* immediately but only *returns* once the probe
         // has actually finished — the deadline was advisory, not enforced. Two
         // unstructured tasks racing onto one single-resume continuation is the
-        // shape that actually bounds the wait, and it is the same one
-        // `PlaybackLiveActivityController.attach` uses for its enrich deadline.
+        // shape that actually bounds the wait.
         let outcome = await withCheckedContinuation { (continuation: CheckedContinuation<ProbeOutcome, Never>) in
             let race = ProbeRace(continuation)
             // The loser is **not** cancelled, on purpose: `getNextUp` populates

@@ -211,7 +211,6 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.autoSkipIntro) var autoSkipIntro: Bool = SettingsKey.Default.autoSkipIntro
     @AppStorage(SettingsKey.autoSkipCredits) var autoSkipCredits: Bool = SettingsKey.Default.autoSkipCredits
     @AppStorage(SettingsKey.forceNativeAVPlayer) var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
-    @AppStorage(SettingsKey.playbackLiveActivity) var playbackLiveActivity: Bool = SettingsKey.Default.playbackLiveActivity
     @AppStorage(SettingsKey.remoteControlEnabled) var remoteControlEnabled: Bool = SettingsKey.Default.remoteControlEnabled
     @AppStorage(SettingsKey.homeShowContinueWatching) var showContinueWatching: Bool = SettingsKey.Default.homeShowContinueWatching
     @AppStorage(SettingsKey.homeShowNextUp) var showNextUp: Bool = SettingsKey.Default.homeShowNextUp
@@ -305,7 +304,7 @@ struct SettingsScreen: View {
     /// control). The sleep timer picker is a non-boolean row appended per
     /// platform.
     var playbackToggleRows: [SettingsToggleRow] {
-        var rows: [SettingsToggleRow] = [
+        [
             .init(id: "4k", icon: "4k.tv", label: loc.localized("settings.4kRendering"), value: $render4K),
             .init(id: "autoPlayNext", icon: "play.square.stack", label: loc.localized("settings.autoPlayNextEpisode"), value: $autoPlayNextEpisode),
             // Both opt-in: the skip button stays the default, these make it
@@ -317,12 +316,6 @@ struct SettingsScreen: View {
             // and the opt-out has to exist wherever the capability is published.
             .init(id: "remoteControl", icon: "tv.badge.wifi", label: loc.localized("settings.playback.remoteControl"), value: $remoteControlEnabled)
         ]
-        // Live Activities are an iOS surface (Lock Screen + Dynamic Island);
-        // tvOS has no ActivityKit, so the row doesn't exist there.
-        #if os(iOS)
-        rows.append(.init(id: "playbackLiveActivity", icon: "platter.filled.top.iphone", label: loc.localized("settings.playback.liveActivity"), value: $playbackLiveActivity))
-        #endif
-        return rows
     }
 
     var homePageToggleRows: [SettingsToggleRow] {

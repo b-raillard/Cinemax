@@ -51,9 +51,6 @@ final class NativeVideoPresenter {
     private var endOfSeries: EndOfSeriesOverlayController!
     private var remoteCommands: RemoteCommandController!
     private var nowPlaying: NowPlayingInfoController!
-    /// iOS Lock Screen / Dynamic Island Live Activity. No-op stub on tvOS
-    /// (no ActivityKit) so the call sites below stay platform-free.
-    private var liveActivity: PlaybackLiveActivityController!
     /// Our slot in `RemotePlaystateRouter` (inbound pause / seek / stop from
     /// another Jellyfin session). Handed back in `cleanup()`; a stale token is
     /// ignored by the router.
@@ -159,7 +156,6 @@ final class NativeVideoPresenter {
             apiClient: apiClient, userId: userId,
             imageBuilder: imageBuilder, authToken: nil
         )
-        self.liveActivity = PlaybackLiveActivityController(apiClient: apiClient, userId: userId)
     }
 
     /// Called by `RemoteCommandController` when the system play/pause command
@@ -172,20 +168,15 @@ final class NativeVideoPresenter {
         setAVPlayerPlaying(player.timeControlStatus != .playing, player: player)
     }
 
-    /// Plays or pauses and re-syncs the Now Playing widget + Live Activity at
-    /// once rather than on the next 1 s tick. Shared by the system play/pause
-    /// command and inbound remote Playstate.
+    /// Plays or pauses and re-syncs the Now Playing widget at once rather than
+    /// on the next 1 s tick. Shared by the system play/pause command and
+    /// inbound remote Playstate.
     private func setAVPlayerPlaying(_ play: Bool, player: AVPlayer) {
         if play { player.play() } else { player.pause() }
         nowPlaying.update(
             elapsed: player.currentTime().seconds,
             duration: currentItemDurationSeconds(),
             rate: player.rate > 0 ? 1.0 : 0.0
-        )
-        liveActivity.update(
-            elapsed: player.currentTime().seconds,
-            duration: currentItemDurationSeconds(),
-            rate: Double(player.rate)
         )
     }
 
@@ -295,13 +286,6 @@ final class NativeVideoPresenter {
         }
         nowPlaying.setAuthToken(playbackInfo?.authToken)
         nowPlaying.attach(itemId: itemId, title: title, durationSeconds: nil)
-        // Lock Screen / Dynamic Island Live Activity (iOS; no-op on tvOS).
-        // `startTime` seeds the resume position so the banner opens on the right
-        // playhead instead of anchoring at 0 and self-correcting a tick later.
-        liveActivity.attach(
-            itemId: itemId, title: title, subtitle: nil,
-            durationSeconds: nil, startAtSeconds: startTime
-        )
         setupTrackMenus()
         setupBackgroundObserver()
 
@@ -585,12 +569,8 @@ final class NativeVideoPresenter {
                       itemId: ep.id, userId: userId, maxBitrate: maxBitrate
                   ) else {
                 // The session is already closed and the new episode never
-                // resolved, so this bail is terminal for the banner: without a
-                // detach the Live Activity strands on the Lock Screen showing
-                // the previous episode's playhead. (Recovering playback itself
-                // is deliberately out of scope here — see the VLC path's
-                // `handleFailedEpisodeNav`.)
-                liveActivity.detach()
+                // resolved. (Recovering playback itself is deliberately out of
+                // scope here — see the VLC path's `handleFailedEpisodeNav`.)
                 return
             }
             cleanupPlayer()
@@ -633,14 +613,6 @@ final class NativeVideoPresenter {
             remoteCommands.attach(previous: previousEpisode, next: nextEpisode, hasNavigator: episodeNavigator != nil)
             nowPlaying.setAuthToken(playbackInfo?.authToken)
             nowPlaying.attach(itemId: ep.id, title: ep.title, durationSeconds: nil)
-            // Episode swap = end the old activity + start a fresh one (an
-            // activity's attributes are frozen for its lifetime). `attach`
-            // detaches first, and its generation guard drops a lookup still in
-            // flight from the episode we just left.
-            liveActivity.attach(
-                itemId: ep.id, title: ep.title, subtitle: nil,
-                durationSeconds: nil, startAtSeconds: nil
-            )
             setupTrackMenus()              // refreshes native "..." menu for new episode
 
             playerObservation?.invalidate()
@@ -721,16 +693,6 @@ final class NativeVideoPresenter {
                     duration: self.currentItemDurationSeconds(),
                     rate: engineRate > 0 ? 1.0 : 0.0
                 )
-                // Same tick, no second timer: the controller itself decides
-                // whether this sample is a discontinuity worth a push. It gets
-                // the REAL rate (not 0/1) — AVKit's speed menu can run the item
-                // at 2×, and both the widget's client-side timer and the
-                // throttle's projection have to expect that.
-                self.liveActivity.update(
-                    elapsed: time.seconds,
-                    duration: self.currentItemDurationSeconds(),
-                    rate: engineRate
-                )
             }
         }
     }
@@ -759,10 +721,6 @@ final class NativeVideoPresenter {
                     self.navigateToEpisode(next)
                     return
                 }
-                // Playback is over and nothing follows — end the Live Activity
-                // rather than leaving a banner stuck at the end of the item
-                // (the end-of-series overlay keeps the player on screen).
-                self.liveActivity.detach()
                 if autoPlay, self.episodeNavigator != nil, self.nextEpisode == nil,
                    let seriesName = self.currentSeriesName {
                     // We just finished the last episode of a series while auto-play is on.
@@ -1015,7 +973,6 @@ final class NativeVideoPresenter {
         RemotePlaystateRouter.shared.unregister(remotePlaystateToken)
         remoteCommands.detach()
         nowPlaying.detach()
-        liveActivity.detach()
         if let vc = playerVC { applyTransportBarItems([], to: vc) }
         #if os(tvOS)
         dismissDelegate = nil

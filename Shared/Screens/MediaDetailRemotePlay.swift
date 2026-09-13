@@ -7,10 +7,9 @@ import CinemaxKit
 // drive and sends `PlayNow` to the one they pick.
 //
 // Deliberately send-only: once the command lands, this device has NO transport
-// controls. The two banner controllers (`PlaybackLiveActivityController`,
-// `NowPlayingInfoController`) are attached by the *local* presenters only, and
-// nothing plays locally here — so there is no Live Activity, no Now Playing
-// entry, no Control Center banner on the sender. The user pilots from the target
+// controls. `NowPlayingInfoController` is attached by the *local* presenters
+// only, and nothing plays locally here — so there is no Now Playing entry and no
+// Control Center banner on the sender. The user pilots from the target
 // device's own remote. That is the validated behaviour, not an oversight; see
 // the "Remote control" section in CLAUDE.md.
 
