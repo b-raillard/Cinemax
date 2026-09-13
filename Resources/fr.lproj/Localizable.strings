@@ -322,7 +322,6 @@
 "settings.autoSkipIntro" = "Passer l'intro automatiquement";
 "settings.autoSkipCredits" = "Passer le générique automatiquement";
 "settings.forceNativeAVPlayer" = "Lecteur natif";
-"settings.playback.liveActivity" = "Activité en direct";
 "settings.systemSettings" = "Réglages système";
 "settings.version" = "Version %@";
 "settings.deviceName" = "Nom de l'appareil";

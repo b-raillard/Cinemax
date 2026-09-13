@@ -433,8 +433,7 @@ final class ProfileModel {
     /// Serialises saves. Each picker fires its own task, and every save is a
     /// server-side read-modify-write: two overlapping ones let the second read
     /// the configuration before the first has written it, so the first field
-    /// silently loses. Same chained-task shape as
-    /// `PlaybackLiveActivityController.enqueue`.
+    /// silently loses.
     private var saveChain: Task<Void, Never>?
 
     enum PasswordOutcome {

@@ -38,11 +38,6 @@ enum SettingsKey {
     /// without a server transcode (no freezes); native is the escape hatch for
     /// edge cases. Default `false` ⇒ VLC.
     static let forceNativeAVPlayer = "forceNativeAVPlayer"
-    /// iOS only — publishes the current playback session as a Live Activity
-    /// (Lock Screen banner + Dynamic Island) via
-    /// `PlaybackLiveActivityController`. tvOS has no ActivityKit, so neither the
-    /// controller (a no-op stub there) nor its settings row exist.
-    static let playbackLiveActivity = "playback.liveActivity"
     /// Whether this device advertises itself as a remote-control target, so
     /// another Jellyfin session can start playback here ("Lire sur…" from an
     /// iPhone onto this Apple TV). Drives `RemoteControlListener`: on ⇒ publish
@@ -180,7 +175,6 @@ enum SettingsKey {
         static let subtitleBackground = "none"
         static let sleepTimerDefaultMinutes = 0
         static let forceNativeAVPlayer = false
-        static let playbackLiveActivity = true
         static let remoteControlEnabled = true
 
         static let homeShowContinueWatching = true
