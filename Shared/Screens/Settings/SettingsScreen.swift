@@ -175,6 +175,11 @@ struct SettingsScreen: View {
     /// `isReplay` differs, which is what `OnboardingExit` keys the tvOS Menu
     /// button on.
     @State var showOnboarding = false
+    /// « Quoi de neuf », re-opened from Réglages. A replay shows the WHOLE
+    /// catalogue (`WhatsNewCatalogue.allPages()`), not the slice this user had
+    /// left to see, and stamps nothing — somebody asking for it has not just
+    /// updated, they are looking something up.
+    @State var showWhatsNew = false
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
     /// "Quick Connect" (authorize) row so we never surface a flow the server
@@ -412,6 +417,7 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .sheet(isPresented: $showServers) { serversSheet }
         .sheet(isPresented: $showOnboarding) { onboardingSheet }
+        .fullScreenCover(isPresented: $showWhatsNew) { whatsNewSheet }
         .sheet(isPresented: $showProfile) { profileSheet }
         #else
         .fullScreenCover(isPresented: $showLicenses) { licensesSheet }
@@ -421,6 +427,7 @@ struct SettingsScreen: View {
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .fullScreenCover(isPresented: $showServers) { serversSheet }
         .fullScreenCover(isPresented: $showOnboarding) { onboardingSheet }
+        .fullScreenCover(isPresented: $showWhatsNew) { whatsNewSheet }
         .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
     }
@@ -448,6 +455,17 @@ struct SettingsScreen: View {
 
     private var onboardingSheet: some View {
         OnboardingScreen(isReplay: true) { showOnboarding = false }
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
+    }
+
+    /// Like `onboardingSheet`, the environment is re-injected by hand: a
+    /// presentation is its own context and does not carry the injected
+    /// `@Observable` objects down with it.
+    private var whatsNewSheet: some View {
+        WhatsNewScreen(pages: WhatsNewCatalogue.allPages()) { showWhatsNew = false }
             .environment(appState)
             .environment(themeManager)
             .environment(loc)

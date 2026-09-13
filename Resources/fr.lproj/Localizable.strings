@@ -1204,6 +1204,22 @@
 "profile.preferences.saved" = "Préférences enregistrées";
 "profile.preferences.unavailable" = "Préférences illisibles pour l'instant. Rouvrez cet écran pour réessayer.";
 
+/* Quoi de neuf — la pellicule des nouveautés */
+"settings.whatsNew" = "Nouveautés";
+"whatsNew.next" = "Suivant";
+"whatsNew.back" = "Précédent";
+"whatsNew.skip" = "Passer";
+"whatsNew.done" = "Terminé";
+"whatsNew.page" = "Page %d sur %d";
+"whatsNew.watchTogether.title" = "Regarder ensemble";
+"whatsNew.watchTogether.body" = "Lancez le même film à plusieurs : pause, reprise et déplacements sont partagés à la seconde près. Les autres rejoignent la séance depuis la rangée « En direct » de leur accueil.";
+"whatsNew.playOn.title" = "Lire sur…";
+"whatsNew.playOn.body" = "Envoyez un film sur l'Apple TV depuis le téléphone, à la bonne position. Et Cinemax accepte désormais d'être la cible : c'est l'Apple TV qui reçoit.";
+"whatsNew.playlists.title" = "Vos playlists";
+"whatsNew.playlists.body" = "Créez une liste depuis n'importe quelle affiche, réordonnez-la d'un glissement, retrouvez-la sur votre accueil.";
+"whatsNew.subtitles.title" = "Sous-titres réglables";
+"whatsNew.subtitles.body" = "Couleur, contour et cadre se règlent dans Lecture. Les nouveaux réglages s'appliquent à la prochaine ouverture du lecteur.";
+
 /* Vérification de version au lancement */
 "update.available.title" = "Une nouvelle version est disponible";
 "update.available.message" = "Cinemax %@ est disponible sur l'App Store. Vous utilisez la version %@.";

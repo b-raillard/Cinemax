@@ -454,6 +454,14 @@ extension SettingsScreen {
                 showsChevron: true,
                 action: { showOnboarding = true }
             )
+
+            tvActionRow(
+                id: "whatsNew",
+                icon: "wand.and.stars",
+                label: loc.localized("settings.whatsNew"),
+                showsChevron: true,
+                action: { showWhatsNew = true }
+            )
         }
     }
 

@@ -153,6 +153,13 @@ enum SettingsKey {
     /// without onboarding). Read through `OnboardingPolicy` only.
     static let onboardingSeen = "onboarding.seen"
 
+    /// The app version whose « Quoi de neuf » pages have already been shown.
+    /// **Absent is NOT "first run"** — it is also every install upgrading from
+    /// a build that predates the reel, which is exactly who it exists for; the
+    /// two are told apart by `OnboardingPolicy.shouldShow`, never by this being
+    /// missing. Read and written only through `WhatsNewPolicy`.
+    static let whatsNewLastSeenVersion = "whatsNew.lastSeenVersion"
+
     // App update check — all four written only through `AppUpdateChecker`.
     /// When the App Store was last asked (seconds since 1970, `0` = never).
     /// Throttles the REQUEST only: the decision is re-derived from the stored
