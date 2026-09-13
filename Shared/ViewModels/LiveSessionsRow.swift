@@ -283,11 +283,30 @@ enum LiveSessionsRow {
     /// An administrator keeps the unfiltered shape on purpose: the
     /// controllable branch also drops every session that does not advertise
     /// `SupportsRemoteControl`, and an admin is entitled to the whole list.
-    /// Consequence for everyone else, to know when reading a bug report: a
-    /// regular account only ever sees sessions that DECLARE remote control —
-    /// a Cinemax whose « Lire sur… » target toggle is off, or a client that
-    /// never posts capabilities, is invisible to non-admins by the server's
-    /// own rule — and only on devices its device-access policy allows.
+    ///
+    /// **And that flag is NOT a declaration — it is a declaration AND a live
+    /// socket.** `SessionInfo.SupportsRemoteControl` reads
+    /// `Capabilities.SupportsMediaControl` *and* asks every attached session
+    /// controller, where `WebSocketController.SupportsMediaControl =>
+    /// HasOpenSockets` (verified on jellyfin `master`, 2026-09-13). So a
+    /// regular account sees a session only while its client is HOLDING an open
+    /// socket. This app publishes the capability and opens one on foreground,
+    /// and drops it on background by design — which is why a backgrounded
+    /// Cinemax reports `false` on both flags and is absent from the row, while
+    /// a PLAYING one (necessarily foregrounded) is there. A client that never
+    /// posts capabilities, or a Cinemax whose « Lire sur… » target toggle is
+    /// off, is invisible to non-admins by the server's rule, not ours — and
+    /// only devices its own device-access policy allows are listed at all.
+    ///
+    /// Measured against the reference server on 2026-09-13 with a real
+    /// non-admin account: before the permission the row showed nobody; after
+    /// it, the same account saw every live session, including a Jellyfin
+    /// Android TV mid-playback (`SupportsMediaControl = true`). The permission
+    /// is the half an administrator grants; the open socket is the half the
+    /// WATCHED client has to hold. A bug report saying « the admin sees
+    /// everyone and a regular user sees nobody » is one of those two, and
+    /// reading `/Sessions` twice — bare, then with `controllableByUserId` —
+    /// tells them apart in one request.
     static func sessionsQueryUserId(isAdministrator: Bool, currentUserId: String?) -> String? {
         isAdministrator ? nil : currentUserId
     }
