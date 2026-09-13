@@ -56,9 +56,18 @@ struct DiagnosticsFacts: Sendable, Equatable {
     var logEntryCount: Int
     /// `nil` ⇒ MetricKit does not exist on this platform (tvOS).
     var metricKit: MetricKitSummary?
+    /// Why this report exists, when the app produced it on its own. `nil` for
+    /// the manual export, where the user IS the reason — and that is what keeps
+    /// the existing header shape (which tests lock) byte-identical.
+    var reason: String?
 
     /// The app-state half, with the device facts every report carries.
-    static func current(serverVersion: String?, engine: String, lastPlayback: PlaybackSnapshot?) -> DiagnosticsFacts {
+    static func current(
+        serverVersion: String?,
+        engine: String,
+        lastPlayback: PlaybackSnapshot?,
+        reason: String? = nil
+    ) -> DiagnosticsFacts {
         DiagnosticsFacts(
             generatedAt: Date(),
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?",
@@ -70,7 +79,8 @@ struct DiagnosticsFacts: Sendable, Equatable {
             lastPlayback: lastPlayback,
             logWindowMinutes: 0,
             logEntryCount: 0,
-            metricKit: nil
+            metricKit: nil,
+            reason: reason
         )
     }
 }
@@ -84,9 +94,14 @@ enum DiagnosticsReport {
     static let title = "# Cinemax diagnostics"
 
     static func header(_ facts: DiagnosticsFacts) -> [String] {
-        [
+        var lines = [
             title,
             "generated_at: \(timestamp(facts.generatedAt))",
+        ]
+        // Only an automatic report states a reason. The manual export carries
+        // none, so its header stays exactly what it was.
+        if let reason = facts.reason { lines.append("reason: \(reason)") }
+        lines.append(contentsOf: [
             "app_version: \(facts.appVersion) (\(facts.appBuild))",
             "device: \(facts.deviceModel)",
             "os: \(facts.osDescription)",
@@ -95,7 +110,8 @@ enum DiagnosticsReport {
             "last_playback: \(describe(facts.lastPlayback))",
             "log_window: last \(facts.logWindowMinutes) min of this launch, subsystem \(DiagnosticsLogCollector.subsystem), \(facts.logEntryCount) entries",
             "metrickit: \(describe(facts.metricKit))",
-        ]
+        ])
+        return lines
     }
 
     static func describe(_ snapshot: PlaybackSnapshot?) -> String {

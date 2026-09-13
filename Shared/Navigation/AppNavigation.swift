@@ -1133,6 +1133,12 @@ struct AppNavigation: View {
             // loopback stream proxy (dual-stack host with a black-holed IPv6
             // that libVLC would stall on). Non-blocking; cached for the session.
             StreamTransportPolicy.shared.configure(serverURL: appState.serverURL)
+            // The diagnostics channel's ONLY injection point. The player holds a
+            // narrowed API slice and cannot reach a server-wide route — see the
+            // RULE on `DiagnosticsUploader.client`. One assignment is enough:
+            // `AppState.apiClient` is the same instance for the process's life,
+            // `reconnect` repointing it in place rather than replacing it.
+            DiagnosticsUploader.client = appState.apiClient
             // Advertise this device as a remote-control target and start
             // listening. Idempotent — `apply` no-ops when nothing changed, so
             // the observers below can call it freely.
