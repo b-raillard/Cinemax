@@ -4649,6 +4649,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard errorAlert == nil else { return }
         logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
         releaseServerSessionAfterFailure()
+        // The user is about to see « Lecture impossible » on a device whose log
+        // nobody can reach: the diagnostics EXPORT is iOS-only, so on an Apple
+        // TV this fault is otherwise unreportable — precisely the gap the upload
+        // channel exists to close. Reported 2026-09-13 with the server log as
+        // the only evidence: every attempt accepted by the server and stopped at
+        // 0 ms, on three different titles, until the app was killed and
+        // relaunched — a shape no server-side log can explain on its own.
+        // `last_playback` already carries the transport (`route:` in
+        // `recordPlaybackDiagnostics`), so the document answers the first
+        // question such a report raises — direct or through the loopback proxy —
+        // which decides whether `StreamTransportPolicy.directFailedThisSession`
+        // (session-sticky, cleared only by a server switch) is the amplifier.
+        DiagnosticsUploader.send(reason: "playback-failed", engine: "vlc")
         setLoading(false) // the error dialog now owns the screen
         let alert = UIAlertController(
             title: loc.localized("playback.error.title"),
