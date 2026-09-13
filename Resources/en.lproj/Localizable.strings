@@ -1201,3 +1201,13 @@
 "profile.subtitleMode.None" = "Never";
 "profile.preferences.saved" = "Preferences saved";
 "profile.preferences.unavailable" = "Preferences could not be read. Reopen this screen to retry.";
+
+/* Launch version check */
+"update.available.title" = "A new version is available";
+"update.available.message" = "Cinemax %@ is available on the App Store. You're running version %@.";
+"update.required.title" = "Update required";
+"update.required.message" = "This version of Cinemax is no longer supported. Install version %@ to continue.";
+"update.tvos.hint" = "Open the App Store on your Apple TV to install the update.";
+"update.action.update" = "Update";
+"update.action.later" = "Later";
+"update.action.retry" = "Try again";
