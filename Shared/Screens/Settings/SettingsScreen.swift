@@ -417,7 +417,7 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .sheet(isPresented: $showServers) { serversSheet }
         .sheet(isPresented: $showOnboarding) { onboardingSheet }
-        .fullScreenCover(isPresented: $showWhatsNew) { whatsNewSheet }
+        .whatsNewPresentation(isPresented: $showWhatsNew) { whatsNewSheet }
         .sheet(isPresented: $showProfile) { profileSheet }
         #else
         .fullScreenCover(isPresented: $showLicenses) { licensesSheet }
@@ -427,7 +427,7 @@ struct SettingsScreen: View {
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
         .fullScreenCover(isPresented: $showServers) { serversSheet }
         .fullScreenCover(isPresented: $showOnboarding) { onboardingSheet }
-        .fullScreenCover(isPresented: $showWhatsNew) { whatsNewSheet }
+        .whatsNewPresentation(isPresented: $showWhatsNew) { whatsNewSheet }
         .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
     }
