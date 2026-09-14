@@ -524,6 +524,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // P3: end-of-series / error
     private var didReportEnd = false
     private var didRetry = false
+    /// Set while an error retry sits between its failure and its `play()` (it
+    /// awaits the proxy check, then the audio session — see
+    /// `handlePlaybackError`): the attempt it replaces can still emit a late
+    /// error in that window, and that must not be read as the retry failing. A
+    /// token rather than a Bool, so an abandoned retry (episode swap, wake
+    /// re-resolve) can never clear a newer retry's guard.
+    private var pendingRetryToken: Int?
+    private var retryTokenCounter = 0
     // True once `noteMediaOpened()` has confirmed a demuxer exists. Until then
     // the spinner stays up whatever libVLC says about the state — see
     // `clearLoadingIfOpen()`.
@@ -3883,6 +3891,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         closeOptionPanelForMediaChange()
         #endif
         navGeneration += 1
+        pendingRetryToken = nil // a retry of the media being replaced is moot
         let gen = navGeneration
         reporter?.reportStop(reason: .episodeSwap)
         progressTimer?.invalidate()
@@ -4617,29 +4626,55 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // for every URL, since the proxy is then the ONLY path that works
             // (measured: libVLC `cannot resolve` while URLSession returns 200).
             if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
-            // Always retry via the proxy (direct is the path that stalls on
-            // broken IPv6, and the proxy authenticates by header); fall back to
-            // direct only if it can't start — the one open that carries
-            // `ApiKey` (see `streamURL`).
-            let (url, viaProxy) = streamOpenURL(for: info, tryProxy: true)
-            if viaProxy { usingProxy = true }
-            if let media = try? Media(url: url) {
+            // Armed NOW rather than after the await below: the failed attempt's
+            // own trailing `.stopped` lands during it, and `beginOpenLoading` is
+            // what tells the end gate to ignore it (and puts the spinner up).
+            beginOpenLoading()
+            retryTokenCounter += 1
+            let token = retryTokenCounter
+            pendingRetryToken = token
+            let gen = navGeneration
+            Task { [weak self] in
+                // Always retry via the proxy (direct is the path that stalls on
+                // broken IPv6, and the proxy authenticates by header); fall back
+                // to direct only if it can't start — the one open that carries
+                // `ApiKey` (see `streamURL`). But first make sure the proxy can
+                // still take a connection: a listener that died unseen refused
+                // the retry too, and that is how one dead socket became
+                // « Lecture impossible » on every title until the app was killed
+                // (see `CinemaxStreamProxy.restartListenerIfNotAccepting`).
+                await StreamTransportPolicy.shared.prepareProxyForRetry()
+                // Superseded while waiting (an episode swap or a wake re-resolve
+                // cleared the token and owns the screen now): not ours any more.
+                guard let self, self.pendingRetryToken == token else { return }
+                guard !self.isTearingDown, gen == self.navGeneration else {
+                    self.pendingRetryToken = nil
+                    return
+                }
+                let (url, viaProxy) = self.streamOpenURL(for: self.info, tryProxy: true)
+                // Assigned, not only raised: a retry that falls back to direct
+                // after a PROXIED failure is no longer on the proxy.
+                self.usingProxy = viaProxy
+                guard let media = try? Media(url: url) else {
+                    self.pendingRetryToken = nil
+                    self.handlePlaybackError()
+                    return
+                }
                 media.addOption(":network-caching=5000")
-                recordPlaybackDiagnostics()
+                self.recordPlaybackDiagnostics()
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
                 // of restarting at 0. The initial resume-seek already fired,
                 // so re-arm it and reset media state exactly like an episode
                 // swap. A fresh-open failure (never played, position 0)
                 // keeps its original `startTime` resume untouched.
-                if lastKnownPositionMs > 1000 {
-                    startTime = Double(lastKnownPositionMs) / 1000
-                    didSeekToStart = false
-                    hasValidTime = false
-                    mediaLengthMs = 0
+                if self.lastKnownPositionMs > 1000 {
+                    self.startTime = Double(self.lastKnownPositionMs) / 1000
+                    self.didSeekToStart = false
+                    self.hasValidTime = false
+                    self.mediaLengthMs = 0
                 }
-                beginOpenLoading()
-                activateSessionThenPlay(media)
+                self.activateSessionThenPlay(media)
             }
             return
         }
@@ -4647,7 +4682,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // (its trailing `.stopped`, a late watchdog) must neither stack another
         // alert nor release the server session twice.
         guard errorAlert == nil else { return }
+        // A retry is still readying the proxy: a late signal from the attempt
+        // it replaces is not the retry failing.
+        guard pendingRetryToken == nil else { return }
         logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
+        // The last attempt failed THROUGH the proxy: don't leave every future
+        // playback pinned to it (see `noteProxiedPlaybackFailed`).
+        if usingProxy { StreamTransportPolicy.shared.noteProxiedPlaybackFailed() }
         releaseServerSessionAfterFailure()
         // The user is about to see « Lecture impossible » on a device whose log
         // nobody can reach: the diagnostics EXPORT is iOS-only, so on an Apple
@@ -4746,6 +4787,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             guard self?.isTearingDown == false else { return }
             await PlaybackAudioSession.activate()
             guard let self, !self.isTearingDown, gen == self.navGeneration else { return }
+            // If this is an error retry, it becomes the media on screen here:
+            // from now on a failure is its own, so the give-up branch may speak.
+            self.pendingRetryToken = nil
             self.lastPlayStart = Date()
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
@@ -4833,6 +4877,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         cancelPendingSeekCommit()
         isReResolvingAfterWake = true
         navGeneration += 1
+        pendingRetryToken = nil // a retry of the media being replaced is moot
         let gen = navGeneration
         let resumeItemId = itemId
         let resumeSeconds = Double(resumeMs) / 1000.0
@@ -4845,7 +4890,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // failure just returns nil → leave the watchdog / error path to it.
             guard let fresh = try? await self.apiClient.getPlaybackInfo(
                 itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
-            ) else { return }
+            ) else {
+                // …and make sure there IS one: this re-resolve may have superseded
+                // an error retry (its token was cleared above), which had already
+                // cancelled the watchdog. Without re-arming it, nothing would ever
+                // end that spinner. A no-op if the media is actually playing.
+                if !self.isTearingDown, gen == self.navGeneration { self.scheduleOpenWatchdog() }
+                return
+            }
             guard !self.isTearingDown, gen == self.navGeneration else { return }
             // The negotiation we're replacing holds its own play session AND a
             // live stream the server opened for it (`isAutoOpenLiveStream`), and
