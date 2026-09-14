@@ -68,9 +68,38 @@ final class StreamTransportPolicy {
         proxyLog.log("StreamTransport ▸ direct playback failed — proxy is now sticky for this session")
     }
 
+    /// Called by the player when it gives up on an open whose last attempt went
+    /// THROUGH the proxy: both paths have now failed, so the pin that
+    /// `noteDirectPlaybackFailed()` put on the session is no longer evidence for
+    /// anything. Keeping it is what turned one broken proxy into « Lecture
+    /// impossible » on every title until the app was killed (measured on an
+    /// iPhone 2026-09-14: `preferProxy=false`, an MKV, and still `voie=proxy` on
+    /// the very first open). Released, the next playback tries direct first and
+    /// pins itself again if direct fails — one hidden retry, never a dead app.
+    func noteProxiedPlaybackFailed() {
+        guard directFailedThisSession else { return }
+        directFailedThisSession = false
+        proxyLog.log("StreamTransport ▸ proxied attempt failed too — proxy is no longer sticky")
+    }
+
+    /// Makes sure the loopback listener can take a connection before the retry
+    /// that follows a failed open goes through it: rebuilds a listener that
+    /// stopped accepting without saying so, then waits (bounded) for it to be
+    /// up. Past the bound the retry simply opens direct, which is what
+    /// `proxiedURL` returning nil has always meant.
+    func prepareProxyForRetry() async {
+        await proxy.restartListenerIfNotAccepting()
+        _ = await proxy.waitUntilReady(timeout: 1.5)
+    }
+
     /// Re-run the probe (call on foreground / connectivity change).
     func refresh() {
         guard let url = serverURL, let host = url.host else { preferProxy = false; return }
+        // A return to the foreground is when a listener can have died unseen (a
+        // suspended app's listening socket can be reclaimed by the system, and
+        // the `NWListener` then never reports it). Check it here, off the hot
+        // path, so the first play after the return finds a live listener.
+        Task { [proxy] in await proxy.restartListenerIfNotAccepting() }
         let useTLS = (url.scheme?.lowercased() != "http")
         let port = UInt16(url.port ?? (useTLS ? 443 : 80))
         probeTask?.cancel()
@@ -257,6 +286,9 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     private var listener: NWListener?
     private var listenerPort: UInt16?
     private var listenerStarting = false
+    /// Bumped whenever the current listener is replaced or dropped, so a late
+    /// state callback from an OLD listener can never clear its successor's port.
+    private var listenerGeneration = 0
     // Each loopback URL carries a unique UNGUESSABLE id → its own origin, so an
     // in-flight request for a previous media (retry / episode swap) can't read
     // the wrong stream, and a co-resident app port-scanning loopback can't
@@ -345,6 +377,7 @@ final class CinemaxStreamProxy: @unchecked Sendable {
             listener = nil
             listenerPort = nil
             listenerStarting = false
+            listenerGeneration += 1
             targets.removeAll()
             targetOrder.removeAll()
             let live = liveHandlers.allObjects
@@ -360,41 +393,166 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     /// via the update handler — no semaphore, no blocking, no self-deadlock on
     /// `netQueue`). Idempotent and concurrency-safe.
     private func startListenerIfNeeded() {
-        let proceed: Bool = stateLock.withLock {
-            if listenerPort != nil || listenerStarting { return false }
+        let generation: Int? = stateLock.withLock {
+            if listenerPort != nil || listenerStarting { return nil }
             listenerStarting = true
-            return true
+            listenerGeneration += 1
+            return listenerGeneration
         }
-        guard proceed else { return }
+        guard let generation else { return }
         let params = NWParameters.tcp
         params.requiredInterfaceType = .loopback
         params.allowLocalEndpointReuse = true
         guard let l = try? NWListener(using: params) else {
             proxyLog.error("StreamProxy ▸ listener init failed")
-            stateLock.withLock { listenerStarting = false }
+            stateLock.withLock { if listenerGeneration == generation { listenerStarting = false } }
             return
         }
-        stateLock.withLock { listener = l } // hold a strong ref during bring-up
+        // Hold a strong ref during bring-up — unless a restart superseded this
+        // one while it was being created, in which case it is simply dropped.
+        let isCurrent: Bool = stateLock.withLock {
+            guard listenerGeneration == generation else { return false }
+            listener = l
+            return true
+        }
+        guard isCurrent else { return }
         l.newConnectionHandler = { [weak self] conn in self?.accept(conn) }
         l.stateUpdateHandler = { [weak self, weak l] state in
             guard let self else { return }
             switch state {
             case .ready:
                 let port = l?.port?.rawValue
-                self.stateLock.withLock { self.listenerPort = port; self.listenerStarting = false }
-                if let port { proxyLog.log("StreamProxy ▸ listening on 127.0.0.1:\(port)") }
-            case .failed, .cancelled:
-                self.stateLock.withLock {
+                let current: Bool = self.stateLock.withLock {
+                    guard self.listenerGeneration == generation else { return false }
+                    self.listenerPort = port
                     self.listenerStarting = false
-                    if self.listener === l { self.listener = nil; self.listenerPort = nil }
+                    return true
                 }
-                proxyLog.error("StreamProxy ▸ listener down (\(String(describing: state), privacy: .public))")
+                if current, let port { proxyLog.log("StreamProxy ▸ listening on 127.0.0.1:\(port)") }
+            case .failed, .cancelled:
+                let current: Bool = self.stateLock.withLock {
+                    guard self.listenerGeneration == generation else { return false }
+                    self.listenerStarting = false
+                    self.listener = nil
+                    self.listenerPort = nil
+                    return true
+                }
+                // A replaced listener's own cancellation is expected, not news.
+                if current {
+                    proxyLog.error("StreamProxy ▸ listener down (\(String(describing: state), privacy: .public))")
+                }
             default:
                 break
             }
         }
         l.start(queue: netQueue)
     }
+
+    /// Drops the current listener and brings a fresh one up on a new port.
+    /// Registrations and live requests are kept: a connection already accepted
+    /// doesn't depend on the listener, and a registration is addressed by its
+    /// id, so the next `localURL` simply carries the new port.
+    func restartListener() {
+        restartListener(ifGeneration: nil)
+    }
+
+    /// `expected` non-nil: restart only if the listener is still the one that
+    /// generation describes — a check that raced a `stop()` (sign-out) or
+    /// another restart must not bring up a second listener on top of it.
+    private func restartListener(ifGeneration expected: Int?) {
+        let (proceed, old): (Bool, NWListener?) = stateLock.withLock {
+            if let expected, listenerGeneration != expected { return (false, nil) }
+            let current = listener
+            listener = nil
+            listenerPort = nil
+            listenerStarting = false
+            listenerGeneration += 1
+            return (true, current)
+        }
+        guard proceed else { return }
+        old?.cancel()
+        startListenerIfNeeded()
+    }
+
+    /// Rebuilds the listener when its cached port no longer takes connections.
+    ///
+    /// **The defect this exists for, measured 2026-09-14 on an iPhone:** every
+    /// open went to `127.0.0.1:55961` and libVLC got `Connection refused` in
+    /// 0.1 s. The port was still being handed out, so the `NWListener` had never
+    /// reported `.failed` — yet nothing listened on it any more. `localURL` only
+    /// trusts the cached port, so nothing noticed until the app was killed, and
+    /// the session-sticky proxy sent every title there. This asks the socket.
+    func restartListenerIfNotAccepting() async {
+        // Port and generation read together, and the same port is probed: the
+        // restart below then only acts on the listener this check looked at.
+        let snapshot: (port: UInt16, generation: Int)? = stateLock.withLock {
+            listenerPort.map { ($0, listenerGeneration) }
+        }
+        guard let snapshot else {
+            startListenerIfNeeded() // nothing cached, nothing to verify
+            return
+        }
+        if await isAccepting(port: snapshot.port, timeout: 1) { return }
+        proxyLog.error("StreamProxy ▸ the listener's port no longer accepts connections — rebuilding it")
+        restartListener(ifGeneration: snapshot.generation)
+    }
+
+    /// Whether a TCP connection to the cached loopback port is accepted.
+    func isListenerAccepting(timeout: TimeInterval = 1) async -> Bool {
+        guard let port = stateLock.withLock({ listenerPort }) else { return false }
+        return await isAccepting(port: port, timeout: timeout)
+    }
+
+    /// A refused loopback connection reports `.waiting`, not `.failed`, so both
+    /// count as no.
+    private func isAccepting(port: UInt16, timeout: TimeInterval) async -> Bool {
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return false }
+        let params = NWParameters.tcp
+        params.requiredInterfaceType = .loopback
+        let conn = NWConnection(host: "127.0.0.1", port: nwPort, using: params)
+        let queue = netQueue
+        let once = ResumeOnce()
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            @Sendable func finish(_ value: Bool) {
+                guard once.claim() else { return }
+                conn.cancel()
+                cont.resume(returning: value)
+            }
+            conn.stateUpdateHandler = { state in
+                switch state {
+                case .ready: finish(true)
+                case .waiting, .failed, .cancelled: finish(false)
+                default: break
+                }
+            }
+            queue.asyncAfter(deadline: .now() + timeout) { finish(false) }
+            conn.start(queue: queue)
+        }
+    }
+
+    /// Waits, bounded, for a listener to be up — starting one if none is.
+    func waitUntilReady(timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        startListenerIfNeeded()
+        while Date() < deadline {
+            if stateLock.withLock({ listenerPort }) != nil { return true }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return stateLock.withLock { listenerPort } != nil
+    }
+
+    #if DEBUG
+    /// Reproduces the field state for tests: the listener's socket is gone but
+    /// its port is still cached, because no state callback ever says so.
+    func simulateSilentListenerDeathForTesting() {
+        guard let l = stateLock.withLock({ listener }) else { return }
+        netQueue.sync {
+            l.stateUpdateHandler = nil
+            l.newConnectionHandler = nil
+            l.cancel()
+        }
+    }
+    #endif
 
     // MARK: Connection handling
 

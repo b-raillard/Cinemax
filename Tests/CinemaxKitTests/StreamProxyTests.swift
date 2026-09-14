@@ -80,6 +80,83 @@ struct StreamProxyTests {
         #expect(revived.path.hasPrefix("/s/"))
     }
 
+    /// Polls until the listener refuses connections, bounded. A cancelled
+    /// listener's socket closes asynchronously, so one immediate probe could
+    /// still be accepted.
+    private func eventuallyRefuses(_ proxy: CinemaxStreamProxy, timeout: TimeInterval = 3) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await !proxy.isListenerAccepting(timeout: 0.5) { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
+    }
+
+    // The field defect of 2026-09-14 (iPhone export): every open went to a cached
+    // loopback port that refused connections, and nothing ever noticed.
+    @Test("a listener that dies without reporting it is detected and rebuilt")
+    func silentlyDeadListenerIsRebuilt() async throws {
+        let proxy = CinemaxStreamProxy()
+        proxy.prestart()
+        defer { proxy.stop() }
+        _ = try #require(await waitForLocalURL(proxy))
+        #expect(await proxy.isListenerAccepting())
+
+        proxy.simulateSilentListenerDeathForTesting()
+
+        // The measured state: a URL is still handed out, and its port refuses.
+        #expect(proxy.localURL(for: Self.target, token: nil) != nil)
+        #expect(await eventuallyRefuses(proxy))
+
+        await proxy.restartListenerIfNotAccepting()
+        #expect(await proxy.waitUntilReady(timeout: 3))
+        #expect(await proxy.isListenerAccepting())
+    }
+
+    @Test("a healthy listener is left alone by the check")
+    func healthyListenerIsKept() async throws {
+        let proxy = CinemaxStreamProxy()
+        proxy.prestart()
+        defer { proxy.stop() }
+        let before = try #require(await waitForLocalURL(proxy))
+
+        await proxy.restartListenerIfNotAccepting()
+
+        let after = try #require(proxy.localURL(for: Self.target, token: nil))
+        #expect(after.port == before.port)
+    }
+
+    @Test("an old listener's late cancellation never knocks out its replacement")
+    func restartSurvivesOldListenerCallbacks() async throws {
+        let proxy = CinemaxStreamProxy()
+        proxy.prestart()
+        defer { proxy.stop() }
+        _ = try #require(await waitForLocalURL(proxy))
+
+        proxy.restartListener()
+        proxy.restartListener()
+        #expect(await proxy.waitUntilReady(timeout: 3))
+        // The two replaced listeners report `.cancelled` asynchronously; give
+        // those callbacks time to land — they must not clear the live port.
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(proxy.localURL(for: Self.target, token: nil) != nil)
+        #expect(await proxy.isListenerAccepting())
+    }
+
+    @Test("a proxied attempt that fails too releases the session-sticky proxy")
+    @MainActor
+    func proxiedFailureReleasesStickyProxy() {
+        let policy = StreamTransportPolicy.shared
+        let wasPinned = policy.directFailedThisSession
+        policy.noteDirectPlaybackFailed()
+        #expect(policy.directFailedThisSession)
+
+        policy.noteProxiedPlaybackFailed()
+        #expect(policy.directFailedThisSession == false)
+
+        if wasPinned { policy.noteDirectPlaybackFailed() } // leave the singleton as found
+    }
+
     // MARK: - Origin directory mapping (pure)
 
     @Test("an HLS tree round-trips: master, the variant VLC resolves from it, and a segment")
