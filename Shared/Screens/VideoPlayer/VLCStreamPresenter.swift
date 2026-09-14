@@ -213,16 +213,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // SwiftVLC engine (libVLC 4.0). `videoView` stays a plain UIView so the
     // existing gesture / HUD layout is untouched; the SwiftVLC rendering
     // surface is embedded into it via a child UIHostingController.
-    /// Owns the libVLC instance AND the player, because subtitle appearance is
-    /// set through instance arguments (#162) and SwiftVLC keeps
-    /// `Player.instance` internal — see `StyledVLCEngine`, which also installs
-    /// the log bridge on whichever instance ends up being used. With the
-    /// appearance left at its default this is `VLCInstance.shared`, i.e. the
-    /// previous behaviour to the bit.
-    private let engine = StyledVLCEngine()
-    /// Transparent pass-through so every existing `player.` call site in this
-    /// file is untouched.
-    private var player: Player { engine.player }
+    private let player = Player()
     private let videoView = UIView()
     private var videoHost: UIViewController?
     private var eventsTask: Task<Void, Never>?
@@ -667,9 +658,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         super.viewDidLoad()
         // Redirect libVLC's stderr firehose into OSLog. Done here rather than at
         // launch so `libvlc_new` (plugin scan) still happens on first playback.
-        // The log bridge is installed by `StyledVLCEngine.init`, on the instance
-        // the player actually runs on — binding it here to `VLCInstance.shared`
-        // would cover nothing once a styling instance is in play (#162).
+        VLCEngineLog.installOnce()
         view.backgroundColor = .black
         setupVideoView()
         setupControls()
@@ -3195,26 +3184,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         presentPicker(loc.localized("player.speed"), sourceView: speedPickerSource, opts)
     }
 
-    /// Applies the user's subtitle size.
-    ///
-    /// `Player.subtitleTextScale` wraps `libvlc_video_set_spu_text_scale`, a
-    /// first-class libVLC call — which is why SIZE can change on a live player,
-    /// unlike colour / outline / background. Those are `freetype` config items
-    /// set as instance arguments (`SubtitleStyleOptions`), so they only apply at
-    /// the next player creation. The old note here claimed the option names were
-    /// "guessed" and differed between libVLC 3.x and 4.0; the #162 spike measured
-    /// all of them present verbatim in the vendored 4.0.6 binary.
-    private func applySubtitleTextScale() {
-        let stored = UserDefaults.standard.object(forKey: SettingsKey.subtitleTextSize) as? Int
-        let option = SubtitleTextSizeOption(rawValue: stored ?? SettingsKey.Default.subtitleTextSize)
-            ?? .normal
-        guard abs(player.subtitleTextScale - option.scale) > 0.001 else { return }
-        // SwiftVLC 1.0.0 made this a get-only property with a typed setter —
-        // the same shape as `setPlaybackRate`. `SubtitleScale` clamps to
-        // 0.1…5.0 itself.
-        player.setSubtitleScale(SubtitleScale(option.scale))
-    }
-
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         try? player.setPlaybackRate(PlaybackRate(rate))
@@ -4402,11 +4371,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if !boosting, abs(player.rate - playbackRate) > 0.01 {
                 try? player.setPlaybackRate(PlaybackRate(playbackRate))
             }
-            // Same reasoning as the rate: a player-level property that a media
-            // swap can reset, re-applied from the user's setting rather than
-            // assumed to have survived. Read fresh each time so a change made
-            // in Settings mid-session takes effect on the next episode.
-            applySubtitleTextScale()
             #if os(iOS)
             setPlayPauseIcon(playing: true)
             #endif

@@ -20,8 +20,6 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case playOn
     /// Playlists — a list being reordered.
     case playlists
-    /// Subtitle styling — a screen with legible subtitles on it.
-    case subtitles
 }
 
 struct WhatsNewIllustrationView: View {
@@ -52,7 +50,6 @@ struct WhatsNewIllustrationView: View {
             case .watchTogether: watchTogether(u)
             case .playOn:        playOn(u)
             case .playlists:     playlists(u)
-            case .subtitles:     subtitles(u)
             }
         }
         .frame(width: side, height: side)
@@ -121,24 +118,6 @@ struct WhatsNewIllustrationView: View {
         RoundedRectangle(cornerRadius: 3 * u)
             .fill(fill)
             .frame(width: width * u, height: 11 * u)
-    }
-
-    /// A screen with two subtitle lines at the bottom, the readable one accent.
-    private func subtitles(_ u: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 5 * u)
-            .fill(CinemaColor.surfaceContainerHigh)
-            .frame(width: 64 * u, height: 42 * u)
-            .overlay(alignment: .bottom) {
-                VStack(spacing: 4 * u) {
-                    RoundedRectangle(cornerRadius: 1.5 * u)
-                        .fill(accentGradient)
-                        .frame(width: 40 * u, height: 6 * u)
-                    RoundedRectangle(cornerRadius: 1.5 * u)
-                        .fill(CinemaColor.surfaceContainerHighest)
-                        .frame(width: 26 * u, height: 6 * u)
-                }
-                .padding(.bottom, 6 * u)
-            }
     }
 }
 

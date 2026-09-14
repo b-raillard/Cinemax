@@ -33,8 +33,7 @@ enum WhatsNewCatalogue {
         WhatsNewRelease(version: ServerVersion(2, 1, 0), pages: [
             WhatsNewPage(id: "watchTogether", illustration: .watchTogether),
             WhatsNewPage(id: "playOn", illustration: .playOn),
-            WhatsNewPage(id: "playlists", illustration: .playlists),
-            WhatsNewPage(id: "subtitles", illustration: .subtitles)
+            WhatsNewPage(id: "playlists", illustration: .playlists)
         ])
     ]
 

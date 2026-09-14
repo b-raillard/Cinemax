@@ -552,40 +552,9 @@ extension SettingsScreen {
             VStack(spacing: 0) {
                 iOSToggleRowsJoined(playbackToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
                 iOSSettingsDivider
-                iOSSubtitleSizeRow
-                iOSSettingsDivider
-                iOSSubtitleStyleRow(
-                    title: loc.localized("settings.subtitleColor"),
-                    icon: "paintpalette",
-                    selection: $subtitleColor,
-                    fallback: SubtitleColorOption.white
-                )
-                iOSSettingsDivider
-                iOSSubtitleStyleRow(
-                    title: loc.localized("settings.subtitleOutline"),
-                    icon: "square.on.square.dashed",
-                    selection: $subtitleOutline,
-                    fallback: SubtitleOutlineOption.normal
-                )
-                iOSSettingsDivider
-                iOSSubtitleStyleRow(
-                    title: loc.localized("settings.subtitleBackground"),
-                    icon: "rectangle.fill",
-                    selection: $subtitleBackground,
-                    fallback: SubtitleBackgroundOption.none
-                )
-                iOSSettingsDivider
                 iOSSleepTimerRow
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-
-            // Instance arguments cannot change on a live libVLC instance, so the
-            // three rows above land at the next playback — said out loud rather
-            // than left to be discovered.
-            Text(loc.localized("settings.subtitleStyle.footer"))
-                .font(CinemaFont.label(.medium))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .padding(.horizontal, CinemaSpacing.spacing2)
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 iOSSettingsSectionHeader(loc.localized("settings.debug"))
@@ -684,89 +653,6 @@ extension SettingsScreen {
     /// Menu-based picker for the default sleep timer duration. Label matches the selected
     /// option's localized name ("Off", "30 minutes", etc.).
     @ViewBuilder
-    /// Subtitle size. VLC path only — the native `AVPlayer` renders subtitles
-    /// through the system, which has its own accessibility settings.
-    var iOSSubtitleSizeRow: some View {
-        iOSSettingsRow {
-            HStack {
-                iOSRowIcon(systemName: "captions.bubble", color: themeManager.accent)
-                Text(loc.localized("settings.subtitleSize"))
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                Menu {
-                    ForEach(SubtitleTextSizeOption.allCases) { option in
-                        Button {
-                            subtitleTextSize = option.rawValue
-                        } label: {
-                            if subtitleTextSize == option.rawValue {
-                                Label(loc.localized(option.localizationKey), systemImage: "checkmark")
-                            } else {
-                                Text(loc.localized(option.localizationKey))
-                            }
-                        }
-                    }
-                } label: {
-                    let selected = SubtitleTextSizeOption(rawValue: subtitleTextSize) ?? .normal
-                    HStack(spacing: 4) {
-                        Text(loc.localized(selected.localizationKey))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
-                            .foregroundStyle(CinemaColor.outlineVariant)
-                    }
-                }
-                .tint(themeManager.accent)
-            }
-        }
-    }
-
-    /// One appearance picker (colour / outline / background), generic over the
-    /// three enums so the same row serves all of them — six near-identical
-    /// copies across two platforms is what this avoids.
-    @ViewBuilder
-    func iOSSubtitleStyleRow<Option: SubtitleStylePickerOption>(
-        title: String,
-        icon: String,
-        selection: Binding<String>,
-        fallback: Option
-    ) -> some View {
-        iOSSettingsRow {
-            HStack {
-                iOSRowIcon(systemName: icon, color: themeManager.accent)
-                Text(title)
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                Menu {
-                    ForEach(Array(Option.allCases)) { option in
-                        Button {
-                            selection.wrappedValue = option.rawValue
-                        } label: {
-                            if selection.wrappedValue == option.rawValue {
-                                Label(loc.localized(option.localizationKey), systemImage: "checkmark")
-                            } else {
-                                Text(loc.localized(option.localizationKey))
-                            }
-                        }
-                    }
-                } label: {
-                    let selected = Option(rawValue: selection.wrappedValue) ?? fallback
-                    HStack(spacing: 4) {
-                        Text(loc.localized(selected.localizationKey))
-                            .font(CinemaFont.label(.large))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
-                            .foregroundStyle(CinemaColor.outlineVariant)
-                    }
-                }
-                .tint(themeManager.accent)
-            }
-        }
-    }
-
     var iOSSleepTimerRow: some View {
         iOSSettingsRow {
             HStack {
