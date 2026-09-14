@@ -851,7 +851,7 @@
 "onboarding.server.body" = "Cinemax plays the library of a Jellyfin server — yours. On the same network the app can find it by itself; otherwise its address is all it needs.";
 "onboarding.quickConnect.title" = "Sign in without typing";
 "onboarding.quickConnect.body" = "Quick Connect shows a code you approve from a device already signed in. It earns its keep on the Apple TV, where typing a password with the remote is a chore.";
-"onboarding.personalize.title" = "Make it yours";
+"onboarding.personalize.title" = "Customisable to your liking";
 "onboarding.personalize.body" = "The bottom menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
 "settings.discoverApp" = "Discover the app";
 
@@ -1212,7 +1212,7 @@
 "whatsNew.watchTogether.title" = "Watch Together";
 "whatsNew.watchTogether.body" = "Play the same film with other people: pausing, resuming and seeking stay in step. They join the session from the “Live” row on their own home screen.";
 "whatsNew.playOn.title" = "Play on…";
-"whatsNew.playOn.body" = "Send a film to the Apple TV from your phone, at the right position. And Cinemax can now be the target itself.";
+"whatsNew.playOn.body" = "Send a film to your Apple TV, a tablet or a phone, as long as the app is open on both devices with the same account.";
 "whatsNew.playlists.title" = "Your playlists";
 "whatsNew.playlists.body" = "Create a list from any poster, reorder it with a drag, find it again on your home screen.";
 "whatsNew.subtitles.title" = "Adjustable subtitles";

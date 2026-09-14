@@ -444,7 +444,7 @@
 "onboarding.server.body" = "Cinemax lit la bibliothèque d'un serveur Jellyfin — le vôtre. Sur le même réseau, l'app peut le trouver toute seule ; sinon, son adresse suffit.";
 "onboarding.quickConnect.title" = "Se connecter sans rien taper";
 "onboarding.quickConnect.body" = "Quick Connect affiche un code à valider depuis un appareil déjà connecté. C'est surtout utile sur l'Apple TV, où saisir un mot de passe à la télécommande est pénible.";
-"onboarding.personalize.title" = "À votre main";
+"onboarding.personalize.title" = "Personnalisable selon vos envies";
 "onboarding.personalize.body" = "Le menu du bas se réorganise, se réduit, ou s'ouvre directement sur vos bibliothèques ; la couleur d'accent et la taille du texte sont à vous. Tout se règle dans Réglages.";
 "settings.discoverApp" = "Découvrir l'app";
 
@@ -1214,7 +1214,7 @@
 "whatsNew.watchTogether.title" = "Regarder ensemble";
 "whatsNew.watchTogether.body" = "Lancez le même film à plusieurs : pause, reprise et déplacements sont partagés à la seconde près. Les autres rejoignent la séance depuis la rangée « En direct » de leur accueil.";
 "whatsNew.playOn.title" = "Lire sur…";
-"whatsNew.playOn.body" = "Envoyez un film sur l'Apple TV depuis le téléphone, à la bonne position. Et Cinemax accepte désormais d'être la cible : c'est l'Apple TV qui reçoit.";
+"whatsNew.playOn.body" = "Envoyez un film sur votre Apple TV, une tablette ou un smartphone, dès lors que l'application est lancée sur les deux terminaux avec le même compte.";
 "whatsNew.playlists.title" = "Vos playlists";
 "whatsNew.playlists.body" = "Créez une liste depuis n'importe quelle affiche, réordonnez-la d'un glissement, retrouvez-la sur votre accueil.";
 "whatsNew.subtitles.title" = "Sous-titres réglables";
