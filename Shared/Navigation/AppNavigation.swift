@@ -1067,15 +1067,17 @@ struct AppNavigation: View {
         // screen. It can only ever speak once `AppUpdateChecker.refresh()` has
         // run, which is gated on the session check below.
         .modifier(AppUpdatePresentation(checker: updateChecker, loc: loc))
-        // « Quoi de neuf » — the first launch on a new version. A full-screen
-        // cover on BOTH platforms: it is a moment, not a settings detail.
-        // Gated on being signed in, so an upgrade that lands on the login
+        // « Quoi de neuf » — the first launch on a new version. A sheet on
+        // iOS (closable from its top button or a swipe down, both of which
+        // stamp the version like the last page does), a full-screen cover on
+        // tvOS — see `whatsNewPresentation`. Gated on being signed in, so an
+        // upgrade that lands on the login
         // screen shows it once the user is actually in the app rather than
         // over the sign-in form. The environment is re-injected by hand: a
         // presentation is its own context and does not carry injected
         // `@Observable` objects down with it (same reason `onboardingSheet`
         // does it).
-        .fullScreenCover(isPresented: Binding(
+        .whatsNewPresentation(isPresented: Binding(
             get: { !whatsNewPages.isEmpty && appState.isAuthenticated },
             set: { presented in
                 guard !presented else { return }

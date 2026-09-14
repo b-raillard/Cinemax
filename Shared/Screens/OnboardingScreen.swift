@@ -34,6 +34,9 @@ struct OnboardingScreen: View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
             VStack(spacing: 0) {
+                #if os(iOS)
+                skipHeader
+                #endif
                 pageBody
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 footer
@@ -98,25 +101,32 @@ struct OnboardingScreen: View {
     private var footer: some View {
         VStack(spacing: CinemaSpacing.spacing4) {
             dots
+            // tvOS: fixed-width CTAs pushed apart by a spacer — the screen is
+            // 1920 pt wide. iOS: two equal slots across the row, never fixed
+            // widths: three 130 pt buttons came to 486 pt on a 402 pt iPhone and
+            // pushed the whole screen past both edges, and even three equal
+            // slots truncated « Précédent » — hence « Passer » moves to the top
+            // trailing corner on iOS (`skipHeader`). A slot whose button is
+            // absent on this page stays in the row, invisible, so « Suivant »
+            // never moves under a thumb tapping through.
             HStack(spacing: CinemaSpacing.spacing4) {
-                if page.previous != nil {
-                    CinemaButton(title: loc.localized("onboarding.back"), style: .ghost) { goBack() }
-                        .frame(width: ctaWidth)
-                        .focused($focusedControl, equals: .back)
-                }
+                #if os(tvOS)
+                if page.previous != nil { backButton }
                 Spacer(minLength: CinemaSpacing.spacing4)
-                if !page.isLast {
-                    CinemaButton(title: loc.localized("onboarding.skip"), style: .ghost) { onFinish() }
-                        .frame(width: ctaWidth)
-                        .focused($focusedControl, equals: .skip)
-                }
+                if !page.isLast { skipButton }
+                #else
+                backButton.slotVisible(page.previous != nil)
+                #endif
                 CinemaButton(
                     title: loc.localized(page.isLast ? "onboarding.start" : "onboarding.next"),
                     style: .accent
                 ) { advance() }
-                .frame(width: ctaWidth)
+                .frame(maxWidth: ctaWidth)
                 .focused($focusedControl, equals: .primary)
             }
+            #if os(iOS)
+            .frame(maxWidth: proseWidth)
+            #endif
         }
         .padding(.horizontal, pagePadding)
         .padding(.bottom, CinemaSpacing.spacing8)
@@ -129,6 +139,41 @@ struct OnboardingScreen: View {
         .onAppear { focusedControl = .primary }
         .onChange(of: page) { focusedControl = .primary }
     }
+
+    private var backButton: some View {
+        CinemaButton(title: loc.localized("onboarding.back"), style: .ghost) { goBack() }
+            .frame(maxWidth: ctaWidth)
+            .focused($focusedControl, equals: .back)
+    }
+
+    #if os(tvOS)
+    private var skipButton: some View {
+        CinemaButton(title: loc.localized("onboarding.skip"), style: .ghost) { onFinish() }
+            .frame(maxWidth: ctaWidth)
+            .focused($focusedControl, equals: .skip)
+    }
+    #else
+    /// « Passer » on iOS: a text button in the top trailing corner, where a
+    /// pager's skip usually sits, instead of a third footer button there was
+    /// no width for. Kept in place (invisible) on the last page so the page
+    /// below it does not jump.
+    private var skipHeader: some View {
+        HStack {
+            Spacer()
+            Button { onFinish() } label: {
+                Text(loc.localized("onboarding.skip"))
+                    .font(.system(size: CinemaScale.pt(16), weight: .semibold))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .padding(.vertical, CinemaSpacing.spacing2)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .slotVisible(!page.isLast)
+        }
+        .padding(.horizontal, pagePadding)
+        .padding(.top, CinemaSpacing.spacing2)
+    }
+    #endif
 
     /// Page indicator. One accessibility element for the whole pager, so
     /// VoiceOver says « Page 2 sur 3 » once instead of reading three circles.
@@ -194,12 +239,25 @@ struct OnboardingScreen: View {
     #else
     private var pagePadding: CGFloat { CinemaSpacing.spacing6 }
     private var proseWidth: CGFloat { 520 }
-    private var ctaWidth: CGFloat { 130 }
+    private var ctaWidth: CGFloat { .infinity }
     private var iconSize: CGFloat { 44 }
     #endif
 }
 
 // MARK: - Platform-gated modifiers
+
+extension View {
+    /// A pager control that does not apply on this page, kept in its row slot.
+    /// Shared with `WhatsNewScreen`: both iOS footers lay their buttons out in
+    /// equal slots, and removing one would shift the primary CTA sideways under
+    /// a thumb tapping through the pages. Hidden from VoiceOver and inert, so
+    /// the slot is space and nothing else.
+    func slotVisible(_ visible: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .disabled(!visible)
+            .accessibilityHidden(!visible)
+    }
+}
 
 private extension View {
     /// `.onExitCommand` is **unavailable on iOS**, so the Menu handling has to be
