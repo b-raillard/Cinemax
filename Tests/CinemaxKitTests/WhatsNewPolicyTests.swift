@@ -108,7 +108,7 @@ struct WhatsNewPolicyTests {
 struct WhatsNewCatalogueTests {
 
     private func page(_ id: String) -> WhatsNewPage {
-        WhatsNewPage(id: id, illustration: .subtitles)
+        WhatsNewPage(id: id, illustration: .playOn)
     }
 
     private func release(_ major: Int, _ minor: Int, _ ids: [String]) -> WhatsNewRelease {

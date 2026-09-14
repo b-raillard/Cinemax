@@ -1157,27 +1157,6 @@
 "home.upcoming.airs" = "%@";
 "detail.action.trailer" = "Trailer";
 
-/* Subtitle text size (VLC player). */
-"settings.subtitleSize" = "Subtitle size";
-"subtitleSize.small" = "Small";
-"subtitleSize.normal" = "Normal";
-"subtitleSize.large" = "Large";
-"subtitleSize.extraLarge" = "Extra large";
-"subtitleSize.huge" = "Huge";
-"settings.subtitleColor" = "Subtitle colour";
-"settings.subtitleOutline" = "Subtitle outline";
-"settings.subtitleBackground" = "Subtitle background";
-"settings.subtitleStyle.footer" = "Applies to the next playback, not the one in progress. No effect on the native player, which follows the system's accessibility settings.";
-"subtitleColor.white" = "White";
-"subtitleColor.yellow" = "Yellow";
-"subtitleColor.cyan" = "Cyan";
-"subtitleOutline.none" = "None";
-"subtitleOutline.normal" = "Normal";
-"subtitleOutline.thick" = "Thick";
-"subtitleBackground.none" = "None";
-"subtitleBackground.translucent" = "Translucent";
-"subtitleBackground.opaque" = "Opaque";
-
 /* Profile screen. */
 "profile.title" = "Profile";
 "profile.password.section" = "Password";
@@ -1215,8 +1194,6 @@
 "whatsNew.playOn.body" = "Send a film to your Apple TV, a tablet or a phone, as long as the app is open on both devices with the same account.";
 "whatsNew.playlists.title" = "Your playlists";
 "whatsNew.playlists.body" = "Create a list from any poster, reorder it with a drag, find it again on your home screen.";
-"whatsNew.subtitles.title" = "Adjustable subtitles";
-"whatsNew.subtitles.body" = "Colour, outline and box are set under Playback. New settings apply the next time the player opens.";
 
 /* Launch version check */
 "update.available.title" = "A new version is available";
