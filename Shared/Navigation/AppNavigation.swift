@@ -1105,9 +1105,12 @@ struct AppNavigation: View {
             appState.apiClient.setPreferredLanguage(code)
         }
         .task {
-            // Let the confirm-before-logout coordinator see real connectivity
-            // (captured weakly so the closure can't extend NetworkMonitor's life).
-            appState.isOnlineProvider = { [weak network] in network?.isOnline ?? true }
+            // Let the confirm-before-logout coordinator see real connectivity.
+            // Captured strongly: `NetworkMonitor` and `AppState` are both process
+            // singletons, so there is no lifetime to protect — and a `weak`
+            // capture here was ineffective anyway, the enclosing `.task` already
+            // holding `network` strongly (Swift 6.4 warns about exactly that).
+            appState.isOnlineProvider = { [network] in network.isOnline }
             // The language rides every request as `Accept-Language` (Jellyfin
             // 12.0 localizes the media-stream titles the track pickers print
             // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds

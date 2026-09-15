@@ -69,7 +69,7 @@ final class VideoPlayerCoordinator {
         let engine: VideoPlaybackEngine = useVLC ? .vlc : .native
         currentGeneration &+= 1
         let generation = currentGeneration
-        playTask = Task {
+        playTask = Task { [self] in
             guard let userId = appState.currentUserId else {
                 logger.error("VideoPlayerCoordinator: not authenticated")
                 return

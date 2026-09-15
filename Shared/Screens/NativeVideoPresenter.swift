@@ -319,7 +319,9 @@ final class NativeVideoPresenter {
         // For transcode streams, makePlayerItem uses HLSManifestLoader (AVAssetResourceLoader)
         // to intercept the manifest and strip subtitle/CC renditions before AVKit parses it.
         let st = startTime
-        Task { [weak self] in
+        // `avPlayer` is captured explicitly: the status observer below holds it
+        // weakly, which Swift 6.4 flags when the enclosing capture is implicit.
+        Task { [weak self, avPlayer] in
             // The session must be `.playback` before we hand a player item to AVKit,
             // otherwise AirPlay routing drops audio when the iPhone silent switch is
             // on or the screen locks during a cast. Runs off the main thread (see
@@ -560,7 +562,7 @@ final class NativeVideoPresenter {
 
     private func navigateToEpisode(_ ep: EpisodeRef) {
         guard let navigator = episodeNavigator, let vc = playerVC else { return }
-        Task {
+        Task { [self] in
             playbackReporter.reportStop(reason: .episodeSwap)
             // Neighbors resolve synchronously (pure index lookups); this
             // presenter owns the negotiation, with the Apple device profile.
