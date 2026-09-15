@@ -3472,6 +3472,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             Task { @MainActor in
                 guard let self, !self.isTearingDown, !self.hasValidTime, self.lengthMs <= 0 else { return }
                 logger.error("VLC open watchdog: media never became ready after \(self.elapsedSincePlay(), privacy: .public) — surfacing error")
+                // Reported HERE, not only from the give-up branch: « Lecture
+                // impossible » comes a whole retry later (15 s + 30 s), and a
+                // viewer facing a spinner leaves before that. 2026-09-14, Apple
+                // TV: after « précédent » the spinner never ended, the server
+                // saw the episode start and the app go ~30 s later — and no
+                // document, so nothing could say why the open hung.
+                DiagnosticsUploader.send(reason: "open-timeout", engine: "vlc")
                 self.handlePlaybackError()
             }
         }

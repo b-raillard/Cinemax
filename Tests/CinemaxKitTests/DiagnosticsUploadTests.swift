@@ -62,6 +62,14 @@ struct DiagnosticsUploadTests {
         #expect(DiagnosticsUploader.shouldUpload(last: now.addingTimeInterval(-floor - 60), now: now))
     }
 
+    @Test("Le plancher est par raison : un délai d'ouverture n'étouffe pas « Lecture impossible »")
+    func throttlePerReason() {
+        let now = Date()
+        let history = ["open-timeout": now.addingTimeInterval(-30)]
+        #expect(DiagnosticsUploader.shouldUpload(reason: "open-timeout", history: history, now: now) == false)
+        #expect(DiagnosticsUploader.shouldUpload(reason: "playback-failed", history: history, now: now))
+    }
+
     // MARK: - La charge utile
 
     @Test("Un document court part tel quel")

@@ -22,9 +22,10 @@ private let diagnosticsUploadFloor: TimeInterval = 300
 /// the file — or hand it over — without pairing anything to a Mac.
 ///
 /// **Never on the happy path.** The only callers are faults: the picture-stall
-/// recovery and the case where its budget is spent. The upload is throttled per
-/// process on top of that, so even a pathological loop cannot fill someone's log
-/// directory, and it is fire-and-forget — a diagnostic must never be able to
+/// recovery and the case where its budget is spent, an open that outlives its
+/// watchdog, and the terminal « Lecture impossible ». The upload is throttled
+/// per reason on top of that, so even a pathological loop cannot fill someone's
+/// log directory, and it is fire-and-forget — a diagnostic must never be able to
 /// delay, or break, the recovery it is describing.
 ///
 /// **Consent lives server-side, which is where it belongs**: an administrator
@@ -39,9 +40,13 @@ enum DiagnosticsUploader {
     /// somebody's log directory rather than onto their own disk.
     nonisolated static let logWindowMinutes = 10
 
-    /// The floor between two uploads in one process. The stall detector is
-    /// already bounded to 2 recoveries, but it is not the only future caller,
-    /// and the cost of being wrong here is paid by the user's server.
+    /// The floor between two uploads of the SAME reason in one process. The
+    /// stall detector is already bounded to 2 recoveries, but it is not the only
+    /// caller, and the cost of being wrong here is paid by the user's server.
+    ///
+    /// Per reason, not global: one failed open produces an `open-timeout` at the
+    /// watchdog and, a retry later, a `playback-failed` — a single floor would
+    /// throttle the second, which is the one that says how the retry went.
     nonisolated static let minimumInterval: TimeInterval = diagnosticsUploadFloor
 
     /// The full client, injected once at the app root.
@@ -58,7 +63,7 @@ enum DiagnosticsUploader {
     /// default: a suite has to opt in before anything could leave the process.
     static var client: (any ServerAPI)?
 
-    private static var lastUploadAt: Date?
+    private static var lastUploadAt: [String: Date] = [:]
 
     /// Pure, so the throttle is testable without a server or a clock.
     nonisolated static func shouldUpload(
@@ -70,16 +75,26 @@ enum DiagnosticsUploader {
         return now.timeIntervalSince(last) >= minimumInterval
     }
 
+    /// The same floor, kept per reason.
+    nonisolated static func shouldUpload(
+        reason: String,
+        history: [String: Date],
+        now: Date,
+        minimumInterval: TimeInterval = diagnosticsUploadFloor
+    ) -> Bool {
+        shouldUpload(last: history[reason], now: now, minimumInterval: minimumInterval)
+    }
+
     /// Fire-and-forget. Reads the app-state facts on the main actor, then hands
     /// a `Sendable` snapshot to a detached task — enumerating the log store
     /// blocks, and this is called from the player's 1 s heartbeat.
     static func send(reason: String, engine: String, now: Date = Date()) {
         guard let client else { return }
-        guard shouldUpload(last: lastUploadAt, now: now) else {
-            logger.debug("diagnostics upload skipped (throttled)")
+        guard shouldUpload(reason: reason, history: lastUploadAt, now: now) else {
+            logger.debug("diagnostics upload skipped (throttled: \(reason, privacy: .public))")
             return
         }
-        lastUploadAt = now
+        lastUploadAt[reason] = now
         let facts = DiagnosticsFacts.current(
             serverVersion: client.knownServerVersion()?.description,
             engine: engine,
