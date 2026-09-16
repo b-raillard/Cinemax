@@ -18,6 +18,14 @@ struct WideCard: View {
     /// `CardZoom`. `nil` keeps the default push (and every card that plays
     /// rather than pushes a fiche).
     var zoomSource: CardZoom? = nil
+    /// Keeps a blank line wherever `subtitle` or `detail` is absent, so every
+    /// card of a row stands the same height. Carried by the "En direct" row,
+    /// whose cards legitimately differ in how many lines they print (a film
+    /// has no episode line, a group may have no state): without it the card
+    /// carrying the extra line had its artwork squeezed out of 16:9 (640 × 300
+    /// beside a 640 × 360 neighbour on an Apple TV, 2026-09-16) and the
+    /// « … regarde » lines no longer lined up across the row.
+    var reservesTextLines = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -49,19 +57,26 @@ struct WideCard: View {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .lineLimit(1)
 
-            if let subtitle {
-                Text(subtitle)
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.outline)
-                    .lineLimit(1)
-            }
+            textLine(subtitle, font: CinemaFont.label(.medium), color: CinemaColor.outline)
+            textLine(detail, font: CinemaFont.label(.small), color: CinemaColor.outlineVariant)
+        }
+    }
 
-            if let detail {
-                Text(detail)
-                    .font(CinemaFont.label(.small))
-                    .foregroundStyle(CinemaColor.outlineVariant)
-                    .lineLimit(1)
-            }
+    @ViewBuilder
+    private func textLine(_ text: String?, font: Font, color: Color) -> some View {
+        if let text {
+            Text(text)
+                .font(font)
+                .foregroundStyle(color)
+                .lineLimit(1)
+        } else if reservesTextLines {
+            // Same placeholder trick as `PosterCard`'s title: a hidden glyph
+            // in the line's own font takes exactly that line's height.
+            Text(verbatim: "M")
+                .font(font)
+                .lineLimit(1)
+                .hidden()
+                .accessibilityHidden(true)
         }
     }
 }

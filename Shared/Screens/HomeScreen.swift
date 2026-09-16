@@ -958,7 +958,8 @@ struct HomeScreen: View {
                 // makes that read as a broken card; the people glyph says what
                 // the tile actually is.
                 fallbackIcon: "person.2.fill",
-                detail: liveDetail(entry)
+                detail: liveDetail(entry),
+                reservesTextLines: true
             )
             .overlay(alignment: .topLeading) { livePill(isTogether: true) }
             .saturation(joinBlocked ? 0 : 1)
@@ -1020,14 +1021,17 @@ struct HomeScreen: View {
                     progress: entry.progress ?? 0,
                     // An episode takes the SAME line « À suivre » gives it,
                     // right under the series title, and the viewer's name
-                    // moves down one line. Before this the card named the
+                    // sits on the line below. Before this the card named the
                     // series and the person and never the episode — the one
                     // thing that tells someone following the same show
                     // whether Xavier is ahead of them. A film has no such
-                    // line, so the name keeps the subtitle there.
-                    subtitle: entry.episodeLabel ?? watcherLine(entry),
-                    detail: entry.episodeLabel == nil ? nil : watcherLine(entry),
-                    zoomSource: zoom
+                    // line: it stays BLANK rather than lifting the name into
+                    // it, so films and episodes keep one height and their
+                    // « … regarde » lines stay aligned across the row.
+                    subtitle: entry.episodeLabel,
+                    detail: watcherLine(entry),
+                    zoomSource: zoom,
+                    reservesTextLines: true
                 )
                 .overlay(alignment: .topLeading) { livePill(isTogether: false) }
             }
