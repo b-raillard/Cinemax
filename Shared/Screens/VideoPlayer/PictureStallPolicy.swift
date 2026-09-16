@@ -1,7 +1,8 @@
 import Foundation
 
-/// Decides whether the VIDEO DECODER has wedged in the middle of a playback
-/// that every other signal still calls healthy.
+/// Decides whether the picture has stopped — a wedged video decoder, or a
+/// whole pipeline stalled — in the middle of a playback that every other
+/// signal still calls healthy.
 ///
 /// **The state this exists for is invisible to every other guard in the
 /// player.** Measured on an Apple TV on 2026-09-13 (« La Pat' Patrouille : Le
@@ -21,14 +22,24 @@ import Foundation
 /// on the one fact that actually stopped: **libVLC's `displayedPictures`
 /// counter**, which the stats HUD already reads and nothing else consults.
 ///
-/// **RULE — the clock MUST be advancing for this to fire.** "Frames frozen AND
-/// clock frozen" is somebody else's case in every instance: paused (no state
-/// change), buffering (the spinner owns it, and libVLC reports `.buffering`),
-/// end of media (`PlaybackEndPolicy`), a dead input (the same). Firing there
-/// would put a costly re-negotiation on top of a path that already has an
-/// owner. The signature this type recognises is precisely the contradictory
-/// one — *the clock says we are playing and the picture says we are not* — and
-/// that pair is never legitimate.
+/// **RULE — the clock does NOT have to be advancing; the engine STATE is the
+/// gate.** Whether the clock moves or not, *the engine says `.playing` and no
+/// picture comes out* is never legitimate: a pause is `.paused`, a rebuffer is
+/// `.buffering` (and shows the spinner), the end of media is `.stopped`, a seek
+/// has its own settle window — all four already leave through the `guard`
+/// below. This used to demand a moving clock, on the grounds that "frozen
+/// pictures and frozen clock" always had another owner. It does not: measured
+/// on the same Apple TV on 2026-09-15 (Pat' Patrouille in the afternoon, a
+/// Punisher episode in the evening), the picture AND the SOUND stopped, no
+/// spinner showed, a −10 s seek raised the spinner and never landed — the
+/// input no longer serviced anything — and the server received no diagnostic
+/// document, i.e. this guard saw the frozen clock and stood down. Nothing else
+/// owns a pipeline that stalls while libVLC still reports `.playing`: the open
+/// watchdog covers the OPEN phase, `PlaybackEndPolicy` needs a `.stopped`, and
+/// no error is ever emitted. The rebuild is the same cure for both shapes — a
+/// fresh player opens a fresh connection as well as a fresh decoder.
+/// `stallClockMoved` says which of the two a given recovery was, so the
+/// document tells them apart.
 ///
 /// Recovery is `reResolveAndResume`, the wake path: it re-negotiates
 /// `PlaybackInfo`, hands the previous server session back and rebuilds the
@@ -70,6 +81,11 @@ struct PictureStallPolicy {
     private var lastPictures: UInt64?
     private var lastPositionMs: Int32?
     private var stalledSeconds = 0
+    /// Whether the clock advanced during the current run of frozen pictures:
+    /// `true` is the wedged decoder of 2026-09-13 (sound and clock went on),
+    /// `false` the whole pipeline of 2026-09-15 (sound stopped too). Read when
+    /// an outcome is logged; reset with the run.
+    private(set) var stallClockMoved = false
     private var healthySeconds = 0
     private(set) var recoveriesLeft: Int
 
@@ -94,6 +110,7 @@ struct PictureStallPolicy {
         lastPictures = nil
         lastPositionMs = nil
         stalledSeconds = 0
+        stallClockMoved = false
         healthySeconds = 0
     }
 
@@ -126,6 +143,7 @@ struct PictureStallPolicy {
             lastPictures = nil
             lastPositionMs = nil
             stalledSeconds = 0
+            stallClockMoved = false
             return .healthy
         }
 
@@ -141,6 +159,7 @@ struct PictureStallPolicy {
 
         if pictures > previousPictures {
             stalledSeconds = 0
+            stallClockMoved = false
             healthySeconds += 1
             if healthySeconds >= Self.budgetRenewSeconds {
                 healthySeconds = 0
@@ -149,12 +168,10 @@ struct PictureStallPolicy {
             return .healthy
         }
 
-        // Frames are not moving. Unless the CLOCK is, this is somebody else's
-        // case — see the RULE above.
-        guard positionMs > previousPosition else {
-            stalledSeconds = 0
-            return .healthy
-        }
+        // Frames are not moving while the engine says it is playing — with or
+        // without the clock, see the RULE above.
+        if stalledSeconds == 0 { stallClockMoved = false }
+        if positionMs > previousPosition { stallClockMoved = true }
 
         stalledSeconds += 1
         healthySeconds = 0
