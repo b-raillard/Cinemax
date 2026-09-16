@@ -1139,8 +1139,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     /// The one guard that watches the PICTURE instead of the clock, the engine
-    /// state or an error — none of which move when the video decoder wedges.
-    /// See `PictureStallPolicy` for the measured signature this recognises.
+    /// state or an error — the state and the errors say nothing when the video
+    /// decoder wedges or the pipeline stalls, and the clock may or may not move.
+    /// See `PictureStallPolicy` for the two measured signatures it recognises.
     private func checkPictureStall() {
         switch pictureStall.sample(
             displayedPictures: player.statistics?.displayedPictures,
@@ -1157,21 +1158,28 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // budget is spent and the counter keeps climbing, which must not
             // become one log line per second for the rest of the film.
             guard seconds == PictureStallPolicy.stallSeconds else { return }
+            let clockMoved = pictureStall.stallClockMoved
             logger.notice("""
                 picture-stall no recovery left pos=\(Int(self.currentMs / 1000), privacy: .public)s \
+                clockMoved=\(clockMoved, privacy: .public) \
                 modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
                 """)
             // The case worth a document above all others: the picture is frozen
             // and the app has nothing left to try.
-            DiagnosticsUploader.send(reason: "picture-stall-exhausted", engine: "vlc")
+            DiagnosticsUploader.send(
+                reason: clockMoved ? "picture-stall-exhausted" : "playback-freeze-exhausted",
+                engine: "vlc"
+            )
         case .recover:
             // Everything worth knowing about WHY, in one line: the picture
             // counters, the demuxer's own complaints, and the module chain
             // libVLC selected. This is a net, not a cure — a recurrence has to
             // be diagnosable from a log rather than reproduced on demand.
             let stats = player.statistics
+            let clockMoved = pictureStall.stallClockMoved
             logger.notice("""
                 picture-stall recover pos=\(Int(self.currentMs / 1000), privacy: .public)s \
+                clockMoved=\(clockMoved, privacy: .public) \
                 displayed=\(stats?.displayedPictures ?? 0, privacy: .public) \
                 lost=\(stats?.lostPictures ?? 0, privacy: .public) \
                 late=\(stats?.latePictures ?? 0, privacy: .public) \
@@ -1182,8 +1190,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // On tvOS this line would otherwise be written where nobody can
             // read it. Sent BEFORE the rebuild, because the rebuild is what
             // resets the counters this document is about — and fire-and-forget,
-            // so it can never delay the recovery it describes.
-            DiagnosticsUploader.send(reason: "picture-stall", engine: "vlc")
+            // so it can never delay the recovery it describes. The reason names
+            // the shape: a wedged decoder (clock moving) or a whole pipeline
+            // stalled (clock frozen, sound gone too).
+            DiagnosticsUploader.send(reason: clockMoved ? "picture-stall" : "playback-freeze", engine: "vlc")
             _ = reResolveAndResume(from: currentMs)
         }
     }

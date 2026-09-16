@@ -1,14 +1,14 @@
 import Testing
 @testable import Cinemax
 
-/// Verrouille la détection du décodeur vidéo planté.
+/// Verrouille la détection de l'image figée : décodeur vidéo planté (horloge
+/// qui avance, 13/09) ou chaîne entière bloquée (horloge et son figés, 15/09).
 ///
-/// La propriété qui porte tout est la deuxième : on ne déclenche QUE sur la
-/// paire contradictoire « l'horloge avance, aucune image ne sort ». Images
-/// figées *et* horloge figée appartient à quelqu'un d'autre — pause, mise en
-/// tampon, fin de média, entrée morte — et déclencher là mettrait une
-/// renégociation coûteuse par-dessus un chemin qui a déjà son propriétaire.
-@Suite("Décodeur vidéo planté")
+/// La propriété qui porte tout : c'est l'ÉTAT du moteur qui décide, pas
+/// l'horloge. Pause, mise en tampon, recherche en cours, fin de média sortent
+/// toutes par un état ou une fenêtre qui leur est propre ; « en lecture et
+/// aucune image » n'est jamais légitime, que l'horloge avance ou non.
+@Suite("Image figée en cours de lecture")
 struct PictureStallPolicyTests {
 
     /// Un lecteur simulé qui bat la seconde. Les compteurs vivent ICI et non
@@ -85,32 +85,54 @@ struct PictureStallPolicyTests {
             #expect(v == .stalling(seconds: i + 1))
         }
         #expect(f.policy.recoveriesLeft == PictureStallPolicy.recoveryBudget - 1)
+        #expect(f.policy.stallClockMoved)
     }
 
-    @Test("Horloge figée AUSSI : jamais — ce cas a déjà un propriétaire")
-    func frozenClockIsSomebodyElsesCase() {
+    @Test("Horloge figée AUSSI (son coupé, 15/09) : même reprise, au même seuil")
+    func frozenClockAndPictureRecovers() {
         var f = Feeder()
-        let out = f.run(60, picturesMove: false, clockMoves: false)
-        #expect(out.allSatisfy { $0 == .healthy })
-        #expect(f.policy.recoveriesLeft == PictureStallPolicy.recoveryBudget)
+        let out = f.run(PictureStallPolicy.stallSeconds + 1, picturesMove: false, clockMoves: false)
+        #expect(out.first == .healthy)
+        let verdicts = Array(out.dropFirst())
+        #expect(verdicts.last == .recover)
+        for (i, v) in verdicts.dropLast().enumerated() {
+            #expect(v == .stalling(seconds: i + 1))
+        }
+        #expect(f.policy.recoveriesLeft == PictureStallPolicy.recoveryBudget - 1)
+        // Le document doit pouvoir dire lequel des deux cas c'était.
+        #expect(f.policy.stallClockMoved == false)
+    }
+
+    @Test("La forme d'un blocage ne déteint pas sur le suivant")
+    func clockShapeIsPerStall() {
+        var f = Feeder()
+        _ = f.run(PictureStallPolicy.stallSeconds + 1, picturesMove: false)
+        #expect(f.policy.stallClockMoved)
+        _ = f.run(3)                                   // des images reviennent
+        _ = f.run(PictureStallPolicy.stallSeconds, picturesMove: false, clockMoves: false)
+        #expect(f.policy.stallClockMoved == false)
     }
 
     // MARK: - Les refus
 
-    @Test("En pause, en calage de recherche, sans piste vidéo, avant l'ouverture, sans stats : jamais")
+    @Test("En pause, en calage de recherche, sans piste vidéo, avant l'ouverture, sans stats : jamais, horloge figée ou non")
     func refusals() {
-        for label in ["pause", "seek", "audio", "notOpen", "noStats"] {
+        let cases = ["pause", "seek", "audio", "notOpen", "noStats"].flatMap { label in
+            [true, false].map { (label, $0) }
+        }
+        for (label, clockMoves) in cases {
             var f = Feeder()
             let out = f.run(
                 60,
                 picturesMove: false,
+                clockMoves: clockMoves,
                 isPlaying: label != "pause",
                 hasVideoTrack: label != "audio",
                 seekSettling: label == "seek",
                 mediaConfirmedOpen: label != "notOpen",
                 statisticsAvailable: label != "noStats"
             )
-            #expect(out.allSatisfy { $0 == .healthy }, "\(label) ne doit jamais déclencher")
+            #expect(out.allSatisfy { $0 == .healthy }, "\(label) (horloge \(clockMoves)) ne doit jamais déclencher")
             #expect(f.policy.recoveriesLeft == PictureStallPolicy.recoveryBudget)
         }
     }
