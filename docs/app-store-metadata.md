@@ -59,7 +59,7 @@ Cinemax est un client moderne pour vos serveurs Jellyfin, conçu spécifiquement
 • Recherche par texte ou par voix
 • Filtres par genre, par décennie, contenu non vu
 • Tri alphabétique avec barre de navigation rapide
-• Genres aléatoires sur l'écran d'accueil pour redécouvrir votre bibliothèque
+• Rangées de genres à choisir sur l'écran d'accueil
 
 — OPTIMISÉ POUR APPLE TV
 • Navigation parfaitement pensée pour la Siri Remote
@@ -89,9 +89,52 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 
 ### Notes de version / What's New (4000 caractères max)
 
-> Deux textes distincts : l'Activité en direct n'existe que sur iOS.
+> Deux textes distincts : le contrôle « Reprendre la lecture », les widgets, l'export de diagnostics et l'administration n'existent que sur iOS.
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
+
+#### iOS — 2.1.0
+```
+Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
+
+— LECTURE PLUS FIABLE
+• « Lecture impossible » ne s'installe plus sur tous les titres jusqu'au redémarrage de l'app
+• Une image figée en cours de film, pendant que le son et le compteur continuent, est détectée et la lecture repart d'elle-même
+• Un fichier que le serveur doit convertir ne reste plus bloqué à 0:00 quand la connexion saute à l'ouverture
+• Choisir à la main une piste TrueHD, muette sur Apple, affiche un avertissement et indique la piste audible
+
+— NOUVEAU
+• Saut automatique de l'intro et du générique, à activer dans Réglages → Lecture
+• Une rangée « Parce que vous avez vu… » sur l'accueil
+• Un code, ou Face ID, protège les réglages de contrôle parental
+• Un contrôle « Reprendre la lecture » pour le Centre de contrôle et le bouton Action, et le widget « Reprendre la lecture » sur l'écran verrouillé
+• Renommez et réordonnez vos serveurs ; l'historique de recherche est propre à chaque serveur
+• Un serveur au certificat auto-signé s'approuve explicitement, sans repasser en http
+• Cinemax obéit à la pause, aux sauts et à l'arrêt envoyés depuis un autre appareil Jellyfin
+• Fermer le lecteur pendant une séance « Regarder ensemble » demande confirmation
+• Une affiche s'ouvre sur sa page par un zoom, et le logo du titre s'affiche quand l'écran est assez large
+• Une présentation au premier lancement, les nouveautés après chaque mise à jour, et un rappel quand une nouvelle version est disponible
+• Exportez les diagnostics depuis Réglages → Lecture, pour les joindre à un rapport de bug
+
+— ACCESSIBILITÉ
+• Le réglage « Réduire les animations » de l'iPhone est respecté
+• Les commandes du lecteur sont annoncées par VoiceOver, et le texte suit les plus grandes tailles de caractères
+
+— PERFORMANCES
+• Moins de requêtes au serveur : les rangées désactivées ne sont plus chargées, et la navigation entre épisodes est bien plus légère
+
+— BUGS CORRIGÉS
+• « Reprendre » n'affiche plus la saison et la série d'un épisode sur Jellyfin 12
+• Toucher un widget ouvre le bon titre, même quand une page est déjà ouverte
+• Le contrôle parental s'applique aussi aux widgets
+• Administration : un titre contenant une apostrophe peut de nouveau être supprimé
+
+— RETIRÉ
+• Le réglage de taille des sous-titres, sans effet sur les sous-titres au format ASS
+• L'activité en direct : l'écran verrouillé affiche déjà le titre, l'affiche et la progression de la lecture
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
 
 #### iOS — 2.0.0
 ```
@@ -210,6 +253,43 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
 • Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
 • Même correction dans le widget
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 2.1.0
+```
+Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
+
+— LECTURE PLUS FIABLE
+• « Lecture impossible » ne s'installe plus sur tous les titres jusqu'au redémarrage de l'app
+• Une image figée en cours de film, pendant que le son et le compteur continuent, est détectée et la lecture repart d'elle-même
+• Un fichier que le serveur doit convertir ne reste plus bloqué à 0:00 quand la connexion saute à l'ouverture
+• Choisir à la main une piste TrueHD, muette sur Apple, affiche un avertissement et indique la piste audible
+
+— NOUVEAU
+• Saut automatique de l'intro et du générique, à activer dans Réglages → Lecture
+• Une rangée « Parce que vous avez vu… » sur l'accueil
+• Un code protège les réglages de contrôle parental
+• Renommez et réordonnez vos serveurs ; l'historique de recherche est propre à chaque serveur
+• Un serveur au certificat auto-signé s'approuve explicitement, sans repasser en http
+• L'Apple TV obéit à la pause, aux sauts et à l'arrêt envoyés depuis un autre appareil Jellyfin
+• Fermer le lecteur pendant une séance « Regarder ensemble » demande confirmation
+• Une présentation au premier lancement, les nouveautés après chaque mise à jour, et un rappel quand une nouvelle version est disponible
+
+— ACCESSIBILITÉ
+• Le réglage « Réduire les animations » de l'Apple TV est respecté
+
+— PERFORMANCES
+• Moins de requêtes au serveur : les rangées désactivées ne sont plus chargées, et la navigation entre épisodes est bien plus légère
+
+— BUGS CORRIGÉS
+• « Reprendre » n'affiche plus la saison et la série d'un épisode sur Jellyfin 12
+• Le Top Shelf ouvre le bon titre, même quand une page est déjà ouverte
+• Le contrôle parental s'applique aussi au Top Shelf
+
+— RETIRÉ
+• Le réglage de taille des sous-titres, sans effet sur les sous-titres au format ASS
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -442,7 +522,7 @@ Cinemax is a modern client for your Jellyfin media servers, designed specificall
 • Text or voice search
 • Filter by genre, by decade, unwatched only
 • Alphabetical sort with quick-jump bar
-• Random genre rows on the home screen to rediscover your library
+• Pick which genre rows appear on the home screen
 
 — OPTIMIZED FOR APPLE TV
 • Navigation purpose-built for the Siri Remote
@@ -472,8 +552,51 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 
 ### What's New (4000 chars max)
 
-> Two separate texts: Live Activity is iOS-only.
+> Two separate texts: the "Continue watching" control, widgets, diagnostics export and administration are iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
+
+#### iOS — 2.1.0
+```
+Cinemax 2.1: more dependable playback, and plenty of small touches.
+
+— MORE DEPENDABLE PLAYBACK
+• "Couldn't play this video" no longer sticks to every title until the app is relaunched
+• A picture that freezes mid-film while the sound and the counter carry on is now detected, and playback recovers on its own
+• A file your server has to convert no longer stays stuck at 0:00 when the connection drops as it opens
+• Picking a TrueHD track by hand, silent on Apple devices, shows a warning and points to the audible track
+
+— NEW
+• Automatic intro and credits skipping, to turn on in Settings → Playback
+• A "Because you watched…" row on the home screen
+• A passcode, or Face ID, protects the parental control settings
+• A "Continue watching" control for Control Center and the Action button, and the "Continue Watching" widget on the Lock Screen
+• Rename and reorder your servers; search history is kept per server
+• A server with a self-signed certificate can be explicitly approved, without falling back to http
+• Cinemax follows pause, seek and stop commands sent from another Jellyfin device
+• Closing the player during a Watch Together session asks for confirmation first
+• A poster zooms into its title's page, and the title's logo shows when the screen is wide enough
+• A tour on first launch, what's new after each update, and a reminder when a new version is available
+• Export diagnostics from Settings → Playback to attach them to a bug report
+
+— ACCESSIBILITY
+• The iPhone's Reduce Motion setting is respected
+• Player controls are announced by VoiceOver, and text follows the largest text sizes
+
+— PERFORMANCE
+• Fewer requests to your server: disabled home rows are no longer loaded, and episode navigation is much lighter
+
+— BUGS FIXED
+• "Continue Watching" no longer shows an episode's season and series on Jellyfin 12
+• Tapping a widget opens the right title, even when a page is already open
+• Parental controls now apply to the widgets too
+• Administration: a title containing an apostrophe can be deleted again
+
+— REMOVED
+• The subtitle size setting, which had no effect on ASS subtitles
+• The Live Activity: the Lock Screen already shows the title, artwork and playback progress
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
 
 #### iOS — 2.0.0
 ```
@@ -592,6 +715,43 @@ Long-press a title and it now does everything, without opening its page.
 • One show can no longer take over the row: importing a full season used to fill it entirely
 • Series that just received episodes now surface there, alongside new movies and shows
 • Same fix in the widget
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 2.1.0
+```
+Cinemax 2.1: more dependable playback, and plenty of small touches.
+
+— MORE DEPENDABLE PLAYBACK
+• "Couldn't play this video" no longer sticks to every title until the app is relaunched
+• A picture that freezes mid-film while the sound and the counter carry on is now detected, and playback recovers on its own
+• A file your server has to convert no longer stays stuck at 0:00 when the connection drops as it opens
+• Picking a TrueHD track by hand, silent on Apple devices, shows a warning and points to the audible track
+
+— NEW
+• Automatic intro and credits skipping, to turn on in Settings → Playback
+• A "Because you watched…" row on the home screen
+• A passcode protects the parental control settings
+• Rename and reorder your servers; search history is kept per server
+• A server with a self-signed certificate can be explicitly approved, without falling back to http
+• Your Apple TV follows pause, seek and stop commands sent from another Jellyfin device
+• Closing the player during a Watch Together session asks for confirmation first
+• A tour on first launch, what's new after each update, and a reminder when a new version is available
+
+— ACCESSIBILITY
+• The Apple TV's Reduce Motion setting is respected
+
+— PERFORMANCE
+• Fewer requests to your server: disabled home rows are no longer loaded, and episode navigation is much lighter
+
+— BUGS FIXED
+• "Continue Watching" no longer shows an episode's season and series on Jellyfin 12
+• The Top Shelf opens the right title, even when a page is already open
+• Parental controls now apply to the Top Shelf too
+
+— REMOVED
+• The subtitle size setting, which had no effect on ASS subtitles
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
@@ -839,8 +999,8 @@ ASC → Pricing and Availability → Edit Countries or Regions → cocher unique
 
 ## 6. Build à sélectionner
 
-iOS : dernière build TestFlight (**2.0.0** build N)
-tvOS : dernière build TestFlight (**2.0.0** build N)
+iOS : **2.1.0** build **2.1.1** (envoyé sur TestFlight le 2026-09-14)
+tvOS : **2.1.0** build **2.1.1** (envoyé sur TestFlight le 2026-09-14)
 
 `MARKETING_VERSION` et `CURRENT_PROJECT_VERSION` sont source unique dans `project.yml` (settings.base) : bumper `MARKETING_VERSION` à chaque version publique, `CURRENT_PROJECT_VERSION` à chaque archive envoyée.
 
