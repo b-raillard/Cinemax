@@ -1928,6 +1928,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
     }
 
+    /// The remote's click, or Enter on a hardware keyboard (the simulator).
+    private static func isSelectPress(_ press: UIPress) -> Bool {
+        press.type == .select
+            || press.key?.keyCode == .keyboardReturnOrEnter
+            || press.key?.keyCode == .keypadEnter
+    }
+
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         // « Quitter la séance ? » is up. A presented controller's next responder
         // is the controller that presented it, so a press the alert does not
@@ -1977,6 +1984,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // its animation completion, and the skip button asks for focus the
         // instant the card starts fading — the model `alpha` is already 0 then.
         if let card = nextUpCard, !card.isHidden, card.alpha > 0, controlsContainer.alpha == 0 {
+            super.pressesBegan(presses, with: event)
+            return
+        }
+        // Same for « Passer l'intro / le générique »: the one control that takes
+        // focus over bare video (`updateSkipButton` → `setNeedsFocusUpdate`), so
+        // a select there is aimed at IT. The wake branch below read it as
+        // play/pause and revealed the HUD, which hands focus to `tvScrub` before
+        // the button's `pressesEnded` — so the button never fired: the film
+        // paused under a HUD instead of skipping (reported on Apple TV
+        // 2026-09-18). Select only: left/right keep their ∓N s skip.
+        if skipButton.isFocused, controlsContainer.alpha == 0,
+           presses.contains(where: { Self.isSelectPress($0) }) {
             super.pressesBegan(presses, with: event)
             return
         }
