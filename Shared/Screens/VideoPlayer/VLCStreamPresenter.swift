@@ -402,11 +402,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var infoPanelVisible = false
     #endif
 
-    /// Set on scrub release / coalesced skip: VLC applies a seek asynchronously,
-    /// so until `currentMs` reaches this the periodic tick must keep showing the
-    /// target instead of snapping back to the stale pre-seek position. Shared by
-    /// both platforms (the iOS slider and the tvOS scrub bar both honor it).
-    private var pendingScrubTargetMs: Int32?
     /// Series name resolved by `fetchChapters`' `getItem` at playback start.
     /// Reused by `showEndOfSeriesOverlay` so the end-of-series card doesn't
     /// re-fetch the whole item purely for its `seriesName` (the getItem TTL has
@@ -418,42 +413,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `NextUpCountdownPolicy`). A film reaches this presenter with a "next"
     /// only through a collection's « Tout lire ».
     private var resolvedIsEpisode: Bool?
-    /// Debounced commit for coalesced ±N skips / chapter jumps. Each press
-    /// advances `pendingScrubTargetMs` (the on-screen target) and re-arms this;
-    /// the single engine seek fires `seekCommitDelay` after the LAST press. See
-    /// `accumulateSeek`.
-    private var seekCommitWork: DispatchWorkItem?
-    private let seekCommitDelay: TimeInterval = 0.3
-
-    /// Target (ms) of the engine seek currently settling, or nil when none is.
-    /// libVLC echoes the seek target as a time update the instant the seek is
-    /// issued — long before it has re-opened the byte range and re-buffered — so
-    /// the time tick alone would clear the spinner while the picture is still
-    /// frozen (the "no loader after a fast-forward" bug). While this is set, the
-    /// spinner is held until the playhead is demonstrably MOVING again.
-    private var seekLoadingTargetMs: Int32?
-    /// Last position observed while a seek was settling, so progress is measured
-    /// between two consecutive reports. Comparing against the target instead
-    /// would misfire on sparse-keyframe files, where VLC legitimately resumes
-    /// seconds *before* the requested position.
-    private var seekSettle = SeekSettleTracker()
-    /// Consecutive samples that showed forward progress. While the engine still
-    /// reports `.opening`/`.buffering` two in a row are required before the seek
-    /// counts as landed (one jump alone can be the demuxer resettling).
-    private var seekLoadingProgressTicks = 0
-    private var seekLoadingStartedAt = Date.distantPast
-    private var seekLoadingWork: DispatchWorkItem?
-    /// Grace period before the post-seek spinner appears: a seek that lands
-    /// instantly (cached / local range) must not flash a spinner, only one that
-    /// actually makes the user wait should.
-    private let seekSpinnerDelay: TimeInterval = 0.35
-    /// Forward progress between two consecutive post-seek position reports that
-    /// counts as "frames are flowing again". libVLC ticks ~4×/s while playing;
-    /// while re-buffering the reported position doesn't advance at all.
-    private static let seekLandedProgressMs: Int32 = 120
-    /// Backstop so a missed engine signal can never leave the spinner turning
-    /// forever over a picture that is actually playing.
-    private static let seekLoadingMaxHold: TimeInterval = 30
+    /// Pending target, coalesced ±N commit, settle window and the `engineSeek`
+    /// funnel every seek path goes through — see `SeekMachine`.
+    private lazy var seeks = makeSeekMachine()
 
     private var reporter: PlaybackReporter?
     private let remoteCommands: RemoteCommandController
@@ -701,7 +663,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         nowPlaying.detach()
         hideControlsWorkItem?.cancel()
         pendingTapWork?.cancel()
-        cancelPendingSeekCommit()
+        seeks.cancelPending()
         skipHUDHide?.cancel()
         noticeHide?.cancel()
         centerGlyphHide?.cancel()
@@ -757,184 +719,35 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// was false during pause/stop/buffering).
     private var enginePlaying: Bool { player.state == .playing }
 
-    private func engineSeek(ms: Int32) {
-        // The near-end guard belongs HERE, in the funnel, not one level up.
-        // `SeekCoalescer.clamp` had a SINGLE caller — `accumulateSeek`, the ±N
-        // skip path — while the three other entries into this method went
-        // through unbounded: the scrub release (`userEngineSeek`), the SyncPlay
-        // echo, and the resume-position seek. At the right edge
-        // `slider.value == 1.0`, so a drag targeted `lengthMs` EXACTLY; libVLC
-        // refuses that (`INPUT_CONTROL_SET_TIME @… failed`) and the input never
-        // recovers — frozen picture under a HUD still reading "playing", the
-        // spinner held to its 30 s backstop, and every later seek dead too
-        // (measured on device 2026-08-21: `target=2503936` on a `lengthMs` of
-        // 2503936, i.e. the end itself, not `lengthMs − endGuardMs` as the
-        // first reading of that log assumed).
-        //
-        // Clamping here is what makes the guard true to this method's own
-        // "every seek path funnels here". The ±N path clamps a second time —
-        // idempotent, and it keeps its own call because it also PAINTS the
-        // clamped target into the HUD before the debounced commit.
-        let target = SeekCoalescer.clamp(target: ms, lengthMs: lengthMs)
-        // DIAG (recette loader) — every seek path funnels here.
-        logger.notice("""
-            seek-fire target=\(target, privacy: .public) \
-            from=\(self.currentMs, privacy: .public) \
-            state=\(String(describing: self.player.state), privacy: .public)
-            """)
-        beginSeekLoading(target: target)
-        try? player.seek(to: .milliseconds(Int(target)))
-    }
-
-    // MARK: Post-seek loading state
-    //
-    // A seek tears down and re-opens libVLC's HTTP byte range, so on a slow /
-    // self-hosted origin the picture stays frozen on the pre-seek frame for
-    // several seconds. VLC reports the new position immediately, so the plain
-    // `.playing` / time-tick paths cleared the spinner right away and the wait
-    // read as a freeze. These three helpers hold the spinner across that gap.
-
-    /// Arm the settle window for a seek that just fired. The spinner only shows
-    /// if the seek hasn't produced real frames within `seekSpinnerDelay`.
-    private func beginSeekLoading(target: Int32) {
-        seekLoadingTargetMs = target
-        seekSettle.reset()
-        seekLoadingProgressTicks = 0
-        seekLoadingStartedAt = Date()
-        seekLoadingWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            // Re-check rather than trusting the window is still open: a seek that
-            // already resumed (or settled into pause) must not flash a spinner.
-            guard let self, self.updateSeekLoading() else { return }
-            self.setLoading(true)
-        }
-        seekLoadingWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + seekSpinnerDelay, execute: work)
-    }
-
-    /// Drop the settle window (landed, superseded, or no frames expected any
-    /// more). Doesn't touch the spinner — the caller owns that.
-    private func endSeekLoading() {
-        seekLoadingWork?.cancel()
-        seekLoadingWork = nil
-        seekLoadingTargetMs = nil
-        seekSettle.reset()
-        seekLoadingProgressTicks = 0
-    }
-
-    /// Re-evaluates a settling seek against the live position. Returns true while
-    /// the spinner must stay up; clears the window (and returns false) as soon as
-    /// the playhead is moving again, the player has settled into pause, or the
-    /// backstop expires. Called from the time tick, the 1 s heartbeat, and the
-    /// `.playing` state change — every path that would otherwise hide the spinner.
-    @discardableResult
-    private func updateSeekLoading() -> Bool {
-        guard seekLoadingTargetMs != nil else { return false }
-        let now = currentMs
-        // The tracker keeps its baseline until progress is actually confirmed.
-        // Comparing against the PREVIOUS sample instead made this dependent on
-        // how often we are called: `onEngineTimeChanged` fires several times
-        // per 100 ms, so every comparison spanned far less than the threshold
-        // and a seek that had already resumed at full speed never counted as
-        // landed — the spinner then sat there until the 30 s backstop.
-        let moved = seekSettle.noteProgress(positionMs: now, thresholdMs: Self.seekLandedProgressMs)
-        seekLoadingProgressTicks = moved ? seekLoadingProgressTicks + 1 : 0
-
-        let landed: Bool
-        switch player.state {
-        case .paused:
-            // Nothing more to wait for: VLC emits no time updates while paused,
-            // and the frame at the seek target is exactly what the user asked for.
-            landed = true
-        case .opening, .buffering:
-            // The engine says it's still loading, so demand sustained progress
-            // before believing otherwise: a single jump can be the demuxer
-            // resettling on a distant keyframe, not frames reaching the screen.
-            landed = seekLoadingProgressTicks >= 2
-        default:
-            landed = moved // the playhead is moving again: real frames
-        }
-        // The inputs that decide whether the settle window keeps holding the
-        // spinner. Only logged while a window is open, but that is still ~4
-        // lines a second for as long as a seek takes to land — up to 120
-        // PERSISTED lines per seek at the 30 s backstop. `.debug` keeps it
-        // available under a live `log stream` without writing it to the store.
-        logger.debug("""
-            seek-settle state=\(String(describing: self.player.state), privacy: .public) \
-            now=\(now, privacy: .public) moved=\(moved, privacy: .public) \
-            ticks=\(self.seekLoadingProgressTicks, privacy: .public) \
-            landed=\(landed, privacy: .public) \
-            since=\(Date().timeIntervalSince(self.seekLoadingStartedAt), format: .fixed(precision: 2), privacy: .public)
-            """)
-        // Backstop: a missed engine signal must never strand the spinner.
-        let expired = Date().timeIntervalSince(seekLoadingStartedAt) > Self.seekLoadingMaxHold
-        if landed || expired {
-            endSeekLoading()
-            // The group is in `Waiting` until every participant re-announces
-            // readiness, and this is the ONLY moment that can say so: libVLC
-            // emits no state change when a seek settles on an already-open
-            // stream, so the two `.playing` / `.paused` callers of
-            // `reportReady` never fire. Without it the veil stood for 7 min 41 s
-            // over a picture playing normally. The backstop reports too — a
-            // stranded group is worse than a report made a beat late, and the
-            // position sent is read live from the bridge either way.
-            if syncPlay.isInGroup {
-                syncPlay.reportSeekSettled(isPlaying: player.state == .playing)
+    private func makeSeekMachine() -> SeekMachine {
+        let machine = SeekMachine(
+            currentMs: { [weak self] in self?.currentMs ?? 0 },
+            lengthMs: { [weak self] in self?.lengthMs ?? 0 },
+            engineState: { [weak self] in
+                guard let state = self?.player.state else { return .other("gone") }
+                switch state {
+                case .opening: return .opening
+                case .buffering: return .buffering
+                case .playing: return .playing
+                case .paused: return .paused
+                default: return .other(state.description)
+                }
             }
-            return false
+        )
+        machine.performSeek = { [weak self] target in
+            try? self?.player.seek(to: .milliseconds(Int(target)))
         }
-        return true
-    }
-
-    // MARK: Coalesced seeking
-    //
-    // A ±N skip used to fire an immediate relative `player.seek(by:)` on every
-    // press, which storms a self-hosted / reverse-proxied origin with byte-range
-    // open/cancel churn and can stall the stream. Instead we accumulate an
-    // ABSOLUTE target and commit ONE engine seek a beat after the last press; the
-    // HUD jumps to the projected position immediately so it reads as responsive,
-    // not less. The pure target math (exact accumulation + near-end clamp) lives
-    // in `SeekCoalescer` so it can be unit-tested without a live player; this
-    // method owns only the debounce timer, the pending-target storage, the HUD
-    // repaint, and the engine seek.
-
-    /// Accumulate a ±N skip: advance the pending target from the last target
-    /// (or the live position if none) and re-arm the debounced commit.
-    private func seek(bySeconds delta: Int) {
-        accumulateSeek(toAbsoluteMs: SeekCoalescer.relativeTarget(
-            deltaSeconds: delta, pendingMs: pendingScrubTargetMs, currentMs: currentMs))
-    }
-
-    /// Set an absolute pending target, paint it immediately, and (re)arm the
-    /// single debounced engine seek. Shared by ±N skips and chapter jumps.
-    private func accumulateSeek(toAbsoluteMs target: Int32) {
-        let len = lengthMs
-        let clamped = SeekCoalescer.clamp(target: target, lengthMs: len)
-        pendingScrubTargetMs = clamped // also holds the bar until VLC catches up
-        paintPosition(clamped, lengthMs: len)
-        seekCommitWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.commitPendingSeek() }
-        seekCommitWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + seekCommitDelay, execute: work)
-    }
-
-    /// Fire the one accumulated seek. `pendingScrubTargetMs` stays set so the
-    /// periodic tick keeps showing the target until VLC's position reaches it
-    /// (no snap-back); it clears itself in `refreshTimeUI`.
-    private func commitPendingSeek() {
-        seekCommitWork = nil
-        guard let target = pendingScrubTargetMs else { return }
-        userEngineSeek(ms: target)
-        refreshTimeUISoon()
-    }
-
-    /// Drop any uncommitted skip (scrub takeover, media reload, teardown) so a
-    /// stale target can't seek the wrong position / a freshly-loaded episode.
-    private func cancelPendingSeekCommit() {
-        seekCommitWork?.cancel()
-        seekCommitWork = nil
-        pendingScrubTargetMs = nil
-        endSeekLoading() // a superseded seek must not keep holding the spinner
+        machine.commitUserSeek = { [weak self] target in
+            self?.userEngineSeek(ms: target)
+            self?.refreshTimeUISoon()
+        }
+        machine.paint = { [weak self] ms, length in self?.paintPosition(ms, lengthMs: length) }
+        machine.showSpinner = { [weak self] in self?.setLoading(true) }
+        machine.onSettled = { [weak self] isPlaying in
+            guard let self, self.syncPlay.isInGroup else { return }
+            self.syncPlay.reportSeekSettled(isPlaying: isPlaying)
+        }
+        return machine
     }
 
     private func enginePlay() { player.resume() }
@@ -942,7 +755,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Shows/hides the centered loading spinner. Driven from playback start, the
     /// retry path, engine state changes (opening/buffering → on; playing/paused →
-    /// off), and the post-seek settle window (`beginSeekLoading`); also
+    /// off), and the post-seek settle window (`SeekMachine.showSpinner`); also
     /// force-cleared once real frames flow.
     private func setLoading(_ loading: Bool) {
         // `clearLoadingIfOpen` rides the ~4×/s engine tick for the whole film, so
@@ -1116,7 +929,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         updateSkipButton(currentTime: now)
         // Second chance to close a settling seek: if VLC went quiet on time
         // updates the heartbeat's own sampling still sees the playhead move.
-        if seekLoadingTargetMs != nil, !updateSeekLoading() { clearLoadingIfOpen() }
+        if seeks.isSettling, !seeks.sampleSettle() { clearLoadingIfOpen() }
         // ...and a second chance to REPAINT, for exactly the same reason.
         // `refreshTimeUI()` was reachable only from `onEngineTimeChanged`, so
         // while libVLC was silent during a seek settle the two labels stayed
@@ -1124,8 +937,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // writes `timeLabel` alone, `writeTimeLabels` writes both — giving an
         // impossible pair (measured 2/2 on 2026-08-24: `1:53:14 / -1:21:30` on
         // a 2 h 06 film, i.e. a 3 h 14 total, at the precise moment the user is
-        // asking themselves why the picture is frozen). The `pendingScrubTargetMs`
-        // branch already paints the target into BOTH labels. Costs nothing in
+        // asking themselves why the picture is frozen). The pending-target
+        // branch (`SeekMachine.displayPosition`) already paints the target into BOTH labels. Costs nothing in
         // the steady state: `refreshTimeUI` returns at once while scrubbing, and
         // `paintPosition`'s two gates (HUD hidden, unchanged whole second)
         // swallow the rest.
@@ -1148,7 +961,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             positionMs: currentMs,
             isPlaying: enginePlaying,
             hasVideoTrack: !player.videoTracks.isEmpty,
-            seekSettling: seekLoadingTargetMs != nil,
+            seekSettling: seeks.isSettling,
             mediaConfirmedOpen: mediaConfirmedOpen
         ) {
         case .healthy:
@@ -1257,7 +1070,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 segmentType: segment.type,
                 autoSkipIntro: autoSkip.intro, autoSkipCredits: autoSkip.credits,
                 alreadySkipped: autoSkippedSegmentKeys.contains(key),
-                isPlaying: enginePlaying && seekLoadingTargetMs == nil,
+                isPlaying: enginePlaying && !seeks.isSettling,
                 inSyncPlayGroup: syncPlay.isInGroup,
                 canHandOffToNext: canHandOff
             )
@@ -2179,8 +1992,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }
             switch intent {
             case .playPause: playPauseTapped()
-            case .skipBack: seek(bySeconds: -PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: false)
-            case .skipForward: seek(bySeconds: PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: true)
+            case .skipBack: seeks.skip(bySeconds: -PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: false)
+            case .skipForward: seeks.skip(bySeconds: PlayerSkipConfig.intervalSeconds); showSkipGlyph(forward: true)
             case .revealOnly: break
             }
             revealControls()
@@ -2234,7 +2047,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.onSeek = { [weak self] delta in
             guard let self else { return }
             let forward = delta >= 0
-            self.seek(bySeconds: forward ? PlayerSkipConfig.intervalSeconds : -PlayerSkipConfig.intervalSeconds)
+            self.seeks.skip(bySeconds: forward ? PlayerSkipConfig.intervalSeconds : -PlayerSkipConfig.intervalSeconds)
             self.showSkipGlyph(forward: forward)
             self.scheduleHideControls()
         }
@@ -2244,7 +2057,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tvScrub.onScrubPreview = { [weak self] progress in
             guard let self else { return }
             self.isScrubbing = true
-            self.cancelPendingSeekCommit() // a live drag supersedes a queued skip
+            self.seeks.cancelPending() // a live drag supersedes a queued skip
             self.hideControlsWorkItem?.cancel()
             let len = self.lengthMs
             guard len > 0 else { return }
@@ -2262,7 +2075,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Hold the bar/labels at the target; the periodic tick keeps
             // showing it (not the stale pre-seek currentMs) until VLC's
             // position actually reaches it — no snap-back flicker.
-            self.pendingScrubTargetMs = target
+            self.seeks.hold(at: target)
             self.writeTimeLabels(position: target, lengthMs: len)
             self.updateScrubBar(progress: progress)
             self.userEngineSeek(ms: target)
@@ -2698,7 +2511,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let i = sender.tag
         guard i < chapterStartTicks.count else { return }
         let targetMs = Int32(clamping: chapterStartTicks[i] / 10_000)
-        accumulateSeek(toAbsoluteMs: targetMs) // coalesce rapid chapter taps too
+        seeks.accumulate(toAbsoluteMs: targetMs) // coalesce rapid chapter taps too
         showSkipHUD(PlayerTimeFormat.ms(targetMs))
         scheduleHideControls()
     }
@@ -3141,7 +2954,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         player.selectedAudioTrack = track
         guard mediaConfirmedOpen, lengthMs > 0 else { return }
         logger.notice("CINEMAX-AUDIO ▸ changement de piste, réancrage à \(anchor, privacy: .public) ms")
-        engineSeek(ms: anchor)
+        seeks.engineSeek(anchor)
     }
 
     /// Switches the subtitle track and re-anchors playback at the switch
@@ -3157,7 +2970,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         player.selectedSubtitleTrack = track
         guard track != nil, mediaConfirmedOpen, lengthMs > 0 else { return }
         logger.notice("CINEMAX-SUBS ▸ changement de piste, réancrage à \(anchor, privacy: .public) ms")
-        engineSeek(ms: anchor)
+        seeks.engineSeek(anchor)
     }
 
     @objc private func openSubtitleMenu() {
@@ -3448,7 +3261,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func startPlayback() {
         hasValidTime = false
         didApplyServerTrackDefaults = false
-        cancelPendingSeekCommit()
+        seeks.cancelPending()
         beginOpenLoading()
         mediaLengthMs = 0
         firstPlayStart = Date()
@@ -3631,8 +3444,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // and libVLC would drop a seek into a media not yet open.
             guard let ticks = command.seekPositionTicks, mediaConfirmedOpen else { return false }
             // A local ±N burst still waiting to commit must not land after it.
-            cancelPendingSeekCommit()
-            engineSeek(ms: Int32(clamping: ticks / 10_000))
+            seeks.cancelPending()
+            seeks.engineSeek(Int32(clamping: ticks / 10_000))
             refreshTimeUISoon()
             return true
         case .stop:
@@ -3680,7 +3493,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         syncPlay.bindPlayback(SyncPlayController.PlaybackBridge(
             play: { [weak self] in self?.enginePlay() },
             pause: { [weak self] in self?.enginePause() },
-            seekMs: { [weak self] ms in self?.engineSeek(ms: Int32(clamping: ms)) },
+            seekMs: { [weak self] ms in self?.seeks.engineSeek(Int32(clamping: ms)) },
             positionMs: { [weak self] in Int(self?.currentMs ?? 0) },
             stop: { [weak self] in self?.enginePause() } // v1: pause on server Stop
         ))
@@ -3694,7 +3507,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// while the group sat at 1:36, and the server rebuilt the group's clock
     /// 96 s into the future around it, leaving every transport button dead.
     ///
-    /// `seekLoadingTargetMs != nil` is the "a seek is still settling" test; the
+    /// `seeks.isSettling` is the "a seek is still settling" test; the
     /// settle closes with its own report (`reportSeekSettled`), which knows the
     /// arrival position. `startSeekPending` covers the window BEFORE that, where
     /// the media is open and nothing is settling only because the resume seek
@@ -3704,7 +3517,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard SyncPlayReadyPolicy.shouldAnnounceReady(
             mediaConfirmedOpen: mediaConfirmedOpen,
             startSeekPending: startSeekPending,
-            isSeekSettling: seekLoadingTargetMs != nil
+            isSeekSettling: seeks.isSettling
         ) else { return }
         syncPlay.reportReady(isPlaying: isPlaying)
     }
@@ -3751,7 +3564,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // The group is held while somebody buffers. Saying so is the difference
         // between a wait and what reads as a frozen player.
         // Delayed on the way IN, immediate on the way out — the same shape as
-        // `seekSpinnerDelay`, and for the same reason: a group re-enters
+        // `SeekMachine.spinnerDelay`, and for the same reason: a group re-enters
         // `Waiting` on every synced seek while participants re-buffer, which for
         // a healthy group is routine and sub-second, so showing it at once
         // makes ordinary seeking flash a full-screen scrim over the picture.
@@ -3860,7 +3673,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if syncPlay.isInGroup {
             syncPlay.userDidSeek(toMs: Int(max(0, ms)))
         } else {
-            engineSeek(ms: ms)
+            seeks.engineSeek(ms)
         }
     }
 
@@ -3903,7 +3716,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didSeekToStart = true // new episode starts at 0
             self.hasValidTime = false
             self.lastKnownPositionMs = 0 // don't resume a retry at the old episode's position
-            self.cancelPendingSeekCommit() // a queued skip must not seek the new episode
+            self.seeks.cancelPending() // a queued skip must not seek the new episode
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
@@ -4018,10 +3831,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             pendingTapWork = nil
             lastTapTime = 0
             if x < view.bounds.width / 2 {
-                seek(bySeconds: -PlayerSkipConfig.intervalSeconds)
+                seeks.skip(bySeconds: -PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: false)
             } else {
-                seek(bySeconds: PlayerSkipConfig.intervalSeconds)
+                seeks.skip(bySeconds: PlayerSkipConfig.intervalSeconds)
                 showSkipGlyph(forward: true)
             }
             if controlsVisible { scheduleHideControls() }
@@ -4143,13 +3956,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func iosSkipBack() {
-        seek(bySeconds: -PlayerSkipConfig.intervalSeconds)
+        seeks.skip(bySeconds: -PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: false)
         scheduleHideControls()
     }
 
     @objc private func iosSkipForward() {
-        seek(bySeconds: PlayerSkipConfig.intervalSeconds)
+        seeks.skip(bySeconds: PlayerSkipConfig.intervalSeconds)
         showSkipGlyph(forward: true)
         scheduleHideControls()
     }
@@ -4157,7 +3970,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // MARK: - iPad hardware-keyboard shortcuts
     //
     // Space = play/pause, ←/→ = seek ∓10 s. Both seek shortcuts route through the
-    // documented coalesced path (`seek(bySeconds:)` → `accumulateSeek`) via the
+    // documented coalesced path (`SeekMachine.skip(bySeconds:)`) via the
     // existing iOS skip handlers — never a direct engine seek. Wired as UIKit key
     // commands so they coexist with the gesture/HUD stack without touching it.
     override var canBecomeFirstResponder: Bool { true }
@@ -4184,7 +3997,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     @objc private func scrubberTouchDown() {
         isScrubbing = true
-        cancelPendingSeekCommit() // a live drag supersedes a queued skip
+        seeks.cancelPending() // a live drag supersedes a queued skip
         // Freeze the HUD for the whole drag — re-armed on touch-up.
         hideControlsWorkItem?.cancel()
         updateScrubPreview()
@@ -4318,7 +4131,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setLoading(true)
             if syncPlay.isInGroup { syncPlay.reportBuffering() }
         case .stopped:
-            endSeekLoading() // no frames are coming — a pending settle is moot
+            seeks.endSettle() // no frames are coming — a pending settle is moot
             // DIAG (recette A7) — libVLC has no distinct `.ended`, so every
             // teardown, error and real EOF arrives here. Log the four gate
             // inputs so a missing end-of-series card can be attributed to the
@@ -4370,7 +4183,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // …and defer to the open gate too: a bare `.playing` is exactly the
             // signal that used to hide the spinner over a stream that never
             // opened. See `clearLoadingIfOpen()`.
-            if !updateSeekLoading() { clearLoadingIfOpen() }
+            if !seeks.sampleSettle() { clearLoadingIfOpen() }
             // NOTE: `.playing` deliberately does NOT clear the retry budget —
             // `noteMediaOpened()` owns that. libVLC reports `.playing` as soon
             // as the input starts, BEFORE a demuxer exists, so a stream that
@@ -4394,7 +4207,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             refreshNowPlayingRate(playing: true)
             announceSyncPlayReadyIfPositionIsReal(isPlaying: true)
         case .paused:
-            endSeekLoading()
+            seeks.endSettle()
             clearLoadingIfOpen()
             #if os(iOS)
             setPlayPauseIcon(playing: false)
@@ -4596,7 +4409,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func handlePlaybackError() {
         cancelOpenWatchdog()
-        endSeekLoading() // the media is being reloaded (or given up on)
+        seeks.endSettle() // the media is being reloaded (or given up on)
         if !didRetry {
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
@@ -4853,9 +4666,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // resume there rather than the stale pre-seek tick, then drop the pending
         // seek so it can't fire against the reloaded media or leave `refreshTimeUI`
         // frozen painting a target the new stream never reaches. Mirrors the
-        // `cancelPendingSeekCommit()` that `startPlayback`/`navigateToEpisode` do.
-        let resumeMs = pendingScrubTargetMs ?? ms
-        cancelPendingSeekCommit()
+        // `seeks.cancelPending()` that `startPlayback`/`navigateToEpisode` do.
+        let resumeMs = seeks.pendingTargetMs ?? ms
+        seeks.cancelPending()
         isReResolvingAfterWake = true
         navGeneration += 1
         pendingRetryToken = nil // a retry of the media being replaced is moot
@@ -4931,7 +4744,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             hasValidTime = true; noteMediaOpened()
             // A settling seek echoes its target here before any frame is decoded —
             // only hide the spinner once the playhead is actually moving again.
-            if !updateSeekLoading() { clearLoadingIfOpen() }
+            if !seeks.sampleSettle() { clearLoadingIfOpen() }
             lastKnownPositionMs = currentMs
         }
         if !didSeekToStart, let start = startTime, start.isFinite, start > 0, lengthMs > 0 {
@@ -4940,7 +4753,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // yields a huge position — clamp the conversion, then cap to just
             // before the end so a stale tick past EOF doesn't seek into nothing.
             let targetMs = min(Int32(clamping: Int(start * 1000)), max(0, lengthMs - 5000))
-            if targetMs > 0 { engineSeek(ms: targetMs) }
+            if targetMs > 0 { seeks.engineSeek(targetMs) }
         }
     }
 
@@ -4951,21 +4764,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func refreshTimeUI() {
         // While the user is sliding, the live preview owns the bar + labels.
         if isScrubbing { return }
-        let currentMs = self.currentMs
-        let lengthMs = self.lengthMs
-        // Hold a pending target (coalesced skip, chapter jump, or scrub release)
-        // until VLC's position actually reaches it (within ~1.2 s) — otherwise
-        // the periodic tick paints the stale pre-seek position for a beat and
-        // the bar visibly snaps back. Applies to BOTH platforms.
-        if let target = pendingScrubTargetMs {
-            if abs(Int(currentMs) - Int(target)) <= 1200 {
-                pendingScrubTargetMs = nil
-            } else {
-                paintPosition(target, lengthMs: lengthMs)
-                return
-            }
-        }
-        paintPosition(currentMs, lengthMs: lengthMs)
+        // A pending target (coalesced skip, chapter jump, or scrub release) is
+        // held until VLC's position actually reaches it — otherwise the periodic
+        // tick paints the stale pre-seek position for a beat and the bar
+        // visibly snaps back. Applies to BOTH platforms.
+        paintPosition(seeks.displayPosition(), lengthMs: lengthMs)
     }
 
     /// Sole writer of the two time labels — records what it painted so
