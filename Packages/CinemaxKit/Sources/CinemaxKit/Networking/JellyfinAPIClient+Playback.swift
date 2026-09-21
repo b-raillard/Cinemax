@@ -267,7 +267,8 @@ extension JellyfinAPIClient {
             selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
             authToken: token,
             sourceContainer: mediaSource.container,
-            liveStreamId: mediaSource.liveStreamID
+            liveStreamId: mediaSource.liveStreamID,
+            sourceSizeBytes: mediaSource.size.map(Int64.init)
         )
     }
 

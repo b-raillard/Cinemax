@@ -39,6 +39,13 @@ public struct PlaybackInfo: Sendable {
     /// lingers until the server expires it on its own. Nil when no negotiation
     /// took place (the direct-stream fallback never talks to the server).
     public let liveStreamId: String?
+    /// Size of the source file in bytes, as the server reports it — DirectPlay
+    /// / DirectStream only, nil for a transcode (no file to size) and for the
+    /// fallback that never negotiates. Read by the player's feed watchdog: a
+    /// source whose every byte has already been read legitimately stops the
+    /// input for the rest of the playback (a short trailer buffers whole), so
+    /// without this the watchdog would read that as a dead feed.
+    public let sourceSizeBytes: Int64?
 
     public init(
         url: URL,
@@ -51,7 +58,8 @@ public struct PlaybackInfo: Sendable {
         selectedSubtitleIndex: Int?,
         authToken: String?,
         sourceContainer: String? = nil,
-        liveStreamId: String? = nil
+        liveStreamId: String? = nil,
+        sourceSizeBytes: Int64? = nil
     ) {
         self.url = url
         self.playSessionId = playSessionId
@@ -64,5 +72,6 @@ public struct PlaybackInfo: Sendable {
         self.authToken = authToken
         self.sourceContainer = sourceContainer
         self.liveStreamId = liveStreamId
+        self.sourceSizeBytes = sourceSizeBytes
     }
 }

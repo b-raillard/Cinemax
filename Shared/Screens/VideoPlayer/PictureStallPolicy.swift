@@ -183,3 +183,145 @@ struct PictureStallPolicy {
         return .stalling(seconds: stalledSeconds)
     }
 }
+
+/// Watches the INPUT rather than the picture: bytes stop arriving while the
+/// engine still plays from what it has already buffered.
+///
+/// **This sees the fault ~20 s before `PictureStallPolicy` can**, and that gap
+/// is the whole point. Measured on an Apple TV on 2026-09-20 (« Just Play
+/// Dead », a 6,6 Go MKV in DirectStream through the reverse-proxied server, two
+/// freezes eight minutes apart, both uploaded as `playback-freeze`): the origin
+/// cancelled the long-lived HTTP/2 stream mid-film — `peer stream 27 error:
+/// Cancellation (0x8)` at 17:41:47, `peer stream 25 error` at 17:48:55, the
+/// first preceded by a read that timed out — and libVLC's own HTTP access has
+/// **no mid-stream reconnect**, so nothing was ever fed to the demuxer again.
+/// The picture ran on from the buffer (18 s the second time), so every picture-
+/// keyed guard was still seeing a healthy stream; only once the buffer drained
+/// did `PictureStallPolicy` fire, i.e. after the viewer had been staring at a
+/// frozen frame. The transparent reconnect the app owns lives in
+/// `CinemaxStreamProxy`, and a direct stream never goes through it.
+///
+/// So this watchdog keys on `readBytes`, the input counter, and fires while the
+/// picture is STILL PLAYING — which is what makes the cure cheap: a re-anchor
+/// seek, which is the one thing that makes libVLC open a fresh connection
+/// (`VLCStreamPresenter.reanchorAfterFeedStall`). If that does not restore the
+/// feed, the picture stops a few seconds later and `PictureStallPolicy` rebuilds
+/// the player exactly as before — the escalation costs no state of its own.
+///
+/// **Four refusals, and each one answers a way the input legitimately goes
+/// quiet**: an adaptive (HLS) stream fetches in per-segment bursts, so silence
+/// between two segments is normal; a source whose every byte has been read has
+/// nothing left to fetch (a short trailer buffers whole, and any file does near
+/// its end); a settling seek owns its own wait; and before `mediaConfirmedOpen`
+/// the open watchdog owns every failure. `readBytes == nil` (no statistics) is
+/// "cannot tell", never a stall — same discipline as the picture counter.
+struct FeedStallPolicy {
+    /// Consecutive seconds without a single new byte before re-anchoring. A
+    /// playing stream reads roughly a second of media per second, so five
+    /// silent seconds is already far outside the jitter of a healthy feed.
+    static let stallSeconds = 5
+
+    /// How many times ONE playback may re-anchor itself. Bounded like every
+    /// other self-healing path here: a link that dies again immediately must
+    /// surface as a frozen picture (and the rebuild that follows), never as a
+    /// silent loop of seeks against the server.
+    static let reanchorBudget = 2
+
+    /// Seconds of a feed that is actually delivering that renew the budget —
+    /// proof the re-anchor worked, the same reasoning as the picture policy's.
+    static let budgetRenewSeconds = 60
+
+    /// Slack under the source size within which "everything is read" holds.
+    /// The server's reported size and libVLC's byte count need not agree to the
+    /// byte (headers, the range the access actually issued), so the comparison
+    /// is deliberately loose — being late to fire on a nearly-finished file
+    /// costs nothing, firing on a fully-buffered one costs a needless seek.
+    static let fullyReadSlackBytes: UInt64 = 4 * 1024 * 1024
+
+    enum Outcome: Equatable {
+        case healthy
+        /// Silent for this many consecutive seconds, with no re-anchor spent —
+        /// either below the threshold, or the budget is exhausted.
+        case stalling(seconds: Int)
+        /// Re-anchor playback at the current position to force a fresh
+        /// connection.
+        case reanchor
+    }
+
+    private var lastBytes: UInt64?
+    private var stalledSeconds = 0
+    private var healthySeconds = 0
+    private(set) var reanchorsLeft: Int
+
+    init() {
+        reanchorsLeft = Self.reanchorBudget
+    }
+
+    /// Called at every fresh open. Clears the window; **keeps the budget**, for
+    /// the reason `PictureStallPolicy.resetWindow` spells out — the re-anchor
+    /// itself reopens the input, so restoring the allowance here would remove
+    /// the bound entirely.
+    mutating func resetWindow() {
+        lastBytes = nil
+        stalledSeconds = 0
+        healthySeconds = 0
+    }
+
+    /// One sample per second, from the player's existing 1 s heartbeat.
+    ///
+    /// - Parameters:
+    ///   - readBytes: libVLC's count of bytes read from the input.
+    ///   - sourceSizeBytes: the server's size for the source, when it reports
+    ///     one. Once `readBytes` reaches it the input is DONE, not dead.
+    ///   - isPlaying: the engine's state is `.playing`.
+    ///   - isAdaptiveStream: an HLS stream — its input is bursty by design.
+    ///   - seekSettling: a seek window is open; `updateSeekLoading` owns it.
+    ///   - mediaConfirmedOpen: a demuxer exists.
+    mutating func sample(
+        readBytes: UInt64?,
+        sourceSizeBytes: Int64?,
+        isPlaying: Bool,
+        isAdaptiveStream: Bool,
+        seekSettling: Bool,
+        mediaConfirmedOpen: Bool
+    ) -> Outcome {
+        guard isPlaying, mediaConfirmedOpen, !seekSettling, !isAdaptiveStream,
+              let bytes = readBytes, !Self.isFullyRead(bytes, sourceSizeBytes) else {
+            lastBytes = nil
+            stalledSeconds = 0
+            return .healthy
+        }
+
+        defer { lastBytes = bytes }
+
+        guard let previous = lastBytes else {
+            return .healthy          // first sample of a window: nothing to compare
+        }
+
+        if bytes > previous {
+            stalledSeconds = 0
+            healthySeconds += 1
+            if healthySeconds >= Self.budgetRenewSeconds {
+                healthySeconds = 0
+                reanchorsLeft = Self.reanchorBudget
+            }
+            return .healthy
+        }
+
+        stalledSeconds += 1
+        healthySeconds = 0
+        if stalledSeconds >= Self.stallSeconds, reanchorsLeft > 0 {
+            reanchorsLeft -= 1
+            stalledSeconds = 0
+            return .reanchor
+        }
+        return .stalling(seconds: stalledSeconds)
+    }
+
+    /// Whether the whole source has been read, i.e. the input has nothing left
+    /// to fetch and its silence is the ordinary end of its work.
+    static func isFullyRead(_ readBytes: UInt64, _ sourceSizeBytes: Int64?) -> Bool {
+        guard let size = sourceSizeBytes, size > 0 else { return false }
+        return readBytes + fullyReadSlackBytes >= UInt64(size)
+    }
+}

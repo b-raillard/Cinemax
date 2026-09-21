@@ -423,6 +423,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Watches for a wedged video decoder — the one failure mode no other
     /// guard in this file can see. See `PictureStallPolicy`.
     private var pictureStall = PictureStallPolicy()
+    /// Watches the INPUT, which dies ~20 s before the picture does when the
+    /// origin cancels a direct stream. See `FeedStallPolicy`.
+    private var feedStall = FeedStallPolicy()
+    /// Byte count captured when a re-anchor was issued, and the follow-up that
+    /// escalates to a full rebuild if it has not moved since. Without it a
+    /// re-anchor onto a genuinely dead link would hold its own seek-settle
+    /// window (30 s backstop) with both watchdogs standing down behind it.
+    private var feedReanchorBytes: UInt64?
+    private var feedReanchorWatchdog: DispatchWorkItem?
     private var progressTimer: Timer?
     private var hideControlsWorkItem: DispatchWorkItem?
     private var didSeekToStart = false
@@ -657,6 +666,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         unbindSyncPlay()
         setLoading(false)
         cancelOpenWatchdog()
+        cancelFeedReanchorWatchdog()
         progressTimer?.invalidate()
         progressTimer = nil
         remoteCommands.detach()
@@ -787,6 +797,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // BUDGET is deliberately not restored here — this method is on the
         // recovery's own path, see `PictureStallPolicy.resetWindow`.
         pictureStall.resetWindow()
+        feedStall.resetWindow()
+        cancelFeedReanchorWatchdog()
         // A new media's first position must always repaint, even if it lands on
         // the same whole second as the outgoing one's last painted position.
         lastPaintedPosition = nil
@@ -836,12 +848,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // already describing it — the one place the export's `last_playback`
         // line can be kept true (the error retry below records its own).
         recordPlaybackDiagnostics()
-        // 5 s read-ahead (was 3 s): a deeper cushion rides out a transient
-        // origin drop and, crucially, gives the proxy's transparent
-        // reconnect time to re-establish the upstream BEFORE the buffer
-        // drains — so the drop stays invisible. Costs ~2 s of extra initial
-        // buffering; matches the retry path's network-caching.
-        media.addOption(":network-caching=5000")
+        // 8 s read-ahead (3 s → 5 s → 8 s): a deeper cushion rides out a
+        // transient origin drop and, crucially, gives a reconnect time to
+        // re-establish the upstream BEFORE the buffer drains — so the drop
+        // stays invisible. Raised to 8 s on 2026-09-21 after two freezes on a
+        // reverse-proxied server (« Just Play Dead », see `FeedStallPolicy`):
+        // the buffer is what buys the feed watchdog the room to re-anchor
+        // while the picture is still running. Costs proportionally more
+        // initial buffering; matches the retry path's network-caching.
+        media.addOption(":network-caching=8000")
         return media
     }
 
@@ -943,6 +958,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // `paintPosition`'s two gates (HUD hidden, unchanged whole second)
         // swallow the rest.
         refreshTimeUI()
+        checkFeedStall()
         checkPictureStall()
         if statsVisible { refreshStats() }
         if sleepActive {
@@ -1010,6 +1026,97 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             _ = reResolveAndResume(from: currentMs)
         }
     }
+
+    /// The guard that watches the INPUT instead of the picture — the origin
+    /// cancelling a direct stream kills the feed ~20 s before the buffer runs
+    /// dry and anything shows on screen. See `FeedStallPolicy`.
+    private func checkFeedStall() {
+        switch feedStall.sample(
+            readBytes: player.statistics?.readBytes,
+            sourceSizeBytes: info.sourceSizeBytes,
+            isPlaying: enginePlaying,
+            isAdaptiveStream: isAdaptiveStream,
+            seekSettling: seeks.isSettling,
+            mediaConfirmedOpen: mediaConfirmedOpen
+        ) {
+        case .healthy:
+            break
+        case .stalling(let seconds):
+            // Once per episode of silence, at the threshold — past it the
+            // budget is spent and the counter climbs for the rest of the film.
+            guard seconds == FeedStallPolicy.stallSeconds else { return }
+            logger.notice("""
+                feed-stall no re-anchor left pos=\(Int(self.currentMs / 1000), privacy: .public)s \
+                read=\(self.player.statistics?.readBytes ?? 0, privacy: .public) \
+                modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
+                """)
+        case .reanchor:
+            reanchorAfterFeedStall()
+        }
+    }
+
+    /// Forces libVLC to open a FRESH connection at the position on screen.
+    ///
+    /// A seek is the one thing that re-opens the input without rebuilding the
+    /// player, which is why it is the right cure here and the wrong one for a
+    /// wedged decoder (`PictureStallPolicy` owns that, and a seek was measured
+    /// not to fix it). It runs while the picture is still playing out of the
+    /// buffer, so the viewer pays a short re-buffer instead of a frozen frame.
+    /// One second back rather than the exact position: a seek to where the
+    /// playhead already is can be answered as a no-op, and a second of replay
+    /// is imperceptible.
+    private func reanchorAfterFeedStall() {
+        let stats = player.statistics
+        logger.notice("""
+            feed-stall re-anchor pos=\(Int(self.currentMs / 1000), privacy: .public)s \
+            read=\(stats?.readBytes ?? 0, privacy: .public) \
+            inputBitrate=\(stats?.inputBitrate ?? 0, format: .fixed(precision: 1), privacy: .public) \
+            displayed=\(stats?.displayedPictures ?? 0, privacy: .public) \
+            discont=\(stats?.demuxDiscontinuity ?? 0, privacy: .public) \
+            proxy=\(self.usingProxy, privacy: .public) \
+            modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
+            """)
+        // Sent before the seek, like every other fault document here: on tvOS
+        // this line is otherwise written where nobody can read it, and the
+        // re-anchor is what resets the counters it describes.
+        DiagnosticsUploader.send(reason: "feed-stall", engine: "vlc")
+        feedReanchorBytes = stats?.readBytes
+        seeks.engineSeek(max(0, currentMs - 1000))
+        scheduleFeedReanchorWatchdog()
+    }
+
+    /// Escalates to the full rebuild when a re-anchor did not bring the feed
+    /// back. Needed because the re-anchor opens a seek-settle window, and both
+    /// watchdogs stand down behind one — on a genuinely dead link that window
+    /// would otherwise hold for its own 30 s backstop with nothing watching.
+    private func scheduleFeedReanchorWatchdog() {
+        cancelFeedReanchorWatchdog()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.isTearingDown else { return }
+            self.feedReanchorWatchdog = nil
+            let now = self.player.statistics?.readBytes
+            guard let before = self.feedReanchorBytes, let now, now <= before else { return }
+            logger.error("""
+                feed-stall re-anchor did not restore the feed \
+                (read=\(now, privacy: .public)) — rebuilding
+                """)
+            _ = self.reResolveAndResume(from: self.currentMs)
+        }
+        feedReanchorWatchdog = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.feedReanchorGrace, execute: work)
+    }
+
+    private func cancelFeedReanchorWatchdog() {
+        feedReanchorWatchdog?.cancel()
+        feedReanchorWatchdog = nil
+        feedReanchorBytes = nil
+    }
+
+    /// How long a re-anchor is given to bring bytes back before the player is
+    /// rebuilt. Longer than a healthy re-open (a fresh connection delivers its
+    /// first bytes in well under a second) and shorter than the buffer the
+    /// re-anchor is racing.
+    private static let feedReanchorGrace: TimeInterval = 8
 
     // MARK: - Skip intro / outro (P3)
 
@@ -2951,7 +3058,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Switches the audio track and re-anchors playback at the switch position.
     ///
     /// Selecting a track alone is not enough on a streamed source. libVLC has
-    /// already demuxed `:network-caching` (5 s) worth of the file past the
+    /// already demuxed `:network-caching` (8 s) worth of the file past the
     /// playhead, and the packets of a track that was NOT selected at demux time
     /// were dropped on the floor — the new decoder only receives data from the
     /// demuxer's current position onward. So the picture kept running for those
@@ -4473,7 +4580,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.handlePlaybackError()
                     return
                 }
-                media.addOption(":network-caching=5000")
+                media.addOption(":network-caching=8000")
                 self.recordPlaybackDiagnostics()
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
