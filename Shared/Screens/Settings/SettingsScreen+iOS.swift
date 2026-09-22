@@ -114,7 +114,7 @@ extension SettingsScreen {
                 // Chevron
                 Image(systemName: "chevron.right")
                     .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-                    .foregroundStyle(isFirst ? CinemaColor.onSurface.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
+                    .foregroundStyle(isFirst ? themeManager.onAccentContainer.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
@@ -409,7 +409,7 @@ extension SettingsScreen {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-                    .foregroundStyle(isFirst ? CinemaColor.onSurface.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
+                    .foregroundStyle(isFirst ? themeManager.onAccentContainer.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)

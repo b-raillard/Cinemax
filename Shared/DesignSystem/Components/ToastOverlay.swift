@@ -92,5 +92,9 @@ private struct ToastView: View {
         )
         .shadow(color: Color.black.opacity(0.25), radius: 20, x: 0, y: 8)
         .accessibilityElement(children: .combine)
+        // The combined element reads title + message; closing it is an explicit
+        // action (and the escape gesture) rather than a separate element.
+        .accessibilityAction(named: loc.localized("toast.dismiss"), onDismiss)
+        .accessibilityAction(.escape, onDismiss)
     }
 }

@@ -184,13 +184,13 @@ extension SettingsScreen {
                 if let subtitle = category.subtitle(loc, themeManager: themeManager), isFocused {
                     Text(subtitle)
                         .font(.system(size: CinemaScale.pt(18), weight: .regular))
-                        .foregroundStyle(CinemaColor.onSurface.opacity(0.7))
+                        .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
                 }
 
                 if isFocused {
                     Image(systemName: "chevron.right")
                         .font(.system(size: CinemaScale.pt(20), weight: .semibold))
-                        .foregroundStyle(CinemaColor.onSurface.opacity(0.7))
+                        .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
                 }
             }
             .padding(.horizontal, CinemaSpacing.spacing5)

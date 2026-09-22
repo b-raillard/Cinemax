@@ -313,7 +313,7 @@ struct SearchScreen: View {
         } label: {
             Text(loc.localized(scope.localizationKey))
                 .font(CinemaFont.label(.medium))
-                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
+                .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
                 .padding(.horizontal, CinemaSpacing.spacing3)
                 .padding(.vertical, CinemaSpacing.spacing2)
                 .background(

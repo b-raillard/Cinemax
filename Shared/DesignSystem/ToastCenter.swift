@@ -49,13 +49,14 @@ final class ToastCenter {
     /// comme vu », an error — and VoiceOver said nothing about any of them. The
     /// overlay also sits under every sheet, so a toast raised from one is never
     /// SEEN; an announcement still reaches the user. Under VoiceOver the toast
-    /// stays up long enough to be reached by swiping too.
+    /// also stays up longer, so it can still be reached (and dismissed through
+    /// its combined element's action) after the announcement.
     func show(_ toast: Toast) {
         dismissTask?.cancel()
         current = toast
         let voiceOver = UIAccessibility.isVoiceOverRunning
         if voiceOver {
-            AccessibilityNotification.Announcement(Self.announcement(for: toast)).post()
+            UIAccessibility.post(notification: .announcement, argument: Self.announcement(for: toast))
         }
         let duration = Self.effectiveDuration(toast.duration, voiceOverRunning: voiceOver)
         dismissTask = Task { [weak self, id = toast.id, duration] in
@@ -94,8 +95,7 @@ final class ToastCenter {
     }
 
     /// A toast read by VoiceOver must outlive the announcement and leave time
-    /// to swipe to its close button: never under 6 s, and twice the sighted
-    /// duration beyond that.
+    /// to reach it: never under 6 s, and twice the sighted duration beyond that.
     nonisolated static func effectiveDuration(_ duration: TimeInterval, voiceOverRunning: Bool) -> TimeInterval {
         voiceOverRunning ? max(duration * 2, 6) : duration
     }

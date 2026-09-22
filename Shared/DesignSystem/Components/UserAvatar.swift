@@ -41,7 +41,7 @@ struct UserAvatar: View {
                 )
             Text(initial)
                 .font(.system(size: size * 0.4, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(themeManager.onAccentContainer)
         }
         .frame(width: size, height: size)
         .overlay {

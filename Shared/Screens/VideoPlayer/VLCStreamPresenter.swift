@@ -665,8 +665,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// The two-finger double tap: play / pause, the gesture VoiceOver users
     /// expect from any player — the same path as the on-screen button.
     override func accessibilityPerformMagicTap() -> Bool {
+        guard !isOverlayOwningInput, mediaConfirmedOpen else { return false }
         playPauseTapped()
         return true
+    }
+
+    /// True while something other than the transport owns the screen — the
+    /// teardown, an alert (error, leave confirmation), a picker, and on tvOS
+    /// the option panel or the end-of-series card. Those layers take the HUD
+    /// out of the focus map on purpose; a VoiceOver gesture must not bring it
+    /// back behind them, nor toggle a playback nobody can see.
+    private var isOverlayOwningInput: Bool {
+        if isTearingDown || errorAlert != nil || leaveConfirmationAlert != nil || pickerPresented {
+            return true
+        }
+        #if os(tvOS)
+        if optionPanel != nil || endOfSeriesCard != nil { return true }
+        #endif
+        return false
     }
 
     #if os(iOS)
@@ -683,6 +699,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func voiceOverStatusChanged() {
         if UIAccessibility.isVoiceOverRunning {
             hideControlsWorkItem?.cancel()
+            guard !isOverlayOwningInput else { return }
             showControls()
         } else if controlsVisible {
             scheduleHideControls()
