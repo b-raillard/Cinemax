@@ -328,3 +328,25 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
   - le geste magique et le retour du HUD à l'activation de VoiceOver attendent qu'aucune couche (alerte, sélecteur, panneau d'options tvOS, carte de fin de série) ne tienne l'écran, et le geste magique attend un média ouvert ;
   - toast : annonce via `UIAccessibility.post`, action « Fermer » explicite et geste d'échappement sur l'élément combiné.
   - Non traité, antérieur au lot : la coche blanche des pastilles jaune et cyan en mode sombre (~1,6:1).
+
+**Lot 5 — fait, sauf les points reportés ci-dessous.**
+- Étape 1 (sans code applicatif) :
+  - CI : Xcode épinglé (26.5, avec avertissement listant les versions du runner tant que l'épinglage n'est pas confirmé), étapes de build sautées quand une PR ne touche que du Markdown ou `docs/` (le job répond quand même), build Release iOS + tvOS après les tests.
+  - T11 : licences Apache-2.0 de la famille swift-nio créditées, `URLQueryEncoder` retiré ; `dependency-audit.py` échoue désormais (au lieu d'avertir) sur un paquet non crédité ou une entrée qui n'est plus résolue.
+  - Docs archivées dans `docs/archive/` : `superpowers/`, `architecture/` (copies périmées de CLAUDE.md), `v2-todo.md`, le plan de test de la PR #109.
+  - CLAUDE.md découpé : 443 Ko → 39 Ko à la racine. Chaque règle est déplacée telle quelle dans un `CLAUDE.md` de dossier (chargé automatiquement) ou, pour les écrans de `Shared/Screens/`, dans `docs/rules/*.md` (index dans `Shared/Screens/CLAUDE.md`). Un script a vérifié qu'aucune ligne n'a été perdue. Deux contradictions corrigées au passage (liste « hors périmètre » des App Intents, sous-agent manquant). Le hook de fraîcheur vise maintenant le fichier de la zone modifiée et signale une racine au-delà de 45 Ko ; les trois sous-agents de revue et le skill design-system pointent vers les nouveaux fichiers.
+- Étape 2 (code, risque moyen) :
+  - Q5 : `NativeVideoPresenter`, `MenuConfigStore`, `IdentifyFlowModel` et 13 view-models admin ne prennent plus que les slices d'API qu'ils utilisent.
+  - P3 : les 14 liens carte / héros → fiche construisent leur destination à la poussée (`DeferredView`) et plus à chaque redessin de carte.
+  - P8 : `getItems` accepte un `ItemFieldSet` ; les requêtes qui n'alimentent que des cartes (rangées de genres, grilles filtrées, favoris, collections, historique) ne demandent plus `overview` ni `genres`. La source du héros garde les champs complets.
+  - P10 : les rangées de genres de la bibliothèque sont écrites une fois par lot, et pas du tout quand rien n'a changé.
+  - T3 : 30 des 47 `sleep` des tests remplacés par des attentes déterministes (`drain()`, `eventually`, `TestLatch`) ; les 17 restants mesurent un délai ou simulent une latence.
+  - A11y : l'état vu / en cours des cartes est annoncé par VoiceOver (valeur d'accessibilité, clés `card.status.*`).
+  - Q8 : `AppState` extrait dans `AppState.swift` ; son `didSet` sur `serverURL` est remplacé par un `imageBuilder` dérivé et mis en cache par URL.
+  - Q2 (#193, 2ᵉ extraction) : la décision de `handlePlaybackError` (réessayer, ignorer, abandonner, épingler ou relâcher le proxy, position de reprise) est la fonction pure `PlaybackRetryPolicy`, testée ; le contrôleur ne garde que les effets.
+- **Reportés, à faire avec un Mac et un appareil** :
+  - S7 (socket par en-tête) : touche l'identité du hub dont dépendent « Lire sur… » et Regarder ensemble ; seul un vrai serveur peut le valider.
+  - Retrait des `@preconcurrency import JellyfinAPI` (66 fichiers) : chaque retrait peut révéler des erreurs Swift 6 qu'on ne voit qu'en compilant.
+  - P7 (ThemeManager, accent arc-en-ciel), P13 (volume du journal libVLC), P14 (préchargement d'images) : à mesurer dans Instruments avant tout changement.
+  - SwiftLint : le job reste consultatif (`continue-on-error`) — une base de référence exige de lancer SwiftLint, impossible ici.
+  - P8, volet cache TTL de `getItems` : écarté. Les résultats portent le userData ; un cache ajouterait un risque de données périmées pour un gain faible, les écrans ayant déjà leurs gardes `hasLoaded`.
