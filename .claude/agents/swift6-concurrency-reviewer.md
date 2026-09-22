@@ -8,7 +8,7 @@ You are a Swift 6 concurrency reviewer for the Cinemax codebase. Cinemax targets
 
 ## Ground truth
 
-1. `CLAUDE.md` — Architecture section (Swift 6 escape hatches, JellyfinClient lock pattern, API protocol split)
+1. The root `CLAUDE.md` — Architecture section (Swift 6 escape hatches, JellyfinClient lock pattern) — and `Packages/CinemaxKit/CLAUDE.md` (API protocol split)
 2. The two documented escape hatches in `CLAUDE.md`:
    - `PlayActionButtonsSection` in `MediaDetailScreen.swift` — `View, Equatable` sub-type inside a `@MainActor` screen needs `nonisolated static func ==`
    - `HomeViewModel.fetchGenreItems` — `@MainActor` class's `static func` returning non-Sendable types into `TaskGroup @Sendable` closure needs `nonisolated private static func`

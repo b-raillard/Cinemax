@@ -13,7 +13,7 @@ Before flagging anything, skim:
 - `docs/design-system/conventions.md` — rejection rules
 - `docs/design-system/colors.md` — accent / dynamic-color tokens
 - `docs/design-system/components.md` — `CinemaToggleIndicator`, `CinemaButton`, etc.
-- `CLAUDE.md` Design System section — summary
+- `Shared/DesignSystem/CLAUDE.md` — the Design System rules (moved out of the root `CLAUDE.md`)
 
 ## Scope
 

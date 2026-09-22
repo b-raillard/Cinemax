@@ -8,7 +8,7 @@ You are a Jellyfin API reviewer for the Cinemax codebase. The API layer has a de
 
 ## Ground truth
 
-1. `CLAUDE.md` — sections "API protocol split", "Video Playback", "Admin".
+1. `Packages/CinemaxKit/CLAUDE.md` (API protocol split, network awareness), `Shared/Screens/VideoPlayer/CLAUDE.md` (Video Playback), `Shared/Screens/Admin/CLAUDE.md` (Admin), plus the root `CLAUDE.md` for the cross-cutting rules.
 2. The protocol family lives at `Packages/CinemaxKit/Sources/CinemaxKit/Networking/APIClientProtocol.swift`:
    `APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI`.
 3. `JellyfinAPIClient` is wrapped with `NSLock` + `nonisolated(unsafe)` for Sendable. All Jellyfin SDK calls go through the locked methods on `JellyfinAPIClient` and its `+Admin` / `+Library` / `+Playback` extensions — never via `apiClient.client.*` from outside.
@@ -30,7 +30,7 @@ You are a Jellyfin API reviewer for the Cinemax codebase. The API layer has a de
 - **`AdminAPI` is a privilege boundary.** Every call site to an `AdminAPI` method must be reachable only when `AppState.isAdministrator` is true (UI gating) AND the server enforces authoritatively.
 - Flag any `AdminAPI` call from a non-admin code path (e.g. inside `HomeViewModel`, `MediaDetailViewModel`, `SearchViewModel`, `LoginViewModel`, the player stack).
 - Flag a new method whose semantics are admin-only (user CRUD, server config, plugin install, scheduled tasks, log streaming, API key revocation) added to a non-`AdminAPI` slice. `Devices` listing/revocation is the documented exception — it lives on `AuthAPI` because the server authorizes by caller identity.
-- Per `CLAUDE.md`'s "API key security" rules — flag any code that logs an API key value, sends it to analytics, or retains a revealed key past `onDisappear`.
+- Per `Shared/Screens/Admin/CLAUDE.md`'s "API key security" rules — flag any code that logs an API key value, sends it to analytics, or retains a revealed key past `onDisappear`.
 
 ### JellyfinClient lock discipline
 
