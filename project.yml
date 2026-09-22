@@ -48,7 +48,13 @@ targets:
     platform: iOS
     sources:
       - path: iOS
+      # The per-area CLAUDE.md files (agent rules, 2026-09-22) live next to the
+      # code they govern. Swept as resources they would ship inside the app,
+      # and nine files named CLAUDE.md in one bundle is a "Multiple commands
+      # produce" build error.
       - path: Shared
+        excludes:
+          - "**/CLAUDE.md"
       - path: Resources
       # The Control Center / Action-button intent, shared with the widget
       # extension by SOURCE: the extension links none of our frameworks (widget
@@ -177,7 +183,10 @@ targets:
     platform: tvOS
     sources:
       - path: tvOS
+      # Same exclusion as the iOS target (per-area CLAUDE.md agent rules).
       - path: Shared
+        excludes:
+          - "**/CLAUDE.md"
       # AppShortcuts.strings carries the Siri phrases, and App Intents are
       # iOS-only here (every file in Shared/Intents/ is #if os(iOS) — none of
       # the surfaces they feed exist on tvOS). Bundling the phrases anyway is
