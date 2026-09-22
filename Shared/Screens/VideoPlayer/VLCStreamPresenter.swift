@@ -4655,7 +4655,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackError() {
         cancelOpenWatchdog()
         seeks.endSettle() // the media is being reloaded (or given up on)
-        if !didRetry {
+        // The decision is pure and unit-tested (`PlaybackRetryPolicy`); this
+        // method owns only its effects.
+        let decision = PlaybackRetryPolicy.decide(
+            didRetry: didRetry,
+            errorAlertShowing: errorAlert != nil,
+            retryPending: pendingRetryToken != nil,
+            usingProxy: usingProxy
+        )
+        let releaseStickyProxy: Bool
+        switch decision {
+        case .retry(let noteDirectFailure):
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
             // A direct attempt failed: pin the rest of the session to the proxy
@@ -4664,7 +4674,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // latching is exactly right on a network where `getaddrinfo` fails
             // for every URL, since the proxy is then the ONLY path that works
             // (measured: libVLC `cannot resolve` while URLSession returns 200).
-            if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
+            if noteDirectFailure { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
             // Armed NOW rather than after the await below: the failed attempt's
             // own trailing `.stopped` lands during it, and `beginOpenLoading` is
             // what tells the end gate to ignore it (and puts the spinner up).
@@ -4707,8 +4717,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 // so re-arm it and reset media state exactly like an episode
                 // swap. A fresh-open failure (never played, position 0)
                 // keeps its original `startTime` resume untouched.
-                if self.lastKnownPositionMs > 1000 {
-                    self.startTime = Double(self.lastKnownPositionMs) / 1000
+                if let resume = PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: self.lastKnownPositionMs) {
+                    self.startTime = resume
                     self.didSeekToStart = false
                     self.hasValidTime = false
                     self.mediaLengthMs = 0
@@ -4716,18 +4726,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.activateSessionThenPlay(media)
             }
             return
+        case .ignore:
+            // Already given up and on screen: a second signal of the SAME
+            // failure (its trailing `.stopped`, a late watchdog) must neither
+            // stack another alert nor release the server session twice. Or a
+            // retry is still readying the proxy: a late signal from the
+            // attempt it replaces is not the retry failing.
+            return
+        case .giveUp(let release):
+            releaseStickyProxy = release
         }
-        // Already given up and on screen: a second signal of the SAME failure
-        // (its trailing `.stopped`, a late watchdog) must neither stack another
-        // alert nor release the server session twice.
-        guard errorAlert == nil else { return }
-        // A retry is still readying the proxy: a late signal from the attempt
-        // it replaces is not the retry failing.
-        guard pendingRetryToken == nil else { return }
         logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
         // The last attempt failed THROUGH the proxy: don't leave every future
         // playback pinned to it (see `noteProxiedPlaybackFailed`).
-        if usingProxy { StreamTransportPolicy.shared.noteProxiedPlaybackFailed() }
+        if releaseStickyProxy { StreamTransportPolicy.shared.noteProxiedPlaybackFailed() }
         releaseServerSessionAfterFailure()
         // The user is about to see « Lecture impossible » on a device whose log
         // nobody can reach: the diagnostics EXPORT is iOS-only, so on an Apple
