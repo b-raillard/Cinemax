@@ -28,11 +28,13 @@ final class NativeVideoPresenter {
     private var itemId: String
     private let title: String
     private var startTime: Double?
-    /// True from open until the resume seek to `startTime` has completed (or
-    /// turned out not to apply). While it holds, every playback report carries
-    /// `startTime` instead of the player's clock, which reads 0/NaN until the
-    /// item is ready — see `PlaybackReporter.reportableSeconds`.
-    private var resumeSeekPending = false
+    /// A position the player was asked to reach and has not reached yet: the
+    /// resume point from open until its seek completes (or turns out not to
+    /// apply), and the playhead of a track switch until the rebuilt item is
+    /// back there. While set, every playback report carries it instead of the
+    /// player's clock, which reads 0/NaN until an item is ready — see
+    /// `PlaybackReporter.reportableSeconds`.
+    private var pendingResumeSeconds: Double?
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
@@ -123,12 +125,9 @@ final class NativeVideoPresenter {
                 guard let self, let info = self.playbackInfo else { return nil }
                 return .init(itemId: self.itemId, info: info, player: self.playerVC?.player)
             },
-            pendingResume: { [weak self] in
-                guard let self, self.resumeSeekPending else { return nil }
-                return self.startTime
-            }
+            pendingResume: { [weak self] in self?.pendingResumeSeconds }
         )
-        self.resumeSeekPending = (startTime ?? 0) > 0
+        self.pendingResumeSeconds = (startTime ?? 0) > 0 ? startTime : nil
         self.skipSegments = SkipSegmentController(
             apiClient: apiClient, loc: loc,
             playerVCProvider: { [weak self] in self?.playerVC }
@@ -357,10 +356,10 @@ final class NativeVideoPresenter {
                         if let st, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
                             avPlayer?.seek(to: CMTime(seconds: target, preferredTimescale: 600),
                                           toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                                Task { @MainActor in self?.resumeSeekPending = false }
+                                Task { @MainActor in self?.pendingResumeSeconds = nil }
                             }
                         } else {
-                            self?.resumeSeekPending = false
+                            self?.pendingResumeSeconds = nil
                         }
                     case .failed:
                         logger.error("AVPlayer failed: \(item.error?.localizedDescription ?? "unknown")")
@@ -424,10 +423,10 @@ final class NativeVideoPresenter {
                     if let st = startTime, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
                         player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
                                     toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                            Task { @MainActor in self?.resumeSeekPending = false }
+                            Task { @MainActor in self?.pendingResumeSeconds = nil }
                         }
                     } else {
-                        self?.resumeSeekPending = false
+                        self?.pendingResumeSeconds = nil
                     }
                 case .failed:
                     logger.error("AVPlayer failed on direct URL fallback: \(item.error?.localizedDescription ?? "unknown")")
@@ -533,7 +532,11 @@ final class NativeVideoPresenter {
 
     private func switchTracks(audioIndex: Int?, subtitleIndex: Int?) async {
         guard let vc = playerVC, let player = vc.player else { return }
-        let currentTime = player.currentTime().seconds
+        // Where the rebuilt item must land: a resume not reached yet (a switch
+        // made before the first `readyToPlay`) wins over the clock, which
+        // still reads 0 then.
+        let clock = player.currentTime().seconds
+        let currentTime = pendingResumeSeconds ?? (clock.isFinite ? clock : 0)
 
         guard let info = try? await apiClient.getPlaybackInfo(
             itemId: itemId, userId: userId, maxBitrate: maxBitrate,
@@ -559,13 +562,21 @@ final class NativeVideoPresenter {
             itemEndObserver = nil
         }
         playerObservation?.invalidate()
-        playerObservation = playerItem.observe(\.status) { item, _ in
+        // Reports during the rebuild carry the position being restored.
+        pendingResumeSeconds = currentTime > 0 ? currentTime : nil
+        playerObservation = playerItem.observe(\.status) { [weak self] item, _ in
             Task { @MainActor in
-                guard item.status == .readyToPlay, currentTime > 0 else { return }
+                guard item.status == .readyToPlay else { return }
+                guard currentTime > 0 else {
+                    self?.pendingResumeSeconds = nil
+                    return
+                }
                 player.seek(
                     to: CMTime(seconds: currentTime, preferredTimescale: 600),
                     toleranceBefore: .zero, toleranceAfter: .zero
-                )
+                ) { [weak self] _ in
+                    Task { @MainActor in self?.pendingResumeSeconds = nil }
+                }
                 player.play()
             }
         }
@@ -602,7 +613,7 @@ final class NativeVideoPresenter {
             // to the first item presented.
             self.itemId = ep.id
             self.startTime = nil
-            self.resumeSeekPending = false
+            self.pendingResumeSeconds = nil
             self.previousEpisode = prev
             self.nextEpisode = next
             self.audioTracks = info.audioTracks

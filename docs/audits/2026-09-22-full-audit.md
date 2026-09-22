@@ -272,3 +272,18 @@ Annonces VoiceOver des toasts · contraste des accents jaune/cyan/orange · HUD 
 
 **Lot 5 — structure (continu)**
 Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) · extraction d'`AppState` · slices d'API · `@preconcurrency` · perf P2, P3, P7, P8, P10 (Instruments d'abord pour P7, P13, P14) · CI (Xcode épinglé, `paths-ignore`, Release, SwiftLint réel ou supprimé) · licences · archivage de `docs/`.
+
+---
+
+## 11. Avancement (PR #255)
+
+**Lot 1 — fait.** B1, B2/B9, B3, B6, B7, P1, P4/P5, U1, U2, `NSFaceIDUsageDescription`, « percent ». En plus : `MediaDetailViewModel.load()` ne remettait jamais `errorMessage` à zéro (« Réessayer » ne pouvait pas effacer l'écran d'erreur). Relecture adversariale intégrée : l'idempotence du stop ne verrouille qu'un `.sessionEnded` ; la reprise sur erreur de `handleFailedEpisodeNav` / `reResolveAndResume` est limitée au cas d'un retry abandonné ; les tests tier-2 n'utilisent plus `UserDefaults.standard` ; la position en attente du lecteur natif couvre aussi un changement de piste ; `currentUser` est comparé sur les champs affichés.
+
+**Lot 2 — fait, sauf un point.**
+- S1 + Q1 : groupe Keychain privé en tête des entitlements des deux apps, migration unique par `SecItemUpdate` ; écritures « mise à jour puis ajout » ; `getServers` journalise et met de côté un registre illisible. **À valider sur appareil signé** (attribut `agrp`).
+- S2 : le plafond est envoyé comme l'âge lui-même (`"12"`), lu tel quel par tous les serveurs supportés (vérifié dans les sources 10.9 → 12.0) ; la recherche filtre aussi localement.
+- S3 : fiche atteinte par identifiant → état « contenu restreint » et lecture automatique refusée. Trou restant : une carte des rails Reprendre / À suivre lance la lecture sans passer par la fiche.
+- S4 : Face ID armé sur le jeu biométrique enrôlé ; un visage ajouté impose le code.
+- S5/S6 : plus de jeton dans les URL d'images du Top Shelf, des chapitres et du trickplay.
+- S7 : session du socket éphémère. **Reporté au lot 3** : l'authentification du socket par en-tête, car l'URL tokenisée sert aussi de clé d'identité au `JellyfinSocketHub` (il faut changer `RealtimeSocketAPI` pour rendre une requête et comparer le jeton).
+- S10 : `permissions: contents: read` sur `ci.yml`, actions épinglées par SHA, somme SHA-256 de xcodegen vérifiée, revue Claude sans Dependabot et avec groupe de concurrence.

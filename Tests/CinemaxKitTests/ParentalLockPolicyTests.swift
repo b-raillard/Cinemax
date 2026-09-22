@@ -204,4 +204,28 @@ struct ParentalLockPolicyTests {
         #expect(ParentalLockPolicy.constantTimeEquals(Data([1, 2, 3]), Data([1, 2, 3])))
         #expect(ParentalLockPolicy.constantTimeEquals(Data(), Data()))
     }
+
+    // MARK: - Biométrie (audit 2026-09-22, S4)
+
+    /// Le code de l'appareil suffit pour AJOUTER un visage ou un doigt : le
+    /// raccourci ne doit valoir que pour le jeu biométrique sur lequel il a été
+    /// armé, et seul le code parental le réarme.
+    @Test("La biométrie n'ouvre que le jeu enrôlé au moment de l'armement")
+    func biometricsRequireTheArmedSet() {
+        let armed = Data([1, 2, 3])
+        #expect(ParentalLockPolicy.biometricsAllowed(armedState: armed, currentState: armed))
+        #expect(!ParentalLockPolicy.biometricsAllowed(armedState: armed, currentState: Data([1, 2, 4])),
+                "un visage ajouté change l'état")
+        #expect(!ParentalLockPolicy.biometricsAllowed(armedState: nil, currentState: armed),
+                "jamais armé (ou armé avant ce correctif) : le code d'abord")
+        #expect(!ParentalLockPolicy.biometricsAllowed(armedState: armed, currentState: nil))
+    }
+
+    @Test("Un identifiant enregistré avant l'état biométrique se décode toujours")
+    func legacyCredentialDecodes() throws {
+        let legacy = #"{"salt":"AQI=","hash":"AwQ=","iterations":10,"failedAttempts":0,"biometricsEnabled":true}"#
+        let decoded = try JSONDecoder().decode(ParentalLockCredential.self, from: Data(legacy.utf8))
+        #expect(decoded.biometricsEnabled)
+        #expect(decoded.biometricDomainState == nil)
+    }
 }

@@ -45,13 +45,15 @@ final class PlaybackReporter {
     private let context: ContextProvider
     private let timeSource: TimeSource?
     private let pendingResume: PendingResumeSource?
-    /// Play sessions whose stop has already been reported. Jellyfin records
-    /// `PositionTicks` from EVERY stop it receives, so a second report of the
-    /// same session (the end-of-series card's « Terminé » after the end branch
-    /// already stopped it) could only overwrite the first with a worse
-    /// position. Cleared per session by `reportStart`, which is what lets a
-    /// failed episode swap re-open and later stop the session it had closed.
-    private var stoppedPlaySessionIds: Set<String> = []
+    /// Play sessions whose END has already been reported. Jellyfin records
+    /// `PositionTicks` from EVERY stop it receives, so a second end report of
+    /// the same session (the end-of-series card's « Terminé » after the end
+    /// branch already ended it) could only overwrite the first with a worse
+    /// position. Only a `.sessionEnded` latches: after an `.episodeSwap` stop
+    /// the closing stop must still go out — it carries the position reached
+    /// since (a failed swap leaves the old episode playing) and it is the one
+    /// that announces tier-2. Cleared per session by `reportStart`.
+    private var endedPlaySessionIds: Set<String> = []
     private var tickCounter = 0
     /// Separate from `tickCounter`: the cadence differs (30 s vs 10 s) and the
     /// keep-alive carries conditions progress reporting doesn't have.
@@ -126,7 +128,7 @@ final class PlaybackReporter {
 
     func reportStart(startTime: Double?) {
         guard let ctx = context() else { return }
-        if let id = ctx.info.playSessionId { stoppedPlaySessionIds.remove(id) }
+        if let id = ctx.info.playSessionId { endedPlaySessionIds.remove(id) }
         let positionTicks = startTime.map { Self.positionTicks(fromSeconds: $0) } ?? 0
         let client = apiClient
         let uid = userId
@@ -153,7 +155,8 @@ final class PlaybackReporter {
     func reportStop(reason: PlaybackStopReason = .sessionEnded) {
         guard let ctx = context() else { return }
         if let id = ctx.info.playSessionId {
-            guard stoppedPlaySessionIds.insert(id).inserted else { return }
+            guard !endedPlaySessionIds.contains(id) else { return }
+            if reason == .sessionEnded { endedPlaySessionIds.insert(id) }
         }
         let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient

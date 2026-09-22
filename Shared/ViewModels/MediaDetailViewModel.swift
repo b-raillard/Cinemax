@@ -12,6 +12,17 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaDetail")
 final class MediaDetailViewModel {
     var item: BaseItemDto?
     var similarItems: [BaseItemDto] = []
+    /// The work on screen is rated above the Privacy & Security age cap.
+    ///
+    /// Lists never show such a title — `getItems` / search filter server-side,
+    /// the other rails locally — but a fiche can also be reached BY ID, with no
+    /// list in between: an inbound « Lire sur… » from another account, a Watch
+    /// Together queue, a saved Siri shortcut, a `cinemax://` link. Those routes
+    /// used to open the fiche and start playback on their own, so an adult
+    /// holding the remote-control permission could start an 18-rated film on a
+    /// child's capped Apple TV with no interaction at all. The fiche now shows
+    /// a restricted state instead, and the automatic playback is refused.
+    private(set) var isAgeRestricted = false
     /// The side task filling `similarItems` (see `loadSimilar`). Internal so a
     /// test can await it instead of racing it.
     private(set) var similarTask: Task<Void, Never>?
@@ -182,6 +193,7 @@ final class MediaDetailViewModel {
         guard loadGeneration == generation else { return }
         isFavorite = item?.userData?.isFavorite ?? false
         isPlayed = item?.userData?.isPlayed ?? false
+        isAgeRestricted = !Self.passesAgeCap(item?.officialRating)
         // « Titres similaires » is a side task too. It used to sit on the
         // critical path: `/Similar` is one of the costliest queries a Jellyfin
         // server answers, its row lives below the fold, and the fiche waited
@@ -586,6 +598,15 @@ final class MediaDetailViewModel {
         }
 
         rebuildNavigationMaps()
+    }
+
+    /// Whether a rating clears the Privacy & Security cap. Unrated passes —
+    /// see `ContentRatingClassifier` for why missing data is not hidden.
+    static func passesAgeCap(_ rating: String?) -> Bool {
+        ContentRatingClassifier.passes(
+            rating: rating,
+            maxAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        )
     }
 
     /// Fills « Titres similaires » off the critical path. Silent on failure —

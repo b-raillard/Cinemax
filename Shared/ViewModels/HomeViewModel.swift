@@ -743,14 +743,21 @@ final class HomeViewModel {
     /// tolerate brief staleness". Both halves were wrong: a nil navigator also
     /// silences autoplay-next and the end-of-series card, and a card that has
     /// just ENTERED a rail has no entry at all rather than a stale one.
-    func refreshUserDataRails(using appState: AppState) async {
+    /// The two switches are parameters (defaulting to the stored preferences)
+    /// so a test can state them instead of racing other suites over
+    /// `UserDefaults.standard`.
+    func refreshUserDataRails(
+        using appState: AppState,
+        showNextUp: Bool = HomeRailPreferences.showNextUp,
+        showFavorites: Bool = HomeRailPreferences.showFavorites
+    ) async {
         // Same gate as `load()`: a rail the user switched off is not fetched —
         // this ran on every playback end and every watched toggle anywhere in
         // the app, so the two gated rails cost two requests each time for
         // cards nobody could see. Resume stays ungated: it feeds the hero.
         async let resume: Void = refreshResume(using: appState)
-        async let nextUp: Void = HomeRailPreferences.showNextUp ? refreshNextUp(using: appState) : ()
-        async let favorites: Void = HomeRailPreferences.showFavorites ? refreshFavorites(using: appState) : ()
+        async let nextUp: Void = showNextUp ? refreshNextUp(using: appState) : ()
+        async let favorites: Void = showFavorites ? refreshFavorites(using: appState) : ()
         _ = await (resume, nextUp, favorites)
         // « Parce que vous avez vu … » is userData-dependent twice over: its
         // SEED is the last played item — finishing a film is exactly when it

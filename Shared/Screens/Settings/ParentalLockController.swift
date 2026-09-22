@@ -105,7 +105,10 @@ final class ParentalLockController {
             ParentalLockPolicy.verify(pin: pin, against: credential)
         }.value
         switch verdict {
-        case .unlocked(let updated):
+        case .unlocked(var updated):
+            // The parent's PIN is what (re-)arms the biometric shortcut on the
+            // enrolled set as it stands now — see `biometricsAllowed`.
+            if updated.biometricsEnabled { updated.biometricDomainState = Self.currentBiometricDomainState() }
             persist(updated)
             isUnlocked = true
         case .wrong(let updated, _):
@@ -135,6 +138,16 @@ final class ParentalLockController {
         let context = LAContext()
         context.localizedFallbackTitle = ""
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) else { return false }
+        // A face or finger added since the shortcut was armed (the device
+        // passcode suffices for that) must not open the lock: refuse, and let
+        // the PIN pad — which re-arms on success — take over.
+        guard ParentalLockPolicy.biometricsAllowed(
+            armedState: credential.biometricDomainState,
+            currentState: context.evaluatedPolicyDomainState
+        ) else {
+            lockLog.notice("biometric set changed since the lock was armed — PIN required")
+            return false
+        }
         // The completion handler is invoked off the main actor, hence `@Sendable`
         // — the same rule the speech-recognition callbacks documented the hard way.
         let success = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
@@ -155,6 +168,18 @@ final class ParentalLockController {
     }
     #endif
 
+    /// The current `evaluatedPolicyDomainState`, or `nil` where biometrics are
+    /// unavailable (it is only populated after `canEvaluatePolicy`).
+    private static func currentBiometricDomainState() -> Data? {
+        #if os(iOS)
+        let context = LAContext()
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) else { return nil }
+        return context.evaluatedPolicyDomainState
+        #else
+        return nil
+        #endif
+    }
+
     // MARK: - Enrolment
 
     /// Enrols (or replaces) the PIN. Returns `false` when the PIN fails
@@ -171,7 +196,8 @@ final class ParentalLockController {
         let made = await Task.detached(priority: .userInitiated) {
             ParentalLockPolicy.makeCredential(pin: pin, biometricsEnabled: effectiveBiometrics)
         }.value
-        guard let fresh = made else { return false }
+        guard var fresh = made else { return false }
+        if fresh.biometricsEnabled { fresh.biometricDomainState = Self.currentBiometricDomainState() }
         guard persist(fresh) else { return false }
         // Enrolling from an open screen must leave it open: the parent is
         // standing right there, and re-asking for the PIN they just chose reads
@@ -187,6 +213,8 @@ final class ParentalLockController {
         let effective = enabled && Self.biometricsAvailable
         guard credential.biometricsEnabled != effective else { return }
         credential.biometricsEnabled = effective
+        // Reachable only from behind an open gate, i.e. the parent is here.
+        credential.biometricDomainState = effective ? Self.currentBiometricDomainState() : nil
         persist(credential)
     }
 

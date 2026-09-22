@@ -50,19 +50,19 @@ public enum ContentRatingClassifier {
         return age(forRating: rating) <= maxAge
     }
 
-    /// Canonical rating string to send as `maxOfficialRating` on server-side
-    /// `/Items` queries for a given user-selected maximum content age.
-    /// Jellyfin's server resolves this to its internal parental-rating score
-    /// and drops anything rated above it. Returns `nil` when `maxAge <= 0`
-    /// (no filter).
+    /// The `maxOfficialRating` to send on server-side `/Items` queries for a
+    /// user-selected maximum content age: **the age itself, as an integer
+    /// string** (`"12"`), or `nil` when `maxAge <= 0` (no filter).
+    ///
+    /// Every supported server (10.9, 10.10, 10.11, 12.0 — verified in
+    /// `LocalizationManager.GetRatingLevel` / `GetRatingScore`) parses an
+    /// integer rating straight into that age before any country table is
+    /// consulted, so this is exact everywhere. The US codes this used to send
+    /// were not: 12 → `PG-13` and 16 → `TV-MA` score 13 and 17 on 10.10+, so an
+    /// over-the-ceiling title reached the library, search and Siri while Home
+    /// (filtered locally) hid it; and on 10.9, whose table scores `TV-PG` at
+    /// 13, even the 10+ ceiling let 13-rated titles through.
     public static func maxOfficialRatingCode(forAge maxAge: Int) -> String? {
-        switch maxAge {
-        case ...0:   return nil
-        case 1...10: return "TV-PG"
-        case 11...12: return "PG-13"
-        case 13...14: return "TV-14"
-        case 15...16: return "TV-MA"
-        default:     return "NC-17"
-        }
+        maxAge > 0 ? String(maxAge) : nil
     }
 }

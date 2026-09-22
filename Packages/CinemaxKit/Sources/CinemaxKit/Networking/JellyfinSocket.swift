@@ -70,8 +70,14 @@ public actor JellyfinSocket {
         // `wss://` to a self-signed server needs the same explicit approval as
         // every REST call, or « Lire sur… » and Watch Together would be the two
         // features that stayed broken after the user trusted the certificate.
+        //
+        // Ephemeral and cache-less like every other authenticated session the
+        // app owns: `.default` persisted cookies (a reverse proxy's SSO cookie,
+        // for one) and a disk `URLCache` for a connection that carries the token.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
         self.session = URLSession(
-            configuration: .default,
+            configuration: configuration,
             delegate: ServerTrustDelegate.shared,
             delegateQueue: nil
         )

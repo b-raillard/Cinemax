@@ -307,13 +307,11 @@ struct HomeRailGatingTests {
 
     @Test("switched off, the tier-2 refresh skips Next Up and Favorites too")
     func tierTwoSkipsDisabledNextUpAndFavorites() async {
-        setRails(nextUp: false, favorites: false, becauseYouWatched: false)
-        defer { clearRails() }
-
         let api = MockAPIClient()
         let vm = HomeViewModel()
 
-        await vm.refreshUserDataRails(using: makeAppState(api: api))
+        // Stated, not stored: no `UserDefaults.standard` race with other suites.
+        await vm.refreshUserDataRails(using: makeAppState(api: api), showNextUp: false, showFavorites: false)
 
         #expect(api.getResumeItemsCallCount == 1, "the control: the tier-2 refresh did run")
         #expect(api.getNextUpEpisodesCallCount == 0)

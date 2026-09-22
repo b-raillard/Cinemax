@@ -2643,11 +2643,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         scheduleHideControls()
     }
 
-    /// Downloads one chapter thumbnail. Sends the token both as the
-    /// `ApiKey` query param (what Jellyfin image endpoints expect) and as the
-    /// Authorization header, so it works regardless of server hardening.
+    /// Downloads one chapter thumbnail, token in the Authorization header only:
+    /// the image endpoint is anonymous anyway, and a token in the URL only
+    /// reached reverse-proxy logs and made the cache key change with it.
     nonisolated private static func loadImage(url: URL, token: String?) async -> Data? {
-        let authed = VLCStreamPresenter.authedURL(url, token: token)
+        let authed = url
         guard let data = await AuthenticatedImageFetch.data(from: authed, token: token) else {
             #if DEBUG
             logger.debug("CINEMAX-CHAPTERIMG ▸ request failed \(redactedURL(authed))")
@@ -3831,6 +3831,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         closeOptionPanelForMediaChange()
         #endif
         navGeneration += 1
+        // A retry in flight is abandoned by this nav; if the nav then fails,
+        // nothing is playing and nothing would end the retry's spinner.
+        let abandonedRetry = pendingRetryToken != nil
         pendingRetryToken = nil // a retry of the media being replaced is moot
         let gen = navGeneration
         reporter?.reportStop(reason: .episodeSwap)
@@ -3845,7 +3848,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
-                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay)
+                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay, abandonedRetry: abandonedRetry)
                 return
             }
             // Dismissed mid-nav, or a newer nav superseded this one: applying
@@ -3921,7 +3924,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// - autoplay at end of episode: nothing is playing any more, so there is no
     ///   session to restore. Surface a terminal alert with a single dismiss
     ///   action, mirroring `showEndOfSeriesOverlay`'s end-of-playback precedent.
-    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, abandonedRetry: Bool) {
         // A teardown, or a newer nav that already re-armed the timers, owns the
         // session now — recovering here would double-arm / resurrect state.
         guard !isTearingDown, gen == navGeneration else { return }
@@ -3943,12 +3946,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         reporter?.resetTicking()
         reporter?.reportStart(startTime: pendingResumeSecondsForReport ?? Double(currentMs) / 1000.0)
         startProgressTimer()
-        // "The episode on screen keeps playing" only holds when it IS playing.
-        // A Next pressed during an error retry's window (the retry token was
-        // just cleared by this nav, and the watchdog cancelled by the retry)
-        // leaves nothing that could ever end the spinner — hand the media back
-        // to the error path, which retries once or surfaces the alert.
-        guard mediaConfirmedOpen, !engineIsStopped else {
+        // "The episode on screen keeps playing" does not hold when this nav
+        // abandoned an error retry: the retry's watchdog was cancelled and its
+        // token just cleared, so nothing could ever end its spinner. That retry
+        // was the one allowed attempt, so the error path surfaces the alert.
+        // Deliberately scoped to that case — an initial open still in flight
+        // keeps its own watchdog, and a finished episode must not be reopened.
+        guard !abandonedRetry else {
             handlePlaybackError()
             return
         }
@@ -4821,6 +4825,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         seeks.cancelPending()
         isReResolvingAfterWake = true
         navGeneration += 1
+        let supersededRetry = pendingRetryToken != nil
         pendingRetryToken = nil // a retry of the media being replaced is moot
         let gen = navGeneration
         let resumeItemId = itemId
@@ -4840,15 +4845,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 // cancelled the watchdog. Without re-arming it, nothing would ever
                 // end that spinner. A no-op if the media is actually playing.
                 guard !self.isTearingDown, gen == self.navGeneration else { return }
-                // The watchdog alone cannot end a spinner here: its guard reads
-                // `hasValidTime` / `lengthMs`, which still describe the media from
-                // before the sleep, so it fired and did nothing — an infinite
-                // spinner (or a frozen frame) with no alert on a Wi-Fi that was
-                // not back yet. When nothing is actually playing, hand the media
-                // to the error path, which retries once or surfaces the alert.
-                if self.engineIsStopped || !self.mediaConfirmedOpen {
+                // The watchdog alone could not end a spinner here: its guard
+                // reads `hasValidTime` / `lengthMs`, which still described the
+                // media from before the sleep, so it fired and did nothing — an
+                // infinite spinner (or a frozen frame) with no alert on a Wi-Fi
+                // that was not back yet.
+                if supersededRetry {
+                    // That retry was the one allowed attempt: surface the alert.
                     self.handlePlaybackError()
                 } else {
+                    if self.engineIsStopped {
+                        // Nothing plays: make the watchdog see it, so it hands
+                        // the media to the error path (retry, then alert).
+                        self.hasValidTime = false
+                        self.mediaLengthMs = 0
+                    }
                     self.scheduleOpenWatchdog()
                 }
                 return

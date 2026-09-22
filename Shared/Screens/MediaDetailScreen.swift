@@ -171,6 +171,8 @@ struct MediaDetailScreen: View {
                 LoadingStateView()
             } else if let error = viewModel.errorMessage {
                 errorView(error)
+            } else if viewModel.isAgeRestricted {
+                ageRestrictedView
             } else if let item = viewModel.item {
                 detailContent(item)
             }
@@ -1083,11 +1085,21 @@ struct MediaDetailScreen: View {
         let groupTicks = appState.pendingIntentPlaybackStartTicks
         appState.pendingIntentPlaybackStartTicks = nil
         guard let item = viewModel.item else { return }
+        // Every producer of this request reaches the fiche BY ID, past the
+        // lists that filter on the age cap — refuse rather than play (the
+        // screen itself shows the restricted state). An episode is checked on
+        // its own rating too: the series' may be absent or milder.
+        let requestedEpisode = viewModel.episodes.first(where: { $0.id == viewModel.itemId })
+        guard !viewModel.isAgeRestricted,
+              MediaDetailViewModel.passesAgeCap(requestedEpisode?.officialRating) else {
+            toast.info(loc.localized("detail.restricted.title"))
+            return
+        }
 
         // A request naming an episode plays THAT episode — the view model has
         // resolved the screen up to the parent series, so the Play button's
         // next-up target would be the wrong one here.
-        if let episode = viewModel.episodes.first(where: { $0.id == viewModel.itemId }) {
+        if let episode = requestedEpisode {
             let ticks = episode.userData?.playbackPositionTicks ?? 0
             let played = episode.userData?.isPlayed ?? false
             let localResume = (ticks > 0 && !played) ? ticks.jellyfinSeconds : nil
@@ -1745,6 +1757,23 @@ struct MediaDetailScreen: View {
         ErrorStateView(message: message, retryTitle: loc.localized("action.retry")) {
             Task { await viewModel.load(using: appState, loc: loc, cardActions: cardActions) }
         }
+    }
+
+    /// Shown instead of the fiche when the work is rated above the Privacy &
+    /// Security cap (see `MediaDetailViewModel.isAgeRestricted`). Focusable on
+    /// tvOS: this fiche is also the deep-link cover's content, and a cover
+    /// with no focusable view lets Menu tear down the screen under it.
+    private var ageRestrictedView: some View {
+        EmptyStateView(
+            systemImage: "lock.fill",
+            title: loc.localized("detail.restricted.title"),
+            subtitle: loc.localized("detail.restricted.subtitle")
+        )
+        .accessibilityElement(children: .combine)
+        #if os(tvOS)
+        .focusable()
+        .focusEffectDisabled()
+        #endif
     }
 
     // MARK: - Adaptive Sizing

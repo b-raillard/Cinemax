@@ -249,18 +249,19 @@ final class ContentProvider: TVTopShelfContentProvider {
         }
     }
 
-    /// The ONE place the token legitimately stays in a URL: these URLs are handed
-    /// to `TVTopShelfSectionedItem.setImageURL`, i.e. the SYSTEM fetches them —
-    /// we never issue the request, so header auth is impossible here.
-    /// `ApiKey`, never `api_key`: the legacy spelling is rejected by Jellyfin
-    /// 12.0's default (`EnableLegacyAuthorization = false`).
+    /// These URLs are handed to `TVTopShelfSectionedItem.setImageURL`, i.e. the
+    /// SYSTEM fetches them, so no header can ride along — and none is needed:
+    /// `GET /Items/{id}/Images/{type}` carries no `[Authorize]` on any supported
+    /// server (verified 10.9 → 12.0), which is why the app's own posters load
+    /// with no auth at all. The `ApiKey` this used to append bought nothing and
+    /// put a non-expiring token in PineBoard's cache and in every reverse-proxy
+    /// access log on each shelf refresh (audit 2026-09-22, S5).
     private static func imageURL(session: Session, itemId: String, type: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/Items/\(itemId)/Images/\(type)", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "maxWidth", value: String(maxWidth)),
-            URLQueryItem(name: "quality", value: "90"),
-            URLQueryItem(name: "ApiKey", value: session.accessToken)
+            URLQueryItem(name: "quality", value: "90")
         ]
         return comps.url
     }

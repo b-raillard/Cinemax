@@ -212,3 +212,22 @@ struct ExtensionSessionSkipDecisionTests {
         #expect(!ExtensionSessionBridge.isCurrent(session: nil, keychainData: data))
     }
 }
+
+/// Audit 2026-09-22 (S1) : les éléments « privés » atterrissaient dans le groupe
+/// partagé avec les extensions. La migration déplace exactement cette liste —
+/// elle doit couvrir tout ce que l'app stocke, SAUF la session partagée.
+@Suite("Keychain private accounts")
+struct KeychainPrivateAccountsTests {
+    @Test("Every app-private account migrates; the shared session never does")
+    func privateAccountsCoverEverythingButTheSharedSession() {
+        let accounts = Set(KeychainService.privateAccounts)
+        #expect(!accounts.contains(KeychainService.sharedSessionAccount))
+        for account in [
+            "access_token", "server_url", "user_session", "device_id",
+            KeychainService.serversAccount, KeychainService.activeServerIdAccount,
+            KeychainService.trustedCertificatesAccount, KeychainService.parentalLockAccount,
+        ] {
+            #expect(accounts.contains(account), "\(account) must leave the shared group")
+        }
+    }
+}

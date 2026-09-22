@@ -353,7 +353,10 @@ extension JellyfinAPIClient {
             params.enableImageTypes = [.primary]
             params.imageTypeLimit = 1
             let response = try await client.send(Paths.getItems(parameters: params))
-            return response.value.items ?? []
+            // Defense in depth on top of `maxOfficialRating`: search feeds Siri
+            // as well as the screen, and — unlike the paginated grids, whose
+            // offsets would drift — it can afford a local pass.
+            return applyRatingFilter(response.value.items ?? [])
         } catch {
             notifyIfUnauthorized(error)
             throw error

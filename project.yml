@@ -73,7 +73,11 @@ targets:
         # UserDefaults. $(AppIdentifierPrefix) expands to the team id at sign
         # time. Requires "Keychain Sharing" enabled on the App IDs for App
         # Store distribution.
+        # The app's OWN group comes FIRST: group-less Keychain writes land in the
+        # first group listed, and with the shared one alone every token and the
+        # parental lock were readable by the extensions (see KeychainService).
         keychain-access-groups:
+          - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
           - $(AppIdentifierPrefix)com.cinemax.shared
         # Universal Links (iOS only — tvOS has none). The host must serve
         # `/.well-known/apple-app-site-association` at its ROOT (see
@@ -196,7 +200,9 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.cinemax.shared
+        # Own group first — same reason as the iOS target.
         keychain-access-groups:
+          - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
           - $(AppIdentifierPrefix)com.cinemax.shared
     info:
       path: tvOS/Info.plist

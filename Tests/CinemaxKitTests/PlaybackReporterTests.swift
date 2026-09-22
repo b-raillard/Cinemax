@@ -384,7 +384,26 @@ struct PlaybackReporterTests {
         #expect(mock.stopCount == 1)
     }
 
-    @Test("reportStart rouvre une session arrêtée (navigation d'épisode ratée)")
+    @Test("Un stop de changement d'épisode ne bloque pas le stop de fin de session")
+    func sessionEndAfterEpisodeSwapStillGoesOut() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        // Navigation ratée : le stop `.episodeSwap` part, l'ancien épisode
+        // continue, puis la fermeture doit encore rapporter sa position.
+        reporter.reportStop(reason: .episodeSwap)
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.stopCount == 2)
+    }
+
+    @Test("reportStart rouvre une session terminée")
     func startReopensStoppedSession() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
@@ -393,7 +412,7 @@ struct PlaybackReporterTests {
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
-        reporter.reportStop(reason: .episodeSwap)
+        reporter.reportStop()
         reporter.reportStart(startTime: 42)
         reporter.reportStop()
         for _ in 0..<200 where mock.stopCount < 2 {

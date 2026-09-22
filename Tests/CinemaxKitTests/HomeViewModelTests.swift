@@ -339,7 +339,7 @@ struct HomeViewModelTests {
         ep.seriesID = "series-9"
         api.stubbedNextUpItems = [ep]
 
-        await vm.refreshUserDataRails(using: appState)
+        await vm.refreshUserDataRails(using: appState, showNextUp: true, showFavorites: true)
 
         let nav = vm.nextUpNavigation["e1"]
         let next = nav?.next?.id
@@ -462,7 +462,7 @@ struct HomeViewModelTests {
         #expect(vm.heroItem?.name == "Before", "pré-condition")
 
         api.stubbedResumeItems = [makeItem(name: "After")]
-        await vm.refreshUserDataRails(using: appState)
+        await vm.refreshUserDataRails(using: appState, showNextUp: false, showFavorites: false)
 
         #expect(vm.heroItem?.name == "After")
     }
@@ -476,7 +476,7 @@ struct HomeViewModelTests {
         api.stubbedNextUpItems = [makeItem(name: "NextUp")]
         let vm = HomeViewModel()
 
-        await vm.refreshUserDataRails(using: makeAppState(api: api))
+        await vm.refreshUserDataRails(using: makeAppState(api: api), showNextUp: true, showFavorites: true)
 
         // Hit exactly the three userData rails, once each.
         #expect(api.getResumeItemsCallCount == 1)

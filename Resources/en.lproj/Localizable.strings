@@ -922,6 +922,8 @@
 "accessibility.moreInfoAbout" = "More information about %@";
 "accessibility.resumeProgress" = "%d%% watched";
 "accessibility.criticRating" = "Critics: %d percent";
+"detail.restricted.title" = "Restricted content";
+"detail.restricted.subtitle" = "This title is above the age limit set in Privacy & Security.";
 
 // MARK: - Admin — formatting glyphs
 

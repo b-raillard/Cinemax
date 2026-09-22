@@ -59,14 +59,15 @@ struct ContentRatingClassifierTests {
 
     // MARK: maxOfficialRatingCode(forAge:)
 
-    @Test("Server-side ceiling code per age bucket")
+    /// Audit 2026-09-22 (S2) : les codes US envoyés jusque-là dépassaient le
+    /// plafond (12 → PG-13 = 13, 16 → TV-MA = 17 sur 10.10+ ; TV-PG = 13 sur
+    /// 10.9). Chaque serveur supporté lit un entier comme un âge : exact partout.
+    @Test("Server-side ceiling is the age itself, as an integer string")
     func serverCode() {
         #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 0) == nil)
         #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: -5) == nil)
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 10) == "TV-PG")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 12) == "PG-13")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 14) == "TV-14")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 16) == "TV-MA")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 18) == "NC-17")
+        for age in [10, 12, 14, 16, 18] {
+            #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: age) == String(age))
+        }
     }
 }

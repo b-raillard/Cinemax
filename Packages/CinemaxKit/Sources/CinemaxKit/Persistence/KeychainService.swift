@@ -21,6 +21,22 @@ private let keychainLog = Logger(subsystem: "com.cinemax", category: "Keychain")
 ///   total migration failure preserves today's exact single-server behavior.
 ///
 /// `device_id` stays global across servers (one device identity per install).
+///
+/// **RULE — "app-private" means the app's OWN access group, and it has to be
+/// first in `keychain-access-groups`.** Items written without an explicit
+/// `kSecAttrAccessGroup` land in the FIRST group of that entitlement, and until
+/// 2026-09-22 the only group listed was the shared extension one — so every
+/// token of every registered server, the parental-lock verifier and the
+/// certificate pins were readable by the widget and the Top Shelf. The app's
+/// own group (`$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)`) now leads
+/// the list on both app targets, and `migrateToPrivateAccessGroupIfNeeded()`
+/// moves the items already stored in the shared group. Only
+/// `extension_session` belongs there, and it always names the group explicitly.
+///
+/// **RULE — writes are UPDATE-then-ADD, never delete-then-add.** A failed add
+/// after a delete lost the value for good: the token (a silent logout next
+/// launch), the whole server registry, or the parental lock — which then read
+/// as "no lock", i.e. open.
 public struct KeychainService: Sendable {
     /// Keychain service name for every stored item. `internal` (not `private`)
     /// so the extension-contract test can lock it — the extensions
@@ -107,16 +123,30 @@ public struct KeychainService: Sendable {
     /// Account holding the active entry's id (UTF-8), or absent when none.
     static let activeServerIdAccount = "active_server_id"
 
+    /// Where an unreadable `servers` blob is set aside before the migration
+    /// re-seeds the list over it.
+    static let unreadableServersBackupAccount = "servers.unreadable"
+
     /// The registered servers. A decode failure returns `[]` — which also
     /// re-arms `migrateToMultiServerIfNeeded()` off the still-present legacy
-    /// trio, so a corrupt blob self-heals instead of stranding the user.
+    /// trio, so the ACTIVE server comes back instead of stranding the user.
+    /// Every other server of that blob would be overwritten by the re-seed, so
+    /// the raw bytes are copied aside first (once) and the failure is logged.
     public func getServers() -> [ServerEntry] {
         guard let data = getData(for: Self.serversAccount) else { return [] }
-        return (try? JSONDecoder().decode([ServerEntry].self, from: data)) ?? []
+        do {
+            return try JSONDecoder().decode([ServerEntry].self, from: data)
+        } catch {
+            keychainLog.fault("Server registry unreadable (\(data.count) bytes): \(error.localizedDescription, privacy: .public)")
+            if getData(for: Self.unreadableServersBackupAccount) == nil {
+                try? save(data: data, for: Self.unreadableServersBackupAccount)
+            }
+            return []
+        }
     }
 
-    /// Single atomic item (the private `save` is delete-then-add), so a partial
-    /// write can't leave a half-updated list.
+    /// Single item, written in place (see `save`), so a partial write can't
+    /// leave a half-updated list.
     public func saveServers(_ entries: [ServerEntry]) throws {
         try save(data: JSONEncoder().encode(entries), for: Self.serversAccount)
     }
@@ -135,7 +165,11 @@ public struct KeychainService: Sendable {
             delete(for: Self.activeServerIdAccount)
             return
         }
-        try? save(data: Data(id.utf8), for: Self.activeServerIdAccount)
+        do {
+            try save(data: Data(id.utf8), for: Self.activeServerIdAccount)
+        } catch {
+            keychainLog.error("Saving the active server id failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // The single-server → registry migration deliberately lives in the
@@ -166,11 +200,15 @@ public struct KeychainService: Sendable {
         return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
     }
 
-    /// Written whole (the private `save` is delete-then-add), so a partial write
-    /// cannot leave half a pin map.
+    /// Written whole, in place (see `save`), so a partial write cannot leave
+    /// half a pin map.
     public func saveTrustedCertificates(_ pins: [String: String]) {
         guard let data = try? JSONEncoder().encode(pins) else { return }
-        try? save(data: data, for: Self.trustedCertificatesAccount)
+        do {
+            try save(data: data, for: Self.trustedCertificatesAccount)
+        } catch {
+            keychainLog.error("Saving certificate pins failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - Parental-controls lock
@@ -188,8 +226,8 @@ public struct KeychainService: Sendable {
     /// is the right way round here: the alternative strands the parent in a
     /// screen they can never unlock because a blob became unreadable, while the
     /// thing this protects is a content filter, not a credential. The Keychain
-    /// item is written whole (`save` is delete-then-add) so a partial write
-    /// cannot produce that state in the first place.
+    /// item is written whole and in place (see `save`), so neither a partial
+    /// write nor a failed one can produce that state in the first place.
     public func getParentalLock() -> ParentalLockCredential? {
         guard let data = getData(for: Self.parentalLockAccount) else { return nil }
         return try? JSONDecoder().decode(ParentalLockCredential.self, from: data)
@@ -223,12 +261,26 @@ public struct KeychainService: Sendable {
     /// Full identifier of the shared Keychain access group
     /// (`<TeamPrefix>com.cinemax.shared`), resolved from the `AppIdentifierPrefix`
     /// Info.plist key injected at sign time. `nil` in an unsigned / prefix-less
-    /// context — callers then skip the shared Keychain and the legacy App Group
-    /// UserDefaults copy still covers the extensions.
+    /// context — callers then skip the shared Keychain (the extensions then have
+    /// no session to read).
     public static var sharedAccessGroup: String? {
-        guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
-              !prefix.isEmpty else { return nil }
+        guard let prefix = appIdentifierPrefix else { return nil }
         return prefix + sharedAccessGroupSuffix
+    }
+
+    /// The app's OWN access group (`<TeamPrefix><bundle id>`), first in its
+    /// `keychain-access-groups` so it is where group-less writes land. `nil`
+    /// in an unsigned / prefix-less context.
+    static var privateAccessGroup: String? {
+        guard let prefix = appIdentifierPrefix,
+              let bundleId = Bundle.main.bundleIdentifier, !bundleId.isEmpty else { return nil }
+        return prefix + bundleId
+    }
+
+    private static var appIdentifierPrefix: String? {
+        guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
+              !prefix.isEmpty, !prefix.hasPrefix("$(") else { return nil }
+        return prefix
     }
 
     /// Writes the extension session blob into the shared, device-only Keychain
@@ -244,11 +296,10 @@ public struct KeychainService: Sendable {
             kSecAttrAccount as String: Self.sharedSessionAccount,
             kSecAttrAccessGroup as String: group
         ]
-        SecItemDelete(base as CFDictionary)
-        var add = base
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = Self.itemAccessibility
-        SecItemAdd(add as CFDictionary, nil)
+        let status = Self.upsert(query: base, data: data)
+        if status != errSecSuccess {
+            keychainLog.error("Shared session write failed (status \(status))")
+        }
     }
 
     /// Reads the shared session blob back (used by the round-trip test; the
@@ -276,14 +327,70 @@ public struct KeychainService: Sendable {
             kSecAttrAccount as String: Self.sharedSessionAccount,
             kSecAttrAccessGroup as String: group
         ]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            keychainLog.error("Shared session delete failed (status \(status))")
+        }
+    }
+
+    // MARK: - Private access-group migration
+
+    /// Every app-private account — everything this type stores except
+    /// `extension_session`.
+    static let privateAccounts = [
+        "access_token", "server_url", "user_session", "device_id",
+        serversAccount, activeServerIdAccount, trustedCertificatesAccount,
+        parentalLockAccount, unreadableServersBackupAccount,
+    ]
+
+    private static let privateGroupMigratedKey = "keychain.privateAccessGroup.migrated"
+
+    /// Moves the app-private items out of the shared extension group, where
+    /// every build before 2026-09-22 wrote them (see the type's RULE).
+    ///
+    /// `SecItemUpdate` on `kSecAttrAccessGroup` MOVES an item — nothing is
+    /// deleted, nothing is re-added — so a failure leaves the item exactly where
+    /// it was and still readable (reads name no group, so they search them all).
+    /// One-shot via a flag set only when every move succeeded; a partial failure
+    /// (a locked Keychain, a profile missing the new group) retries next launch.
+    public func migrateToPrivateAccessGroupIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.privateGroupMigratedKey),
+              let shared = Self.sharedAccessGroup,
+              let privateGroup = Self.privateAccessGroup else { return }
+        var allSucceeded = true
+        for account in Self.privateAccounts {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: Self.serviceName,
+                kSecAttrAccount as String: account,
+                kSecAttrAccessGroup as String: shared
+            ]
+            let status = SecItemUpdate(
+                query as CFDictionary,
+                [kSecAttrAccessGroup as String: privateGroup] as CFDictionary
+            )
+            switch status {
+            case errSecSuccess, errSecItemNotFound:
+                continue
+            case errSecDuplicateItem:
+                // A private copy already exists and is the one group-less
+                // writes update: the shared one is the stale leftover.
+                SecItemDelete(query as CFDictionary)
+            default:
+                allSucceeded = false
+                keychainLog.error("Moving \(account, privacy: .public) to the private group failed (status \(status))")
+            }
+        }
+        if allSucceeded {
+            UserDefaults.standard.set(true, forKey: Self.privateGroupMigratedKey)
+        }
     }
 
     // MARK: - Accessibility migration
 
     /// Re-saves already-stored items under the new `AfterFirstUnlock`
     /// accessibility class. Idempotent (UserDefaults flag) and lossless:
-    /// `save()` is delete-then-add, and we only re-write items that read back
+    /// `save()` updates in place, and we only re-write items that read back
     /// successfully *this* launch — so a re-save can never erase a value we
     /// still have. Call after a confirmed-readable restore. The flag is set
     /// only when every re-save succeeds, so a partial failure retries next launch.
@@ -305,35 +412,22 @@ public struct KeychainService: Sendable {
         }
     }
 
-    /// Rewrites the persistent device id under the new accessibility class.
-    /// Best-effort: failures are tolerated because `cachedDeviceID` already
-    /// keeps the id stable within a run even if the keychain read/write fails.
+    /// Moves the persistent device id to the new accessibility class, in place
+    /// (the old delete-then-add could lose it and fragment the device identity).
+    /// Best-effort: `cachedDeviceID` keeps the id stable within a run anyway.
     private static func migrateDeviceIDAccessibility() {
-        let account = "device_id"
-        let readQuery: [String: Any] = [
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecAttrAccount as String: "device_id"
         ]
-        var result: AnyObject?
-        guard SecItemCopyMatching(readQuery as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return }
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: itemAccessibility
-        ]
-        SecItemAdd(addQuery as CFDictionary, nil)
+        let status = SecItemUpdate(
+            query as CFDictionary,
+            [kSecAttrAccessible as String: itemAccessibility] as CFDictionary
+        )
+        if status != errSecSuccess && status != errSecItemNotFound {
+            keychainLog.error("device-id accessibility update failed (status \(status))")
+        }
     }
 
     // MARK: - Clear All
@@ -421,20 +515,32 @@ public struct KeychainService: Sendable {
     // MARK: - Private
 
     private func save(data: Data, for key: String) throws {
-        delete(for: key)
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.serviceName,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: Self.itemAccessibility
+            kSecAttrAccount as String: key
         ]
-
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let status = Self.upsert(query: query, data: data)
         guard status == errSecSuccess else {
+            keychainLog.error("Keychain write of \(key, privacy: .public) failed (status \(status))")
             throw KeychainError.saveFailed(status)
         }
+    }
+
+    /// Writes `data` into the item `query` identifies: UPDATE in place when it
+    /// exists, ADD otherwise. Never delete-then-add — a failed add after the
+    /// delete would lose the value (see the type's RULE). The update also moves
+    /// the item to the current accessibility class.
+    private static func upsert(query: [String: Any], data: Data) -> OSStatus {
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: itemAccessibility
+        ]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        guard status == errSecItemNotFound else { return status }
+        var add = query
+        add.merge(attributes) { _, new in new }
+        return SecItemAdd(add as CFDictionary, nil)
     }
 
     private func getData(for key: String) -> Data? {

@@ -147,8 +147,9 @@ final class TrickplayController {
         fetchTasks.append(task)
     }
 
-    /// Same dual-auth pattern as the chapter thumbnails: `ApiKey` query param
-    /// (what image endpoints accept) plus the Authorization header.
+    /// Token in the Authorization header only (`TrickplayController` is
+    /// `[Authorize]` server-side and reads it there) — never in the URL, where
+    /// it reached reverse-proxy logs and made the cache key change with it.
     ///
     /// Returns a **decoded, bitmap-backed** image. `UIImage(data:)` alone is
     /// JPEG-backed and decodes lazily on first draw — and a tile sheet's first
@@ -159,8 +160,7 @@ final class TrickplayController {
     /// off a decoded bitmap are near-free. Scale (1 for raw JPEG data) is
     /// preserved, so `thumbnail(atMs:)`'s pixel-space crop rect stays valid.
     nonisolated private static func loadTile(url: URL, token: String?) async -> UIImage? {
-        let authed = VLCStreamPresenter.authedURL(url, token: token)
-        guard let data = await AuthenticatedImageFetch.data(from: authed, token: token),
+        guard let data = await AuthenticatedImageFetch.data(from: url, token: token),
               let image = UIImage(data: data) else { return nil }
         return image.preparingForDisplay() ?? image
     }

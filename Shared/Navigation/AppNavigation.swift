@@ -114,6 +114,9 @@ final class AppState {
         // the single-server behavior — it still reads only the legacy trio, so
         // an offline cold launch stays non-blocking and a failed migration
         // cannot log anyone out.
+        // First of all: take the app-private items out of the group the
+        // extensions can read (one-shot, a move — nothing is deleted).
+        keychain.migrateToPrivateAccessGroupIfNeeded()
         keychain.migrateToMultiServerIfNeeded()
         loadServersFromKeychain()
 
@@ -183,12 +186,25 @@ final class AppState {
             // `withMutation` even for an identical value — which invalidated
             // every view reading either property (each library card reads
             // `isAdministrator` on iOS) for an answer that almost never changes.
-            if user != currentUser { currentUser = user }
+            // Compared on what the UI reads, not the whole DTO: `UserDto`
+            // carries `lastActivityDate`, which the server moves every minute
+            // of activity, so a plain `!=` let nearly every refresh through.
+            if !Self.sameVisibleUser(user, currentUser) { currentUser = user }
             let admin = user.policy?.isAdministrator ?? false
             if admin != isAdministrator { isAdministrator = admin }
         } catch {
             // Network blip — keep last-known values.
         }
+    }
+
+    /// The fields of the signed-in user the UI actually reads (name, avatar,
+    /// policy), plus its id. `nonisolated` + static: a pure comparison.
+    nonisolated static func sameVisibleUser(_ fresh: UserDto, _ current: UserDto?) -> Bool {
+        guard let current else { return false }
+        return fresh.id == current.id
+            && fresh.name == current.name
+            && fresh.primaryImageTag == current.primaryImageTag
+            && fresh.policy == current.policy
     }
 
     /// Users eligible for the quick-switch surfaces (`UserSwitchSheet` grid +

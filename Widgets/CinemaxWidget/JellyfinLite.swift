@@ -49,15 +49,11 @@ enum JellyfinLite {
         /// The `maxOfficialRating` string to send on `/Items` queries, which the
         /// server filters itself. Mirrors the app's own per-endpoint split:
         /// server-side on the `/Items` family, local everywhere else.
+        /// The age itself as an integer string, which every supported server
+        /// reads as that age — see the app's `ContentRatingClassifier`.
         static func maxOfficialRatingCode(forAge maxAge: Int?) -> String? {
             guard let maxAge, maxAge > 0 else { return nil }
-            switch maxAge {
-            case 1...10:  return "TV-PG"
-            case 11...12: return "PG-13"
-            case 13...14: return "TV-14"
-            case 15...16: return "TV-MA"
-            default:      return "NC-17"
-            }
+            return String(maxAge)
         }
     }
 
