@@ -45,6 +45,13 @@ struct MediaDetailSimilarSection: View, Equatable {
             id: \.id
         ) { item in
             let zoom = zoomScope?.zoom(for: item.id)
+            // One value feeds both the overlay and VoiceOver, so the card
+            // cannot announce a state it does not draw.
+            let status = MediaCardStatus.make(
+                positionTicks: item.userData?.playbackPositionTicks,
+                runtimeTicks: item.runTimeTicks,
+                isPlayed: item.userData?.isPlayed
+            )
             NavigationLink {
                 if let id = item.id {
                     MediaDetailScreen(
@@ -58,11 +65,7 @@ struct MediaDetailSimilarSection: View, Equatable {
                     title: item.name ?? "",
                     imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
                     subtitle: item.productionYear.map(String.init),
-                    status: .make(
-                        positionTicks: item.userData?.playbackPositionTicks,
-                        runtimeTicks: item.runTimeTicks,
-                        isPlayed: item.userData?.isPlayed
-                    ),
+                    status: status,
                     zoomSource: zoom
                 )
                 .frame(width: cardWidth)
@@ -73,6 +76,7 @@ struct MediaDetailSimilarSection: View, Equatable {
             .buttonStyle(.plain)
             #endif
             .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
+            .mediaCardStatusAccessibility(status)
             // On the NavigationLink (the focusable button), never its label,
             // so tvOS focus is untouched.
             .mediaCardContextMenu(item: item, artwork: .poster)

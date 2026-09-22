@@ -972,6 +972,8 @@
 "card.unfavorited" = "Retiré des favoris";
 "card.resume" = "Reprendre";
 "card.goToSeries" = "Aller à la série";
+"card.status.watched" = "Vu";
+"card.status.progress" = "%d %% regardé";
 "detail.season.markWatched" = "Marquer la saison comme vue";
 "detail.season.markWatched.message" = "Tous les épisodes de cette saison seront marqués comme vus.";
 "detail.season.markedWatched" = "Saison marquée comme vue";

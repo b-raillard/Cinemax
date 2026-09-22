@@ -861,6 +861,13 @@ private struct SearchResultCard: View, Equatable {
     var body: some View {
         let subtitle = Self.subtitle(for: item)
         let zoom = zoomScope?.zoom(for: item.id)
+        // One value feeds both the overlay and VoiceOver, so the card
+        // cannot announce a state it does not draw.
+        let status = MediaCardStatus.make(
+            positionTicks: item.userData?.playbackPositionTicks,
+            runtimeTicks: item.runTimeTicks,
+            isPlayed: item.userData?.isPlayed
+        )
 
         NavigationLink {
             DeferredView {
@@ -876,11 +883,7 @@ private struct SearchResultCard: View, Equatable {
                     imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
                 },
                 subtitle: subtitle,
-                status: .make(
-                    positionTicks: item.userData?.playbackPositionTicks,
-                    runtimeTicks: item.runTimeTicks,
-                    isPlayed: item.userData?.isPlayed
-                ),
+                status: status,
                 zoomSource: zoom
             )
         }
@@ -894,6 +897,7 @@ private struct SearchResultCard: View, Equatable {
                 .compactMap { $0 }
                 .joined(separator: ", ")
         )
+        .mediaCardStatusAccessibility(status)
         // Long-press / long-press-select watched + favorite actions, on the
         // NavigationLink (the focusable button) not its label — see
         // `mediaCardContextMenu`.

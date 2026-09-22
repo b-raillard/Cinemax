@@ -970,6 +970,8 @@
 "card.unfavorited" = "Removed from favorites";
 "card.resume" = "Resume";
 "card.goToSeries" = "Go to series";
+"card.status.watched" = "Watched";
+"card.status.progress" = "%d%% watched";
 "detail.season.markWatched" = "Mark season as watched";
 "detail.season.markWatched.message" = "All episodes in this season will be marked as watched.";
 "detail.season.markedWatched" = "Season marked as watched";

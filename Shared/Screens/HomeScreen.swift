@@ -1560,6 +1560,13 @@ struct HomeScreen: View {
             return parts.joined(separator: " · ")
         }()
         let zoom = CardZoom(zoomNamespace, surface: surface, itemId: item.id)
+        // One value feeds both the overlay and VoiceOver, so the card
+        // cannot announce a state it does not draw.
+        let status = MediaCardStatus.make(
+            positionTicks: item.userData?.playbackPositionTicks,
+            runtimeTicks: item.runTimeTicks,
+            isPlayed: item.userData?.isPlayed
+        )
 
         NavigationLink {
             DeferredView {
@@ -1573,11 +1580,7 @@ struct HomeScreen: View {
                 title: item.name ?? "",
                 imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
                 subtitle: subtitle,
-                status: .make(
-                    positionTicks: item.userData?.playbackPositionTicks,
-                    runtimeTicks: item.runTimeTicks,
-                    isPlayed: item.userData?.isPlayed
-                ),
+                status: status,
                 zoomSource: zoom
             )
         }
@@ -1587,6 +1590,7 @@ struct HomeScreen: View {
         .buttonStyle(.plain)
         #endif
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        .mediaCardStatusAccessibility(status)
         // On the NavigationLink (the focusable button), never its label, so
         // tvOS focus is untouched.
         .mediaCardContextMenu(item: item, artwork: .poster)

@@ -130,6 +130,7 @@ private struct PosterCardContent: View {
 
     var body: some View {
         let zoom = zoomScope?.zoom(for: item.id)
+        let status = self.status
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             ZStack(alignment: .bottomTrailing) {
                 NavigationLink {
@@ -164,6 +165,8 @@ private struct PosterCardContent: View {
                 .buttonStyle(.plain)
                 #endif
                 .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+                // The overlay's check / bar, spoken — from the same `status`.
+                .mediaCardStatusAccessibility(status)
                 // Long-press / long-press-select watched + favorite actions.
                 // On the NavigationLink (the focusable button), never its label,
                 // so tvOS focus is untouched; coexists with the admin ellipsis

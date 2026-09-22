@@ -6,7 +6,10 @@ struct PosterCard: View {
     var subtitle: String? = nil
     /// Watched check or progress bar over the artwork. Defaults to `.none`, so
     /// a surface that has no `userData` to offer (a collection folder, a
-    /// filmography entry) simply shows nothing.
+    /// filmography entry) simply shows nothing. The caller pairs it with
+    /// `.mediaCardStatusAccessibility(_:)` — same value — on the focusable
+    /// `NavigationLink` / `Button` that carries the card's accessibility label,
+    /// so VoiceOver announces what the overlay draws.
     var status: MediaCardStatus = .none
     /// Origin of the iOS zoom into the fiche this card pushes — see
     /// `CardZoom`. `nil` keeps the default push.

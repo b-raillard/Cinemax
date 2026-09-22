@@ -159,6 +159,13 @@ struct PersonDetailScreen: View {
         ContentRow(title: title, data: items, id: \.id) { item in
             // One surface per rail (Films / Séries) — see `CardZoom`.
             let zoom = CardZoom(zoomNamespace, surface: "person.\(title)", itemId: item.id)
+            // One value feeds both the overlay and VoiceOver, so the card
+            // cannot announce a state it does not draw.
+            let status = MediaCardStatus.make(
+                positionTicks: item.userData?.playbackPositionTicks,
+                runtimeTicks: item.runTimeTicks,
+                isPlayed: item.userData?.isPlayed
+            )
             NavigationLink {
                 DeferredView {
                     if let id = item.id {
@@ -173,11 +180,7 @@ struct PersonDetailScreen: View {
                         appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
                     },
                     subtitle: item.productionYear.map(String.init),
-                    status: .make(
-                        positionTicks: item.userData?.playbackPositionTicks,
-                        runtimeTicks: item.runTimeTicks,
-                        isPlayed: item.userData?.isPlayed
-                    ),
+                    status: status,
                     zoomSource: zoom
                 )
                 .frame(width: cardWidth)
@@ -188,6 +191,7 @@ struct PersonDetailScreen: View {
             .buttonStyle(.plain)
             #endif
             .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
+            .mediaCardStatusAccessibility(status)
             // On the NavigationLink (the focusable button), never its label,
             // so tvOS focus is untouched.
             .mediaCardContextMenu(item: item, artwork: .poster)
