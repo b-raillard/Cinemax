@@ -53,8 +53,8 @@ final class LocalizationManager {
     /// A rating or any one-decimal figure, with the app language's decimal
     /// separator (« 7,5 » in French) — `String(format: "%.1f")` always wrote a
     /// dot.
-    func decimal(_ value: Double, fractionDigits: Int = 1) -> String {
-        value.formatted(.number.precision(.fractionLength(fractionDigits)).locale(locale))
+    func decimal<T: BinaryFloatingPoint>(_ value: T, fractionDigits: Int = 1) -> String {
+        Double(value).formatted(.number.precision(.fractionLength(fractionDigits)).locale(locale))
     }
 
     // MARK: - Helpers
