@@ -225,20 +225,32 @@ public enum ServerSessionValidator {
                          forHTTPHeaderField: "Authorization")
         request.timeoutInterval = requestTimeout
         do {
-            let (_, response) = try await (session ?? validateSession).data(for: request)
-            return classify(statusCode: (response as? HTTPURLResponse)?.statusCode)
+            let (data, response) = try await (session ?? validateSession).data(for: request)
+            return classify(statusCode: (response as? HTTPURLResponse)?.statusCode, body: data)
         } catch {
             return .indeterminate
         }
     }
 
     /// The same reading `JellyfinAPIClient.validateSession` gives the shared
-    /// client: only an authoritative 401 is `.invalid`.
-    static func classify(statusCode: Int?) -> SessionValidity {
+    /// client: only an authoritative 401 is `.invalid`, and a 2xx is `.valid`
+    /// only when it is a user — the shared client DECODES a `UserDto` there,
+    /// and a status alone is not enough: URLSession follows redirects, so an
+    /// SSO proxy's login page or a captive portal answers 200 with HTML, and a
+    /// switch would commit onto a server that answers nothing useful.
+    static func classify(statusCode: Int?, body: Data) -> SessionValidity {
         guard let statusCode else { return .indeterminate }
-        if (200..<300).contains(statusCode) { return .valid }
+        if (200..<300).contains(statusCode) { return isUserPayload(body) ? .valid : .indeterminate }
         if statusCode == 401 { return .invalid }
         return .indeterminate
+    }
+
+    /// A JSON object carrying a non-empty `Id` — the one field of `UserDto`
+    /// every supported server sends.
+    static func isUserPayload(_ body: Data) -> Bool {
+        guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
+              let id = object["Id"] as? String else { return false }
+        return !id.isEmpty
     }
 
     private static let validateSession: URLSession = {

@@ -65,6 +65,7 @@ extension JellyfinAPIClient {
     /// is included by default instead of being silently dropped by an allow-list.
     public func getResumeItems(userId: String, limit: Int = 10) async throws -> [BaseItemDto] {
         let cacheKey = "resume-\(userId)-\(limit)-\(getMaxContentAge())"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
 
         do {
@@ -78,7 +79,7 @@ extension JellyfinAPIClient {
             )
             let response = try await client.send(Paths.getResumeItems(parameters: params))
             let result = applyRatingFilter(response.value.items ?? [])
-            cache.set(cacheKey, value: result, ttl: 30)
+            cache.set(cacheKey, value: result, ttl: 30, stamp: cacheStamp)
             return result
         } catch {
             notifyIfUnauthorized(error)
@@ -99,6 +100,7 @@ extension JellyfinAPIClient {
     /// than to drop raw episode cards into a poster row.
     public func getSeriesWithRecentEpisodes(userId: String, limit: Int = 8) async throws -> [BaseItemDto] {
         let cacheKey = "latest-episodes-\(userId)-\(limit)-\(getMaxContentAge())"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
 
         do {
@@ -114,7 +116,7 @@ extension JellyfinAPIClient {
             )
             let response = try await client.send(Paths.getLatestMedia(parameters: params))
             let result = applyRatingFilter(response.value).filter { $0.type == .series }
-            cache.set(cacheKey, value: result, ttl: 60)
+            cache.set(cacheKey, value: result, ttl: 60, stamp: cacheStamp)
             return result
         } catch {
             notifyIfUnauthorized(error)
@@ -206,6 +208,7 @@ extension JellyfinAPIClient {
     ) async throws -> [String] {
         let itemTypes = includeItemTypes?.map(\.rawValue).sorted().joined(separator: ",") ?? ""
         let cacheKey = "genres-\(userId)-\(parentId ?? "all")-\(itemTypes)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [String] = cache.get(cacheKey) { return cached }
 
         guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -236,7 +239,7 @@ extension JellyfinAPIClient {
             result = filterResponse.value.genres?.compactMap(\.name) ?? []
         }
 
-        cache.set(cacheKey, value: result, ttl: 300)
+        cache.set(cacheKey, value: result, ttl: 300, stamp: cacheStamp)
         return result
     }
 
@@ -265,11 +268,12 @@ extension JellyfinAPIClient {
         // freshly-cached value back — `BaseItemDto` isn't Sendable, so it must
         // never cross the coalescing boundary itself.
         let cacheKey = "item-\(itemId)-\(userId)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: BaseItemDto = cache.get(cacheKey) { return cached }
         let fetch: @Sendable () async throws -> BaseItemDto = { [self] in
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let response = try await client.send(Paths.getItem(itemID: itemId, userID: userId))
-            cache.set(cacheKey, value: response.value, ttl: 10)
+            cache.set(cacheKey, value: response.value, ttl: 10, stamp: cacheStamp)
             return response.value
         }
         do {
@@ -314,6 +318,7 @@ extension JellyfinAPIClient {
         // every time. Cache the raw items and apply the rating filter on the way
         // out so a mid-session content-age change is always honored.
         let cacheKey = "similar-\(itemId)-\(userId)-\(limit)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) {
             return applyRatingFilter(cached)
         }
@@ -321,7 +326,7 @@ extension JellyfinAPIClient {
         let params = Paths.GetSimilarItemsParameters(userID: userId, limit: limit)
         let response = try await client.send(Paths.getSimilarItems(itemID: itemId, parameters: params))
         let items = response.value.items ?? []
-        cache.set(cacheKey, value: items, ttl: 300)
+        cache.set(cacheKey, value: items, ttl: 300, stamp: cacheStamp)
         return applyRatingFilter(items)
     }
 
@@ -371,12 +376,13 @@ extension JellyfinAPIClient {
         // same invalidation as `episodes-` — see `markItemPlayed` /
         // `markItemUnplayed` / `reportPlaybackStopped`.
         let cacheKey = "seasons-\(seriesId)-\(userId)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return cached }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetSeasonsParameters(userID: userId, enableUserData: true)
         let response = try await client.send(Paths.getSeasons(seriesID: seriesId, parameters: params))
         let items = response.value.items ?? []
-        cache.set(cacheKey, value: items, ttl: 10)
+        cache.set(cacheKey, value: items, ttl: 10, stamp: cacheStamp)
         return items
     }
 
@@ -390,6 +396,7 @@ extension JellyfinAPIClient {
         // bar is never served — see `markItemPlayed` / `markItemUnplayed` /
         // `reportPlaybackStopped`.
         let cacheKey = "episodes-\(seasonId)-\(userId)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return applyRatingFilter(cached) }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         // `.mediaSources` rides along so an episode can carry its alternate
@@ -398,7 +405,7 @@ extension JellyfinAPIClient {
         let params = Paths.GetEpisodesParameters(userID: userId, fields: [.overview, .mediaSources], seasonID: seasonId, enableUserData: true)
         let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
         let items = response.value.items ?? []
-        cache.set(cacheKey, value: items, ttl: 10)
+        cache.set(cacheKey, value: items, ttl: 10, stamp: cacheStamp)
         return applyRatingFilter(items)
     }
 
@@ -431,6 +438,7 @@ extension JellyfinAPIClient {
     /// `getPlaybackInfo` remains the authority on what may actually be played.
     public func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference] {
         let cacheKey = "episoderefs-\(seasonId)-\(userId)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [EpisodeReference] = cache.get(cacheKey) { return cached }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         var params = Paths.GetEpisodesParameters(userID: userId, fields: [], seasonID: seasonId, enableUserData: false)
@@ -441,7 +449,7 @@ extension JellyfinAPIClient {
                 guard let id = item.id else { return nil }
                 return EpisodeReference(id: id, name: item.name ?? "")
             }
-            cache.set(cacheKey, value: refs, ttl: 300)
+            cache.set(cacheKey, value: refs, ttl: 300, stamp: cacheStamp)
             return refs
         } catch {
             notifyIfUnauthorized(error)
@@ -462,6 +470,7 @@ extension JellyfinAPIClient {
         // uncached.
         let cacheKey = "nextup-\(seriesId)-\(userId)"
         let items: [BaseItemDto]
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) {
             items = cached
         } else {
@@ -477,7 +486,7 @@ extension JellyfinAPIClient {
             )
             let response = try await client.send(Paths.getNextUp(parameters: params))
             items = response.value.items ?? []
-            cache.set(cacheKey, value: items, ttl: 10)
+            cache.set(cacheKey, value: items, ttl: 10, stamp: cacheStamp)
         }
         guard let next = items.first else { return nil }
         return ContentRatingClassifier.passes(rating: next.officialRating, maxAge: getMaxContentAge()) ? next : nil
@@ -538,11 +547,12 @@ extension JellyfinAPIClient {
         // session (open a title, play, come back) into one request. No userData
         // in the payload, so no mutator has to sweep this key.
         let cacheKey = "trailers-\(itemId)-\(userId)-\(getMaxContentAge())"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) { return applyRatingFilter(cached) }
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let response = try await client.send(Paths.getLocalTrailers(itemID: itemId, userID: userId))
-            cache.set(cacheKey, value: response.value, ttl: 300)
+            cache.set(cacheKey, value: response.value, ttl: 300, stamp: cacheStamp)
             // Filtered like every other item-returning method here. A trailer is
             // a child of an already-visible item and carries no rating of its
             // own, so this admits them all today — the point is that the
@@ -724,6 +734,7 @@ extension JellyfinAPIClient {
         // entry serves every film, not just this one; the filter and the rating
         // filter both run on the way out.
         let cacheKey = "boxsets-\(userId)-\(getMaxContentAge())"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: [BaseItemDto] = cache.get(cacheKey) {
             return applyRatingFilter(Self.boxsets(cached, matchingTmdbCollectionId: tmdbCollectionId))
         }
@@ -743,7 +754,7 @@ extension JellyfinAPIClient {
             params.imageTypeLimit = 1
             let response = try await client.send(Paths.getItems(parameters: params))
             let boxsets = response.value.items ?? []
-            cache.set(cacheKey, value: boxsets, ttl: 300)
+            cache.set(cacheKey, value: boxsets, ttl: 300, stamp: cacheStamp)
             return applyRatingFilter(Self.boxsets(boxsets, matchingTmdbCollectionId: tmdbCollectionId))
         } catch {
             notifyIfUnauthorized(error)

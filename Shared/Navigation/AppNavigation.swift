@@ -723,8 +723,10 @@ final class AppState {
                 // lands on its `LoginScreen` — the same place a session-expiry
                 // logout leaves them, and the one screen that is correct for
                 // every failure here (`.offline` mutates nothing, `.needsLogin`
-                // already routed to the candidate's login, `.unreachable` only
-                // repointed the client back).
+                // already routed to the candidate's login, `.unreachable` never
+                // touched the client — it validated off-client). Known, and
+                // shared with the `.sessionExpired` path: the shared client keeps
+                // the revoked token until LoginScreen's sign-in replaces it.
                 return .signedOut
             }
             // Nothing left to hop to → `ServerSetupScreen`. The tokenless entry

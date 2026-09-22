@@ -3273,8 +3273,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if let audio = kept.audio, audio < player.audioTracks.count {
                 player.selectedAudioTrack = player.audioTracks[audio]
             }
-            if let subtitle = kept.subtitle, subtitle < player.subtitleTracks.count {
-                player.selectedSubtitleTrack = player.subtitleTracks[subtitle]
+            if let subtitle = kept.subtitle {
+                // Not listed yet on this `.tracksChanged`: leave the engine's
+                // choice rather than read "unknown" as "off".
+                if subtitle < player.subtitleTracks.count {
+                    player.selectedSubtitleTrack = player.subtitleTracks[subtitle]
+                }
             } else {
                 player.selectedSubtitleTrack = nil
             }

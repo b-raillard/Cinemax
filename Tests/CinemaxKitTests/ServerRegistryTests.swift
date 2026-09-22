@@ -845,3 +845,31 @@ struct MultiServerAppStateTests {
         #expect(kc.savedActiveServerId == a.id)
     }
 }
+
+// MARK: - Standalone switch validation (audit 2026-09-22, B10)
+
+/// The switch validates its target off the shared client; its reading of the
+/// answer must match the shared client's `validateSession`, which DECODES a
+/// user rather than trusting a status.
+@Suite("ServerSessionValidator")
+struct ServerSessionValidatorTests {
+    private let user = Data(#"{"Name":"bastien","Id":"4b1c0e8f2a3d4e5f8a9b0c1d2e3f4a5b"}"#.utf8)
+
+    @Test("a 2xx carrying a user is valid, anything else on a 2xx proves nothing")
+    func twoHundredNeedsAUser() {
+        #expect(ServerSessionValidator.classify(statusCode: 200, body: user) == .valid)
+        // An SSO login page or a captive portal after a followed redirect.
+        let html = Data("<html><body>Sign in</body></html>".utf8)
+        #expect(ServerSessionValidator.classify(statusCode: 200, body: html) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: 200, body: Data(#"{"Id":""}"#.utf8)) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: 204, body: Data()) == .indeterminate)
+    }
+
+    @Test("only an authoritative 401 is invalid")
+    func onlyA401IsInvalid() {
+        #expect(ServerSessionValidator.classify(statusCode: 401, body: Data()) == .invalid)
+        #expect(ServerSessionValidator.classify(statusCode: 403, body: Data()) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: 502, body: Data()) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: nil, body: user) == .indeterminate)
+    }
+}

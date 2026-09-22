@@ -20,37 +20,43 @@ final class APICache: @unchecked Sendable {
     // A fetch that was already on the wire when `invalidate` / `clear` ran
     // carries the PRE-mutation answer, and its `set` used to land after the
     // sweep — re-caching exactly the value the sweep existed to drop (a watched
-    // toggle whose refresh then re-read the old mark for the next 10 s). So a
-    // miss remembers the invalidation epoch it happened at, every sweep is
-    // logged with its prefix, and `set` refuses a value whose miss predates a
-    // sweep that covers its key. A `set` with no recorded miss (a test, a
-    // prime) is stored as before.
+    // toggle whose refresh then re-read the old mark for the next 10 s). So
+    // every cached fetch takes a `stamp()` BEFORE it goes out and hands it to
+    // `set`, and `set` refuses a value when a sweep covering its key ran after
+    // that stamp. The stamp belongs to the FETCH, not to the key: an earlier
+    // version remembered one miss per key, which the refresh raised by the
+    // very same mutation overwrote — letting the stale answer through
+    // (adversarial review, 2026-09-22). A `set` without a stamp (tests, a
+    // prime) is stored unconditionally.
     private var epoch: UInt64 = 0
     /// `(epoch, prefix)` of each recent sweep; `""` is `clear()`.
     private var sweeps: [(epoch: UInt64, prefix: String)] = []
-    private var missEpoch: [String: UInt64] = [:]
     private static let sweepLogLimit = 128
-    private static let missLimit = 2_000
+
+    /// The invalidation epoch a fetch starts from. Opaque to callers.
+    struct Stamp: Sendable, Equatable {
+        fileprivate let epoch: UInt64
+    }
+
+    func stamp() -> Stamp {
+        lock.withLock { Stamp(epoch: epoch) }
+    }
 
     func get<T>(_ key: String) -> T? {
         lock.withLock {
-            if let entry = store[key], entry.expiry > Date(), let value = entry.value as? T {
-                return value
-            }
-            if missEpoch.count >= Self.missLimit { missEpoch.removeAll() }
-            missEpoch[key] = epoch
-            return nil
+            guard let entry = store[key], entry.expiry > Date() else { return nil }
+            return entry.value as? T
         }
     }
 
-    /// Whether a value fetched after a miss at `missAt` would now be stale for
-    /// `key`. Called under the lock.
-    private func isStale(key: String, missAt: UInt64) -> Bool {
-        guard missAt < epoch else { return false }
-        // The log no longer reaches back to the miss: we cannot prove the value
-        // is still fresh, so we do not cache it (costs one refetch, never truth).
-        guard let oldest = sweeps.first, oldest.epoch <= missAt + 1 else { return true }
-        return sweeps.contains { $0.epoch > missAt && key.hasPrefix($0.prefix) }
+    /// Whether a value fetched from `stamp` would now be stale for `key`.
+    /// Called under the lock.
+    private func isStale(key: String, since stamp: Stamp) -> Bool {
+        guard stamp.epoch < epoch else { return false }
+        // The log no longer reaches back to the stamp: freshness cannot be
+        // proven, so the value is not cached (one refetch, never stale truth).
+        guard let oldest = sweeps.first, oldest.epoch <= stamp.epoch + 1 else { return true }
+        return sweeps.contains { $0.epoch > stamp.epoch && key.hasPrefix($0.prefix) }
     }
 
     private func recordSweep(prefix: String) {
@@ -59,12 +65,12 @@ final class APICache: @unchecked Sendable {
         if sweeps.count > Self.sweepLogLimit { sweeps.removeFirst(sweeps.count - Self.sweepLogLimit) }
         // A fetch still on the wire for a swept key must not be JOINED by a
         // caller arriving after the sweep: drop it from the table so the next
-        // `coalesce` starts fresh. The orphan finishes on its own and its `set`
-        // is refused by the guard above.
+        // `coalesce` starts fresh. The orphan finishes on its own and its
+        // `set` is refused by the stamp it carries.
         inFlight = inFlight.filter { !$0.key.hasPrefix(prefix) }
     }
 
-    func set<T>(_ key: String, value: T, ttl: TimeInterval) {
+    func set<T>(_ key: String, value: T, ttl: TimeInterval, stamp: Stamp? = nil) {
         lock.withLock {
             // `get` filters expired entries lazily but never removes them, so
             // without this sweep the store grows unbounded over a long session
@@ -74,9 +80,7 @@ final class APICache: @unchecked Sendable {
             // keeps the live set tiny. O(n) over a small dictionary.
             let now = Date()
             store = store.filter { $0.value.expiry > now }
-            if let missAt = missEpoch.removeValue(forKey: key), isStale(key: key, missAt: missAt) {
-                return
-            }
+            if let stamp, isStale(key: key, since: stamp) { return }
             store[key] = Entry(value: value, expiry: now.addingTimeInterval(ttl))
         }
     }

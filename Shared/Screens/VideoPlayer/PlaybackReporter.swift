@@ -63,6 +63,14 @@ final class PlaybackReporter {
     /// persisted. The keep-alive ping stays outside the chain — it carries no
     /// position and must not wait behind a hung report.
     private var tail: Task<Void, Never>?
+    /// Progress reports still queued or in flight. A stop supersedes them —
+    /// its own position is the newer truth — so it cancels them rather than
+    /// wait: behind a progress stuck on a slow server (30 s request timeout)
+    /// the stop that persists the resume point would otherwise wait too, and
+    /// an app suspended in that window never sends it. A cancelled progress
+    /// still waits its turn, then its request fails at once. A START is never
+    /// cancelled: a stop must not overtake the start of its own session.
+    private var pendingProgress: [Task<Void, Never>] = []
     /// Separate from `tickCounter`: the cadence differs (30 s vs 10 s) and the
     /// keep-alive carries conditions progress reporting doesn't have.
     private var pingCounter = 0
@@ -171,6 +179,8 @@ final class PlaybackReporter {
         let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
+        pendingProgress.forEach { $0.cancel() }
+        pendingProgress.removeAll()
         enqueue {
             await client.reportPlaybackStopped(
                 itemId: itemId, userId: uid,
@@ -206,7 +216,7 @@ final class PlaybackReporter {
         let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
-        enqueue {
+        enqueueProgress {
             await client.reportPlaybackProgress(
                 itemId: itemId, userId: uid,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
@@ -215,16 +225,24 @@ final class PlaybackReporter {
         }
     }
 
-    /// Runs `work` after every report raised before it. The chain is per
-    /// reporter, i.e. per play session: a new episode's start does not wait on
-    /// the previous episode's stop, which lives on the same chain anyway when
-    /// the presenter reuses its reporter.
-    private func enqueue(_ work: @escaping @Sendable () async -> Void) {
+    /// Runs `work` after every report raised before it, on this reporter's
+    /// chain — including an episode swap's stop followed by the next
+    /// episode's start when the presenter reuses its reporter.
+    @discardableResult
+    private func enqueue(_ work: @escaping @Sendable () async -> Void) -> Task<Void, Never> {
         let previous = tail
-        tail = Task.detached {
+        let task = Task.detached {
             await previous?.value
             await work()
         }
+        tail = task
+        return task
+    }
+
+    private func enqueueProgress(_ work: @escaping @Sendable () async -> Void) {
+        pendingProgress.removeAll { $0.isCancelled }
+        pendingProgress.append(enqueue(work))
+        if pendingProgress.count > 8 { pendingProgress.removeFirst(pendingProgress.count - 8) }
     }
 
     /// Resolves once every report raised so far has been sent. Test seam —
@@ -284,7 +302,7 @@ final class PlaybackReporter {
         let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
-        enqueue {
+        enqueueProgress {
             await client.reportPlaybackProgress(
                 itemId: itemId, userId: uid,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,

@@ -44,6 +44,7 @@ extension JellyfinAPIClient: RemoteControlAPI {
     /// to make the button appear.
     public func getControllableSessions(userId: String, cached: Bool = false) async throws -> [SessionInfoDto] {
         let cacheKey = "controllable-sessions-\(userId)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if cached, let hit: [SessionInfoDto] = cache.get(cacheKey) { return hit }
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let params = Paths.GetSessionsParameters(
@@ -52,7 +53,7 @@ extension JellyfinAPIClient: RemoteControlAPI {
         )
         do {
             let response = try await client.send(Paths.getSessions(parameters: params))
-            if cached { cache.set(cacheKey, value: response.value, ttl: 30) }
+            if cached { cache.set(cacheKey, value: response.value, ttl: 30, stamp: cacheStamp) }
             return response.value
         } catch {
             notifyIfUnauthorized(error)

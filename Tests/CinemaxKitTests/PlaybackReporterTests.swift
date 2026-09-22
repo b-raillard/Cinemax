@@ -394,6 +394,25 @@ struct PlaybackReporterTests {
         #expect(mock.callOrder == ["start", "progress", "stopped", "stopEncoding"])
     }
 
+    @Test("Un stop n'attend pas un progress bloqué : il l'annule")
+    func stopCancelsHungProgress() async {
+        let mock = CountingPlaybackAPI(progressDelay: .seconds(20))
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        reporter.reportBackgroundProgress()
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(clock.now - start < .seconds(5))
+        #expect(mock.callOrder == ["stopped", "stopEncoding"])
+        #expect(mock.lastStopTicks == 420_000_000)
+    }
+
     @Test("reportStart rouvre une session terminée")
     func startReopensStoppedSession() async throws {
         let mock = CountingPlaybackAPI()
@@ -510,9 +529,13 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     private let state = OSAllocatedUnfairLock(initialState: Counts())
     /// Holds the start report back, so a test can prove the stop waits for it.
     private let startDelay: Duration
+    /// Holds a progress report back — CANCELLABLY, like a real request: a
+    /// cancelled one records nothing.
+    private let progressDelay: Duration
 
-    init(startDelay: Duration = .zero) {
+    init(startDelay: Duration = .zero, progressDelay: Duration = .zero) {
         self.startDelay = startDelay
+        self.progressDelay = progressDelay
     }
 
     var startCount: Int { state.withLock { $0.start } }
@@ -540,6 +563,9 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod
     ) async {
+        if progressDelay > .zero {
+            do { try await Task.sleep(for: progressDelay) } catch { return }
+        }
         state.withLock { $0.progress += 1; $0.lastProgressTicks = positionTicks; $0.order.append("progress") }
     }
 

@@ -708,7 +708,10 @@ final class NativeVideoPresenter {
     private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
         guard gen == navGeneration, let player = playerVC?.player else { return }
         logger.error("Native episode nav: negotiation failed (autoplay=\(isAutoplay, privacy: .public))")
-        if isAutoplay {
+        // An earlier nav may already have torn the old item down and then been
+        // superseded by this one: nothing is left playing, which is the
+        // autoplay case in all but name (adversarial review, 2026-09-22).
+        if isAutoplay || player.currentItem == nil {
             showPlaybackErrorAlert(error: nil)
             return
         }

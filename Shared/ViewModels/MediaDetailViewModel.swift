@@ -282,7 +282,9 @@ final class MediaDetailViewModel {
             // it here so a stale cross-season list from a PRIOR refresh can't
             // leave dangling nav entries pointing at the wrong season.
             let nextUpSeasonId = refreshedNextUp?.seasonID
-            if let nextUpSeasonId, nextUpSeasonId != seasonId {
+            // Against the season on screen NOW, not the one captured before the
+            // awaits: the user may have switched season meanwhile (B8).
+            if let nextUpSeasonId, nextUpSeasonId != selectedSeasonId {
                 let refreshedNextUpEpisodes = (try? await apiClient.getEpisodes(
                     seriesId: id, seasonId: nextUpSeasonId, userId: userId
                 )) ?? []

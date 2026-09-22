@@ -175,6 +175,16 @@ final class HomeViewModel {
     /// failed (`loadFailure` only replaces an EMPTY Home).
     private var loadedIdentity: String?
 
+    /// Whether a pass started under `generation` may still write. A newer
+    /// `load` supersedes it, and so does cancellation: when a superseded load
+    /// returns, its `async let` children are cancelled and every `try?` in
+    /// them comes back empty — written out, that painted `.failed` genre rows
+    /// and an empty « En direct » over the NEWER load's screen, which also hid
+    /// its error state behind them (adversarial review of B13, 2026-09-22).
+    private func isCurrent(_ generation: Int) -> Bool {
+        generation == loadGeneration && !Task.isCancelled
+    }
+
     private func clearContent() {
         heroItem = nil
         resumeItems = []
@@ -412,16 +422,16 @@ final class HomeViewModel {
         // single most expensive thing on this screen (up to 8 queries), and the
         // « En direct » pair costs two more.
         async let genreRowsDone: Void = rails.genreRows
-            ? loadGenreRows(userId: userId, appState: appState)
+            ? loadGenreRows(userId: userId, appState: appState, generation: generation)
             : ()
         async let sessionsDone: Void = rails.watchingNow
-            ? loadActiveSessions(userId: userId, appState: appState)
+            ? loadActiveSessions(userId: userId, appState: appState, generation: generation)
             : ()
         // Phase 2, not phase 1: its exclusion list is Continue Watching, which
         // is only known once phase 1 has landed — and the rail sits just above
         // the genre rows, so filling in late moves nothing already on screen.
         async let becauseYouWatchedDone: Void = rails.becauseYouWatched
-            ? loadBecauseYouWatched(userId: userId, appState: appState)
+            ? loadBecauseYouWatched(userId: userId, appState: appState, generation: generation)
             : ()
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
@@ -636,9 +646,9 @@ final class HomeViewModel {
         case .playlists: await refreshPlaylists(using: appState)
         case .upcoming: await refreshUpcoming(using: appState)
         case .collections: await refreshCollections(using: appState)
-        case .becauseYouWatched: await loadBecauseYouWatched(userId: userId, appState: appState)
-        case .genreRows: await loadGenreRows(userId: userId, appState: appState)
-        case .watchingNow: await loadActiveSessions(userId: userId, appState: appState)
+        case .becauseYouWatched: await loadBecauseYouWatched(userId: userId, appState: appState, generation: loadGeneration)
+        case .genreRows: await loadGenreRows(userId: userId, appState: appState, generation: loadGeneration)
+        case .watchingNow: await loadActiveSessions(userId: userId, appState: appState, generation: loadGeneration)
         }
     }
 
@@ -723,7 +733,7 @@ final class HomeViewModel {
     /// refresh. Must run after `resumeItems` is known — it is the exclusion
     /// list. A failed request leaves the rail as it was (same discipline as
     /// `refreshCollections`); a SUCCESSFUL answer with nothing to show hides it.
-    private func loadBecauseYouWatched(userId: String, appState: AppState) async {
+    private func loadBecauseYouWatched(userId: String, appState: AppState, generation: Int) async {
         let lastPlayed: BaseItemDto?
         do {
             lastPlayed = try await appState.apiClient.getItems(
@@ -740,6 +750,7 @@ final class HomeViewModel {
             logger.warning("Home because-you-watched seed fetch failed: \(error.localizedDescription, privacy: .public)")
             return
         }
+        guard isCurrent(generation) else { return }
         guard let lastPlayed, let seed = Self.becauseYouWatchedSeed(from: lastPlayed) else {
             setBecauseYouWatched(nil)
             return
@@ -753,6 +764,7 @@ final class HomeViewModel {
             logger.warning("Home because-you-watched similar fetch failed: \(error.localizedDescription, privacy: .public)")
             return
         }
+        guard isCurrent(generation) else { return }
         let items = Self.becauseYouWatchedItems(similar: similar, seedId: seed.id, resumeItems: resumeItems)
         setBecauseYouWatched(items.isEmpty ? nil : BecauseYouWatchedRail(seedTitle: seed.title, items: items))
     }
@@ -877,12 +889,12 @@ final class HomeViewModel {
     /// members, so a non-member is told nothing at all.
     func refreshLiveRow(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
-        await loadActiveSessions(userId: userId, appState: appState)
+        await loadActiveSessions(userId: userId, appState: appState, generation: loadGeneration)
     }
 
     /// Fetches active sessions and filters down to ones with a currently-playing item,
     /// excluding the logged-in user (their own "resume" already covers that).
-    private func loadActiveSessions(userId: String, appState: AppState) async {
+    private func loadActiveSessions(userId: String, appState: AppState, generation: Int) async {
         // Equality-guarded, all three of them: `HomeScreen` re-runs this every
         // 20 s while Accueil is the visible tab, and `@Observable` fires
         // `withMutation` even for an identical value — so an unchanged poll was
@@ -933,6 +945,7 @@ final class HomeViewModel {
         // groups down with it, and vice versa.
         let freshSessions = await sessions
         let freshGroups = await groups
+        guard isCurrent(generation) else { return }
         if activeSessions != freshSessions { activeSessions = freshSessions }
         if syncPlayGroups != freshGroups { syncPlayGroups = freshGroups }
     }
@@ -943,17 +956,17 @@ final class HomeViewModel {
     /// reflected live without re-running the whole Home load.
     func reloadGenreRows(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
-        await loadGenreRows(userId: userId, appState: appState)
+        await loadGenreRows(userId: userId, appState: appState, generation: loadGeneration)
     }
 
-    private func loadGenreRows(userId: String, appState: AppState) async {
+    private func loadGenreRows(userId: String, appState: AppState, generation: Int) async {
         let allGenres: [String]
         do {
             allGenres = try await appState.apiClient.getGenres(
                 userId: userId, includeItemTypes: [.movie, .series]
             )
         } catch {
-            genreRows = []
+            if isCurrent(generation) { genreRows = [] }
             return
         }
 
@@ -962,7 +975,7 @@ final class HomeViewModel {
         let sortedGenres = allGenres.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
         guard !sortedGenres.isEmpty else {
-            genreRows = []
+            if isCurrent(generation) { genreRows = [] }
             return
         }
 
@@ -972,7 +985,7 @@ final class HomeViewModel {
         let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres, in: defaults)
 
         guard !picked.isEmpty else {
-            genreRows = []
+            if isCurrent(generation) { genreRows = [] }
             return
         }
 
@@ -1005,6 +1018,7 @@ final class HomeViewModel {
             }
         }
 
+        guard isCurrent(generation) else { return }
         genreRows = picked.compactMap { genre in
             switch results[genre] {
             case .success(let items) where !items.isEmpty:
@@ -1030,8 +1044,10 @@ final class HomeViewModel {
     func retryGenre(_ genre: String, using appState: AppState) async {
         guard let userId = appState.currentUserId,
               genreRows.contains(where: { $0.genre == genre }) else { return }
+        let generation = loadGeneration
         do {
             let items = try await Self.fetchGenreItems(genre: genre, userId: userId, appState: appState)
+            guard isCurrent(generation) else { return }
             guard let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
             if items.isEmpty {
                 genreRows.remove(at: index)
@@ -1039,7 +1055,8 @@ final class HomeViewModel {
                 genreRows[index].state = .items(items)
             }
         } catch {
-            guard let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
+            guard isCurrent(generation),
+                  let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
             genreRows[index].state = .failed
         }
     }
