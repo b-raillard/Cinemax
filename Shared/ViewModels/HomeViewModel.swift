@@ -100,7 +100,14 @@ final class HomeViewModel {
     /// completes. `HomeScreen` gates the all-empty `EmptyStateView` on this so
     /// it can't flash mid-load while later phases are still populating.
     var isFullyLoaded = false
-    var errorMessage: String?
+    /// Set when EVERY phase-1 fetch of the last load failed — the server could
+    /// not be reached, or refused every request. Kept apart from "the server
+    /// answered and has nothing", because the two used to render the same
+    /// « Votre bibliothèque est vide » screen: offline, the app told the user
+    /// their content was gone and invited them to add films. `HomeScreen`
+    /// shows an error state for it only while there is nothing on screen, so
+    /// a failed refresh never blanks rails that loaded earlier.
+    private(set) var loadFailure: (any Error)?
 
     /// How many cards "Recently Added" shows, and how many of them may be
     /// shows-that-just-got-episodes. The cap is what keeps the second source a
@@ -168,13 +175,15 @@ final class HomeViewModel {
         hasLoaded = true
         isLoading = true
         isFullyLoaded = false
-        errorMessage = nil
 
         enum Section {
             case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto])
             case nextUp([BaseItemDto]); case playlists([BaseItemDto])
             case upcoming([BaseItemDto]); case collections([BaseItemDto])
+            case failed(any Error)
         }
+        var anySucceeded = false
+        var firstError: (any Error)?
 
         // A rail the user has switched off is not fetched. Every branch below
         // used to run unconditionally, so « Prochainement » and « Collections »
@@ -202,7 +211,7 @@ final class HomeViewModel {
                     return .resume(try await appState.apiClient.getResumeItems(userId: userId, limit: 20))
                 } catch {
                     logger.warning("Home resume fetch failed: \(error.localizedDescription, privacy: .public)")
-                    return nil
+                    return .failed(error)
                 }
             }
             group.addTask {
@@ -257,7 +266,7 @@ final class HomeViewModel {
                         ).items)
                     } catch {
                         logger.warning("Home favorites fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -267,7 +276,7 @@ final class HomeViewModel {
                         return .nextUp(try await appState.apiClient.getNextUpEpisodes(userId: userId, limit: 20))
                     } catch {
                         logger.warning("Home next-up fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -277,7 +286,7 @@ final class HomeViewModel {
                         return .playlists(try await appState.apiClient.getPlaylists(userId: userId))
                     } catch {
                         logger.warning("Home playlists fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -287,7 +296,7 @@ final class HomeViewModel {
                         return .upcoming(try await appState.apiClient.getUpcomingEpisodes(userId: userId, limit: 20))
                     } catch {
                         logger.warning("Home upcoming fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -306,11 +315,19 @@ final class HomeViewModel {
                         ).items)
                     } catch {
                         logger.warning("Home collections fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
             for await result in group {
+                // A `nil` is the Recently Added task, whose two sources degrade
+                // on their own and report no error when both fail.
+                guard let result else { continue }
+                if case .failed(let error) = result {
+                    if firstError == nil { firstError = error }
+                    continue
+                }
+                anySucceeded = true
                 switch result {
                 case .resume(let items): resumeItems = items
                 case .latest(let items): latestItems = items
@@ -319,12 +336,24 @@ final class HomeViewModel {
                 case .playlists(let items): playlists = items
                 case .upcoming(let items): upcomingItems = items
                 case .collections(let items): collections = items
-                case nil: break
+                case .failed: break
                 }
             }
         }
 
         heroItem = resumeItems.first ?? latestItems.first
+
+        // Every source failed: the server is unreachable (or refusing every
+        // request). Stop here rather than running phase 2 — its genre fan-out
+        // would only fail the same way, after up to another request timeout
+        // spent behind the skeleton. Cancellation is not a failure.
+        guard anySucceeded || Task.isCancelled else {
+            loadFailure = firstError ?? URLError(.unknown)
+            isLoading = false
+            isFullyLoaded = true
+            return
+        }
+        loadFailure = nil
 
         // Progressive render: the hero + rails are ready, so drop the skeleton
         // now. Genre rows, active sessions, and the episode-nav maps keep filling
@@ -501,7 +530,15 @@ final class HomeViewModel {
     private func refreshResume(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         if let items = try? await appState.apiClient.getResumeItems(userId: userId, limit: 20) {
-            resumeItems = items
+            if items != resumeItems { resumeItems = items }
+            // The hero is derived from this rail, and `load()` used to be its
+            // only writer: iOS draws its carousel off `resumeItems` live, but
+            // tvOS renders `heroItem`, so after a playback its « Reprendre »
+            // reopened the film where it was at page load while the card right
+            // under it showed the new position — and a film just finished
+            // stayed in the hero. Equality-guarded like every write here.
+            let hero = resumeItems.first ?? latestItems.first
+            if hero != heroItem { heroItem = hero }
         }
     }
 
@@ -512,7 +549,7 @@ final class HomeViewModel {
     func refreshFavorites(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         do {
-            favoriteItems = try await appState.apiClient.getItems(
+            let items = try await appState.apiClient.getItems(
                 userId: userId,
                 includeItemTypes: [.movie, .series],
                 sortBy: [.dateCreated],
@@ -521,6 +558,7 @@ final class HomeViewModel {
                 limit: 20,
                 enableTotalRecordCount: false
             ).items
+            if items != favoriteItems { favoriteItems = items }
         } catch {
             logger.warning("Favorites refresh failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -706,9 +744,13 @@ final class HomeViewModel {
     /// silences autoplay-next and the end-of-series card, and a card that has
     /// just ENTERED a rail has no entry at all rather than a stale one.
     func refreshUserDataRails(using appState: AppState) async {
+        // Same gate as `load()`: a rail the user switched off is not fetched —
+        // this ran on every playback end and every watched toggle anywhere in
+        // the app, so the two gated rails cost two requests each time for
+        // cards nobody could see. Resume stays ungated: it feeds the hero.
         async let resume: Void = refreshResume(using: appState)
-        async let nextUp: Void = refreshNextUp(using: appState)
-        async let favorites: Void = refreshFavorites(using: appState)
+        async let nextUp: Void = HomeRailPreferences.showNextUp ? refreshNextUp(using: appState) : ()
+        async let favorites: Void = HomeRailPreferences.showFavorites ? refreshFavorites(using: appState) : ()
         _ = await (resume, nextUp, favorites)
         // « Parce que vous avez vu … » is userData-dependent twice over: its
         // SEED is the last played item — finishing a film is exactly when it
@@ -764,7 +806,7 @@ final class HomeViewModel {
     private func refreshNextUp(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         if let items = try? await appState.apiClient.getNextUpEpisodes(userId: userId, limit: 20) {
-            nextUpItems = items
+            if items != nextUpItems { nextUpItems = items }
         }
     }
 

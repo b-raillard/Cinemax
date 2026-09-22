@@ -405,6 +405,68 @@ struct HomeViewModelTests {
         #expect(!vm.isLoading)
     }
 
+    // MARK: - Serveur injoignable ≠ bibliothèque vide (audit 2026-09-22, U1)
+
+    @Test("Every phase-1 source failing sets loadFailure and skips phase 2")
+    func totalFailureIsReported() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        api.seriesWithRecentEpisodesShouldThrow = true
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(vm.loadFailure != nil)
+        #expect(!vm.isLoading)
+        #expect(vm.isFullyLoaded, "the screen must leave the skeleton to show the error")
+    }
+
+    @Test("One source answering keeps loadFailure nil (an empty server, not an unreachable one)")
+    func partialFailureIsNotReported() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        // The second Recently Added source still answers (with nothing).
+        let vm = HomeViewModel()
+
+        await vm.load(using: makeAppState(api: api))
+
+        #expect(vm.loadFailure == nil)
+    }
+
+    @Test("A successful reload clears a previous loadFailure")
+    func successfulReloadClearsFailure() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        api.seriesWithRecentEpisodesShouldThrow = true
+        let vm = HomeViewModel()
+        let appState = makeAppState(api: api)
+        await vm.load(using: appState)
+        #expect(vm.loadFailure != nil, "pré-condition")
+
+        api.shouldThrow = false
+        api.seriesWithRecentEpisodesShouldThrow = false
+        await vm.reload(using: appState)
+
+        #expect(vm.loadFailure == nil)
+    }
+
+    // MARK: - Héros recalculé après une lecture (audit 2026-09-22, B7)
+
+    @Test("The tier-2 refresh re-derives the hero from the refreshed resume rail")
+    func tierTwoRefreshUpdatesHero() async {
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeItem(name: "Before")]
+        let vm = HomeViewModel()
+        let appState = makeAppState(api: api)
+        await vm.load(using: appState)
+        #expect(vm.heroItem?.name == "Before", "pré-condition")
+
+        api.stubbedResumeItems = [makeItem(name: "After")]
+        await vm.refreshUserDataRails(using: appState)
+
+        #expect(vm.heroItem?.name == "After")
+    }
+
     // MARK: - Targeted userData refresh
 
     @Test("refreshUserDataRails re-fetches only resume/nextUp/favorites, not genre/latest")

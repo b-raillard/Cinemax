@@ -922,7 +922,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             timeSource: { [weak self] in
                 guard let self else { return (0, true) }
                 return (Double(self.currentMs) / 1000.0, !self.enginePlaying)
-            }
+            },
+            pendingResume: { [weak self] in self?.pendingResumeSecondsForReport }
         )
     }
 
@@ -3657,6 +3658,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         !didSeekToStart && (startTime ?? 0) > 0
     }
 
+    /// The position every report must carry instead of the engine's while the
+    /// engine has not reached it (see `PlaybackReporter.reportableSeconds`).
+    /// Two shapes: a resume seek not sent yet (initial open, wake re-resolve,
+    /// or a mid-film retry once it has re-armed `startTime`), and a re-open
+    /// that has not produced a demuxer yet — between `beginOpenLoading()` and
+    /// the retry's own `startTime` write, the dead engine reads 0 while
+    /// `lastKnownPositionMs` still holds where the film dropped. An episode
+    /// swap zeroes that position, so a new episode reports its own playhead.
+    private var pendingResumeSecondsForReport: Double? {
+        if startSeekPending { return startTime }
+        if !mediaConfirmedOpen, lastKnownPositionMs > 1000 { return Double(lastKnownPositionMs) / 1000 }
+        return nil
+    }
+
     /// Repaints presence, the waiting overlay and any arrival/departure line.
     /// Driven by the controller's `onSessionChanged`, so it covers joining and
     /// leaving mid-playback as well as the initial state.
@@ -3926,8 +3941,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
         reporter?.resetTicking()
-        reporter?.reportStart(startTime: Double(currentMs) / 1000.0)
+        reporter?.reportStart(startTime: pendingResumeSecondsForReport ?? Double(currentMs) / 1000.0)
         startProgressTimer()
+        // "The episode on screen keeps playing" only holds when it IS playing.
+        // A Next pressed during an error retry's window (the retry token was
+        // just cleared by this nav, and the watchdog cancelled by the retry)
+        // leaves nothing that could ever end the spinner — hand the media back
+        // to the error path, which retries once or surfaces the alert.
+        guard mediaConfirmedOpen, !engineIsStopped else {
+            handlePlaybackError()
+            return
+        }
         showSkipHUD(loc.localized("player.episodeNav.failed"), duration: 1.8)
     }
 
@@ -4815,7 +4839,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 // an error retry (its token was cleared above), which had already
                 // cancelled the watchdog. Without re-arming it, nothing would ever
                 // end that spinner. A no-op if the media is actually playing.
-                if !self.isTearingDown, gen == self.navGeneration { self.scheduleOpenWatchdog() }
+                guard !self.isTearingDown, gen == self.navGeneration else { return }
+                // The watchdog alone cannot end a spinner here: its guard reads
+                // `hasValidTime` / `lengthMs`, which still describe the media from
+                // before the sleep, so it fired and did nothing — an infinite
+                // spinner (or a frozen frame) with no alert on a Wi-Fi that was
+                // not back yet. When nothing is actually playing, hand the media
+                // to the error path, which retries once or surfaces the alert.
+                if self.engineIsStopped || !self.mediaConfirmedOpen {
+                    self.handlePlaybackError()
+                } else {
+                    self.scheduleOpenWatchdog()
+                }
                 return
             }
             guard !self.isTearingDown, gen == self.navGeneration else { return }

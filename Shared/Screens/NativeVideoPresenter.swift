@@ -28,6 +28,11 @@ final class NativeVideoPresenter {
     private var itemId: String
     private let title: String
     private var startTime: Double?
+    /// True from open until the resume seek to `startTime` has completed (or
+    /// turned out not to apply). While it holds, every playback report carries
+    /// `startTime` instead of the player's clock, which reads 0/NaN until the
+    /// item is ready — see `PlaybackReporter.reportableSeconds`.
+    private var resumeSeekPending = false
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
@@ -117,8 +122,13 @@ final class NativeVideoPresenter {
             context: { [weak self] in
                 guard let self, let info = self.playbackInfo else { return nil }
                 return .init(itemId: self.itemId, info: info, player: self.playerVC?.player)
+            },
+            pendingResume: { [weak self] in
+                guard let self, self.resumeSeekPending else { return nil }
+                return self.startTime
             }
         )
+        self.resumeSeekPending = (startTime ?? 0) > 0
         self.skipSegments = SkipSegmentController(
             apiClient: apiClient, loc: loc,
             playerVCProvider: { [weak self] in self?.playerVC }
@@ -346,7 +356,11 @@ final class NativeVideoPresenter {
                     case .readyToPlay:
                         if let st, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
                             avPlayer?.seek(to: CMTime(seconds: target, preferredTimescale: 600),
-                                          toleranceBefore: .zero, toleranceAfter: .zero)
+                                          toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                                Task { @MainActor in self?.resumeSeekPending = false }
+                            }
+                        } else {
+                            self?.resumeSeekPending = false
                         }
                     case .failed:
                         logger.error("AVPlayer failed: \(item.error?.localizedDescription ?? "unknown")")
@@ -409,7 +423,11 @@ final class NativeVideoPresenter {
                 case .readyToPlay:
                     if let st = startTime, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
                         player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
-                                    toleranceBefore: .zero, toleranceAfter: .zero)
+                                    toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                            Task { @MainActor in self?.resumeSeekPending = false }
+                        }
+                    } else {
+                        self?.resumeSeekPending = false
                     }
                 case .failed:
                     logger.error("AVPlayer failed on direct URL fallback: \(item.error?.localizedDescription ?? "unknown")")
@@ -584,6 +602,7 @@ final class NativeVideoPresenter {
             // to the first item presented.
             self.itemId = ep.id
             self.startTime = nil
+            self.resumeSeekPending = false
             self.previousEpisode = prev
             self.nextEpisode = next
             self.audioTracks = info.audioTracks

@@ -768,7 +768,6 @@
 "detail.seeMore" = "See more";
 "detail.studio" = "Studio";
 "detail.network" = "Network";
-"detail.criticRating" = "Critics";
 "detail.audienceRating" = "Audience";
 
 // MARK: - Login
@@ -922,6 +921,7 @@
 "accessibility.playItem" = "Play %@";
 "accessibility.moreInfoAbout" = "More information about %@";
 "accessibility.resumeProgress" = "%d%% watched";
+"accessibility.criticRating" = "Critics: %d percent";
 
 // MARK: - Admin — formatting glyphs
 

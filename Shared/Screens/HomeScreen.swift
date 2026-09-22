@@ -85,6 +85,10 @@ struct HomeScreen: View {
                 // must only appear once the *entire* load finishes, never as a
                 // mid-load flash (genre rows populate after the hero/rails).
                 loadingSkeleton
+            } else if isHomeEmpty, let failure = viewModel.loadFailure {
+                // Every source failed: never « Votre bibliothèque est vide »,
+                // which told an offline user their content was gone.
+                homeErrorState(failure)
             } else if isHomeEmpty {
                 homeEmptyState
             } else {
@@ -356,6 +360,24 @@ struct HomeScreen: View {
         #if os(iOS)
         // Inert on tvOS — a remote has no pull gesture. Refresh lives in the
         // empty state's own action there.
+        .refreshable { await viewModel.reload(using: appState) }
+        #endif
+    }
+
+    private func homeErrorState(_ failure: any Error) -> some View {
+        ScrollView {
+            ErrorStateView(
+                message: loc.userFacingMessage(for: failure),
+                retryTitle: loc.localized("action.retry"),
+                // The cloud claims a cause; draw it only when the message
+                // itself says the server could not be reached.
+                illustration: loc.userFacingMessage(for: failure) == loc.localized("error.network") ? .offline : nil
+            ) {
+                Task { await viewModel.reload(using: appState) }
+            }
+            .padding(.top, CinemaSpacing.spacing20)
+        }
+        #if os(iOS)
         .refreshable { await viewModel.reload(using: appState) }
         #endif
     }

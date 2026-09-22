@@ -36,11 +36,22 @@ final class PlaybackReporter {
     /// the reporter reads `Context.player`; the VLC path injects this closure
     /// so the same reporter works without an `AVPlayer`.
     typealias TimeSource = @MainActor () -> (seconds: Double, isPaused: Bool)
+    /// A resume position that was asked for and that the engine has not
+    /// reached yet (`nil` once it has, or when there is none).
+    typealias PendingResumeSource = @MainActor () -> Double?
 
     private let apiClient: any PlaybackAPI
     private let userId: String
     private let context: ContextProvider
     private let timeSource: TimeSource?
+    private let pendingResume: PendingResumeSource?
+    /// Play sessions whose stop has already been reported. Jellyfin records
+    /// `PositionTicks` from EVERY stop it receives, so a second report of the
+    /// same session (the end-of-series card's « Terminé » after the end branch
+    /// already stopped it) could only overwrite the first with a worse
+    /// position. Cleared per session by `reportStart`, which is what lets a
+    /// failed episode swap re-open and later stop the session it had closed.
+    private var stoppedPlaySessionIds: Set<String> = []
     private var tickCounter = 0
     /// Separate from `tickCounter`: the cadence differs (30 s vs 10 s) and the
     /// keep-alive carries conditions progress reporting doesn't have.
@@ -51,20 +62,46 @@ final class PlaybackReporter {
         apiClient: any PlaybackAPI,
         userId: String,
         context: @escaping ContextProvider,
-        timeSource: TimeSource? = nil
+        timeSource: TimeSource? = nil,
+        pendingResume: PendingResumeSource? = nil
     ) {
         self.apiClient = apiClient
         self.userId = userId
         self.context = context
         self.timeSource = timeSource
+        self.pendingResume = pendingResume
     }
 
     /// Current (positionSeconds, isPaused) from the injected time source if
-    /// present, else from the AVPlayer in `Context`.
+    /// present, else from the AVPlayer in `Context` — with a pending resume
+    /// position taking precedence over the engine (see `reportableSeconds`).
     private func currentState(_ ctx: Context) -> (seconds: Double, isPaused: Bool)? {
-        if let timeSource { return timeSource() }
-        guard let player = ctx.player else { return nil }
-        return (player.currentTime().seconds, player.rate == 0)
+        let engine: (seconds: Double, isPaused: Bool)
+        if let timeSource {
+            engine = timeSource()
+        } else {
+            guard let player = ctx.player else { return nil }
+            engine = (player.currentTime().seconds, player.rate == 0)
+        }
+        return (Self.reportableSeconds(engineSeconds: engine.seconds, pendingResumeSeconds: pendingResume?()),
+                engine.isPaused)
+    }
+
+    /// The position a report may carry.
+    ///
+    /// **Until the engine has reached the resume position it was asked for, the
+    /// report carries THAT position, never the engine's.** Before the media is
+    /// open — or before the resume seek has landed — the engine reads 0 (or NaN
+    /// on AVPlayer, which `positionTicks` also maps to 0), and Jellyfin persists
+    /// `PositionTicks` from every progress AND stop report. So closing the
+    /// player during the loading spinner, or on « Lecture impossible », used to
+    /// write 0 over a resume point at 1 h 20: the film went back to the start
+    /// and dropped out of Continue Watching. Reporting the pending position
+    /// instead leaves the server exactly where it was. The position is never
+    /// omitted: Jellyfin reads a stop with no `PositionTicks` as "watched".
+    nonisolated static func reportableSeconds(engineSeconds: Double, pendingResumeSeconds: Double?) -> Double {
+        if let pending = pendingResumeSeconds, pending.isFinite, pending > 0 { return pending }
+        return engineSeconds
     }
 
     /// Converts a playback position in seconds to Jellyfin's 100 ns ticks.
@@ -89,6 +126,7 @@ final class PlaybackReporter {
 
     func reportStart(startTime: Double?) {
         guard let ctx = context() else { return }
+        if let id = ctx.info.playSessionId { stoppedPlaySessionIds.remove(id) }
         let positionTicks = startTime.map { Self.positionTicks(fromSeconds: $0) } ?? 0
         let client = apiClient
         let uid = userId
@@ -114,6 +152,9 @@ final class PlaybackReporter {
     /// exact bug this notification exists to fix, made intermittent by the race.
     func reportStop(reason: PlaybackStopReason = .sessionEnded) {
         guard let ctx = context() else { return }
+        if let id = ctx.info.playSessionId {
+            guard stoppedPlaySessionIds.insert(id).inserted else { return }
+        }
         let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient
         let uid = userId

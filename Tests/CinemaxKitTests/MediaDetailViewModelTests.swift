@@ -142,6 +142,72 @@ struct MediaDetailViewModelTests {
         #expect(api.markUnplayedCalls == ["movie-1"])
     }
 
+    /// Audit 2026-09-22 (B6) : « Marquer comme vu » ne basculait que `isPlayed`,
+    /// alors que « Reprendre » et la barre de progression lisent `item.userData`
+    /// via `resolvedPlayTarget` — le bouton restait et rouvrait le film au milieu.
+    @Test("togglePlayed clears the resume position the Play button reads")
+    func togglePlayedClearsResumeOnItem() async {
+        let api = MockAPIClient()
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        var movie = makeMovie(id: "movie-1", played: false)
+        movie.userData?.playbackPositionTicks = 30_000_000_000
+        vm.item = movie
+        vm.isPlayed = false
+
+        await vm.togglePlayed(using: appState)
+        #expect(vm.item?.userData?.isPlayed == true)
+        #expect(vm.item?.userData?.playbackPositionTicks == 0)
+    }
+
+    // MARK: - « Titres similaires » hors du chemin critique (audit 2026-09-22, P1)
+
+    @Test("A failing /Similar never replaces the fiche with the error screen")
+    func similarFailureIsNotFatal() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeMovie(id: id, played: false) }
+        api.similarItemsShouldThrow = true
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+        await vm.similarTask?.value
+
+        #expect(vm.errorMessage == nil)
+        #expect(vm.item?.id == "movie-1")
+        #expect(vm.similarItems.isEmpty)
+    }
+
+    @Test("Similar titles fill in from the side task")
+    func similarFillsInAfterLoad() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeMovie(id: id, played: false) }
+        api.stubbedSimilarItems = [makeMovie(id: "other", played: false)]
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+        await vm.similarTask?.value
+
+        #expect(vm.similarItems.map(\.id) == ["other"])
+    }
+
+    @Test("A successful retry clears the error screen")
+    func retryClearsError() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        await vm.load(using: appState, loc: LocalizationManager())
+        #expect(vm.errorMessage != nil, "pré-condition")
+
+        api.shouldThrow = false
+        api.getItemHandler = { id in makeMovie(id: id, played: false) }
+        await vm.load(using: appState, loc: LocalizationManager())
+
+        #expect(vm.errorMessage == nil)
+    }
+
     @Test("toggleEpisodeWatched flips the local episode payload and clears resume")
     func toggleEpisodeWatchedUpdatesLocalState() async {
         let api = MockAPIClient()

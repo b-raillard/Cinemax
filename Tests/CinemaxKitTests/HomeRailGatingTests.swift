@@ -305,6 +305,21 @@ struct HomeRailGatingTests {
         #expect(api.getSimilarItemsCallCount == 0)
     }
 
+    @Test("switched off, the tier-2 refresh skips Next Up and Favorites too")
+    func tierTwoSkipsDisabledNextUpAndFavorites() async {
+        setRails(nextUp: false, favorites: false, becauseYouWatched: false)
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        let vm = HomeViewModel()
+
+        await vm.refreshUserDataRails(using: makeAppState(api: api))
+
+        #expect(api.getResumeItemsCallCount == 1, "the control: the tier-2 refresh did run")
+        #expect(api.getNextUpEpisodesCallCount == 0)
+        #expect(api.favoriteFetchCount == 0)
+    }
+
     @Test("a movie seeds itself; an episode with no series seeds nothing")
     func seedRule() {
         let movie = makeItem(name: "Dune")

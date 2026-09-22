@@ -333,6 +333,75 @@ struct PlaybackReporterTests {
         #expect(mock.lastStopTicks == 420_000_000)
     }
 
+    // MARK: - Point de reprise tant que la reprise n'a pas eu lieu
+
+    /// Verrouille le correctif de l'audit 2026-09-22 (B1) : fermer le lecteur
+    /// pendant le spinner d'un « Reprendre » envoyait `PositionTicks = 0`, que
+    /// Jellyfin enregistre — le film revenait au début et sortait de Reprendre.
+
+    @Test("reportableSeconds : une reprise en attente l'emporte sur le moteur")
+    func reportableSecondsPrefersPendingResume() {
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 0, pendingResumeSeconds: 4800) == 4800)
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: nil) == 12)
+        // Une reprise nulle, négative ou non finie n'est pas une reprise.
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: 0) == 12)
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: -3) == 12)
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: .nan) == 12)
+    }
+
+    @Test("Stop avant la reprise : le serveur reçoit la position demandée, pas 0")
+    func stopBeforeResumeKeepsResumePoint() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 0, isPaused: false) },
+            pendingResume: { 4800 }
+        )
+
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.lastStopTicks == 48_000_000_000)
+    }
+
+    @Test("Deux stops de la même session : un seul part au serveur")
+    func secondStopOfSameSessionIsDropped() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        reporter.reportStop()
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mock.stopCount == 1)
+    }
+
+    @Test("reportStart rouvre une session arrêtée (navigation d'épisode ratée)")
+    func startReopensStoppedSession() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        reporter.reportStop(reason: .episodeSwap)
+        reporter.reportStart(startTime: 42)
+        reporter.reportStop()
+        for _ in 0..<200 where mock.stopCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(mock.stopCount == 2)
+    }
+
     // MARK: - Annonce du changement de données utilisateur
 
     /// Verrouille le correctif du Home périmé : la lecture était le seul

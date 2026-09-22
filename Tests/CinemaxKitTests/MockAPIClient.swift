@@ -563,11 +563,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// Every `getSimilarItems` call's seed id and limit, in order.
     private(set) var similarItemsRequests: [(itemId: String, limit: Int)] = []
     var stubbedSimilarItems: [BaseItemDto] = []
+    /// Dedicated flag, never `shouldThrow`: the fiche test needs the item to
+    /// load while `/Similar` alone fails.
+    var similarItemsShouldThrow = false
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock {
             getSimilarItemsCallCount += 1
             similarItemsRequests.append((itemId: itemId, limit: limit))
         }
+        if similarItemsShouldThrow { throw stubbedError }
         return stubbedSimilarItems
     }
 

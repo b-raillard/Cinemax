@@ -707,7 +707,7 @@ struct MediaDetailScreen: View {
                     }
                     .font(.system(size: ratingFontSize))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .accessibilityLabel("\(loc.localized("detail.criticRating")) \(Int(critic.rounded())) percent")
+                    .accessibilityLabel(loc.localized("accessibility.criticRating", Int(critic.rounded())))
                 }
             }
         }

@@ -172,14 +172,20 @@ final class AppState {
             maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
         )
         guard let id = currentUserId else {
-            currentUser = nil
-            isAdministrator = false
+            if currentUser != nil { currentUser = nil }
+            if isAdministrator { isAdministrator = false }
             return
         }
         do {
             let user = try await apiClient.getUserByID(id: id)
-            currentUser = user
-            isAdministrator = user.policy?.isAdministrator ?? false
+            // Equality-guarded: this runs on EVERY return to the foreground and
+            // on every `UserUpdated` socket frame, and `@Observable` fires
+            // `withMutation` even for an identical value — which invalidated
+            // every view reading either property (each library card reads
+            // `isAdministrator` on iOS) for an answer that almost never changes.
+            if user != currentUser { currentUser = user }
+            let admin = user.policy?.isAdministrator ?? false
+            if admin != isAdministrator { isAdministrator = admin }
         } catch {
             // Network blip — keep last-known values.
         }
@@ -1301,6 +1307,16 @@ struct AppNavigation: View {
             // controllable-session landscape, so the last poll's count can't
             // be trusted for them either.
             cardActions.knownRemoteTargetCount = nil
+        }
+        .onChange(of: appState.isAuthenticated) { _, _ in
+            // A fresh sign-in sets `currentUserId` BEFORE `isAuthenticated`
+            // (`LoginViewModel.completeSession` awaits `refreshCurrentUser` and
+            // the success dwell in between), so the `currentUserId` observer
+            // above reaches `apply` while it still reads signed-out and stops.
+            // Without this second call the device was no « Lire sur… » target
+            // and heard no invitation until the next trip to the foreground.
+            // Idempotent: `apply` no-ops on an unchanged state.
+            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
         }
         .onChange(of: remoteControlEnabled) { _, enabled in
             // Withdrawing re-posts with `supportsMediaControl: false`, which is
