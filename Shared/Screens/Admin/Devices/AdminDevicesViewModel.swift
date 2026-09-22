@@ -15,7 +15,7 @@ final class AdminDevicesViewModel {
         !isLoading && errorMessage == nil && devices.isEmpty
     }
 
-    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func load(using apiClient: any AuthAPI, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
         do {
@@ -28,7 +28,7 @@ final class AdminDevicesViewModel {
         isLoading = false
     }
 
-    func revoke(_ device: DeviceInfoDto, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func revoke(_ device: DeviceInfoDto, using apiClient: any AuthAPI, loc: LocalizationManager) async -> Bool {
         guard let id = device.id else { return false }
         do {
             try await apiClient.deleteDevice(id: id)

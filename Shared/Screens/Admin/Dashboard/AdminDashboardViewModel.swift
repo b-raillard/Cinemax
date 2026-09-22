@@ -15,7 +15,7 @@ final class AdminDashboardViewModel {
     /// renders as fast as the slowest dependency. We intentionally don't bail
     /// on the first failure — each fetch owns its own try/catch so a broken
     /// system-info endpoint doesn't hide active sessions, and vice versa.
-    func load(using apiClient: any APIClientProtocol) async {
+    func load(using apiClient: any AdminAPI & AuthAPI) async {
         isLoading = true
         errorMessage = nil
 

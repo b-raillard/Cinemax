@@ -43,7 +43,7 @@ final class NativeVideoPresenter {
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any APIClientProtocol
+    private let apiClient: any PlaybackAPI & LibraryAPI
     private let userId: String
     private let maxBitrate: Int
     private let loc: LocalizationManager
@@ -104,7 +104,7 @@ final class NativeVideoPresenter {
         itemId: String, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?,
-        apiClient: any APIClientProtocol, userId: String,
+        apiClient: any PlaybackAPI & LibraryAPI, userId: String,
         maxBitrate: Int, loc: LocalizationManager,
         autoPlayNextEpisode: Bool,
         imageBuilder: ImageURLBuilder,

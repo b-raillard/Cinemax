@@ -42,7 +42,7 @@ final class AdminScheduledTasksViewModel {
 
     // MARK: - Load / poll
 
-    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func load(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         isLoading = tasks.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -56,7 +56,7 @@ final class AdminScheduledTasksViewModel {
 
     /// Refreshes without clearing the list. Used by the polling loop so the
     /// visible list doesn't blink on every tick.
-    private func silentRefresh(using apiClient: any APIClientProtocol) async {
+    private func silentRefresh(using apiClient: any AdminAPI) async {
         if let fresh = try? await apiClient.getScheduledTasks(includeHidden: false) {
             tasks = fresh.sorted { ($0.category ?? "") < ($1.category ?? "") }
         }
@@ -65,7 +65,7 @@ final class AdminScheduledTasksViewModel {
     /// Polls every 2s while any task is running. Self-cancels when the screen
     /// unmounts (via `stopPolling()`) or when no tasks are running — whichever
     /// comes first.
-    func startPolling(using apiClient: any APIClientProtocol) {
+    func startPolling(using apiClient: any AdminAPI) {
         stopPolling()
         pollingTask = Task { @MainActor [weak self] in
             while let self, !Task.isCancelled {
@@ -84,7 +84,7 @@ final class AdminScheduledTasksViewModel {
 
     // MARK: - Actions
 
-    func startTask(_ task: TaskInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func startTask(_ task: TaskInfo, using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         guard let id = task.id else { return false }
         pendingActionTaskId = id
         defer { pendingActionTaskId = nil }
@@ -99,7 +99,7 @@ final class AdminScheduledTasksViewModel {
         }
     }
 
-    func stopTask(_ task: TaskInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func stopTask(_ task: TaskInfo, using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         guard let id = task.id else { return false }
         pendingActionTaskId = id
         defer { pendingActionTaskId = nil }

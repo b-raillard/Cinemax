@@ -19,7 +19,7 @@ final class AdminActivityViewModel {
         !isLoading && errorMessage == nil && entries.isEmpty
     }
 
-    func loadInitial(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func loadInitial(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -37,7 +37,7 @@ final class AdminActivityViewModel {
 
     /// Fires when the last visible row appears — infinite-scroll trigger.
     /// Guards against re-entry and no-op when we've already loaded everything.
-    func loadMoreIfNeeded(currentItem entry: ActivityLogEntry, using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func loadMoreIfNeeded(currentItem entry: ActivityLogEntry, using apiClient: any AdminAPI, loc: LocalizationManager) async {
         guard hasMore, !isLoading, !isLoadingMore else { return }
         guard entries.last?.id == entry.id else { return }
 
@@ -55,7 +55,7 @@ final class AdminActivityViewModel {
         }
     }
 
-    func reload(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func reload(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         await loadInitial(using: apiClient, loc: loc)
     }
 }

@@ -73,7 +73,7 @@ final class IdentifyFlowModel {
     /// Lazy fetch of the item path. Called once from the form on first
     /// appearance; if the caller already passed a `BaseItemDto` with `path`
     /// set, this is a no-op.
-    func loadPathIfNeeded(using apiClient: any APIClientProtocol, userId: String) async {
+    func loadPathIfNeeded(using apiClient: any AdminAPI & LibraryAPI, userId: String) async {
         guard itemPath == nil, !itemId.isEmpty, !userId.isEmpty else { return }
         if let item = try? await apiClient.getItem(userId: userId, itemId: itemId) {
             self.itemPath = item.path
@@ -82,7 +82,7 @@ final class IdentifyFlowModel {
 
     /// Dispatches to the right remote-search endpoint based on the item's
     /// kind. Only movies and series are supported.
-    func runSearch(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func runSearch(using apiClient: any AdminAPI & LibraryAPI, loc: LocalizationManager) async {
         guard !itemId.isEmpty else { return }
         isSearching = true
         errorMessage = nil
@@ -122,7 +122,7 @@ final class IdentifyFlowModel {
     /// Applies a chosen result. Returns `true` on success so the hosting
     /// screen can toast + dismiss/pop. Posts `.cinemaxShouldRefreshCatalogue`
     /// on success so Home and Library re-fetch with the new artwork.
-    func apply(_ result: RemoteSearchResult, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func apply(_ result: RemoteSearchResult, using apiClient: any AdminAPI & LibraryAPI, loc: LocalizationManager) async -> Bool {
         guard !itemId.isEmpty else { return false }
         isApplying = true
         errorMessage = nil
