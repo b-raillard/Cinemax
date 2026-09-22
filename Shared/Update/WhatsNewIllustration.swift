@@ -20,6 +20,8 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case playOn
     /// Playlists — a list being reordered.
     case playlists
+    /// A release that changed nothing on screen — fixes and performance.
+    case underTheHood
 }
 
 struct WhatsNewIllustrationView: View {
@@ -50,6 +52,7 @@ struct WhatsNewIllustrationView: View {
             case .watchTogether: watchTogether(u)
             case .playOn:        playOn(u)
             case .playlists:     playlists(u)
+            case .underTheHood:  underTheHood(u)
             }
         }
         .frame(width: side, height: side)
@@ -114,10 +117,44 @@ struct WhatsNewIllustrationView: View {
         }
     }
 
+    /// A screen with two accent sparkles over it: nothing was moved, the thing
+    /// behind it was polished. Deliberately the only motif with no second
+    /// object — a fix release has nothing to show, which is what it says.
+    private func underTheHood(_ u: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4 * u)
+                .fill(CinemaColor.surfaceContainerHighest)
+                .frame(width: 54 * u, height: 34 * u)
+            Sparkle()
+                .fill(accentGradient)
+                .frame(width: 20 * u, height: 20 * u)
+                .offset(x: 21 * u, y: -19 * u)
+            Sparkle()
+                .fill(themeManager.accentDim)
+                .frame(width: 11 * u, height: 11 * u)
+                .offset(x: -23 * u, y: 15 * u)
+        }
+    }
+
     private func bar(_ u: CGFloat, width: CGFloat, fill: AnyShapeStyle) -> some View {
         RoundedRectangle(cornerRadius: 3 * u)
             .fill(fill)
             .frame(width: width * u, height: 11 * u)
+    }
+}
+
+/// A four-pointed star with concave sides — `underTheHood`'s sparkles.
+private struct Sparkle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        path.move(to: CGPoint(x: c.x, y: rect.minY))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: c.y), control: c)
+        path.addQuadCurve(to: CGPoint(x: c.x, y: rect.maxY), control: c)
+        path.addQuadCurve(to: CGPoint(x: rect.minX, y: c.y), control: c)
+        path.addQuadCurve(to: CGPoint(x: c.x, y: rect.minY), control: c)
+        path.closeSubpath()
+        return path
     }
 }
 
