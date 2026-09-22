@@ -203,7 +203,7 @@ Le code Swift réellement mort est **marginal (~40 lignes sûres)**. Aucun fichi
 
 **À décider** : `PlayerChapterSelection` (testé, jamais branché) — à brancher (trait `.selected` du chapitre) ou supprimer ; `MediaSourceQuality.bitrateLabel` (tests seulement) ; `purgeLegacyDownloads()` (« garder jusqu'après 1.0.5 », on est en 2.1.1) ; paramètre `userId:` jamais lu dans `reportPlayback*` ; le stub de test SwiftPM `#expect(true)`.
 
-**Docs** : ~5 800 lignes archivables sans risque (`docs/superpowers/` — toutes les features livrées —, le plan de recette de la PR #109, `docs/v2-todo.md` dont le seul item est livré) ; `docs/architecture/*.md` sont des copies **périmées** de CLAUDE.md (« Settings → Interface → Debug », `URLSession.shared` pour l'artwork).
+**Docs** : ~5 800 lignes archivables sans risque (`docs/archive/superpowers/` — toutes les features livrées —, le plan de recette de la PR #109, `docs/v2-todo.md` dont le seul item est livré) ; `docs/architecture/*.md` sont des copies **périmées** de CLAUDE.md (« Settings → Interface → Debug », `URLSession.shared` pour l'artwork).
 
 ---
 
