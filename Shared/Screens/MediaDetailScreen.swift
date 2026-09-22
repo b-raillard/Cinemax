@@ -2172,3 +2172,22 @@ private struct WatchTogetherPresentation: ViewModifier {
         .environment(network)
     }
 }
+
+/// Builds its content only when it is itself rendered (audit P3).
+///
+/// `NavigationLink { destination } label: { … }` evaluates its destination
+/// closure every time the LINK's body runs — i.e. on every redraw of every
+/// card in a grid — and `MediaDetailScreen.init` allocates its view model
+/// there (`State(initialValue:)`). So each card redraw built, then dropped, a
+/// fiche and a view model nobody would ever see. Wrapped in this view, the
+/// destination is a closure until the link is actually pushed. Keep
+/// `.cardZoomDestination(_:)` OUTSIDE the wrapper, on the pushed view itself.
+struct DeferredView<Content: View>: View {
+    private let make: () -> Content
+
+    init(@ViewBuilder _ make: @escaping () -> Content) {
+        self.make = make
+    }
+
+    var body: some View { make() }
+}

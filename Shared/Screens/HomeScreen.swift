@@ -826,7 +826,9 @@ struct HomeScreen: View {
                             .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
 
                             NavigationLink {
-                                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                                DeferredView {
+                                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                                }
                             } label: {
                                 HStack(spacing: CinemaSpacing.spacing2) {
                                     Text(loc.localized("action.moreInfo"))
@@ -1033,8 +1035,10 @@ struct HomeScreen: View {
             // film alone are two cards on this row.
             let zoom = CardZoom(zoomNamespace, surface: "home.live", itemId: entry.id)
             NavigationLink {
-                MediaDetailScreen(itemId: id, itemType: entry.itemType ?? .movie)
-                    .cardZoomDestination(zoom)
+                DeferredView {
+                    MediaDetailScreen(itemId: id, itemType: entry.itemType ?? .movie)
+                }
+                .cardZoomDestination(zoom)
             } label: {
                 WideCard(
                     title: entry.title ?? "",
@@ -1457,10 +1461,12 @@ struct HomeScreen: View {
     private func collectionCard(_ collection: BaseItemDto) -> some View {
         let zoom = CardZoom(zoomNamespace, surface: "home.collections", itemId: collection.id)
         NavigationLink {
-            if let id = collection.id {
-                MediaDetailScreen(itemId: id, itemType: .boxSet)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = collection.id {
+                    MediaDetailScreen(itemId: id, itemType: .boxSet)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: collection.name ?? "",
@@ -1515,12 +1521,14 @@ struct HomeScreen: View {
         // upcoming episodes of one show are two cards on this rail.
         let zoom = CardZoom(zoomNamespace, surface: "home.upcoming", itemId: episode.id)
         NavigationLink {
-            // The SERIES, not the episode: an unaired episode has no fiche
-            // worth opening, and the series is what the user is following.
-            if let id = episode.seriesID ?? episode.id {
-                MediaDetailScreen(itemId: id, itemType: .series)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                // The SERIES, not the episode: an unaired episode has no fiche
+                // worth opening, and the series is what the user is following.
+                if let id = episode.seriesID ?? episode.id {
+                    MediaDetailScreen(itemId: id, itemType: .series)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             WideCard(
                 title: episode.seriesName ?? episode.name ?? "",
@@ -1554,10 +1562,12 @@ struct HomeScreen: View {
         let zoom = CardZoom(zoomNamespace, surface: surface, itemId: item.id)
 
         NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = item.id {
+                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: item.name ?? "",

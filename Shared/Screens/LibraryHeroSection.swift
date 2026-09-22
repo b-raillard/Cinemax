@@ -144,7 +144,9 @@ struct LibraryHeroSection: View {
             .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
 
             NavigationLink {
-                MediaDetailScreen(itemId: id, itemType: itemType)
+                DeferredView {
+                    MediaDetailScreen(itemId: id, itemType: itemType)
+                }
             } label: {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     Text(loc.localized("action.moreInfo"))

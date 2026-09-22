@@ -160,10 +160,12 @@ struct PersonDetailScreen: View {
             // One surface per rail (Films / Séries) — see `CardZoom`.
             let zoom = CardZoom(zoomNamespace, surface: "person.\(title)", itemId: item.id)
             NavigationLink {
-                if let id = item.id {
-                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                        .cardZoomDestination(zoom)
+                DeferredView {
+                    if let id = item.id {
+                        MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    }
                 }
+                .cardZoomDestination(zoom)
             } label: {
                 PosterCard(
                     title: item.name ?? "",

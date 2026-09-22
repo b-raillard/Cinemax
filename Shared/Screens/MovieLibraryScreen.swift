@@ -382,10 +382,12 @@ struct MediaLibraryScreen: View {
         ) { collection in
             let zoom = CardZoom(zoomNamespace, surface: "library.collections", itemId: collection.id)
             NavigationLink {
-                if let id = collection.id {
-                    MediaDetailScreen(itemId: id, itemType: .boxSet)
-                        .cardZoomDestination(zoom)
+                DeferredView {
+                    if let id = collection.id {
+                        MediaDetailScreen(itemId: id, itemType: .boxSet)
+                    }
                 }
+                .cardZoomDestination(zoom)
             } label: {
                 PosterCard(
                     title: collection.name ?? "",

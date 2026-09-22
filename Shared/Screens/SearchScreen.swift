@@ -863,10 +863,12 @@ private struct SearchResultCard: View, Equatable {
         let zoom = zoomScope?.zoom(for: item.id)
 
         NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = item.id {
+                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: item.name ?? "",

@@ -133,10 +133,12 @@ private struct PosterCardContent: View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             ZStack(alignment: .bottomTrailing) {
                 NavigationLink {
-                    if let id = item.id {
-                        MediaDetailScreen(itemId: id, itemType: itemType)
-                            .cardZoomDestination(zoom)
+                    DeferredView {
+                        if let id = item.id {
+                            MediaDetailScreen(itemId: id, itemType: itemType)
+                        }
                     }
+                    .cardZoomDestination(zoom)
                 } label: {
                     Color.clear
                         .aspectRatio(2 / 3, contentMode: .fit)
