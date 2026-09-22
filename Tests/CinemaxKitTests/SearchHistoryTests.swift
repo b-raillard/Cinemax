@@ -155,7 +155,7 @@ struct SearchViewModelHistoryTests {
 
         vm.searchText = "Dune"
         vm.search(using: appState)
-        try? await Task.sleep(for: .milliseconds(700))
+        await vm.searchTask?.value
 
         #expect(vm.recentSearches == ["Dune"])
         #expect(SearchHistoryStore.load(serverId: "A", defaults: defaults) == ["Dune"])
@@ -206,7 +206,7 @@ struct SearchViewModelHistoryTests {
 
         vm.searchText = "Dune"
         vm.search(using: appState)
-        try? await Task.sleep(for: .milliseconds(700))
+        await vm.searchTask?.value
 
         #expect(vm.results.count == 1)
         #expect(vm.recentSearches.isEmpty)

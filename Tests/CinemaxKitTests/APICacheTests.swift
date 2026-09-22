@@ -196,11 +196,14 @@ struct APICacheTests {
         let cache = APICache()
         let counter = CallCounter()
         let (started, signal) = AsyncStream.makeStream(of: Void.self)
+        // Holds the stale fetch in flight until the fresh one has returned —
+        // the window the test is about, held open rather than guessed.
+        let releaseStale = TestLatch()
         let stale = Task {
             try await cache.coalesce(key: "item-5-u") {
                 await counter.increment()
                 signal.yield()                     // registered AND running
-                try await Task.sleep(for: .milliseconds(150))
+                await releaseStale.wait()
                 return 1
             }
         }
@@ -210,6 +213,7 @@ struct APICacheTests {
             await counter.increment()
             return 2
         }
+        releaseStale.open()
         #expect(fresh == 2)
         #expect(try await stale.value == 1)
         #expect(await counter.count == 2)

@@ -245,10 +245,11 @@ struct CardEpisodeNavigationTests {
             probeDeadline: .milliseconds(10)
         )
 
-        // Laisser à la tâche détachée le temps de dépasser son sommeil de
-        // 100 ms. Compter avant serait instable : avec un délai de 10 ms, la
-        // résolution peut rendre la main avant même que la tâche soit planifiée.
-        try? await Task.sleep(for: .milliseconds(600))
+        // Attendre (borné) que la tâche détachée dépasse son sommeil de
+        // 100 ms. Compter tout de suite serait instable : avec un délai de
+        // 10 ms, la résolution peut rendre la main avant même que la tâche
+        // soit planifiée.
+        await eventually { await completions.count >= 1 }
         let count = await completions.count
         #expect(count == 1, "annulée, la requête n'aurait jamais abouti")
     }

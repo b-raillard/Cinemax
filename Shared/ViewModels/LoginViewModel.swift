@@ -21,7 +21,9 @@ final class LoginViewModel {
     /// Non-nil while a Quick Connect request is in flight; drives the sheet.
     var quickConnectCode: String?
     var quickConnectError: String?
-    private var quickConnectTask: Task<Void, Never>?
+    /// Readable (not writable) outside the type so a test can await the poll
+    /// loop's exit after a cancel instead of sleeping.
+    private(set) var quickConnectTask: Task<Void, Never>?
 
     /// Consecutive failed polls tolerated before the flow gives up. At the ~3 s
     /// cadence that is ~15 s of *continuous* failure — long enough to ride out a

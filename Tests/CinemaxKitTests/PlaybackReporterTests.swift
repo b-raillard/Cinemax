@@ -10,7 +10,8 @@ import JellyfinAPI
 /// from the presenter's shared 1 Hz time observer).
 ///
 /// The reporter queues the actual API calls on its own serial chain, which
-/// `drain()` awaits — only the keep-alive ping (off the chain) still polls. These tests cover
+/// `drain()` awaits along with the latest keep-alive ping — no test sleeps to
+/// let a report land. These tests cover
 /// the pure throttle logic — network success/failure is server-side and not
 /// reachable from a unit test anyway (MockAPIClient stubs return void).
 @MainActor
@@ -243,9 +244,10 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<60 { reporter.onTick() }
-        for _ in 0..<200 where mock.pingCount < 2 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // Two pings ride two independent detached tasks; `drain()` holds only
+        // the latest, so the earlier one is polled for (bounded).
+        await reporter.drain()
+        await eventually { mock.pingCount >= 2 }
         #expect(mock.pingCount == 2)
     }
 
@@ -259,7 +261,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<60 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(50))
+        await reporter.drain()
         #expect(mock.pingCount == 0)
     }
 
@@ -273,7 +275,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<60 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(50))
+        await reporter.drain()
         #expect(mock.pingCount == 0)
     }
 
@@ -295,7 +297,7 @@ struct PlaybackReporterTests {
         paused = true
         for _ in 0..<20 { reporter.onTick() }
 
-        try await Task.sleep(for: .milliseconds(50))
+        await reporter.drain()
         #expect(mock.pingCount == 0)
     }
 
@@ -453,9 +455,10 @@ struct PlaybackReporterTests {
         defer { NotificationCenter.default.removeObserver(token) }
 
         reporter.reportStop()
-        for _ in 0..<200 where witness.count == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // The post rides its own main-actor task, launched from inside the
+        // queued stop: drain the stop, then poll (bounded) for the post.
+        await reporter.drain()
+        await eventually { witness.count > 0 }
 
         #expect(witness.count == 1, "une fin de session doit annoncer exactement une fois")
         // Le cœur du test : annoncer AVANT que le serveur ait enregistré la
@@ -480,8 +483,9 @@ struct PlaybackReporterTests {
         reporter.reportStop(reason: .episodeSwap)
         // Attendre que le rapport serveur soit parti, pour que l'absence
         // d'annonce soit un vrai constat et pas une course gagnée de justesse.
+        // `drain()` returns once the stop's work has run to its end, and the
+        // post is decided inside that work: nothing can be announced later.
         await reporter.drain()
-        try await Task.sleep(for: .milliseconds(50))
 
         #expect(mock.stopCount == 1, "le serveur doit tout de même recevoir le stop")
         #expect(witness.count == 0, "on regarde encore : rafraîchir les rails ici coûterait une salve par épisode")

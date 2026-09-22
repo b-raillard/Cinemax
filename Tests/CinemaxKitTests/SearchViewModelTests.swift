@@ -29,8 +29,9 @@ struct SearchViewModelTests {
         vm.searchText = "   "
 
         vm.search(using: makeAppState(api: api))
-        // Give the debounce ample time to fire (or not).
-        try? await Task.sleep(for: .milliseconds(500))
+        // An empty query starts no search task at all; awaiting the (absent)
+        // task proves nothing is left to fire.
+        await vm.searchTask?.value
 
         #expect(vm.results.isEmpty)
         #expect(!vm.hasSearched)
@@ -45,8 +46,8 @@ struct SearchViewModelTests {
         vm.searchText = "Dune"
 
         vm.search(using: makeAppState(api: api))
-        // Debounce is 400 ms; wait longer so the Task completes.
-        try? await Task.sleep(for: .milliseconds(700))
+        // Await the debounced task itself rather than outsleeping it.
+        await vm.searchTask?.value
 
         #expect(vm.results.count == 1)
         #expect(vm.hasSearched)
@@ -65,7 +66,7 @@ struct SearchViewModelTests {
         vm.searchText = "Cillian Murphy"
 
         vm.search(using: makeAppState(api: api))
-        try? await Task.sleep(for: .milliseconds(700))
+        await vm.searchTask?.value
 
         #expect(vm.personResults.map(\.id) == ["p1"])
     }
@@ -83,7 +84,7 @@ struct SearchViewModelTests {
         vm.searchText = "Cillian Murphy"
 
         vm.search(using: makeAppState(api: api))
-        try? await Task.sleep(for: .milliseconds(700))
+        await vm.searchTask?.value
 
         #expect(vm.personResults.isEmpty)
         #expect(api.searchPersonsCallCount == 0)
@@ -100,7 +101,7 @@ struct SearchViewModelTests {
         vm.searchText = "Oppenheimer"
 
         vm.search(using: makeAppState(api: api))
-        try? await Task.sleep(for: .milliseconds(700))
+        await vm.searchTask?.value
 
         #expect(vm.results.count == 1)
         #expect(!vm.searchFailed)
@@ -115,12 +116,12 @@ struct SearchViewModelTests {
         let vm = SearchViewModel()
         vm.searchText = "Cillian"
         vm.search(using: makeAppState(api: api))
-        try? await Task.sleep(for: .milliseconds(700))
+        await vm.searchTask?.value
         #expect(!vm.personResults.isEmpty)
 
         vm.searchText = "  "
         vm.search(using: makeAppState(api: api))
-        try? await Task.sleep(for: .milliseconds(500))
+        await vm.searchTask?.value
 
         #expect(vm.personResults.isEmpty)
     }
@@ -133,7 +134,9 @@ struct SearchViewModelTests {
     @Test("Cancelled search does not leave isSearching stuck on")
     func cancelledSearchClearsIsSearching() async {
         let api = MockAPIClient()
+        let apiEntered = TestLatch()
         api.searchItemsHandler = { term in
+            apiEntered.open()
             try? await Task.sleep(for: .milliseconds(300))
             return [BaseItemDto]()
         }
@@ -143,15 +146,17 @@ struct SearchViewModelTests {
         // First query: debounce + 300 ms API. Will be cancelled once the API await starts.
         vm.searchText = "a"
         vm.search(using: appState)
-        // Let the first task pass its debounce and enter the API call.
-        try? await Task.sleep(for: .milliseconds(450))
+        let firstSearch = vm.searchTask
+        // The first task has passed its debounce and entered the API call.
+        await apiEntered.wait()
 
         // Replace with a new query — this cancels the in-flight task.
         vm.searchText = "ab"
         vm.search(using: appState)
 
-        // Let the second task fully complete.
-        try? await Task.sleep(for: .milliseconds(900))
+        // Both tasks have fully run, the cancelled one's `defer` included.
+        await firstSearch?.value
+        await vm.searchTask?.value
 
         #expect(!vm.isSearching)
     }
@@ -164,7 +169,7 @@ struct SearchViewModelTests {
         vm.searchText = "query"
 
         vm.search(using: makeAppState(api: api))
-        try? await Task.sleep(for: .milliseconds(700))
+        await vm.searchTask?.value
 
         #expect(vm.results.isEmpty)
         #expect(!vm.isSearching)

@@ -83,14 +83,17 @@ struct MediaDetailViewModelTests {
     @Test("selectSeason discards stale results when a newer selection completes first")
     func selectSeasonRaceKeepsLatest() async {
         let api = MockAPIClient()
+        let seasonAFetching = TestLatch()
+        let releaseSeasonA = TestLatch()
         api.getEpisodesHandler = { seasonId in
-            // Season A intentionally sleeps longer so it resolves *after* Season B,
-            // simulating the race described in the audit.
+            // Season A is held until Season B has fully resolved, so it lands
+            // *after* it — the race described in the audit, held open by a
+            // latch instead of guessed with two sleeps.
             if seasonId == "season-A" {
-                try? await Task.sleep(for: .milliseconds(200))
+                seasonAFetching.open()
+                await releaseSeasonA.wait()
                 return [makeEpisode(id: "ep-a1", name: "A1"), makeEpisode(id: "ep-a2", name: "A2")]
             } else {
-                try? await Task.sleep(for: .milliseconds(20))
                 return [makeEpisode(id: "ep-b1", name: "B1")]
             }
         }
@@ -99,11 +102,12 @@ struct MediaDetailViewModelTests {
         let appState = makeAppState(api: api)
 
         async let firstCall: Void = vm.selectSeason("season-A", seriesId: "series-1", using: appState)
-        // Ensure Season A's generation is captured before B increments it.
-        try? await Task.sleep(for: .milliseconds(10))
-        async let secondCall: Void = vm.selectSeason("season-B", seriesId: "series-1", using: appState)
-
-        _ = await (firstCall, secondCall)
+        // Season A's fetch is in flight, so its generation is already captured
+        // before B increments it.
+        await seasonAFetching.wait()
+        await vm.selectSeason("season-B", seriesId: "series-1", using: appState)
+        releaseSeasonA.open()
+        await firstCall
 
         #expect(vm.selectedSeasonId == "season-B")
         #expect(vm.episodes.map(\.id) == ["ep-b1"])
@@ -369,14 +373,17 @@ struct MediaDetailViewModelTests {
     func loadRaceKeepsLatest() async {
         let api = MockAPIClient()
         let counter = CallCounter()
+        let firstFetching = TestLatch()
+        let releaseFirst = TestLatch()
         api.getItemHandler = { _ in
-            // The first-started load resolves LAST (slow); the second resolves
-            // first (fast) — last-writer-wins would leave "old" without a guard.
+            // The first-started load resolves LAST (held until the second has
+            // finished); the second resolves first — last-writer-wins would
+            // leave "old" without a guard.
             if counter.next() == 1 {
-                try? await Task.sleep(for: .milliseconds(200))
+                firstFetching.open()
+                await releaseFirst.wait()
                 return makeMovie(id: "old", played: false)
             } else {
-                try? await Task.sleep(for: .milliseconds(20))
                 return makeMovie(id: "new", played: true)
             }
         }
@@ -385,11 +392,12 @@ struct MediaDetailViewModelTests {
         let loc = LocalizationManager()
 
         async let firstCall: Void = vm.load(using: appState, loc: loc)
-        // Ensure the first load bumps + snapshots its generation before the second.
-        try? await Task.sleep(for: .milliseconds(10))
-        async let secondCall: Void = vm.load(using: appState, loc: loc)
-
-        _ = await (firstCall, secondCall)
+        // The first load's fetch is in flight, so it has bumped + snapshotted
+        // its generation before the second starts.
+        await firstFetching.wait()
+        await vm.load(using: appState, loc: loc)
+        releaseFirst.open()
+        await firstCall
 
         #expect(vm.item?.id == "new")
         #expect(vm.isPlayed == true)

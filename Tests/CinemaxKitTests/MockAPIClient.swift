@@ -808,3 +808,61 @@ extension UserDefaults {
         return defaults
     }
 }
+
+// MARK: - Deterministic waiting (audit 2026-09-22, T3)
+
+/// Polls `condition` until it holds, and returns as soon as it does — never a
+/// fixed sleep sized for the slowest CI host. Bounded by `timeout` so a
+/// regression fails instead of hanging; the caller still `#expect`s the
+/// condition afterwards, so a timeout surfaces as an ordinary failure.
+///
+/// For work that exposes no seam to await. Prefer awaiting the work itself
+/// (`PlaybackReporter.drain()`, a view model's task) or a `TestLatch`.
+/// `isolation` keeps the check on the caller's actor, so the closure may read
+/// main-actor state from a `@MainActor` suite.
+@discardableResult
+func eventually(
+    timeout: Duration = .seconds(5),
+    isolation: isolated (any Actor)? = #isolation,
+    _ condition: () async -> Bool
+) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while !(await condition()) {
+        guard clock.now < deadline else { return false }
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return true
+}
+
+/// A one-shot latch usable from any isolation, mock handlers included:
+/// `wait()` suspends until `open()` has been called, and returns at once
+/// afterwards. Holds a race window open on purpose instead of guessing its
+/// width with a sleep — the `PaginatedLoaderInterlockTests` gate, made
+/// `Sendable` for `@Sendable` mock handlers.
+final class TestLatch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        let toResume: [CheckedContinuation<Void, Never>] = lock.withLock {
+            isOpen = true
+            let pending = waiters
+            waiters = []
+            return pending
+        }
+        for waiter in toResume { waiter.resume() }
+    }
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumeNow: Bool = lock.withLock {
+                if isOpen { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if resumeNow { continuation.resume() }
+        }
+    }
+}

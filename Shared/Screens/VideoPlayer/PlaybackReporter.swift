@@ -75,6 +75,11 @@ final class PlaybackReporter {
     /// keep-alive carries conditions progress reporting doesn't have.
     private var pingCounter = 0
     private static let pingTickInterval = 30
+    /// The most recent keep-alive ping. Nothing in the app waits on it — it is
+    /// held only so `drain()` can, which is what lets a test prove a ping was
+    /// NOT sent without sleeping (the decision is taken synchronously in
+    /// `onTick`, so once the last one launched has landed, none is left).
+    private var lastKeepAlive: Task<Void, Never>?
 
     init(
         apiClient: any PlaybackAPI,
@@ -245,10 +250,12 @@ final class PlaybackReporter {
         if pendingProgress.count > 8 { pendingProgress.removeFirst(pendingProgress.count - 8) }
     }
 
-    /// Resolves once every report raised so far has been sent. Test seam —
-    /// nothing in the app waits on reports.
+    /// Resolves once every report raised so far has been sent, and the most
+    /// recent keep-alive ping with them. Test seam — nothing in the app waits
+    /// on reports.
     func drain() async {
         await tail?.value
+        await lastKeepAlive?.value
     }
 
     func resetTicking() {
@@ -289,7 +296,7 @@ final class PlaybackReporter {
         guard pingCounter >= Self.pingTickInterval else { return }
         pingCounter = 0
         let client = apiClient
-        Task.detached {
+        lastKeepAlive = Task.detached {
             await client.pingPlaybackSession(playSessionId: playSessionId)
         }
     }
