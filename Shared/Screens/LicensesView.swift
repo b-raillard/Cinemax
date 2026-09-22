@@ -179,6 +179,20 @@ struct LicensesView: View {
         The full license text is available at https://mozilla.org/MPL/2.0/.
         """
 
+    // Linked through the Jellyfin SDK (its realtime transport), not used
+    // directly by the app — still shipped in the binary, so still credited.
+    private let apacheLicense = """
+        Licensed under the Apache License, Version 2.0 (the "License"); you may \
+        not use this file except in compliance with the License. You may obtain \
+        a copy of the License at https://www.apache.org/licenses/LICENSE-2.0
+
+        Unless required by applicable law or agreed to in writing, software \
+        distributed under the License is distributed on an "AS IS" BASIS, \
+        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. \
+        See the License for the specific language governing permissions and \
+        limitations under the License.
+        """
+
     private let lgplLicense = """
         This program uses the libVLC media framework (© VideoLAN and the VLC \
         Authors), licensed under the GNU Lesser General Public License, version \
@@ -237,10 +251,34 @@ struct LicensesView: View {
                 text: "Copyright (c) Alexander Grebenyuk\n\n" + mitLicense
             ),
             OSSLicense(
-                name: "URLQueryEncoder",
-                version: "0.2.1",
-                url: "github.com/CreateAPI/URLQueryEncoder",
-                text: "Copyright (c) CreateAPI\n\n" + mitLicense
+                name: "SwiftNIO",
+                version: "2.102.0",
+                url: "github.com/apple/swift-nio",
+                text: "Copyright (c) Apple Inc. and the SwiftNIO project authors\n\n" + apacheLicense
+            ),
+            OSSLicense(
+                name: "SwiftNIO Transport Services",
+                version: "1.28.0",
+                url: "github.com/apple/swift-nio-transport-services",
+                text: "Copyright (c) Apple Inc. and the SwiftNIO project authors\n\n" + apacheLicense
+            ),
+            OSSLicense(
+                name: "Swift Atomics",
+                version: "1.3.1",
+                url: "github.com/apple/swift-atomics",
+                text: "Copyright (c) Apple Inc. and the Swift project authors\n\n" + apacheLicense
+            ),
+            OSSLicense(
+                name: "Swift Collections",
+                version: "1.6.0",
+                url: "github.com/apple/swift-collections",
+                text: "Copyright (c) Apple Inc. and the Swift project authors\n\n" + apacheLicense
+            ),
+            OSSLicense(
+                name: "Swift System",
+                version: "1.8.1",
+                url: "github.com/apple/swift-system",
+                text: "Copyright (c) Apple Inc. and the Swift System project authors\n\n" + apacheLicense
             ),
         ]
     }

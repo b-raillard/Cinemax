@@ -49,8 +49,48 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Xcode version
+
+      # A PR that only touches Markdown / docs cannot change what this job
+      # builds, and used to cost ~17 min of macOS runner — every CLAUDE.md edit
+      # included. Deliberately NOT a workflow-level `paths-ignore`: that leaves a
+      # required check pending for ever. The job still runs and reports; every
+      # step below is gated on this output instead. Pushes to main always build.
+      - name: Detect code changes
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          changed=$(git diff --name-only "$BASE_SHA" HEAD)
+          echo "$changed"
+          if echo "$changed" | grep -Ev '(\.md$|^docs/)' | grep -q .; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Documentation-only change — build and tests skipped."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pinned: behaviour changes between Xcode releases are documented in
+      # CLAUDE.md (a `sending`-closure error on 26.5 that 26.2 accepted), so the
+      # runner image's default must not decide which compiler checks a PR. Bump
+      # together with `xcodeVersion` in project.yml.
+      - name: Select Xcode
+        if: steps.changes.outputs.code == 'true'
+        env:
+          XCODE_VERSION: "26.5"
+        run: |
+          available=$(ls -d /Applications/Xcode*.app 2>/dev/null | tr '\n' ' ')
+          if [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+            echo "::notice::Xcode ${XCODE_VERSION} selected (available: ${available})"
+          else
+            echo "::warning::Xcode ${XCODE_VERSION} is not on this runner image — building with the default. Available: ${available}"
+          fi
           xcode-select -p
           xcodebuild -version
 
@@ -62,6 +102,7 @@ jobs:
       # XCODEGEN_VERSION together with a local `xcodegen generate` (same
       # version) + committed pbxproj, and keep regen-project.yml in sync.
       - name: Install xcodegen
+        if: steps.changes.outputs.code == 'true'
         env:
           XCODEGEN_VERSION: 2.46.0
           # SHA-256 of that release's xcodegen.zip — bump TOGETHER with the
@@ -76,6 +117,7 @@ jobs:
           echo "/tmp/xcodegen-dist/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Generate Xcode project
+        if: steps.changes.outputs.code == 'true'
         run: xcodegen generate
 
       # CI builds from the freshly generated project, so a stale committed
@@ -84,6 +126,7 @@ jobs:
       # ("Cannot find 'X' in scope" for types that exist). Fail loudly instead
       # so the regenerated file has to ship with the PR.
       - name: Verify committed project.pbxproj is up to date
+        if: steps.changes.outputs.code == 'true'
         run: |
           if ! git diff --exit-code -- Cinemax.xcodeproj/project.pbxproj; then
             echo "::error::Cinemax.xcodeproj/project.pbxproj is stale — run 'xcodegen generate' locally and commit the regenerated project."
@@ -91,6 +134,7 @@ jobs:
           fi
 
       - name: Cache SwiftPM
+        if: steps.changes.outputs.code == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
@@ -106,6 +150,7 @@ jobs:
       # swift-testing tests (the `-only-testing` trap in CLAUDE.md), so the exit
       # code alone does not prove the suite ran.
       - name: Build & test (iOS)
+        if: steps.changes.outputs.code == 'true'
         run: |
           set -o pipefail
           xcodebuild test \
@@ -123,6 +168,7 @@ jobs:
       # locked"). The CinemaxTV scheme carries CinemaxTVTests — the same
       # Tests/CinemaxKitTests sources, hosted by CinemaxTV.app.
       - name: Build & test (tvOS)
+        if: steps.changes.outputs.code == 'true'
         run: |
           set -o pipefail
           xcodebuild test \
@@ -134,6 +180,25 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/tvos-test.log" | xcbeautify
           grep -E '^✔ Test run with [1-9][0-9]* tests in [0-9]+ suites passed' "$RUNNER_TEMP/tvos-test.log"
           grep -F '✔ Suite "tvOS layout metrics" passed' "$RUNNER_TEMP/tvos-test.log"
+
+      # The tests run the Debug configuration only, so `#if DEBUG` branches and
+      # the optimiser were first seen at archive time. A plain Release compile
+      # of both apps (simulator SDK, unsigned) closes that gap; no tests, no run.
+      - name: Build Release (iOS + tvOS)
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          set -o pipefail
+          for scheme in Cinemax CinemaxTV; do
+            if [ "$scheme" = Cinemax ]; then dest='generic/platform=iOS Simulator'; else dest='generic/platform=tvOS Simulator'; fi
+            xcodebuild build \
+              -project Cinemax.xcodeproj \
+              -scheme "$scheme" \
+              -configuration Release \
+              -destination "$dest" \
+              -skipPackagePluginValidation \
+              CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+              2>&1 | xcbeautify
+          done
 
   lint:
     name: SwiftLint
