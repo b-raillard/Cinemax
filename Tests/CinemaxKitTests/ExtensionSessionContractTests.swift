@@ -155,6 +155,14 @@ struct ExtensionSessionContractTests {
 
         let keychain = KeychainService()
         let payload = Data("shared-session-payload".utf8)
+        // The test host IS the app: on a signed device this item is the
+        // widget's and the Top Shelf's live session. Put it back afterwards,
+        // or every local test run signs both extensions out (audit
+        // 2026-09-22, T4).
+        let original = keychain.readSharedSession()
+        defer {
+            if let original { keychain.saveSharedSession(original) } else { keychain.deleteSharedSession() }
+        }
 
         keychain.deleteSharedSession()       // clean slate
         keychain.saveSharedSession(payload)

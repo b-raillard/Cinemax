@@ -35,7 +35,7 @@ struct HomeViewModelTests {
     func loadWithoutUserIdIsNoop() async {
         let api = MockAPIClient()
         let appState = makeAppState(api: api, userId: nil)
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: appState)
 
@@ -65,7 +65,7 @@ struct HomeViewModelTests {
         policy.enableRemoteControlOfOtherUsers = true
         user.policy = policy
         appState.currentUser = user
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.refreshLiveRow(using: appState)
 
@@ -83,7 +83,7 @@ struct HomeViewModelTests {
         user.id = "wife"
         user.policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
         appState.currentUser = user
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.refreshLiveRow(using: appState)
 
@@ -151,7 +151,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.seriesWithRecentEpisodesShouldThrow = true
         api.stubbedLatestItems = [makeItem(name: "Dune")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -161,7 +161,7 @@ struct HomeViewModelTests {
     @Test("Recently Added asks for movies and series by date added — never raw episodes")
     func recentlyAddedQueriesMoviesAndSeriesByDateAdded() async {
         let api = MockAPIClient()
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -190,7 +190,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.stubbedResumeItems = [makeItem(name: "Inception"), makeItem(name: "Interstellar")]
         api.stubbedLatestItems = [makeItem(name: "Dune")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -204,7 +204,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.stubbedResumeItems = [makeItem(name: "Featured")]
         api.stubbedLatestItems = [makeItem(name: "Latest")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -216,7 +216,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.stubbedResumeItems = []
         api.stubbedLatestItems = [makeItem(name: "Latest")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -227,7 +227,7 @@ struct HomeViewModelTests {
     func loadPopulatesNextUp() async {
         let api = MockAPIClient()
         api.stubbedNextUpItems = [makeItem(name: "S01E02"), makeItem(name: "S03E01")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -254,7 +254,7 @@ struct HomeViewModelTests {
                 makeSeasonEpisode(id: "ep-3", name: "Episode 3"),
             ]
         }
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -291,7 +291,7 @@ struct HomeViewModelTests {
                 makeSeasonEpisode(id: "ep-3", name: "Episode 3"),
             ]
         }
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         let appState = makeAppState(api: api)
 
         // Chargement initial : le rail est vide, donc aucune navigation.
@@ -328,7 +328,7 @@ struct HomeViewModelTests {
                 makeSeasonEpisode(id: "e2", name: "E2"),
             ] : []
         }
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         let appState = makeAppState(api: api)
         await vm.load(using: appState)
 
@@ -364,7 +364,7 @@ struct HomeViewModelTests {
         api.getEpisodesHandler = { _ in
             [makeSeasonEpisode(id: "ep-1", name: "E1"), makeSeasonEpisode(id: "ep-2", name: "E2")]
         }
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         let appState = makeAppState(api: api)
 
         await vm.load(using: appState)
@@ -384,7 +384,7 @@ struct HomeViewModelTests {
     func nextUpFailureIsIsolated() async {
         let api = MockAPIClient()
         api.shouldThrow = true
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -396,7 +396,7 @@ struct HomeViewModelTests {
     func apiFailureLeavesCollectionsEmpty() async {
         let api = MockAPIClient()
         api.shouldThrow = true
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -412,7 +412,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.shouldThrow = true
         api.seriesWithRecentEpisodesShouldThrow = true
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -426,7 +426,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.shouldThrow = true
         // The second Recently Added source still answers (with nothing).
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: makeAppState(api: api))
 
@@ -438,7 +438,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.shouldThrow = true
         api.seriesWithRecentEpisodesShouldThrow = true
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         let appState = makeAppState(api: api)
         await vm.load(using: appState)
         #expect(vm.loadFailure != nil, "pré-condition")
@@ -450,13 +450,51 @@ struct HomeViewModelTests {
         #expect(vm.loadFailure == nil)
     }
 
+    // MARK: - Changement d'identité (audit 2026-09-22, B13)
+
+    @Test("A load for another account clears the previous rails, even when it fails")
+    func identityChangeClearsRails() async {
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeItem(name: "Inception")]
+        api.stubbedLatestItems = [makeItem(name: "Dune")]
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        let appState = makeAppState(api: api)
+        await vm.load(using: appState)
+        #expect(vm.resumeItems.count == 1, "pré-condition")
+
+        appState.currentUserId = "user2"
+        api.shouldThrow = true
+        api.seriesWithRecentEpisodesShouldThrow = true
+        await vm.reload(using: appState)
+
+        #expect(vm.resumeItems.isEmpty)
+        #expect(vm.latestItems.isEmpty)
+        #expect(vm.heroItem == nil)
+        #expect(vm.loadFailure != nil, "an empty Home now shows the error state")
+    }
+
+    @Test("A reload for the same account keeps its rails when a source fails")
+    func sameIdentityKeepsRails() async {
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeItem(name: "Inception")]
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        let appState = makeAppState(api: api)
+        await vm.load(using: appState)
+
+        api.shouldThrow = true
+        api.seriesWithRecentEpisodesShouldThrow = true
+        await vm.reload(using: appState)
+
+        #expect(vm.resumeItems.count == 1)
+    }
+
     // MARK: - Héros recalculé après une lecture (audit 2026-09-22, B7)
 
     @Test("The tier-2 refresh re-derives the hero from the refreshed resume rail")
     func tierTwoRefreshUpdatesHero() async {
         let api = MockAPIClient()
         api.stubbedResumeItems = [makeItem(name: "Before")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         let appState = makeAppState(api: api)
         await vm.load(using: appState)
         #expect(vm.heroItem?.name == "Before", "pré-condition")
@@ -474,7 +512,7 @@ struct HomeViewModelTests {
         let api = MockAPIClient()
         api.stubbedResumeItems = [makeItem(name: "Resuming")]
         api.stubbedNextUpItems = [makeItem(name: "NextUp")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.refreshUserDataRails(using: makeAppState(api: api), showNextUp: true, showFavorites: true)
 
@@ -507,7 +545,7 @@ struct HomeViewModelTests {
     @Test("retryGenre bails silently when its row disappears during the fetch")
     func retryGenreRowRemovedMidFlight() async {
         let api = MockAPIClient()
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         vm.genreRows = [GenreRow(genre: "Action", state: .failed),
                         GenreRow(genre: "Comedy", state: .failed)]
         // Runs while `retryGenre` is suspended — same effect as a concurrent
@@ -525,7 +563,7 @@ struct HomeViewModelTests {
     @Test("retryGenre re-resolves the index when rows shift during the fetch")
     func retryGenreIndexShiftsMidFlight() async {
         let api = MockAPIClient()
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         vm.genreRows = [GenreRow(genre: "Action", state: .failed),
                         GenreRow(genre: "Comedy", state: .failed),
                         GenreRow(genre: "Drama", state: .failed)]
@@ -546,7 +584,7 @@ struct HomeViewModelTests {
     @Test("retryGenre no-ops when the genre isn't in genreRows at all")
     func retryGenreUnknownGenre() async {
         let api = MockAPIClient()
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
         vm.genreRows = [GenreRow(genre: "Action", state: .failed)]
 
         await vm.retryGenre("Comedy", using: makeAppState(api: api))
@@ -565,39 +603,41 @@ struct HomeGenrePreferencesTests {
 
     private let key = SettingsKey.homeSelectedGenres
 
-    private func clear() { UserDefaults.standard.removeObject(forKey: key) }
+    private let defaults = UserDefaults.isolatedForTesting()
+
+    private func clear() { defaults.removeObject(forKey: key) }
 
     @Test("missing key → not configured, renders the default prefix")
     func unconfiguredMissing() {
         clear(); defer { clear() }
-        #expect(HomeGenrePreferences.isConfigured() == false)
+        #expect(HomeGenrePreferences.isConfigured(in: defaults) == false)
         let available = ["Action", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Romance"]
-        #expect(HomeGenrePreferences.effectiveGenres(available: available)
+        #expect(HomeGenrePreferences.effectiveGenres(available: available, in: defaults)
                 == Array(available.prefix(HomeGenrePreferences.defaultRowCount)))
     }
 
     @Test("empty-string value is still treated as unconfigured")
     func emptyStringUnconfigured() {
         clear(); defer { clear() }
-        UserDefaults.standard.set("", forKey: key)
-        #expect(HomeGenrePreferences.isConfigured() == false)
-        #expect(HomeGenrePreferences.effectiveGenres(available: ["Action", "Comedy"]) == ["Action", "Comedy"])
+        defaults.set("", forKey: key)
+        #expect(HomeGenrePreferences.isConfigured(in: defaults) == false)
+        #expect(HomeGenrePreferences.effectiveGenres(available: ["Action", "Comedy"], in: defaults) == ["Action", "Comedy"])
     }
 
     @Test("explicit empty array is configured and yields zero rows")
     func explicitEmptyArray() {
         clear(); defer { clear() }
-        HomeGenrePreferences.setSelectedGenres([])
-        #expect(HomeGenrePreferences.isConfigured() == true)
-        #expect(HomeGenrePreferences.effectiveGenres(available: ["Action", "Comedy"]).isEmpty)
+        HomeGenrePreferences.setSelectedGenres([], in: defaults)
+        #expect(HomeGenrePreferences.isConfigured(in: defaults) == true)
+        #expect(HomeGenrePreferences.effectiveGenres(available: ["Action", "Comedy"], in: defaults).isEmpty)
     }
 
     @Test("explicit picks intersect availability and follow canonical order")
     func explicitPicks() {
         clear(); defer { clear() }
-        HomeGenrePreferences.setSelectedGenres(["Horror", "Action", "Unavailable"])
-        #expect(HomeGenrePreferences.isConfigured() == true)
+        HomeGenrePreferences.setSelectedGenres(["Horror", "Action", "Unavailable"], in: defaults)
+        #expect(HomeGenrePreferences.isConfigured(in: defaults) == true)
         let available = ["Action", "Comedy", "Drama", "Horror"]
-        #expect(HomeGenrePreferences.effectiveGenres(available: available) == ["Action", "Horror"])
+        #expect(HomeGenrePreferences.effectiveGenres(available: available, in: defaults) == ["Action", "Horror"])
     }
 }

@@ -76,8 +76,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     private(set) var reconnectedURLs: [URL] = []
     private(set) var reconnectedTokens: [String] = []
 
+    /// The version the "client" currently knows. Mirrors the real client's
+    /// contract: a reconnect onto a DIFFERENT URL forgets it.
+    var learnedVersion: ServerVersion?
+    func knownServerVersion() -> ServerVersion? { recordLock.withLock { learnedVersion } }
+
     func reconnect(url: URL, accessToken: String) {
         recordLock.withLock {
+            if reconnectedURLs.last != url { learnedVersion = nil }
             reconnectCalled = true
             reconnectedURLs.append(url)
             reconnectedTokens.append(accessToken)
@@ -782,4 +788,20 @@ final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
 
 enum MockError: Error {
     case genericFailure
+}
+
+// MARK: - Isolated UserDefaults
+
+extension UserDefaults {
+    /// A fresh, empty store for one test. Suites run in parallel, and a test
+    /// writing `.standard` (a rail switched off, a genre pick) leaked into
+    /// every other suite reading the same key at that moment (audit
+    /// 2026-09-22, T2). Absent keys resolve to `SettingsKey.Default`, i.e.
+    /// exactly what an untouched `.standard` gave before.
+    static func isolatedForTesting() -> UserDefaults {
+        let name = "cinemax.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
 }

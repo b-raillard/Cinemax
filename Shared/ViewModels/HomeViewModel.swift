@@ -154,6 +154,44 @@ final class HomeViewModel {
     /// genre rows. Same pattern as `MediaLibraryViewModel.hasLoaded`.
     private var hasLoaded = false
 
+    /// Where the rail switches and genre picks are read. `.standard` in the
+    /// app; a test passes its own suite (see `HomeRailPreferences.snapshot`).
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// Bumped by every `load`. Two loads overlap routinely (a pull-to-refresh
+    /// during the first paint, the tier-1 refresh a server switch posts while
+    /// the previous server's load is still in flight), and without it the
+    /// slower one — often the OLDER one — wrote its rails last (audit
+    /// 2026-09-22, B13).
+    private var loadGeneration = 0
+    /// Server + account the rails on screen belong to. A load for another
+    /// identity clears them first: rails from the previous server were
+    /// otherwise left on screen — tappable, pointing at ids this server does
+    /// not have — for as long as the new load took, and for good when it
+    /// failed (`loadFailure` only replaces an EMPTY Home).
+    private var loadedIdentity: String?
+
+    private func clearContent() {
+        heroItem = nil
+        resumeItems = []
+        latestItems = []
+        favoriteItems = []
+        playlists = []
+        upcomingItems = []
+        collections = []
+        becauseYouWatched = nil
+        nextUpItems = []
+        genreRows = []
+        resumeNavigation = [:]
+        nextUpNavigation = [:]
+        activeSessions = []
+        syncPlayGroups = []
+    }
+
     /// First load — no-op if content is already loaded (screen remount).
     func loadInitial(using appState: AppState) async {
         guard !hasLoaded else { return }
@@ -173,6 +211,13 @@ final class HomeViewModel {
     func load(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         hasLoaded = true
+        loadGeneration += 1
+        let generation = loadGeneration
+        let identity = "\(appState.activeServerId ?? "-")|\(userId)"
+        if loadedIdentity != identity {
+            if loadedIdentity != nil { clearContent() }
+            loadedIdentity = identity
+        }
         isLoading = true
         isFullyLoaded = false
 
@@ -184,6 +229,7 @@ final class HomeViewModel {
         }
         var anySucceeded = false
         var firstError: (any Error)?
+        var sections: [Section] = []
 
         // A rail the user has switched off is not fetched. Every branch below
         // used to run unconditionally, so « Prochainement » and « Collections »
@@ -194,16 +240,7 @@ final class HomeViewModel {
         //
         // Resume and Recently Added are deliberately absent from the gate:
         // they also feed `heroItem` below, and the hero is never gated.
-        let rails = (
-            nextUp: HomeRailPreferences.showNextUp,
-            favorites: HomeRailPreferences.showFavorites,
-            playlists: HomeRailPreferences.showPlaylists,
-            upcoming: HomeRailPreferences.showUpcoming,
-            collections: HomeRailPreferences.showCollections,
-            becauseYouWatched: HomeRailPreferences.showBecauseYouWatched,
-            genreRows: HomeRailPreferences.showGenreRows,
-            watchingNow: HomeRailPreferences.showWatchingNow
-        )
+        let rails = HomeRailPreferences.snapshot(in: defaults)
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
@@ -328,16 +365,23 @@ final class HomeViewModel {
                     continue
                 }
                 anySucceeded = true
-                switch result {
-                case .resume(let items): resumeItems = items
-                case .latest(let items): latestItems = items
-                case .favorites(let items): favoriteItems = items
-                case .nextUp(let items): nextUpItems = items
-                case .playlists(let items): playlists = items
-                case .upcoming(let items): upcomingItems = items
-                case .collections(let items): collections = items
-                case .failed: break
-                }
+                sections.append(result)
+            }
+        }
+
+        // Superseded while phase 1 was in flight: the newer load owns every
+        // slice from here on, including the loading flags.
+        guard generation == loadGeneration else { return }
+        for result in sections {
+            switch result {
+            case .resume(let items): resumeItems = items
+            case .latest(let items): latestItems = items
+            case .favorites(let items): favoriteItems = items
+            case .nextUp(let items): nextUpItems = items
+            case .playlists(let items): playlists = items
+            case .upcoming(let items): upcomingItems = items
+            case .collections(let items): collections = items
+            case .failed: break
             }
         }
 
@@ -389,11 +433,15 @@ final class HomeViewModel {
         let seasonEpisodes = await fetchSeasonEpisodes(
             for: resumeEpisodes + nextUpEpisodes, userId: userId, appState: appState
         )
+        // Returning here cancels this load's own genre / sessions / « Parce
+        // que vous avez vu » children, which the newer load re-runs anyway.
+        guard generation == loadGeneration else { return }
         resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
         nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
 
         _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone)
 
+        guard generation == loadGeneration else { return }
         isFullyLoaded = true
     }
 
@@ -743,18 +791,20 @@ final class HomeViewModel {
     /// tolerate brief staleness". Both halves were wrong: a nil navigator also
     /// silences autoplay-next and the end-of-series card, and a card that has
     /// just ENTERED a rail has no entry at all rather than a stale one.
-    /// The two switches are parameters (defaulting to the stored preferences)
-    /// so a test can state them instead of racing other suites over
-    /// `UserDefaults.standard`.
+    /// The two switches are parameters (nil = the stored preferences, read from
+    /// the injected `defaults`) so a test can state them outright.
     func refreshUserDataRails(
         using appState: AppState,
-        showNextUp: Bool = HomeRailPreferences.showNextUp,
-        showFavorites: Bool = HomeRailPreferences.showFavorites
+        showNextUp: Bool? = nil,
+        showFavorites: Bool? = nil
     ) async {
         // Same gate as `load()`: a rail the user switched off is not fetched —
         // this ran on every playback end and every watched toggle anywhere in
         // the app, so the two gated rails cost two requests each time for
         // cards nobody could see. Resume stays ungated: it feeds the hero.
+        let rails = HomeRailPreferences.snapshot(in: defaults)
+        let showNextUp = showNextUp ?? rails.nextUp
+        let showFavorites = showFavorites ?? rails.favorites
         async let resume: Void = refreshResume(using: appState)
         async let nextUp: Void = showNextUp ? refreshNextUp(using: appState) : ()
         async let favorites: Void = showFavorites ? refreshFavorites(using: appState) : ()
@@ -764,7 +814,7 @@ final class HomeViewModel {
         // should change — and it excludes what is played or in Continue
         // Watching. After the resume fetch, which it filters against.
         async let navigation: Void = fillMissingEpisodeNavigation(using: appState)
-        async let recommendations: Void = HomeRailPreferences.showBecauseYouWatched
+        async let recommendations: Void = rails.becauseYouWatched
             ? refreshRail(.becauseYouWatched, using: appState)
             : ()
         _ = await (navigation, recommendations)
@@ -919,7 +969,7 @@ final class HomeViewModel {
         // User-configurable: the explicit picks (no cap), or a deterministic
         // default set when unconfigured. Each row's item fetch is still bounded
         // (limit 10) — we bound the fetch, not the number of rows.
-        let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres)
+        let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres, in: defaults)
 
         guard !picked.isEmpty else {
             genreRows = []

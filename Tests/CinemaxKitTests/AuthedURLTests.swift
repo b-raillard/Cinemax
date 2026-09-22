@@ -1,5 +1,7 @@
 import Foundation
 import Testing
+import JellyfinAPI
+@testable import CinemaxKit
 @testable import Cinemax
 
 /// `VLCStreamPresenter.authedURL` is the only place the app puts the account
@@ -119,5 +121,90 @@ struct StreamURLTests {
                 }
             }
         }
+    }
+}
+
+// MARK: - Device profiles (moved here: a new test file needs an xcodegen run)
+
+/// The device profiles are what the server reads to decide between DirectPlay,
+/// a remux and a full re-encode, and several of their fields carry a measured
+/// defect behind them (see CLAUDE.md → Video Playback). None of that was locked
+/// by a test: a well-meaning "cleanup" of one allow-list would compile, pass
+/// the whole suite, and bring a freeze or a desync back.
+@Suite("Device profiles")
+struct DeviceProfileTests {
+
+    private func codecs(_ list: String?) -> Set<String> {
+        Set((list ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+    }
+
+    // MARK: - Native (AVPlayer)
+
+    @Test("the native HLS transcode targets hevc/h264 only — never mpeg4")
+    func nativeTranscodeHasNoMpeg4() throws {
+        let profile = JellyfinAPIClient.buildAppleDeviceProfile()
+        let transcodes = try #require(profile.transcodingProfiles)
+        #expect(!transcodes.isEmpty)
+        for t in transcodes {
+            #expect(codecs(t.videoCodec) == ["hevc", "h264"])
+            #expect(!codecs(t.videoCodec).contains("mpeg4"))
+            #expect(t.protocol == .hls)
+        }
+        for d in profile.directPlayProfiles ?? [] {
+            #expect(!codecs(d.videoCodec).contains("mpeg4"))
+        }
+    }
+
+    @Test("maxBitrate reaches the profile")
+    func bitrateIsCarried() {
+        #expect(JellyfinAPIClient.buildAppleDeviceProfile(maxBitrate: 20_000_000).maxStreamingBitrate == 20_000_000)
+        #expect(JellyfinAPIClient.buildVLCDeviceProfile(maxBitrate: 120_000_000).maxStreamingBitrate == 120_000_000)
+        #expect(JellyfinAPIClient.buildVLCTranscodeProfile(maxBitrate: 20_000_000).maxStreamingBitrate == 20_000_000)
+    }
+
+    // MARK: - VLC
+
+    @Test("the VLC DirectPlay profile has no container restriction")
+    func vlcDirectPlayIsUnrestricted() throws {
+        let direct = try #require(JellyfinAPIClient.buildVLCDeviceProfile().directPlayProfiles)
+        #expect(direct.count == 1)
+        #expect(direct.first?.container == nil)
+        // The DirectPlay list is where MPEG audio is copied as-is — the
+        // opposite goal from the transcode list below.
+        #expect(codecs(direct.first?.audioCodec).isSuperset(of: ["mp1", "mp2", "mp3"]))
+    }
+
+    @Test("the VLC transcode asks for MPEG-TS segments, one of them, and re-encodes MPEG audio")
+    func vlcTranscodeShape() throws {
+        for profile in [JellyfinAPIClient.buildVLCDeviceProfile(), JellyfinAPIClient.buildVLCTranscodeProfile()] {
+            let transcodes = try #require(profile.transcodingProfiles)
+            #expect(transcodes.count == 1)
+            let t = try #require(transcodes.first)
+            #expect(t.container == "ts")
+            #expect(t.minSegments == 1)
+            #expect(t.protocol == .hls)
+            #expect(codecs(t.audioCodec).isDisjoint(with: ["mp1", "mp2", "mp3"]))
+            #expect(codecs(t.videoCodec) == ["hevc", "h264"])
+            // Jellyfin ignores it and 12.0 deprecates it — see CLAUDE.md.
+            #expect(t.isBreakOnNonKeyFrames == false)
+        }
+    }
+
+    @Test("the forced-transcode profile offers no DirectPlay at all")
+    func vlcTranscodeForcesTranscode() {
+        #expect(JellyfinAPIClient.buildVLCTranscodeProfile().directPlayProfiles?.isEmpty == true)
+    }
+
+    // MARK: - Seek-heavy containers
+
+    @Test("seek-heavy containers are recognised, including joined container lists")
+    func seekHeavy() {
+        for c in ["avi", "AVI", "divx", "wmv", "asf", "flv", "vob", "mpg", "mpeg", "mpe", "m2v", "mkv,avi", "mov avi"] {
+            #expect(JellyfinAPIClient.isSeekHeavyContainer(c), "\(c)")
+        }
+        for c in ["mkv", "mp4", "m4v", "mov", "ts", "webm", "", "aviary"] {
+            #expect(!JellyfinAPIClient.isSeekHeavyContainer(c), "\(c)")
+        }
+        #expect(!JellyfinAPIClient.isSeekHeavyContainer(nil))
     }
 }

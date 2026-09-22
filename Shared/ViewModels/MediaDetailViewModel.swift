@@ -265,7 +265,10 @@ final class MediaDetailViewModel {
             guard loadGeneration == generation else { return }
             if let refreshedItem { item = refreshedItem }
             nextUpEpisode = refreshedNextUp
-            if let refreshedEpisodes {
+            // Only onto the season they were fetched for: the user may have
+            // switched season while this was in flight, and `selectSeason`'s
+            // own generation does not cover this writer (audit 2026-09-22, B8).
+            if let refreshedEpisodes, selectedSeasonId == seasonId {
                 episodes = refreshedEpisodes
             }
 
@@ -439,7 +442,8 @@ final class MediaDetailViewModel {
     /// `isPlayed` flip already gave the user feedback.
     private func refreshVisibleEpisodes(seriesId: String, using appState: AppState) async {
         guard let userId = appState.currentUserId, let seasonId = selectedSeasonId else { return }
-        if let refreshed = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId) {
+        if let refreshed = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId),
+           selectedSeasonId == seasonId {   // same guard as `refreshAfterPlayback` (B8)
             episodes = refreshed
             rebuildNavigationMaps()
         }

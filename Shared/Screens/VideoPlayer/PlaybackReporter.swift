@@ -55,6 +55,14 @@ final class PlaybackReporter {
     /// that announces tier-2. Cleared per session by `reportStart`.
     private var endedPlaySessionIds: Set<String> = []
     private var tickCounter = 0
+    /// The last report in flight. Every start / progress / stop is chained
+    /// behind it so they reach the server in the order they were raised: as
+    /// independent detached tasks, a slow start could land AFTER the stop of
+    /// the same session (re-opening it server-side with a stale position), and
+    /// a late progress report could overwrite the position the stop had just
+    /// persisted. The keep-alive ping stays outside the chain — it carries no
+    /// position and must not wait behind a hung report.
+    private var tail: Task<Void, Never>?
     /// Separate from `tickCounter`: the cadence differs (30 s vs 10 s) and the
     /// keep-alive carries conditions progress reporting doesn't have.
     private var pingCounter = 0
@@ -134,7 +142,7 @@ final class PlaybackReporter {
         let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
-        Task.detached {
+        enqueue {
             await client.reportPlaybackStart(
                 itemId: itemId, userId: uid,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
@@ -146,7 +154,7 @@ final class PlaybackReporter {
     /// Reports the stop to the server and, for a real end of session, announces
     /// the userData change so every surface can resynchronise.
     ///
-    /// **The announcement is deliberately inside the detached task, after the
+    /// **The announcement is deliberately inside the queued report, after the
     /// `reportPlaybackStopped` await.** That call is what persists the new
     /// position server-side AND drops the client's userData caches, so it is the
     /// first instant at which a listener can refetch and get truth. Posting at
@@ -163,7 +171,7 @@ final class PlaybackReporter {
         let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
-        Task.detached {
+        enqueue {
             await client.reportPlaybackStopped(
                 itemId: itemId, userId: uid,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
@@ -198,13 +206,31 @@ final class PlaybackReporter {
         let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
-        Task.detached {
+        enqueue {
             await client.reportPlaybackProgress(
                 itemId: itemId, userId: uid,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
                 positionTicks: positionTicks, isPaused: true, playMethod: info.playMethod
             )
         }
+    }
+
+    /// Runs `work` after every report raised before it. The chain is per
+    /// reporter, i.e. per play session: a new episode's start does not wait on
+    /// the previous episode's stop, which lives on the same chain anyway when
+    /// the presenter reuses its reporter.
+    private func enqueue(_ work: @escaping @Sendable () async -> Void) {
+        let previous = tail
+        tail = Task.detached {
+            await previous?.value
+            await work()
+        }
+    }
+
+    /// Resolves once every report raised so far has been sent. Test seam —
+    /// nothing in the app waits on reports.
+    func drain() async {
+        await tail?.value
     }
 
     func resetTicking() {
@@ -258,7 +284,7 @@ final class PlaybackReporter {
         let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
-        Task.detached {
+        enqueue {
             await client.reportPlaybackProgress(
                 itemId: itemId, userId: uid,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,

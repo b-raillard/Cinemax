@@ -9,8 +9,8 @@ import JellyfinAPI
 /// per-tick progress reports to the server (one report per ten `onTick()` calls
 /// from the presenter's shared 1 Hz time observer).
 ///
-/// The reporter fires `Task.detached` for the actual API calls, so we race a
-/// short yield window against the counter's public effect. These tests cover
+/// The reporter queues the actual API calls on its own serial chain, which
+/// `drain()` awaits — only the keep-alive ping (off the chain) still polls. These tests cover
 /// the pure throttle logic — network success/failure is server-side and not
 /// reachable from a unit test anyway (MockAPIClient stubs return void).
 @MainActor
@@ -38,7 +38,7 @@ struct PlaybackReporterTests {
         for _ in 0..<9 { reporter.onTick() }
         reporter.resetTicking()
         for _ in 0..<9 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(30))
+        await reporter.drain()
         #expect(mock.progressCount == 0)
     }
 
@@ -51,7 +51,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<20 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(30))
+        await reporter.drain()
         #expect(mock.progressCount == 0)
     }
 
@@ -64,11 +64,9 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStart(startTime: nil)
-        // The API call rides a Task.detached — on a loaded CI host a fixed
-        // sleep races its scheduling, so poll (bounded) for the effect instead.
-        for _ in 0..<200 where mock.startCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // `drain()` resolves once every queued report has been sent — no
+        // sleep racing the scheduler on a loaded CI host.
+        await reporter.drain()
         #expect(mock.startCount == 1)
     }
 
@@ -80,7 +78,7 @@ struct PlaybackReporterTests {
             context: { nil }
         )
         reporter.reportStart(startTime: nil)
-        try await Task.sleep(for: .milliseconds(30))
+        await reporter.drain()
         #expect(mock.startCount == 0)
     }
 
@@ -116,9 +114,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 1)
         #expect(mock.lastStopTicks == 0)
     }
@@ -133,9 +129,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportBackgroundProgress()
-        for _ in 0..<200 where mock.progressCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.progressCount == 1)
         #expect(mock.lastProgressTicks == 0)
     }
@@ -150,9 +144,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<10 { reporter.onTick() }
-        for _ in 0..<200 where mock.progressCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.progressCount == 1)
         #expect(mock.lastProgressTicks == 0)
     }
@@ -166,9 +158,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStart(startTime: .nan)
-        for _ in 0..<200 where mock.startCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.startCount == 1)
         #expect(mock.lastStartTicks == 0)
     }
@@ -188,9 +178,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 1)
         #expect(mock.lastStopLiveStreamId == "ls-42")
     }
@@ -204,9 +192,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 1)
         #expect(mock.lastStopLiveStreamId == nil)
     }
@@ -220,9 +206,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopEncodingCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         // Order matters: the server must record the resume position before we
         // tear the job down.
         #expect(mock.callOrder == ["stopped", "stopEncoding"])
@@ -237,9 +221,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopEncodingCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopEncodingCount == 1)
     }
 
@@ -327,9 +309,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.lastStopTicks == 420_000_000)
     }
 
@@ -360,9 +340,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.lastStopTicks == 48_000_000_000)
     }
 
@@ -377,10 +355,7 @@ struct PlaybackReporterTests {
 
         reporter.reportStop()
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try await Task.sleep(for: .milliseconds(50))
+        await reporter.drain()
         #expect(mock.stopCount == 1)
     }
 
@@ -397,10 +372,26 @@ struct PlaybackReporterTests {
         // continue, puis la fermeture doit encore rapporter sa position.
         reporter.reportStop(reason: .episodeSwap)
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount < 2 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 2)
+    }
+
+    // MARK: - Ordre des rapports (audit 2026-09-22, B12)
+
+    @Test("Un start lent n'arrive jamais après le stop de la même session")
+    func reportsReachTheServerInOrder() async {
+        let mock = CountingPlaybackAPI(startDelay: .milliseconds(150))
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        reporter.reportStart(startTime: nil)
+        reporter.reportBackgroundProgress()
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(mock.callOrder == ["start", "progress", "stopped", "stopEncoding"])
     }
 
     @Test("reportStart rouvre une session terminée")
@@ -415,9 +406,7 @@ struct PlaybackReporterTests {
         reporter.reportStop()
         reporter.reportStart(startTime: 42)
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount < 2 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 2)
     }
 
@@ -472,9 +461,7 @@ struct PlaybackReporterTests {
         reporter.reportStop(reason: .episodeSwap)
         // Attendre que le rapport serveur soit parti, pour que l'absence
         // d'annonce soit un vrai constat et pas une course gagnée de justesse.
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         try await Task.sleep(for: .milliseconds(50))
 
         #expect(mock.stopCount == 1, "le serveur doit tout de même recevoir le stop")
@@ -521,6 +508,12 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         var order: [String] = []
     }
     private let state = OSAllocatedUnfairLock(initialState: Counts())
+    /// Holds the start report back, so a test can prove the stop waits for it.
+    private let startDelay: Duration
+
+    init(startDelay: Duration = .zero) {
+        self.startDelay = startDelay
+    }
 
     var startCount: Int { state.withLock { $0.start } }
     var progressCount: Int { state.withLock { $0.progress } }
@@ -538,7 +531,8 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, playMethod: CinemaxKit.PlayMethod
     ) async {
-        state.withLock { $0.start += 1; $0.lastStartTicks = positionTicks }
+        if startDelay > .zero { try? await Task.sleep(for: startDelay) }
+        state.withLock { $0.start += 1; $0.lastStartTicks = positionTicks; $0.order.append("start") }
     }
 
     func reportPlaybackProgress(
@@ -546,7 +540,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod
     ) async {
-        state.withLock { $0.progress += 1; $0.lastProgressTicks = positionTicks }
+        state.withLock { $0.progress += 1; $0.lastProgressTicks = positionTicks; $0.order.append("progress") }
     }
 
     func reportPlaybackStopped(

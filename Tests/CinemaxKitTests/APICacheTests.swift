@@ -134,6 +134,67 @@ struct APICacheTests {
         #expect(hit == 99)
     }
 
+    // MARK: - Stale-write guard (audit 2026-09-22)
+
+    @Test("a fetch that began before a sweep does not re-cache the swept value")
+    func sweepRefusesInFlightWrite() {
+        let cache = APICache()
+        let miss: Int? = cache.get("item-1-u")          // the fetch starts here
+        #expect(miss == nil)
+        cache.invalidate(prefix: "item-1")               // a mutation lands meanwhile
+        cache.set("item-1-u", value: 1, ttl: 60)         // the pre-mutation answer arrives
+        let after: Int? = cache.get("item-1-u")
+        #expect(after == nil)
+        // The next fetch, started after the sweep, is cached normally.
+        cache.set("item-1-u", value: 2, ttl: 60)
+        let fresh: Int? = cache.get("item-1-u")
+        #expect(fresh == 2)
+    }
+
+    @Test("a sweep of another prefix does not block the write")
+    func unrelatedSweepKeepsWrite() {
+        let cache = APICache()
+        let _: Int? = cache.get("seasons-9-u")
+        cache.invalidate(prefix: "episodes-")
+        cache.set("seasons-9-u", value: 3, ttl: 60)
+        let hit: Int? = cache.get("seasons-9-u")
+        #expect(hit == 3)
+    }
+
+    @Test("clear() also refuses a write whose miss predates it")
+    func clearRefusesInFlightWrite() {
+        let cache = APICache()
+        let _: Int? = cache.get("genres-u")
+        cache.clear()
+        cache.set("genres-u", value: 4, ttl: 60)
+        let hit: Int? = cache.get("genres-u")
+        #expect(hit == nil)
+    }
+
+    @Test("a caller arriving after a sweep does not join the stale in-flight fetch")
+    func sweepDetachesInFlight() async throws {
+        let cache = APICache()
+        let counter = CallCounter()
+        let (started, signal) = AsyncStream.makeStream(of: Void.self)
+        let stale = Task {
+            try await cache.coalesce(key: "item-5-u") {
+                await counter.increment()
+                signal.yield()                     // registered AND running
+                try await Task.sleep(for: .milliseconds(150))
+                return 1
+            }
+        }
+        for await _ in started { break }
+        cache.invalidate(prefix: "item-5")
+        let fresh = try await cache.coalesce(key: "item-5-u") {
+            await counter.increment()
+            return 2
+        }
+        #expect(fresh == 2)
+        #expect(try await stale.value == 1)
+        #expect(await counter.count == 2)
+    }
+
     // MARK: - Single-flight coalescing
 
     /// Counts how many times a coalesced operation actually executed. An actor

@@ -287,3 +287,19 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
 - S5/S6 : plus de jeton dans les URL d'images du Top Shelf, des chapitres et du trickplay.
 - S7 : session du socket éphémère. **Reporté au lot 3** : l'authentification du socket par en-tête, car l'URL tokenisée sert aussi de clé d'identité au `JellyfinSocketHub` (il faut changer `RealtimeSocketAPI` pour rendre une requête et comparer le jeton).
 - S10 : `permissions: contents: read` sur `ci.yml`, actions épinglées par SHA, somme SHA-256 de xcodegen vérifiée, revue Claude sans Dependabot et avec groupe de concurrence.
+
+**Lot 3 — fait, sauf deux points.**
+- B10 + B4 : la cible d'un changement de serveur est validée hors du client partagé (`ServerSessionValidator`, `GET /Users/Me` sur sa propre session). Le client n'est repointé qu'au commit, un refus n'a plus rien à défaire, et la version apprise du serveur courant n'est plus effacée. `rollBackFailedSwitch` supprimé.
+- B5 : la reprise VLC après un réveil re-négocie avec la même version (`mediaSourceId`) et réapplique les pistes audio / sous-titres en cours.
+- B8 : les deux rafraîchissements d'épisodes de la fiche n'écrivent que dans la saison encore sélectionnée.
+- B11 : le lecteur natif a une génération de navigation. En cas d'échec, la session de l'épisode courant est rouverte (appui manuel) ou l'alerte d'erreur s'affiche (enchaînement automatique).
+- B12 : `PlaybackReporter` sériel (start → progress → stop dans l'ordre), avec `drain()` pour les tests.
+- B13 : génération de chargement sur l'Accueil ; rails vidés quand le serveur ou le compte change.
+- APICache : une écriture partie avant une invalidation qui couvre sa clé est refusée ; une invalidation détache les requêtes en vol correspondantes.
+- T1 : tests des profils d'appareil, placés dans `AuthedURLTests.swift` (un nouveau fichier imposerait un `xcodegen`).
+- T2 : `UserDefaults` injectés dans `HomeViewModel`, `HomeRailPreferences` et `HomeGenrePreferences` ; les suites de l'Accueil utilisent chacune leur store. `MenuConfigStore` n'a pas été touché : sa suite est sérialisée et c'est la seule à lire ses clés.
+- T3 : partiel. Les tests du rapporteur et le nouveau test d'APICache ne dorment plus. Le reste des `sleep` passe au lot 5.
+- T4 : la session partagée réelle est restaurée après le test.
+- **Reportés** :
+  - S7 (authentification du socket par en-tête) : il faut changer `RealtimeSocketAPI` et la clé d'identité du hub, trop risqué sans compilateur local. Passe au lot 5.
+  - Les autres `sleep` de T3.

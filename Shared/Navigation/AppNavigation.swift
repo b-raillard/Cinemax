@@ -54,6 +54,14 @@ final class AppState {
     /// don't set it still exercise the validate path. Never log out while this
     /// reports offline — turning the box off/on must not disconnect the user.
     var isOnlineProvider: @MainActor () -> Bool = { true }
+    /// Validates a token against a server WITHOUT repointing the shared client
+    /// (`ServerSessionValidator`). A seam like `isOnlineProvider`: the switch
+    /// tests route it to their mock client's `validateSession()`.
+    var sessionValidator: @MainActor (URL, String) async -> SessionValidity = { url, token in
+        await ServerSessionValidator.validate(
+            url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID()
+        )
+    }
 
     // MARK: - Multi-server state
     //
@@ -518,13 +526,6 @@ final class AppState {
     func switchTo(_ entry: ServerEntry) async -> SwitchDecision {
         guard entry.id != activeServerId else { return .commit }
 
-        // Captured BEFORE the client is repointed, and used explicitly on the
-        // rollback path. Resolving the previous server lazily via
-        // `currentActiveEntry` is unsafe here: its most-recently-used fallback
-        // (for a nil / stale `activeServerId`) can resolve to `entry` itself, so
-        // a refused switch would "roll back" onto the very server it just refused.
-        let previous = currentActiveEntry
-
         switch ServerRegistry.decideSwitch(entry: entry, isOnline: isOnlineProvider(), validity: nil) {
         case .offline:
             return .offline                     // caller toasts; nothing mutated
@@ -539,10 +540,12 @@ final class AppState {
             return .needsLogin
         }
 
-        apiClient.reconnect(url: entry.url, accessToken: token)
-        switch await apiClient.validateSession() {
+        // Validated OFF the shared client: it stays on the working server until
+        // the target is known good, so nothing on screen can reach the target
+        // with the wrong user id, and a refusal has nothing to undo (B4/B10).
+        switch await sessionValidator(entry.url, token) {
         case .valid:
-            await applyActiveServer(entry)
+            await applyActiveServer(entry)       // the one repoint of a switch
             return .commit
         case .invalid:
             // Server-confirmed revocation — drop THIS entry's credentials only.
@@ -550,31 +553,11 @@ final class AppState {
             await beginReLogin(for: entry)
             return .needsLogin
         case .indeterminate:
-            // Unprovable failure: restore the previous client and KEEP the
-            // target's token (the "never destroy on indeterminate" rule).
-            await rollBackFailedSwitch(to: previous)
+            // Unprovable failure: KEEP the target's token (the "never destroy
+            // on indeterminate" rule). The client was never repointed, so the
+            // working server — its screens, its learned version — is untouched.
             return .unreachable
         }
-    }
-
-    /// Undoes the `reconnect` a refused switch performed, without any of the
-    /// side effects of a real switch.
-    ///
-    /// Deliberately NOT `applyActiveServer`: nothing about the current server
-    /// actually changed, so re-running the full path would post a tier-1 refresh,
-    /// re-fetch the user and bump `lastUsedAt` — i.e. a flaky network would blow
-    /// away the working server's loaded screens. Only the client is repointed
-    /// (and the rating cap re-applied, since `reconnect` drops it).
-    private func rollBackFailedSwitch(to previous: ServerEntry?) async {
-        guard let previous, let token = previous.accessToken, !token.isEmpty else {
-            // No usable server to fall back to — take the full path, which knows
-            // how to land on LoginScreen / ServerSetupScreen.
-            await restorePreviousServer()
-            return
-        }
-        apiClient.reconnect(url: previous.url, accessToken: token)
-        let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
-        apiClient.applyContentRatingLimit(maxAge: storedAge)
     }
 
     /// Points the shared client at `entry` without a token and leaves the app in

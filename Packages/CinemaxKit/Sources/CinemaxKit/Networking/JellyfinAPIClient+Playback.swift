@@ -720,7 +720,7 @@ extension JellyfinAPIClient {
     ]
 
     /// Builds a DeviceProfile matching Swiftfin's native player profile.
-    fileprivate static func buildAppleDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
+    static func buildAppleDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
         DeviceProfile(
             codecProfiles: _codecProfiles,
             directPlayProfiles: _directPlayProfiles,
@@ -803,7 +803,7 @@ extension JellyfinAPIClient {
 
     /// Broad-DirectPlay profile for the VLC engine — Jellyfin serves the raw
     /// file with no transcode (4K / HEVC 10-bit / Dolby Vision preserved).
-    fileprivate static func buildVLCDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
+    static func buildVLCDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
         DeviceProfile(
             directPlayProfiles: _vlcDirectPlayProfiles,
             maxStreamingBitrate: maxBitrate,
@@ -816,7 +816,7 @@ extension JellyfinAPIClient {
     /// matches for DirectPlay/DirectStream, so the server hands back a linear HLS
     /// transcode. Used only for seek-heavy containers (`isSeekHeavyContainer`)
     /// that can't be streamed raw over HTTP from a reverse-proxied origin.
-    fileprivate static func buildVLCTranscodeProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
+    static func buildVLCTranscodeProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
         DeviceProfile(
             directPlayProfiles: [],
             maxStreamingBitrate: maxBitrate,

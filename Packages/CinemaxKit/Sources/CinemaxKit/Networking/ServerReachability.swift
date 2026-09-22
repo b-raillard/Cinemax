@@ -142,7 +142,7 @@ public enum ServerSessionRevoker {
     /// values because the target server is not (necessarily) the one the shared
     /// client is pointed at — reading the client's configuration would revoke
     /// against the wrong server.
-    private static func authorizationHeader(accessToken: String, deviceId: String) -> String {
+    static func authorizationHeader(accessToken: String, deviceId: String) -> String {
         let fields = [
             "DeviceId": deviceId,
             "Device": deviceName,
@@ -181,6 +181,72 @@ public enum ServerSessionRevoker {
         // Same explicit certificate approval as every other session: without it
         // a self-signed server's status dot would read « injoignable » on a
         // server the app is otherwise happily talking to.
+        return URLSession(configuration: configuration, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
+    }()
+}
+
+/// Checks a token against a server the shared client is NOT pointed at.
+///
+/// A multi-server switch used to repoint the shared `JellyfinAPIClient` at the
+/// target first and validate afterwards, so for as long as the check took —
+/// up to the 30 s request timeout on a slow box — every screen still on the
+/// previous server issued its requests to the TARGET, with the previous
+/// server's user id, and a 401 landing in that window fed the session-expiry
+/// coordinator against the wrong server. The refused case then had to put the
+/// client back, and forgot the learned `ServerVersion` doing so (audit
+/// 2026-09-22, B4 / B10). Validating here, off-client, leaves the shared client
+/// untouched until the switch is known to succeed.
+///
+/// Same discipline as `ServerSessionRevoker`: its own bounded, cache-less
+/// session, an explicit `MediaBrowser` header, the reverse-proxy base path
+/// preserved, and NO `notifyIfUnauthorized` — a 401 here is the answer being
+/// asked for, not a sign the ACTIVE session expired.
+public enum ServerSessionValidator {
+
+    /// Longer than the revoke: a switch waits on this answer, and a slow but
+    /// healthy server must not be reported unreachable.
+    public static let requestTimeout: TimeInterval = 15
+
+    public static func validate(
+        url: URL,
+        accessToken: String,
+        deviceId: String,
+        session: URLSession? = nil
+    ) async -> SessionValidity {
+        guard !accessToken.isEmpty,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return .indeterminate }
+        components.setEndpointPath("/Users/Me", preservingBasePathOf: url)
+        components.query = nil
+        components.fragment = nil
+        guard let endpoint = components.url else { return .indeterminate }
+
+        var request = URLRequest(url: endpoint)
+        request.setValue(ServerSessionRevoker.authorizationHeader(accessToken: accessToken, deviceId: deviceId),
+                         forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = requestTimeout
+        do {
+            let (_, response) = try await (session ?? validateSession).data(for: request)
+            return classify(statusCode: (response as? HTTPURLResponse)?.statusCode)
+        } catch {
+            return .indeterminate
+        }
+    }
+
+    /// The same reading `JellyfinAPIClient.validateSession` gives the shared
+    /// client: only an authoritative 401 is `.invalid`.
+    static func classify(statusCode: Int?) -> SessionValidity {
+        guard let statusCode else { return .indeterminate }
+        if (200..<300).contains(statusCode) { return .valid }
+        if statusCode == 401 { return .invalid }
+        return .indeterminate
+    }
+
+    private static let validateSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = requestTimeout
+        configuration.waitsForConnectivity = false
+        configuration.urlCache = nil
         return URLSession(configuration: configuration, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
     }()
 }

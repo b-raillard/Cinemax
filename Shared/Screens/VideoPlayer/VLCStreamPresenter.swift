@@ -223,6 +223,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `mediaPlayer.media?.length` reads).
     private var mediaLengthMs: Int32 = 0
     private var didApplyServerTrackDefaults = false
+    /// The audio / subtitle ordinals in use when a wake re-resolve replaced the
+    /// media, re-applied INSTEAD of the server defaults on the reopened stream
+    /// (same source, so the ordinals still name the same tracks). Without it a
+    /// user who had switched to the VO, or turned subtitles on, woke the Apple
+    /// TV onto the server's default track (audit 2026-09-22, B5). `subtitle`
+    /// nil = off. Consumed by the next `applyServerTrackDefaultsIfNeeded`.
+    private var trackRestore: (audio: Int?, subtitle: Int?)?
     #if os(iOS)
     private var pipController: PiPController?
     private let pipButton = UIButton(type: .system)
@@ -3261,6 +3268,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
         didApplyServerTrackDefaults = true
 
+        if let kept = trackRestore {
+            trackRestore = nil
+            if let audio = kept.audio, audio < player.audioTracks.count {
+                player.selectedAudioTrack = player.audioTracks[audio]
+            }
+            if let subtitle = kept.subtitle, subtitle < player.subtitleTracks.count {
+                player.selectedSubtitleTrack = player.subtitleTracks[subtitle]
+            } else {
+                player.selectedSubtitleTrack = nil
+            }
+            let audioLabel = kept.audio.map { String($0) } ?? "-"
+            let subtitleLabel = kept.subtitle.map { String($0) } ?? "off"
+            logger.notice("CINEMAX-AUDIO ▸ réveil : pistes conservées audio=\(audioLabel, privacy: .public) sous-titres=\(subtitleLabel, privacy: .public)")
+            return
+        }
+
         // NOT `info.selectedAudioIndex` verbatim: the server's default can be a
         // TrueHD track, which this engine renders as silence on Apple. See
         // `AudioTrackPolicy`.
@@ -3388,6 +3411,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func startPlayback() {
         hasValidTime = false
         didApplyServerTrackDefaults = false
+        trackRestore = nil
         seeks.cancelPending()
         beginOpenLoading()
         mediaLengthMs = 0
@@ -3864,6 +3888,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
+            self.trackRestore = nil // another episode: its own defaults
             self.mediaLengthMs = 0
             // Per-file state: the countdown card baked in the old "next" title,
             // and delays compensate per-file mux drift. Speed persists.
@@ -4831,6 +4856,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let gen = navGeneration
         let resumeItemId = itemId
         let resumeSeconds = Double(resumeMs) / 1000.0
+        // The version and the tracks on screen, captured while the old media
+        // still describes them. A re-negotiation without `mediaSourceId` lets
+        // the server rank the sources afresh — i.e. drops a version the user
+        // picked on the fiche for the ranked default.
+        let keptSourceId = info.mediaSourceId
+        let keptTracks: (audio: Int?, subtitle: Int?)? = didApplyServerTrackDefaults && !player.audioTracks.isEmpty
+            ? (audio: player.selectedAudioTrack.flatMap { player.audioTracks.firstIndex(of: $0) },
+               subtitle: player.selectedSubtitleTrack.flatMap { player.subtitleTracks.firstIndex(of: $0) })
+            : nil
         logger.notice("VLC wake re-resolve for \(resumeItemId, privacy: .public) @ \(Int(resumeSeconds))s")
         Task { [weak self] in
             guard let self else { return }
@@ -4839,7 +4873,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.
             guard let fresh = try? await self.apiClient.getPlaybackInfo(
-                itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
+                itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate,
+                engine: .vlc, mediaSourceId: keptSourceId
             ) else {
                 // …and make sure there IS one: this re-resolve may have superseded
                 // an error retry (its token was cleared above), which had already
@@ -4882,6 +4917,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
+            // Only when the server kept the source: another version's ordinals
+            // would name different tracks.
+            self.trackRestore = (fresh.mediaSourceId == keptSourceId) ? keptTracks : nil
             self.mediaLengthMs = 0
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
             let (url, viaProxy) = self.streamOpenURL(

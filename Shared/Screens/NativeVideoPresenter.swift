@@ -606,8 +606,16 @@ final class NativeVideoPresenter {
 
     // MARK: - Episode Navigation
 
-    private func navigateToEpisode(_ ep: EpisodeRef) {
+    /// Bumped by every `navigateToEpisode`: two quick Next presses used to run
+    /// two negotiations whose results both applied, in arrival order — the
+    /// screen could land on the FIRST episode asked for, with the reporter
+    /// bound to whichever finished last (audit 2026-09-22, B11).
+    private var navGeneration = 0
+
+    private func navigateToEpisode(_ ep: EpisodeRef, isAutoplay: Bool = false) {
         guard let navigator = episodeNavigator, let vc = playerVC else { return }
+        navGeneration += 1
+        let gen = navGeneration
         Task { [self] in
             playbackReporter.reportStop(reason: .episodeSwap)
             // Neighbors resolve synchronously (pure index lookups); this
@@ -616,11 +624,11 @@ final class NativeVideoPresenter {
                   let info = try? await apiClient.getPlaybackInfo(
                       itemId: ep.id, userId: userId, maxBitrate: maxBitrate
                   ) else {
-                // The session is already closed and the new episode never
-                // resolved. (Recovering playback itself is deliberately out of
-                // scope here — see the VLC path's `handleFailedEpisodeNav`.)
+                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay)
                 return
             }
+            // Superseded by a newer nav, or dismissed, while negotiating.
+            guard gen == self.navGeneration, self.playerVC != nil else { return }
             cleanupPlayer()
             self.hasRetriedDirectURL = false
             self.playbackInfo = info
@@ -651,7 +659,7 @@ final class NativeVideoPresenter {
             // await above — the navigator itself no longer awaits anything).
             guard self.playerVC != nil else { return }
             await PlaybackAudioSession.activate()
-            guard self.playerVC != nil else { return }
+            guard self.playerVC != nil, gen == self.navGeneration else { return }
 
             let playerItem = makePlayerItem(for: info)
             applyTitleMetadata(to: playerItem, title: ep.title)
@@ -688,6 +696,24 @@ final class NativeVideoPresenter {
             sleepTimer.startIfNeeded()
             showSkipToEndButtonIfDebugEnabled()
         }
+    }
+
+    /// The negotiation for the next episode failed after the stop of the one
+    /// on screen had already gone out. Same split as the VLC path's
+    /// `handleFailedEpisodeNav`: a manual press leaves the current episode
+    /// playing, so its server session is re-opened at the live position (or
+    /// its progress and resume point would stay frozen at the press); an
+    /// autoplay hand-off has nothing left playing, so it ends on the error
+    /// alert instead of a silent, finished player.
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
+        guard gen == navGeneration, let player = playerVC?.player else { return }
+        logger.error("Native episode nav: negotiation failed (autoplay=\(isAutoplay, privacy: .public))")
+        if isAutoplay {
+            showPlaybackErrorAlert(error: nil)
+            return
+        }
+        let position = player.currentTime().seconds
+        playbackReporter.reportStart(startTime: position.isFinite ? position : nil)
     }
 
     // MARK: - Metadata
@@ -767,7 +793,7 @@ final class NativeVideoPresenter {
                     seriesName=\(self.currentSeriesName ?? "<nil>", privacy: .public)
                     """)
                 if autoPlay, let next = self.nextEpisode, self.episodeNavigator != nil {
-                    self.navigateToEpisode(next)
+                    self.navigateToEpisode(next, isAutoplay: true)
                     return
                 }
                 if autoPlay, self.episodeNavigator != nil, self.nextEpisode == nil,
