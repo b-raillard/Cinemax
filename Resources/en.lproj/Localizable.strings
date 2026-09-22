@@ -1188,6 +1188,8 @@
 "whatsNew.skip" = "Skip";
 "whatsNew.done" = "Done";
 "whatsNew.page" = "Page %d of %d";
+"whatsNew.underTheHood.title" = "Under the hood";
+"whatsNew.underTheHood.body" = "This version fixes bugs and makes the app lighter. Playback above all: it now recovers on its own when your server briefly stops feeding it, instead of sitting on a frozen picture.";
 "whatsNew.watchTogether.title" = "Watch Together";
 "whatsNew.watchTogether.body" = "Play the same film with other people: pausing, resuming and seeking stay in step. They join the session from the “Live” row on their own home screen.";
 "whatsNew.playOn.title" = "Play on…";

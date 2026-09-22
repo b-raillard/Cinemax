@@ -30,6 +30,9 @@ enum WhatsNewCatalogue {
     static let maxPages = 6
 
     static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(version: ServerVersion(2, 1, 1), pages: [
+            WhatsNewPage(id: "underTheHood", illustration: .underTheHood)
+        ]),
         WhatsNewRelease(version: ServerVersion(2, 1, 0), pages: [
             WhatsNewPage(id: "watchTogether", illustration: .watchTogether),
             WhatsNewPage(id: "playOn", illustration: .playOn),

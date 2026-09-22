@@ -1190,6 +1190,8 @@
 "whatsNew.skip" = "Passer";
 "whatsNew.done" = "Terminé";
 "whatsNew.page" = "Page %d sur %d";
+"whatsNew.underTheHood.title" = "Sous le capot";
+"whatsNew.underTheHood.body" = "Cette version corrige des bugs et allège l'application. La lecture, surtout : elle se rattrape maintenant toute seule quand le serveur cesse un instant de l'alimenter, au lieu de rester sur une image figée.";
 "whatsNew.watchTogether.title" = "Regarder ensemble";
 "whatsNew.watchTogether.body" = "Lancez le même film à plusieurs : pause, reprise et déplacements sont partagés à la seconde près. Les autres rejoignent la séance depuis la rangée « En direct » de leur accueil.";
 "whatsNew.playOn.title" = "Lire sur…";
