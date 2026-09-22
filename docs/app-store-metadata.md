@@ -93,6 +93,21 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
 
+#### iOS — 2.1.1
+```
+Cinemax 2.1.1 : une lecture qui tient la distance.
+
+— LECTURE PLUS FIABLE
+• Quand le serveur cesse d'alimenter un film en cours de lecture, Cinemax le voit maintenant pendant que l'image tourne encore, et se raccroche tout seul : un court rechargement remplace l'écran figé
+• Une image et un compteur figés ensemble relancent désormais la lecture, comme le faisait déjà une image figée seule
+• Un peu plus de marge de tampon, pour absorber les coupures passagères sans rien interrompre
+
+— BUGS CORRIGÉS
+• Les cartes de la rangée « En direct » ont toutes la même hauteur, quel que soit le texte qu'elles portent
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 2.1.0
 ```
 Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
@@ -253,6 +268,22 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
 • Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
 • Même correction dans le widget
+
+Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 2.1.1
+```
+Cinemax 2.1.1 : une lecture qui tient la distance.
+
+— LECTURE PLUS FIABLE
+• Quand le serveur cesse d'alimenter un film en cours de lecture, Cinemax le voit maintenant pendant que l'image tourne encore, et se raccroche tout seul : un court rechargement remplace l'écran figé
+• Une image et un compteur figés ensemble relancent désormais la lecture, comme le faisait déjà une image figée seule
+• Un peu plus de marge de tampon, pour absorber les coupures passagères sans rien interrompre
+
+— BUGS CORRIGÉS
+• « Passer l'intro » répond de nouveau quand les commandes de lecture sont masquées : le clic passe l'intro au lieu de mettre en pause
+• Les cartes de la rangée « En direct » ont toutes la même hauteur, quel que soit le texte qu'elles portent
 
 Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -555,6 +586,21 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 > Two separate texts: the "Continue watching" control, widgets, diagnostics export and administration are iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
 
+#### iOS — 2.1.1
+```
+Cinemax 2.1.1: playback that goes the distance.
+
+— MORE DEPENDABLE PLAYBACK
+• When your server stops feeding a film mid-playback, Cinemax now notices while the picture is still running and reconnects on its own: a short reload instead of a frozen screen
+• A picture and a counter that freeze together now restart playback, as a frozen picture alone already did
+• A little more buffer, to absorb brief interruptions without interrupting anything
+
+— BUGS FIXED
+• The cards in the "Live" row all share the same height, whatever text they carry
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 2.1.0
 ```
 Cinemax 2.1: more dependable playback, and plenty of small touches.
@@ -715,6 +761,22 @@ Long-press a title and it now does everything, without opening its page.
 • One show can no longer take over the row: importing a full season used to fill it entirely
 • Series that just received episodes now surface there, alongside new movies and shows
 • Same fix in the widget
+
+Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 2.1.1
+```
+Cinemax 2.1.1: playback that goes the distance.
+
+— MORE DEPENDABLE PLAYBACK
+• When your server stops feeding a film mid-playback, Cinemax now notices while the picture is still running and reconnects on its own: a short reload instead of a frozen screen
+• A picture and a counter that freeze together now restart playback, as a frozen picture alone already did
+• A little more buffer, to absorb brief interruptions without interrupting anything
+
+— BUGS FIXED
+• "Skip intro" responds again when the player controls are hidden: the click skips the intro instead of pausing
+• The cards in the "Live" row all share the same height, whatever text they carry
 
 Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
@@ -999,8 +1061,8 @@ ASC → Pricing and Availability → Edit Countries or Regions → cocher unique
 
 ## 6. Build à sélectionner
 
-iOS : **2.1.0** build **2.1.1** (envoyé sur TestFlight le 2026-09-14)
-tvOS : **2.1.0** build **2.1.1** (envoyé sur TestFlight le 2026-09-14)
+iOS : **2.1.1** build **2.1.1** (envoyé sur TestFlight le 2026-09-22)
+tvOS : **2.1.1** build **2.1.1** (envoyé sur TestFlight le 2026-09-22)
 
 `MARKETING_VERSION` et `CURRENT_PROJECT_VERSION` sont source unique dans `project.yml` (settings.base) : bumper `MARKETING_VERSION` à chaque version publique, `CURRENT_PROJECT_VERSION` à chaque archive envoyée.
 
