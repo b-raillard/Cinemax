@@ -322,3 +322,9 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
 - Dynamic Type sur les réglages iOS, les états vides et d'erreur, et les toasts. Traits « en-tête » sur les en-têtes de section, trait « sélectionné » sur les puces, le tri et les onglets de saison.
 - Divers : le carrousel iOS ne tourne plus sous VoiceOver ; la coche « vu » est visible en mode clair.
 - **Reporté au lot 5** : l'état vu / en cours des cartes pour VoiceOver. Il faut reprendre le libellé composé de chaque carte, surface par surface.
+- **Relecture adversariale du lot 4, intégrée** (`df600c2`, `5683bd0`) :
+  - `loc.decimal` n'acceptait qu'un `Double` alors que les notes sont des `Float` (erreur de compilation) ; il accepte tout `BinaryFloatingPoint` ;
+  - fonds d'accent oubliés : puce de portée de la Recherche, chevron de la première pastille des réglages iOS, sous-titre et chevron de la pastille tvOS focalisée, initiales des avatars ;
+  - le geste magique et le retour du HUD à l'activation de VoiceOver attendent qu'aucune couche (alerte, sélecteur, panneau d'options tvOS, carte de fin de série) ne tienne l'écran, et le geste magique attend un média ouvert ;
+  - toast : annonce via `UIAccessibility.post`, action « Fermer » explicite et geste d'échappement sur l'élément combiné.
+  - Non traité, antérieur au lot : la coche blanche des pastilles jaune et cyan en mode sombre (~1,6:1).
