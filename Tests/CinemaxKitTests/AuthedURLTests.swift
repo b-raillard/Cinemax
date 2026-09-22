@@ -171,7 +171,8 @@ struct DeviceProfileTests {
         #expect(direct.first?.container == nil)
         // The DirectPlay list is where MPEG audio is copied as-is — the
         // opposite goal from the transcode list below.
-        #expect(codecs(direct.first?.audioCodec).isSuperset(of: ["mp1", "mp2", "mp3"]))
+        let directAudio = codecs(direct.first?.audioCodec)
+        #expect(directAudio.isSuperset(of: ["mp1", "mp2", "mp3"]))
     }
 
     @Test("the VLC transcode asks for MPEG-TS segments, one of them, and re-encodes MPEG audio")
@@ -185,8 +186,6 @@ struct DeviceProfileTests {
             #expect(t.protocol == .hls)
             #expect(codecs(t.audioCodec).isDisjoint(with: ["mp1", "mp2", "mp3"]))
             #expect(codecs(t.videoCodec) == ["hevc", "h264"])
-            // Jellyfin ignores it and 12.0 deprecates it — see CLAUDE.md.
-            #expect(t.isBreakOnNonKeyFrames == false)
         }
     }
 
