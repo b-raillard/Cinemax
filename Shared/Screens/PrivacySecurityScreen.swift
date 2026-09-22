@@ -320,10 +320,16 @@ struct PrivacySecurityScreen: View {
                 lockToggleRow(
                     icon: "faceid",
                     label: loc.localized("privacy.lock.biometrics"),
-                    subtitle: loc.localized("privacy.lock.biometrics.subtitle"),
+                    // Says WHY the switch is off when the enrolled faces /
+                    // fingers changed and the PIN unlock turned it off — this
+                    // screen is a sheet, above the root toast overlay.
+                    subtitle: loc.localized(parentalLock.biometricSetChanged
+                        ? "privacy.lock.biometrics.reset"
+                        : "privacy.lock.biometrics.subtitle"),
                     isOn: parentalLock.biometricsEnabled,
                     focusTarget: .lockBiometrics
                 ) {
+                    parentalLock.acknowledgeBiometricSetChange()
                     parentalLock.setBiometricsEnabled(!parentalLock.biometricsEnabled)
                 }
             }

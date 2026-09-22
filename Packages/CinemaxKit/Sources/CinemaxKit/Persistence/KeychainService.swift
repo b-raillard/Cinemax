@@ -123,24 +123,18 @@ public struct KeychainService: Sendable {
     /// Account holding the active entry's id (UTF-8), or absent when none.
     static let activeServerIdAccount = "active_server_id"
 
-    /// Where an unreadable `servers` blob is set aside before the migration
-    /// re-seeds the list over it.
-    static let unreadableServersBackupAccount = "servers.unreadable"
-
     /// The registered servers. A decode failure returns `[]` — which also
     /// re-arms `migrateToMultiServerIfNeeded()` off the still-present legacy
-    /// trio, so the ACTIVE server comes back instead of stranding the user.
-    /// Every other server of that blob would be overwritten by the re-seed, so
-    /// the raw bytes are copied aside first (once) and the failure is logged.
+    /// trio, so the ACTIVE server comes back instead of stranding the user;
+    /// the other servers of that blob are lost with it. Logged, because it
+    /// used to be silent. (No copy is set aside: it would be a second store of
+    /// every server's token that nothing ever reads back.)
     public func getServers() -> [ServerEntry] {
         guard let data = getData(for: Self.serversAccount) else { return [] }
         do {
             return try JSONDecoder().decode([ServerEntry].self, from: data)
         } catch {
             keychainLog.fault("Server registry unreadable (\(data.count) bytes): \(error.localizedDescription, privacy: .public)")
-            if getData(for: Self.unreadableServersBackupAccount) == nil {
-                try? save(data: data, for: Self.unreadableServersBackupAccount)
-            }
             return []
         }
     }
@@ -340,7 +334,7 @@ public struct KeychainService: Sendable {
     static let privateAccounts = [
         "access_token", "server_url", "user_session", "device_id",
         serversAccount, activeServerIdAccount, trustedCertificatesAccount,
-        parentalLockAccount, unreadableServersBackupAccount,
+        parentalLockAccount,
     ]
 
     private static let privateGroupMigratedKey = "keychain.privateAccessGroup.migrated"
@@ -374,8 +368,14 @@ public struct KeychainService: Sendable {
                 continue
             case errSecDuplicateItem:
                 // A private copy already exists and is the one group-less
-                // writes update: the shared one is the stale leftover.
-                SecItemDelete(query as CFDictionary)
+                // writes update: the shared one is the stale leftover. If it
+                // cannot be removed it stays readable by the extensions, so the
+                // migration must run again rather than latch.
+                let deleted = SecItemDelete(query as CFDictionary)
+                if deleted != errSecSuccess && deleted != errSecItemNotFound {
+                    allSucceeded = false
+                    keychainLog.error("Removing the shared copy of \(account, privacy: .public) failed (status \(deleted))")
+                }
             default:
                 allSucceeded = false
                 keychainLog.error("Moving \(account, privacy: .public) to the private group failed (status \(status))")

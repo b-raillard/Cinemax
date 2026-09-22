@@ -35,6 +35,11 @@ final class NativeVideoPresenter {
     /// player's clock, which reads 0/NaN until an item is ready — see
     /// `PlaybackReporter.reportableSeconds`.
     private var pendingResumeSeconds: Double?
+    /// Bumped whenever `pendingResumeSeconds` is (re)set, and checked by every
+    /// seek completion before it clears it: the initial resume seek completes
+    /// with `finished == false` when a track switch replaces the item, and must
+    /// not clear the switch's own pending position.
+    private var pendingResumeGeneration = 0
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
@@ -128,6 +133,7 @@ final class NativeVideoPresenter {
             pendingResume: { [weak self] in self?.pendingResumeSeconds }
         )
         self.pendingResumeSeconds = (startTime ?? 0) > 0 ? startTime : nil
+        self.pendingResumeGeneration = 1
         self.skipSegments = SkipSegmentController(
             apiClient: apiClient, loc: loc,
             playerVCProvider: { [weak self] in self?.playerVC }
@@ -354,9 +360,10 @@ final class NativeVideoPresenter {
                     switch item.status {
                     case .readyToPlay:
                         if let st, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
+                            let generation = self?.pendingResumeGeneration
                             avPlayer?.seek(to: CMTime(seconds: target, preferredTimescale: 600),
                                           toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                                Task { @MainActor in self?.pendingResumeSeconds = nil }
+                                Task { @MainActor in self?.clearPendingResume(ifGeneration: generation) }
                             }
                         } else {
                             self?.pendingResumeSeconds = nil
@@ -392,6 +399,13 @@ final class NativeVideoPresenter {
         }
     }
 
+    /// Clears the pending report position, unless a newer one replaced it
+    /// since the seek that is completing was issued.
+    private func clearPendingResume(ifGeneration generation: Int?) {
+        guard generation == pendingResumeGeneration else { return }
+        pendingResumeSeconds = nil
+    }
+
     // MARK: - Direct URL Fallback (iOS)
 
     #if os(iOS)
@@ -421,9 +435,10 @@ final class NativeVideoPresenter {
                 switch item.status {
                 case .readyToPlay:
                     if let st = startTime, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
+                        let generation = self?.pendingResumeGeneration
                         player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
                                     toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                            Task { @MainActor in self?.pendingResumeSeconds = nil }
+                            Task { @MainActor in self?.clearPendingResume(ifGeneration: generation) }
                         }
                     } else {
                         self?.pendingResumeSeconds = nil
@@ -564,18 +579,20 @@ final class NativeVideoPresenter {
         playerObservation?.invalidate()
         // Reports during the rebuild carry the position being restored.
         pendingResumeSeconds = currentTime > 0 ? currentTime : nil
+        pendingResumeGeneration += 1
+        let generation = pendingResumeGeneration
         playerObservation = playerItem.observe(\.status) { [weak self] item, _ in
             Task { @MainActor in
                 guard item.status == .readyToPlay else { return }
                 guard currentTime > 0 else {
-                    self?.pendingResumeSeconds = nil
+                    self?.clearPendingResume(ifGeneration: generation)
                     return
                 }
                 player.seek(
                     to: CMTime(seconds: currentTime, preferredTimescale: 600),
                     toleranceBefore: .zero, toleranceAfter: .zero
                 ) { [weak self] _ in
-                    Task { @MainActor in self?.pendingResumeSeconds = nil }
+                    Task { @MainActor in self?.clearPendingResume(ifGeneration: generation) }
                 }
                 player.play()
             }

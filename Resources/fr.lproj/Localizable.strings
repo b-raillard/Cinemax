@@ -240,6 +240,7 @@
 "privacy.lock.enable.subtitle" = "Demande le code pour ouvrir cet écran, limite d'âge comprise.";
 "privacy.lock.biometrics" = "Utiliser Face ID / Touch ID";
 "privacy.lock.biometrics.subtitle" = "Raccourci à la place du code. Le code reste toujours accepté.";
+"privacy.lock.biometrics.reset" = "Les visages ou empreintes enregistrés ont changé : Face ID a été désactivé. Réactivez-le si le changement vient de vous.";
 "privacy.lock.change" = "Changer le code";
 "privacy.lock.disable" = "Désactiver le verrouillage";
 "privacy.lock.footer" = "Ce code protège les réglages de cet appareil. Pour une limite qu'une réinstallation ne lève pas, créez un compte Jellyfin dédié et réglez sa limite d'âge sur le serveur.";
@@ -991,6 +992,7 @@
 "syncplay.waiting.title" = "En attente d'un participant";
 "syncplay.waiting.subtitle" = "Quelqu'un met en mémoire tampon. Tout le monde reprendra ensemble.";
 "syncplay.libraryAccessDenied" = "Ce titre n'est pas accessible à votre compte";
+"syncplay.restricted.left" = "Ce titre dépasse la limite d'âge de cet appareil : la séance a été quittée.";
 "syncplay.session.badge" = "ENSEMBLE";
 "syncplay.session.with" = "Avec %@";
 "syncplay.session.two" = "%@ et %@";

@@ -3943,19 +3943,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             present(alert, animated: true)
             return
         }
-        reporter?.resetTicking()
-        reporter?.reportStart(startTime: pendingResumeSecondsForReport ?? Double(currentMs) / 1000.0)
-        startProgressTimer()
         // "The episode on screen keeps playing" does not hold when this nav
         // abandoned an error retry: the retry's watchdog was cancelled and its
         // token just cleared, so nothing could ever end its spinner. That retry
-        // was the one allowed attempt, so the error path surfaces the alert.
-        // Deliberately scoped to that case — an initial open still in flight
-        // keeps its own watchdog, and a finished episode must not be reopened.
+        // was the one allowed attempt, so the error path surfaces the alert —
+        // before any session is re-armed under it. Deliberately scoped to that
+        // case: an initial open still in flight keeps its own watchdog, and a
+        // finished episode must not be reopened.
         guard !abandonedRetry else {
             handlePlaybackError()
             return
         }
+        reporter?.resetTicking()
+        reporter?.reportStart(startTime: pendingResumeSecondsForReport ?? Double(currentMs) / 1000.0)
+        startProgressTimer()
         showSkipHUD(loc.localized("player.episodeNav.failed"), duration: 1.8)
     }
 
@@ -4856,9 +4857,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 } else {
                     if self.engineIsStopped {
                         // Nothing plays: make the watchdog see it, so it hands
-                        // the media to the error path (retry, then alert).
+                        // the media to the error path (retry, then alert) — and
+                        // say so meanwhile, rather than a still frame.
                         self.hasValidTime = false
                         self.mediaLengthMs = 0
+                        self.setLoading(true)
                     }
                     self.scheduleOpenWatchdog()
                 }

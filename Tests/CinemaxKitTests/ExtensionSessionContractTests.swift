@@ -115,6 +115,15 @@ struct ExtensionSessionContractTests {
         ("-12", 16, true),
         ("FSK-16", 16, true),
         ("TOUS PUBLICS", 10, true),
+        // Formes réelles hors table (audit 2026-09-22) : préfixe pays du
+        // fournisseur TMDb, âge nu, suffixe « + ».
+        ("FR-16", 12, false),
+        ("FR-12", 12, true),
+        ("16", 12, false),
+        ("12+", 12, true),
+        ("18+", 16, false),
+        ("Germany: FSK-18", 16, false),
+        ("Rated R", 16, false),
         ("G", 10, true),
         // Absente ou inconnue ⇒ passe : un épisode hérite sa classification de
         // sa série et arrive `nil`, donc filtrer sur une donnée manquante

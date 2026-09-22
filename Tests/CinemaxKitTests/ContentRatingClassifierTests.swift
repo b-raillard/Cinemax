@@ -33,6 +33,23 @@ struct ContentRatingClassifierTests {
         #expect(ContentRatingClassifier.age(forRating: "NOT-A-RATING") == 0)
     }
 
+    /// Audit 2026-09-22 : la table seule répondait 0 (« laisse passer ») aux
+    /// formes que les fournisseurs écrivent réellement, et la porte de la fiche
+    /// atteinte par identifiant repose sur ce classifieur.
+    @Test("Country prefixes, bare ages and a trailing + are read as ages")
+    func realWorldForms() {
+        #expect(ContentRatingClassifier.age(forRating: "FR-12") == 12)
+        #expect(ContentRatingClassifier.age(forRating: "DE-16") == 16)
+        #expect(ContentRatingClassifier.age(forRating: "Germany: FSK-18") == 18)
+        #expect(ContentRatingClassifier.age(forRating: "16") == 16)
+        #expect(ContentRatingClassifier.age(forRating: "12+") == 12)
+        #expect(ContentRatingClassifier.age(forRating: "Rated R") == 17)
+        // The table still wins over the splitting: these contain a dash.
+        #expect(ContentRatingClassifier.age(forRating: "PG-13") == 13)
+        #expect(ContentRatingClassifier.age(forRating: "TV-MA") == 17)
+        #expect(ContentRatingClassifier.age(forRating: "-12") == 12)
+    }
+
     // MARK: passes(rating:maxAge:)
 
     @Test("maxAge 0 disables filtering — everything passes")

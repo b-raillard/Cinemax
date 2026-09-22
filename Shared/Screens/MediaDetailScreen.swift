@@ -1092,7 +1092,17 @@ struct MediaDetailScreen: View {
         let requestedEpisode = viewModel.episodes.first(where: { $0.id == viewModel.itemId })
         guard !viewModel.isAgeRestricted,
               MediaDetailViewModel.passesAgeCap(requestedEpisode?.officialRating) else {
-            toast.info(loc.localized("detail.restricted.title"))
+            if groupTicks != nil {
+                // A Watch Together join: the session is already a member, and
+                // the group waits for its `Ready`, which will never come — every
+                // other participant would sit on « En attente d'un participant »
+                // until this device found « Quitter ». Leave instead.
+                SyncPlayController.shared.leaveGroup()
+                toast.info(loc.localized("detail.restricted.title"),
+                           message: loc.localized("syncplay.restricted.left"))
+            } else {
+                toast.info(loc.localized("detail.restricted.title"))
+            }
             return
         }
 

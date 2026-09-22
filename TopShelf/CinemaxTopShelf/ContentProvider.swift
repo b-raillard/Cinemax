@@ -54,7 +54,27 @@ final class ContentProvider: TVTopShelfContentProvider {
         /// absent.
         static func age(forRating rating: String?) -> Int {
             guard let rating else { return 0 }
-            return ageMap[rating.trimmingCharacters(in: .whitespaces).uppercased()] ?? 0
+            var key = rating.trimmingCharacters(in: .whitespaces).uppercased()
+            // "Rated R" and friends — the server strips the same prefixes.
+            if let prefix = ["RATED :", "RATED:", "RATED "].first(where: { key.hasPrefix($0) }) {
+                key = String(key.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+            }
+            if let age = ageMap[key] { return age }
+            let bare = key.hasSuffix("+") ? String(key.dropLast()) : key
+            if let age = ageMap[bare] { return age }
+            // A bare age ("16", "12+") is read as that age, like the server does.
+            if let age = Int(bare), age >= 0 { return age }
+            // A country or board prefix before the code: "FR-12", "DE-16",
+            // "Germany: FSK-18" — the TMDb provider writes the first form for every
+            // non-US country, i.e. the ordinary case of a French library.
+            if let separator = key.firstIndex(where: { $0 == "-" || $0 == ":" }) {
+                let left = key[..<separator]
+                let right = key[key.index(after: separator)...].trimmingCharacters(in: .whitespaces)
+                if left.count >= 2, left.allSatisfy(\.isLetter), !right.isEmpty {
+                    return age(forRating: right)
+                }
+            }
+            return 0
         }
 
         static func passes(rating: String?, maxAge: Int?) -> Bool {

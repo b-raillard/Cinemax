@@ -80,7 +80,7 @@ private struct ParentalUnlockView: View {
             )
 
             #if os(iOS)
-            if lock.biometricsEnabled, ParentalLockController.biometricsAvailable {
+            if lock.biometricsArmed, ParentalLockController.biometricsAvailable {
                 Button {
                     Task { await tryBiometrics() }
                 } label: {
@@ -98,7 +98,7 @@ private struct ParentalUnlockView: View {
             // A lock whose biometric shortcut is on challenges straight away:
             // the parent's intent is already expressed by opening the screen.
             #if os(iOS)
-            if lock.biometricsEnabled { await tryBiometrics() }
+            if lock.biometricsArmed { await tryBiometrics() }
             #endif
         }
         .task(id: throttledUntil) {

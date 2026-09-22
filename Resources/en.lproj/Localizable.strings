@@ -240,6 +240,7 @@
 "privacy.lock.enable.subtitle" = "Asks for the PIN to open this screen, age limit included.";
 "privacy.lock.biometrics" = "Use Face ID / Touch ID";
 "privacy.lock.biometrics.subtitle" = "A shortcut instead of the PIN. The PIN always stays valid.";
+"privacy.lock.biometrics.reset" = "The enrolled faces or fingerprints changed, so Face ID was turned off. Turn it back on if you made the change.";
 "privacy.lock.change" = "Change PIN";
 "privacy.lock.disable" = "Turn off the lock";
 "privacy.lock.footer" = "This PIN protects the settings on this device. For a limit a reinstall cannot lift, create a dedicated Jellyfin account and set its age limit on the server.";
@@ -989,6 +990,7 @@
 "syncplay.waiting.title" = "Waiting for a participant";
 "syncplay.waiting.subtitle" = "Someone is buffering. Everyone will resume together.";
 "syncplay.libraryAccessDenied" = "Your account can't access this title";
+"syncplay.restricted.left" = "This title is above this device's age limit, so you left the session.";
 "syncplay.session.badge" = "TOGETHER";
 "syncplay.session.with" = "With %@";
 "syncplay.session.two" = "%@ and %@";

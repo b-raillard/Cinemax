@@ -40,6 +40,16 @@ final class ParentalLockController {
 
     var isEnabled: Bool { credential != nil }
     var biometricsEnabled: Bool { credential?.biometricsEnabled ?? false }
+    /// The shortcut is on AND armed on a recorded biometric set — what the gate
+    /// keys its Face ID button on, so it never offers one that cannot succeed.
+    /// A legacy lock (on, never armed) reads `false` until a PIN unlock arms it.
+    var biometricsArmed: Bool { biometricsEnabled && credential?.biometricDomainState != nil }
+    /// Set when a PIN unlock found the enrolled faces / fingers changed since
+    /// the shortcut was armed and switched it OFF. Read once by the gate, which
+    /// tells the parent; cleared by `acknowledgeBiometricSetChange()`.
+    private(set) var biometricSetChanged = false
+
+    func acknowledgeBiometricSetChange() { biometricSetChanged = false }
 
     /// The instant a back-off window closes, or `nil` when none is open.
     /// Recomputed from the stored credential, so it survives a force-quit.
@@ -106,9 +116,24 @@ final class ParentalLockController {
         }.value
         switch verdict {
         case .unlocked(var updated):
-            // The parent's PIN is what (re-)arms the biometric shortcut on the
-            // enrolled set as it stands now — see `biometricsAllowed`.
-            if updated.biometricsEnabled { updated.biometricDomainState = Self.currentBiometricDomainState() }
+            // A PIN unlock arms a shortcut that was NEVER armed (a lock enrolled
+            // before the domain state existed). It never RE-arms a changed set:
+            // the parent typing the PIN right after Face ID refused would
+            // otherwise record the set that now holds the child's added face,
+            // and that face would open the lock from then on. A changed set
+            // switches the shortcut off instead; turning it back on is an
+            // explicit gesture behind the open gate (`setBiometricsEnabled`).
+            if updated.biometricsEnabled {
+                let current = Self.currentBiometricDomainState()
+                if updated.biometricDomainState == nil {
+                    updated.biometricDomainState = current
+                } else if updated.biometricDomainState != current {
+                    updated.biometricsEnabled = false
+                    updated.biometricDomainState = nil
+                    biometricSetChanged = true
+                    lockLog.notice("biometric set changed — Face ID shortcut switched off")
+                }
+            }
             persist(updated)
             isUnlocked = true
         case .wrong(let updated, _):
