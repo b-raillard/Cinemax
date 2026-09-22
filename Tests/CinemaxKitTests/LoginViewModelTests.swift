@@ -141,7 +141,7 @@ struct LoginViewModelTests {
         #expect(api.quickConnectPollCount == LoginViewModel.quickConnectFailureBudget)
     }
 
-    @Test("Cancelling the sheet exits the poll loop without surfacing an error")
+    @Test("Cancelling the sheet exits the poll loop without surfacing an error", .timeLimit(.minutes(1)))
     func quickConnectCancelExitsSilently() async {
         let api = MockAPIClient()
         api.quickConnectAuthorizedHandler = { _ in false }   // never approved

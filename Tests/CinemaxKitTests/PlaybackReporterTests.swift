@@ -483,9 +483,11 @@ struct PlaybackReporterTests {
         reporter.reportStop(reason: .episodeSwap)
         // Attendre que le rapport serveur soit parti, pour que l'absence
         // d'annonce soit un vrai constat et pas une course gagnée de justesse.
-        // `drain()` returns once the stop's work has run to its end, and the
-        // post is decided inside that work: nothing can be announced later.
+        // `drain()` returns once the stop's work has run to its end. The post,
+        // when there is one, rides its own main-actor task queued from that
+        // work — so give the main actor one turn before asserting absence.
         await reporter.drain()
+        await MainActor.run {}
 
         #expect(mock.stopCount == 1, "le serveur doit tout de même recevoir le stop")
         #expect(witness.count == 0, "on regarde encore : rafraîchir les rails ici coûterait une salve par épisode")

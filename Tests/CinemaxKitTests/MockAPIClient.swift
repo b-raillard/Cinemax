@@ -843,26 +843,37 @@ func eventually(
 final class TestLatch: @unchecked Sendable {
     private let lock = NSLock()
     private var isOpen = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var nextId = 0
+    private var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
 
     func open() {
         let toResume: [CheckedContinuation<Void, Never>] = lock.withLock {
             isOpen = true
-            let pending = waiters
-            waiters = []
+            let pending = Array(waiters.values)
+            waiters = [:]
             return pending
         }
         for waiter in toResume { waiter.resume() }
     }
 
-    func wait() async {
+    /// Suspends until `open()` — or until `timeout`, so a regression that
+    /// never reaches the code opening the latch makes the test FAIL on its
+    /// assertions instead of hanging the whole job. A latch that times out
+    /// behaves as if opened for that waiter only.
+    func wait(timeout: Duration = .seconds(10)) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let resumeNow: Bool = lock.withLock {
-                if isOpen { return true }
-                waiters.append(continuation)
-                return false
+            let id: Int? = lock.withLock {
+                if isOpen { return nil }
+                nextId += 1
+                waiters[nextId] = continuation
+                return nextId
             }
-            if resumeNow { continuation.resume() }
+            guard let id else { continuation.resume(); return }
+            Task {
+                try? await Task.sleep(for: timeout)
+                let expired = self.lock.withLock { self.waiters.removeValue(forKey: id) }
+                expired?.resume()
+            }
         }
     }
 }

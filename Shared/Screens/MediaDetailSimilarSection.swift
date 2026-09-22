@@ -53,13 +53,16 @@ struct MediaDetailSimilarSection: View, Equatable {
                 isPlayed: item.userData?.isPlayed
             )
             NavigationLink {
-                if let id = item.id {
-                    MediaDetailScreen(
-                        itemId: id,
-                        itemType: item.type ?? .movie
-                    )
-                    .cardZoomDestination(zoom)
+                // Built at the push, not on every redraw (P3 — see DeferredView).
+                DeferredView {
+                    if let id = item.id {
+                        MediaDetailScreen(
+                            itemId: id,
+                            itemType: item.type ?? .movie
+                        )
+                    }
                 }
+                .cardZoomDestination(zoom)
             } label: {
                 PosterCard(
                     title: item.name ?? "",

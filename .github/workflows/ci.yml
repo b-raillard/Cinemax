@@ -66,9 +66,18 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          changed=$(git diff --name-only "$BASE_SHA" HEAD)
+          # --no-renames: a rename prints only its NEW path, so a Swift file
+          # moved into docs/ would read as docs-only while it left the build.
+          changed=$(git diff --no-renames --name-only "$BASE_SHA" HEAD)
           echo "$changed"
-          if echo "$changed" | grep -Ev '(\.md$|^docs/)' | grep -q .; then
+          # Documentation = anything under docs/, a Markdown file at the repo
+          # root, or a CLAUDE.md anywhere (project.yml keeps those out of the
+          # bundles). Any OTHER .md under a target's source path is swept into
+          # the build by xcodegen, so it counts as code. `|| true`, not a
+          # `grep -q` pipe: under pipefail an early-exiting `grep -q` can kill
+          # its writer with SIGPIPE and turn a code change into "docs-only".
+          non_doc=$(printf '%s\n' "$changed" | grep -Ev '^(docs/.*|[^/]+\.md|(.*/)?CLAUDE\.md)$' || true)
+          if [ -n "$non_doc" ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::Documentation-only change — build and tests skipped."
@@ -183,7 +192,9 @@ jobs:
 
       # The tests run the Debug configuration only, so `#if DEBUG` branches and
       # the optimiser were first seen at archive time. A plain Release compile
-      # of both apps (simulator SDK, unsigned) closes that gap; no tests, no run.
+      # of both apps (simulator SDK, unsigned, arm64 only — one slice is enough
+      # to see a Release-only compile error, and keeps the job inside its
+      # timeout) closes that gap; no tests, no run.
       - name: Build Release (iOS + tvOS)
         if: steps.changes.outputs.code == 'true'
         run: |
@@ -196,6 +207,7 @@ jobs:
               -configuration Release \
               -destination "$dest" \
               -skipPackagePluginValidation \
+              ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
               CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
               2>&1 | xcbeautify
           done

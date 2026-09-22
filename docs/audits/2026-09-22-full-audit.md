@@ -350,3 +350,8 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
   - P7 (ThemeManager, accent arc-en-ciel), P13 (volume du journal libVLC), P14 (préchargement d'images) : à mesurer dans Instruments avant tout changement.
   - SwiftLint : le job reste consultatif (`continue-on-error`) — une base de référence exige de lancer SwiftLint, impossible ici.
   - P8, volet cache TTL de `getItems` : écarté. Les résultats portent le userData ; un cache ajouterait un risque de données périmées pour un gain faible, les écrans ayant déjà leurs gardes `hasLoaded`.
+- **Relecture adversariale du lot 5, intégrée** :
+  - le filtre « docs seulement » de la CI traitait tout `.md` comme de la doc, y compris ceux qu'xcodegen met dans le build, et ignorait les renommages : il ne compte plus comme doc que `docs/`, un `.md` à la racine ou un `CLAUDE.md`, compare sans détection de renommage, et n'utilise plus de `grep -q` sous `pipefail` (un SIGPIPE pouvait sauter le build) ;
+  - des tests pouvaient se bloquer jusqu'au délai du job au lieu d'échouer : `TestLatch.wait` a désormais un délai (10 s), et les deux tests qui attendent une tâche ont un `.timeLimit` ;
+  - le build Release se limite à arm64 pour rester dans le délai du job ;
+  - la section « Titres similaires » de la fiche différait encore mal sa destination (P3) ; corrigé.

@@ -191,7 +191,7 @@ struct APICacheTests {
         #expect(hit == nil)
     }
 
-    @Test("a caller arriving after a sweep does not join the stale in-flight fetch")
+    @Test("a caller arriving after a sweep does not join the stale in-flight fetch", .timeLimit(.minutes(1)))
     func sweepDetachesInFlight() async throws {
         let cache = APICache()
         let counter = CallCounter()
