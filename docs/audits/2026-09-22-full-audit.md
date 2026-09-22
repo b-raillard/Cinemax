@@ -303,3 +303,22 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
 - **Reportés** :
   - S7 (authentification du socket par en-tête) : il faut changer `RealtimeSocketAPI` et la clé d'identité du hub, trop risqué sans compilateur local. Passe au lot 5.
   - Les autres `sleep` de T3.
+- **Relecture adversariale du lot 3, intégrée** (`8b772d3`) :
+  - le garde anti-écriture périmée d'APICache pouvait être contourné (un tampon par clé, écrasé par le rafraîchissement lancé par la même mutation) ; il prend désormais un tampon par requête ;
+  - les enfants de phase 2 d'un chargement de l'Accueil remplacé écrivaient des rangées en échec par-dessus le nouvel écran ;
+  - un stop de lecture attendait derrière un progress bloqué ; il l'annule ;
+  - la validation autonome acceptait toute réponse 2xx comme session (page SSO, portail captif) ; elle exige un utilisateur JSON.
+
+**Lot 4 — fait, sauf un point.**
+- U3 : les toasts sont annoncés à VoiceOver (depuis `ToastCenter`, donc aussi sous une feuille) et restent au moins 6 s sous VoiceOver ; texte en Dynamic Type ; bouton de fermeture de 44 pt.
+- U4 : contraste des boutons d'accent. Un libellé sombre remplace le blanc sur orange, jaune et cyan (5,2 à 6,6:1, contre 2,6 à 3,4:1). Règle numérique pure, qui vaut aussi pour l'accent arc-en-ciel. Nouveau jeton `onAccentContainer` pour tout ce qui est posé sur `accentContainer`.
+- U5 : sélecteur d'accent.
+  - Pastilles nommées (`accent.name.*`), trait « sélectionné », zones de 44 pt de haut.
+  - Rangées tvOS couleur et langue : un seul élément ; la couleur est réglable par balayage.
+  - Boutons FR/EN : lus « Français » / « English », 44 pt.
+- U6 : sous VoiceOver, le HUD VLC ne se masque plus, le geste magique met en lecture ou en pause, le geste d'échappement ferme le lecteur, et la vue est modale. La barre haute du HUD iOS passe à 44 pt de haut.
+- Pluriels : une règle unique (0 et 1 au singulier en français, 1 seulement en anglais) et des clés `.one`. Corrige « 1 films », « 1 titres », « et 1 autres » et « %dm restantes » (devenu « %d min restante(s) »). Pas de `.stringsdict` : un nouveau fichier de ressources imposerait `xcodegen`.
+- Q7 : `loc.locale` est injecté à la racine. Les dates (fiche acteur, épisodes, appareils, Prochainement, admin) et les notes (« 7,5 ») suivent la langue de l'app. Les cinq `RelativeDateTimeFormatter` en `nonisolated(unsafe)` sont remplacés par `Date.RelativeFormatStyle`.
+- Dynamic Type sur les réglages iOS, les états vides et d'erreur, et les toasts. Traits « en-tête » sur les en-têtes de section, trait « sélectionné » sur les puces, le tri et les onglets de saison.
+- Divers : le carrousel iOS ne tourne plus sous VoiceOver ; la coche « vu » est visible en mode clair.
+- **Reporté au lot 5** : l'état vu / en cours des cartes pour VoiceOver. Il faut reprendre le libellé composé de chaque carte, surface par surface.

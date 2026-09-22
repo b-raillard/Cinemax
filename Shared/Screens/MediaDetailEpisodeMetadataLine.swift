@@ -31,7 +31,7 @@ struct MediaDetailEpisodeMetadataLine: View {
         }()
 
         let dateText: String? = episode.premiereDate.map {
-            $0.formatted(.dateTime.month(.abbreviated).day().year())
+            $0.formatted(.dateTime.month(.abbreviated).day().year().locale(loc.locale))
         }
 
         let parts: [String] = [runtimeText, dateText].compactMap { $0 }

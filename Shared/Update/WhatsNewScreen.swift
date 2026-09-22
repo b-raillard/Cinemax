@@ -79,7 +79,7 @@ struct WhatsNewScreen: View {
             Button { onFinish() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: CinemaScale.pt(14), weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(themeManager.onAccentContainer)
                     .padding(10)
                     .background(themeManager.accentContainer)
                     .clipShape(Circle())

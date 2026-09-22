@@ -99,6 +99,10 @@ func iOSSettingsSectionHeader(_ title: String) -> some View {
         .foregroundStyle(CinemaColor.onSurfaceVariant)
         .tracking(1.2)
         .padding(.horizontal, CinemaSpacing.spacing2)
+        // A header for VoiceOver's rotor, read in its natural case rather than
+        // as the upper-cased display string.
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(.isHeader)
 }
 
 /// Toggle row matching the iOS settings pattern: icon + label + CinemaToggleIndicator.

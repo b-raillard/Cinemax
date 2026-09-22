@@ -12,6 +12,7 @@ struct HomeScreen: View {
     #endif
     #if os(iOS)
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     /// Index of the hero currently shown in the rotating carousel (iOS only —
     /// tvOS keeps a single static hero; the focus engine + `.focusSection` rules
     /// make auto-advancing focusable chrome hazardous there).
@@ -650,7 +651,7 @@ struct HomeScreen: View {
         // Task lifecycle is tied to the view — auto-cancels on disappear (pauses
         // rotation) and never strongly retains the screen. Restarts when the
         // candidate count or the motion-effects gate changes.
-        .task(id: "\(candidates.count)-\(motionEffects)") {
+        .task(id: "\(candidates.count)-\(motionEffects)-\(voiceOverEnabled)") {
             await runHeroRotation()
         }
     }
@@ -696,7 +697,10 @@ struct HomeScreen: View {
     /// Advances the hero every `heroRotationInterval` seconds with a crossfade.
     /// No-op when Motion Effects is off (static first hero) or there's <2 heroes.
     private func runHeroRotation() async {
-        guard motionEffects, heroCandidates.count > 1 else { return }
+        // Not under VoiceOver: content that changes on its own every 8 s moves
+        // the element being read out from under the user (WCAG 2.2.2), and the
+        // swipes stay available to change it deliberately (audit 2026-09-22).
+        guard motionEffects, !voiceOverEnabled, heroCandidates.count > 1 else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(heroRotationInterval))
             guard !Task.isCancelled else { break }
@@ -804,7 +808,7 @@ struct HomeScreen: View {
                                     Image(systemName: "play.fill")
                                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                                 }
-                                .foregroundStyle(.white)
+                                .foregroundStyle(themeManager.onAccentContainer)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
                                 .padding(.horizontal, CinemaSpacing.spacing4)
@@ -1142,7 +1146,7 @@ struct HomeScreen: View {
         case 0: return ""
         case 1: return names[0]
         case 2: return loc.localized("syncplay.session.two", names[0], names[1])
-        default: return loc.localized("syncplay.session.more", names[0], names[1], names.count - 2)
+        default: return loc.localized(loc.pluralKey("syncplay.session.more", names.count - 2), names[0], names[1], names.count - 2)
         }
     }
 
@@ -1503,7 +1507,7 @@ struct HomeScreen: View {
             guard let date = episode.premiereDate else { return episode.name ?? "" }
             return String(
                 format: loc.localized("home.upcoming.airs"),
-                date.formatted(date: .abbreviated, time: .omitted)
+                date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(loc.locale))
             )
         }()
 

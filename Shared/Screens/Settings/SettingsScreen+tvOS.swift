@@ -169,14 +169,14 @@ extension SettingsScreen {
 
                     Image(systemName: category.icon)
                         .font(CinemaFont.headline(.small))
-                        .foregroundStyle(isFocused ? .white : CinemaColor.onSurfaceVariant)
+                        .foregroundStyle(isFocused ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
                 }
 
                 // Label
                 Text(category.localizedName(loc))
                     .font(.system(size: CinemaScale.pt(28), weight: .semibold))
                     .tracking(-0.3)
-                    .foregroundStyle(isFocused ? .white : CinemaColor.onSurfaceVariant)
+                    .foregroundStyle(isFocused ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
 
                 Spacer()
 
@@ -993,7 +993,7 @@ struct TVHomeGenrePickerView: View {
                 Text(genre)
                     .font(.system(size: CinemaScale.pt(20), weight: isSelected ? .bold : .medium))
             }
-            .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+            .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurface)
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing2)
             .environment(\.colorScheme, scheme)

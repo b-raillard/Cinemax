@@ -111,3 +111,121 @@ struct PlayerAccessibilityTests {
     }
     #endif
 }
+
+// MARK: - Accent label contrast (audit 2026-09-22, U4)
+
+/// A white label on the accent fill fell under 3:1 on yellow and cyan — the
+/// floor WCAG sets even for large text — on « Lecture » and « Connexion ».
+@Suite("Accent label contrast")
+struct AccentLabelContrastTests {
+
+    @Test("yellow, cyan and orange fills take a dark label, and it reads")
+    func paleFillsGoDark() {
+        for option in [AccentOption.yellow, .cyan, .orange] {
+            let fill = option.palette.containerLight
+            #expect(AccentLabelContrast.prefersDarkLabel(hex: fill), "\(option)")
+            let ratio = AccentLabelContrast.contrast(
+                AccentLabelContrast.luminance(hex: AccentLabelContrast.darkLabel),
+                AccentLabelContrast.luminance(hex: fill)
+            )
+            #expect(ratio >= 4.5, "\(option): \(ratio)")
+        }
+    }
+
+    @Test("the saturated fills keep the design's white label, at 3:1 or better")
+    func saturatedFillsStayWhite() {
+        for option in [AccentOption.red, .green, .blue, .indigo, .purple, .pink] {
+            for fill in [option.palette.containerLight, option.palette.containerDark] {
+                #expect(!AccentLabelContrast.prefersDarkLabel(hex: fill), "\(option)")
+                let ratio = AccentLabelContrast.contrast(1.0, AccentLabelContrast.luminance(hex: fill))
+                #expect(ratio >= 3.0, "\(option): \(ratio)")
+            }
+        }
+    }
+
+    @Test("every visible accent has a localized name, in both languages")
+    func everyAccentIsNamed() {
+        for language in ["fr", "en"] {
+            let bundle = Bundle.localizedBundle(for: language)
+            for option in AccentOption.allCases {
+                let name = bundle.localizedString(forKey: option.nameKey, value: nil, table: nil)
+                #expect(name != option.nameKey, "\(language): \(option.nameKey)")
+            }
+        }
+    }
+}
+
+
+// MARK: - Toasts under VoiceOver (audit 2026-09-22, U3)
+
+@Suite("Toast announcements")
+struct ToastAnnouncementTests {
+
+    @Test("the announcement is the title, then the message when there is one")
+    func announcementText() {
+        let bare = Toast(level: .success, title: "Ajouté aux favoris", message: nil, duration: 2.5)
+        #expect(ToastCenter.announcement(for: bare) == "Ajouté aux favoris")
+        let empty = Toast(level: .info, title: "Copié", message: "", duration: 2.5)
+        #expect(ToastCenter.announcement(for: empty) == "Copié")
+        let full = Toast(level: .error, title: "Échec", message: "Serveur injoignable", duration: 4)
+        #expect(ToastCenter.announcement(for: full) == "Échec. Serveur injoignable")
+    }
+
+    @Test("under VoiceOver a toast stays at least 6 s, twice as long beyond that")
+    func voiceOverDuration() {
+        #expect(ToastCenter.effectiveDuration(2.5, voiceOverRunning: false) == 2.5)
+        #expect(ToastCenter.effectiveDuration(2.5, voiceOverRunning: true) == 6)
+        #expect(ToastCenter.effectiveDuration(4, voiceOverRunning: true) == 8)
+    }
+}
+
+// MARK: - Plurals (audit 2026-09-22)
+
+@Suite("Plural rule")
+struct PluralRuleTests {
+
+    @Test("French puts 0 and 1 in the singular, English only 1")
+    func singularRule() {
+        #expect(LocalizationManager.usesSingular(0, languageCode: "fr"))
+        #expect(LocalizationManager.usesSingular(1, languageCode: "fr"))
+        #expect(!LocalizationManager.usesSingular(2, languageCode: "fr"))
+        #expect(!LocalizationManager.usesSingular(0, languageCode: "en"))
+        #expect(LocalizationManager.usesSingular(1, languageCode: "en"))
+        #expect(!LocalizationManager.usesSingular(2, languageCode: "en"))
+    }
+
+    @Test("every plural key used through `counted` has its `.one` sibling in both languages")
+    func singularSiblingsExist() {
+        let keys = ["library.itemCount", "detail.collection.count", "search.resultCount",
+                    "home.remainingTime.minutes", "movies.count", "movies.titles", "tvShows.count",
+                    "person.titleCount", "syncplay.participants", "syncplay.session.more"]
+        for language in ["fr", "en"] {
+            let bundle = Bundle.localizedBundle(for: language)
+            for key in keys {
+                let one = key + ".one"
+                #expect(bundle.localizedString(forKey: one, value: nil, table: nil) != one, "\(language): \(one)")
+            }
+        }
+    }
+}
+
+// MARK: - App locale (audit 2026-09-22, Q7)
+
+@Suite("App locale")
+struct AppLocaleTests {
+
+    @Test("the app's language keeps the device's region")
+    func languageWithRegion() {
+        #expect(LocalizationManager.locale(languageCode: "fr", region: "BE").identifier == "fr_BE")
+        #expect(LocalizationManager.locale(languageCode: "en", region: nil).identifier == "en")
+        #expect(LocalizationManager.locale(languageCode: "en", region: "").identifier == "en")
+    }
+
+    @Test("a French app writes a decimal comma, whatever the device language")
+    func frenchDecimal() {
+        let fr = LocalizationManager.locale(languageCode: "fr", region: "FR")
+        #expect(7.5.formatted(.number.precision(.fractionLength(1)).locale(fr)) == "7,5")
+        let en = LocalizationManager.locale(languageCode: "en", region: "US")
+        #expect(7.5.formatted(.number.precision(.fractionLength(1)).locale(en)) == "7.5")
+    }
+}

@@ -88,11 +88,13 @@ extension View {
             .overlay(alignment: .topTrailing) {
                 if status == .watched {
                     // Same badge the episode row and the iOS episode card draw:
-                    // white over the artwork, on a dimmed disc so it survives a
-                    // pale poster.
+                    // `onSurface` on a `surface` disc, i.e. dark-on-light in light
+                    // mode and light-on-dark in dark mode — both ~17:1. It was a
+                    // WHITE check on the `surface` disc, which in light mode is
+                    // #F7F7F8: a white mark on a white disc (audit 2026-09-22).
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: CinemaScale.pt(20), weight: .semibold))
-                        .foregroundStyle(.white, CinemaColor.surface.opacity(0.8))
+                        .foregroundStyle(CinemaColor.onSurface, CinemaColor.surface.opacity(0.85))
                         .padding(6)
                 }
             }

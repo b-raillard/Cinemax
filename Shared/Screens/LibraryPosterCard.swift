@@ -68,11 +68,11 @@ struct LibraryPosterCard: View {
         if let year = item.productionYear { parts.append(String(year)) }
         if itemType == .series {
             if let count = item.childCount {
-                parts.append(loc.localized(count == 1 ? "tvShows.season" : "tvShows.seasonsPlural", count))
+                parts.append(loc.seasonCount(count))
             }
         } else {
             if let rating = item.communityRating {
-                parts.append(String(format: "%.1f", rating))
+                parts.append(loc.decimal(rating))
             }
         }
         return parts.joined(separator: " · ")

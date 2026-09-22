@@ -23,7 +23,7 @@ struct ErrorStateView: View {
                     .accessibilityHidden(true)
             }
             Text(message)
-                .font(CinemaFont.body)
+                .font(CinemaFont.dynamicBody)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, CinemaSpacing.spacing6)

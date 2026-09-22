@@ -646,9 +646,46 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         startPlayback()
         scheduleHideControls()
         setupLifecycleObservers()
+        // VoiceOver: the player is the whole screen, so the app still drawn
+        // behind the `.overFullScreen` presentation must not be reachable by
+        // swiping, and the HUD stays up for as long as VoiceOver runs.
+        view.accessibilityViewIsModal = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(voiceOverStatusChanged),
+            name: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil
+        )
         bindSyncPlay()
         remotePlaystateToken = RemotePlaystateRouter.shared.register { [weak self] command in
             self?.applyRemotePlaystate(command) ?? false
+        }
+    }
+
+    // MARK: - VoiceOver (audit 2026-09-22, U6)
+
+    /// The two-finger double tap: play / pause, the gesture VoiceOver users
+    /// expect from any player — the same path as the on-screen button.
+    override func accessibilityPerformMagicTap() -> Bool {
+        playPauseTapped()
+        return true
+    }
+
+    #if os(iOS)
+    /// The two-finger Z: close the player, exactly as the ✕ does (so a
+    /// Watch Together session still asks before leaving the group).
+    override func accessibilityPerformEscape() -> Bool {
+        closePlayer(.user)
+        return true
+    }
+    #endif
+
+    /// Turning VoiceOver on brings the HUD back and keeps it; turning it off
+    /// hands the HUD back to its usual 4 s timer.
+    @objc private func voiceOverStatusChanged() {
+        if UIAccessibility.isVoiceOverRunning {
+            hideControlsWorkItem?.cancel()
+            showControls()
+        } else if controlsVisible {
+            scheduleHideControls()
         }
     }
 
@@ -1791,7 +1828,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         closeConfig.baseForegroundColor = .white
         closeConfig.background.backgroundColor = UIColor.black.withAlphaComponent(0.45)
         closeConfig.cornerStyle = .capsule
-        closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 9, bottom: 9, trailing: 9)
+        // 15 pt around the 14 pt glyph: a 44 pt target (was ~32).
+        closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15)
         closeButton.configuration = closeConfig
         closeButton.translatesAutoresizingMaskIntoConstraints = false
         closeButton.accessibilityLabel = loc.localized("action.done")
@@ -1932,8 +1970,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // `compact` = the top-right cluster (PiP/audio/subtitle): tighter
         // insets so four icons + a title fit in narrow portrait. Default
         // insets are for the larger center transport controls.
+        // Compact still meets 44 pt in HEIGHT (was ~31 pt all round); the width
+        // stays tighter so the five icons fit beside the title in portrait,
+        // which is what yields — see the compression priorities below.
         cfg.contentInsets = compact
-            ? NSDirectionalEdgeInsets(top: 7, leading: 7, bottom: 7, trailing: 7)
+            ? NSDirectionalEdgeInsets(top: 12, leading: 9, bottom: 12, trailing: 9)
             : NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
         b.configuration = cfg
         b.accessibilityLabel = a11y
@@ -4263,6 +4304,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Never auto-hide while a track/chapter picker is up — the controls must
         // stay put behind it so focus returns somewhere sensible.
         if pickerPresented { return }
+        // Nor under VoiceOver: a HUD that fades every 4 s takes the element the
+        // user is swiping to away from under them (audit 2026-09-22, U6).
+        if UIAccessibility.isVoiceOverRunning { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.pickerPresented else { return }
             self.hideControlsImmediately()

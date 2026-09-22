@@ -569,7 +569,7 @@ struct MediaLibraryScreen: View {
                     .foregroundStyle(CinemaColor.onSurface)
                     .accessibilityAddTraits(.isHeader)
 
-                Text(loc.localized("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredLoader.totalCount : viewModel.totalCount))
+                Text(loc.counted("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredLoader.totalCount : viewModel.totalCount))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
@@ -639,12 +639,12 @@ struct MediaLibraryScreen: View {
                 if isActive {
                     Text("\(activeFilterCount)")
                         .font(.system(size: CinemaScale.pt(14), weight: .bold))
-                        .foregroundStyle(themeManager.onAccent)
+                        .foregroundStyle(themeManager.onAccentContainer)
                         .frame(minWidth: 22, minHeight: 22)
                         .background(Circle().fill(CinemaColor.onSurface.opacity(0.25)))
                 }
             }
-            .foregroundStyle(isActive ? themeManager.onAccent : CinemaColor.onSurface)
+            .foregroundStyle(isActive ? themeManager.onAccentContainer : CinemaColor.onSurface)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
             .background(isActive ? themeManager.accentContainer : CinemaColor.surfaceContainerHigh)
@@ -840,8 +840,8 @@ struct MediaLibraryScreen: View {
         let total = viewModel.displayedTotalCount
         let count: String
         switch itemType {
-        case .series: count = loc.localized("tvShows.count", total)
-        case .movie:  count = loc.localized("movies.count", total)
+        case .series: count = loc.counted("tvShows.count", total)
+        case .movie:  count = loc.counted("movies.count", total)
         default:      count = loc.itemCount(total)
         }
         guard let anchor = viewModel.letterAnchor else { return count }

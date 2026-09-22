@@ -29,13 +29,14 @@ struct EmptyStateView: View {
             }
 
             Text(title)
-                .font(CinemaFont.headline(.small))
+                .font(CinemaFont.dynamicHeadline(.small))
                 .foregroundStyle(CinemaColor.onSurface)
                 .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
 
             if let subtitle {
                 Text(subtitle)
-                    .font(CinemaFont.body)
+                    .font(CinemaFont.dynamicBody)
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, CinemaSpacing.spacing6)

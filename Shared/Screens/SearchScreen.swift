@@ -526,9 +526,9 @@ struct SearchScreen: View {
                 Text(label)
                     .font(.system(size: surpriseLabelSize, weight: .semibold))
             }
-            // Accent CTA: saturated `accentContainer` + `.white`, like every
-            // other accent CTA (`CinemaButton(style: .accent)`).
-            .foregroundStyle(.white)
+            // Accent CTA: saturated `accentContainer` + its contrast-checked
+            // label, like every other accent CTA (`CinemaButton(style: .accent)`).
+            .foregroundStyle(themeManager.onAccentContainer)
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
             .background(themeManager.accentContainer)

@@ -409,7 +409,7 @@ struct LoginScreen: View {
                         .frame(width: 32, height: 32)
                     Image(systemName: "checkmark")
                         .font(.system(size: CinemaScale.pt(14), weight: .bold))
-                        .foregroundStyle(themeManager.onAccent)
+                        .foregroundStyle(themeManager.onAccentContainer)
                 }
                 Text(message)
                     .font(.system(size: CinemaScale.pt(15), weight: .semibold))

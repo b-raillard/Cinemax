@@ -237,7 +237,7 @@ struct ConnectedDevicesList: View {
         if let app = device.appName { parts.append(app) }
         if let user = device.lastUserName { parts.append(user) }
         if let when = device.dateLastActivity {
-            parts.append(when.formatted(.relative(presentation: .named)))
+            parts.append(when.formatted(Date.RelativeFormatStyle(presentation: .named, locale: loc.locale)))
         }
         return parts.joined(separator: " · ")
     }

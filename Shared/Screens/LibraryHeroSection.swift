@@ -126,7 +126,7 @@ struct LibraryHeroSection: View {
                     Image(systemName: "play.fill")
                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(themeManager.onAccentContainer)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, heroButtonVerticalPadding)
                 .padding(.horizontal, CinemaSpacing.spacing4)
@@ -184,7 +184,7 @@ struct LibraryHeroSection: View {
         let parts: [String] = [
             item.productionYear.map(String.init),
             itemType == .series
-                ? item.childCount.map { loc.localized($0 == 1 ? "tvShows.season" : "tvShows.seasonsPlural", $0) }
+                ? item.childCount.map { loc.seasonCount($0) }
                 : item.formattedRuntime,
             item.genres?.first
         ].compactMap { $0 }

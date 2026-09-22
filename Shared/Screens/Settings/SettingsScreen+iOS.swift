@@ -64,7 +64,7 @@ extension SettingsScreen {
                     .tracking(-0.5)
 
                 Text(loc.localized("settings.version", appVersion))
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .tracking(0.5)
             }
@@ -100,14 +100,14 @@ extension SettingsScreen {
 
                     Image(systemName: category.icon)
                         .font(.system(size: CinemaScale.pt(18), weight: .semibold))
-                        .foregroundStyle(isFirst ? .white : themeManager.accent)
+                        .foregroundStyle(isFirst ? themeManager.onAccentContainer : themeManager.accent)
                 }
 
                 // Label
                 Text(category.localizedName(loc))
-                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                    .font(CinemaFont.dynamicSystem(18, weight: .semibold, relativeTo: .headline))
                     .tracking(-0.3)
-                    .foregroundStyle(isFirst ? .white : CinemaColor.onSurface)
+                    .foregroundStyle(isFirst ? themeManager.onAccentContainer : CinemaColor.onSurface)
 
                 Spacer()
 
@@ -151,7 +151,7 @@ extension SettingsScreen {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
 
             Text(deviceName)
-                .font(CinemaFont.label(.medium))
+                .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurface)
         }
         .opacity(0.4)
@@ -168,7 +168,7 @@ extension SettingsScreen {
             showLicenses = true
         } label: {
             Text(loc.localized("settings.licenses"))
-                .font(CinemaFont.label(.medium))
+                .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
         .buttonStyle(.plain)
@@ -264,7 +264,7 @@ extension SettingsScreen {
                                 iOSRowIcon(systemName: "rectangle.portrait.and.arrow.right", color: CinemaColor.error)
 
                                 Text(loc.localized("action.logOut"))
-                                    .font(CinemaFont.label(.large))
+                                    .font(CinemaFont.dynamicLabel(.large))
                                     .foregroundStyle(CinemaColor.error)
 
                                 Spacer()
@@ -310,11 +310,11 @@ extension SettingsScreen {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(serverName)
-                            .font(CinemaFont.label(.large))
+                            .font(CinemaFont.dynamicLabel(.large))
                             .foregroundStyle(CinemaColor.onSurface)
 
                         Text(serverAddress)
-                            .font(CinemaFont.label(.medium))
+                            .font(CinemaFont.dynamicLabel(.medium))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -350,10 +350,10 @@ extension SettingsScreen {
                             iOSRowIcon(systemName: "arrow.triangle.2.circlepath", color: themeManager.accent)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(loc.localized("settings.refreshCatalogue"))
-                                    .font(CinemaFont.label(.large))
+                                    .font(CinemaFont.dynamicLabel(.large))
                                     .foregroundStyle(CinemaColor.onSurface)
                                 Text(loc.localized("settings.refreshCatalogue.subtitle"))
-                                    .font(CinemaFont.label(.medium))
+                                    .font(CinemaFont.dynamicLabel(.medium))
                                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                                     .multilineTextAlignment(.leading)
                             }
@@ -397,13 +397,13 @@ extension SettingsScreen {
                         .frame(width: 40, height: 40)
                     Image(systemName: sub.icon)
                         .font(.system(size: CinemaScale.pt(18), weight: .semibold))
-                        .foregroundStyle(isFirst ? .white : themeManager.accent)
+                        .foregroundStyle(isFirst ? themeManager.onAccentContainer : themeManager.accent)
                 }
 
                 Text(sub.localizedName(loc))
-                    .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                    .font(CinemaFont.dynamicSystem(18, weight: .semibold, relativeTo: .headline))
                     .tracking(-0.3)
-                    .foregroundStyle(isFirst ? .white : CinemaColor.onSurface)
+                    .foregroundStyle(isFirst ? themeManager.onAccentContainer : CinemaColor.onSurface)
 
                 Spacer()
 
@@ -473,7 +473,7 @@ extension SettingsScreen {
                         HStack {
                             iOSRowIcon(systemName: "theatermasks", color: themeManager.accent)
                             Text(loc.localized("settings.homePage.genreRows.choose"))
-                                .font(CinemaFont.label(.large))
+                                .font(CinemaFont.dynamicLabel(.large))
                                 .foregroundStyle(CinemaColor.onSurface)
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -593,7 +593,7 @@ extension SettingsScreen {
                     .foregroundStyle(CinemaColor.onSurface)
 
                 Text(loc.localized("settings.premiumMember"))
-                    .font(CinemaFont.label(.medium))
+                    .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
 
@@ -635,7 +635,7 @@ extension SettingsScreen {
                     iOSRowIcon(systemName: icon, color: CinemaColor.onSurfaceVariant)
 
                     Text(label)
-                        .font(CinemaFont.label(.large))
+                        .font(CinemaFont.dynamicLabel(.large))
                         .foregroundStyle(CinemaColor.onSurface)
 
                     Spacer()
@@ -658,7 +658,7 @@ extension SettingsScreen {
             HStack {
                 iOSRowIcon(systemName: "moon.zzz", color: themeManager.accent)
                 Text(loc.localized("settings.sleepTimer"))
-                    .font(CinemaFont.label(.large))
+                    .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                 Spacer()
                 Menu {
@@ -677,7 +677,7 @@ extension SettingsScreen {
                     let selected = SleepTimerOption(rawValue: sleepTimerMinutes) ?? .disabled
                     HStack(spacing: 4) {
                         Text(loc.localized(selected.localizationKey))
-                            .font(CinemaFont.label(.large))
+                            .font(CinemaFont.dynamicLabel(.large))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: CinemaScale.pt(11), weight: .semibold))
@@ -719,7 +719,7 @@ struct IOSHomeGenrePickerView: View {
             } else {
                 List(availableGenres, id: \.self, selection: selectionBinding) { genre in
                     Text(genre)
-                        .font(CinemaFont.label(.large))
+                        .font(CinemaFont.dynamicLabel(.large))
                         .foregroundStyle(CinemaColor.onSurface)
                         .listRowBackground(CinemaColor.surfaceContainer)
                 }

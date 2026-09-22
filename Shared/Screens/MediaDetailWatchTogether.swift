@@ -326,7 +326,7 @@ struct WatchTogetherSheet: View {
 
     private func participantsSummary(_ group: SyncPlayGroup) -> String {
         if group.participants.isEmpty {
-            return loc.localized("syncplay.participants", 0)
+            return loc.counted("syncplay.participants", 0)
         }
         let names = group.participants.joined(separator: ", ")
         return names

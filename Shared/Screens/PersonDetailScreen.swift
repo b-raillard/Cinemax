@@ -139,13 +139,13 @@ struct PersonDetailScreen: View {
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                 if let birth = person?.premiereDate {
-                    Text(String(format: loc.localized("person.born"), birth.formatted(date: .long, time: .omitted)))
+                    Text(String(format: loc.localized("person.born"), birth.formatted(Date.FormatStyle(date: .long, time: .omitted).locale(loc.locale))))
                         .font(CinemaFont.label(.medium))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
                 let count = movies.count + series.count
                 if count > 0 {
-                    Text(String(format: loc.localized("person.titleCount"), count))
+                    Text(loc.counted("person.titleCount", count))
                         .font(CinemaFont.label(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }

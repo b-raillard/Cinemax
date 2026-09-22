@@ -687,10 +687,12 @@ struct PrivacySecurityScreen: View {
     @ViewBuilder
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(CinemaFont.label(.small))
+            .font(CinemaFont.dynamicLabel(.small))
             .foregroundStyle(CinemaColor.onSurfaceVariant)
             .tracking(1.2)
             .padding(.horizontal, CinemaSpacing.spacing2)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder

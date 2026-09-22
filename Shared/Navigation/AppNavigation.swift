@@ -1016,6 +1016,9 @@ struct AppNavigation: View {
         .environment(appState)
         .environment(themeManager)
         .environment(loc)
+        // SwiftUI's own formatting (`Text(date, style:)`, number and list
+        // interpolations) follows the APP's language, not the device's.
+        .environment(\.locale, loc.locale)
         .environment(toasts)
         .environment(network)
         .environment(menuConfig)

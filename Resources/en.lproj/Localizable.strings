@@ -55,6 +55,7 @@
 "home.becauseYouWatched" = "Because you watched %@";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
+"home.remainingTime.minutes.one" = "%dm remaining";
 "home.genreRow.failed" = "Couldn't load";
 
 // MARK: - Movie Library
@@ -63,7 +64,9 @@
 "movies.sortFilter" = "Sort & Filter";
 "library.filter.button" = "Filters";
 "movies.count" = "%d Movies";
+"movies.count.one" = "%d Movie";
 "movies.titles" = "%d titles";
+"movies.titles.one" = "%d title";
 "sort.ascending" = "Ascending";
 "sort.descending" = "Descending";
 "sort.by" = "Sort by";
@@ -84,6 +87,7 @@
 "tvShows.title" = "TV Shows";
 "tvShows.browseGenres" = "Browse Genres";
 "tvShows.count" = "%d Series";
+"tvShows.count.one" = "%d Series";
 "tvShows.season" = "%d Season";
 "tvShows.seasonsPlural" = "%d Seasons";
 
@@ -166,6 +170,16 @@
 "settings.darkMode" = "Dark Mode";
 "settings.lightMode" = "Light Mode";
 "settings.accentColor" = "Accent Color";
+"accent.name.red" = "Red";
+"accent.name.orange" = "Orange";
+"accent.name.yellow" = "Yellow";
+"accent.name.green" = "Green";
+"accent.name.cyan" = "Cyan";
+"accent.name.blue" = "Blue";
+"accent.name.indigo" = "Indigo";
+"accent.name.purple" = "Purple";
+"accent.name.pink" = "Pink";
+"accent.name.rainbow" = "Rainbow";
 "settings.language" = "Language";
 "settings.language.french" = "Français";
 "settings.language.english" = "English";
@@ -963,6 +977,7 @@
 "person.series" = "TV Shows";
 "person.born" = "Born %@";
 "person.titleCount" = "%d titles";
+"person.titleCount.one" = "%d title";
 "person.empty" = "No titles in your library";
 
 // MARK: - UI polish
@@ -979,7 +994,8 @@
 "syncplay.noGroups.subtitle" = "Create a group to watch this title with others at the same time.";
 "syncplay.unnamedGroup" = "Unnamed group";
 "syncplay.defaultName" = "%@'s group";
-"syncplay.participants" = "%d participant(s)";
+"syncplay.participants" = "%d participants";
+"syncplay.participants.one" = "%d participant";
 "syncplay.joined" = "Joined group";
 "syncplay.left" = "Left group";
 "syncplay.groupEnded" = "The group has ended";
@@ -995,6 +1011,7 @@
 "syncplay.session.with" = "With %@";
 "syncplay.session.two" = "%@ and %@";
 "syncplay.session.more" = "%@, %@ and %d others";
+"syncplay.session.more.one" = "%@, %@ and %d other";
 "syncplay.session.unknownTitle" = "Session in progress";
 "syncplay.session.a11y" = "Session: %@, with %@. Join.";
 "syncplay.session.mine" = "You're in \u00b7 with %@";

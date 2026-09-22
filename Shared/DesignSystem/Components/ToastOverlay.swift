@@ -52,13 +52,15 @@ private struct ToastView: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
+                // Dynamic Type: a toast is reading text, and the fixed sizes
+                // ignored the user's text size (audit 2026-09-22).
                 Text(toast.title)
-                    .font(CinemaFont.label(.large))
+                    .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .lineLimit(2)
+                    .lineLimit(3)
                 if let msg = toast.message {
                     Text(msg)
-                        .font(CinemaFont.body)
+                        .font(CinemaFont.dynamicBody)
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .lineLimit(3)
                 }
@@ -69,9 +71,13 @@ private struct ToastView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: CinemaScale.pt(13), weight: .bold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .padding(6)
+                    // The glyph stays small; the target is the 44 pt minimum
+                    // (it was ~25 pt), pulled back into the pill's padding.
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
+            .padding(.vertical, -CinemaSpacing.spacing2)
+            .padding(.trailing, -CinemaSpacing.spacing2)
             .buttonStyle(.plain)
             .accessibilityLabel(loc.localized("toast.dismiss"))
         }

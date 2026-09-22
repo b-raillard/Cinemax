@@ -690,12 +690,12 @@ struct MediaDetailScreen: View {
                     HStack(spacing: 4) {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
-                        Text(String(format: "%.1f", rating))
+                        Text(loc.decimal(rating))
                             .fontWeight(.bold)
                     }
                     .font(.system(size: ratingFontSize))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .accessibilityLabel("\(loc.localized("detail.audienceRating")) \(String(format: "%.1f", rating))")
+                    .accessibilityLabel("\(loc.localized("detail.audienceRating")) \(loc.decimal(rating))")
                 }
 
                 if let critic = item.criticRating {
@@ -1603,7 +1603,7 @@ struct MediaDetailScreen: View {
                             } label: {
                                 Text(season.name ?? loc.localized("detail.season"))
                                     .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
-                                    .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
+                                    .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
                                     .padding(.horizontal, CinemaSpacing.spacing3)
                                     .padding(.vertical, 8)
                                     .background(
@@ -1615,6 +1615,7 @@ struct MediaDetailScreen: View {
                             .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
                             .focusEffectDisabled()
                             .hoverEffectDisabled()
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
                     .padding(.horizontal, contentPadding)
@@ -2060,7 +2061,7 @@ private struct PlayActionButtonsSection: View, Equatable {
                 Image(systemName: "play.fill")
                     .font(.system(size: buttonFontSize - 2, weight: .bold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(themeManager.onAccentContainer)
             .frame(maxWidth: .infinity)
             #if os(tvOS)
             // Fills the row height so the style's fill and ring cover the whole
