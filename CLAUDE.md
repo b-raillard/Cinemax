@@ -26,6 +26,8 @@ This root file holds only what applies everywhere. Every feature's RULEs live ne
 | Remote control « Lire sur… » (send + receive) | `docs/rules/remote-control.md` | `MediaDetailRemotePlay`, `RemoteControlListener`, `JellyfinSocket` |
 | Playlists (write) | `docs/rules/playlists.md` | `AddToPlaylistSheet`, `PlaylistDetailScreen` |
 
+**RULE — a `CLAUDE.md` inside a target's source path is swept into the app as a resource** unless `project.yml` excludes it: both `Shared` source paths carry `excludes: ["**/CLAUDE.md"]`, which covers every area file under `Shared/`. A new area file under another source path (`iOS/`, `tvOS/`, `Resources/`, `Widgets/CinemaxWidget/`, `TopShelf/CinemaxTopShelf/`) needs the same exclusion, or the bundle ships it and two same-named files fail the build ("Multiple commands produce"). `Widgets/CLAUDE.md` and `TopShelf/CLAUDE.md` sit ABOVE their targets' paths on purpose.
+
 **RULE — a new RULE goes into the file of the area it governs, never back into this root file**, unless it is genuinely cross-cutting (it applies in three or more areas). Keep this file under ~45 KB: it is loaded by every session and every sub-agent. A long measurement story belongs in the area file or in `docs/adr/`, the RULE keeps the invariant.
 
 ## Architecture
@@ -109,6 +111,7 @@ cd Cinemax && xcodegen generate
 
 **Build verification gotchas (RULE)**:
 - Always pair pipes with `set -o pipefail` (`set -o pipefail; xcodebuild ... | grep ...`) — without it `tail`/`grep` swallow xcodebuild's exit code and a failed build returns 0. Confirm by reading output for `** BUILD SUCCEEDED **` / `** BUILD FAILED **`, not just shell exit.
+- **CI's *Build & Test* job gates every step on a docs-only check** (`Detect code changes`): a PR touching only `*.md` / `docs/` still gets a green job, with nothing built — never read that green as a build. It also pins Xcode (`Select Xcode`, keep in step with `xcodeVersion` in `project.yml`) and compiles both apps in **Release** after the tests, the only place `#if DEBUG` branches and the optimiser are seen before archiving.
 - Don't run iOS + tvOS builds in parallel against the same DerivedData — they race on `build.db` ("database is locked"). Run serially.
 - **RULE — `ci.yml`'s concurrency group is PER COMMIT on main (`…-${{ github.sha }}`) and per ref everywhere else, and `cancel-in-progress` is false on main.** A shared group on main cancels main's OWN verification, and dropping `cancel-in-progress` is NOT enough on its own: GitHub keeps at most one *pending* run per group (`queue: single`, the default) and cancels the previously pending one, so a burst of 3+ merges still loses every intermediate commit. That is how `ea96635` came to sit on main with a genuinely stale `project.pbxproj` and turned **four unrelated Dependabot PRs red** on a fault none of them had introduced — the failure surfaces on the PRs, never on the commit that caused it, which is what makes it expensive to diagnose. Corollary for reading CI at all: **a green PR run is not proof for a step gated `push && ref == main`** — the *Upload SBOM* step, i.e. the only thing exercising `actions/upload-artifact`, is skipped in every PR run, so an upload-artifact bump is verified by reading that step's own conclusion on main plus the `cinemax-sbom` artifact's existence, not by the run's colour.
 
