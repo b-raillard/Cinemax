@@ -309,7 +309,8 @@ final class HomeViewModel {
                             sortOrder: [.descending],
                             isFavorite: true,
                             limit: 20,
-                            enableTotalRecordCount: false
+                            enableTotalRecordCount: false,
+                            fieldSet: .card
                         ).items)
                     } catch {
                         logger.warning("Home favorites fetch failed: \(error.localizedDescription, privacy: .public)")
@@ -358,7 +359,8 @@ final class HomeViewModel {
                             sortBy: [.sortName],
                             sortOrder: [.ascending],
                             limit: 20,
-                            enableTotalRecordCount: false
+                            enableTotalRecordCount: false,
+                            fieldSet: .card
                         ).items)
                     } catch {
                         logger.warning("Home collections fetch failed: \(error.localizedDescription, privacy: .public)")
@@ -614,7 +616,8 @@ final class HomeViewModel {
                 sortOrder: [.descending],
                 isFavorite: true,
                 limit: 20,
-                enableTotalRecordCount: false
+                enableTotalRecordCount: false,
+                fieldSet: .card
             ).items
             if items != favoriteItems { favoriteItems = items }
         } catch {
@@ -1078,7 +1081,9 @@ final class HomeViewModel {
             startIndex: nil,
             // Only `.items` is read, and this runs once per genre row — up to 8
             // COUNT queries per Home load before this.
-            enableTotalRecordCount: false
+            enableTotalRecordCount: false,
+            // Genre rows are cards; the hero never comes from them (P8).
+            fieldSet: .card
         )
         return response.items
     }

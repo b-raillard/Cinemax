@@ -80,7 +80,8 @@ final class WatchedHistoryViewModel {
                 sortOrder: [.descending],
                 filters: [.isPlayed],
                 limit: limit,
-                startIndex: startIndex
+                startIndex: startIndex,
+                fieldSet: .card
             )
             self.loadFailed = false
             return (items: result.items, total: result.totalCount)

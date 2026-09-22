@@ -157,7 +157,9 @@ extension JellyfinAPIClient {
         /// saying "didn't count", never "no results". Never pass `false` from
         /// a caller that paginates — a `hasLoadedAll` derived from 0 would end
         /// pagination on the first page.
-        enableTotalRecordCount: Bool = true
+        enableTotalRecordCount: Bool = true,
+        /// `.card` drops `overview` and `genres` — see `ItemFieldSet`.
+        fieldSet: ItemFieldSet = .detail
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -178,7 +180,7 @@ extension JellyfinAPIClient {
             )
             params.isFavorite = isFavorite
             params.nameStartsWithOrGreater = nameStartsWithOrGreater
-            params.fields = [.overview, .genres, .childCount]
+            params.fields = fieldSet == .card ? [.childCount] : [.overview, .genres, .childCount]
             params.enableUserData = true
             params.enableImageTypes = [.primary, .backdrop, .thumb]
             params.imageTypeLimit = 1

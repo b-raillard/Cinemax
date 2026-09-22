@@ -81,7 +81,8 @@ final class FavoritesViewModel {
                 sortOrder: [.ascending],
                 isFavorite: true,
                 limit: limit,
-                startIndex: startIndex
+                startIndex: startIndex,
+                fieldSet: .card
             )
             self.loadFailed = false
             return (items: result.items, total: result.totalCount)

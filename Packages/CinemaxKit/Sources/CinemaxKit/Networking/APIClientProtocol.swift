@@ -149,6 +149,21 @@ public protocol AuthAPI: Sendable {
     func deleteDevice(id: String) async throws
 }
 
+/// How much of each item a `getItems` query asks the server for (audit P8).
+///
+/// `.detail` is the historical request — `overview`, `genres` and `childCount`
+/// — and stays the default, because a query that can feed a hero, a synopsis
+/// or a genre line needs them. `.card` asks for `childCount` alone: a poster
+/// card prints a title, a year, a rating, a season / item count and a status
+/// badge, none of which comes from `overview` or `genres`, and a synopsis is
+/// by far the heaviest field of a `BaseItemDto`. Only pass `.card` from a
+/// query whose items are drawn as cards and nothing else — the detail screen
+/// always re-fetches its own item by id, so a card's lean DTO never reaches it.
+public enum ItemFieldSet: Sendable, Equatable {
+    case detail
+    case card
+}
+
 /// Library queries: items, genres, search, series/seasons/episodes.
 public protocol LibraryAPI: Sendable {
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto]
@@ -186,7 +201,9 @@ public protocol LibraryAPI: Sendable {
         /// the count needs `true`: `PaginatedLoader` (it derives `hasLoadedAll`
         /// from it) and `MediaLibraryViewModel`'s header. See the
         /// implementation for the rest of the contract.
-        enableTotalRecordCount: Bool
+        enableTotalRecordCount: Bool,
+        /// Which optional fields to ask for — see `ItemFieldSet`.
+        fieldSet: ItemFieldSet
     ) async throws -> (items: [BaseItemDto], totalCount: Int)
     func getGenres(userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?) async throws -> [String]
     func getUserViews(userId: String) async throws -> [BaseItemDto]
@@ -709,7 +726,8 @@ public extension LibraryAPI {
         nameStartsWithOrGreater: String? = nil,
         limit: Int? = nil,
         startIndex: Int? = nil,
-        enableTotalRecordCount: Bool = true
+        enableTotalRecordCount: Bool = true,
+        fieldSet: ItemFieldSet = .detail
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         try await getItems(
             userId: userId, parentId: parentId, includeItemTypes: includeItemTypes,
@@ -717,7 +735,8 @@ public extension LibraryAPI {
             isFavorite: isFavorite, filters: filters,
             nameStartsWithOrGreater: nameStartsWithOrGreater,
             limit: limit, startIndex: startIndex,
-            enableTotalRecordCount: enableTotalRecordCount
+            enableTotalRecordCount: enableTotalRecordCount,
+            fieldSet: fieldSet
         )
     }
     func getGenres(

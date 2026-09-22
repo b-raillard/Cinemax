@@ -409,7 +409,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         genres: [String]?,
         /// Recorded so Home's « last played » seed query (`[.isPlayed]`) can
         /// be told apart from every other movie/episode query.
-        filters: [ItemFilter]?
+        filters: [ItemFilter]?,
+        /// Lean (`.card`) vs full (`.detail`) fields — audit P8.
+        fieldSet: ItemFieldSet
     )] = []
 
     /// When set, a `getItems` carrying the `.isPlayed` filter answers with this
@@ -449,7 +451,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         sortBy: [ItemSortBy]?, sortOrder: [JellyfinAPI.SortOrder]?,
         genres: [String]?, years: [Int]?, isFavorite: Bool?,
         filters: [ItemFilter]?, nameStartsWithOrGreater: String?,
-        limit: Int?, startIndex: Int?, enableTotalRecordCount: Bool
+        limit: Int?, startIndex: Int?, enableTotalRecordCount: Bool,
+        fieldSet: ItemFieldSet
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         recordLock.withLock {
             if isFavorite == true { favoriteFetchCount += 1 }
@@ -459,7 +462,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
                 includeItemTypes: includeItemTypes, sortBy: sortBy,
                 sortOrder: sortOrder, isFavorite: isFavorite, limit: limit,
                 enableTotalRecordCount: enableTotalRecordCount, genres: genres,
-                filters: filters
+                filters: filters, fieldSet: fieldSet
             ))
         }
         if shouldThrow { throw stubbedError }

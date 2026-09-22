@@ -355,6 +355,37 @@ struct HomeRailGatingTests {
                 "the « Parce que vous avez vu » seed query must be among those checked")
     }
 
+    // MARK: - P8 — lean fields for queries that only feed cards
+
+    /// A card never prints a synopsis or a genre line, so a query whose items
+    /// are only drawn as cards asks for `.card`. The Recently Added query also
+    /// feeds the HERO (`heroItem = resumeItems.first ?? latestItems.first`),
+    /// which prints both — it must keep `.detail`.
+    @Test("card-only Home queries ask for lean fields; the hero's source keeps them")
+    func cardQueriesAreLean() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action"]
+        let vm = HomeViewModel(defaults: defaults)
+
+        await vm.load(using: makeAppState(api: api))
+
+        let queries = api.getItemsQueries
+        let genreRow = queries.first { $0.genres == ["Action"] }
+        let favorites = queries.first { $0.isFavorite == true }
+        let collections = queries.first { $0.includeItemTypes == [.boxSet] }
+        let heroSource = queries.first {
+            $0.includeItemTypes == [.movie, .series] && $0.isFavorite == nil && $0.genres == nil
+        }
+        #expect(genreRow?.fieldSet == .card)
+        #expect(favorites?.fieldSet == .card)
+        #expect(collections?.fieldSet == .card)
+        #expect(heroSource?.fieldSet == .detail)
+        #expect(heroSource != nil, "the hero-source assertion must not pass vacuously")
+    }
+
     /// The paired control, and the half that must never regress: a caller that
     /// PAGINATES derives `hasLoadedAll` from the total, so a count of 0 would
     /// end pagination on the first page.
