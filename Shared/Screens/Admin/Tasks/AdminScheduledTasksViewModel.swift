@@ -7,7 +7,10 @@ import CinemaxKit
 @MainActor @Observable
 final class AdminScheduledTasksViewModel {
     var tasks: [TaskInfo] = []
-    var isLoading = false
+    /// Starts TRUE: the screen's `.task` loads on first appearance, and a
+    /// `false` start drew the « Aucun… » empty state for a frame before the
+    /// spinner replaced it.
+    var isLoading = true
     var errorMessage: String?
     /// Task id that is currently being started/stopped — used to render a
     /// spinner on just that row instead of blocking the whole list.

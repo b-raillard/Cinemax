@@ -12,5 +12,19 @@ enum AdminRelativeFormatter {
         formatter.unitsStyle = style
         return formatter
     }
+
+    /// Formats `date` relative to now in the APP's language. A formatter left
+    /// on its default locale follows the DEVICE language, so an English phone
+    /// printed « 5 hr. ago » over a French app (same lesson as the system
+    /// `EditButton` — the app's language is its own setting). The locale is
+    /// re-applied on each call so a language switch takes effect at once.
+    @MainActor
+    static func string(for date: Date, with formatter: RelativeDateTimeFormatter, languageCode: String) -> String {
+        let locale = Locale(identifier: languageCode)
+        if formatter.locale.identifier != locale.identifier {
+            formatter.locale = locale
+        }
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
 }
 #endif

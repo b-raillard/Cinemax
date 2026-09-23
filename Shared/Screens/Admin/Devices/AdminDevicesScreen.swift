@@ -151,7 +151,7 @@ struct AdminDevicesScreen: View {
             }
         }
         if let date = device.dateLastActivity {
-            parts.append(Self.relativeFormatter.localizedString(for: date, relativeTo: Date()))
+            parts.append(AdminRelativeFormatter.string(for: date, with: Self.relativeFormatter, languageCode: loc.languageCode))
         }
         return parts.joined(separator: " • ")
     }

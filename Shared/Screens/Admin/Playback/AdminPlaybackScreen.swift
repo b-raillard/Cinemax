@@ -123,12 +123,13 @@ struct AdminPlaybackScreen: View {
             ) {
                 readOnlyPathRow(
                     label: loc.localized("admin.playback.encoderPath"),
-                    value: options.encoderAppPathDisplay ?? options.encoderAppPath ?? "—"
+                    value: [options.encoderAppPathDisplay, options.encoderAppPath]
+                        .compactMap { $0 }.first { !$0.isEmpty } ?? "—"
                 )
                 iOSSettingsDivider
                 readOnlyPathRow(
                     label: loc.localized("admin.playback.transcodingTempPath"),
-                    value: options.transcodingTempPath ?? "—"
+                    value: options.transcodingTempPath.flatMap { $0.isEmpty ? nil : $0 } ?? "—"
                 )
             }
         }

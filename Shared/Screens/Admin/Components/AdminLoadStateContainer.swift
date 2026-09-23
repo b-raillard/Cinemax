@@ -67,6 +67,10 @@ struct AdminLoadStateContainer<Content: View>: View {
                 actionTitle: emptyActionTitle,
                 onAction: onEmptyAction
             )
+            // Same frame as the two states above: sized to its content, the
+            // empty state left the screen background showing above and below
+            // it, as a lighter band across a black page.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             content()
         }

@@ -141,7 +141,7 @@ struct AdminScheduledTasksScreen: View {
     nonisolated(unsafe) private static let relativeFormatter = AdminRelativeFormatter.make(.short)
 
     private func relativeShort(_ date: Date) -> String {
-        Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+        AdminRelativeFormatter.string(for: date, with: Self.relativeFormatter, languageCode: loc.languageCode)
     }
 
     private func labelBadge(_ text: String, color: Color) -> some View {

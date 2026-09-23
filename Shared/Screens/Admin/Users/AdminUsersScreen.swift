@@ -97,10 +97,14 @@ struct AdminUsersScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .lineLimit(1)
 
-                if user.policy?.isAdministrator == true {
-                    adminBadge
-                        .padding(.top, 2)
-                }
+                // The badge's slot is always reserved, invisible for a
+                // non-admin, so every tile of a row has the same height —
+                // an admin's tile used to stand taller than its neighbour.
+                let isAdmin = user.policy?.isAdministrator == true
+                adminBadge
+                    .padding(.top, 2)
+                    .opacity(isAdmin ? 1 : 0)
+                    .accessibilityHidden(!isAdmin)
             }
             .padding(.horizontal, CinemaSpacing.spacing3)
             .padding(.bottom, CinemaSpacing.spacing3)
@@ -129,7 +133,7 @@ struct AdminUsersScreen: View {
         guard let date = user.lastActivityDate ?? user.lastLoginDate else {
             return loc.localized("admin.users.neverActive")
         }
-        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+        return AdminRelativeFormatter.string(for: date, with: Self.relativeFormatter, languageCode: loc.languageCode)
     }
 
     // MARK: - Create user sheet

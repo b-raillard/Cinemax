@@ -127,34 +127,34 @@ func iOSToggleRow(
     animated: Bool,
     loc: LocalizationManager
 ) -> some View {
-    iOSSettingsRow {
-        HStack {
-            iOSRowIcon(systemName: icon, color: accent)
-            Text(label)
-                .font(CinemaFont.dynamicLabel(.large))
-                .foregroundStyle(CinemaColor.onSurface)
-            Spacer()
-            Button {
-                value.wrappedValue.toggle()
-                Haptics.tap()
-            } label: {
+    // The WHOLE row is the button, not just the pill, so a tap on the label
+    // or in the empty middle flips the setting — like a native `Toggle` row.
+    Button {
+        value.wrappedValue.toggle()
+        Haptics.tap()
+    } label: {
+        iOSSettingsRow {
+            HStack {
+                iOSRowIcon(systemName: icon, color: accent)
+                Text(label)
+                    .font(CinemaFont.dynamicLabel(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
                 CinemaToggleIndicator(isOn: value.wrappedValue, accent: accent, animated: animated)
             }
-            .buttonStyle(.plain)
         }
-        // Collapse the whole row into one VoiceOver element that announces the
-        // label + on/off state + toggle semantics (the bare `CinemaToggleIndicator`
-        // is purely visual, so without this VoiceOver read the setting label-only).
-        // Direct-touch on the pill still works — the accessibility tree is
-        // independent of hit-testing.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(loc.localized(value.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityAction {
-            value.wrappedValue.toggle()
-            Haptics.tap()
-        }
+    }
+    .buttonStyle(.plain)
+    // Collapse the whole row into one VoiceOver element that announces the
+    // label + on/off state + toggle semantics (the bare `CinemaToggleIndicator`
+    // is purely visual, so without this VoiceOver read the setting label-only).
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(label)
+    .accessibilityValue(loc.localized(value.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+    .accessibilityAddTraits(.isToggle)
+    .accessibilityAction {
+        value.wrappedValue.toggle()
+        Haptics.tap()
     }
 }
 

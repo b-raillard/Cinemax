@@ -7,7 +7,10 @@ import CinemaxKit
 @MainActor @Observable
 final class AdminApiKeysViewModel {
     var keys: [AuthenticationInfo] = []
-    var isLoading = false
+    /// Starts TRUE: the screen's `.task` loads on first appearance, and a
+    /// `false` start drew the « Aucun… » empty state for a frame before the
+    /// spinner replaced it.
+    var isLoading = true
     var errorMessage: String?
 
     // Security-sensitive transient state.
@@ -42,22 +45,50 @@ final class AdminApiKeysViewModel {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            let fetched = try await apiClient.getApiKeys()
-            // Filter revoked keys defensively — the server typically omits
-            // them but we don't want to render stale entries if it doesn't.
-            keys = fetched
-                .filter { $0.dateRevoked == nil && ($0.isActive ?? true) }
-                .sorted { ($0.dateCreated ?? .distantPast) > ($1.dateCreated ?? .distantPast) }
+            keys = Self.listable(try await apiClient.getApiKeys())
+            // `listable` renumbers the keys, so a reveal state from the
+            // previous list could now point at a different key.
+            revealedKeyIds.removeAll()
         } catch {
             errorMessage = loc.userFacingMessage(for: error)
         }
     }
 
+    /// Turns the server's answer into what the list can show and address.
+    ///
+    /// Jellyfin builds every API key from three fields only (`AppName`,
+    /// `AccessToken`, `DateCreated` — `AuthenticationManager.GetApiKeys`, 10.9
+    /// through 12.0), so the rest of `AuthenticationInfo` arrives at its C#
+    /// default: **`IsActive` is `false` and `Id` is `0` on EVERY key.** Filtering
+    /// on `isActive` therefore dropped the whole list (the screen always read
+    /// « Aucune clé API »), and keying the rows on `id` would have made every
+    /// key the same row — revealing one would reveal them all. So `isActive` is
+    /// ignored (a revoked key is deleted server-side, not flagged) and each key
+    /// is given a LOCAL id: its position in this list, which `ForEach`, the
+    /// reveal set and the revoke path all key on. The token itself is never
+    /// used as an identifier.
+    static func listable(_ fetched: [AuthenticationInfo]) -> [AuthenticationInfo] {
+        fetched
+            .filter { $0.dateRevoked == nil && !($0.accessToken ?? "").isEmpty }
+            .sorted {
+                let lhs = $0.dateCreated ?? .distantPast
+                let rhs = $1.dateCreated ?? .distantPast
+                if lhs != rhs { return lhs > rhs }
+                return ($0.appName ?? "") < ($1.appName ?? "")
+            }
+            .enumerated()
+            .map { index, key in
+                var key = key
+                key.id = index
+                return key
+            }
+    }
+
     // MARK: - Create
 
-    /// Creates a key, refetches, and identifies the new one by subtracting
-    /// the previous id set — avoids relying on dateCreated ordering in case
-    /// two keys share a timestamp (unlikely but easy to defend against).
+    /// Creates a key, refetches, and identifies the new one as the token that
+    /// was not there before — the server hands out no usable id (see
+    /// `listable`). Compared in memory only, never stored or hashed.
     func createKey(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
         let name = newAppName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return false }
@@ -65,13 +96,13 @@ final class AdminApiKeysViewModel {
         createErrorMessage = nil
         defer { isCreating = false }
 
-        let previousIds = Set(keys.compactMap { $0.id })
+        let previousTokens = keys.compactMap(\.accessToken)
         do {
             try await apiClient.createApiKey(app: name)
             await load(using: apiClient, loc: loc)
-            freshlyCreatedKey = keys.first { id in
-                guard let newId = id.id else { return false }
-                return !previousIds.contains(newId)
+            freshlyCreatedKey = keys.first { key in
+                guard let token = key.accessToken else { return false }
+                return !previousTokens.contains(token)
             }
             newAppName = ""
             return true

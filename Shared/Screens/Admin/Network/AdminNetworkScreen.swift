@@ -215,7 +215,7 @@ struct AdminNetworkScreen: View {
             ) {
                 readOnlyRow(
                     label: loc.localized("admin.network.certPath"),
-                    value: edited.certificatePath ?? "—"
+                    value: (edited.certificatePath ?? "").orEmDash
                 )
                 iOSSettingsDivider
                 readOnlyRow(

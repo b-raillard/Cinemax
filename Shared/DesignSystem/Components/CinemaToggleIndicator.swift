@@ -17,7 +17,11 @@ struct CinemaToggleIndicator: View {
 
     var body: some View {
         Capsule()
-            .fill(isOn ? accent : CinemaColor.surfaceContainerHighest)
+            // Off track = `outlineVariant`, not `surfaceContainerHighest`: the
+            // latter is the exact fill of the `glassPanel` settings rows sit on
+            // (0x252626 in dark mode), so an off toggle drew as a lone white
+            // knob with no track around it.
+            .fill(isOn ? accent : CinemaColor.outlineVariant)
             .frame(width: 52, height: 32)
             .overlay(alignment: isOn ? .trailing : .leading) {
                 Circle()

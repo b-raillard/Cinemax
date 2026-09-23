@@ -294,6 +294,13 @@
 "admin.users.subtitle" = "Manage accounts and permissions.";
 "admin.devices.subtitle" = "Review and revoke connected devices.";
 "admin.activity.subtitle" = "Browse server events.";
+"admin.playback.subtitle" = "Hardware acceleration and transcoding.";
+"admin.plugins.subtitle" = "Enable or uninstall installed plugins.";
+"admin.catalog.subtitle" = "Browse and install new plugins.";
+"admin.tasks.subtitle" = "Run or stop server tasks.";
+"admin.network.subtitle" = "Ports, addresses and remote access.";
+"admin.logs.subtitle" = "Read the server logs.";
+"admin.apiKeys.subtitle" = "Create and revoke app access.";
 "admin.playback.title" = "Playback";
 "admin.plugins.title" = "My plugins";
 "admin.catalog.title" = "Plugin catalog";
@@ -443,6 +450,15 @@
 "admin.catalog.install" = "Install";
 "admin.catalog.install.success" = "Installation started";
 "admin.catalog.install.restartHint" = "A server restart may be required to activate the plugin.";
+"admin.catalog.category.administration" = "Administration";
+"admin.catalog.category.anime" = "Anime";
+"admin.catalog.category.books" = "Books";
+"admin.catalog.category.general" = "General";
+"admin.catalog.category.livetv" = "Live TV";
+"admin.catalog.category.metadata" = "Metadata";
+"admin.catalog.category.moviesandshows" = "Movies & Shows";
+"admin.catalog.category.music" = "Music";
+"admin.catalog.category.subtitles" = "Subtitles";
 
 // MARK: - Admin — Playback (Encoding)
 

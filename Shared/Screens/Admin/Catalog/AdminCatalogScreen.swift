@@ -30,7 +30,7 @@ struct AdminCatalogScreen: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                     ForEach(viewModel.groupedByCategory, id: \.category) { group in
-                        AdminSectionGroup(group.category) {
+                        AdminSectionGroup(categoryTitle(group.category)) {
                             ForEach(Array(group.packages.enumerated()), id: \.element.guid) { index, package in
                                 Button { viewModel.selectedPackage = package } label: {
                                     packageRow(package)
@@ -67,6 +67,17 @@ struct AdminCatalogScreen: View {
     }
 
     @ViewBuilder
+    /// The catalogue's categories are the repository's internal keys
+    /// (« MoviesAndShows », « LiveTV »), shown verbatim until now. The nine the
+    /// official repository uses are translated; a third-party repository's own
+    /// key is split at its capitals so it at least reads as words.
+    private func categoryTitle(_ raw: String) -> String {
+        let key = "admin.catalog.category.\(raw.lowercased())"
+        let localized = loc.localized(key)
+        if localized != key { return localized }
+        return raw.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression)
+    }
+
     private func packageRow(_ package: PackageInfo) -> some View {
         iOSSettingsRow {
             HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {

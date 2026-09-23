@@ -527,6 +527,13 @@
 "admin.users.subtitle" = "Gérer les comptes et les autorisations.";
 "admin.devices.subtitle" = "Voir et révoquer les appareils connectés.";
 "admin.activity.subtitle" = "Consulter les événements du serveur.";
+"admin.playback.subtitle" = "Accélération matérielle et transcodage.";
+"admin.plugins.subtitle" = "Activer ou désinstaller les extensions installées.";
+"admin.catalog.subtitle" = "Parcourir et installer de nouvelles extensions.";
+"admin.tasks.subtitle" = "Lancer ou arrêter les tâches du serveur.";
+"admin.network.subtitle" = "Ports, adresses et accès distant.";
+"admin.logs.subtitle" = "Lire les journaux du serveur.";
+"admin.apiKeys.subtitle" = "Créer et révoquer les accès des applications.";
 "admin.playback.title" = "Lecture";
 "admin.plugins.title" = "Mes extensions";
 "admin.catalog.title" = "Catalogue d'extensions";
@@ -676,6 +683,15 @@
 "admin.catalog.install" = "Installer";
 "admin.catalog.install.success" = "Installation lancée";
 "admin.catalog.install.restartHint" = "Un redémarrage du serveur peut être nécessaire pour activer l'extension.";
+"admin.catalog.category.administration" = "Administration";
+"admin.catalog.category.anime" = "Anime";
+"admin.catalog.category.books" = "Livres";
+"admin.catalog.category.general" = "Général";
+"admin.catalog.category.livetv" = "TV en direct";
+"admin.catalog.category.metadata" = "Métadonnées";
+"admin.catalog.category.moviesandshows" = "Films et séries";
+"admin.catalog.category.music" = "Musique";
+"admin.catalog.category.subtitles" = "Sous-titres";
 
 // MARK: - Admin — Playback (Encoding)
 

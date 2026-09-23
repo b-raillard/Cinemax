@@ -156,32 +156,33 @@ struct MetadataActionsTab: View {
 
     @ViewBuilder
     private func toggleRow(label: String, isOn: Binding<Bool>) -> some View {
-        iOSSettingsRow {
-            HStack {
-                Text(label)
-                    .font(CinemaFont.dynamicLabel(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                Button {
-                    isOn.wrappedValue.toggle()
-                    Haptics.tap()
-                } label: {
+        // The whole row toggles, not just the pill (same shape as `iOSToggleRow`).
+        Button {
+            isOn.wrappedValue.toggle()
+            Haptics.tap()
+        } label: {
+            iOSSettingsRow {
+                HStack {
+                    Text(label)
+                        .font(CinemaFont.dynamicLabel(.large))
+                        .foregroundStyle(CinemaColor.onSurface)
+                    Spacer()
                     CinemaToggleIndicator(
                         isOn: isOn.wrappedValue,
                         accent: themeManager.accent,
                         animated: motionEffects
                     )
                 }
-                .buttonStyle(.plain)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(label)
-            .accessibilityValue(loc.localized(isOn.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
-            .accessibilityAddTraits(.isToggle)
-            .accessibilityAction {
-                isOn.wrappedValue.toggle()
-                Haptics.tap()
-            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(loc.localized(isOn.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityAction {
+            isOn.wrappedValue.toggle()
+            Haptics.tap()
         }
     }
 
