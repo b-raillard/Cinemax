@@ -54,6 +54,11 @@ LICENSE_PINS = {
     "SwiftVLC": "swiftvlc",
     "Nuke": "nuke",
     "Get": "get",
+    "SwiftNIO": "swift-nio",
+    "SwiftNIO Transport Services": "swift-nio-transport-services",
+    "Swift Atomics": "swift-atomics",
+    "Swift Collections": "swift-collections",
+    "Swift System": "swift-system",
 }
 # LicensesView entries that legitimately have no SwiftPM pin of their own.
 LICENSE_UNPINNED = {
@@ -161,9 +166,11 @@ def check(offline: bool) -> int:
             if pinned != version:
                 errors.append(f"licenses: LicensesView lists {name} {version}, Package.resolved pins {pinned}")
         elif name not in LICENSE_UNPINNED:
-            warnings.append(f"licenses: LicensesView lists {name} {version}, which no longer appears in Package.resolved")
+            errors.append(f"licenses: LicensesView lists {name} {version}, which no longer appears in Package.resolved")
+    # Everything linked into the binary is credited — a transitive package
+    # (the swift-nio family the SDK pulls) ships in the app just the same.
     for identity in sorted(set(app) - credited):
-        warnings.append(f"licenses: `{identity}` {app[identity]['version']} is resolved but not credited in LicensesView")
+        errors.append(f"licenses: `{identity}` {app[identity]['version']} is resolved but not credited in LicensesView")
 
     # artifacts
     if offline:

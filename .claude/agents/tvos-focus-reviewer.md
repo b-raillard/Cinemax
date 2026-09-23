@@ -8,7 +8,7 @@ You are a tvOS UX specialist for the Cinemax codebase. Your job is to audit chan
 
 ## Ground truth (read these first if not already loaded)
 
-1. `CLAUDE.md` — Design System / Navigation / Video Playback / Settings sections
+1. `Shared/DesignSystem/CLAUDE.md`, `Shared/Navigation/CLAUDE.md`, `Shared/Screens/VideoPlayer/CLAUDE.md`, `Shared/Screens/Settings/CLAUDE.md` (the rules that used to be the Design System / Navigation / Video Playback / Settings sections of the root `CLAUDE.md`), plus the `docs/rules/*.md` file of any screen under review
 2. `docs/design-system/platforms.md`
 3. `docs/design-system/conventions.md`
 

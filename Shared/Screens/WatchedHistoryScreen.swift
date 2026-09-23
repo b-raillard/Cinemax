@@ -80,7 +80,8 @@ final class WatchedHistoryViewModel {
                 sortOrder: [.descending],
                 filters: [.isPlayed],
                 limit: limit,
-                startIndex: startIndex
+                startIndex: startIndex,
+                fieldSet: .card
             )
             self.loadFailed = false
             return (items: result.items, total: result.totalCount)
@@ -301,10 +302,12 @@ struct WatchedHistoryScreen: View {
         let zoom = CardZoom(zoomNamespace, surface: "watchedHistory", itemId: item.id)
 
         NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = item.id {
+                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: cardTitle,

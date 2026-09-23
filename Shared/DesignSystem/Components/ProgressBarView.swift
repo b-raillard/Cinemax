@@ -61,9 +61,73 @@ enum MediaCardStatus: Equatable {
         guard fraction >= 0.01 else { return .none }
         return .inProgress(min(fraction, 1))
     }
+
+    // MARK: VoiceOver
+
+    /// The whole percent VoiceOver speaks for `.inProgress`, clamped to 1…100.
+    ///
+    /// `make` never produces a fraction under 1 %, but the clamp keeps a
+    /// hand-built value from ever being read out as « 0 % regardé » over a bar
+    /// that is visibly there.
+    static func spokenPercent(_ fraction: Double) -> Int {
+        let percent = Int((min(max(fraction, 0), 1) * 100).rounded())
+        return min(max(percent, 1), 100)
+    }
+
+    /// What VoiceOver says about this status, or `nil` for `.none`.
+    ///
+    /// Built from a `localize` closure (the `PlayerHUDAccessibility` shape) so
+    /// the mapping is testable against the real fr / en bundles without
+    /// touching the app-wide language. Read off the SAME value the overlay
+    /// draws — a card announces exactly what it shows.
+    func accessibilityValue(localize: (String) -> String) -> String? {
+        switch self {
+        case .none:
+            return nil
+        case .watched:
+            return localize("card.status.watched")
+        case .inProgress(let fraction):
+            return String(format: localize("card.status.progress"), Self.spokenPercent(fraction))
+        }
+    }
+
+    /// `accessibilityValue(localize:)` in the app's own language.
+    @MainActor
+    func accessibilityValue(_ loc: LocalizationManager) -> String? {
+        accessibilityValue(localize: { loc.localized($0) })
+    }
+}
+
+/// Exposes a card's `MediaCardStatus` to VoiceOver as the element's value.
+///
+/// The overlay draws the check / bar in `accessibilityHidden` chrome, so the
+/// focused card used to announce its title alone. Apply it on the element
+/// VoiceOver focuses (the card's `NavigationLink` / `Button`, next to its
+/// `accessibilityLabel`), passing the very `status` handed to the overlay.
+///
+/// Always writes a value — an empty one for `.none`, which VoiceOver skips —
+/// rather than branching on the status: a conditional modifier would change
+/// the card's view identity when a watched toggle flips it, and on tvOS that
+/// drops focus off the card the user is standing on.
+private struct MediaCardStatusAccessibility: ViewModifier {
+    @Environment(LocalizationManager.self) private var loc
+    let status: MediaCardStatus
+
+    func body(content: Content) -> some View {
+        let value: String = status.accessibilityValue(loc) ?? ""
+        return content.accessibilityValue(value)
+    }
 }
 
 extension View {
+    /// Announces a card's watched / in-progress state to VoiceOver — see
+    /// `MediaCardStatusAccessibility`. Pair it with `mediaCardStatusOverlay`,
+    /// fed the same `MediaCardStatus`.
+    @MainActor
+    func mediaCardStatusAccessibility(_ status: MediaCardStatus) -> some View {
+        modifier(MediaCardStatusAccessibility(status: status))
+    }
+
     /// Paints a card's watched check or progress bar over its artwork.
     ///
     /// `@MainActor` because the body evaluates `CinemaScale.pt`, whose factor
@@ -88,11 +152,13 @@ extension View {
             .overlay(alignment: .topTrailing) {
                 if status == .watched {
                     // Same badge the episode row and the iOS episode card draw:
-                    // white over the artwork, on a dimmed disc so it survives a
-                    // pale poster.
+                    // `onSurface` on a `surface` disc, i.e. dark-on-light in light
+                    // mode and light-on-dark in dark mode — both ~17:1. It was a
+                    // WHITE check on the `surface` disc, which in light mode is
+                    // #F7F7F8: a white mark on a white disc (audit 2026-09-22).
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: CinemaScale.pt(20), weight: .semibold))
-                        .foregroundStyle(.white, CinemaColor.surface.opacity(0.8))
+                        .foregroundStyle(CinemaColor.onSurface, CinemaColor.surface.opacity(0.85))
                         .padding(6)
                 }
             }

@@ -53,8 +53,9 @@
 "settings.homePage.watchingNow" = "En direct";
 "home.recentlyAdded" = "Ajouts récents";
 "home.becauseYouWatched" = "Parce que vous avez vu %@";
-"home.remainingTime.hours" = "%dh %dm restantes";
-"home.remainingTime.minutes" = "%dm restantes";
+"home.remainingTime.hours" = "%d h %d min restantes";
+"home.remainingTime.minutes" = "%d min restantes";
+"home.remainingTime.minutes.one" = "%d min restante";
 "home.genreRow.failed" = "Échec du chargement";
 
 // MARK: - Movie Library
@@ -63,7 +64,9 @@
 "movies.sortFilter" = "Trier et filtrer";
 "library.filter.button" = "Filtres";
 "movies.count" = "%d films";
+"movies.count.one" = "%d film";
 "movies.titles" = "%d titres";
+"movies.titles.one" = "%d titre";
 "sort.ascending" = "Croissant";
 "sort.descending" = "Décroissant";
 "sort.by" = "Trier par";
@@ -84,6 +87,7 @@
 "tvShows.title" = "Séries";
 "tvShows.browseGenres" = "Parcourir les genres";
 "tvShows.count" = "%d séries";
+"tvShows.count.one" = "%d série";
 "tvShows.season" = "%d saison";
 "tvShows.seasonsPlural" = "%d saisons";
 
@@ -166,6 +170,16 @@
 "settings.darkMode" = "Mode sombre";
 "settings.lightMode" = "Mode clair";
 "settings.accentColor" = "Couleur d'accentuation";
+"accent.name.red" = "Rouge";
+"accent.name.orange" = "Orange";
+"accent.name.yellow" = "Jaune";
+"accent.name.green" = "Vert";
+"accent.name.cyan" = "Cyan";
+"accent.name.blue" = "Bleu";
+"accent.name.indigo" = "Indigo";
+"accent.name.purple" = "Violet";
+"accent.name.pink" = "Rose";
+"accent.name.rainbow" = "Arc-en-ciel";
 "settings.language" = "Langue";
 "settings.language.french" = "Français";
 "settings.language.english" = "English";
@@ -240,6 +254,7 @@
 "privacy.lock.enable.subtitle" = "Demande le code pour ouvrir cet écran, limite d'âge comprise.";
 "privacy.lock.biometrics" = "Utiliser Face ID / Touch ID";
 "privacy.lock.biometrics.subtitle" = "Raccourci à la place du code. Le code reste toujours accepté.";
+"privacy.lock.biometrics.reset" = "Les visages ou empreintes enregistrés ont changé : Face ID a été désactivé. Réactivez-le si le changement vient de vous.";
 "privacy.lock.change" = "Changer le code";
 "privacy.lock.disable" = "Désactiver le verrouillage";
 "privacy.lock.footer" = "Ce code protège les réglages de cet appareil. Pour une limite qu'une réinstallation ne lève pas, créez un compte Jellyfin dédié et réglez sa limite d'âge sur le serveur.";
@@ -362,7 +377,6 @@
 "detail.seeMore" = "Voir plus";
 "detail.studio" = "Studio";
 "detail.network" = "Chaîne";
-"detail.criticRating" = "Critiques";
 "detail.audienceRating" = "Public";
 
 // MARK: - Login
@@ -445,7 +459,7 @@
 "onboarding.quickConnect.title" = "Se connecter sans rien taper";
 "onboarding.quickConnect.body" = "Quick Connect affiche un code à valider depuis un appareil déjà connecté. C'est surtout utile sur l'Apple TV, où saisir un mot de passe à la télécommande est pénible.";
 "onboarding.personalize.title" = "Personnalisable selon vos envies";
-"onboarding.personalize.body" = "Le menu du bas se réorganise, se réduit, ou s'ouvre directement sur vos bibliothèques ; la couleur d'accent et la taille du texte sont à vous. Tout se règle dans Réglages.";
+"onboarding.personalize.body" = "Le menu principal se réorganise, se réduit, ou s'ouvre directement sur vos bibliothèques ; la couleur d'accent et la taille du texte sont à vous. Tout se règle dans Réglages.";
 "settings.discoverApp" = "Découvrir l'app";
 
 "player.a11y.skipForward" = "Avancer de %d secondes";
@@ -939,6 +953,9 @@
 "accessibility.playItem" = "Lire %@";
 "accessibility.moreInfoAbout" = "Plus d'informations sur %@";
 "accessibility.resumeProgress" = "%d %% regardé";
+"accessibility.criticRating" = "Critiques : %d pour cent";
+"detail.restricted.title" = "Contenu restreint";
+"detail.restricted.subtitle" = "Ce titre dépasse la limite d'âge définie dans Confidentialité et sécurité.";
 
 // MARK: - Admin — formatting glyphs
 
@@ -971,6 +988,8 @@
 "card.unfavorited" = "Retiré des favoris";
 "card.resume" = "Reprendre";
 "card.goToSeries" = "Aller à la série";
+"card.status.watched" = "Vu";
+"card.status.progress" = "%d %% regardé";
 "detail.season.markWatched" = "Marquer la saison comme vue";
 "detail.season.markWatched.message" = "Tous les épisodes de cette saison seront marqués comme vus.";
 "detail.season.markedWatched" = "Saison marquée comme vue";
@@ -978,6 +997,7 @@
 "person.series" = "Séries";
 "person.born" = "Né(e) le %@";
 "person.titleCount" = "%d titres";
+"person.titleCount.one" = "%d titre";
 "person.empty" = "Aucun titre dans votre médiathèque";
 
 // MARK: - UI polish
@@ -994,7 +1014,8 @@
 "syncplay.noGroups.subtitle" = "Créez un groupe pour regarder ce titre avec d'autres personnes en même temps.";
 "syncplay.unnamedGroup" = "Groupe sans nom";
 "syncplay.defaultName" = "Groupe de %@";
-"syncplay.participants" = "%d participant(s)";
+"syncplay.participants" = "%d participants";
+"syncplay.participants.one" = "%d participant";
 "syncplay.joined" = "Groupe rejoint";
 "syncplay.left" = "Groupe quitté";
 "syncplay.groupEnded" = "Le groupe s'est terminé";
@@ -1005,10 +1026,12 @@
 "syncplay.waiting.title" = "En attente d'un participant";
 "syncplay.waiting.subtitle" = "Quelqu'un met en mémoire tampon. Tout le monde reprendra ensemble.";
 "syncplay.libraryAccessDenied" = "Ce titre n'est pas accessible à votre compte";
+"syncplay.restricted.left" = "Ce titre dépasse la limite d'âge de cet appareil : la séance a été quittée.";
 "syncplay.session.badge" = "ENSEMBLE";
 "syncplay.session.with" = "Avec %@";
 "syncplay.session.two" = "%@ et %@";
 "syncplay.session.more" = "%@, %@ et %d autres";
+"syncplay.session.more.one" = "%@, %@ et %d autre";
 "syncplay.session.unknownTitle" = "Séance en cours";
 "syncplay.session.a11y" = "Séance : %@, avec %@. Rejoindre.";
 "syncplay.needsVLC" = "Regarder ensemble ne fonctionne qu'avec le lecteur VLC. Désactivez « Lecteur natif » dans Réglages → Lecture.";
@@ -1224,3 +1247,12 @@
 "update.action.update" = "Mettre à jour";
 "update.action.later" = "Plus tard";
 "update.action.retry" = "Réessayer";
+
+/* Card subtitles — item kind */
+"item.kind.movie" = "Film";
+"item.kind.series" = "Série";
+"item.kind.episode" = "Épisode";
+"item.kind.season" = "Saison";
+"item.kind.collection" = "Collection";
+"item.kind.playlist" = "Playlist";
+"item.kind.video" = "Vidéo";

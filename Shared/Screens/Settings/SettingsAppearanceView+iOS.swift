@@ -33,15 +33,15 @@ struct IOSAppearanceDetailView: View {
                     Haptics.tap()
                 } label: {
                     iOSSettingsRow {
-                        HStack {
-                            iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
+                        SettingsRowAdaptiveLayout {
+                            HStack {
+                                iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
 
-                            Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
-                                .font(CinemaFont.dynamicLabel(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-
-                            Spacer()
-
+                                Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
+                                    .font(CinemaFont.dynamicLabel(.large))
+                                    .foregroundStyle(CinemaColor.onSurface)
+                            }
+                        } control: {
                             CinemaToggleIndicator(isOn: themeManager.darkModeEnabled, accent: themeManager.accent, animated: motionEffects)
                         }
                     }
@@ -70,7 +70,10 @@ struct IOSAppearanceDetailView: View {
                             Spacer()
                         }
 
-                        HStack(spacing: CinemaSpacing.spacing2) {
+                        // Spacing 0: each swatch takes an equal share of the row, so
+                        // its hit area is the whole slot (≥ 34 pt wide on the
+                        // narrowest iPhone, 44 pt tall) rather than the 28 pt dot.
+                        HStack(spacing: 0) {
                             ForEach(AccentOption.visibleCases(rainbowUnlocked: rainbowUnlocked)) { option in
                                 accentDot(option)
                             }
@@ -82,15 +85,15 @@ struct IOSAppearanceDetailView: View {
                 iOSSettingsDivider
 
                 iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: "globe", color: themeManager.accent)
+                    SettingsRowAdaptiveLayout {
+                        HStack {
+                            iOSRowIcon(systemName: "globe", color: themeManager.accent)
 
-                        Text(loc.localized("settings.language"))
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Spacer()
-
+                            Text(loc.localized("settings.language"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                    } control: {
                         languagePicker
                     }
                 }
@@ -102,23 +105,23 @@ struct IOSAppearanceDetailView: View {
                     Haptics.tap()
                 } label: {
                     iOSSettingsRow {
-                        HStack {
-                            iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
+                        SettingsRowAdaptiveLayout {
+                            HStack {
+                                iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
 
-                            VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
-                                Text(loc.localized("settings.motionEffects"))
-                                    .font(CinemaFont.dynamicLabel(.large))
-                                    .foregroundStyle(CinemaColor.onSurface)
-                                if systemReduceMotion {
-                                    Text(loc.localized("settings.motionEffects.systemOverride"))
-                                        .font(CinemaFont.dynamicLabel(.small))
-                                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                        .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                                    Text(loc.localized("settings.motionEffects"))
+                                        .font(CinemaFont.dynamicLabel(.large))
+                                        .foregroundStyle(CinemaColor.onSurface)
+                                    if systemReduceMotion {
+                                        Text(loc.localized("settings.motionEffects.systemOverride"))
+                                            .font(CinemaFont.dynamicLabel(.small))
+                                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
                                 }
                             }
-
-                            Spacer()
-
+                        } control: {
                             CinemaToggleIndicator(isOn: motionEffectsStorage, accent: themeManager.accent, animated: motionEffects)
                         }
                     }
@@ -137,12 +140,17 @@ struct IOSAppearanceDetailView: View {
                 iOSSettingsDivider
 
                 iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
-                        Text(loc.localized("settings.fontSize"))
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
+                    // The stepper's own « 100% » grows with the text and is
+                    // `fixedSize`: beside the label it squeezed it to one
+                    // syllable per line (« Tail/le/du/tex/te »).
+                    SettingsRowAdaptiveLayout {
+                        HStack {
+                            iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
+                            Text(loc.localized("settings.fontSize"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                    } control: {
                         Stepper(
                             "\(Int(fontScale * 100))%",
                             onIncrement: {
@@ -193,8 +201,14 @@ struct IOSAppearanceDetailView: View {
                     RoundedRectangle(cornerRadius: CinemaRadius.medium)
                         .fill(isSelected ? themeManager.accent : CinemaColor.surfaceContainerHigh)
                 )
+                // The pill stays 40 × 30; the tap target is the 44 pt minimum.
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // « FR » read aloud is two letters, not a language.
+        .accessibilityLabel(loc.localized(code == "fr" ? "settings.language.french" : "settings.language.english"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -223,9 +237,15 @@ struct IOSAppearanceDetailView: View {
                         .foregroundStyle(.white)
                 }
             }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .hoverEffectDisabled()
+        // Nine « bouton » in a row said nothing: each swatch is its colour's
+        // name, and the current one says so (audit 2026-09-22, U5).
+        .accessibilityLabel(loc.localized(option.nameKey))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .scaleEffect(isSelected ? 1.1 : 1.0)
         .animation(motionEffects ? .spring(response: 0.25, dampingFraction: 0.7) : nil, value: isSelected)
     }

@@ -11,6 +11,8 @@ struct LoginScreen: View {
     @State private var showQuickConnect = false
     @State private var showServers = false
     @State private var easterEggTaps: Int = 0
+    /// Set by the username's Return key to move on to the password.
+    @State private var passwordFocusRequested = false
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -170,14 +172,17 @@ struct LoginScreen: View {
                             placeholder: loc.localized("login.usernamePlaceholder"),
                             icon: "person"
                         )
+                        .credentialField(.username) { passwordFocusRequested = true }
 
                         GlassTextField(
                             label: loc.localized("login.password"),
                             text: $viewModel.password,
                             placeholder: loc.localized("login.passwordPlaceholder"),
                             icon: "lock",
-                            isSecure: true
+                            isSecure: true,
+                            focusRequest: $passwordFocusRequested
                         )
+                        .credentialField(.password) { submitLogin() }
 
                         if let error = viewModel.errorMessage {
                             PreAuthErrorBanner(message: error)
@@ -190,7 +195,7 @@ struct LoginScreen: View {
                         style: .accent,
                         isLoading: viewModel.isAuthenticating
                     ) {
-                        Task { await viewModel.authenticate(using: appState, loc: loc) }
+                        submitLogin()
                     }
                     .disabled(viewModel.isAuthenticating)
 
@@ -288,14 +293,17 @@ struct LoginScreen: View {
                     #if os(iOS)
                     .keyboardType(.asciiCapable)
                     #endif
+                    .credentialField(.username) { passwordFocusRequested = true }
 
                     GlassTextField(
                         label: loc.localized("login.password"),
                         text: $viewModel.password,
                         placeholder: loc.localized("login.passwordPlaceholder"),
                         icon: "lock",
-                        isSecure: true
+                        isSecure: true,
+                        focusRequest: $passwordFocusRequested
                     )
+                    .credentialField(.password) { submitLogin() }
 
                     if let error = viewModel.errorMessage {
                         PreAuthErrorBanner(message: error)
@@ -315,7 +323,7 @@ struct LoginScreen: View {
                         icon: "chevron.right",
                         isLoading: viewModel.isAuthenticating
                     ) {
-                        Task { await viewModel.authenticate(using: appState, loc: loc) }
+                        submitLogin()
                     }
                     .disabled(viewModel.isAuthenticating)
 
@@ -362,6 +370,12 @@ struct LoginScreen: View {
     // and the helper link — these two screens are one journey and carried
     // byte-identical copies of all three. The tap count stays per-screen
     // `@State` and the unlock flag stays `@AppStorage`, hence the bindings.
+    /// The sign-in action, shared by the button and the password's Return key.
+    private func submitLogin() {
+        guard !viewModel.isAuthenticating else { return }
+        Task { await viewModel.authenticate(using: appState, loc: loc) }
+    }
+
     private func triggerEasterEgg() {
         PreAuthEasterEgg.tap(
             tapCount: $easterEggTaps,
@@ -395,7 +409,7 @@ struct LoginScreen: View {
                         .frame(width: 32, height: 32)
                     Image(systemName: "checkmark")
                         .font(.system(size: CinemaScale.pt(14), weight: .bold))
-                        .foregroundStyle(themeManager.onAccent)
+                        .foregroundStyle(themeManager.onAccentContainer)
                 }
                 Text(message)
                     .font(.system(size: CinemaScale.pt(15), weight: .semibold))

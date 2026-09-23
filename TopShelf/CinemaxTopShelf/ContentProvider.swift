@@ -54,7 +54,27 @@ final class ContentProvider: TVTopShelfContentProvider {
         /// absent.
         static func age(forRating rating: String?) -> Int {
             guard let rating else { return 0 }
-            return ageMap[rating.trimmingCharacters(in: .whitespaces).uppercased()] ?? 0
+            var key = rating.trimmingCharacters(in: .whitespaces).uppercased()
+            // "Rated R" and friends — the server strips the same prefixes.
+            if let prefix = ["RATED :", "RATED:", "RATED "].first(where: { key.hasPrefix($0) }) {
+                key = String(key.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+            }
+            if let age = ageMap[key] { return age }
+            let bare = key.hasSuffix("+") ? String(key.dropLast()) : key
+            if let age = ageMap[bare] { return age }
+            // A bare age ("16", "12+") is read as that age, like the server does.
+            if let age = Int(bare), age >= 0 { return age }
+            // A country or board prefix before the code: "FR-12", "DE-16",
+            // "Germany: FSK-18" — the TMDb provider writes the first form for every
+            // non-US country, i.e. the ordinary case of a French library.
+            if let separator = key.firstIndex(where: { $0 == "-" || $0 == ":" }) {
+                let left = key[..<separator]
+                let right = key[key.index(after: separator)...].trimmingCharacters(in: .whitespaces)
+                if left.count >= 2, left.allSatisfy(\.isLetter), !right.isEmpty {
+                    return age(forRating: right)
+                }
+            }
+            return 0
         }
 
         static func passes(rating: String?, maxAge: Int?) -> Bool {
@@ -249,18 +269,19 @@ final class ContentProvider: TVTopShelfContentProvider {
         }
     }
 
-    /// The ONE place the token legitimately stays in a URL: these URLs are handed
-    /// to `TVTopShelfSectionedItem.setImageURL`, i.e. the SYSTEM fetches them —
-    /// we never issue the request, so header auth is impossible here.
-    /// `ApiKey`, never `api_key`: the legacy spelling is rejected by Jellyfin
-    /// 12.0's default (`EnableLegacyAuthorization = false`).
+    /// These URLs are handed to `TVTopShelfSectionedItem.setImageURL`, i.e. the
+    /// SYSTEM fetches them, so no header can ride along — and none is needed:
+    /// `GET /Items/{id}/Images/{type}` carries no `[Authorize]` on any supported
+    /// server (verified 10.9 → 12.0), which is why the app's own posters load
+    /// with no auth at all. The `ApiKey` this used to append bought nothing and
+    /// put a non-expiring token in PineBoard's cache and in every reverse-proxy
+    /// access log on each shelf refresh (audit 2026-09-22, S5).
     private static func imageURL(session: Session, itemId: String, type: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/Items/\(itemId)/Images/\(type)", serverURL: session.serverURL)
         comps.queryItems = [
             URLQueryItem(name: "maxWidth", value: String(maxWidth)),
-            URLQueryItem(name: "quality", value: "90"),
-            URLQueryItem(name: "ApiKey", value: session.accessToken)
+            URLQueryItem(name: "quality", value: "90")
         ]
         return comps.url
     }

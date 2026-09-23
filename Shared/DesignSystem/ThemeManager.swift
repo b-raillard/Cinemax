@@ -167,6 +167,33 @@ final class ThemeManager {
         return Color.dynamic(light: p.onAccentLight, dark: p.onAccentDark)
     }
 
+    /// The label colour for anything drawn ON `accentContainer` — CTAs, the
+    /// selected chip, the first settings pill, the sheets' close button. White
+    /// where it reads, near-black where it does not (yellow, cyan, orange —
+    /// see `AccentLabelContrast`). Distinct from `onAccent`, which pairs with
+    /// `accent` and is near-black in dark mode by design.
+    var onAccentContainer: Color {
+        _ = _accentRevision
+        let dark: Bool
+        if isRainbow {
+            let rgb = UIColor(hue: CGFloat(_rainbowHue), saturation: 0.9, brightness: 0.88, alpha: 1)
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            rgb.getRed(&r, green: &g, blue: &b, alpha: &a)
+            dark = AccentLabelContrast.prefersDarkLabel(red: Double(r), green: Double(g), blue: Double(b))
+        } else {
+            let p = palette
+            // Both modes share the container on every palette but purple and
+            // pink, whose dark-mode fills also keep a white label.
+            let light = AccentLabelContrast.prefersDarkLabel(hex: p.containerLight)
+            let darkMode = AccentLabelContrast.prefersDarkLabel(hex: p.containerDark)
+            return Color.dynamic(
+                light: light ? AccentLabelContrast.darkLabel : 0xFFFFFF,
+                dark: darkMode ? AccentLabelContrast.darkLabel : 0xFFFFFF
+            )
+        }
+        return dark ? Color.dynamic(light: AccentLabelContrast.darkLabel, dark: AccentLabelContrast.darkLabel) : .white
+    }
+
     // MARK: - Color Scheme
 
     var colorScheme: ColorScheme? {

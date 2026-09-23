@@ -297,7 +297,9 @@ final class SearchViewModel {
     var showPermissionAlert = false
     var permissionError: VoiceSearchPermissionError?
 
-    private var searchTask: Task<Void, Never>?
+    /// Readable (not writable) outside the type so a test can await the
+    /// debounced search instead of sleeping past the debounce.
+    private(set) var searchTask: Task<Void, Never>?
 
     #if os(iOS)
     private let speechHelper = SpeechRecognitionHelper()

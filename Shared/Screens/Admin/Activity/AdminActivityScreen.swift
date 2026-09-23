@@ -138,12 +138,6 @@ struct AdminActivityScreen: View {
             .frame(width: 8, height: 8)
     }
 
-    // Hoisted out of the per-row helper — `RelativeDateTimeFormatter()` init is
-    // non-trivial and was previously allocated on every list row render. Only
-    // ever touched during main-actor view rendering, so `nonisolated(unsafe)`
-    // is safe.
-    nonisolated(unsafe) private static let relativeFormatter = AdminRelativeFormatter.make(.full)
-
     /// The server's one-line summary, or `nil` when it says nothing. Jellyfin
     /// fills it from a template even when the value is missing, which printed
     /// a bare « Adresse IP : » under half the sign-in events — a label whose
@@ -160,7 +154,7 @@ struct AdminActivityScreen: View {
     }
 
     private func relativeTimeLabel(for date: Date) -> String {
-        AdminRelativeFormatter.string(for: date, with: Self.relativeFormatter, languageCode: loc.languageCode)
+        AdminRelativeFormatter.string(for: date, style: .full, locale: loc.locale)
     }
 }
 #endif

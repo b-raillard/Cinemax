@@ -21,7 +21,7 @@ final class AdminPluginsViewModel {
         !isLoading && errorMessage == nil && plugins.isEmpty
     }
 
-    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func load(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         isLoading = plugins.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -33,7 +33,7 @@ final class AdminPluginsViewModel {
         }
     }
 
-    func setEnabled(_ plugin: PluginInfo, enabled: Bool, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func setEnabled(_ plugin: PluginInfo, enabled: Bool, using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         guard let id = plugin.id, let version = plugin.version else { return false }
         pendingActionPluginId = id
         defer { pendingActionPluginId = nil }
@@ -53,7 +53,7 @@ final class AdminPluginsViewModel {
         }
     }
 
-    func uninstall(_ plugin: PluginInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func uninstall(_ plugin: PluginInfo, using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         guard let id = plugin.id, let version = plugin.version else { return false }
         pendingActionPluginId = id
         defer { pendingActionPluginId = nil }

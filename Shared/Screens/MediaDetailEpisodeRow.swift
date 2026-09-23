@@ -90,7 +90,7 @@ struct MediaDetailEpisodeRow: View, Equatable {
                                 if isPlayed {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: CinemaScale.pt(22), weight: .semibold))
-                                        .foregroundStyle(.white, CinemaColor.surface.opacity(0.8))
+                                        .foregroundStyle(CinemaColor.onSurface, CinemaColor.surface.opacity(0.85))
                                         .padding(6)
                                 }
                             }

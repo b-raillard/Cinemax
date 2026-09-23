@@ -93,3 +93,62 @@ enum PlaybackEndPolicy {
         return mediaConfirmedOpen ? .unexpectedStop : .ignore
     }
 }
+
+// MARK: - Retry after a playback failure
+
+/// What a playback failure (`.encounteredError`, an unexpected stop, a failed
+/// HLS open, the open watchdog) must do — the decision half of
+/// `VLCStreamPresenter.handlePlaybackError`, extracted in the #193 line after
+/// `SeekMachine` so the zone every recent playback regression came from (B2,
+/// B5, B9) is finally under test. The presenter keeps the effects: the proxy
+/// wait, the reopen, the alert.
+enum PlaybackRetryDecision: Equatable {
+    /// First failure of this open: retry once. `noteDirectFailure` is true
+    /// when the failed attempt went DIRECT — the presenter then pins the rest
+    /// of the session to the loopback proxy (`noteDirectPlaybackFailed`).
+    case retry(noteDirectFailure: Bool)
+    /// A late signal of a failure already being handled: the error alert is
+    /// up, or a retry is still readying the proxy. Acting on it would stack a
+    /// second alert or release the server session the retry is using.
+    case ignore
+    /// The single retry failed too: show « Lecture impossible ».
+    /// `releaseStickyProxy` is true when that last attempt went THROUGH the
+    /// proxy — the next playback must try direct again rather than stay
+    /// pinned to a path that just failed (`noteProxiedPlaybackFailed`).
+    case giveUp(releaseStickyProxy: Bool)
+}
+
+enum PlaybackRetryPolicy {
+    /// - Parameters:
+    ///   - didRetry: this open has already spent its one retry. Renewed only by
+    ///     `noteMediaOpened()` — never by `.playing` (see the RULE).
+    ///   - errorAlertShowing: « Lecture impossible » is already on screen.
+    ///   - retryPending: a retry token is outstanding (the retry is awaiting the
+    ///     proxy and has not reached its own `play()` yet).
+    ///   - usingProxy: the attempt that just failed went through the proxy.
+    static func decide(
+        didRetry: Bool,
+        errorAlertShowing: Bool,
+        retryPending: Bool,
+        usingProxy: Bool
+    ) -> PlaybackRetryDecision {
+        if !didRetry {
+            return .retry(noteDirectFailure: !usingProxy)
+        }
+        if errorAlertShowing || retryPending {
+            return .ignore
+        }
+        return .giveUp(releaseStickyProxy: usingProxy)
+    }
+
+    /// Where the retry reopens, in seconds, or `nil` to keep the open's own
+    /// resume point. A drop AFTER playback had begun (an HTTP/2 RST, a
+    /// transient blip) resumes where it dropped; a failure before the first
+    /// second (a fresh open that never played) keeps the original `startTime`
+    /// — the playhead then reads the pre-seek 0, not a position worth keeping.
+    static func resumeSeconds(lastKnownPositionMs: Int32) -> Double? {
+        guard lastKnownPositionMs > 1000 else { return nil }
+        return Double(lastKnownPositionMs) / 1000
+    }
+}
+

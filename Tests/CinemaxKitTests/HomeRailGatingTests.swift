@@ -18,6 +18,10 @@ struct HomeRailGatingTests {
         return item
     }
 
+    /// This suite's own store — its rail switches never reach `.standard`,
+    /// where other suites loading Home in parallel would read them.
+    private let defaults = UserDefaults.isolatedForTesting()
+
     private func makeAppState(api: MockAPIClient) -> AppState {
         let appState = AppState(apiClient: api, keychain: MockKeychain())
         appState.currentUserId = "user1"
@@ -33,7 +37,6 @@ struct HomeRailGatingTests {
         becauseYouWatched: Bool = true,
         genreRows: Bool = true, watchingNow: Bool = true
     ) {
-        let defaults = UserDefaults.standard
         defaults.set(nextUp, forKey: SettingsKey.homeShowNextUp)
         defaults.set(favorites, forKey: SettingsKey.homeShowFavorites)
         defaults.set(playlists, forKey: SettingsKey.homeShowPlaylists)
@@ -45,7 +48,6 @@ struct HomeRailGatingTests {
     }
 
     private func clearRails() {
-        let defaults = UserDefaults.standard
         for key in [
             SettingsKey.homeShowNextUp, SettingsKey.homeShowFavorites,
             SettingsKey.homeShowPlaylists, SettingsKey.homeShowUpcoming,
@@ -74,7 +76,7 @@ struct HomeRailGatingTests {
         // A played item exists, so the rail WOULD have something to show —
         // the negative below is about the switch, not about an empty history.
         api.stubbedLastPlayedItems = [makeItem(name: "Watched")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: makeAppState(api: api))
 
@@ -105,7 +107,7 @@ struct HomeRailGatingTests {
         let api = MockAPIClient()
         api.stubbedGenres = ["Action"]
         api.stubbedLastPlayedItems = [makeItem(name: "Watched")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: makeAppState(api: api))
 
@@ -128,7 +130,7 @@ struct HomeRailGatingTests {
 
         let api = MockAPIClient()
         api.stubbedUpcomingItems = [makeItem(name: "Airing soon")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
         let loadingBefore = vm.isLoading
 
         await vm.refreshRail(.upcoming, using: makeAppState(api: api))
@@ -170,7 +172,7 @@ struct HomeRailGatingTests {
         let api = MockAPIClient()
         api.stubbedLastPlayedItems = [makeEpisode(id: "ep-4", seriesId: "arrow", seriesName: "Arrow")]
         api.stubbedSimilarItems = [makeItem(name: "Flash"), makeItem(name: "Legends")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: makeAppState(api: api))
 
@@ -206,7 +208,7 @@ struct HomeRailGatingTests {
             makeItem(name: "Fresh"),
             makeItem(name: "Fresh"),         // duplicate
         ]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: makeAppState(api: api))
 
@@ -221,7 +223,7 @@ struct HomeRailGatingTests {
         let api = MockAPIClient()
         api.stubbedLastPlayedItems = []
         api.stubbedSimilarItems = [makeItem(name: "Orphan")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: makeAppState(api: api))
 
@@ -237,7 +239,7 @@ struct HomeRailGatingTests {
         let api = MockAPIClient()
         api.stubbedLastPlayedItems = [makeItem(name: "Seed")]
         api.stubbedSimilarItems = [makePlayed("Seen 1"), makePlayed("Seen 2")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: makeAppState(api: api))
 
@@ -253,7 +255,7 @@ struct HomeRailGatingTests {
         let api = MockAPIClient()
         api.stubbedLastPlayedItems = [makeItem(name: "Seed")]
         api.stubbedSimilarItems = [makeItem(name: "Fresh")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
         let loadingBefore = vm.isLoading
 
         await vm.refreshRail(.becauseYouWatched, using: makeAppState(api: api))
@@ -275,7 +277,7 @@ struct HomeRailGatingTests {
         api.stubbedLastPlayedItems = [makeItem(name: "First")]
         api.stubbedSimilarItems = [makeItem(name: "Like first")]
         let appState = makeAppState(api: api)
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: appState)
         #expect(vm.becauseYouWatched?.seedTitle == "First")
@@ -296,13 +298,26 @@ struct HomeRailGatingTests {
 
         let api = MockAPIClient()
         api.stubbedLastPlayedItems = [makeItem(name: "Seed")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.refreshUserDataRails(using: makeAppState(api: api))
 
         #expect(api.getResumeItemsCallCount == 1, "the control: the tier-2 refresh did run")
         #expect(api.getItemsQueries.contains { isSeedQuery($0.filters) } == false)
         #expect(api.getSimilarItemsCallCount == 0)
+    }
+
+    @Test("switched off, the tier-2 refresh skips Next Up and Favorites too")
+    func tierTwoSkipsDisabledNextUpAndFavorites() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel(defaults: defaults)
+
+        // Stated, not stored: no `UserDefaults.standard` race with other suites.
+        await vm.refreshUserDataRails(using: makeAppState(api: api), showNextUp: false, showFavorites: false)
+
+        #expect(api.getResumeItemsCallCount == 1, "the control: the tier-2 refresh did run")
+        #expect(api.getNextUpEpisodesCallCount == 0)
+        #expect(api.favoriteFetchCount == 0)
     }
 
     @Test("a movie seeds itself; an episode with no series seeds nothing")
@@ -329,7 +344,7 @@ struct HomeRailGatingTests {
         let api = MockAPIClient()
         api.stubbedGenres = ["Action"]
         api.stubbedLastPlayedItems = [makeItem(name: "Watched")]
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: makeAppState(api: api))
 
@@ -338,6 +353,37 @@ struct HomeRailGatingTests {
         #expect(api.getItemsQueries.isEmpty == false, "the assertion above must not pass vacuously")
         #expect(api.getItemsQueries.contains { isSeedQuery($0.filters) },
                 "the « Parce que vous avez vu » seed query must be among those checked")
+    }
+
+    // MARK: - P8 — lean fields for queries that only feed cards
+
+    /// A card never prints a synopsis or a genre line, so a query whose items
+    /// are only drawn as cards asks for `.card`. The Recently Added query also
+    /// feeds the HERO (`heroItem = resumeItems.first ?? latestItems.first`),
+    /// which prints both — it must keep `.detail`.
+    @Test("card-only Home queries ask for lean fields; the hero's source keeps them")
+    func cardQueriesAreLean() async {
+        setRails()
+        defer { clearRails() }
+
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action"]
+        let vm = HomeViewModel(defaults: defaults)
+
+        await vm.load(using: makeAppState(api: api))
+
+        let queries = api.getItemsQueries
+        let genreRow = queries.first { $0.genres == ["Action"] }
+        let favorites = queries.first { $0.isFavorite == true }
+        let collections = queries.first { $0.includeItemTypes == [.boxSet] }
+        let heroSource = queries.first {
+            $0.includeItemTypes == [.movie, .series] && $0.isFavorite == nil && $0.genres == nil
+        }
+        #expect(genreRow?.fieldSet == .card)
+        #expect(favorites?.fieldSet == .card)
+        #expect(collections?.fieldSet == .card)
+        #expect(heroSource?.fieldSet == .detail)
+        #expect(heroSource != nil, "the hero-source assertion must not pass vacuously")
     }
 
     /// The paired control, and the half that must never regress: a caller that

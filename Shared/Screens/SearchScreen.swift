@@ -313,7 +313,7 @@ struct SearchScreen: View {
         } label: {
             Text(loc.localized(scope.localizationKey))
                 .font(CinemaFont.label(.medium))
-                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurfaceVariant)
+                .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
                 .padding(.horizontal, CinemaSpacing.spacing3)
                 .padding(.vertical, CinemaSpacing.spacing2)
                 .background(
@@ -526,9 +526,9 @@ struct SearchScreen: View {
                 Text(label)
                     .font(.system(size: surpriseLabelSize, weight: .semibold))
             }
-            // Accent CTA: saturated `accentContainer` + `.white`, like every
-            // other accent CTA (`CinemaButton(style: .accent)`).
-            .foregroundStyle(.white)
+            // Accent CTA: saturated `accentContainer` + its contrast-checked
+            // label, like every other accent CTA (`CinemaButton(style: .accent)`).
+            .foregroundStyle(themeManager.onAccentContainer)
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
             .background(themeManager.accentContainer)
@@ -857,16 +857,26 @@ private struct SearchResultCard: View, Equatable {
 
     /// Published by `SearchScreen` on the grid — see `CardZoom`.
     @Environment(\.cardZoomScope) private var zoomScope
+    @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
-        let subtitle = Self.subtitle(for: item)
+        let subtitle = Self.subtitle(for: item, loc: loc)
         let zoom = zoomScope?.zoom(for: item.id)
+        // One value feeds both the overlay and VoiceOver, so the card
+        // cannot announce a state it does not draw.
+        let status = MediaCardStatus.make(
+            positionTicks: item.userData?.playbackPositionTicks,
+            runtimeTicks: item.runTimeTicks,
+            isPlayed: item.userData?.isPlayed
+        )
 
         NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = item.id {
+                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: item.name ?? "",
@@ -874,11 +884,7 @@ private struct SearchResultCard: View, Equatable {
                     imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
                 },
                 subtitle: subtitle,
-                status: .make(
-                    positionTicks: item.userData?.playbackPositionTicks,
-                    runtimeTicks: item.runTimeTicks,
-                    isPlayed: item.userData?.isPlayed
-                ),
+                status: status,
                 zoomSource: zoom
             )
         }
@@ -892,6 +898,7 @@ private struct SearchResultCard: View, Equatable {
                 .compactMap { $0 }
                 .joined(separator: ", ")
         )
+        .mediaCardStatusAccessibility(status)
         // Long-press / long-press-select watched + favorite actions, on the
         // NavigationLink (the focusable button) not its label — see
         // `mediaCardContextMenu`.
@@ -902,13 +909,13 @@ private struct SearchResultCard: View, Equatable {
         )
     }
 
-    private static func subtitle(for item: BaseItemDto) -> String {
+    private static func subtitle(for item: BaseItemDto, loc: LocalizationManager) -> String {
         var parts: [String] = []
         if let year = item.productionYear { parts.append(String(year)) }
         if item.type == .episode, let seriesName = item.seriesName {
             parts.append(seriesName)
-        } else if let type = item.type {
-            parts.append(type.rawValue)
+        } else if let type = item.type, let kind = loc.itemKind(type) {
+            parts.append(kind)
         }
         return parts.joined(separator: " · ")
     }

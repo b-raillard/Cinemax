@@ -100,7 +100,14 @@ final class HomeViewModel {
     /// completes. `HomeScreen` gates the all-empty `EmptyStateView` on this so
     /// it can't flash mid-load while later phases are still populating.
     var isFullyLoaded = false
-    var errorMessage: String?
+    /// Set when EVERY phase-1 fetch of the last load failed — the server could
+    /// not be reached, or refused every request. Kept apart from "the server
+    /// answered and has nothing", because the two used to render the same
+    /// « Votre bibliothèque est vide » screen: offline, the app told the user
+    /// their content was gone and invited them to add films. `HomeScreen`
+    /// shows an error state for it only while there is nothing on screen, so
+    /// a failed refresh never blanks rails that loaded earlier.
+    private(set) var loadFailure: (any Error)?
 
     /// How many cards "Recently Added" shows, and how many of them may be
     /// shows-that-just-got-episodes. The cap is what keeps the second source a
@@ -147,6 +154,54 @@ final class HomeViewModel {
     /// genre rows. Same pattern as `MediaLibraryViewModel.hasLoaded`.
     private var hasLoaded = false
 
+    /// Where the rail switches and genre picks are read. `.standard` in the
+    /// app; a test passes its own suite (see `HomeRailPreferences.snapshot`).
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// Bumped by every `load`. Two loads overlap routinely (a pull-to-refresh
+    /// during the first paint, the tier-1 refresh a server switch posts while
+    /// the previous server's load is still in flight), and without it the
+    /// slower one — often the OLDER one — wrote its rails last (audit
+    /// 2026-09-22, B13).
+    private var loadGeneration = 0
+    /// Server + account the rails on screen belong to. A load for another
+    /// identity clears them first: rails from the previous server were
+    /// otherwise left on screen — tappable, pointing at ids this server does
+    /// not have — for as long as the new load took, and for good when it
+    /// failed (`loadFailure` only replaces an EMPTY Home).
+    private var loadedIdentity: String?
+
+    /// Whether a pass started under `generation` may still write. A newer
+    /// `load` supersedes it, and so does cancellation: when a superseded load
+    /// returns, its `async let` children are cancelled and every `try?` in
+    /// them comes back empty — written out, that painted `.failed` genre rows
+    /// and an empty « En direct » over the NEWER load's screen, which also hid
+    /// its error state behind them (adversarial review of B13, 2026-09-22).
+    private func isCurrent(_ generation: Int) -> Bool {
+        generation == loadGeneration && !Task.isCancelled
+    }
+
+    private func clearContent() {
+        heroItem = nil
+        resumeItems = []
+        latestItems = []
+        favoriteItems = []
+        playlists = []
+        upcomingItems = []
+        collections = []
+        becauseYouWatched = nil
+        nextUpItems = []
+        genreRows = []
+        resumeNavigation = [:]
+        nextUpNavigation = [:]
+        activeSessions = []
+        syncPlayGroups = []
+    }
+
     /// First load — no-op if content is already loaded (screen remount).
     func loadInitial(using appState: AppState) async {
         guard !hasLoaded else { return }
@@ -166,15 +221,25 @@ final class HomeViewModel {
     func load(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         hasLoaded = true
+        loadGeneration += 1
+        let generation = loadGeneration
+        let identity = "\(appState.activeServerId ?? "-")|\(userId)"
+        if loadedIdentity != identity {
+            if loadedIdentity != nil { clearContent() }
+            loadedIdentity = identity
+        }
         isLoading = true
         isFullyLoaded = false
-        errorMessage = nil
 
         enum Section {
             case resume([BaseItemDto]); case latest([BaseItemDto]); case favorites([BaseItemDto])
             case nextUp([BaseItemDto]); case playlists([BaseItemDto])
             case upcoming([BaseItemDto]); case collections([BaseItemDto])
+            case failed(any Error)
         }
+        var anySucceeded = false
+        var firstError: (any Error)?
+        var sections: [Section] = []
 
         // A rail the user has switched off is not fetched. Every branch below
         // used to run unconditionally, so « Prochainement » and « Collections »
@@ -185,16 +250,7 @@ final class HomeViewModel {
         //
         // Resume and Recently Added are deliberately absent from the gate:
         // they also feed `heroItem` below, and the hero is never gated.
-        let rails = (
-            nextUp: HomeRailPreferences.showNextUp,
-            favorites: HomeRailPreferences.showFavorites,
-            playlists: HomeRailPreferences.showPlaylists,
-            upcoming: HomeRailPreferences.showUpcoming,
-            collections: HomeRailPreferences.showCollections,
-            becauseYouWatched: HomeRailPreferences.showBecauseYouWatched,
-            genreRows: HomeRailPreferences.showGenreRows,
-            watchingNow: HomeRailPreferences.showWatchingNow
-        )
+        let rails = HomeRailPreferences.snapshot(in: defaults)
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
@@ -202,7 +258,7 @@ final class HomeViewModel {
                     return .resume(try await appState.apiClient.getResumeItems(userId: userId, limit: 20))
                 } catch {
                     logger.warning("Home resume fetch failed: \(error.localizedDescription, privacy: .public)")
-                    return nil
+                    return .failed(error)
                 }
             }
             group.addTask {
@@ -253,11 +309,12 @@ final class HomeViewModel {
                             sortOrder: [.descending],
                             isFavorite: true,
                             limit: 20,
-                            enableTotalRecordCount: false
+                            enableTotalRecordCount: false,
+                            fieldSet: .card
                         ).items)
                     } catch {
                         logger.warning("Home favorites fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -267,7 +324,7 @@ final class HomeViewModel {
                         return .nextUp(try await appState.apiClient.getNextUpEpisodes(userId: userId, limit: 20))
                     } catch {
                         logger.warning("Home next-up fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -277,7 +334,7 @@ final class HomeViewModel {
                         return .playlists(try await appState.apiClient.getPlaylists(userId: userId))
                     } catch {
                         logger.warning("Home playlists fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -287,7 +344,7 @@ final class HomeViewModel {
                         return .upcoming(try await appState.apiClient.getUpcomingEpisodes(userId: userId, limit: 20))
                     } catch {
                         logger.warning("Home upcoming fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
@@ -302,29 +359,57 @@ final class HomeViewModel {
                             sortBy: [.sortName],
                             sortOrder: [.ascending],
                             limit: 20,
-                            enableTotalRecordCount: false
+                            enableTotalRecordCount: false,
+                            fieldSet: .card
                         ).items)
                     } catch {
                         logger.warning("Home collections fetch failed: \(error.localizedDescription, privacy: .public)")
-                        return nil
+                        return .failed(error)
                     }
                 }
             }
             for await result in group {
-                switch result {
-                case .resume(let items): resumeItems = items
-                case .latest(let items): latestItems = items
-                case .favorites(let items): favoriteItems = items
-                case .nextUp(let items): nextUpItems = items
-                case .playlists(let items): playlists = items
-                case .upcoming(let items): upcomingItems = items
-                case .collections(let items): collections = items
-                case nil: break
+                // A `nil` is the Recently Added task, whose two sources degrade
+                // on their own and report no error when both fail.
+                guard let result else { continue }
+                if case .failed(let error) = result {
+                    if firstError == nil { firstError = error }
+                    continue
                 }
+                anySucceeded = true
+                sections.append(result)
+            }
+        }
+
+        // Superseded while phase 1 was in flight: the newer load owns every
+        // slice from here on, including the loading flags.
+        guard generation == loadGeneration else { return }
+        for result in sections {
+            switch result {
+            case .resume(let items): resumeItems = items
+            case .latest(let items): latestItems = items
+            case .favorites(let items): favoriteItems = items
+            case .nextUp(let items): nextUpItems = items
+            case .playlists(let items): playlists = items
+            case .upcoming(let items): upcomingItems = items
+            case .collections(let items): collections = items
+            case .failed: break
             }
         }
 
         heroItem = resumeItems.first ?? latestItems.first
+
+        // Every source failed: the server is unreachable (or refusing every
+        // request). Stop here rather than running phase 2 — its genre fan-out
+        // would only fail the same way, after up to another request timeout
+        // spent behind the skeleton. Cancellation is not a failure.
+        guard anySucceeded || Task.isCancelled else {
+            loadFailure = firstError ?? URLError(.unknown)
+            isLoading = false
+            isFullyLoaded = true
+            return
+        }
+        loadFailure = nil
 
         // Progressive render: the hero + rails are ready, so drop the skeleton
         // now. Genre rows, active sessions, and the episode-nav maps keep filling
@@ -339,16 +424,16 @@ final class HomeViewModel {
         // single most expensive thing on this screen (up to 8 queries), and the
         // « En direct » pair costs two more.
         async let genreRowsDone: Void = rails.genreRows
-            ? loadGenreRows(userId: userId, appState: appState)
+            ? loadGenreRows(userId: userId, appState: appState, generation: generation)
             : ()
         async let sessionsDone: Void = rails.watchingNow
-            ? loadActiveSessions(userId: userId, appState: appState)
+            ? loadActiveSessions(userId: userId, appState: appState, generation: generation)
             : ()
         // Phase 2, not phase 1: its exclusion list is Continue Watching, which
         // is only known once phase 1 has landed — and the rail sits just above
         // the genre rows, so filling in late moves nothing already on screen.
         async let becauseYouWatchedDone: Void = rails.becauseYouWatched
-            ? loadBecauseYouWatched(userId: userId, appState: appState)
+            ? loadBecauseYouWatched(userId: userId, appState: appState, generation: generation)
             : ()
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
@@ -360,11 +445,15 @@ final class HomeViewModel {
         let seasonEpisodes = await fetchSeasonEpisodes(
             for: resumeEpisodes + nextUpEpisodes, userId: userId, appState: appState
         )
+        // Returning here cancels this load's own genre / sessions / « Parce
+        // que vous avez vu » children, which the newer load re-runs anyway.
+        guard generation == loadGeneration else { return }
         resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
         nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
 
         _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone)
 
+        guard generation == loadGeneration else { return }
         isFullyLoaded = true
     }
 
@@ -501,7 +590,15 @@ final class HomeViewModel {
     private func refreshResume(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         if let items = try? await appState.apiClient.getResumeItems(userId: userId, limit: 20) {
-            resumeItems = items
+            if items != resumeItems { resumeItems = items }
+            // The hero is derived from this rail, and `load()` used to be its
+            // only writer: iOS draws its carousel off `resumeItems` live, but
+            // tvOS renders `heroItem`, so after a playback its « Reprendre »
+            // reopened the film where it was at page load while the card right
+            // under it showed the new position — and a film just finished
+            // stayed in the hero. Equality-guarded like every write here.
+            let hero = resumeItems.first ?? latestItems.first
+            if hero != heroItem { heroItem = hero }
         }
     }
 
@@ -512,15 +609,17 @@ final class HomeViewModel {
     func refreshFavorites(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         do {
-            favoriteItems = try await appState.apiClient.getItems(
+            let items = try await appState.apiClient.getItems(
                 userId: userId,
                 includeItemTypes: [.movie, .series],
                 sortBy: [.dateCreated],
                 sortOrder: [.descending],
                 isFavorite: true,
                 limit: 20,
-                enableTotalRecordCount: false
+                enableTotalRecordCount: false,
+                fieldSet: .card
             ).items
+            if items != favoriteItems { favoriteItems = items }
         } catch {
             logger.warning("Favorites refresh failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -550,9 +649,9 @@ final class HomeViewModel {
         case .playlists: await refreshPlaylists(using: appState)
         case .upcoming: await refreshUpcoming(using: appState)
         case .collections: await refreshCollections(using: appState)
-        case .becauseYouWatched: await loadBecauseYouWatched(userId: userId, appState: appState)
-        case .genreRows: await loadGenreRows(userId: userId, appState: appState)
-        case .watchingNow: await loadActiveSessions(userId: userId, appState: appState)
+        case .becauseYouWatched: await loadBecauseYouWatched(userId: userId, appState: appState, generation: loadGeneration)
+        case .genreRows: await loadGenreRows(userId: userId, appState: appState, generation: loadGeneration)
+        case .watchingNow: await loadActiveSessions(userId: userId, appState: appState, generation: loadGeneration)
         }
     }
 
@@ -637,7 +736,7 @@ final class HomeViewModel {
     /// refresh. Must run after `resumeItems` is known — it is the exclusion
     /// list. A failed request leaves the rail as it was (same discipline as
     /// `refreshCollections`); a SUCCESSFUL answer with nothing to show hides it.
-    private func loadBecauseYouWatched(userId: String, appState: AppState) async {
+    private func loadBecauseYouWatched(userId: String, appState: AppState, generation: Int) async {
         let lastPlayed: BaseItemDto?
         do {
             lastPlayed = try await appState.apiClient.getItems(
@@ -654,6 +753,7 @@ final class HomeViewModel {
             logger.warning("Home because-you-watched seed fetch failed: \(error.localizedDescription, privacy: .public)")
             return
         }
+        guard isCurrent(generation) else { return }
         guard let lastPlayed, let seed = Self.becauseYouWatchedSeed(from: lastPlayed) else {
             setBecauseYouWatched(nil)
             return
@@ -667,6 +767,7 @@ final class HomeViewModel {
             logger.warning("Home because-you-watched similar fetch failed: \(error.localizedDescription, privacy: .public)")
             return
         }
+        guard isCurrent(generation) else { return }
         let items = Self.becauseYouWatchedItems(similar: similar, seedId: seed.id, resumeItems: resumeItems)
         setBecauseYouWatched(items.isEmpty ? nil : BecauseYouWatchedRail(seedTitle: seed.title, items: items))
     }
@@ -705,17 +806,30 @@ final class HomeViewModel {
     /// tolerate brief staleness". Both halves were wrong: a nil navigator also
     /// silences autoplay-next and the end-of-series card, and a card that has
     /// just ENTERED a rail has no entry at all rather than a stale one.
-    func refreshUserDataRails(using appState: AppState) async {
+    /// The two switches are parameters (nil = the stored preferences, read from
+    /// the injected `defaults`) so a test can state them outright.
+    func refreshUserDataRails(
+        using appState: AppState,
+        showNextUp: Bool? = nil,
+        showFavorites: Bool? = nil
+    ) async {
+        // Same gate as `load()`: a rail the user switched off is not fetched —
+        // this ran on every playback end and every watched toggle anywhere in
+        // the app, so the two gated rails cost two requests each time for
+        // cards nobody could see. Resume stays ungated: it feeds the hero.
+        let rails = HomeRailPreferences.snapshot(in: defaults)
+        let showNextUp = showNextUp ?? rails.nextUp
+        let showFavorites = showFavorites ?? rails.favorites
         async let resume: Void = refreshResume(using: appState)
-        async let nextUp: Void = refreshNextUp(using: appState)
-        async let favorites: Void = refreshFavorites(using: appState)
+        async let nextUp: Void = showNextUp ? refreshNextUp(using: appState) : ()
+        async let favorites: Void = showFavorites ? refreshFavorites(using: appState) : ()
         _ = await (resume, nextUp, favorites)
         // « Parce que vous avez vu … » is userData-dependent twice over: its
         // SEED is the last played item — finishing a film is exactly when it
         // should change — and it excludes what is played or in Continue
         // Watching. After the resume fetch, which it filters against.
         async let navigation: Void = fillMissingEpisodeNavigation(using: appState)
-        async let recommendations: Void = HomeRailPreferences.showBecauseYouWatched
+        async let recommendations: Void = rails.becauseYouWatched
             ? refreshRail(.becauseYouWatched, using: appState)
             : ()
         _ = await (navigation, recommendations)
@@ -764,7 +878,7 @@ final class HomeViewModel {
     private func refreshNextUp(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         if let items = try? await appState.apiClient.getNextUpEpisodes(userId: userId, limit: 20) {
-            nextUpItems = items
+            if items != nextUpItems { nextUpItems = items }
         }
     }
 
@@ -778,12 +892,12 @@ final class HomeViewModel {
     /// members, so a non-member is told nothing at all.
     func refreshLiveRow(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
-        await loadActiveSessions(userId: userId, appState: appState)
+        await loadActiveSessions(userId: userId, appState: appState, generation: loadGeneration)
     }
 
     /// Fetches active sessions and filters down to ones with a currently-playing item,
     /// excluding the logged-in user (their own "resume" already covers that).
-    private func loadActiveSessions(userId: String, appState: AppState) async {
+    private func loadActiveSessions(userId: String, appState: AppState, generation: Int) async {
         // Equality-guarded, all three of them: `HomeScreen` re-runs this every
         // 20 s while Accueil is the visible tab, and `@Observable` fires
         // `withMutation` even for an identical value — so an unchanged poll was
@@ -834,6 +948,7 @@ final class HomeViewModel {
         // groups down with it, and vice versa.
         let freshSessions = await sessions
         let freshGroups = await groups
+        guard isCurrent(generation) else { return }
         if activeSessions != freshSessions { activeSessions = freshSessions }
         if syncPlayGroups != freshGroups { syncPlayGroups = freshGroups }
     }
@@ -844,17 +959,17 @@ final class HomeViewModel {
     /// reflected live without re-running the whole Home load.
     func reloadGenreRows(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
-        await loadGenreRows(userId: userId, appState: appState)
+        await loadGenreRows(userId: userId, appState: appState, generation: loadGeneration)
     }
 
-    private func loadGenreRows(userId: String, appState: AppState) async {
+    private func loadGenreRows(userId: String, appState: AppState, generation: Int) async {
         let allGenres: [String]
         do {
             allGenres = try await appState.apiClient.getGenres(
                 userId: userId, includeItemTypes: [.movie, .series]
             )
         } catch {
-            genreRows = []
+            if isCurrent(generation) { genreRows = [] }
             return
         }
 
@@ -863,17 +978,17 @@ final class HomeViewModel {
         let sortedGenres = allGenres.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
         guard !sortedGenres.isEmpty else {
-            genreRows = []
+            if isCurrent(generation) { genreRows = [] }
             return
         }
 
         // User-configurable: the explicit picks (no cap), or a deterministic
         // default set when unconfigured. Each row's item fetch is still bounded
         // (limit 10) — we bound the fetch, not the number of rows.
-        let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres)
+        let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres, in: defaults)
 
         guard !picked.isEmpty else {
-            genreRows = []
+            if isCurrent(generation) { genreRows = [] }
             return
         }
 
@@ -906,6 +1021,7 @@ final class HomeViewModel {
             }
         }
 
+        guard isCurrent(generation) else { return }
         genreRows = picked.compactMap { genre in
             switch results[genre] {
             case .success(let items) where !items.isEmpty:
@@ -931,8 +1047,10 @@ final class HomeViewModel {
     func retryGenre(_ genre: String, using appState: AppState) async {
         guard let userId = appState.currentUserId,
               genreRows.contains(where: { $0.genre == genre }) else { return }
+        let generation = loadGeneration
         do {
             let items = try await Self.fetchGenreItems(genre: genre, userId: userId, appState: appState)
+            guard isCurrent(generation) else { return }
             guard let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
             if items.isEmpty {
                 genreRows.remove(at: index)
@@ -940,7 +1058,8 @@ final class HomeViewModel {
                 genreRows[index].state = .items(items)
             }
         } catch {
-            guard let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
+            guard isCurrent(generation),
+                  let index = genreRows.firstIndex(where: { $0.genre == genre }) else { return }
             genreRows[index].state = .failed
         }
     }
@@ -962,7 +1081,9 @@ final class HomeViewModel {
             startIndex: nil,
             // Only `.items` is read, and this runs once per genre row — up to 8
             // COUNT queries per Home load before this.
-            enableTotalRecordCount: false
+            enableTotalRecordCount: false,
+            // Genre rows are cards; the hero never comes from them (P8).
+            fieldSet: .card
         )
         return response.items
     }

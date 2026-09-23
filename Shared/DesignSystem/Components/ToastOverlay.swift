@@ -5,6 +5,9 @@ import SwiftUI
 struct ToastOverlay: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.motionEffectsEnabled) private var motionEnabled
+    /// Reports the visible pill's frame in global coordinates (`.zero` when
+    /// none) — `ToastWindowHost` uses it to pass every other touch through.
+    var onToastFrameChange: ((CGRect) -> Void)? = nil
 
     var body: some View {
         VStack {
@@ -12,6 +15,10 @@ struct ToastOverlay: View {
                 ToastView(toast: toast) {
                     toasts.dismiss()
                 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                    onToastFrameChange?($0)
+                }
+                .onDisappear { onToastFrameChange?(.zero) }
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.top, CinemaSpacing.spacing3)
@@ -52,13 +59,18 @@ private struct ToastView: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
+                // Dynamic Type: a toast is reading text, and the fixed sizes
+                // ignored the user's text size (audit 2026-09-22).
+                // No line limit: a toast is one sentence, and three lines cut
+                // « Vous restez connecté au serveur actuel » mid-word on an
+                // iPhone — the half that says nothing went wrong.
                 Text(toast.title)
-                    .font(CinemaFont.label(.large))
+                    .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let msg = toast.message {
                     Text(msg)
-                        .font(CinemaFont.body)
+                        .font(CinemaFont.dynamicBody)
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .lineLimit(3)
                 }
@@ -69,9 +81,13 @@ private struct ToastView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: CinemaScale.pt(13), weight: .bold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .padding(6)
+                    // The glyph stays small; the target is the 44 pt minimum
+                    // (it was ~25 pt), pulled back into the pill's padding.
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
+            .padding(.vertical, -CinemaSpacing.spacing2)
+            .padding(.trailing, -CinemaSpacing.spacing2)
             .buttonStyle(.plain)
             .accessibilityLabel(loc.localized("toast.dismiss"))
         }
@@ -86,5 +102,9 @@ private struct ToastView: View {
         )
         .shadow(color: Color.black.opacity(0.25), radius: 20, x: 0, y: 8)
         .accessibilityElement(children: .combine)
+        // The combined element reads title + message; closing it is an explicit
+        // action (and the escape gesture) rather than a separate element.
+        .accessibilityAction(named: loc.localized("toast.dismiss"), onDismiss)
+        .accessibilityAction(.escape, onDismiss)
     }
 }

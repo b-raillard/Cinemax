@@ -97,6 +97,8 @@ struct CollectionDetailTests {
         let vm = MediaDetailViewModel(itemId: "m1", itemType: .movie)
 
         await vm.load(using: appState, loc: LocalizationManager())
+        // A side task since the audit of 2026-09-22 (P1): awaited, not raced.
+        await vm.similarTask?.value
 
         #expect(api.getSimilarItemsCallCount == 1)
         #expect(vm.collectionChildren.isEmpty)

@@ -125,7 +125,7 @@ struct EpisodeRefsPayloadTests {
         }
         let appState = AppState(apiClient: api, keychain: MockKeychain())
         appState.currentUserId = "user1"
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
 
         await vm.load(using: appState)
 

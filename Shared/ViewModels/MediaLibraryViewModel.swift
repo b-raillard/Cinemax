@@ -346,14 +346,25 @@ final class MediaLibraryViewModel {
                             // Seul `.items` est lu (voir `GenreResult`), et ceci
                             // part une fois par genre — jusqu'à 8 COUNT serveur
                             // par ouverture d'onglet en disposition « parcourir ».
-                            enableTotalRecordCount: false
+                            enableTotalRecordCount: false,
+                            // Cards only — no synopsis or genre line (P8).
+                            fieldSet: .card
                         )
                         return GenreResult(genre: genre, items: result.items)
                     }
                 }
+                // One write per CHUNK, not per genre (audit P10): every write to
+                // this dictionary re-evaluates every genre row on screen, so
+                // eight single-genre writes cost eight passes over the whole
+                // browse layout. The rows still fill in progressively — chunk by
+                // chunk — which is what the progressive-render RULE asks for, and
+                // an identical answer (a re-attach, a pull-to-refresh with
+                // nothing new) writes nothing at all.
+                var merged = itemsByGenre
                 for try await entry in group {
-                    itemsByGenre[entry.genre] = entry.items
+                    merged[entry.genre] = entry.items
                 }
+                if merged != itemsByGenre { itemsByGenre = merged }
             }
         }
         // Reached only when every chunk completed without throwing (a failure or
@@ -634,7 +645,9 @@ final class MediaLibraryViewModel {
             filters: filters,
             nameStartsWithOrGreater: anchor,
             limit: limit,
-            startIndex: startIndex
+            startIndex: startIndex,
+            // The filtered grid draws cards only (P8).
+            fieldSet: .card
         )
         return (items: result.items, total: result.totalCount)
     }

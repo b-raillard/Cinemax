@@ -359,7 +359,7 @@ struct ServersScreen: View {
 
             Text(String(source.prefix(1)).uppercased())
                 .font(CinemaFont.label(.large))
-                .foregroundStyle(themeManager.onAccent)
+                .foregroundStyle(themeManager.onAccentContainer)
         }
         .accessibilityHidden(true)
     }
@@ -367,7 +367,7 @@ struct ServersScreen: View {
     private var currentPill: some View {
         Text(loc.localized("servers.current"))
             .font(CinemaFont.label(.small))
-            .foregroundStyle(themeManager.onAccent)
+            .foregroundStyle(themeManager.onAccentContainer)
             .padding(.horizontal, CinemaSpacing.spacing2)
             .padding(.vertical, 3)
             .background(Capsule().fill(themeManager.accentContainer))

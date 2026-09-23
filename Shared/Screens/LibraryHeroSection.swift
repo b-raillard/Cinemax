@@ -81,7 +81,7 @@ struct LibraryHeroSection: View {
                     Text(item.name ?? "")
                         .font(.system(size: heroTitleSize, weight: .black))
                         .tracking(-1.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CinemaColor.onSurface)
                         .textCase(.uppercase)
                         .lineLimit(2)
 
@@ -126,7 +126,7 @@ struct LibraryHeroSection: View {
                     Image(systemName: "play.fill")
                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(themeManager.onAccentContainer)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, heroButtonVerticalPadding)
                 .padding(.horizontal, CinemaSpacing.spacing4)
@@ -144,7 +144,9 @@ struct LibraryHeroSection: View {
             .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
 
             NavigationLink {
-                MediaDetailScreen(itemId: id, itemType: itemType)
+                DeferredView {
+                    MediaDetailScreen(itemId: id, itemType: itemType)
+                }
             } label: {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     Text(loc.localized("action.moreInfo"))
@@ -184,7 +186,7 @@ struct LibraryHeroSection: View {
         let parts: [String] = [
             item.productionYear.map(String.init),
             itemType == .series
-                ? item.childCount.map { loc.localized($0 == 1 ? "tvShows.season" : "tvShows.seasonsPlural", $0) }
+                ? item.childCount.map { loc.seasonCount($0) }
                 : item.formattedRuntime,
             item.genres?.first
         ].compactMap { $0 }

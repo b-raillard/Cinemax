@@ -106,8 +106,10 @@ struct PlaylistDetailScreen: View {
         List {
             ForEach(viewModel.items, id: \.playlistItemID) { item in
                 NavigationLink {
-                    if let id = item.id {
-                        MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    DeferredView {
+                        if let id = item.id {
+                            MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                        }
                     }
                 } label: {
                     PlaylistRow(item: item, imageBuilder: appState.imageBuilder)
@@ -148,8 +150,10 @@ struct PlaylistDetailScreen: View {
                     // the destination closure is honored inside a lazy
                     // container, only the `item:` modifier is not.
                     NavigationLink {
-                        if let id = item.id {
-                            MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                        DeferredView {
+                            if let id = item.id {
+                                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                            }
                         }
                     } label: {
                         PlaylistRow(item: item, imageBuilder: appState.imageBuilder)

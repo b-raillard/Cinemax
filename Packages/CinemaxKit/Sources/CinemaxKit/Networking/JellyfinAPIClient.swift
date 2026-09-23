@@ -301,6 +301,7 @@ public final class JellyfinAPIClient: Sendable {
     /// Fetches server info using the existing client (does NOT replace it).
     public func fetchServerInfo() async throws -> ServerInfo {
         let cacheKey = "serverInfo"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
         if let cached: ServerInfo = cache.get(cacheKey) {
             // Re-seed the version on the cache-hit path too, so "we have server
             // info" and "we know the version" can never disagree — `reconnect`
@@ -325,7 +326,7 @@ public final class JellyfinAPIClient: Sendable {
             version: info.version ?? "",
             url: url
         )
-        cache.set(cacheKey, value: result, ttl: 600)
+        cache.set(cacheKey, value: result, ttl: 600, stamp: cacheStamp)
         return result
     }
 

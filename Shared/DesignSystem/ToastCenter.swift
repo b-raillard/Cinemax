@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 /// A single queued toast message.
 struct Toast: Identifiable, Equatable {
@@ -42,10 +43,23 @@ final class ToastCenter {
     private var dismissTask: Task<Void, Never>?
 
     /// Enqueue and display a toast. If another toast is currently showing, it is replaced.
+    ///
+    /// Announced to VoiceOver HERE, not by the overlay (audit 2026-09-22, U3):
+    /// a toast is feedback for an action — « Ajouté aux favoris », « Marqué
+    /// comme vu », an error — and VoiceOver said nothing about any of them. The
+    /// overlay also sits under every sheet, so a toast raised from one is never
+    /// SEEN; an announcement still reaches the user. Under VoiceOver the toast
+    /// also stays up longer, so it can still be reached (and dismissed through
+    /// its combined element's action) after the announcement.
     func show(_ toast: Toast) {
         dismissTask?.cancel()
         current = toast
-        dismissTask = Task { [weak self, id = toast.id, duration = toast.duration] in
+        let voiceOver = UIAccessibility.isVoiceOverRunning
+        if voiceOver {
+            UIAccessibility.post(notification: .announcement, argument: Self.announcement(for: toast))
+        }
+        let duration = Self.effectiveDuration(toast.duration, voiceOverRunning: voiceOver)
+        dismissTask = Task { [weak self, id = toast.id, duration] in
             try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
             guard !Task.isCancelled else { return }
             await MainActor.run {
@@ -72,5 +86,17 @@ final class ToastCenter {
     func dismiss() {
         dismissTask?.cancel()
         current = nil
+    }
+
+    /// What VoiceOver speaks: the title, then the message when there is one.
+    nonisolated static func announcement(for toast: Toast) -> String {
+        guard let message = toast.message, !message.isEmpty else { return toast.title }
+        return "\(toast.title). \(message)"
+    }
+
+    /// A toast read by VoiceOver must outlive the announcement and leave time
+    /// to reach it: never under 6 s, and twice the sighted duration beyond that.
+    nonisolated static func effectiveDuration(_ duration: TimeInterval, voiceOverRunning: Bool) -> TimeInterval {
+        voiceOverRunning ? max(duration * 2, 6) : duration
     }
 }

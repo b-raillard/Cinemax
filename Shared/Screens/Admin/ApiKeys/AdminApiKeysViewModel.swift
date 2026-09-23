@@ -40,7 +40,7 @@ final class AdminApiKeysViewModel {
 
     // MARK: - Load
 
-    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func load(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         isLoading = keys.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -89,7 +89,7 @@ final class AdminApiKeysViewModel {
     /// Creates a key, refetches, and identifies the new one as the token that
     /// was not there before — the server hands out no usable id (see
     /// `listable`). Compared in memory only, never stored or hashed.
-    func createKey(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func createKey(using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         let name = newAppName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return false }
         isCreating = true
@@ -136,7 +136,7 @@ final class AdminApiKeysViewModel {
 
     // MARK: - Revoke
 
-    func revoke(_ key: AuthenticationInfo, using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func revoke(_ key: AuthenticationInfo, using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         guard let token = key.accessToken else { return false }
         do {
             try await apiClient.revokeApiKey(key: token)

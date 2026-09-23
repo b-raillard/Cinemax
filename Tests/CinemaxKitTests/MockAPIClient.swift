@@ -76,8 +76,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     private(set) var reconnectedURLs: [URL] = []
     private(set) var reconnectedTokens: [String] = []
 
+    /// The version the "client" currently knows. Mirrors the real client's
+    /// contract: a reconnect onto a DIFFERENT URL forgets it.
+    var learnedVersion: ServerVersion?
+    func knownServerVersion() -> ServerVersion? { recordLock.withLock { learnedVersion } }
+
     func reconnect(url: URL, accessToken: String) {
         recordLock.withLock {
+            if reconnectedURLs.last != url { learnedVersion = nil }
             reconnectCalled = true
             reconnectedURLs.append(url)
             reconnectedTokens.append(accessToken)
@@ -408,7 +414,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         genres: [String]?,
         /// Recorded so Home's « last played » seed query (`[.isPlayed]`) can
         /// be told apart from every other movie/episode query.
-        filters: [ItemFilter]?
+        filters: [ItemFilter]?,
+        /// Lean (`.card`) vs full (`.detail`) fields — audit P8.
+        fieldSet: ItemFieldSet
     )] = []
 
     /// When set, a `getItems` carrying the `.isPlayed` filter answers with this
@@ -448,7 +456,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         sortBy: [ItemSortBy]?, sortOrder: [JellyfinAPI.SortOrder]?,
         genres: [String]?, years: [Int]?, isFavorite: Bool?,
         filters: [ItemFilter]?, nameStartsWithOrGreater: String?,
-        limit: Int?, startIndex: Int?, enableTotalRecordCount: Bool
+        limit: Int?, startIndex: Int?, enableTotalRecordCount: Bool,
+        fieldSet: ItemFieldSet
     ) async throws -> (items: [BaseItemDto], totalCount: Int) {
         recordLock.withLock {
             if isFavorite == true { favoriteFetchCount += 1 }
@@ -458,7 +467,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
                 includeItemTypes: includeItemTypes, sortBy: sortBy,
                 sortOrder: sortOrder, isFavorite: isFavorite, limit: limit,
                 enableTotalRecordCount: enableTotalRecordCount, genres: genres,
-                filters: filters
+                filters: filters, fieldSet: fieldSet
             ))
         }
         if shouldThrow { throw stubbedError }
@@ -568,11 +577,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// Every `getSimilarItems` call's seed id and limit, in order.
     private(set) var similarItemsRequests: [(itemId: String, limit: Int)] = []
     var stubbedSimilarItems: [BaseItemDto] = []
+    /// Dedicated flag, never `shouldThrow`: the fiche test needs the item to
+    /// load while `/Similar` alone fails.
+    var similarItemsShouldThrow = false
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock {
             getSimilarItemsCallCount += 1
             similarItemsRequests.append((itemId: itemId, limit: limit))
         }
+        if similarItemsShouldThrow { throw stubbedError }
         return stubbedSimilarItems
     }
 
@@ -783,4 +796,89 @@ final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
 
 enum MockError: Error {
     case genericFailure
+}
+
+// MARK: - Isolated UserDefaults
+
+extension UserDefaults {
+    /// A fresh, empty store for one test. Suites run in parallel, and a test
+    /// writing `.standard` (a rail switched off, a genre pick) leaked into
+    /// every other suite reading the same key at that moment (audit
+    /// 2026-09-22, T2). Absent keys resolve to `SettingsKey.Default`, i.e.
+    /// exactly what an untouched `.standard` gave before.
+    static func isolatedForTesting() -> UserDefaults {
+        let name = "cinemax.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+}
+
+// MARK: - Deterministic waiting (audit 2026-09-22, T3)
+
+/// Polls `condition` until it holds, and returns as soon as it does — never a
+/// fixed sleep sized for the slowest CI host. Bounded by `timeout` so a
+/// regression fails instead of hanging; the caller still `#expect`s the
+/// condition afterwards, so a timeout surfaces as an ordinary failure.
+///
+/// For work that exposes no seam to await. Prefer awaiting the work itself
+/// (`PlaybackReporter.drain()`, a view model's task) or a `TestLatch`.
+/// `isolation` keeps the check on the caller's actor, so the closure may read
+/// main-actor state from a `@MainActor` suite.
+@discardableResult
+func eventually(
+    timeout: Duration = .seconds(5),
+    isolation: isolated (any Actor)? = #isolation,
+    _ condition: () async -> Bool
+) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while !(await condition()) {
+        guard clock.now < deadline else { return false }
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return true
+}
+
+/// A one-shot latch usable from any isolation, mock handlers included:
+/// `wait()` suspends until `open()` has been called, and returns at once
+/// afterwards. Holds a race window open on purpose instead of guessing its
+/// width with a sleep — the `PaginatedLoaderInterlockTests` gate, made
+/// `Sendable` for `@Sendable` mock handlers.
+final class TestLatch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var nextId = 0
+    private var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
+
+    func open() {
+        let toResume: [CheckedContinuation<Void, Never>] = lock.withLock {
+            isOpen = true
+            let pending = Array(waiters.values)
+            waiters = [:]
+            return pending
+        }
+        for waiter in toResume { waiter.resume() }
+    }
+
+    /// Suspends until `open()` — or until `timeout`, so a regression that
+    /// never reaches the code opening the latch makes the test FAIL on its
+    /// assertions instead of hanging the whole job. A latch that times out
+    /// behaves as if opened for that waiter only.
+    func wait(timeout: Duration = .seconds(10)) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let id: Int? = lock.withLock {
+                if isOpen { return nil }
+                nextId += 1
+                waiters[nextId] = continuation
+                return nextId
+            }
+            guard let id else { continuation.resume(); return }
+            Task {
+                try? await Task.sleep(for: timeout)
+                let expired = self.lock.withLock { self.waiters.removeValue(forKey: id) }
+                expired?.resume()
+            }
+        }
+    }
 }

@@ -39,13 +39,10 @@ struct LoginViewModelTests {
         vm.username = "Alice"
         vm.password = "password"
 
-        // Run without awaiting the 1s sleep to keep tests fast
+        // Run without awaiting the success dwell to keep tests fast
         let task = Task { await vm.authenticate(using: appState, loc: LocalizationManager()) }
-        // Poll until showSuccess is set (before the sleep finishes)
-        for _ in 0..<50 {
-            if vm.showSuccess { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        // Returns as soon as showSuccess is set (before the dwell finishes)
+        await eventually { vm.showSuccess }
         task.cancel()
 
         #expect(api.authenticateCalled)
@@ -85,15 +82,6 @@ struct LoginViewModelTests {
 
     // MARK: - Quick Connect poll resilience
 
-    /// Polls the VM until `condition` holds or the budget elapses. Keeps the
-    /// Quick Connect tests off wall-clock sleeps.
-    private func waitFor(_ condition: @MainActor () -> Bool) async {
-        for _ in 0..<300 {
-            if condition() { return }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-    }
-
     @Test("Transient poll failures keep polling and approval still completes")
     func quickConnectSurvivesTransientPollFailures() async {
         let api = MockAPIClient()
@@ -107,7 +95,7 @@ struct LoginViewModelTests {
         vm.quickConnectPollInterval = .milliseconds(1)
 
         vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
-        await waitFor { vm.showSuccess }
+        await eventually { vm.showSuccess }
         vm.cancelQuickConnect()
 
         #expect(vm.showSuccess)
@@ -131,7 +119,7 @@ struct LoginViewModelTests {
         vm.quickConnectPollInterval = .milliseconds(1)
 
         vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
-        await waitFor { vm.showSuccess }
+        await eventually { vm.showSuccess }
         vm.cancelQuickConnect()
 
         #expect(vm.showSuccess)
@@ -146,14 +134,14 @@ struct LoginViewModelTests {
         vm.quickConnectPollInterval = .milliseconds(1)
 
         vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
-        await waitFor { vm.quickConnectError != nil }
+        await eventually { vm.quickConnectError != nil }
 
         #expect(vm.quickConnectError != nil)
         #expect(!vm.showSuccess)
         #expect(api.quickConnectPollCount == LoginViewModel.quickConnectFailureBudget)
     }
 
-    @Test("Cancelling the sheet exits the poll loop without surfacing an error")
+    @Test("Cancelling the sheet exits the poll loop without surfacing an error", .timeLimit(.minutes(1)))
     func quickConnectCancelExitsSilently() async {
         let api = MockAPIClient()
         api.quickConnectAuthorizedHandler = { _ in false }   // never approved
@@ -161,10 +149,13 @@ struct LoginViewModelTests {
         vm.quickConnectPollInterval = .milliseconds(1)
 
         vm.startQuickConnect(using: makeAppState(api: api), loc: LocalizationManager())
-        await waitFor { api.quickConnectPollCount > 2 }
+        await eventually { api.quickConnectPollCount > 2 }
+        let pollLoop = vm.quickConnectTask
         vm.cancelQuickConnect()
         let pollsAtCancel = api.quickConnectPollCount
-        try? await Task.sleep(for: .milliseconds(60))
+        // Wait for the loop to actually exit rather than sleeping and hoping:
+        // once it has, no later poll can ever be issued.
+        await pollLoop?.value
 
         #expect(vm.quickConnectError == nil)
         #expect(vm.quickConnectCode == nil)

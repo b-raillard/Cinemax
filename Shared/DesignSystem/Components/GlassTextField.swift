@@ -8,6 +8,10 @@ struct GlassTextField: View {
     var placeholder: String = ""
     var icon: String? = nil
     var isSecure: Bool = false
+    /// Two-way mirror of the inner field's focus, so a form can chain its
+    /// fields — the username's Return key moving on to the password. Setting
+    /// it to `true` focuses the field; the field writes its own state back.
+    var focusRequest: Binding<Bool>? = nil
     #if os(iOS)
     var keyboardType: UIKeyboardType = .default
     #endif
@@ -29,6 +33,12 @@ struct GlassTextField: View {
             #else
             iOSField
             #endif
+        }
+        .onChange(of: focusRequest?.wrappedValue ?? false) { _, wantsFocus in
+            if wantsFocus, !isFocused { isFocused = true }
+        }
+        .onChange(of: isFocused) { _, focused in
+            if let focusRequest, focusRequest.wrappedValue != focused { focusRequest.wrappedValue = focused }
         }
     }
 
@@ -126,5 +136,37 @@ struct GlassTextField: View {
         #else
         CinemaScale.pt(12)
         #endif
+    }
+}
+
+/// What a form field holds, for AutoFill and the Return key.
+enum CredentialFieldKind {
+    case username
+    case password
+    case serverURL
+
+    fileprivate var contentType: UITextContentType {
+        switch self {
+        case .username: .username
+        case .password: .password
+        case .serverURL: .URL
+        }
+    }
+}
+
+extension View {
+    /// AutoFill and a working Return key for a pre-auth form field.
+    ///
+    /// The sign-in forms had neither: no `textContentType`, so iCloud Keychain
+    /// never offered the saved account (nor tvOS its « sign in with your
+    /// iPhone »), and a Return key that did nothing. The username's key reads
+    /// « Suivant » and moves on; the others read « Aller » and submit.
+    /// Applied to the whole `GlassTextField` — all three are environment-borne,
+    /// so they reach the inner `TextField` / `SecureField`.
+    func credentialField(_ kind: CredentialFieldKind, onSubmit action: @escaping () -> Void) -> some View {
+        self
+            .textContentType(kind.contentType)
+            .submitLabel(kind == .username ? .next : .go)
+            .onSubmit(action)
     }
 }

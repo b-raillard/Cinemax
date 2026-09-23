@@ -9,8 +9,9 @@ import JellyfinAPI
 /// per-tick progress reports to the server (one report per ten `onTick()` calls
 /// from the presenter's shared 1 Hz time observer).
 ///
-/// The reporter fires `Task.detached` for the actual API calls, so we race a
-/// short yield window against the counter's public effect. These tests cover
+/// The reporter queues the actual API calls on its own serial chain, which
+/// `drain()` awaits along with the latest keep-alive ping — no test sleeps to
+/// let a report land. These tests cover
 /// the pure throttle logic — network success/failure is server-side and not
 /// reachable from a unit test anyway (MockAPIClient stubs return void).
 @MainActor
@@ -38,7 +39,7 @@ struct PlaybackReporterTests {
         for _ in 0..<9 { reporter.onTick() }
         reporter.resetTicking()
         for _ in 0..<9 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(30))
+        await reporter.drain()
         #expect(mock.progressCount == 0)
     }
 
@@ -51,7 +52,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<20 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(30))
+        await reporter.drain()
         #expect(mock.progressCount == 0)
     }
 
@@ -64,11 +65,9 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStart(startTime: nil)
-        // The API call rides a Task.detached — on a loaded CI host a fixed
-        // sleep races its scheduling, so poll (bounded) for the effect instead.
-        for _ in 0..<200 where mock.startCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // `drain()` resolves once every queued report has been sent — no
+        // sleep racing the scheduler on a loaded CI host.
+        await reporter.drain()
         #expect(mock.startCount == 1)
     }
 
@@ -80,7 +79,7 @@ struct PlaybackReporterTests {
             context: { nil }
         )
         reporter.reportStart(startTime: nil)
-        try await Task.sleep(for: .milliseconds(30))
+        await reporter.drain()
         #expect(mock.startCount == 0)
     }
 
@@ -116,9 +115,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 1)
         #expect(mock.lastStopTicks == 0)
     }
@@ -133,9 +130,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportBackgroundProgress()
-        for _ in 0..<200 where mock.progressCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.progressCount == 1)
         #expect(mock.lastProgressTicks == 0)
     }
@@ -150,9 +145,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<10 { reporter.onTick() }
-        for _ in 0..<200 where mock.progressCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.progressCount == 1)
         #expect(mock.lastProgressTicks == 0)
     }
@@ -166,9 +159,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStart(startTime: .nan)
-        for _ in 0..<200 where mock.startCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.startCount == 1)
         #expect(mock.lastStartTicks == 0)
     }
@@ -188,9 +179,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 1)
         #expect(mock.lastStopLiveStreamId == "ls-42")
     }
@@ -204,9 +193,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopCount == 1)
         #expect(mock.lastStopLiveStreamId == nil)
     }
@@ -220,9 +207,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopEncodingCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         // Order matters: the server must record the resume position before we
         // tear the job down.
         #expect(mock.callOrder == ["stopped", "stopEncoding"])
@@ -237,9 +222,7 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopEncodingCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.stopEncodingCount == 1)
     }
 
@@ -261,9 +244,10 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<60 { reporter.onTick() }
-        for _ in 0..<200 where mock.pingCount < 2 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // Two pings ride two independent detached tasks; `drain()` holds only
+        // the latest, so the earlier one is polled for (bounded).
+        await reporter.drain()
+        await eventually { mock.pingCount >= 2 }
         #expect(mock.pingCount == 2)
     }
 
@@ -277,7 +261,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<60 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(50))
+        await reporter.drain()
         #expect(mock.pingCount == 0)
     }
 
@@ -291,7 +275,7 @@ struct PlaybackReporterTests {
         )
 
         for _ in 0..<60 { reporter.onTick() }
-        try await Task.sleep(for: .milliseconds(50))
+        await reporter.drain()
         #expect(mock.pingCount == 0)
     }
 
@@ -313,7 +297,7 @@ struct PlaybackReporterTests {
         paused = true
         for _ in 0..<20 { reporter.onTick() }
 
-        try await Task.sleep(for: .milliseconds(50))
+        await reporter.drain()
         #expect(mock.pingCount == 0)
     }
 
@@ -327,10 +311,124 @@ struct PlaybackReporterTests {
         )
 
         reporter.reportStop()
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await reporter.drain()
         #expect(mock.lastStopTicks == 420_000_000)
+    }
+
+    // MARK: - Point de reprise tant que la reprise n'a pas eu lieu
+
+    /// Verrouille le correctif de l'audit 2026-09-22 (B1) : fermer le lecteur
+    /// pendant le spinner d'un « Reprendre » envoyait `PositionTicks = 0`, que
+    /// Jellyfin enregistre — le film revenait au début et sortait de Reprendre.
+
+    @Test("reportableSeconds : une reprise en attente l'emporte sur le moteur")
+    func reportableSecondsPrefersPendingResume() {
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 0, pendingResumeSeconds: 4800) == 4800)
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: nil) == 12)
+        // Une reprise nulle, négative ou non finie n'est pas une reprise.
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: 0) == 12)
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: -3) == 12)
+        #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: .nan) == 12)
+    }
+
+    @Test("Stop avant la reprise : le serveur reçoit la position demandée, pas 0")
+    func stopBeforeResumeKeepsResumePoint() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 0, isPaused: false) },
+            pendingResume: { 4800 }
+        )
+
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(mock.lastStopTicks == 48_000_000_000)
+    }
+
+    @Test("Deux stops de la même session : un seul part au serveur")
+    func secondStopOfSameSessionIsDropped() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        reporter.reportStop()
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(mock.stopCount == 1)
+    }
+
+    @Test("Un stop de changement d'épisode ne bloque pas le stop de fin de session")
+    func sessionEndAfterEpisodeSwapStillGoesOut() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        // Navigation ratée : le stop `.episodeSwap` part, l'ancien épisode
+        // continue, puis la fermeture doit encore rapporter sa position.
+        reporter.reportStop(reason: .episodeSwap)
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(mock.stopCount == 2)
+    }
+
+    // MARK: - Ordre des rapports (audit 2026-09-22, B12)
+
+    @Test("Un start lent n'arrive jamais après le stop de la même session")
+    func reportsReachTheServerInOrder() async {
+        let mock = CountingPlaybackAPI(startDelay: .milliseconds(150))
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        reporter.reportStart(startTime: nil)
+        reporter.reportBackgroundProgress()
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(mock.callOrder == ["start", "progress", "stopped", "stopEncoding"])
+    }
+
+    @Test("Un stop n'attend pas un progress bloqué : il l'annule")
+    func stopCancelsHungProgress() async {
+        let mock = CountingPlaybackAPI(progressDelay: .seconds(20))
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        reporter.reportBackgroundProgress()
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(clock.now - start < .seconds(5))
+        #expect(mock.callOrder == ["stopped", "stopEncoding"])
+        #expect(mock.lastStopTicks == 420_000_000)
+    }
+
+    @Test("reportStart rouvre une session terminée")
+    func startReopensStoppedSession() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, userId: "u1",
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+
+        reporter.reportStop()
+        reporter.reportStart(startTime: 42)
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(mock.stopCount == 2)
     }
 
     // MARK: - Annonce du changement de données utilisateur
@@ -357,9 +455,10 @@ struct PlaybackReporterTests {
         defer { NotificationCenter.default.removeObserver(token) }
 
         reporter.reportStop()
-        for _ in 0..<200 where witness.count == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // The post rides its own main-actor task, launched from inside the
+        // queued stop: drain the stop, then poll (bounded) for the post.
+        await reporter.drain()
+        await eventually { witness.count > 0 }
 
         #expect(witness.count == 1, "une fin de session doit annoncer exactement une fois")
         // Le cœur du test : annoncer AVANT que le serveur ait enregistré la
@@ -384,10 +483,11 @@ struct PlaybackReporterTests {
         reporter.reportStop(reason: .episodeSwap)
         // Attendre que le rapport serveur soit parti, pour que l'absence
         // d'annonce soit un vrai constat et pas une course gagnée de justesse.
-        for _ in 0..<200 where mock.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try await Task.sleep(for: .milliseconds(50))
+        // `drain()` returns once the stop's work has run to its end. The post,
+        // when there is one, rides its own main-actor task queued from that
+        // work — so give the main actor one turn before asserting absence.
+        await reporter.drain()
+        await MainActor.run {}
 
         #expect(mock.stopCount == 1, "le serveur doit tout de même recevoir le stop")
         #expect(witness.count == 0, "on regarde encore : rafraîchir les rails ici coûterait une salve par épisode")
@@ -433,6 +533,16 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         var order: [String] = []
     }
     private let state = OSAllocatedUnfairLock(initialState: Counts())
+    /// Holds the start report back, so a test can prove the stop waits for it.
+    private let startDelay: Duration
+    /// Holds a progress report back — CANCELLABLY, like a real request: a
+    /// cancelled one records nothing.
+    private let progressDelay: Duration
+
+    init(startDelay: Duration = .zero, progressDelay: Duration = .zero) {
+        self.startDelay = startDelay
+        self.progressDelay = progressDelay
+    }
 
     var startCount: Int { state.withLock { $0.start } }
     var progressCount: Int { state.withLock { $0.progress } }
@@ -450,7 +560,8 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, playMethod: CinemaxKit.PlayMethod
     ) async {
-        state.withLock { $0.start += 1; $0.lastStartTicks = positionTicks }
+        if startDelay > .zero { try? await Task.sleep(for: startDelay) }
+        state.withLock { $0.start += 1; $0.lastStartTicks = positionTicks; $0.order.append("start") }
     }
 
     func reportPlaybackProgress(
@@ -458,7 +569,10 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod
     ) async {
-        state.withLock { $0.progress += 1; $0.lastProgressTicks = positionTicks }
+        if progressDelay > .zero {
+            do { try await Task.sleep(for: progressDelay) } catch { return }
+        }
+        state.withLock { $0.progress += 1; $0.lastProgressTicks = positionTicks; $0.order.append("progress") }
     }
 
     func reportPlaybackStopped(

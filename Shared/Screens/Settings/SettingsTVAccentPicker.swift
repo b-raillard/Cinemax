@@ -42,6 +42,26 @@ extension SettingsScreen {
         .buttonStyle(.plain)
         .focusEffectDisabled()
         .hoverEffectDisabled()
+        // The row is ONE focusable unit: VoiceOver reads the current colour's
+        // name as its value, and swipes up / down move through the palette the
+        // way left / right do on the remote (audit 2026-09-22, U5).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("settings.accentColor"))
+        .accessibilityValue(loc.localized(
+            (AccentOption(rawValue: themeManager.accentColorKey) ?? .green).nameKey
+        ))
+        .accessibilityAdjustableAction { direction in
+            let options = AccentOption.visibleCases(rainbowUnlocked: rainbowUnlocked)
+            guard let index = options.firstIndex(where: { $0.rawValue == themeManager.accentColorKey }) else { return }
+            switch direction {
+            case .increment where index < options.count - 1:
+                themeManager.accentColorKey = options[index + 1].rawValue
+            case .decrement where index > 0:
+                themeManager.accentColorKey = options[index - 1].rawValue
+            default:
+                break
+            }
+        }
         .focused($focusedItem, equals: .accentColor("row"))
         .onMoveCommand { direction in
             guard isFocused else { return }

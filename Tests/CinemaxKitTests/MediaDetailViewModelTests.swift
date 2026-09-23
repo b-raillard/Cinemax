@@ -83,14 +83,17 @@ struct MediaDetailViewModelTests {
     @Test("selectSeason discards stale results when a newer selection completes first")
     func selectSeasonRaceKeepsLatest() async {
         let api = MockAPIClient()
+        let seasonAFetching = TestLatch()
+        let releaseSeasonA = TestLatch()
         api.getEpisodesHandler = { seasonId in
-            // Season A intentionally sleeps longer so it resolves *after* Season B,
-            // simulating the race described in the audit.
+            // Season A is held until Season B has fully resolved, so it lands
+            // *after* it — the race described in the audit, held open by a
+            // latch instead of guessed with two sleeps.
             if seasonId == "season-A" {
-                try? await Task.sleep(for: .milliseconds(200))
+                seasonAFetching.open()
+                await releaseSeasonA.wait()
                 return [makeEpisode(id: "ep-a1", name: "A1"), makeEpisode(id: "ep-a2", name: "A2")]
             } else {
-                try? await Task.sleep(for: .milliseconds(20))
                 return [makeEpisode(id: "ep-b1", name: "B1")]
             }
         }
@@ -99,11 +102,12 @@ struct MediaDetailViewModelTests {
         let appState = makeAppState(api: api)
 
         async let firstCall: Void = vm.selectSeason("season-A", seriesId: "series-1", using: appState)
-        // Ensure Season A's generation is captured before B increments it.
-        try? await Task.sleep(for: .milliseconds(10))
-        async let secondCall: Void = vm.selectSeason("season-B", seriesId: "series-1", using: appState)
-
-        _ = await (firstCall, secondCall)
+        // Season A's fetch is in flight, so its generation is already captured
+        // before B increments it.
+        await seasonAFetching.wait()
+        await vm.selectSeason("season-B", seriesId: "series-1", using: appState)
+        releaseSeasonA.open()
+        await firstCall
 
         #expect(vm.selectedSeasonId == "season-B")
         #expect(vm.episodes.map(\.id) == ["ep-b1"])
@@ -140,6 +144,72 @@ struct MediaDetailViewModelTests {
         await vm.togglePlayed(using: appState)
         #expect(vm.isPlayed == false)
         #expect(api.markUnplayedCalls == ["movie-1"])
+    }
+
+    /// Audit 2026-09-22 (B6) : « Marquer comme vu » ne basculait que `isPlayed`,
+    /// alors que « Reprendre » et la barre de progression lisent `item.userData`
+    /// via `resolvedPlayTarget` — le bouton restait et rouvrait le film au milieu.
+    @Test("togglePlayed clears the resume position the Play button reads")
+    func togglePlayedClearsResumeOnItem() async {
+        let api = MockAPIClient()
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        var movie = makeMovie(id: "movie-1", played: false)
+        movie.userData?.playbackPositionTicks = 30_000_000_000
+        vm.item = movie
+        vm.isPlayed = false
+
+        await vm.togglePlayed(using: appState)
+        #expect(vm.item?.userData?.isPlayed == true)
+        #expect(vm.item?.userData?.playbackPositionTicks == 0)
+    }
+
+    // MARK: - « Titres similaires » hors du chemin critique (audit 2026-09-22, P1)
+
+    @Test("A failing /Similar never replaces the fiche with the error screen")
+    func similarFailureIsNotFatal() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeMovie(id: id, played: false) }
+        api.similarItemsShouldThrow = true
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+        await vm.similarTask?.value
+
+        #expect(vm.errorMessage == nil)
+        #expect(vm.item?.id == "movie-1")
+        #expect(vm.similarItems.isEmpty)
+    }
+
+    @Test("Similar titles fill in from the side task")
+    func similarFillsInAfterLoad() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeMovie(id: id, played: false) }
+        api.stubbedSimilarItems = [makeMovie(id: "other", played: false)]
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+        await vm.similarTask?.value
+
+        #expect(vm.similarItems.map(\.id) == ["other"])
+    }
+
+    @Test("A successful retry clears the error screen")
+    func retryClearsError() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        await vm.load(using: appState, loc: LocalizationManager())
+        #expect(vm.errorMessage != nil, "pré-condition")
+
+        api.shouldThrow = false
+        api.getItemHandler = { id in makeMovie(id: id, played: false) }
+        await vm.load(using: appState, loc: LocalizationManager())
+
+        #expect(vm.errorMessage == nil)
     }
 
     @Test("toggleEpisodeWatched flips the local episode payload and clears resume")
@@ -303,14 +373,17 @@ struct MediaDetailViewModelTests {
     func loadRaceKeepsLatest() async {
         let api = MockAPIClient()
         let counter = CallCounter()
+        let firstFetching = TestLatch()
+        let releaseFirst = TestLatch()
         api.getItemHandler = { _ in
-            // The first-started load resolves LAST (slow); the second resolves
-            // first (fast) — last-writer-wins would leave "old" without a guard.
+            // The first-started load resolves LAST (held until the second has
+            // finished); the second resolves first — last-writer-wins would
+            // leave "old" without a guard.
             if counter.next() == 1 {
-                try? await Task.sleep(for: .milliseconds(200))
+                firstFetching.open()
+                await releaseFirst.wait()
                 return makeMovie(id: "old", played: false)
             } else {
-                try? await Task.sleep(for: .milliseconds(20))
                 return makeMovie(id: "new", played: true)
             }
         }
@@ -319,11 +392,12 @@ struct MediaDetailViewModelTests {
         let loc = LocalizationManager()
 
         async let firstCall: Void = vm.load(using: appState, loc: loc)
-        // Ensure the first load bumps + snapshots its generation before the second.
-        try? await Task.sleep(for: .milliseconds(10))
-        async let secondCall: Void = vm.load(using: appState, loc: loc)
-
-        _ = await (firstCall, secondCall)
+        // The first load's fetch is in flight, so it has bumped + snapshotted
+        // its generation before the second starts.
+        await firstFetching.wait()
+        await vm.load(using: appState, loc: loc)
+        releaseFirst.open()
+        await firstCall
 
         #expect(vm.item?.id == "new")
         #expect(vm.isPlayed == true)

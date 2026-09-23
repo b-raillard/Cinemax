@@ -55,6 +55,7 @@
 "home.becauseYouWatched" = "Because you watched %@";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
+"home.remainingTime.minutes.one" = "%dm remaining";
 "home.genreRow.failed" = "Couldn't load";
 
 // MARK: - Movie Library
@@ -63,7 +64,9 @@
 "movies.sortFilter" = "Sort & Filter";
 "library.filter.button" = "Filters";
 "movies.count" = "%d Movies";
+"movies.count.one" = "%d Movie";
 "movies.titles" = "%d titles";
+"movies.titles.one" = "%d title";
 "sort.ascending" = "Ascending";
 "sort.descending" = "Descending";
 "sort.by" = "Sort by";
@@ -84,6 +87,7 @@
 "tvShows.title" = "TV Shows";
 "tvShows.browseGenres" = "Browse Genres";
 "tvShows.count" = "%d Series";
+"tvShows.count.one" = "%d Series";
 "tvShows.season" = "%d Season";
 "tvShows.seasonsPlural" = "%d Seasons";
 
@@ -166,6 +170,16 @@
 "settings.darkMode" = "Dark Mode";
 "settings.lightMode" = "Light Mode";
 "settings.accentColor" = "Accent Color";
+"accent.name.red" = "Red";
+"accent.name.orange" = "Orange";
+"accent.name.yellow" = "Yellow";
+"accent.name.green" = "Green";
+"accent.name.cyan" = "Cyan";
+"accent.name.blue" = "Blue";
+"accent.name.indigo" = "Indigo";
+"accent.name.purple" = "Purple";
+"accent.name.pink" = "Pink";
+"accent.name.rainbow" = "Rainbow";
 "settings.language" = "Language";
 "settings.language.french" = "Français";
 "settings.language.english" = "English";
@@ -240,6 +254,7 @@
 "privacy.lock.enable.subtitle" = "Asks for the PIN to open this screen, age limit included.";
 "privacy.lock.biometrics" = "Use Face ID / Touch ID";
 "privacy.lock.biometrics.subtitle" = "A shortcut instead of the PIN. The PIN always stays valid.";
+"privacy.lock.biometrics.reset" = "The enrolled faces or fingerprints changed, so Face ID was turned off. Turn it back on if you made the change.";
 "privacy.lock.change" = "Change PIN";
 "privacy.lock.disable" = "Turn off the lock";
 "privacy.lock.footer" = "This PIN protects the settings on this device. For a limit a reinstall cannot lift, create a dedicated Jellyfin account and set its age limit on the server.";
@@ -784,7 +799,6 @@
 "detail.seeMore" = "See more";
 "detail.studio" = "Studio";
 "detail.network" = "Network";
-"detail.criticRating" = "Critics";
 "detail.audienceRating" = "Audience";
 
 // MARK: - Login
@@ -868,7 +882,7 @@
 "onboarding.quickConnect.title" = "Sign in without typing";
 "onboarding.quickConnect.body" = "Quick Connect shows a code you approve from a device already signed in. It earns its keep on the Apple TV, where typing a password with the remote is a chore.";
 "onboarding.personalize.title" = "Customisable to your liking";
-"onboarding.personalize.body" = "The bottom menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
+"onboarding.personalize.body" = "The main menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
 "settings.discoverApp" = "Discover the app";
 
 "player.a11y.skipForward" = "Forward %d seconds";
@@ -938,6 +952,9 @@
 "accessibility.playItem" = "Play %@";
 "accessibility.moreInfoAbout" = "More information about %@";
 "accessibility.resumeProgress" = "%d%% watched";
+"accessibility.criticRating" = "Critics: %d percent";
+"detail.restricted.title" = "Restricted content";
+"detail.restricted.subtitle" = "This title is above the age limit set in Privacy & Security.";
 
 // MARK: - Admin — formatting glyphs
 
@@ -969,6 +986,8 @@
 "card.unfavorited" = "Removed from favorites";
 "card.resume" = "Resume";
 "card.goToSeries" = "Go to series";
+"card.status.watched" = "Watched";
+"card.status.progress" = "%d%% watched";
 "detail.season.markWatched" = "Mark season as watched";
 "detail.season.markWatched.message" = "All episodes in this season will be marked as watched.";
 "detail.season.markedWatched" = "Season marked as watched";
@@ -976,6 +995,7 @@
 "person.series" = "TV Shows";
 "person.born" = "Born %@";
 "person.titleCount" = "%d titles";
+"person.titleCount.one" = "%d title";
 "person.empty" = "No titles in your library";
 
 // MARK: - UI polish
@@ -992,7 +1012,8 @@
 "syncplay.noGroups.subtitle" = "Create a group to watch this title with others at the same time.";
 "syncplay.unnamedGroup" = "Unnamed group";
 "syncplay.defaultName" = "%@'s group";
-"syncplay.participants" = "%d participant(s)";
+"syncplay.participants" = "%d participants";
+"syncplay.participants.one" = "%d participant";
 "syncplay.joined" = "Joined group";
 "syncplay.left" = "Left group";
 "syncplay.groupEnded" = "The group has ended";
@@ -1003,10 +1024,12 @@
 "syncplay.waiting.title" = "Waiting for a participant";
 "syncplay.waiting.subtitle" = "Someone is buffering. Everyone will resume together.";
 "syncplay.libraryAccessDenied" = "Your account can't access this title";
+"syncplay.restricted.left" = "This title is above this device's age limit, so you left the session.";
 "syncplay.session.badge" = "TOGETHER";
 "syncplay.session.with" = "With %@";
 "syncplay.session.two" = "%@ and %@";
 "syncplay.session.more" = "%@, %@ and %d others";
+"syncplay.session.more.one" = "%@, %@ and %d other";
 "syncplay.session.unknownTitle" = "Session in progress";
 "syncplay.session.a11y" = "Session: %@, with %@. Join.";
 "syncplay.session.mine" = "You're in \u00b7 with %@";
@@ -1222,3 +1245,12 @@
 "update.action.update" = "Update";
 "update.action.later" = "Later";
 "update.action.retry" = "Try again";
+
+/* Card subtitles — item kind */
+"item.kind.movie" = "Movie";
+"item.kind.series" = "Series";
+"item.kind.episode" = "Episode";
+"item.kind.season" = "Season";
+"item.kind.collection" = "Collection";
+"item.kind.playlist" = "Playlist";
+"item.kind.video" = "Video";

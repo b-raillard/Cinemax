@@ -166,7 +166,7 @@ struct AdminApiKeysScreen: View {
                         if let date = key.dateCreated {
                             Text(String(
                                 format: loc.localized("admin.apiKeys.createdOn"),
-                                date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: loc.languageCode)))
+                                date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(loc.locale))
                             ))
                             .font(CinemaFont.dynamicLabel(.small))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)

@@ -48,7 +48,13 @@ targets:
     platform: iOS
     sources:
       - path: iOS
+      # The per-area CLAUDE.md files (agent rules, 2026-09-22) live next to the
+      # code they govern. Swept as resources they would ship inside the app,
+      # and nine files named CLAUDE.md in one bundle is a "Multiple commands
+      # produce" build error.
       - path: Shared
+        excludes:
+          - "**/CLAUDE.md"
       - path: Resources
       # The Control Center / Action-button intent, shared with the widget
       # extension by SOURCE: the extension links none of our frameworks (widget
@@ -73,7 +79,11 @@ targets:
         # UserDefaults. $(AppIdentifierPrefix) expands to the team id at sign
         # time. Requires "Keychain Sharing" enabled on the App IDs for App
         # Store distribution.
+        # The app's OWN group comes FIRST: group-less Keychain writes land in the
+        # first group listed, and with the shared one alone every token and the
+        # parental lock were readable by the extensions (see KeychainService).
         keychain-access-groups:
+          - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
           - $(AppIdentifierPrefix)com.cinemax.shared
         # Universal Links (iOS only — tvOS has none). The host must serve
         # `/.well-known/apple-app-site-association` at its ROOT (see
@@ -173,7 +183,10 @@ targets:
     platform: tvOS
     sources:
       - path: tvOS
+      # Same exclusion as the iOS target (per-area CLAUDE.md agent rules).
       - path: Shared
+        excludes:
+          - "**/CLAUDE.md"
       # AppShortcuts.strings carries the Siri phrases, and App Intents are
       # iOS-only here (every file in Shared/Intents/ is #if os(iOS) — none of
       # the surfaces they feed exist on tvOS). Bundling the phrases anyway is
@@ -196,7 +209,9 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.cinemax.shared
+        # Own group first — same reason as the iOS target.
         keychain-access-groups:
+          - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
           - $(AppIdentifierPrefix)com.cinemax.shared
     info:
       path: tvOS/Info.plist
@@ -212,6 +227,11 @@ targets:
         # Single-source the version from settings.base (see iOS note).
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # The update prompt's « Mettre à jour » asks `canOpenURL` whether the
+        # Apple TV's App Store answers this scheme, and renders no button when
+        # it does not — see Shared/Update/CLAUDE.md.
+        LSApplicationQueriesSchemes:
+          - com.apple.TVAppStore
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoadsForMedia: true

@@ -12,6 +12,7 @@ struct HomeScreen: View {
     #endif
     #if os(iOS)
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     /// Index of the hero currently shown in the rotating carousel (iOS only —
     /// tvOS keeps a single static hero; the focus engine + `.focusSection` rules
     /// make auto-advancing focusable chrome hazardous there).
@@ -85,6 +86,10 @@ struct HomeScreen: View {
                 // must only appear once the *entire* load finishes, never as a
                 // mid-load flash (genre rows populate after the hero/rails).
                 loadingSkeleton
+            } else if isHomeEmpty, let failure = viewModel.loadFailure {
+                // Every source failed: never « Votre bibliothèque est vide »,
+                // which told an offline user their content was gone.
+                homeErrorState(failure)
             } else if isHomeEmpty {
                 homeEmptyState
             } else {
@@ -360,6 +365,24 @@ struct HomeScreen: View {
         #endif
     }
 
+    private func homeErrorState(_ failure: any Error) -> some View {
+        ScrollView {
+            ErrorStateView(
+                message: loc.userFacingMessage(for: failure),
+                retryTitle: loc.localized("action.retry"),
+                // The cloud claims a cause; draw it only when the message
+                // itself says the server could not be reached.
+                illustration: loc.userFacingMessage(for: failure) == loc.localized("error.network") ? .offline : nil
+            ) {
+                Task { await viewModel.reload(using: appState) }
+            }
+            .padding(.top, CinemaSpacing.spacing20)
+        }
+        #if os(iOS)
+        .refreshable { await viewModel.reload(using: appState) }
+        #endif
+    }
+
     private var content: some View {
         // Wrap in `ScrollViewReader` so that on tvOS we can scroll back to the
         // top sentinel whenever the screen reappears (after a deep-nav pop or
@@ -628,7 +651,7 @@ struct HomeScreen: View {
         // Task lifecycle is tied to the view — auto-cancels on disappear (pauses
         // rotation) and never strongly retains the screen. Restarts when the
         // candidate count or the motion-effects gate changes.
-        .task(id: "\(candidates.count)-\(motionEffects)") {
+        .task(id: "\(candidates.count)-\(motionEffects)-\(voiceOverEnabled)") {
             await runHeroRotation()
         }
     }
@@ -674,7 +697,10 @@ struct HomeScreen: View {
     /// Advances the hero every `heroRotationInterval` seconds with a crossfade.
     /// No-op when Motion Effects is off (static first hero) or there's <2 heroes.
     private func runHeroRotation() async {
-        guard motionEffects, heroCandidates.count > 1 else { return }
+        // Not under VoiceOver: content that changes on its own every 8 s moves
+        // the element being read out from under the user (WCAG 2.2.2), and the
+        // swipes stay available to change it deliberately (audit 2026-09-22).
+        guard motionEffects, !voiceOverEnabled, heroCandidates.count > 1 else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(heroRotationInterval))
             guard !Task.isCancelled else { break }
@@ -745,7 +771,7 @@ struct HomeScreen: View {
                     Text(item.name ?? "")
                         .font(.system(size: heroTitleSize, weight: .black))
                         .tracking(-1.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CinemaColor.onSurface)
                         .textCase(.uppercase)
                         .lineLimit(2)
 
@@ -782,7 +808,7 @@ struct HomeScreen: View {
                                     Image(systemName: "play.fill")
                                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                                 }
-                                .foregroundStyle(.white)
+                                .foregroundStyle(themeManager.onAccentContainer)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
                                 .padding(.horizontal, CinemaSpacing.spacing4)
@@ -800,7 +826,9 @@ struct HomeScreen: View {
                             .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
 
                             NavigationLink {
-                                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                                DeferredView {
+                                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                                }
                             } label: {
                                 HStack(spacing: CinemaSpacing.spacing2) {
                                     Text(loc.localized("action.moreInfo"))
@@ -1007,8 +1035,10 @@ struct HomeScreen: View {
             // film alone are two cards on this row.
             let zoom = CardZoom(zoomNamespace, surface: "home.live", itemId: entry.id)
             NavigationLink {
-                MediaDetailScreen(itemId: id, itemType: entry.itemType ?? .movie)
-                    .cardZoomDestination(zoom)
+                DeferredView {
+                    MediaDetailScreen(itemId: id, itemType: entry.itemType ?? .movie)
+                }
+                .cardZoomDestination(zoom)
             } label: {
                 WideCard(
                     title: entry.title ?? "",
@@ -1120,7 +1150,7 @@ struct HomeScreen: View {
         case 0: return ""
         case 1: return names[0]
         case 2: return loc.localized("syncplay.session.two", names[0], names[1])
-        default: return loc.localized("syncplay.session.more", names[0], names[1], names.count - 2)
+        default: return loc.localized(loc.pluralKey("syncplay.session.more", names.count - 2), names[0], names[1], names.count - 2)
         }
     }
 
@@ -1431,10 +1461,12 @@ struct HomeScreen: View {
     private func collectionCard(_ collection: BaseItemDto) -> some View {
         let zoom = CardZoom(zoomNamespace, surface: "home.collections", itemId: collection.id)
         NavigationLink {
-            if let id = collection.id {
-                MediaDetailScreen(itemId: id, itemType: .boxSet)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = collection.id {
+                    MediaDetailScreen(itemId: id, itemType: .boxSet)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: collection.name ?? "",
@@ -1481,7 +1513,7 @@ struct HomeScreen: View {
             guard let date = episode.premiereDate else { return episode.name ?? "" }
             return String(
                 format: loc.localized("home.upcoming.airs"),
-                date.formatted(date: .abbreviated, time: .omitted)
+                date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(loc.locale))
             )
         }()
 
@@ -1489,12 +1521,14 @@ struct HomeScreen: View {
         // upcoming episodes of one show are two cards on this rail.
         let zoom = CardZoom(zoomNamespace, surface: "home.upcoming", itemId: episode.id)
         NavigationLink {
-            // The SERIES, not the episode: an unaired episode has no fiche
-            // worth opening, and the series is what the user is following.
-            if let id = episode.seriesID ?? episode.id {
-                MediaDetailScreen(itemId: id, itemType: .series)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                // The SERIES, not the episode: an unaired episode has no fiche
+                // worth opening, and the series is what the user is following.
+                if let id = episode.seriesID ?? episode.id {
+                    MediaDetailScreen(itemId: id, itemType: .series)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             WideCard(
                 title: episode.seriesName ?? episode.name ?? "",
@@ -1522,26 +1556,31 @@ struct HomeScreen: View {
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
-            if let type = item.type { parts.append(type.rawValue) }
+            if let type = item.type, let kind = loc.itemKind(type) { parts.append(kind) }
             return parts.joined(separator: " · ")
         }()
         let zoom = CardZoom(zoomNamespace, surface: surface, itemId: item.id)
+        // One value feeds both the overlay and VoiceOver, so the card
+        // cannot announce a state it does not draw.
+        let status = MediaCardStatus.make(
+            positionTicks: item.userData?.playbackPositionTicks,
+            runtimeTicks: item.runTimeTicks,
+            isPlayed: item.userData?.isPlayed
+        )
 
         NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = item.id {
+                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: item.name ?? "",
                 imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
                 subtitle: subtitle,
-                status: .make(
-                    positionTicks: item.userData?.playbackPositionTicks,
-                    runtimeTicks: item.runTimeTicks,
-                    isPlayed: item.userData?.isPlayed
-                ),
+                status: status,
                 zoomSource: zoom
             )
         }
@@ -1551,6 +1590,7 @@ struct HomeScreen: View {
         .buttonStyle(.plain)
         #endif
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        .mediaCardStatusAccessibility(status)
         // On the NavigationLink (the focusable button), never its label, so
         // tvOS focus is untouched.
         .mediaCardContextMenu(item: item, artwork: .poster)

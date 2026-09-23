@@ -6,3 +6,6 @@
 
 /* Speech recognition permission (voice search) */
 "NSSpeechRecognitionUsageDescription" = "Cinemax uses speech recognition for voice search to find movies and shows.";
+
+/* Face ID: optional shortcut past the parental-controls PIN */
+"NSFaceIDUsageDescription" = "Cinemax can use Face ID to unlock the parental controls instead of typing your PIN.";

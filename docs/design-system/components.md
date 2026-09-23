@@ -248,13 +248,14 @@ These four cover every "not the happy path" surface. Use them — don't build ad
 
 - **File**: `Shared/DesignSystem/Components/ToastOverlay.swift`
 - **Signature**: no parameters — reads `ToastCenter` from environment.
-- **Purpose**: Renders the current toast (one at a time) from `ToastCenter.current`. Mount once at the root.
+- **Purpose**: Renders the current toast (one at a time) from `ToastCenter.current`. Hosted ONCE, in its own window, by `ToastWindowHost` (`ToastWindow.swift`).
 - **Anatomy**: top-anchored glass pill: level-tinted SF Symbol + title + optional message + close button. Spring enter/exit.
 - **Usage**:
   ```swift
-  // AppNavigation (root)
-  .overlay(alignment: .top) { ToastOverlay() }
+  // AppNavigation (root) — never mount ToastOverlay in the view tree
+  .background(ToastWindowHost(toasts: toasts, loc: loc, themeManager: themeManager))
   ```
+- **RULE — toasts live in a separate `UIWindow` above the app's (`windowLevel = .normal + 1`)**: an in-tree overlay draws underneath every sheet, cover and the UIKit player, so a toast raised from inside a modal was only seen once it closed. The window passes every touch outside the pill's own frame through (`ToastPassthroughWindow.toastFrame`, reported by SwiftUI — inferring "empty space" from the hit view let a tap on ✕ fall through to the sheet below), pushes the app's dark/light choice onto itself (`overrideUserInterfaceStyle`), and on tvOS takes no input at all, so it can never compete with the focus engine.
 - **Emitting toasts**:
   ```swift
   @Environment(ToastCenter.self) private var toasts

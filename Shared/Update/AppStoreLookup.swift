@@ -98,6 +98,23 @@ enum AppStoreLookup {
         return AppStoreRelease(version: version, displayVersion: raw, storeURL: storeURL)
     }
 
+    /// The Apple TV's App Store page for the release the lookup described.
+    ///
+    /// tvOS has no browser and no `SKStoreProductViewController`, but its App
+    /// Store app answers `com.apple.TVAppStore://itunes.apple.com/app/id<ID>`.
+    /// The id is read from the https page the lookup already returned
+    /// (`…/app/<slug>/id1234567890`), so no extra request and no stored field.
+    /// `nil` when the link carries no numeric `id…` component — the caller then
+    /// renders no button rather than one that goes nowhere.
+    nonisolated static func tvAppStoreURL(for storeURL: URL) -> URL? {
+        guard let component = storeURL.pathComponents.last(where: { $0.hasPrefix("id") }) else {
+            return nil
+        }
+        let digits = component.dropFirst(2)
+        guard !digits.isEmpty, digits.allSatisfy(\.isASCIIDigit) else { return nil }
+        return URL(string: "com.apple.TVAppStore://itunes.apple.com/app/id\(digits)")
+    }
+
     private static func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
@@ -117,4 +134,8 @@ enum AppStoreLookup {
             let trackViewUrl: String?
         }
     }
+}
+
+private extension Character {
+    var isASCIIDigit: Bool { ("0"..."9").contains(self) }
 }

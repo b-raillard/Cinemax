@@ -171,6 +171,8 @@ struct MediaDetailScreen: View {
                 LoadingStateView()
             } else if let error = viewModel.errorMessage {
                 errorView(error)
+            } else if viewModel.isAgeRestricted {
+                ageRestrictedView
             } else if let item = viewModel.item {
                 detailContent(item)
             }
@@ -592,7 +594,7 @@ struct MediaDetailScreen: View {
         Text(item.name ?? "")
             .font(.system(size: detailTitleSize, weight: .black))
             .tracking(-1.5)
-            .foregroundStyle(.white)
+            .foregroundStyle(CinemaColor.onSurface)
             .lineLimit(2)
     }
 
@@ -688,12 +690,12 @@ struct MediaDetailScreen: View {
                     HStack(spacing: 4) {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
-                        Text(String(format: "%.1f", rating))
+                        Text(loc.decimal(rating))
                             .fontWeight(.bold)
                     }
                     .font(.system(size: ratingFontSize))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .accessibilityLabel("\(loc.localized("detail.audienceRating")) \(String(format: "%.1f", rating))")
+                    .accessibilityLabel("\(loc.localized("detail.audienceRating")) \(loc.decimal(rating))")
                 }
 
                 if let critic = item.criticRating {
@@ -707,7 +709,7 @@ struct MediaDetailScreen: View {
                     }
                     .font(.system(size: ratingFontSize))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .accessibilityLabel("\(loc.localized("detail.criticRating")) \(Int(critic.rounded())) percent")
+                    .accessibilityLabel(loc.localized("accessibility.criticRating", Int(critic.rounded())))
                 }
             }
         }
@@ -1083,11 +1085,31 @@ struct MediaDetailScreen: View {
         let groupTicks = appState.pendingIntentPlaybackStartTicks
         appState.pendingIntentPlaybackStartTicks = nil
         guard let item = viewModel.item else { return }
+        // Every producer of this request reaches the fiche BY ID, past the
+        // lists that filter on the age cap — refuse rather than play (the
+        // screen itself shows the restricted state). An episode is checked on
+        // its own rating too: the series' may be absent or milder.
+        let requestedEpisode = viewModel.episodes.first(where: { $0.id == viewModel.itemId })
+        guard !viewModel.isAgeRestricted,
+              MediaDetailViewModel.passesAgeCap(requestedEpisode?.officialRating) else {
+            if groupTicks != nil {
+                // A Watch Together join: the session is already a member, and
+                // the group waits for its `Ready`, which will never come — every
+                // other participant would sit on « En attente d'un participant »
+                // until this device found « Quitter ». Leave instead.
+                SyncPlayController.shared.leaveGroup()
+                toast.info(loc.localized("detail.restricted.title"),
+                           message: loc.localized("syncplay.restricted.left"))
+            } else {
+                toast.info(loc.localized("detail.restricted.title"))
+            }
+            return
+        }
 
         // A request naming an episode plays THAT episode — the view model has
         // resolved the screen up to the parent series, so the Play button's
         // next-up target would be the wrong one here.
-        if let episode = viewModel.episodes.first(where: { $0.id == viewModel.itemId }) {
+        if let episode = requestedEpisode {
             let ticks = episode.userData?.playbackPositionTicks ?? 0
             let played = episode.userData?.isPlayed ?? false
             let localResume = (ticks > 0 && !played) ? ticks.jellyfinSeconds : nil
@@ -1581,7 +1603,7 @@ struct MediaDetailScreen: View {
                             } label: {
                                 Text(season.name ?? loc.localized("detail.season"))
                                     .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
-                                    .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
+                                    .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
                                     .padding(.horizontal, CinemaSpacing.spacing3)
                                     .padding(.vertical, 8)
                                     .background(
@@ -1593,6 +1615,7 @@ struct MediaDetailScreen: View {
                             .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
                             .focusEffectDisabled()
                             .hoverEffectDisabled()
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
                     .padding(.horizontal, contentPadding)
@@ -1747,6 +1770,23 @@ struct MediaDetailScreen: View {
         }
     }
 
+    /// Shown instead of the fiche when the work is rated above the Privacy &
+    /// Security cap (see `MediaDetailViewModel.isAgeRestricted`). Focusable on
+    /// tvOS: this fiche is also the deep-link cover's content, and a cover
+    /// with no focusable view lets Menu tear down the screen under it.
+    private var ageRestrictedView: some View {
+        EmptyStateView(
+            systemImage: "lock.fill",
+            title: loc.localized("detail.restricted.title"),
+            subtitle: loc.localized("detail.restricted.subtitle")
+        )
+        .accessibilityElement(children: .combine)
+        #if os(tvOS)
+        .focusable()
+        .focusEffectDisabled()
+        #endif
+    }
+
     // MARK: - Adaptive Sizing
 
     private var backdropHeight: CGFloat {
@@ -1817,15 +1857,13 @@ struct MediaDetailScreen: View {
         #endif
     }
 
-    /// « Depuis le début » on tvOS, where the button sits beside Play in one
-    /// row and the full « Lire depuis le début » only fit by truncating; the
-    /// full phrase stays on iOS, where the two buttons split a whole line.
+    /// « Depuis le début » on BOTH platforms: beside Play the full « Lire
+    /// depuis le début » only fit by truncating — on tvOS in its row, and on an
+    /// iPhone too, where half a line came out as « Lire depuis le… » (recette
+    /// 2026-09-23). The icon carries the "play" half; VoiceOver keeps the full
+    /// phrase through `playFromBeginningAccessibilityLabel`.
     private var playFromBeginningKey: String {
-        #if os(tvOS)
         "detail.playFromBeginning.short"
-        #else
-        "detail.playFromBeginning"
-        #endif
     }
 
     private var buttonFontSize: CGFloat {
@@ -2021,7 +2059,7 @@ private struct PlayActionButtonsSection: View, Equatable {
                 Image(systemName: "play.fill")
                     .font(.system(size: buttonFontSize - 2, weight: .bold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(themeManager.onAccentContainer)
             .frame(maxWidth: .infinity)
             #if os(tvOS)
             // Fills the row height so the style's fill and ring cover the whole
@@ -2131,4 +2169,23 @@ private struct WatchTogetherPresentation: ViewModifier {
         .environment(toast)
         .environment(network)
     }
+}
+
+/// Builds its content only when it is itself rendered (audit P3).
+///
+/// `NavigationLink { destination } label: { … }` evaluates its destination
+/// closure every time the LINK's body runs — i.e. on every redraw of every
+/// card in a grid — and `MediaDetailScreen.init` allocates its view model
+/// there (`State(initialValue:)`). So each card redraw built, then dropped, a
+/// fiche and a view model nobody would ever see. Wrapped in this view, the
+/// destination is a closure until the link is actually pushed. Keep
+/// `.cardZoomDestination(_:)` OUTSIDE the wrapper, on the pushed view itself.
+struct DeferredView<Content: View>: View {
+    private let make: () -> Content
+
+    init(@ViewBuilder _ make: @escaping () -> Content) {
+        self.make = make
+    }
+
+    var body: some View { make() }
 }
