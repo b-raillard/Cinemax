@@ -161,7 +161,7 @@ struct MetadataRemoteImagePicker: View {
                     .lineLimit(1)
 
                 if let rating = candidate.communityRating {
-                    Text(String(format: "★ %.1f", rating))
+                    Text("★ \(loc.decimal(rating))")
                         .font(CinemaFont.label(.small))
                         .foregroundStyle(themeManager.accent)
                 }

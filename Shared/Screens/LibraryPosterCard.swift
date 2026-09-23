@@ -72,7 +72,7 @@ struct LibraryPosterCard: View {
             }
         } else {
             if let rating = item.communityRating {
-                parts.append(String(format: "%.1f", rating))
+                parts.append(loc.decimal(rating))
             }
         }
         return parts.joined(separator: " · ")

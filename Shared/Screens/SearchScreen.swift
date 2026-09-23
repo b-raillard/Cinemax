@@ -857,9 +857,10 @@ private struct SearchResultCard: View, Equatable {
 
     /// Published by `SearchScreen` on the grid — see `CardZoom`.
     @Environment(\.cardZoomScope) private var zoomScope
+    @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
-        let subtitle = Self.subtitle(for: item)
+        let subtitle = Self.subtitle(for: item, loc: loc)
         let zoom = zoomScope?.zoom(for: item.id)
 
         NavigationLink {
@@ -902,13 +903,13 @@ private struct SearchResultCard: View, Equatable {
         )
     }
 
-    private static func subtitle(for item: BaseItemDto) -> String {
+    private static func subtitle(for item: BaseItemDto, loc: LocalizationManager) -> String {
         var parts: [String] = []
         if let year = item.productionYear { parts.append(String(year)) }
         if item.type == .episode, let seriesName = item.seriesName {
             parts.append(seriesName)
-        } else if let type = item.type {
-            parts.append(type.rawValue)
+        } else if let type = item.type, let kind = loc.itemKind(type) {
+            parts.append(kind)
         }
         return parts.joined(separator: " · ")
     }
