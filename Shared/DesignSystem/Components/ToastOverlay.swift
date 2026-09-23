@@ -5,6 +5,9 @@ import SwiftUI
 struct ToastOverlay: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.motionEffectsEnabled) private var motionEnabled
+    /// Reports the visible pill's frame in global coordinates (`.zero` when
+    /// none) — `ToastWindowHost` uses it to pass every other touch through.
+    var onToastFrameChange: ((CGRect) -> Void)? = nil
 
     var body: some View {
         VStack {
@@ -12,6 +15,10 @@ struct ToastOverlay: View {
                 ToastView(toast: toast) {
                     toasts.dismiss()
                 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                    onToastFrameChange?($0)
+                }
+                .onDisappear { onToastFrameChange?(.zero) }
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.top, CinemaSpacing.spacing3)

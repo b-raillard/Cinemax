@@ -153,6 +153,7 @@
 		3D0E046C8271F43AF4140A28 /* CardPlayTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C21D7C91F182C22D9040E2 /* CardPlayTarget.swift */; };
 		3D5515368F95047F54F0B2C8 /* AdminActivityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C731784E29632A4E153A2CE /* AdminActivityViewModel.swift */; };
 		3DDC7CD20CF4EE5BF2C82863 /* OnboardingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A361F11FB81621F3F110778D /* OnboardingPolicy.swift */; };
+		3DF42D42CD833E00EF00D757 /* ToastWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3A228513FD8334E5B1A5357 /* ToastWindow.swift */; };
 		3E59ADE4094AB3EA9CB628F4 /* IntentSessionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724055A1E25C1AF01224893 /* IntentSessionProvider.swift */; };
 		3EA07881F15762AB00F7A5CD /* WhatsNewPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B90993DD28CF1E2DBAC0A0D /* WhatsNewPolicyTests.swift */; };
 		3EB8F38A74E3F983B33DD677 /* MockAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3734234693F4D6519876963 /* MockAPIClient.swift */; };
@@ -197,6 +198,7 @@
 		4BB363D67E3FE00015B30D10 /* ResumeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A479BA024A9C77374F3D6FD0 /* ResumeControl.swift */; };
 		4BE51C7C783DC5665E32AB27 /* MediaDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD57D8126029102A7AE191CF /* MediaDetailViewModel.swift */; };
 		4C4089A31CD7126F398035EA /* PictureStallPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D3BBFCAEC88F1DBEFC8F74 /* PictureStallPolicy.swift */; };
+		4CF0B139A3E7C5F3229318DE /* ToastWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3A228513FD8334E5B1A5357 /* ToastWindow.swift */; };
 		4D3A0363BBAF768FB4D88343 /* CardPlayTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C21D7C91F182C22D9040E2 /* CardPlayTarget.swift */; };
 		4D5B8748F3B92D962091BC9A /* MetadataActionsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E4A7D171BFFC2140105DE2 /* MetadataActionsTab.swift */; };
 		4DBD5B8AFF0C8D6489DB6063 /* AdminUsersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D5D1A97008B4A1CA8B514B /* AdminUsersScreen.swift */; };
@@ -966,6 +968,7 @@
 		DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryViewModel.swift; sourceTree = "<group>"; };
 		E1330270587AFAB19C600176 /* RemotePlaystateRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlaystateRouterTests.swift; sourceTree = "<group>"; };
 		E15F2D44D68F8FD79A6A7488 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentProvider.swift; sourceTree = "<group>"; };
+		E3A228513FD8334E5B1A5357 /* ToastWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastWindow.swift; sourceTree = "<group>"; };
 		E4B37ED078CCB423C9FE9381 /* FeedStallPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStallPolicyTests.swift; sourceTree = "<group>"; };
 		E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		E5BE8C3505764A69391252DD /* MediaDetailSimilarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailSimilarSection.swift; sourceTree = "<group>"; };
@@ -1640,6 +1643,7 @@
 				19C632FC97E86299EBCAA2CA /* RatingBadge.swift */,
 				E92DA34832DA62A5B0A010C5 /* SkeletonViews.swift */,
 				0E5C1E6AA06EF0B35E4B4CD2 /* ToastOverlay.swift */,
+				E3A228513FD8334E5B1A5357 /* ToastWindow.swift */,
 				8FFCCAA7179A62CDE9CECD2E /* UserAvatar.swift */,
 				BA0B2775D4776FF99A90FB12 /* WideCard.swift */,
 			);
@@ -2198,6 +2202,7 @@
 				F253F28BCDA12B2EC62BE33E /* ThemeManager.swift in Sources */,
 				CE17365839F203B1BB0A34F9 /* ToastCenter.swift in Sources */,
 				390666CDBDB35103BE1D0246 /* ToastOverlay.swift in Sources */,
+				4CF0B139A3E7C5F3229318DE /* ToastWindow.swift in Sources */,
 				622D6AC34C377048FFE8750A /* TrickplayController.swift in Sources */,
 				D0326AA0B9518681C4EB698B /* UserAvatar.swift in Sources */,
 				F7B273773AA4C5CAA1D8BD3F /* UserSwitchSheet.swift in Sources */,
@@ -2515,6 +2520,7 @@
 				7FB1C0EDE50B3335093F475C /* ThemeManager.swift in Sources */,
 				2E1A085843FA335D04A9B52B /* ToastCenter.swift in Sources */,
 				84668E94D3ACB7EA30769308 /* ToastOverlay.swift in Sources */,
+				3DF42D42CD833E00EF00D757 /* ToastWindow.swift in Sources */,
 				5E8DE9281D3D11ADBEE71751 /* TrickplayController.swift in Sources */,
 				CBAEF4A3CF55793AB18B8A0D /* UserAvatar.swift in Sources */,
 				68A6C69AD81208E75BA03CF8 /* UserSwitchSheet.swift in Sources */,

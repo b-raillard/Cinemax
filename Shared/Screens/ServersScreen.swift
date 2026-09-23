@@ -187,12 +187,6 @@ struct ServersScreen: View {
             iOSChrome
             #endif
         }
-        // This screen is ALWAYS a modal (sheet / cover from Settings, Login,
-        // ServerSetup), and the root `ToastOverlay` draws underneath every
-        // modal — so « serveur injoignable » after a refused switch was
-        // invisible until the sheet was closed. Its own overlay reads the same
-        // `ToastCenter`; the root copy stays hidden behind the modal meanwhile.
-        .overlay { ToastOverlay() }
         .task { await viewModel.pingIfNeeded(using: appState) }
         .confirmationDialog(
             loc.localized("servers.switch.action"),

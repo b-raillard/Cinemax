@@ -196,11 +196,10 @@ struct AppNavigation: View {
                     MainTabView()
                 }
             }
-
-            // Toasts overlay the entire app chrome (above tab bar / modals).
-            ToastOverlay()
-                .allowsHitTesting(toasts.current != nil)
         }
+        // Toasts live in their OWN window above this one: an overlay here drew
+        // underneath every sheet, cover and the player — see `ToastWindowHost`.
+        .background(ToastWindowHost(toasts: toasts, loc: loc, themeManager: themeManager))
         .environment(appState)
         .environment(themeManager)
         .environment(loc)

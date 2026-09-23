@@ -174,7 +174,7 @@ toasts.info("Catalogue actualisé")
 - Single active toast at a time — a new one replaces the current.
 - Top-anchored glass pill. Spring enter/exit. Dismissible with the close button.
 - Default durations: success/info 2.5 s, error 4.0 s. Override with `duration:`.
-- Mount `ToastOverlay()` once at the app root (already in `AppNavigation`).
+- Toasts render in their own window above every sheet, cover and the player (`ToastWindowHost`, already in `AppNavigation`) — never mount `ToastOverlay()` in a screen.
 
 ### Alerts
 
