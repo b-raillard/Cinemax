@@ -168,7 +168,7 @@ final class ParentalLockController {
         // the PIN pad — which re-arms on success — take over.
         guard ParentalLockPolicy.biometricsAllowed(
             armedState: credential.biometricDomainState,
-            currentState: context.evaluatedPolicyDomainState
+            currentState: context.domainState.biometry.stateHash
         ) else {
             lockLog.notice("biometric set changed since the lock was armed — PIN required")
             return false
@@ -193,13 +193,13 @@ final class ParentalLockController {
     }
     #endif
 
-    /// The current `evaluatedPolicyDomainState`, or `nil` where biometrics are
+    /// The current biometric `domainState.biometry.stateHash`, or `nil` where biometrics are
     /// unavailable (it is only populated after `canEvaluatePolicy`).
     private static func currentBiometricDomainState() -> Data? {
         #if os(iOS)
         let context = LAContext()
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) else { return nil }
-        return context.evaluatedPolicyDomainState
+        return context.domainState.biometry.stateHash
         #else
         return nil
         #endif
