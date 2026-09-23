@@ -308,17 +308,7 @@ extension SettingsScreen {
                             .foregroundStyle(themeManager.accent)
                     }
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(serverName)
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Text(serverAddress)
-                            .font(CinemaFont.dynamicLabel(.medium))
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
+                    IOSActiveServerLabel()
 
                     Spacer()
 
@@ -697,6 +687,32 @@ extension SettingsScreen {
 /// `@State` (fetched genres) and `@AppStorage` selection drive re-renders even
 /// though it's reached through a `NavigationLink` inside the settings stack.
 /// Selection persists through `HomeGenrePreferences` (`home.selectedGenres`).
+/// Name + address of the active server on the Server page.
+///
+/// A standalone `View` with its own `@Environment`, NOT a read of
+/// `SettingsScreen.serverName`: that page is rendered through
+/// `navigationDestination(item:)`, where an extension property does not
+/// re-render on `@Observable` changes (see the iOS `NavigationStack` RULE) —
+/// a switch made from « Mes serveurs », presented over this page, left the
+/// previous server's name on it.
+struct IOSActiveServerLabel: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(appState.activeServerDisplayName)
+                .font(CinemaFont.dynamicLabel(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+
+            Text(appState.serverURL?.host ?? appState.serverURL?.absoluteString ?? "Unknown")
+                .font(CinemaFont.dynamicLabel(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+}
+
 struct IOSHomeGenrePickerView: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager

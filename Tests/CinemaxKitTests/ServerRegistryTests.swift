@@ -767,6 +767,28 @@ struct MultiServerAppStateTests {
         #expect(app.activeServerNameOverride == "Salon")
     }
 
+    /// The Settings server card read `serverInfo`, which a switch nils and
+    /// only a background fetch refills — so it named the placeholder, and on
+    /// the pushed iOS page kept the PREVIOUS server's name.
+    @Test("The displayed server name follows a switch, from the registry entry")
+    func displayNameFollowsSwitch() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let a = entry("Salon", "https://a.local")
+        let b = entry("Bureau", "https://b.local", userId: "user2")
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+        #expect(app.activeServerDisplayName == "Salon")
+
+        #expect(await app.switchTo(b) == .commit)
+        #expect(app.activeServerDisplayName == "Bureau")
+
+        #expect(await app.switchTo(a) == .commit)
+        #expect(app.activeServerDisplayName == "Salon")
+
+        app.renameServer(id: a.id, to: "Cinéma")
+        #expect(app.activeServerDisplayName == "Cinéma")
+    }
+
     @Test("A rename survives a switch away and back (the upsert path)")
     func renameSurvivesSwitch() async {
         let api = MockAPIClient()

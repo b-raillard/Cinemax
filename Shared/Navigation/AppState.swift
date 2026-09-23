@@ -375,6 +375,20 @@ final class AppState {
         return servers.first { $0.id == activeServerId }?.displayNameOverride
     }
 
+    /// The name the chrome shows for the server the app is ON: the user's label,
+    /// else the name stored on the registry entry, else the live `serverInfo`.
+    /// The entry comes first because `serverInfo` is nil'd on every switch and
+    /// only refilled by a background fetch — reading it alone printed the
+    /// placeholder, then the name, on every switch. Keyed on `activeServerId`
+    /// for the same reason as `activeServerNameOverride`.
+    var activeServerDisplayName: String {
+        if let activeServerId, let entry = servers.first(where: { $0.id == activeServerId }) {
+            if let override = entry.displayNameOverride, !override.isEmpty { return override }
+            if !entry.name.isEmpty, entry.name != ServerEntry.fallbackName { return entry.name }
+        }
+        return serverInfo?.name ?? ServerEntry.fallbackName
+    }
+
     /// Hydrates the observable registry from the Keychain. Called once from
     /// `restoreSession`; every later change goes through a mutator here.
     func loadServersFromKeychain() {
