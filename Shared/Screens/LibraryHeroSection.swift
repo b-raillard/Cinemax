@@ -81,7 +81,7 @@ struct LibraryHeroSection: View {
                     Text(item.name ?? "")
                         .font(.system(size: heroTitleSize, weight: .black))
                         .tracking(-1.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CinemaColor.onSurface)
                         .textCase(.uppercase)
                         .lineLimit(2)
 

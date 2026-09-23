@@ -594,7 +594,7 @@ struct MediaDetailScreen: View {
         Text(item.name ?? "")
             .font(.system(size: detailTitleSize, weight: .black))
             .tracking(-1.5)
-            .foregroundStyle(.white)
+            .foregroundStyle(CinemaColor.onSurface)
             .lineLimit(2)
     }
 
