@@ -95,6 +95,6 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 | `whatsNew.lastSeenVersion` | — | The version whose « Quoi de neuf » pages have already been shown. **Absent is NOT "first run"** — it is also every install upgrading from a build that predates the reel, which is exactly its audience; the two are told apart by `OnboardingPolicy.shouldShow`. Read/written only through `WhatsNewPolicy` |
 | `update.lastCheckedAt` | `0` | When the App Store was last asked (epoch seconds). Throttles the **request** only — the decision is re-derived from `update.latestVersion` on every launch, so a standing offer survives the throttle |
 | `update.latestVersion` | — | The newest version string the Store reported, **verbatim** (`"2.1"` stays `"2.1"`; `ServerVersion.description` would print `2.1.0.0` at the user) |
-| `update.latestStoreURL` | — | That release's Store page. Absent ⇒ iOS renders no « Mettre à jour » button rather than a dead one |
+| `update.latestStoreURL` | — | That release's Store page. Absent ⇒ no « Mettre à jour » button (either platform) rather than a dead one |
 | `update.declinedVersion` | — | The version the user answered « Plus tard » to. Suppresses **that** version only |
 | `easterEgg.rainbowUnlocked` | `false` | Rainbow accent visibility — flipped by logo-tap easter egg |

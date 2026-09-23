@@ -62,11 +62,12 @@ struct AppUpdatePresentation: ViewModifier {
         }
     }
 
-    /// tvOS has no way to open a Store page, so it says where to go instead of
-    /// offering a button that would do nothing.
+    /// Said only when there is no button to press: where the App Store cannot
+    /// be opened from here (tvOS without the Store app, e.g. the simulator),
+    /// the alert says where to go instead.
     private var platformHint: String? {
         #if os(tvOS)
-        loc.localized("update.tvos.hint")
+        checker.storeURLToOpen == nil ? loc.localized("update.tvos.hint") : nil
         #else
         nil
         #endif
@@ -99,17 +100,13 @@ struct AppUpdatePresentation: ViewModifier {
         }
     }
 
-    /// Rendered only where it can actually do something: iOS, and only when the
-    /// lookup carried a page to open. A button that silently does nothing is
-    /// worse than an absent one.
+    /// Rendered only where it can actually do something — the lookup carried
+    /// a page and this device can open it (see `storeURLToOpen`). A button
+    /// that silently does nothing is worse than an absent one.
     @ViewBuilder
     private func updateButton(for release: AppStoreRelease) -> some View {
-        #if os(iOS)
-        if release.storeURL != nil {
+        if checker.storeURLToOpen != nil {
             Button(loc.localized("update.action.update")) { checker.openStore() }
         }
-        #else
-        EmptyView()
-        #endif
     }
 }

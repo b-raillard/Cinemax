@@ -227,6 +227,11 @@ targets:
         # Single-source the version from settings.base (see iOS note).
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # The update prompt's « Mettre à jour » asks `canOpenURL` whether the
+        # Apple TV's App Store answers this scheme, and renders no button when
+        # it does not — see Shared/Update/CLAUDE.md.
+        LSApplicationQueriesSchemes:
+          - com.apple.TVAppStore
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoadsForMedia: true
