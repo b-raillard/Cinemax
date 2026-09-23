@@ -100,10 +100,10 @@ struct MetadataActionsTab: View {
             loc.localized("admin.metadata.actions.delete.title"),
             footer: loc.localized("admin.metadata.actions.delete.footer")
         ) {
-            iOSSettingsRow {
-                Button(role: .destructive) {
-                    viewModel.showDeleteConfirm = true
-                } label: {
+            Button(role: .destructive) {
+                viewModel.showDeleteConfirm = true
+            } label: {
+                iOSSettingsRow {
                     HStack {
                         iOSRowIcon(systemName: "trash", color: CinemaColor.error)
                         Text(loc.localized("admin.metadata.delete.title"))
@@ -112,8 +112,8 @@ struct MetadataActionsTab: View {
                         Spacer()
                     }
                 }
-                .buttonStyle(.plain)
             }
+            .buttonStyle(.plain)
         }
     }
 

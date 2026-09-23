@@ -59,12 +59,21 @@ func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) ->
 #if os(iOS)
 
 /// Standard padded row container for settings cells.
+///
+/// The row carries a rectangular `contentShape` covering its padding, because
+/// a `Button` / `NavigationLink` only takes touches where its label DRAWS —
+/// and neither a `Spacer` nor padding draws anything, so a tappable row whose
+/// label is this container used to answer on its icon, text and chevron only
+/// (Image Patterns RULE). A tappable row must therefore put this container
+/// INSIDE its label (`Button { … } label: { iOSSettingsRow { … } }`), never the
+/// other way round: a button nested inside it gains nothing from the shape.
 @MainActor
 @ViewBuilder
 func iOSSettingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
     content()
         .padding(.horizontal, CinemaSpacing.spacing4)
         .padding(.vertical, CinemaSpacing.spacing3)
+        .contentShape(Rectangle())
 }
 
 /// Colored icon badge used as the leading element of a settings row.

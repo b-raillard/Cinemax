@@ -256,10 +256,10 @@ extension SettingsScreen {
 
                     iOSSettingsDivider
 
-                    iOSSettingsRow {
-                        Button {
-                            showLogOutAlert = true
-                        } label: {
+                    Button {
+                        showLogOutAlert = true
+                    } label: {
+                        iOSSettingsRow {
                             HStack {
                                 iOSRowIcon(systemName: "rectangle.portrait.and.arrow.right", color: CinemaColor.error)
 
@@ -270,8 +270,8 @@ extension SettingsScreen {
                                 Spacer()
                             }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .buttonStyle(.plain)
                 }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
             }
@@ -344,8 +344,8 @@ extension SettingsScreen {
 
             // Refresh Catalogue
             VStack(spacing: 0) {
-                iOSSettingsRow {
-                    Button { refreshCatalogue() } label: {
+                Button { refreshCatalogue() } label: {
+                    iOSSettingsRow {
                         HStack(alignment: .center, spacing: CinemaSpacing.spacing3) {
                             iOSRowIcon(systemName: "arrow.triangle.2.circlepath", color: themeManager.accent)
                             VStack(alignment: .leading, spacing: 2) {
@@ -360,8 +360,8 @@ extension SettingsScreen {
                             Spacer()
                         }
                     }
-                    .buttonStyle(.plain)
                 }
+                .buttonStyle(.plain)
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
         }
@@ -629,8 +629,8 @@ extension SettingsScreen {
 
     @ViewBuilder
     func navigationRow(icon: String, label: String, action: @escaping () -> Void) -> some View {
-        iOSSettingsRow {
-            Button(action: action) {
+        Button(action: action) {
+            iOSSettingsRow {
                 HStack {
                     iOSRowIcon(systemName: icon, color: CinemaColor.onSurfaceVariant)
 
@@ -645,8 +645,8 @@ extension SettingsScreen {
                         .foregroundStyle(CinemaColor.outlineVariant)
                 }
             }
-            .buttonStyle(.plain)
         }
+        .buttonStyle(.plain)
     }
     // MARK: - Sleep Timer Row (iOS)
 

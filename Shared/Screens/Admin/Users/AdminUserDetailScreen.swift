@@ -310,10 +310,10 @@ struct AdminUserDetailScreen: View {
     private func folderRow(_ folder: BaseItemDto) -> some View {
         let folderId = folder.id ?? ""
         let isOn = viewModel.isFolderEnabled(folderId)
-        iOSSettingsRow {
-            Button {
-                viewModel.toggleFolder(folderId)
-            } label: {
+        Button {
+            viewModel.toggleFolder(folderId)
+        } label: {
+            iOSSettingsRow {
                 HStack {
                     iOSRowIcon(
                         systemName: isOn ? "checkmark.square.fill" : "square",
@@ -325,8 +325,8 @@ struct AdminUserDetailScreen: View {
                     Spacer()
                 }
             }
-            .buttonStyle(.plain)
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Parental tab
@@ -448,10 +448,10 @@ struct AdminUserDetailScreen: View {
                     loc.localized("admin.user.password.resetTitle"),
                     footer: loc.localized("admin.user.password.resetFooter")
                 ) {
-                    iOSSettingsRow {
-                        Button(role: .destructive) {
-                            viewModel.showResetPasswordConfirm = true
-                        } label: {
+                    Button(role: .destructive) {
+                        viewModel.showResetPasswordConfirm = true
+                    } label: {
+                        iOSSettingsRow {
                             HStack {
                                 iOSRowIcon(systemName: "key.slash", color: CinemaColor.error)
                                 Text(loc.localized("admin.user.password.resetAction"))
@@ -460,8 +460,8 @@ struct AdminUserDetailScreen: View {
                                 Spacer()
                             }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, CinemaSpacing.spacing3)
