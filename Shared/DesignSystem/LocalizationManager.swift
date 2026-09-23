@@ -1,4 +1,5 @@
 import SwiftUI
+import JellyfinAPI
 
 @MainActor @Observable
 final class LocalizationManager {
@@ -110,6 +111,44 @@ final class LocalizationManager {
     /// « 1 saison » through the `tvShows.season` key this reuses.
     func seasonCount(_ count: Int) -> String {
         count == 1 ? localized("tvShows.season", count) : localized("tvShows.seasonsPlural", count)
+    }
+
+    /// A rating such as « 6,8 » / "6.8", with the decimal separator of the
+    /// APP's language. `String(format: "%.1f")` always wrote a point, and the
+    /// system formatters would follow the DEVICE region — a French app on a
+    /// phone set to the US would still print « 5.9 ». One digit, like before.
+    func decimal<Value: BinaryFloatingPoint>(_ value: Value) -> String {
+        Self.decimal(Double(value), languageCode: languageCode)
+    }
+
+    nonisolated static func decimal(_ value: Double, languageCode: String) -> String {
+        value.formatted(
+            .number
+                .precision(.fractionLength(1))
+                .locale(Locale(identifier: languageCode))
+        )
+    }
+
+    /// Human label for a Jellyfin item kind on a card subtitle (« Film »,
+    /// « Série »…). Cards printed `BaseItemKind.rawValue`, i.e. the wire enum
+    /// « Movie » / « Series » in English whatever the app language. A kind
+    /// with no label of its own answers `nil` and is left out rather than
+    /// printed raw.
+    func itemKind(_ kind: BaseItemKind) -> String? {
+        Self.itemKindKey(kind).map { localized($0) }
+    }
+
+    nonisolated static func itemKindKey(_ kind: BaseItemKind) -> String? {
+        switch kind {
+        case .movie: "item.kind.movie"
+        case .series: "item.kind.series"
+        case .episode: "item.kind.episode"
+        case .season: "item.kind.season"
+        case .boxSet: "item.kind.collection"
+        case .playlist: "item.kind.playlist"
+        case .video, .musicVideo: "item.kind.video"
+        default: nil
+        }
     }
 
     /// "1 essai" / "3 essais" left before the parental lock's next back-off

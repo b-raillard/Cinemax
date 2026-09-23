@@ -101,6 +101,34 @@ func iOSSettingsSectionHeader(_ title: String) -> some View {
         .padding(.horizontal, CinemaSpacing.spacing2)
 }
 
+/// A settings row's label and its control: side by side normally, the control
+/// UNDER the label at the accessibility text sizes. Side by side, a control of
+/// fixed width (a toggle, a stepper whose « 100% » grows with the text, the
+/// FR / EN pills) left the label a sliver and it broke mid-word — « Tail/le/du/
+/// tex/te », « mouvem/ent » (recette 2026-09-23). A view rather than a check in
+/// each helper because the row helpers are free functions with no environment.
+struct SettingsRowAdaptiveLayout<Label: View, Control: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ViewBuilder let label: Label
+    @ViewBuilder let control: Control
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+                label
+                control
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack {
+                label
+                Spacer()
+                control
+            }
+        }
+    }
+}
+
 /// Toggle row matching the iOS settings pattern: icon + label + CinemaToggleIndicator.
 /// Equivalent to tvOS's `tvGlassToggle` — one call per boolean setting.
 ///
@@ -119,12 +147,14 @@ func iOSToggleRow(
     loc: LocalizationManager
 ) -> some View {
     iOSSettingsRow {
-        HStack {
-            iOSRowIcon(systemName: icon, color: accent)
-            Text(label)
-                .font(CinemaFont.dynamicLabel(.large))
-                .foregroundStyle(CinemaColor.onSurface)
-            Spacer()
+        SettingsRowAdaptiveLayout {
+            HStack {
+                iOSRowIcon(systemName: icon, color: accent)
+                Text(label)
+                    .font(CinemaFont.dynamicLabel(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+            }
+        } control: {
             Button {
                 value.wrappedValue.toggle()
                 Haptics.tap()

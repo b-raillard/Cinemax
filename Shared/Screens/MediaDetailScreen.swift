@@ -688,12 +688,12 @@ struct MediaDetailScreen: View {
                     HStack(spacing: 4) {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
-                        Text(String(format: "%.1f", rating))
+                        Text(loc.decimal(rating))
                             .fontWeight(.bold)
                     }
                     .font(.system(size: ratingFontSize))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .accessibilityLabel("\(loc.localized("detail.audienceRating")) \(String(format: "%.1f", rating))")
+                    .accessibilityLabel("\(loc.localized("detail.audienceRating")) \(loc.decimal(rating))")
                 }
 
                 if let critic = item.criticRating {
@@ -707,7 +707,7 @@ struct MediaDetailScreen: View {
                     }
                     .font(.system(size: ratingFontSize))
                     .foregroundStyle(CinemaColor.onSurface)
-                    .accessibilityLabel("\(loc.localized("detail.criticRating")) \(Int(critic.rounded())) percent")
+                    .accessibilityLabel("\(loc.localized("detail.criticRating")) \(Int(critic.rounded()))%")
                 }
             }
         }
@@ -1817,15 +1817,13 @@ struct MediaDetailScreen: View {
         #endif
     }
 
-    /// « Depuis le début » on tvOS, where the button sits beside Play in one
-    /// row and the full « Lire depuis le début » only fit by truncating; the
-    /// full phrase stays on iOS, where the two buttons split a whole line.
+    /// « Depuis le début » on BOTH platforms: beside Play the full « Lire
+    /// depuis le début » only fit by truncating — on tvOS in its row, and on an
+    /// iPhone too, where half a line came out as « Lire depuis le… » (recette
+    /// 2026-09-23). The icon carries the "play" half; VoiceOver keeps the full
+    /// phrase through `playFromBeginningAccessibilityLabel`.
     private var playFromBeginningKey: String {
-        #if os(tvOS)
         "detail.playFromBeginning.short"
-        #else
-        "detail.playFromBeginning"
-        #endif
     }
 
     private var buttonFontSize: CGFloat {
