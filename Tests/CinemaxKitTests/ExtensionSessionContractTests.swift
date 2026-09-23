@@ -115,6 +115,15 @@ struct ExtensionSessionContractTests {
         ("-12", 16, true),
         ("FSK-16", 16, true),
         ("TOUS PUBLICS", 10, true),
+        // Formes réelles hors table (audit 2026-09-22) : préfixe pays du
+        // fournisseur TMDb, âge nu, suffixe « + ».
+        ("FR-16", 12, false),
+        ("FR-12", 12, true),
+        ("16", 12, false),
+        ("12+", 12, true),
+        ("18+", 16, false),
+        ("Germany: FSK-18", 16, false),
+        ("Rated R", 16, false),
         ("G", 10, true),
         // Absente ou inconnue ⇒ passe : un épisode hérite sa classification de
         // sa série et arrive `nil`, donc filtrer sur une donnée manquante
@@ -146,6 +155,14 @@ struct ExtensionSessionContractTests {
 
         let keychain = KeychainService()
         let payload = Data("shared-session-payload".utf8)
+        // The test host IS the app: on a signed device this item is the
+        // widget's and the Top Shelf's live session. Put it back afterwards,
+        // or every local test run signs both extensions out (audit
+        // 2026-09-22, T4).
+        let original = keychain.readSharedSession()
+        defer {
+            if let original { keychain.saveSharedSession(original) } else { keychain.deleteSharedSession() }
+        }
 
         keychain.deleteSharedSession()       // clean slate
         keychain.saveSharedSession(payload)
@@ -210,5 +227,24 @@ struct ExtensionSessionSkipDecisionTests {
     func staleKeychainClearPublishes() throws {
         let data = try JSONEncoder().encode(session)
         #expect(!ExtensionSessionBridge.isCurrent(session: nil, keychainData: data))
+    }
+}
+
+/// Audit 2026-09-22 (S1) : les éléments « privés » atterrissaient dans le groupe
+/// partagé avec les extensions. La migration déplace exactement cette liste —
+/// elle doit couvrir tout ce que l'app stocke, SAUF la session partagée.
+@Suite("Keychain private accounts")
+struct KeychainPrivateAccountsTests {
+    @Test("Every app-private account migrates; the shared session never does")
+    func privateAccountsCoverEverythingButTheSharedSession() {
+        let accounts = Set(KeychainService.privateAccounts)
+        #expect(!accounts.contains(KeychainService.sharedSessionAccount))
+        for account in [
+            "access_token", "server_url", "user_session", "device_id",
+            KeychainService.serversAccount, KeychainService.activeServerIdAccount,
+            KeychainService.trustedCertificatesAccount, KeychainService.parentalLockAccount,
+        ] {
+            #expect(accounts.contains(account), "\(account) must leave the shared group")
+        }
     }
 }

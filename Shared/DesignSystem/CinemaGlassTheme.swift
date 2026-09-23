@@ -180,6 +180,22 @@ enum CinemaFont {
         }
     }
 
+    /// Dynamic Type-aware headline — for the title of an empty / error state,
+    /// which is reading text, not a hero (those keep `headline(_:)`).
+    static func dynamicHeadline(_ size: HeadlineSize = .small) -> Font {
+        switch size {
+        case .large:  .system(size: scaledPoint(32, relativeTo: .title1), weight: .bold)
+        case .medium: .system(size: scaledPoint(28, relativeTo: .title2), weight: .bold)
+        case .small:  .system(size: scaledPoint(24, relativeTo: .title3), weight: .semibold)
+        }
+    }
+
+    /// Any other size, Dynamic Type-aware — the one-off label sizes of the
+    /// settings screens (a category title at 18 pt semibold).
+    static func dynamicSystem(_ baseSize: CGFloat, weight: Font.Weight, relativeTo style: UIFont.TextStyle = .body) -> Font {
+        .system(size: scaledPoint(baseSize, relativeTo: style), weight: weight)
+    }
+
     /// Helper that combines the app's `uiScale` and the OS's Dynamic Type scaling
     /// into a final point size. On non-UIKit platforms falls back to `CinemaScale.pt`.
     private static func scaledPoint(_ baseSize: CGFloat, relativeTo style: UIFont.TextStyle) -> CGFloat {

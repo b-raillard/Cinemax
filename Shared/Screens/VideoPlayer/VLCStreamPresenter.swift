@@ -223,6 +223,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `mediaPlayer.media?.length` reads).
     private var mediaLengthMs: Int32 = 0
     private var didApplyServerTrackDefaults = false
+    /// The audio / subtitle ordinals in use when a wake re-resolve replaced the
+    /// media, re-applied INSTEAD of the server defaults on the reopened stream
+    /// (same source, so the ordinals still name the same tracks). Without it a
+    /// user who had switched to the VO, or turned subtitles on, woke the Apple
+    /// TV onto the server's default track (audit 2026-09-22, B5). `subtitle`
+    /// nil = off. Consumed by the next `applyServerTrackDefaultsIfNeeded`.
+    private var trackRestore: (audio: Int?, subtitle: Int?)?
     #if os(iOS)
     private var pipController: PiPController?
     private let pipButton = UIButton(type: .system)
@@ -639,9 +646,63 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         startPlayback()
         scheduleHideControls()
         setupLifecycleObservers()
+        // VoiceOver: the player is the whole screen, so the app still drawn
+        // behind the `.overFullScreen` presentation must not be reachable by
+        // swiping, and the HUD stays up for as long as VoiceOver runs.
+        view.accessibilityViewIsModal = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(voiceOverStatusChanged),
+            name: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil
+        )
         bindSyncPlay()
         remotePlaystateToken = RemotePlaystateRouter.shared.register { [weak self] command in
             self?.applyRemotePlaystate(command) ?? false
+        }
+    }
+
+    // MARK: - VoiceOver (audit 2026-09-22, U6)
+
+    /// The two-finger double tap: play / pause, the gesture VoiceOver users
+    /// expect from any player — the same path as the on-screen button.
+    override func accessibilityPerformMagicTap() -> Bool {
+        guard !isOverlayOwningInput, mediaConfirmedOpen else { return false }
+        playPauseTapped()
+        return true
+    }
+
+    /// True while something other than the transport owns the screen — the
+    /// teardown, an alert (error, leave confirmation), a picker, and on tvOS
+    /// the option panel or the end-of-series card. Those layers take the HUD
+    /// out of the focus map on purpose; a VoiceOver gesture must not bring it
+    /// back behind them, nor toggle a playback nobody can see.
+    private var isOverlayOwningInput: Bool {
+        if isTearingDown || errorAlert != nil || leaveConfirmationAlert != nil || pickerPresented {
+            return true
+        }
+        #if os(tvOS)
+        if optionPanel != nil || endOfSeriesCard != nil { return true }
+        #endif
+        return false
+    }
+
+    #if os(iOS)
+    /// The two-finger Z: close the player, exactly as the ✕ does (so a
+    /// Watch Together session still asks before leaving the group).
+    override func accessibilityPerformEscape() -> Bool {
+        closePlayer(.user)
+        return true
+    }
+    #endif
+
+    /// Turning VoiceOver on brings the HUD back and keeps it; turning it off
+    /// hands the HUD back to its usual 4 s timer.
+    @objc private func voiceOverStatusChanged() {
+        if UIAccessibility.isVoiceOverRunning {
+            hideControlsWorkItem?.cancel()
+            guard !isOverlayOwningInput else { return }
+            showControls()
+        } else if controlsVisible {
+            scheduleHideControls()
         }
     }
 
@@ -922,7 +983,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             timeSource: { [weak self] in
                 guard let self else { return (0, true) }
                 return (Double(self.currentMs) / 1000.0, !self.enginePlaying)
-            }
+            },
+            pendingResume: { [weak self] in self?.pendingResumeSecondsForReport }
         )
     }
 
@@ -1783,7 +1845,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         closeConfig.baseForegroundColor = .white
         closeConfig.background.backgroundColor = UIColor.black.withAlphaComponent(0.45)
         closeConfig.cornerStyle = .capsule
-        closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 9, bottom: 9, trailing: 9)
+        // 15 pt around the 14 pt glyph: a 44 pt target (was ~32).
+        closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15)
         closeButton.configuration = closeConfig
         closeButton.translatesAutoresizingMaskIntoConstraints = false
         closeButton.accessibilityLabel = loc.localized("action.done")
@@ -1924,8 +1987,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // `compact` = the top-right cluster (PiP/audio/subtitle): tighter
         // insets so four icons + a title fit in narrow portrait. Default
         // insets are for the larger center transport controls.
+        // Compact still meets 44 pt in HEIGHT (was ~31 pt all round); the width
+        // stays tighter so the five icons fit beside the title in portrait,
+        // which is what yields — see the compression priorities below.
         cfg.contentInsets = compact
-            ? NSDirectionalEdgeInsets(top: 7, leading: 7, bottom: 7, trailing: 7)
+            ? NSDirectionalEdgeInsets(top: 12, leading: 9, bottom: 12, trailing: 9)
             : NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
         b.configuration = cfg
         b.accessibilityLabel = a11y
@@ -2642,11 +2708,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         scheduleHideControls()
     }
 
-    /// Downloads one chapter thumbnail. Sends the token both as the
-    /// `ApiKey` query param (what Jellyfin image endpoints expect) and as the
-    /// Authorization header, so it works regardless of server hardening.
+    /// Downloads one chapter thumbnail, token in the Authorization header only:
+    /// the image endpoint is anonymous anyway, and a token in the URL only
+    /// reached reverse-proxy logs and made the cache key change with it.
     nonisolated private static func loadImage(url: URL, token: String?) async -> Data? {
-        let authed = VLCStreamPresenter.authedURL(url, token: token)
+        let authed = url
         guard let data = await AuthenticatedImageFetch.data(from: authed, token: token) else {
             #if DEBUG
             logger.debug("CINEMAX-CHAPTERIMG ▸ request failed \(redactedURL(authed))")
@@ -3260,6 +3326,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
         didApplyServerTrackDefaults = true
 
+        if let kept = trackRestore {
+            trackRestore = nil
+            if let audio = kept.audio, audio < player.audioTracks.count {
+                player.selectedAudioTrack = player.audioTracks[audio]
+            }
+            if let subtitle = kept.subtitle {
+                // Not listed yet on this `.tracksChanged`: leave the engine's
+                // choice rather than read "unknown" as "off".
+                if subtitle < player.subtitleTracks.count {
+                    player.selectedSubtitleTrack = player.subtitleTracks[subtitle]
+                }
+            } else {
+                player.selectedSubtitleTrack = nil
+            }
+            let audioLabel = kept.audio.map { String($0) } ?? "-"
+            let subtitleLabel = kept.subtitle.map { String($0) } ?? "off"
+            logger.notice("CINEMAX-AUDIO ▸ réveil : pistes conservées audio=\(audioLabel, privacy: .public) sous-titres=\(subtitleLabel, privacy: .public)")
+            return
+        }
+
         // NOT `info.selectedAudioIndex` verbatim: the server's default can be a
         // TrueHD track, which this engine renders as silence on Apple. See
         // `AudioTrackPolicy`.
@@ -3387,6 +3473,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func startPlayback() {
         hasValidTime = false
         didApplyServerTrackDefaults = false
+        trackRestore = nil
         seeks.cancelPending()
         beginOpenLoading()
         mediaLengthMs = 0
@@ -3657,6 +3744,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         !didSeekToStart && (startTime ?? 0) > 0
     }
 
+    /// The position every report must carry instead of the engine's while the
+    /// engine has not reached it (see `PlaybackReporter.reportableSeconds`).
+    /// Two shapes: a resume seek not sent yet (initial open, wake re-resolve,
+    /// or a mid-film retry once it has re-armed `startTime`), and a re-open
+    /// that has not produced a demuxer yet — between `beginOpenLoading()` and
+    /// the retry's own `startTime` write, the dead engine reads 0 while
+    /// `lastKnownPositionMs` still holds where the film dropped. An episode
+    /// swap zeroes that position, so a new episode reports its own playhead.
+    private var pendingResumeSecondsForReport: Double? {
+        if startSeekPending { return startTime }
+        if !mediaConfirmedOpen, lastKnownPositionMs > 1000 { return Double(lastKnownPositionMs) / 1000 }
+        return nil
+    }
+
     /// Repaints presence, the waiting overlay and any arrival/departure line.
     /// Driven by the controller's `onSessionChanged`, so it covers joining and
     /// leaving mid-playback as well as the initial state.
@@ -3816,6 +3917,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         closeOptionPanelForMediaChange()
         #endif
         navGeneration += 1
+        // A retry in flight is abandoned by this nav; if the nav then fails,
+        // nothing is playing and nothing would end the retry's spinner.
+        let abandonedRetry = pendingRetryToken != nil
         pendingRetryToken = nil // a retry of the media being replaced is moot
         let gen = navGeneration
         reporter?.reportStop(reason: .episodeSwap)
@@ -3830,7 +3934,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
             ) else {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
-                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay)
+                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay, abandonedRetry: abandonedRetry)
                 return
             }
             // Dismissed mid-nav, or a newer nav superseded this one: applying
@@ -3846,6 +3950,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
+            self.trackRestore = nil // another episode: its own defaults
             self.mediaLengthMs = 0
             // Per-file state: the countdown card baked in the old "next" title,
             // and delays compensate per-file mux drift. Speed persists.
@@ -3906,7 +4011,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// - autoplay at end of episode: nothing is playing any more, so there is no
     ///   session to restore. Surface a terminal alert with a single dismiss
     ///   action, mirroring `showEndOfSeriesOverlay`'s end-of-playback precedent.
-    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, abandonedRetry: Bool) {
         // A teardown, or a newer nav that already re-armed the timers, owns the
         // session now — recovering here would double-arm / resurrect state.
         guard !isTearingDown, gen == navGeneration else { return }
@@ -3925,8 +4030,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             present(alert, animated: true)
             return
         }
+        // "The episode on screen keeps playing" does not hold when this nav
+        // abandoned an error retry: the retry's watchdog was cancelled and its
+        // token just cleared, so nothing could ever end its spinner. That retry
+        // was the one allowed attempt, so the error path surfaces the alert —
+        // before any session is re-armed under it. Deliberately scoped to that
+        // case: an initial open still in flight keeps its own watchdog, and a
+        // finished episode must not be reopened.
+        guard !abandonedRetry else {
+            handlePlaybackError()
+            return
+        }
         reporter?.resetTicking()
-        reporter?.reportStart(startTime: Double(currentMs) / 1000.0)
+        reporter?.reportStart(startTime: pendingResumeSecondsForReport ?? Double(currentMs) / 1000.0)
         startProgressTimer()
         showSkipHUD(loc.localized("player.episodeNav.failed"), duration: 1.8)
     }
@@ -4205,6 +4321,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Never auto-hide while a track/chapter picker is up — the controls must
         // stay put behind it so focus returns somewhere sensible.
         if pickerPresented { return }
+        // Nor under VoiceOver: a HUD that fades every 4 s takes the element the
+        // user is swiping to away from under them (audit 2026-09-22, U6).
+        if UIAccessibility.isVoiceOverRunning { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.pickerPresented else { return }
             self.hideControlsImmediately()
@@ -4536,7 +4655,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackError() {
         cancelOpenWatchdog()
         seeks.endSettle() // the media is being reloaded (or given up on)
-        if !didRetry {
+        // The decision is pure and unit-tested (`PlaybackRetryPolicy`); this
+        // method owns only its effects.
+        let decision = PlaybackRetryPolicy.decide(
+            didRetry: didRetry,
+            errorAlertShowing: errorAlert != nil,
+            retryPending: pendingRetryToken != nil,
+            usingProxy: usingProxy
+        )
+        let releaseStickyProxy: Bool
+        switch decision {
+        case .retry(let noteDirectFailure):
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
             // A direct attempt failed: pin the rest of the session to the proxy
@@ -4545,7 +4674,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // latching is exactly right on a network where `getaddrinfo` fails
             // for every URL, since the proxy is then the ONLY path that works
             // (measured: libVLC `cannot resolve` while URLSession returns 200).
-            if !usingProxy { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
+            if noteDirectFailure { StreamTransportPolicy.shared.noteDirectPlaybackFailed() }
             // Armed NOW rather than after the await below: the failed attempt's
             // own trailing `.stopped` lands during it, and `beginOpenLoading` is
             // what tells the end gate to ignore it (and puts the spinner up).
@@ -4588,8 +4717,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 // so re-arm it and reset media state exactly like an episode
                 // swap. A fresh-open failure (never played, position 0)
                 // keeps its original `startTime` resume untouched.
-                if self.lastKnownPositionMs > 1000 {
-                    self.startTime = Double(self.lastKnownPositionMs) / 1000
+                if let resume = PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: self.lastKnownPositionMs) {
+                    self.startTime = resume
                     self.didSeekToStart = false
                     self.hasValidTime = false
                     self.mediaLengthMs = 0
@@ -4597,18 +4726,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 self.activateSessionThenPlay(media)
             }
             return
+        case .ignore:
+            // Already given up and on screen: a second signal of the SAME
+            // failure (its trailing `.stopped`, a late watchdog) must neither
+            // stack another alert nor release the server session twice. Or a
+            // retry is still readying the proxy: a late signal from the
+            // attempt it replaces is not the retry failing.
+            return
+        case .giveUp(let release):
+            releaseStickyProxy = release
         }
-        // Already given up and on screen: a second signal of the SAME failure
-        // (its trailing `.stopped`, a late watchdog) must neither stack another
-        // alert nor release the server session twice.
-        guard errorAlert == nil else { return }
-        // A retry is still readying the proxy: a late signal from the attempt
-        // it replaces is not the retry failing.
-        guard pendingRetryToken == nil else { return }
         logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — giving up")
         // The last attempt failed THROUGH the proxy: don't leave every future
         // playback pinned to it (see `noteProxiedPlaybackFailed`).
-        if usingProxy { StreamTransportPolicy.shared.noteProxiedPlaybackFailed() }
+        if releaseStickyProxy { StreamTransportPolicy.shared.noteProxiedPlaybackFailed() }
         releaseServerSessionAfterFailure()
         // The user is about to see « Lecture impossible » on a device whose log
         // nobody can reach: the diagnostics EXPORT is iOS-only, so on an Apple
@@ -4797,10 +4928,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         seeks.cancelPending()
         isReResolvingAfterWake = true
         navGeneration += 1
+        let supersededRetry = pendingRetryToken != nil
         pendingRetryToken = nil // a retry of the media being replaced is moot
         let gen = navGeneration
         let resumeItemId = itemId
         let resumeSeconds = Double(resumeMs) / 1000.0
+        // The version and the tracks on screen, captured while the old media
+        // still describes them. A re-negotiation without `mediaSourceId` lets
+        // the server rank the sources afresh — i.e. drops a version the user
+        // picked on the fiche for the ranked default.
+        let keptSourceId = info.mediaSourceId
+        let keptTracks: (audio: Int?, subtitle: Int?)? = didApplyServerTrackDefaults && !player.audioTracks.isEmpty
+            ? (audio: player.selectedAudioTrack.flatMap { player.audioTracks.firstIndex(of: $0) },
+               subtitle: player.selectedSubtitleTrack.flatMap { player.subtitleTracks.firstIndex(of: $0) })
+            : nil
         logger.notice("VLC wake re-resolve for \(resumeItemId, privacy: .public) @ \(Int(resumeSeconds))s")
         Task { [weak self] in
             guard let self else { return }
@@ -4809,13 +4950,33 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.
             guard let fresh = try? await self.apiClient.getPlaybackInfo(
-                itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
+                itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate,
+                engine: .vlc, mediaSourceId: keptSourceId
             ) else {
                 // …and make sure there IS one: this re-resolve may have superseded
                 // an error retry (its token was cleared above), which had already
                 // cancelled the watchdog. Without re-arming it, nothing would ever
                 // end that spinner. A no-op if the media is actually playing.
-                if !self.isTearingDown, gen == self.navGeneration { self.scheduleOpenWatchdog() }
+                guard !self.isTearingDown, gen == self.navGeneration else { return }
+                // The watchdog alone could not end a spinner here: its guard
+                // reads `hasValidTime` / `lengthMs`, which still described the
+                // media from before the sleep, so it fired and did nothing — an
+                // infinite spinner (or a frozen frame) with no alert on a Wi-Fi
+                // that was not back yet.
+                if supersededRetry {
+                    // That retry was the one allowed attempt: surface the alert.
+                    self.handlePlaybackError()
+                } else {
+                    if self.engineIsStopped {
+                        // Nothing plays: make the watchdog see it, so it hands
+                        // the media to the error path (retry, then alert) — and
+                        // say so meanwhile, rather than a still frame.
+                        self.hasValidTime = false
+                        self.mediaLengthMs = 0
+                        self.setLoading(true)
+                    }
+                    self.scheduleOpenWatchdog()
+                }
                 return
             }
             guard !self.isTearingDown, gen == self.navGeneration else { return }
@@ -4833,6 +4994,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
+            // Only when the server kept the source: another version's ordinals
+            // would name different tracks.
+            self.trackRestore = (fresh.mediaSourceId == keptSourceId) ? keptTracks : nil
             self.mediaLengthMs = 0
             self.recoverFromErrorIfNeeded()                 // drop any stale error alert
             let (url, viaProxy) = self.streamOpenURL(

@@ -35,10 +35,15 @@ public protocol SecureStorageProtocol: Sendable {
     /// Upgrades stored items to a cold-boot-readable accessibility class.
     /// Default no-op so mocks need no change.
     func migrateAccessibilityIfNeeded()
+
+    /// Moves app-private items out of the shared extension Keychain group
+    /// (see `KeychainService`). Default no-op so mocks need no change.
+    func migrateToPrivateAccessGroupIfNeeded()
 }
 
 public extension SecureStorageProtocol {
     func migrateAccessibilityIfNeeded() {}
+    func migrateToPrivateAccessGroupIfNeeded() {}
 
     /// Seeds the multi-server registry from the legacy single-server items.
     ///

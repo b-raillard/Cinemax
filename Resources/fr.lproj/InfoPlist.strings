@@ -6,3 +6,6 @@
 
 /* Permission de reconnaissance vocale (recherche vocale) */
 "NSSpeechRecognitionUsageDescription" = "Cinemax utilise la reconnaissance vocale pour rechercher des films et des séries.";
+
+/* Face ID : raccourci facultatif pour déverrouiller le contrôle parental */
+"NSFaceIDUsageDescription" = "Cinemax peut utiliser Face ID pour déverrouiller le contrôle parental sans saisir votre code.";

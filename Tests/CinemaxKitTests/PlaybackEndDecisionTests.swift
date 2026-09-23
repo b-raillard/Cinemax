@@ -262,3 +262,58 @@ struct NextUpCountdownPolicyTests {
         #expect(!NextUpCountdownPolicy.shouldShowCard(secondsRemaining: -3, isEpisode: false))
     }
 }
+
+/// `PlaybackRetryPolicy` — the decision half of `handlePlaybackError`, the
+/// zone the B2 / B5 / B9 regressions came from. The presenter only runs the
+/// effects of what this returns.
+@Suite("Échec de lecture — nouvelle tentative")
+struct PlaybackRetryPolicyTests {
+
+    @Test("a first failure retries once, and pins the proxy only after a DIRECT failure")
+    func firstFailureRetries() {
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: false)
+                == .retry(noteDirectFailure: true))
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: true)
+                == .retry(noteDirectFailure: false))
+    }
+
+    @Test("the retry budget is what decides — even an alert on screen cannot stop the first retry")
+    func retryBudgetFirst() {
+        // `recoverFromErrorIfNeeded` resets `didRetry` when a stalled open
+        // recovers under the alert; the next failure is a fresh one.
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: true,
+                                           retryPending: true, usingProxy: false)
+                == .retry(noteDirectFailure: true))
+    }
+
+    @Test("a late signal of a failure already handled is ignored")
+    func lateSignalsIgnored() {
+        // The alert is up: a trailing `.stopped` must not stack a second one.
+        #expect(PlaybackRetryPolicy.decide(didRetry: true, errorAlertShowing: true,
+                                           retryPending: false, usingProxy: false) == .ignore)
+        // The retry is still readying the proxy: the failed attempt's own late
+        // error is not the retry failing.
+        #expect(PlaybackRetryPolicy.decide(didRetry: true, errorAlertShowing: false,
+                                           retryPending: true, usingProxy: true) == .ignore)
+    }
+
+    @Test("the spent retry gives up, releasing the sticky proxy only when the last attempt used it")
+    func givesUp() {
+        #expect(PlaybackRetryPolicy.decide(didRetry: true, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: true)
+                == .giveUp(releaseStickyProxy: true))
+        #expect(PlaybackRetryPolicy.decide(didRetry: true, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: false)
+                == .giveUp(releaseStickyProxy: false))
+    }
+
+    @Test("a retry resumes where playback dropped, but not before the first second")
+    func resumePosition() {
+        #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 0) == nil)
+        #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 1000) == nil)
+        #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 1001) == 1.001)
+        #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 4_915_487) == 4915.487)
+    }
+}

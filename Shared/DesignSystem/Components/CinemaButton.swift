@@ -103,7 +103,7 @@ struct CinemaButton: View {
         switch style {
         case .primary: CinemaColor.onPrimary
         case .ghost: CinemaColor.onSurface
-        case .accent: .white
+        case .accent: themeManager.onAccentContainer
         case .destructive: CinemaColor.onErrorContainer
         }
     }

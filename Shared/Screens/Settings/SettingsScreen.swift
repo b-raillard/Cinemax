@@ -262,7 +262,7 @@ struct SettingsScreen: View {
     /// The user's own label for the active server wins over the name the
     /// server reports — a rename in « Mes serveurs » must show here too.
     var serverName: String {
-        appState.activeServerNameOverride ?? appState.serverInfo?.name ?? "Jellyfin Server"
+        appState.activeServerDisplayName
     }
 
     var serverAddress: String {

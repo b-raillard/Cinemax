@@ -22,9 +22,8 @@ import Nuke
 /// rather than the old `(Data, HTTPURLResponse)?`.
 ///
 /// Cache-key note: Nuke keys on the URL (the Authorization header is not part of
-/// the key). Chapter/artwork URLs carry no token; trickplay URLs already embed
-/// `ApiKey` via `VLCStreamPresenter.authedURL(_:token:)` — the key stays stable
-/// per item, no behavior change.
+/// the key). No URL passed here carries a token — the header is the only auth —
+/// so the key stays stable per item across sessions.
 enum AuthenticatedImageFetch {
     nonisolated static func data(from url: URL, token: String?) async -> Data? {
         var request = URLRequest(url: url)

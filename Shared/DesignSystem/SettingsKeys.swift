@@ -250,9 +250,31 @@ enum LibraryBrowseLayout: String, CaseIterable, Identifiable {
 enum HomeRailPreferences {
     /// Whether `key` is switched on, honouring the registered default for an
     /// absent value. `default` must be that key's `SettingsKey.Default`.
-    static func isOn(_ key: String, default defaultValue: Bool) -> Bool {
-        guard UserDefaults.standard.object(forKey: key) != nil else { return defaultValue }
-        return UserDefaults.standard.bool(forKey: key)
+    static func isOn(_ key: String, default defaultValue: Bool, in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        return defaults.bool(forKey: key)
+    }
+
+    /// One coherent read of every gated rail. `defaults` is injectable so a
+    /// test suite can hold its own store: several suites load Home in
+    /// parallel, and one of them switching rails off in `.standard` used to
+    /// leak into the others (audit 2026-09-22, T2).
+    struct Snapshot: Equatable, Sendable {
+        var nextUp, favorites, playlists, upcoming, collections: Bool
+        var becauseYouWatched, genreRows, watchingNow: Bool
+    }
+
+    static func snapshot(in defaults: UserDefaults = .standard) -> Snapshot {
+        Snapshot(
+            nextUp: isOn(SettingsKey.homeShowNextUp, default: SettingsKey.Default.homeShowNextUp, in: defaults),
+            favorites: isOn(SettingsKey.homeShowFavorites, default: SettingsKey.Default.homeShowFavorites, in: defaults),
+            playlists: isOn(SettingsKey.homeShowPlaylists, default: SettingsKey.Default.homeShowPlaylists, in: defaults),
+            upcoming: isOn(SettingsKey.homeShowUpcoming, default: SettingsKey.Default.homeShowUpcoming, in: defaults),
+            collections: isOn(SettingsKey.homeShowCollections, default: SettingsKey.Default.homeShowCollections, in: defaults),
+            becauseYouWatched: isOn(SettingsKey.homeShowBecauseYouWatched, default: SettingsKey.Default.homeShowBecauseYouWatched, in: defaults),
+            genreRows: isOn(SettingsKey.homeShowGenreRows, default: SettingsKey.Default.homeShowGenreRows, in: defaults),
+            watchingNow: isOn(SettingsKey.homeShowWatchingNow, default: SettingsKey.Default.homeShowWatchingNow, in: defaults)
+        )
     }
 
     static var showNextUp: Bool { isOn(SettingsKey.homeShowNextUp, default: SettingsKey.Default.homeShowNextUp) }
@@ -279,31 +301,31 @@ enum HomeGenrePreferences {
     /// `true` once the user has made an explicit choice in the picker. Distinct
     /// from "has selected genres" so an explicit empty choice (zero rows) is not
     /// mistaken for the unconfigured default.
-    static func isConfigured() -> Bool {
-        guard let raw = UserDefaults.standard.string(forKey: SettingsKey.homeSelectedGenres) else { return false }
+    static func isConfigured(in defaults: UserDefaults = .standard) -> Bool {
+        guard let raw = defaults.string(forKey: SettingsKey.homeSelectedGenres) else { return false }
         return !raw.isEmpty
     }
 
     /// The user's explicit genre picks (empty if unconfigured or explicitly empty).
-    static func selectedGenres() -> [String] {
-        decode(UserDefaults.standard.string(forKey: SettingsKey.homeSelectedGenres))
+    static func selectedGenres(in defaults: UserDefaults = .standard) -> [String] {
+        decode(defaults.string(forKey: SettingsKey.homeSelectedGenres))
     }
 
     /// Persist an explicit selection. Always marks the preference configured —
     /// even for an empty array, which means "no genre rows".
-    static func setSelectedGenres(_ genres: [String]) {
+    static func setSelectedGenres(_ genres: [String], in defaults: UserDefaults = .standard) {
         guard let data = try? JSONEncoder().encode(genres),
               let json = String(data: data, encoding: .utf8) else { return }
-        UserDefaults.standard.set(json, forKey: SettingsKey.homeSelectedGenres)
+        defaults.set(json, forKey: SettingsKey.homeSelectedGenres)
     }
 
     /// The genres to actually render as Home rows, given the full available
     /// list (already sorted by the caller). Unconfigured → default prefix;
     /// configured → the explicit picks intersected with what's available and
     /// re-ordered to the canonical (available) order. No cap on count.
-    static func effectiveGenres(available: [String]) -> [String] {
-        guard isConfigured() else { return Array(available.prefix(defaultRowCount)) }
-        let chosen = Set(selectedGenres())
+    static func effectiveGenres(available: [String], in defaults: UserDefaults = .standard) -> [String] {
+        guard isConfigured(in: defaults) else { return Array(available.prefix(defaultRowCount)) }
+        let chosen = Set(selectedGenres(in: defaults))
         return available.filter { chosen.contains($0) }
     }
 

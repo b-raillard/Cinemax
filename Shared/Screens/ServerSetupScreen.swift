@@ -105,6 +105,7 @@ struct ServerSetupScreen: View {
                     #if os(iOS)
                     .keyboardType(.URL)
                     #endif
+                    .credentialField(.serverURL) { submitConnect() }
 
                     if let error = viewModel.errorMessage {
                         PreAuthErrorBanner(message: error)
@@ -124,7 +125,7 @@ struct ServerSetupScreen: View {
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
                     ) {
-                        Task { await viewModel.connect(using: appState, loc: loc) }
+                        submitConnect()
                     }
                     .disabled(viewModel.isConnecting)
                 }
@@ -219,6 +220,7 @@ struct ServerSetupScreen: View {
                     #if os(iOS)
                     .keyboardType(.URL)
                     #endif
+                    .credentialField(.serverURL) { submitConnect() }
 
                     if let error = viewModel.errorMessage {
                         PreAuthErrorBanner(message: error)
@@ -246,7 +248,7 @@ struct ServerSetupScreen: View {
                         icon: "chevron.right",
                         isLoading: viewModel.isConnecting
                     ) {
-                        Task { await viewModel.connect(using: appState, loc: loc) }
+                        submitConnect()
                     }
                     .disabled(viewModel.isConnecting)
 
@@ -397,6 +399,12 @@ struct ServerSetupScreen: View {
     // and the helper link — these two screens are one journey and carried
     // byte-identical copies of all three. The tap count stays per-screen
     // `@State` and the unlock flag stays `@AppStorage`, hence the bindings.
+    /// The connect action, shared by the button and the field's Return key.
+    private func submitConnect() {
+        guard !viewModel.isConnecting else { return }
+        Task { await viewModel.connect(using: appState, loc: loc) }
+    }
+
     private func triggerEasterEgg() {
         PreAuthEasterEgg.tap(
             tapCount: $easterEggTaps,

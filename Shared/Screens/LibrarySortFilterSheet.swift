@@ -205,6 +205,7 @@ struct LibrarySortFilterSheet: View {
         #else
         .buttonStyle(.plain)
         #endif
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
 
         if value != sortOptions.last?.value {
             Divider()
@@ -239,7 +240,7 @@ struct LibrarySortFilterSheet: View {
                 Text(label)
                     .font(.system(size: CinemaScale.pt(15), weight: .medium))
             }
-            .foregroundStyle(isSelected ? .white : CinemaColor.onSurfaceVariant)
+            .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
             .padding(.horizontal, CinemaSpacing.spacing3)
             .padding(.vertical, CinemaSpacing.spacing2)
             .background(
@@ -256,6 +257,7 @@ struct LibrarySortFilterSheet: View {
         #else
         .buttonStyle(.plain)
         #endif
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: Watch Status
@@ -357,7 +359,7 @@ struct LibrarySortFilterSheet: View {
         } label: {
             Text(loc.localized("filter.decade", decade))
                 .font(.system(size: chipFontSize, weight: isSelected ? .bold : .medium))
-                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+                .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurface)
                 .padding(.horizontal, chipHorizontalPadding)
                 .padding(.vertical, chipVerticalPadding)
                 .background(
@@ -367,6 +369,7 @@ struct LibrarySortFilterSheet: View {
                 )
                 .clipShape(Capsule())
         }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
 
         #if os(tvOS)
         button
@@ -425,7 +428,7 @@ struct LibrarySortFilterSheet: View {
         } label: {
             Text(genre)
                 .font(.system(size: chipFontSize, weight: isSelected ? .bold : .medium))
-                .foregroundStyle(isSelected ? themeManager.onAccent : CinemaColor.onSurface)
+                .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurface)
                 .padding(.horizontal, chipHorizontalPadding)
                 .padding(.vertical, chipVerticalPadding)
                 .background(
@@ -435,6 +438,7 @@ struct LibrarySortFilterSheet: View {
                 )
                 .clipShape(Capsule())
         }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
 
         #if os(tvOS)
         button
@@ -483,6 +487,7 @@ struct LibrarySortFilterSheet: View {
             .foregroundStyle(CinemaColor.onSurfaceVariant)
             .textCase(.uppercase)
             .tracking(0.8)
+            .accessibilityAddTraits(.isHeader)
     }
 
     /// tvOS sheets are full-screen overlays — bumping horizontal padding keeps

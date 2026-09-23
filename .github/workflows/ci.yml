@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only token: nothing here writes to the repository (the SBOM goes out as
+# an artifact, which does not use GITHUB_TOKEN permissions).
+permissions:
+  contents: read
+
 concurrency:
   # Main gets a group PER COMMIT; a branch keeps one group per ref.
   #
@@ -43,10 +48,58 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Xcode version
+      # A PR that only touches Markdown / docs cannot change what this job
+      # builds, and used to cost ~17 min of macOS runner — every CLAUDE.md edit
+      # included. Deliberately NOT a workflow-level `paths-ignore`: that leaves a
+      # required check pending for ever. The job still runs and reports; every
+      # step below is gated on this output instead. Pushes to main always build.
+      - name: Detect code changes
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          # --no-renames: a rename prints only its NEW path, so a Swift file
+          # moved into docs/ would read as docs-only while it left the build.
+          changed=$(git diff --no-renames --name-only "$BASE_SHA" HEAD)
+          echo "$changed"
+          # Documentation = anything under docs/, a Markdown file at the repo
+          # root, or a CLAUDE.md anywhere (project.yml keeps those out of the
+          # bundles). Any OTHER .md under a target's source path is swept into
+          # the build by xcodegen, so it counts as code. `|| true`, not a
+          # `grep -q` pipe: under pipefail an early-exiting `grep -q` can kill
+          # its writer with SIGPIPE and turn a code change into "docs-only".
+          non_doc=$(printf '%s\n' "$changed" | grep -Ev '^(docs/.*|[^/]+\.md|(.*/)?CLAUDE\.md)$' || true)
+          if [ -n "$non_doc" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Documentation-only change — build and tests skipped."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pinned: behaviour changes between Xcode releases are documented in
+      # CLAUDE.md (a `sending`-closure error on 26.5 that 26.2 accepted), so the
+      # runner image's default must not decide which compiler checks a PR. Bump
+      # together with `xcodeVersion` in project.yml.
+      - name: Select Xcode
+        if: steps.changes.outputs.code == 'true'
+        env:
+          XCODE_VERSION: "26.5"
+        run: |
+          available=$(ls -d /Applications/Xcode*.app 2>/dev/null | tr '\n' ' ')
+          if [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+            echo "::notice::Xcode ${XCODE_VERSION} selected (available: ${available})"
+          else
+            echo "::warning::Xcode ${XCODE_VERSION} is not on this runner image — building with the default. Available: ${available}"
+          fi
           xcode-select -p
           xcodebuild -version
 
@@ -58,14 +111,22 @@ jobs:
       # XCODEGEN_VERSION together with a local `xcodegen generate` (same
       # version) + committed pbxproj, and keep regen-project.yml in sync.
       - name: Install xcodegen
+        if: steps.changes.outputs.code == 'true'
         env:
           XCODEGEN_VERSION: 2.46.0
+          # SHA-256 of that release's xcodegen.zip — bump TOGETHER with the
+          # version. The binary is executed right after, and in
+          # regen-project.yml its output is committed with write access, so a
+          # replaced release asset must fail here rather than run.
+          XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
         run: |
           curl -fsSL -o /tmp/xcodegen.zip "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  /tmp/xcodegen.zip" | shasum -a 256 -c -
           unzip -q /tmp/xcodegen.zip -d /tmp/xcodegen-dist
           echo "/tmp/xcodegen-dist/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Generate Xcode project
+        if: steps.changes.outputs.code == 'true'
         run: xcodegen generate
 
       # CI builds from the freshly generated project, so a stale committed
@@ -74,6 +135,7 @@ jobs:
       # ("Cannot find 'X' in scope" for types that exist). Fail loudly instead
       # so the regenerated file has to ship with the PR.
       - name: Verify committed project.pbxproj is up to date
+        if: steps.changes.outputs.code == 'true'
         run: |
           if ! git diff --exit-code -- Cinemax.xcodeproj/project.pbxproj; then
             echo "::error::Cinemax.xcodeproj/project.pbxproj is stale — run 'xcodegen generate' locally and commit the regenerated project."
@@ -81,7 +143,8 @@ jobs:
           fi
 
       - name: Cache SwiftPM
-        uses: actions/cache@v6
+        if: steps.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
@@ -96,6 +159,7 @@ jobs:
       # swift-testing tests (the `-only-testing` trap in CLAUDE.md), so the exit
       # code alone does not prove the suite ran.
       - name: Build & test (iOS)
+        if: steps.changes.outputs.code == 'true'
         run: |
           set -o pipefail
           xcodebuild test \
@@ -113,6 +177,7 @@ jobs:
       # locked"). The CinemaxTV scheme carries CinemaxTVTests — the same
       # Tests/CinemaxKitTests sources, hosted by CinemaxTV.app.
       - name: Build & test (tvOS)
+        if: steps.changes.outputs.code == 'true'
         run: |
           set -o pipefail
           xcodebuild test \
@@ -125,14 +190,35 @@ jobs:
           grep -E '^✔ Test run with [1-9][0-9]* tests in [0-9]+ suites passed' "$RUNNER_TEMP/tvos-test.log"
           grep -F '✔ Suite "tvOS layout metrics" passed' "$RUNNER_TEMP/tvos-test.log"
 
+      # The tests run the Debug configuration only, so `#if DEBUG` branches and
+      # the optimiser were first seen at archive time. A plain Release compile
+      # of both apps (simulator SDK, unsigned, arm64 only — one slice is enough
+      # to see a Release-only compile error, and keeps the job inside its
+      # timeout) closes that gap; no tests, no run.
+      - name: Build Release (iOS + tvOS)
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          set -o pipefail
+          for scheme in Cinemax CinemaxTV; do
+            if [ "$scheme" = Cinemax ]; then dest='generic/platform=iOS Simulator'; else dest='generic/platform=tvOS Simulator'; fi
+            xcodebuild build \
+              -project Cinemax.xcodeproj \
+              -scheme "$scheme" \
+              -configuration Release \
+              -destination "$dest" \
+              -skipPackagePluginValidation \
+              ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+              CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+              2>&1 | xcbeautify
+          done
+
   lint:
     name: SwiftLint
     runs-on: macos-26
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install SwiftLint
         run: brew install swiftlint
 
@@ -151,8 +237,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Check pins, licences and binary artifacts
         run: python3 scripts/dependency-audit.py check
 
@@ -163,7 +248,7 @@ jobs:
 
       - name: Upload SBOM
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cinemax-sbom
           path: cinemax-sbom.cdx.json

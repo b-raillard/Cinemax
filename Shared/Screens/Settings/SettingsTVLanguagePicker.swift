@@ -37,6 +37,11 @@ extension SettingsScreen {
         .buttonStyle(.plain)
         .focusEffectDisabled()
         .hoverEffectDisabled()
+        // Both chips' labels would otherwise be read with nothing saying which
+        // one is on: the row reads as « Langue, Français ».
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("settings.language"))
+        .accessibilityValue(loc.localized(loc.languageCode == "fr" ? "settings.language.french" : "settings.language.english"))
         .focused($focusedItem, equals: .language("row"))
         .onMoveCommand { direction in
             guard isFocused else { return }

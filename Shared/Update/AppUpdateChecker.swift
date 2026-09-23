@@ -55,19 +55,32 @@ final class AppUpdateChecker {
         logger.debug("update offer declined for \(release.displayVersion, privacy: .public)")
     }
 
-    /// Opens the Store page.
+    /// The URL « Mettre à jour » opens, or `nil` when this device cannot open
+    /// one — in which case the alert renders no button at all.
     ///
-    /// **RULE — tvOS gets no update button, and that is deliberate.** There is
-    /// no public API on tvOS that reliably opens an App Store product page
-    /// (`SKStoreProductViewController` does not exist there), so a « Mettre à
-    /// jour » button would be a control that does nothing — exactly what the
-    /// project's own dead-button rule forbids. The tvOS alert states where to
-    /// update instead, and offers to re-check.
-    func openStore() {
-        #if os(iOS)
-        guard let url = pendingRelease?.storeURL else { return }
-        UIApplication.shared.open(url)
+    /// **RULE — the tvOS button exists only when `canOpenURL` says the App
+    /// Store answers.** tvOS has no browser and no `SKStoreProductViewController`;
+    /// what it does have is the App Store app's `com.apple.TVAppStore://` scheme
+    /// (declared in `LSApplicationQueriesSchemes`, or `canOpenURL` always says
+    /// no). The simulator has no App Store app, so there the answer is `nil`
+    /// and the alert keeps its « open the App Store » hint — never a button
+    /// that does nothing (the project's dead-button rule).
+    var storeURLToOpen: URL? {
+        guard let page = pendingRelease?.storeURL else { return nil }
+        #if os(tvOS)
+        guard let url = AppStoreLookup.tvAppStoreURL(for: page),
+              UIApplication.shared.canOpenURL(url) else { return nil }
+        return url
+        #else
+        return page
         #endif
+    }
+
+    /// Opens the Store page. Leaving the app for the Store is what the user
+    /// just asked for, so there is no "you are leaving" confirmation.
+    func openStore() {
+        guard let url = storeURLToOpen else { return }
+        UIApplication.shared.open(url)
     }
 
     /// The release the current decision is about, whether merely offered or

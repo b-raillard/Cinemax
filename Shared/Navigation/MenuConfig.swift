@@ -207,7 +207,7 @@ final class MenuConfigStore {
     /// written back by `persistActiveProfile()` on every mutation.
     private var profiles: [String: MenuProfile]
 
-    private var apiClient: (any APIClientProtocol)?
+    private var apiClient: (any LibraryAPI)?
     private var userId: String?
     /// Monotonic id for refreshAvailableViews — newest call wins (see method).
     private var refreshGeneration = 0
@@ -273,7 +273,7 @@ final class MenuConfigStore {
         recomputeResolvedTabs()
     }
 
-    func attach(apiClient: any APIClientProtocol, userId: String?) {
+    func attach(apiClient: any LibraryAPI, userId: String?) {
         self.apiClient = apiClient
         self.userId = userId
     }

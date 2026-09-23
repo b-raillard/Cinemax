@@ -65,7 +65,7 @@ extension MenuSettingsScreen {
             Text(loc.localized("menu.mode"))
         } footer: {
             Text(loc.localized("menu.mode.footer"))
-                .font(CinemaFont.label(.medium))
+                .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
     }
@@ -109,7 +109,7 @@ extension MenuSettingsScreen {
                             .font(.system(size: CinemaScale.pt(16), weight: .semibold))
                     }
                     Text(loc.localized("menu.refreshViews"))
-                        .font(CinemaFont.label(.large))
+                        .font(CinemaFont.dynamicLabel(.large))
                     Spacer()
                 }
                 .foregroundStyle(store.isLoadingViews ? CinemaColor.onSurfaceVariant : themeManager.accent)
@@ -124,7 +124,7 @@ extension MenuSettingsScreen {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(CinemaColor.error)
                     Text(loc.userFacingMessage(for: error))
-                        .font(CinemaFont.label(.medium))
+                        .font(CinemaFont.dynamicLabel(.medium))
                         .foregroundStyle(CinemaColor.error)
                 }
             }
@@ -157,7 +157,7 @@ extension MenuSettingsScreen {
                     ? "menu.entries.footer.contentType"
                     : "menu.entries.footer.library"
             ))
-            .font(CinemaFont.label(.medium))
+            .font(CinemaFont.dynamicLabel(.medium))
             .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
     }
@@ -169,11 +169,11 @@ extension MenuSettingsScreen {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entryLabel(entry))
-                    .font(CinemaFont.label(.large))
+                    .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                 if entry.isMandatory {
                     Text(loc.localized("menu.entry.required"))
-                        .font(CinemaFont.label(.small))
+                        .font(CinemaFont.dynamicLabel(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
             }
@@ -209,10 +209,10 @@ extension MenuSettingsScreen {
     private var emptyLibraryRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(loc.localized("menu.library.empty"))
-                .font(CinemaFont.label(.large))
+                .font(CinemaFont.dynamicLabel(.large))
                 .foregroundStyle(CinemaColor.onSurface)
             Text(loc.localized("menu.library.empty.subtitle"))
-                .font(CinemaFont.label(.medium))
+                .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
         }
         .padding(.vertical, 4)
@@ -231,7 +231,7 @@ extension MenuSettingsScreen {
                     Image(systemName: "arrow.counterclockwise")
                         .font(.system(size: CinemaScale.pt(16), weight: .semibold))
                     Text(loc.localized("menu.reset"))
-                        .font(CinemaFont.label(.large))
+                        .font(CinemaFont.dynamicLabel(.large))
                     Spacer()
                 }
             }

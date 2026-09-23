@@ -106,7 +106,7 @@ final class MetadataEditorViewModel {
     /// success: a fetch failure sets `fullItemLoadFailed` (the screen stays
     /// gated with a retry) and the next call — re-fired `.task` or the retry
     /// button — tries again.
-    func loadFullItemIfNeeded(using apiClient: any APIClientProtocol, userId: String) async {
+    func loadFullItemIfNeeded(using apiClient: any AdminAPI & LibraryAPI, userId: String) async {
         guard !hasLoadedFullItem, let id = item.id else {
             isLoadingFullItem = false
             return
@@ -127,7 +127,7 @@ final class MetadataEditorViewModel {
 
     // MARK: - Save
 
-    func save(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func save(using apiClient: any AdminAPI & LibraryAPI, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         isSaving = true
         errorMessage = nil
@@ -145,7 +145,7 @@ final class MetadataEditorViewModel {
 
     // MARK: - Images
 
-    func addImageFromURL(using apiClient: any APIClientProtocol, userId: String, loc: LocalizationManager) async -> Bool {
+    func addImageFromURL(using apiClient: any AdminAPI & LibraryAPI, userId: String, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         let url = newImageURL.trimmingCharacters(in: .whitespaces)
         guard !url.isEmpty, URL(string: url) != nil else {
@@ -165,7 +165,7 @@ final class MetadataEditorViewModel {
         }
     }
 
-    func deletePendingImage(using apiClient: any APIClientProtocol, userId: String, loc: LocalizationManager) async -> Bool {
+    func deletePendingImage(using apiClient: any AdminAPI & LibraryAPI, userId: String, loc: LocalizationManager) async -> Bool {
         guard let id = item.id, let pending = pendingImageDelete else { return false }
         errorMessage = nil
         do {
@@ -202,7 +202,7 @@ final class MetadataEditorViewModel {
     }
 
     func loadRemoteImages(
-        using apiClient: any APIClientProtocol,
+        using apiClient: any AdminAPI & LibraryAPI,
         preferredLanguage: String?,
         loc: LocalizationManager
     ) async {
@@ -243,7 +243,7 @@ final class MetadataEditorViewModel {
     /// (`downloadRemoteImage`), so nothing is proxied through the phone.
     func applyRemoteImage(
         _ candidate: RemoteImageCandidate,
-        using apiClient: any APIClientProtocol,
+        using apiClient: any AdminAPI & LibraryAPI,
         userId: String,
         loc: LocalizationManager
     ) async -> Bool {
@@ -294,14 +294,14 @@ final class MetadataEditorViewModel {
 
     /// Delegates to the shared `IdentifyFlowModel`. Kept as a pass-through
     /// so existing tab callers don't have to know about the nested model.
-    func runIdentifySearch(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func runIdentifySearch(using apiClient: any AdminAPI & LibraryAPI, loc: LocalizationManager) async {
         await identify.runSearch(using: apiClient, loc: loc)
         // Mirror the flow model's error into the editor so it surfaces in
         // the same "error band" the other tabs use.
         errorMessage = identify.errorMessage
     }
 
-    func applyIdentifyResult(using apiClient: any APIClientProtocol, userId: String, loc: LocalizationManager) async -> Bool {
+    func applyIdentifyResult(using apiClient: any AdminAPI & LibraryAPI, userId: String, loc: LocalizationManager) async -> Bool {
         guard let result = pendingIdentifyApply else { return false }
         let ok = await identify.apply(result, using: apiClient, loc: loc)
         if ok {
@@ -315,7 +315,7 @@ final class MetadataEditorViewModel {
 
     // MARK: - Actions
 
-    func refreshMetadata(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func refreshMetadata(using apiClient: any AdminAPI & LibraryAPI, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         isRefreshing = true
         errorMessage = nil
@@ -336,7 +336,7 @@ final class MetadataEditorViewModel {
         }
     }
 
-    func deleteItem(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func deleteItem(using apiClient: any AdminAPI & LibraryAPI, loc: LocalizationManager) async -> Bool {
         guard let id = item.id else { return false }
         isDeleting = true
         errorMessage = nil
@@ -359,7 +359,7 @@ final class MetadataEditorViewModel {
     /// entire is the right answer there, unsaved edits included: they describe
     /// the identification the user just discarded.
     /// Caller threads `userId` through since the VM doesn't own AppState.
-    private func reloadItem(using apiClient: any APIClientProtocol, userId: String) async {
+    private func reloadItem(using apiClient: any AdminAPI & LibraryAPI, userId: String) async {
         guard let id = item.id else { return }
         if let fresh = try? await apiClient.getItem(userId: userId, itemId: id) {
             self.item = fresh
@@ -382,7 +382,7 @@ final class MetadataEditorViewModel {
     /// describing the USER's edits alone — otherwise the new tags would
     /// themselves read as unsaved changes, and the editor would keep claiming
     /// them after the user had reverted everything by hand.
-    private func reloadImages(using apiClient: any APIClientProtocol, userId: String) async {
+    private func reloadImages(using apiClient: any AdminAPI & LibraryAPI, userId: String) async {
         guard let id = item.id else { return }
         guard let fresh = try? await apiClient.getItem(userId: userId, itemId: id) else { return }
         guard isDirty else {

@@ -28,10 +28,22 @@ final class NativeVideoPresenter {
     private var itemId: String
     private let title: String
     private var startTime: Double?
+    /// A position the player was asked to reach and has not reached yet: the
+    /// resume point from open until its seek completes (or turns out not to
+    /// apply), and the playhead of a track switch until the rebuilt item is
+    /// back there. While set, every playback report carries it instead of the
+    /// player's clock, which reads 0/NaN until an item is ready — see
+    /// `PlaybackReporter.reportableSeconds`.
+    private var pendingResumeSeconds: Double?
+    /// Bumped whenever `pendingResumeSeconds` is (re)set, and checked by every
+    /// seek completion before it clears it: the initial resume seek completes
+    /// with `finished == false` when a track switch replaces the item, and must
+    /// not clear the switch's own pending position.
+    private var pendingResumeGeneration = 0
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any APIClientProtocol
+    private let apiClient: any PlaybackAPI & LibraryAPI
     private let userId: String
     private let maxBitrate: Int
     private let loc: LocalizationManager
@@ -92,7 +104,7 @@ final class NativeVideoPresenter {
         itemId: String, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?,
-        apiClient: any APIClientProtocol, userId: String,
+        apiClient: any PlaybackAPI & LibraryAPI, userId: String,
         maxBitrate: Int, loc: LocalizationManager,
         autoPlayNextEpisode: Bool,
         imageBuilder: ImageURLBuilder,
@@ -117,8 +129,11 @@ final class NativeVideoPresenter {
             context: { [weak self] in
                 guard let self, let info = self.playbackInfo else { return nil }
                 return .init(itemId: self.itemId, info: info, player: self.playerVC?.player)
-            }
+            },
+            pendingResume: { [weak self] in self?.pendingResumeSeconds }
         )
+        self.pendingResumeSeconds = (startTime ?? 0) > 0 ? startTime : nil
+        self.pendingResumeGeneration = 1
         self.skipSegments = SkipSegmentController(
             apiClient: apiClient, loc: loc,
             playerVCProvider: { [weak self] in self?.playerVC }
@@ -345,8 +360,13 @@ final class NativeVideoPresenter {
                     switch item.status {
                     case .readyToPlay:
                         if let st, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
+                            let generation = self?.pendingResumeGeneration
                             avPlayer?.seek(to: CMTime(seconds: target, preferredTimescale: 600),
-                                          toleranceBefore: .zero, toleranceAfter: .zero)
+                                          toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                                Task { @MainActor in self?.clearPendingResume(ifGeneration: generation) }
+                            }
+                        } else {
+                            self?.pendingResumeSeconds = nil
                         }
                     case .failed:
                         logger.error("AVPlayer failed: \(item.error?.localizedDescription ?? "unknown")")
@@ -379,6 +399,13 @@ final class NativeVideoPresenter {
         }
     }
 
+    /// Clears the pending report position, unless a newer one replaced it
+    /// since the seek that is completing was issued.
+    private func clearPendingResume(ifGeneration generation: Int?) {
+        guard generation == pendingResumeGeneration else { return }
+        pendingResumeSeconds = nil
+    }
+
     // MARK: - Direct URL Fallback (iOS)
 
     #if os(iOS)
@@ -408,8 +435,13 @@ final class NativeVideoPresenter {
                 switch item.status {
                 case .readyToPlay:
                     if let st = startTime, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
+                        let generation = self?.pendingResumeGeneration
                         player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
-                                    toleranceBefore: .zero, toleranceAfter: .zero)
+                                    toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                            Task { @MainActor in self?.clearPendingResume(ifGeneration: generation) }
+                        }
+                    } else {
+                        self?.pendingResumeSeconds = nil
                     }
                 case .failed:
                     logger.error("AVPlayer failed on direct URL fallback: \(item.error?.localizedDescription ?? "unknown")")
@@ -515,7 +547,11 @@ final class NativeVideoPresenter {
 
     private func switchTracks(audioIndex: Int?, subtitleIndex: Int?) async {
         guard let vc = playerVC, let player = vc.player else { return }
-        let currentTime = player.currentTime().seconds
+        // Where the rebuilt item must land: a resume not reached yet (a switch
+        // made before the first `readyToPlay`) wins over the clock, which
+        // still reads 0 then.
+        let clock = player.currentTime().seconds
+        let currentTime = pendingResumeSeconds ?? (clock.isFinite ? clock : 0)
 
         guard let info = try? await apiClient.getPlaybackInfo(
             itemId: itemId, userId: userId, maxBitrate: maxBitrate,
@@ -541,13 +577,23 @@ final class NativeVideoPresenter {
             itemEndObserver = nil
         }
         playerObservation?.invalidate()
-        playerObservation = playerItem.observe(\.status) { item, _ in
+        // Reports during the rebuild carry the position being restored.
+        pendingResumeSeconds = currentTime > 0 ? currentTime : nil
+        pendingResumeGeneration += 1
+        let generation = pendingResumeGeneration
+        playerObservation = playerItem.observe(\.status) { [weak self] item, _ in
             Task { @MainActor in
-                guard item.status == .readyToPlay, currentTime > 0 else { return }
+                guard item.status == .readyToPlay else { return }
+                guard currentTime > 0 else {
+                    self?.clearPendingResume(ifGeneration: generation)
+                    return
+                }
                 player.seek(
                     to: CMTime(seconds: currentTime, preferredTimescale: 600),
                     toleranceBefore: .zero, toleranceAfter: .zero
-                )
+                ) { [weak self] _ in
+                    Task { @MainActor in self?.clearPendingResume(ifGeneration: generation) }
+                }
                 player.play()
             }
         }
@@ -560,8 +606,16 @@ final class NativeVideoPresenter {
 
     // MARK: - Episode Navigation
 
-    private func navigateToEpisode(_ ep: EpisodeRef) {
+    /// Bumped by every `navigateToEpisode`: two quick Next presses used to run
+    /// two negotiations whose results both applied, in arrival order — the
+    /// screen could land on the FIRST episode asked for, with the reporter
+    /// bound to whichever finished last (audit 2026-09-22, B11).
+    private var navGeneration = 0
+
+    private func navigateToEpisode(_ ep: EpisodeRef, isAutoplay: Bool = false) {
         guard let navigator = episodeNavigator, let vc = playerVC else { return }
+        navGeneration += 1
+        let gen = navGeneration
         Task { [self] in
             playbackReporter.reportStop(reason: .episodeSwap)
             // Neighbors resolve synchronously (pure index lookups); this
@@ -570,11 +624,11 @@ final class NativeVideoPresenter {
                   let info = try? await apiClient.getPlaybackInfo(
                       itemId: ep.id, userId: userId, maxBitrate: maxBitrate
                   ) else {
-                // The session is already closed and the new episode never
-                // resolved. (Recovering playback itself is deliberately out of
-                // scope here — see the VLC path's `handleFailedEpisodeNav`.)
+                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay)
                 return
             }
+            // Superseded by a newer nav, or dismissed, while negotiating.
+            guard gen == self.navGeneration, self.playerVC != nil else { return }
             cleanupPlayer()
             self.hasRetriedDirectURL = false
             self.playbackInfo = info
@@ -584,6 +638,7 @@ final class NativeVideoPresenter {
             // to the first item presented.
             self.itemId = ep.id
             self.startTime = nil
+            self.pendingResumeSeconds = nil
             self.previousEpisode = prev
             self.nextEpisode = next
             self.audioTracks = info.audioTracks
@@ -604,7 +659,7 @@ final class NativeVideoPresenter {
             // await above — the navigator itself no longer awaits anything).
             guard self.playerVC != nil else { return }
             await PlaybackAudioSession.activate()
-            guard self.playerVC != nil else { return }
+            guard self.playerVC != nil, gen == self.navGeneration else { return }
 
             let playerItem = makePlayerItem(for: info)
             applyTitleMetadata(to: playerItem, title: ep.title)
@@ -641,6 +696,27 @@ final class NativeVideoPresenter {
             sleepTimer.startIfNeeded()
             showSkipToEndButtonIfDebugEnabled()
         }
+    }
+
+    /// The negotiation for the next episode failed after the stop of the one
+    /// on screen had already gone out. Same split as the VLC path's
+    /// `handleFailedEpisodeNav`: a manual press leaves the current episode
+    /// playing, so its server session is re-opened at the live position (or
+    /// its progress and resume point would stay frozen at the press); an
+    /// autoplay hand-off has nothing left playing, so it ends on the error
+    /// alert instead of a silent, finished player.
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
+        guard gen == navGeneration, let player = playerVC?.player else { return }
+        logger.error("Native episode nav: negotiation failed (autoplay=\(isAutoplay, privacy: .public))")
+        // An earlier nav may already have torn the old item down and then been
+        // superseded by this one: nothing is left playing, which is the
+        // autoplay case in all but name (adversarial review, 2026-09-22).
+        if isAutoplay || player.currentItem == nil {
+            showPlaybackErrorAlert(error: nil)
+            return
+        }
+        let position = player.currentTime().seconds
+        playbackReporter.reportStart(startTime: position.isFinite ? position : nil)
     }
 
     // MARK: - Metadata
@@ -720,7 +796,7 @@ final class NativeVideoPresenter {
                     seriesName=\(self.currentSeriesName ?? "<nil>", privacy: .public)
                     """)
                 if autoPlay, let next = self.nextEpisode, self.episodeNavigator != nil {
-                    self.navigateToEpisode(next)
+                    self.navigateToEpisode(next, isAutoplay: true)
                     return
                 }
                 if autoPlay, self.episodeNavigator != nil, self.nextEpisode == nil,

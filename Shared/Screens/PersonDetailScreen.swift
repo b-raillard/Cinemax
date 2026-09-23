@@ -139,13 +139,13 @@ struct PersonDetailScreen: View {
                     .font(CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                 if let birth = person?.premiereDate {
-                    Text(String(format: loc.localized("person.born"), birth.formatted(date: .long, time: .omitted)))
+                    Text(String(format: loc.localized("person.born"), birth.formatted(Date.FormatStyle(date: .long, time: .omitted).locale(loc.locale))))
                         .font(CinemaFont.label(.medium))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
                 let count = movies.count + series.count
                 if count > 0 {
-                    Text(String(format: loc.localized("person.titleCount"), count))
+                    Text(loc.counted("person.titleCount", count))
                         .font(CinemaFont.label(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                 }
@@ -159,11 +159,20 @@ struct PersonDetailScreen: View {
         ContentRow(title: title, data: items, id: \.id) { item in
             // One surface per rail (Films / Séries) — see `CardZoom`.
             let zoom = CardZoom(zoomNamespace, surface: "person.\(title)", itemId: item.id)
+            // One value feeds both the overlay and VoiceOver, so the card
+            // cannot announce a state it does not draw.
+            let status = MediaCardStatus.make(
+                positionTicks: item.userData?.playbackPositionTicks,
+                runtimeTicks: item.runTimeTicks,
+                isPlayed: item.userData?.isPlayed
+            )
             NavigationLink {
-                if let id = item.id {
-                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                        .cardZoomDestination(zoom)
+                DeferredView {
+                    if let id = item.id {
+                        MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                    }
                 }
+                .cardZoomDestination(zoom)
             } label: {
                 PosterCard(
                     title: item.name ?? "",
@@ -171,11 +180,7 @@ struct PersonDetailScreen: View {
                         appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue)
                     },
                     subtitle: item.productionYear.map(String.init),
-                    status: .make(
-                        positionTicks: item.userData?.playbackPositionTicks,
-                        runtimeTicks: item.runTimeTicks,
-                        isPlayed: item.userData?.isPlayed
-                    ),
+                    status: status,
                     zoomSource: zoom
                 )
                 .frame(width: cardWidth)
@@ -186,6 +191,7 @@ struct PersonDetailScreen: View {
             .buttonStyle(.plain)
             #endif
             .accessibilityLabel([item.name, item.productionYear.map(String.init)].compactMap { $0 }.joined(separator: ", "))
+            .mediaCardStatusAccessibility(status)
             // On the NavigationLink (the focusable button), never its label,
             // so tvOS focus is untouched.
             .mediaCardContextMenu(item: item, artwork: .poster)

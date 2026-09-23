@@ -330,6 +330,7 @@ struct ProfileScreen: View {
             .foregroundStyle(CinemaColor.onSurfaceVariant)
             .textCase(.uppercase)
             .tracking(1.2)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var pagePadding: CGFloat {

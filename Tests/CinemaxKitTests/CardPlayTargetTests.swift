@@ -202,10 +202,11 @@ struct CardPlayTargetTests {
             api: api, userId: "u1",
             probeDeadline: .milliseconds(10)
         )
-        // Give the detached probe room to finish past its 100 ms sleep. Asserting
-        // the call count BEFORE this sleep would be a flake: with a 10 ms deadline
-        // the resolver can return before the probe task has even been scheduled.
-        try? await Task.sleep(for: .milliseconds(600))
+        // Wait (bounded) for the detached probe to finish past its 100 ms delay.
+        // Asserting the call count straight away would be a flake: with a 10 ms
+        // deadline the resolver can return before the probe task has even been
+        // scheduled.
+        await eventually { api.getNextUpCompletedCount >= 1 }
         #expect(api.getNextUpCallCount == 1)
         // The point of the test: cancelled, this would still be 0.
         #expect(api.getNextUpCompletedCount == 1)

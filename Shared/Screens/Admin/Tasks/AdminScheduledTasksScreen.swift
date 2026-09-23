@@ -136,12 +136,8 @@ struct AdminScheduledTasksScreen: View {
         }
     }
 
-    // Hoisted to avoid per-render allocation (this screen live-polls every 2s
-    // while a task runs). Main-actor render only, so `nonisolated(unsafe)` is safe.
-    nonisolated(unsafe) private static let relativeFormatter = AdminRelativeFormatter.make(.short)
-
     private func relativeShort(_ date: Date) -> String {
-        Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+        AdminRelativeFormatter.string(for: date, style: .short, locale: loc.locale)
     }
 
     private func labelBadge(_ text: String, color: Color) -> some View {

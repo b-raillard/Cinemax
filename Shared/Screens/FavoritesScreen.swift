@@ -81,7 +81,8 @@ final class FavoritesViewModel {
                 sortOrder: [.ascending],
                 isFavorite: true,
                 limit: limit,
-                startIndex: startIndex
+                startIndex: startIndex,
+                fieldSet: .card
             )
             self.loadFailed = false
             return (items: result.items, total: result.totalCount)
@@ -231,22 +232,27 @@ struct FavoritesScreen: View {
             return parts.joined(separator: " · ")
         }()
         let zoom = CardZoom(zoomNamespace, surface: "favorites", itemId: item.id)
+        // One value feeds both the overlay and VoiceOver, so the card
+        // cannot announce a state it does not draw.
+        let status = MediaCardStatus.make(
+            positionTicks: item.userData?.playbackPositionTicks,
+            runtimeTicks: item.runTimeTicks,
+            isPlayed: item.userData?.isPlayed
+        )
 
         NavigationLink {
-            if let id = item.id {
-                MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
-                    .cardZoomDestination(zoom)
+            DeferredView {
+                if let id = item.id {
+                    MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
+                }
             }
+            .cardZoomDestination(zoom)
         } label: {
             PosterCard(
                 title: item.name ?? "",
                 imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
                 subtitle: subtitle,
-                status: .make(
-                    positionTicks: item.userData?.playbackPositionTicks,
-                    runtimeTicks: item.runTimeTicks,
-                    isPlayed: item.userData?.isPlayed
-                ),
+                status: status,
                 zoomSource: zoom
             )
         }
@@ -256,6 +262,7 @@ struct FavoritesScreen: View {
         .buttonStyle(.plain)
         #endif
         .accessibilityLabel([item.name, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        .mediaCardStatusAccessibility(status)
         // On the NavigationLink (the focusable button), never its label,
         // so tvOS focus is untouched.
         .mediaCardContextMenu(item: item, artwork: .poster)

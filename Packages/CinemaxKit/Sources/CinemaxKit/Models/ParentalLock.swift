@@ -29,6 +29,12 @@ public struct ParentalLockCredential: Codable, Sendable, Equatable {
     /// PIN always remains a valid path, so a broken sensor can never lock the
     /// parent out of their own settings.
     public var biometricsEnabled: Bool
+    /// `LAContext.evaluatedPolicyDomainState` when the biometric shortcut was
+    /// armed — the fingerprint of the SET of enrolled faces / fingers. Optional
+    /// so a credential stored before it existed keeps decoding; `nil` means
+    /// "not armed", and only a PIN unlock arms it (see
+    /// `ParentalLockPolicy.biometricsAllowed`).
+    public var biometricDomainState: Data?
 
     public init(
         salt: Data,
@@ -36,7 +42,8 @@ public struct ParentalLockCredential: Codable, Sendable, Equatable {
         iterations: Int,
         failedAttempts: Int = 0,
         lockedUntil: Date? = nil,
-        biometricsEnabled: Bool = false
+        biometricsEnabled: Bool = false,
+        biometricDomainState: Data? = nil
     ) {
         self.salt = salt
         self.hash = hash
@@ -44,6 +51,7 @@ public struct ParentalLockCredential: Codable, Sendable, Equatable {
         self.failedAttempts = failedAttempts
         self.lockedUntil = lockedUntil
         self.biometricsEnabled = biometricsEnabled
+        self.biometricDomainState = biometricDomainState
     }
 }
 
@@ -78,6 +86,20 @@ public enum ParentalLockVerdict: Sendable, Equatable {
 /// robust control remains the server's own per-user `UserPolicy.maxParentalRating`,
 /// which the UI points at.
 public enum ParentalLockPolicy {
+    /// Whether a biometric match may unlock: only against the enrolled set it
+    /// was armed with.
+    ///
+    /// The device passcode — which the child being restrained very plausibly
+    /// knows — is enough to ADD a face (an "alternate appearance") or a finger
+    /// in iOS Settings, after which that child's own face would open the lock.
+    /// Any change to the enrolled set changes the domain state, so the shortcut
+    /// stands down until the parent's PIN re-arms it. A credential with no
+    /// recorded state (armed before this existed, or never) is refused too.
+    public static func biometricsAllowed(armedState: Data?, currentState: Data?) -> Bool {
+        guard let armedState, let currentState else { return false }
+        return armedState == currentState
+    }
+
     /// Shortest PIN accepted. Four digits is the familiar length and gives
     /// 10 000 combinations, which the back-off below turns into days of guessing.
     public static let minPINLength = 4

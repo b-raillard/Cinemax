@@ -134,6 +134,91 @@ struct APICacheTests {
         #expect(hit == 99)
     }
 
+    // MARK: - Stale-write guard (audit 2026-09-22)
+
+    @Test("a fetch that began before a sweep does not re-cache the swept value")
+    func sweepRefusesInFlightWrite() {
+        let cache = APICache()
+        let stale = cache.stamp()                        // the fetch starts here
+        cache.invalidate(prefix: "item-1")               // a mutation lands meanwhile
+        cache.set("item-1-u", value: 1, ttl: 60, stamp: stale)   // pre-mutation answer
+        let after: Int? = cache.get("item-1-u")
+        #expect(after == nil)
+        // The next fetch, started after the sweep, is cached normally.
+        let fresh = cache.stamp()
+        cache.set("item-1-u", value: 2, ttl: 60, stamp: fresh)
+        let hit: Int? = cache.get("item-1-u")
+        #expect(hit == 2)
+    }
+
+    @Test("the refresh raised by a mutation cannot launder the stale answer, in either landing order")
+    func concurrentFetchesAroundASweep() {
+        // R1 starts, the toggle sweeps, the toggle's own refresh R2 starts.
+        for staleLandsFirst in [true, false] {
+            let cache = APICache()
+            let r1 = cache.stamp()
+            cache.invalidate(prefix: "episodes-")
+            let r2 = cache.stamp()
+            if staleLandsFirst {
+                cache.set("episodes-s-u", value: 1, ttl: 60, stamp: r1)
+                cache.set("episodes-s-u", value: 2, ttl: 60, stamp: r2)
+            } else {
+                cache.set("episodes-s-u", value: 2, ttl: 60, stamp: r2)
+                cache.set("episodes-s-u", value: 1, ttl: 60, stamp: r1)
+            }
+            let hit: Int? = cache.get("episodes-s-u")
+            #expect(hit == 2, "stale answer landed first: \(staleLandsFirst)")
+        }
+    }
+
+    @Test("a sweep of another prefix does not block the write")
+    func unrelatedSweepKeepsWrite() {
+        let cache = APICache()
+        let stamp = cache.stamp()
+        cache.invalidate(prefix: "episodes-")
+        cache.set("seasons-9-u", value: 3, ttl: 60, stamp: stamp)
+        let hit: Int? = cache.get("seasons-9-u")
+        #expect(hit == 3)
+    }
+
+    @Test("clear() also refuses a write whose fetch predates it")
+    func clearRefusesInFlightWrite() {
+        let cache = APICache()
+        let stamp = cache.stamp()
+        cache.clear()
+        cache.set("genres-u", value: 4, ttl: 60, stamp: stamp)
+        let hit: Int? = cache.get("genres-u")
+        #expect(hit == nil)
+    }
+
+    @Test("a caller arriving after a sweep does not join the stale in-flight fetch", .timeLimit(.minutes(1)))
+    func sweepDetachesInFlight() async throws {
+        let cache = APICache()
+        let counter = CallCounter()
+        let (started, signal) = AsyncStream.makeStream(of: Void.self)
+        // Holds the stale fetch in flight until the fresh one has returned —
+        // the window the test is about, held open rather than guessed.
+        let releaseStale = TestLatch()
+        let stale = Task {
+            try await cache.coalesce(key: "item-5-u") {
+                await counter.increment()
+                signal.yield()                     // registered AND running
+                await releaseStale.wait()
+                return 1
+            }
+        }
+        for await _ in started { break }
+        cache.invalidate(prefix: "item-5")
+        let fresh = try await cache.coalesce(key: "item-5-u") {
+            await counter.increment()
+            return 2
+        }
+        releaseStale.open()
+        #expect(fresh == 2)
+        #expect(try await stale.value == 1)
+        #expect(await counter.count == 2)
+    }
+
     // MARK: - Single-flight coalescing
 
     /// Counts how many times a coalesced operation actually executed. An actor

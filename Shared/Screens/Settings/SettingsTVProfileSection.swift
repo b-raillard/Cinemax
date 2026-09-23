@@ -164,7 +164,7 @@ extension SettingsScreen {
 
             Text(String(name.prefix(1)).uppercased())
                 .font(.system(size: size * 0.42, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(themeManager.onAccentContainer)
         }
     }
 }

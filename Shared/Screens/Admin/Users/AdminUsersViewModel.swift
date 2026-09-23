@@ -19,7 +19,7 @@ final class AdminUsersViewModel {
         !isLoading && errorMessage == nil && users.isEmpty
     }
 
-    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func load(using apiClient: any AdminAPI & AuthAPI, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
         do {
@@ -33,7 +33,7 @@ final class AdminUsersViewModel {
     /// Creates a user and appends to the local list optimistically — avoids a
     /// second round-trip just to see the new row. Callers still tap into the
     /// detail screen for policy/library configuration.
-    func createUser(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func createUser(using apiClient: any AdminAPI & AuthAPI, loc: LocalizationManager) async -> Bool {
         let name = newUserName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return false }
         isCreating = true

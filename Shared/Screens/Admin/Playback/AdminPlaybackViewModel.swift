@@ -22,7 +22,7 @@ final class AdminPlaybackViewModel {
         return edited != original
     }
 
-    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func load(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         isLoading = edited == nil
         errorMessage = nil
         defer { isLoading = false }
@@ -35,7 +35,7 @@ final class AdminPlaybackViewModel {
         }
     }
 
-    func save(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func save(using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         guard let edited else { return false }
         isSaving = true
         errorMessage = nil

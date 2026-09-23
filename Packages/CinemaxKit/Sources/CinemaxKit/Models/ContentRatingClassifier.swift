@@ -38,8 +38,27 @@ public enum ContentRatingClassifier {
     /// type-level doc for why unrated content is not hidden by default.
     public static func age(forRating rating: String?) -> Int {
         guard let rating else { return 0 }
-        let key = rating.trimmingCharacters(in: .whitespaces).uppercased()
-        return ageMap[key] ?? 0
+        var key = rating.trimmingCharacters(in: .whitespaces).uppercased()
+        // "Rated R" and friends — the server strips the same prefixes.
+        if let prefix = ["RATED :", "RATED:", "RATED "].first(where: { key.hasPrefix($0) }) {
+            key = String(key.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+        if let age = ageMap[key] { return age }
+        let bare = key.hasSuffix("+") ? String(key.dropLast()) : key
+        if let age = ageMap[bare] { return age }
+        // A bare age ("16", "12+") is read as that age, like the server does.
+        if let age = Int(bare), age >= 0 { return age }
+        // A country or board prefix before the code: "FR-12", "DE-16",
+        // "Germany: FSK-18" — the TMDb provider writes the first form for every
+        // non-US country, i.e. the ordinary case of a French library.
+        if let separator = key.firstIndex(where: { $0 == "-" || $0 == ":" }) {
+            let left = key[..<separator]
+            let right = key[key.index(after: separator)...].trimmingCharacters(in: .whitespaces)
+            if left.count >= 2, left.allSatisfy(\.isLetter), !right.isEmpty {
+                return age(forRating: right)
+            }
+        }
+        return 0
     }
 
     /// Returns `true` when `rating`'s age is at or below `maxAge`. `maxAge == 0`
@@ -50,19 +69,19 @@ public enum ContentRatingClassifier {
         return age(forRating: rating) <= maxAge
     }
 
-    /// Canonical rating string to send as `maxOfficialRating` on server-side
-    /// `/Items` queries for a given user-selected maximum content age.
-    /// Jellyfin's server resolves this to its internal parental-rating score
-    /// and drops anything rated above it. Returns `nil` when `maxAge <= 0`
-    /// (no filter).
+    /// The `maxOfficialRating` to send on server-side `/Items` queries for a
+    /// user-selected maximum content age: **the age itself, as an integer
+    /// string** (`"12"`), or `nil` when `maxAge <= 0` (no filter).
+    ///
+    /// Every supported server (10.9, 10.10, 10.11, 12.0 — verified in
+    /// `LocalizationManager.GetRatingLevel` / `GetRatingScore`) parses an
+    /// integer rating straight into that age before any country table is
+    /// consulted, so this is exact everywhere. The US codes this used to send
+    /// were not: 12 → `PG-13` and 16 → `TV-MA` score 13 and 17 on 10.10+, so an
+    /// over-the-ceiling title reached the library, search and Siri while Home
+    /// (filtered locally) hid it; and on 10.9, whose table scores `TV-PG` at
+    /// 13, even the 10+ ceiling let 13-rated titles through.
     public static func maxOfficialRatingCode(forAge maxAge: Int) -> String? {
-        switch maxAge {
-        case ...0:   return nil
-        case 1...10: return "TV-PG"
-        case 11...12: return "PG-13"
-        case 13...14: return "TV-14"
-        case 15...16: return "TV-MA"
-        default:     return "NC-17"
-        }
+        maxAge > 0 ? String(maxAge) : nil
     }
 }

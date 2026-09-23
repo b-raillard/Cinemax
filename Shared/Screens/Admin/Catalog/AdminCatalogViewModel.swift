@@ -43,7 +43,7 @@ final class AdminCatalogViewModel {
         return order.map { ($0, (buckets[$0] ?? []).sorted { ($0.name ?? "") < ($1.name ?? "") }) }
     }
 
-    func load(using apiClient: any APIClientProtocol, loc: LocalizationManager) async {
+    func load(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         isLoading = packages.isEmpty
         errorMessage = nil
         defer { isLoading = false }
@@ -58,7 +58,7 @@ final class AdminCatalogViewModel {
     /// packages newest-first, so `versions.first` is the install target.
     /// `assemblyGuid` is included because some repositories (notably the
     /// official catalog) require it to disambiguate similar names.
-    func installSelected(using apiClient: any APIClientProtocol, loc: LocalizationManager) async -> Bool {
+    func installSelected(using apiClient: any AdminAPI, loc: LocalizationManager) async -> Bool {
         guard let package = selectedPackage,
               let name = package.name,
               let version = package.versions?.first else { return false }

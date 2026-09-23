@@ -244,4 +244,19 @@ struct AppStoreLookupParsingTests {
         #expect(AppStoreLookup.parse(payload("pas du json")) == nil)
         #expect(AppStoreLookup.parse(Data()) == nil)
     }
+
+    @Test("tvOS : la page de l'App Store se déduit du lien https")
+    func tvAppStoreURLFromPage() throws {
+        let page = try #require(URL(string: "https://apps.apple.com/ch/app/cinemax/id6747012345?uo=4"))
+        #expect(AppStoreLookup.tvAppStoreURL(for: page)?.absoluteString
+                == "com.apple.TVAppStore://itunes.apple.com/app/id6747012345")
+    }
+
+    @Test("tvOS : un lien sans identifiant numérique ne donne rien")
+    func tvAppStoreURLRefusesMalformed() throws {
+        for link in ["https://apps.apple.com/ch/app/cinemax", "https://apps.apple.com/app/id", "https://apps.apple.com/app/idabc"] {
+            let page = try #require(URL(string: link))
+            #expect(AppStoreLookup.tvAppStoreURL(for: page) == nil)
+        }
+    }
 }

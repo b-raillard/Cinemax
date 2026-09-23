@@ -12,6 +12,20 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaDetail")
 final class MediaDetailViewModel {
     var item: BaseItemDto?
     var similarItems: [BaseItemDto] = []
+    /// The work on screen is rated above the Privacy & Security age cap.
+    ///
+    /// Lists never show such a title — `getItems` / search filter server-side,
+    /// the other rails locally — but a fiche can also be reached BY ID, with no
+    /// list in between: an inbound « Lire sur… » from another account, a Watch
+    /// Together queue, a saved Siri shortcut, a `cinemax://` link. Those routes
+    /// used to open the fiche and start playback on their own, so an adult
+    /// holding the remote-control permission could start an 18-rated film on a
+    /// child's capped Apple TV with no interaction at all. The fiche now shows
+    /// a restricted state instead, and the automatic playback is refused.
+    private(set) var isAgeRestricted = false
+    /// The side task filling `similarItems` (see `loadSimilar`). Internal so a
+    /// test can await it instead of racing it.
+    private(set) var similarTask: Task<Void, Never>?
     var seasons: [BaseItemDto] = []
     var episodes: [BaseItemDto] = []
     var selectedSeasonId: String?
@@ -140,6 +154,11 @@ final class MediaDetailViewModel {
         loadGeneration += 1
         let generation = loadGeneration
         isLoading = true
+        // Nothing else ever cleared it, so after one failure the error screen
+        // stood for good: Retry re-ran the load, the load succeeded, and the
+        // body still took the `errorMessage` branch (and `hasLoaded` stayed
+        // false, so every reappearance re-loaded behind it).
+        errorMessage = nil
 
         do {
             let loadedItem = try await appState.apiClient.getItem(userId: userId, itemId: itemId)
@@ -163,15 +182,6 @@ final class MediaDetailViewModel {
                 if effectiveType == .series {
                     try await loadSeriesDetail(seriesId: itemId, apiClient: appState.apiClient, userId: userId, generation: generation)
                     guard loadGeneration == generation else { return }
-                } else if effectiveType != .boxSet {
-                    // A collection has nothing to be "similar" to — its own
-                    // members are what the screen shows in that slot, and they
-                    // load as a side task below. Asking anyway spent a request
-                    // to fill a row the fiche no longer renders.
-                    async let similar = appState.apiClient.getSimilarItems(itemId: itemId, userId: userId, limit: 12)
-                    let loadedSimilar = try await similar
-                    guard loadGeneration == generation else { return }
-                    similarItems = loadedSimilar
                 }
             }
         } catch {
@@ -183,6 +193,17 @@ final class MediaDetailViewModel {
         guard loadGeneration == generation else { return }
         isFavorite = item?.userData?.isFavorite ?? false
         isPlayed = item?.userData?.isPlayed ?? false
+        isAgeRestricted = !Self.passesAgeCap(item?.officialRating)
+        // « Titres similaires » is a side task too. It used to sit on the
+        // critical path: `/Similar` is one of the costliest queries a Jellyfin
+        // server answers, its row lives below the fold, and the fiche waited
+        // for it before painting anything — while a FAILED similar request
+        // replaced the whole fiche with the error screen. A collection has
+        // nothing to be "similar" to (its members fill that slot), so it asks
+        // for nothing.
+        if resolvedType != .boxSet, errorMessage == nil, let similarSourceId = item?.id {
+            similarTask = Task { await loadSimilar(for: similarSourceId, using: appState) }
+        }
         // Collections are a movie-only garnish — resolved after the main load
         // so a slow boxset lookup never delays the detail render.
         if resolvedType == .movie, item != nil {
@@ -244,7 +265,10 @@ final class MediaDetailViewModel {
             guard loadGeneration == generation else { return }
             if let refreshedItem { item = refreshedItem }
             nextUpEpisode = refreshedNextUp
-            if let refreshedEpisodes {
+            // Only onto the season they were fetched for: the user may have
+            // switched season while this was in flight, and `selectSeason`'s
+            // own generation does not cover this writer (audit 2026-09-22, B8).
+            if let refreshedEpisodes, selectedSeasonId == seasonId {
                 episodes = refreshedEpisodes
             }
 
@@ -258,7 +282,9 @@ final class MediaDetailViewModel {
             // it here so a stale cross-season list from a PRIOR refresh can't
             // leave dangling nav entries pointing at the wrong season.
             let nextUpSeasonId = refreshedNextUp?.seasonID
-            if let nextUpSeasonId, nextUpSeasonId != seasonId {
+            // Against the season on screen NOW, not the one captured before the
+            // awaits: the user may have switched season meanwhile (B8).
+            if let nextUpSeasonId, nextUpSeasonId != selectedSeasonId {
                 let refreshedNextUpEpisodes = (try? await apiClient.getEpisodes(
                     seriesId: id, seasonId: nextUpSeasonId, userId: userId
                 )) ?? []
@@ -322,14 +348,22 @@ final class MediaDetailViewModel {
             } else {
                 try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             }
-            // `object: self` identifies the sender so this screen's own tier-2
-            // observer can skip it: these toggles already refresh exactly what
-            // they changed, and re-entering `refreshAfterPlayback` here would
-            // spend three requests re-reading what we just wrote.
-            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: self)
-            if resolvedType == .series {
-                await refreshVisibleEpisodes(seriesId: id, using: appState)
+            // The play chrome (Reprendre, progress bar, the Play target) reads
+            // `item.userData` through `resolvedPlayTarget`, NOT `isPlayed`, so
+            // flipping the flag alone left « Reprendre » standing on a film just
+            // marked watched — and it really did reopen the film mid-way (the
+            // defect `OptimisticFlag` fixed for card menus). Splice the change in
+            // at once, then re-read server truth: Jellyfin resets the position
+            // on a played mark, and a series' next-up pointer moves with it.
+            if item?.userData != nil {
+                item?.userData?.isPlayed = target
+                if target { item?.userData?.playbackPositionTicks = 0 }
             }
+            // `object: self` identifies the sender so this screen's own tier-2
+            // observer can skip it: the refresh below already re-reads exactly
+            // the slices a watched toggle moves.
+            NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: self)
+            await refreshAfterPlayback(using: appState)
         } catch {
             logger.error("Played toggle failed: \(error.localizedDescription, privacy: .public)")
             isPlayed = !target
@@ -410,7 +444,8 @@ final class MediaDetailViewModel {
     /// `isPlayed` flip already gave the user feedback.
     private func refreshVisibleEpisodes(seriesId: String, using appState: AppState) async {
         guard let userId = appState.currentUserId, let seasonId = selectedSeasonId else { return }
-        if let refreshed = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId) {
+        if let refreshed = try? await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId),
+           selectedSeasonId == seasonId {   // same guard as `refreshAfterPlayback` (B8)
             episodes = refreshed
             rebuildNavigationMaps()
         }
@@ -538,15 +573,12 @@ final class MediaDetailViewModel {
         userId: String,
         generation: Int
     ) async throws {
-        async let similarTask = apiClient.getSimilarItems(itemId: seriesId, userId: userId, limit: 12)
         async let seasonsTask = apiClient.getSeasons(seriesId: seriesId, userId: userId)
         async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
 
-        let loadedSimilar = try await similarTask
         let loadedSeasons = try await seasonsTask
         let loadedNextUp = try? await nextUpTask
         guard loadGeneration == generation else { return }
-        similarItems = loadedSimilar
         seasons = loadedSeasons
         nextUpEpisode = loadedNextUp
 
@@ -572,6 +604,26 @@ final class MediaDetailViewModel {
         }
 
         rebuildNavigationMaps()
+    }
+
+    /// Whether a rating clears the Privacy & Security cap. Unrated passes —
+    /// see `ContentRatingClassifier` for why missing data is not hidden.
+    static func passesAgeCap(_ rating: String?) -> Bool {
+        ContentRatingClassifier.passes(
+            rating: rating,
+            maxAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        )
+    }
+
+    /// Fills « Titres similaires » off the critical path. Silent on failure —
+    /// no row, never an error over a fiche that loaded fine — and dropped if
+    /// the screen has moved on to another item in the meantime.
+    private func loadSimilar(for sourceId: String, using appState: AppState) async {
+        guard let userId = appState.currentUserId,
+              let loaded = try? await appState.apiClient.getSimilarItems(itemId: sourceId, userId: userId, limit: 12)
+        else { return }
+        guard item?.id == sourceId else { return }
+        if loaded != similarItems { similarItems = loaded }
     }
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {

@@ -494,6 +494,9 @@ struct MultiServerAppStateTests {
         keychain.savedServers = servers
         keychain.savedActiveServerId = activeId
         let app = AppState(apiClient: api, keychain: keychain)
+        // The switch validates off the shared client (`ServerSessionValidator`);
+        // here that answer comes from the mock, which counts the call.
+        app.sessionValidator = { _, _ in await api.validateSession() }
         app.loadServersFromKeychain()
         return app
     }
@@ -532,15 +535,11 @@ struct MultiServerAppStateTests {
         #expect(kc.savedServerURL == b.url)
         #expect(kc.savedSession?.userID == "user2")
         #expect(kc.savedAccessToken == "tok")
-        // The client ends up pointed at B and was NEVER pointed anywhere else.
-        // `switchTo` deliberately repoints twice — once to validate the token
-        // against the target, then again inside `applyActiveServer`, which is
-        // the shared commit path (also reached from a rollback / a login, where
-        // the client is not yet pointed). `reconnect` rebuilds a local client;
-        // it issues no request, so collapsing the two would buy nothing and
-        // would mean `applyActiveServer` had to trust its caller.
-        #expect(Set(api.reconnectedURLs) == [b.url])
-        #expect(api.reconnectedURLs.last == b.url)
+        // The client ends up pointed at B, once: the token was validated OFF
+        // the shared client, which is repointed only by the commit path
+        // (audit 2026-09-22, B10).
+        #expect(api.reconnectedURLs == [b.url])
+        #expect(api.validateSessionCallCount == 1)
         #expect(api.reconnectedTokens.allSatisfy { $0 == "tok" })
         // Cache cleared and the rating cap re-applied after the client rebuild.
         #expect(api.clearCacheCallCount >= 1)
@@ -601,8 +600,24 @@ struct MultiServerAppStateTests {
         #expect(decision == .unreachable)
         #expect(app.activeServerId == a.id)
         #expect(app.servers.first { $0.id == b.id }?.accessToken == "tok")
-        // Rolled back onto A, not left pointing at B.
-        #expect(api.reconnectedURLs.last == a.url)
+        // The shared client was never pointed at B, so there is nothing to
+        // roll back — it is still on A.
+        #expect(api.reconnectedURLs.isEmpty)
+    }
+
+    @Test("A refused switch leaves the working server's version alone (B4)")
+    func switchIndeterminateRestoresVersion() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .indeterminate
+        api.learnedVersion = ServerVersion(12, 0, 0)
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local")
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+
+        #expect(await app.switchTo(b) == .unreachable)
+        // The old rollback reconnected, which cleared it: every 10.10+/12.0
+        // gate went dark on A after a flaky switch attempt.
+        #expect(api.knownServerVersion() == ServerVersion(12, 0, 0))
     }
 
     @Test("A tokenless target skips the network entirely")
@@ -752,6 +767,28 @@ struct MultiServerAppStateTests {
         #expect(app.activeServerNameOverride == "Salon")
     }
 
+    /// The Settings server card read `serverInfo`, which a switch nils and
+    /// only a background fetch refills — so it named the placeholder, and on
+    /// the pushed iOS page kept the PREVIOUS server's name.
+    @Test("The displayed server name follows a switch, from the registry entry")
+    func displayNameFollowsSwitch() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let a = entry("Salon", "https://a.local")
+        let b = entry("Bureau", "https://b.local", userId: "user2")
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+        #expect(app.activeServerDisplayName == "Salon")
+
+        #expect(await app.switchTo(b) == .commit)
+        #expect(app.activeServerDisplayName == "Bureau")
+
+        #expect(await app.switchTo(a) == .commit)
+        #expect(app.activeServerDisplayName == "Salon")
+
+        app.renameServer(id: a.id, to: "Cinéma")
+        #expect(app.activeServerDisplayName == "Cinéma")
+    }
+
     @Test("A rename survives a switch away and back (the upsert path)")
     func renameSurvivesSwitch() async {
         let api = MockAPIClient()
@@ -828,5 +865,33 @@ struct MultiServerAppStateTests {
         #expect(app.servers[0].accessToken == "fresh")
         #expect(app.servers[0].userId == "user9")
         #expect(kc.savedActiveServerId == a.id)
+    }
+}
+
+// MARK: - Standalone switch validation (audit 2026-09-22, B10)
+
+/// The switch validates its target off the shared client; its reading of the
+/// answer must match the shared client's `validateSession`, which DECODES a
+/// user rather than trusting a status.
+@Suite("ServerSessionValidator")
+struct ServerSessionValidatorTests {
+    private let user = Data(#"{"Name":"bastien","Id":"4b1c0e8f2a3d4e5f8a9b0c1d2e3f4a5b"}"#.utf8)
+
+    @Test("a 2xx carrying a user is valid, anything else on a 2xx proves nothing")
+    func twoHundredNeedsAUser() {
+        #expect(ServerSessionValidator.classify(statusCode: 200, body: user) == .valid)
+        // An SSO login page or a captive portal after a followed redirect.
+        let html = Data("<html><body>Sign in</body></html>".utf8)
+        #expect(ServerSessionValidator.classify(statusCode: 200, body: html) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: 200, body: Data(#"{"Id":""}"#.utf8)) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: 204, body: Data()) == .indeterminate)
+    }
+
+    @Test("only an authoritative 401 is invalid")
+    func onlyA401IsInvalid() {
+        #expect(ServerSessionValidator.classify(statusCode: 401, body: Data()) == .invalid)
+        #expect(ServerSessionValidator.classify(statusCode: 403, body: Data()) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: 502, body: Data()) == .indeterminate)
+        #expect(ServerSessionValidator.classify(statusCode: nil, body: user) == .indeterminate)
     }
 }

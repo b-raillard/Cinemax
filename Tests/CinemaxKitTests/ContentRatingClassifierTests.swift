@@ -33,6 +33,23 @@ struct ContentRatingClassifierTests {
         #expect(ContentRatingClassifier.age(forRating: "NOT-A-RATING") == 0)
     }
 
+    /// Audit 2026-09-22 : la table seule répondait 0 (« laisse passer ») aux
+    /// formes que les fournisseurs écrivent réellement, et la porte de la fiche
+    /// atteinte par identifiant repose sur ce classifieur.
+    @Test("Country prefixes, bare ages and a trailing + are read as ages")
+    func realWorldForms() {
+        #expect(ContentRatingClassifier.age(forRating: "FR-12") == 12)
+        #expect(ContentRatingClassifier.age(forRating: "DE-16") == 16)
+        #expect(ContentRatingClassifier.age(forRating: "Germany: FSK-18") == 18)
+        #expect(ContentRatingClassifier.age(forRating: "16") == 16)
+        #expect(ContentRatingClassifier.age(forRating: "12+") == 12)
+        #expect(ContentRatingClassifier.age(forRating: "Rated R") == 17)
+        // The table still wins over the splitting: these contain a dash.
+        #expect(ContentRatingClassifier.age(forRating: "PG-13") == 13)
+        #expect(ContentRatingClassifier.age(forRating: "TV-MA") == 17)
+        #expect(ContentRatingClassifier.age(forRating: "-12") == 12)
+    }
+
     // MARK: passes(rating:maxAge:)
 
     @Test("maxAge 0 disables filtering — everything passes")
@@ -59,14 +76,15 @@ struct ContentRatingClassifierTests {
 
     // MARK: maxOfficialRatingCode(forAge:)
 
-    @Test("Server-side ceiling code per age bucket")
+    /// Audit 2026-09-22 (S2) : les codes US envoyés jusque-là dépassaient le
+    /// plafond (12 → PG-13 = 13, 16 → TV-MA = 17 sur 10.10+ ; TV-PG = 13 sur
+    /// 10.9). Chaque serveur supporté lit un entier comme un âge : exact partout.
+    @Test("Server-side ceiling is the age itself, as an integer string")
     func serverCode() {
         #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 0) == nil)
         #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: -5) == nil)
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 10) == "TV-PG")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 12) == "PG-13")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 14) == "TV-14")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 16) == "TV-MA")
-        #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: 18) == "NC-17")
+        for age in [10, 12, 14, 16, 18] {
+            #expect(ContentRatingClassifier.maxOfficialRatingCode(forAge: age) == String(age))
+        }
     }
 }

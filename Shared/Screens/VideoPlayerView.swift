@@ -29,6 +29,10 @@ struct VideoPlayerView: View {
     // VLC presenter for the online stream path.
     @State private var vlcStreamPresenter: VLCStreamPresenter?
     @State private var didPresent = false
+    /// Bumped by Retry so the negotiation re-runs through `.task(id:)`, which
+    /// SwiftUI cancels when the cover closes — an unstructured `Task` would
+    /// outlive the ✕ and present a player over whatever is on screen by then.
+    @State private var attempt = 0
     #endif
 
     @State private var errorMessage: String?
@@ -95,7 +99,7 @@ struct VideoPlayerView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .task { await startIOSPlayback() }
+        .task(id: attempt) { await startIOSPlayback() }
         #endif
     }
 
@@ -119,6 +123,10 @@ struct VideoPlayerView: View {
                     itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .vlc,
                     mediaSourceId: mediaSourceId
                 )
+                guard !Task.isCancelled else {
+                    abandonNegotiation(vlcInfo)
+                    return
+                }
                 #if DEBUG
                 logger.info("iOS play: engine=vlc, method=\(vlcInfo.playMethod.rawValue), url=\(redactedURL(vlcInfo.url))")
                 #endif
@@ -137,6 +145,10 @@ struct VideoPlayerView: View {
                 return
             } else {
                 info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .native, mediaSourceId: mediaSourceId)
+                guard !Task.isCancelled else {
+                    abandonNegotiation(info)
+                    return
+                }
                 #if DEBUG
                 logger.info("iOS play: engine=native, method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
                 #endif
@@ -156,8 +168,32 @@ struct VideoPlayerView: View {
             didPresent = true
             p.present(info: info)
         } catch {
+            // Closed while negotiating: there is no screen left to show it on.
+            guard !Task.isCancelled else { return }
             logger.error("iOS playback error: \(error.localizedDescription)")
             errorMessage = loc.userFacingMessage(for: error)
+        }
+    }
+
+    /// The user closed this shell (✕, swipe) while `getPlaybackInfo` was in
+    /// flight. The negotiation cannot be interrupted, so it can still land
+    /// after the cover is gone — presenting then would open a player the user
+    /// had just dismissed, over whatever screen they went back to. Nothing
+    /// will ever send a stop report for this session, so hand the server's
+    /// resources back here (same pair as the presenters' abandon path).
+    private func abandonNegotiation(_ info: PlaybackInfo) {
+        logger.info("iOS play: closed during negotiation — not presenting")
+        let client = appState.apiClient
+        let liveStreamId = info.liveStreamId
+        let playSessionId = info.playSessionId
+        guard liveStreamId != nil || playSessionId != nil else { return }
+        Task.detached {
+            if let liveStreamId {
+                await client.closeLiveStream(liveStreamId: liveStreamId)
+            }
+            if let playSessionId {
+                await client.stopEncoding(playSessionId: playSessionId)
+            }
         }
     }
 
@@ -193,7 +229,7 @@ struct VideoPlayerView: View {
             CinemaButton(title: loc.localized("action.retry"), style: .ghost) {
                 didPresent = false
                 errorMessage = nil
-                Task { await startIOSPlayback() }
+                attempt &+= 1
             }
             .frame(width: 160)
         }
