@@ -1556,7 +1556,7 @@ struct HomeScreen: View {
         let subtitle: String = {
             var parts: [String] = []
             if let year = item.productionYear { parts.append(String(year)) }
-            if let type = item.type { parts.append(type.rawValue) }
+            if let type = item.type, let kind = loc.itemKind(type) { parts.append(kind) }
             return parts.joined(separator: " · ")
         }()
         let zoom = CardZoom(zoomNamespace, surface: surface, itemId: item.id)

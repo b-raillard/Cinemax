@@ -866,7 +866,7 @@
 "onboarding.quickConnect.title" = "Sign in without typing";
 "onboarding.quickConnect.body" = "Quick Connect shows a code you approve from a device already signed in. It earns its keep on the Apple TV, where typing a password with the remote is a chore.";
 "onboarding.personalize.title" = "Customisable to your liking";
-"onboarding.personalize.body" = "The bottom menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
+"onboarding.personalize.body" = "The main menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
 "settings.discoverApp" = "Discover the app";
 
 "player.a11y.skipForward" = "Forward %d seconds";
@@ -1229,3 +1229,12 @@
 "update.action.update" = "Update";
 "update.action.later" = "Later";
 "update.action.retry" = "Try again";
+
+/* Card subtitles — item kind */
+"item.kind.movie" = "Movie";
+"item.kind.series" = "Series";
+"item.kind.episode" = "Episode";
+"item.kind.season" = "Season";
+"item.kind.collection" = "Collection";
+"item.kind.playlist" = "Playlist";
+"item.kind.video" = "Video";

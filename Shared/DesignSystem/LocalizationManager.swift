@@ -1,4 +1,5 @@
 import SwiftUI
+import JellyfinAPI
 
 @MainActor @Observable
 final class LocalizationManager {
@@ -52,9 +53,20 @@ final class LocalizationManager {
 
     /// A rating or any one-decimal figure, with the app language's decimal
     /// separator (« 7,5 » in French) — `String(format: "%.1f")` always wrote a
-    /// dot.
+    /// dot. Keyed on the LANGUAGE alone, not on `locale`: with the device's
+    /// region attached, a French app on a US-region phone (`fr_US`) still
+    /// printed « 5.9 » (recette 2026-09-23). Dates keep `locale`, where the
+    /// region legitimately decides the order of day and month.
     func decimal<T: BinaryFloatingPoint>(_ value: T, fractionDigits: Int = 1) -> String {
-        Double(value).formatted(.number.precision(.fractionLength(fractionDigits)).locale(locale))
+        Self.decimal(Double(value), languageCode: languageCode, fractionDigits: fractionDigits)
+    }
+
+    nonisolated static func decimal(_ value: Double, languageCode: String, fractionDigits: Int = 1) -> String {
+        value.formatted(
+            .number
+                .precision(.fractionLength(fractionDigits))
+                .locale(Locale(identifier: languageCode))
+        )
     }
 
     // MARK: - Helpers
@@ -161,6 +173,28 @@ final class LocalizationManager {
         Self.usesSingular(count, languageCode: languageCode)
             ? localized("tvShows.season", count)
             : localized("tvShows.seasonsPlural", count)
+    }
+
+    /// Human label for a Jellyfin item kind on a card subtitle (« Film »,
+    /// « Série »…). Cards printed `BaseItemKind.rawValue`, i.e. the wire enum
+    /// « Movie » / « Series » in English whatever the app language. A kind
+    /// with no label of its own answers `nil` and is left out rather than
+    /// printed raw.
+    func itemKind(_ kind: BaseItemKind) -> String? {
+        Self.itemKindKey(kind).map { localized($0) }
+    }
+
+    nonisolated static func itemKindKey(_ kind: BaseItemKind) -> String? {
+        switch kind {
+        case .movie: "item.kind.movie"
+        case .series: "item.kind.series"
+        case .episode: "item.kind.episode"
+        case .season: "item.kind.season"
+        case .boxSet: "item.kind.collection"
+        case .playlist: "item.kind.playlist"
+        case .video, .musicVideo: "item.kind.video"
+        default: nil
+        }
     }
 
     /// "1 essai" / "3 essais" left before the parental lock's next back-off

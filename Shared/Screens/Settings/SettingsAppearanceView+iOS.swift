@@ -28,15 +28,15 @@ struct IOSAppearanceDetailView: View {
 
             VStack(spacing: 0) {
                 iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
+                    SettingsRowAdaptiveLayout {
+                        HStack {
+                            iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
 
-                        Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Spacer()
-
+                            Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                    } control: {
                         Button {
                             themeManager.darkModeEnabled.toggle()
                             Haptics.tap()
@@ -84,15 +84,15 @@ struct IOSAppearanceDetailView: View {
                 iOSSettingsDivider
 
                 iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: "globe", color: themeManager.accent)
+                    SettingsRowAdaptiveLayout {
+                        HStack {
+                            iOSRowIcon(systemName: "globe", color: themeManager.accent)
 
-                        Text(loc.localized("settings.language"))
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-
-                        Spacer()
-
+                            Text(loc.localized("settings.language"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                    } control: {
                         languagePicker
                     }
                 }
@@ -100,23 +100,23 @@ struct IOSAppearanceDetailView: View {
                 iOSSettingsDivider
 
                 iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
+                    SettingsRowAdaptiveLayout {
+                        HStack {
+                            iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
 
-                        VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
-                            Text(loc.localized("settings.motionEffects"))
-                                .font(CinemaFont.dynamicLabel(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-                            if systemReduceMotion {
-                                Text(loc.localized("settings.motionEffects.systemOverride"))
-                                    .font(CinemaFont.dynamicLabel(.small))
-                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                    .fixedSize(horizontal: false, vertical: true)
+                            VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                                Text(loc.localized("settings.motionEffects"))
+                                    .font(CinemaFont.dynamicLabel(.large))
+                                    .foregroundStyle(CinemaColor.onSurface)
+                                if systemReduceMotion {
+                                    Text(loc.localized("settings.motionEffects.systemOverride"))
+                                        .font(CinemaFont.dynamicLabel(.small))
+                                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
-
-                        Spacer()
-
+                    } control: {
                         Button {
                             motionEffectsStorage.toggle()
                             Haptics.tap()
@@ -139,12 +139,17 @@ struct IOSAppearanceDetailView: View {
                 iOSSettingsDivider
 
                 iOSSettingsRow {
-                    HStack {
-                        iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
-                        Text(loc.localized("settings.fontSize"))
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        Spacer()
+                    // The stepper's own « 100% » grows with the text and is
+                    // `fixedSize`: beside the label it squeezed it to one
+                    // syllable per line (« Tail/le/du/tex/te »).
+                    SettingsRowAdaptiveLayout {
+                        HStack {
+                            iOSRowIcon(systemName: "textformat.size", color: themeManager.accent)
+                            Text(loc.localized("settings.fontSize"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                    } control: {
                         Stepper(
                             "\(Int(fontScale * 100))%",
                             onIncrement: {
