@@ -59,12 +59,21 @@ func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) ->
 #if os(iOS)
 
 /// Standard padded row container for settings cells.
+///
+/// The row carries a rectangular `contentShape` covering its padding, because
+/// a `Button` / `NavigationLink` only takes touches where its label DRAWS —
+/// and neither a `Spacer` nor padding draws anything, so a tappable row whose
+/// label is this container used to answer on its icon, text and chevron only
+/// (Image Patterns RULE). A tappable row must therefore put this container
+/// INSIDE its label (`Button { … } label: { iOSSettingsRow { … } }`), never the
+/// other way round: a button nested inside it gains nothing from the shape.
 @MainActor
 @ViewBuilder
 func iOSSettingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
     content()
         .padding(.horizontal, CinemaSpacing.spacing4)
         .padding(.vertical, CinemaSpacing.spacing3)
+        .contentShape(Rectangle())
 }
 
 /// Colored icon badge used as the leading element of a settings row.
@@ -150,36 +159,36 @@ func iOSToggleRow(
     animated: Bool,
     loc: LocalizationManager
 ) -> some View {
-    iOSSettingsRow {
-        SettingsRowAdaptiveLayout {
-            HStack {
-                iOSRowIcon(systemName: icon, color: accent)
-                Text(label)
-                    .font(CinemaFont.dynamicLabel(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-            }
-        } control: {
-            Button {
-                value.wrappedValue.toggle()
-                Haptics.tap()
-            } label: {
+    // The WHOLE row is the button, not just the pill, so a tap on the label
+    // or in the empty middle flips the setting — like a native `Toggle` row.
+    Button {
+        value.wrappedValue.toggle()
+        Haptics.tap()
+    } label: {
+        iOSSettingsRow {
+            SettingsRowAdaptiveLayout {
+                HStack {
+                    iOSRowIcon(systemName: icon, color: accent)
+                    Text(label)
+                        .font(CinemaFont.dynamicLabel(.large))
+                        .foregroundStyle(CinemaColor.onSurface)
+                }
+            } control: {
                 CinemaToggleIndicator(isOn: value.wrappedValue, accent: accent, animated: animated)
             }
-            .buttonStyle(.plain)
         }
-        // Collapse the whole row into one VoiceOver element that announces the
-        // label + on/off state + toggle semantics (the bare `CinemaToggleIndicator`
-        // is purely visual, so without this VoiceOver read the setting label-only).
-        // Direct-touch on the pill still works — the accessibility tree is
-        // independent of hit-testing.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(loc.localized(value.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityAction {
-            value.wrappedValue.toggle()
-            Haptics.tap()
-        }
+    }
+    .buttonStyle(.plain)
+    // Collapse the whole row into one VoiceOver element that announces the
+    // label + on/off state + toggle semantics (the bare `CinemaToggleIndicator`
+    // is purely visual, so without this VoiceOver read the setting label-only).
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(label)
+    .accessibilityValue(loc.localized(value.wrappedValue ? "a11y.toggle.on" : "a11y.toggle.off"))
+    .accessibilityAddTraits(.isToggle)
+    .accessibilityAction {
+        value.wrappedValue.toggle()
+        Haptics.tap()
     }
 }
 

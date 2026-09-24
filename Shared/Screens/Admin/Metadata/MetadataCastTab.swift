@@ -48,15 +48,15 @@ struct MetadataCastTab: View {
 
             iOSSettingsDivider
 
-            iOSSettingsRow {
-                Button {
-                    viewModel.editingPerson = BaseItemPerson(
-                        id: nil,
-                        name: "",
-                        role: "",
-                        type: .actor
-                    )
-                } label: {
+            Button {
+                viewModel.editingPerson = BaseItemPerson(
+                    id: nil,
+                    name: "",
+                    role: "",
+                    type: .actor
+                )
+            } label: {
+                iOSSettingsRow {
                     HStack {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: CinemaScale.pt(16)))
@@ -67,8 +67,8 @@ struct MetadataCastTab: View {
                         Spacer()
                     }
                 }
-                .buttonStyle(.plain)
             }
+            .buttonStyle(.plain)
         }
         .sheet(item: editingPersonBinding) { wrapper in
             MetadataPersonEditor(
@@ -112,6 +112,7 @@ struct MetadataCastTab: View {
         }
         .padding(.vertical, CinemaSpacing.spacing2)
         .padding(.horizontal, CinemaSpacing.spacing4)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder

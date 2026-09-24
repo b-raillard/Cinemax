@@ -71,7 +71,7 @@ struct AdminLogsScreen: View {
 
                     HStack(spacing: CinemaSpacing.spacing2) {
                         if let size = file.size {
-                            Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                            Text(Int64(size).formatted(.byteCount(style: .file).locale(Locale(identifier: loc.languageCode))))
                                 .font(CinemaFont.label(.small))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }
@@ -139,6 +139,10 @@ struct AdminLogViewerScreen: View {
                     }
                     .padding(CinemaSpacing.spacing3)
                 }
+                // Open on the newest lines: a log is appended to, so what the
+                // admin came for — the latest error — is at the END. The view
+                // model already keeps the tail when it truncates.
+                .defaultScrollAnchor(.bottom)
             }
         }
         .navigationTitle(fileName)
@@ -153,8 +157,8 @@ struct AdminLogViewerScreen: View {
                 .foregroundStyle(.orange)
             Text(String(
                 format: loc.localized("admin.logs.truncated"),
-                ByteCountFormatter.string(fromByteCount: Int64(AdminLogViewerViewModel.maxBytes), countStyle: .file),
-                ByteCountFormatter.string(fromByteCount: Int64(viewModel.originalSize), countStyle: .file)
+                Int64(AdminLogViewerViewModel.maxBytes).formatted(.byteCount(style: .file).locale(Locale(identifier: loc.languageCode))),
+                Int64(viewModel.originalSize).formatted(.byteCount(style: .file).locale(Locale(identifier: loc.languageCode)))
             ))
             .font(CinemaFont.label(.small))
             .foregroundStyle(CinemaColor.onSurfaceVariant)

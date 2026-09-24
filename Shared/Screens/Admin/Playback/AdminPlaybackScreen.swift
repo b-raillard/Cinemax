@@ -19,7 +19,12 @@ struct AdminPlaybackScreen: View {
 
     var body: some View {
         AdminLoadStateContainer(
-            isLoading: viewModel.isLoading && viewModel.edited == nil,
+            // "Nothing to show yet and no error" IS the loading state. Keying
+            // on `viewModel.isLoading` alone left the first frame with no
+            // content at all (it only flips true inside `load()`), and a
+            // `.task` hung off a view that renders nothing never fires — so
+            // `load()` was never called and the screen stayed blank for good.
+            isLoading: viewModel.edited == nil && viewModel.errorMessage == nil,
             errorMessage: viewModel.errorMessage,
             isEmpty: false,
             onRetry: { Task { await viewModel.load(using: appState.apiClient, loc: loc) } }
@@ -118,12 +123,13 @@ struct AdminPlaybackScreen: View {
             ) {
                 readOnlyPathRow(
                     label: loc.localized("admin.playback.encoderPath"),
-                    value: options.encoderAppPathDisplay ?? options.encoderAppPath ?? "—"
+                    value: [options.encoderAppPathDisplay, options.encoderAppPath]
+                        .compactMap { $0 }.first { !$0.isEmpty } ?? "—"
                 )
                 iOSSettingsDivider
                 readOnlyPathRow(
                     label: loc.localized("admin.playback.transcodingTempPath"),
-                    value: options.transcodingTempPath ?? "—"
+                    value: options.transcodingTempPath.flatMap { $0.isEmpty ? nil : $0 } ?? "—"
                 )
             }
         }

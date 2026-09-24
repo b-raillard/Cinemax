@@ -7,7 +7,10 @@ import CinemaxKit
 @MainActor @Observable
 final class AdminDevicesViewModel {
     var devices: [DeviceInfoDto] = []
-    var isLoading = false
+    /// Starts TRUE: the screen's `.task` loads on first appearance, and a
+    /// `false` start drew the « Aucun… » empty state for a frame before the
+    /// spinner replaced it.
+    var isLoading = true
     var errorMessage: String?
     var pendingRevoke: DeviceInfoDto?
 

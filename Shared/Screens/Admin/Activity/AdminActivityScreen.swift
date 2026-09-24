@@ -89,7 +89,7 @@ struct AdminActivityScreen: View {
                         .foregroundStyle(CinemaColor.onSurface)
                         .multilineTextAlignment(.leading)
 
-                    if let short = entry.shortOverview, !short.isEmpty {
+                    if let short = Self.displayedShortOverview(entry.shortOverview) {
                         Text(short)
                             .font(CinemaFont.label(.medium))
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -100,14 +100,6 @@ struct AdminActivityScreen: View {
                     HStack(spacing: CinemaSpacing.spacing2) {
                         if let date = entry.date {
                             Text(relativeTimeLabel(for: date))
-                                .font(CinemaFont.label(.small))
-                                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        }
-                        if let type = entry.type, !type.isEmpty {
-                            Text("•")
-                                .font(CinemaFont.label(.small))
-                                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            Text(type)
                                 .font(CinemaFont.label(.small))
                                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                         }
@@ -144,6 +136,21 @@ struct AdminActivityScreen: View {
         Circle()
             .fill(color)
             .frame(width: 8, height: 8)
+    }
+
+    /// The server's one-line summary, or `nil` when it says nothing. Jellyfin
+    /// fills it from a template even when the value is missing, which printed
+    /// a bare « Adresse IP : » under half the sign-in events — a label whose
+    /// value is empty is dropped rather than shown dangling.
+    ///
+    /// The entry's `type` (« SessionEnded », « AuthenticationSucceeded ») is
+    /// deliberately not rendered at all: it is the server's internal event
+    /// name, never localized, and the entry's own title already says the same
+    /// thing in words.
+    static func displayedShortOverview(_ raw: String?) -> String? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty, !trimmed.hasSuffix(":") else { return nil }
+        return trimmed
     }
 
     private func relativeTimeLabel(for date: Date) -> String {

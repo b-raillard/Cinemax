@@ -7,7 +7,10 @@ import CinemaxKit
 @MainActor @Observable
 final class AdminLogsViewModel {
     var files: [LogFile] = []
-    var isLoading = false
+    /// Starts TRUE: the screen's `.task` loads on first appearance, and a
+    /// `false` start drew the « Aucun… » empty state for a frame before the
+    /// spinner replaced it.
+    var isLoading = true
     var errorMessage: String?
 
     var isEmpty: Bool {
@@ -36,7 +39,8 @@ final class AdminLogViewerViewModel {
 
     let fileName: String
     var contents: String = ""
-    var isLoading = false
+    /// Starts TRUE so the first frame is the spinner, not an empty page.
+    var isLoading = true
     var isTruncated = false
     var originalSize: Int = 0
     var errorMessage: String?

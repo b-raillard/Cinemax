@@ -300,6 +300,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
     func createApiKey(app: String) async throws {
         if shouldThrow { throw stubbedError }
+        // Same shape as the server's own answer (see `AdminApiKeysViewModel.listable`).
+        stubbedApiKeys.append(AuthenticationInfo(
+            accessToken: UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
+            appName: app, dateCreated: Date(), id: 0, isActive: false
+        ))
     }
     func revokeApiKey(key: String) async throws {
         if shouldThrow { throw stubbedError }

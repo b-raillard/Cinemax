@@ -27,32 +27,33 @@ struct IOSAppearanceDetailView: View {
             iOSSettingsSectionHeader(loc.localized("settings.personalization"))
 
             VStack(spacing: 0) {
-                iOSSettingsRow {
-                    SettingsRowAdaptiveLayout {
-                        HStack {
-                            iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
+                // The whole row toggles, not just the pill (same shape as `iOSToggleRow`).
+                Button {
+                    themeManager.darkModeEnabled.toggle()
+                    Haptics.tap()
+                } label: {
+                    iOSSettingsRow {
+                        SettingsRowAdaptiveLayout {
+                            HStack {
+                                iOSRowIcon(systemName: themeManager.darkModeEnabled ? "moon.fill" : "sun.max.fill", color: themeManager.accent)
 
-                            Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
-                                .font(CinemaFont.dynamicLabel(.large))
-                                .foregroundStyle(CinemaColor.onSurface)
-                        }
-                    } control: {
-                        Button {
-                            themeManager.darkModeEnabled.toggle()
-                            Haptics.tap()
-                        } label: {
+                                Text(themeManager.darkModeEnabled ? loc.localized("settings.darkMode") : loc.localized("settings.lightMode"))
+                                    .font(CinemaFont.dynamicLabel(.large))
+                                    .foregroundStyle(CinemaColor.onSurface)
+                            }
+                        } control: {
                             CinemaToggleIndicator(isOn: themeManager.darkModeEnabled, accent: themeManager.accent, animated: motionEffects)
                         }
-                        .buttonStyle(.plain)
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(loc.localized("settings.darkMode"))
-                    .accessibilityValue(loc.localized(themeManager.darkModeEnabled ? "a11y.toggle.on" : "a11y.toggle.off"))
-                    .accessibilityAddTraits(.isToggle)
-                    .accessibilityAction {
-                        themeManager.darkModeEnabled.toggle()
-                        Haptics.tap()
-                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(loc.localized("settings.darkMode"))
+                .accessibilityValue(loc.localized(themeManager.darkModeEnabled ? "a11y.toggle.on" : "a11y.toggle.off"))
+                .accessibilityAddTraits(.isToggle)
+                .accessibilityAction {
+                    themeManager.darkModeEnabled.toggle()
+                    Haptics.tap()
                 }
 
                 iOSSettingsDivider
@@ -99,41 +100,41 @@ struct IOSAppearanceDetailView: View {
 
                 iOSSettingsDivider
 
-                iOSSettingsRow {
-                    SettingsRowAdaptiveLayout {
-                        HStack {
-                            iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
+                Button {
+                    motionEffectsStorage.toggle()
+                    Haptics.tap()
+                } label: {
+                    iOSSettingsRow {
+                        SettingsRowAdaptiveLayout {
+                            HStack {
+                                iOSRowIcon(systemName: "sparkles", color: themeManager.accent)
 
-                            VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
-                                Text(loc.localized("settings.motionEffects"))
-                                    .font(CinemaFont.dynamicLabel(.large))
-                                    .foregroundStyle(CinemaColor.onSurface)
-                                if systemReduceMotion {
-                                    Text(loc.localized("settings.motionEffects.systemOverride"))
-                                        .font(CinemaFont.dynamicLabel(.small))
-                                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                        .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                                    Text(loc.localized("settings.motionEffects"))
+                                        .font(CinemaFont.dynamicLabel(.large))
+                                        .foregroundStyle(CinemaColor.onSurface)
+                                    if systemReduceMotion {
+                                        Text(loc.localized("settings.motionEffects.systemOverride"))
+                                            .font(CinemaFont.dynamicLabel(.small))
+                                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
                                 }
                             }
-                        }
-                    } control: {
-                        Button {
-                            motionEffectsStorage.toggle()
-                            Haptics.tap()
-                        } label: {
+                        } control: {
                             CinemaToggleIndicator(isOn: motionEffectsStorage, accent: themeManager.accent, animated: motionEffects)
                         }
-                        .buttonStyle(.plain)
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(loc.localized("settings.motionEffects"))
-                    .accessibilityValue(loc.localized(motionEffectsStorage ? "a11y.toggle.on" : "a11y.toggle.off"))
-                    .accessibilityHint(systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : "")
-                    .accessibilityAddTraits(.isToggle)
-                    .accessibilityAction {
-                        motionEffectsStorage.toggle()
-                        Haptics.tap()
-                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(loc.localized("settings.motionEffects"))
+                .accessibilityValue(loc.localized(motionEffectsStorage ? "a11y.toggle.on" : "a11y.toggle.off"))
+                .accessibilityHint(systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : "")
+                .accessibilityAddTraits(.isToggle)
+                .accessibilityAction {
+                    motionEffectsStorage.toggle()
+                    Haptics.tap()
                 }
 
                 iOSSettingsDivider

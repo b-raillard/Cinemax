@@ -457,18 +457,25 @@ struct PrivacySecurityScreen: View {
             .accessibilityValue(loc.localized(saveSearchHistory ? "a11y.toggle.on" : "a11y.toggle.off"))
             .accessibilityAddTraits(.isToggle)
             #else
-            searchHistoryRowContent
-                .padding(.horizontal, CinemaSpacing.spacing4)
-                .padding(.vertical, CinemaSpacing.spacing3)
-                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(loc.localized("privacy.saveSearchHistory"))
-                .accessibilityValue(loc.localized(saveSearchHistory ? "a11y.toggle.on" : "a11y.toggle.off"))
-                .accessibilityAddTraits(.isToggle)
-                .accessibilityAction {
-                    toggleSearchHistory()
-                    Haptics.tap()
-                }
+            // The whole row toggles, not just the pill (same shape as `iOSToggleRow`).
+            Button {
+                toggleSearchHistory()
+            } label: {
+                searchHistoryRowContent
+                    .padding(.horizontal, CinemaSpacing.spacing4)
+                    .padding(.vertical, CinemaSpacing.spacing3)
+                    .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
+            .buttonStyle(.plain)
+            .sensoryFeedback(.selection, trigger: saveSearchHistory)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(loc.localized("privacy.saveSearchHistory"))
+            .accessibilityValue(loc.localized(saveSearchHistory ? "a11y.toggle.on" : "a11y.toggle.off"))
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityAction {
+                toggleSearchHistory()
+                Haptics.tap()
+            }
             #endif
         }
     }
@@ -489,17 +496,7 @@ struct PrivacySecurityScreen: View {
 
             Spacer()
 
-            #if os(tvOS)
             CinemaToggleIndicator(isOn: saveSearchHistory, accent: themeManager.accent, animated: motionEffects)
-            #else
-            Button {
-                toggleSearchHistory()
-            } label: {
-                CinemaToggleIndicator(isOn: saveSearchHistory, accent: themeManager.accent, animated: motionEffects)
-            }
-            .buttonStyle(.plain)
-            .sensoryFeedback(.selection, trigger: saveSearchHistory)
-            #endif
         }
     }
 

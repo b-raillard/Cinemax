@@ -7,7 +7,10 @@ import CinemaxKit
 @MainActor @Observable
 final class AdminActivityViewModel {
     var entries: [ActivityLogEntry] = []
-    var isLoading = false
+    /// Starts TRUE: the screen's `.task` loads on first appearance, and a
+    /// `false` start drew the « Aucun… » empty state for a frame before the
+    /// spinner replaced it.
+    var isLoading = true
     var isLoadingMore = false
     var errorMessage: String?
     var hasMore = true

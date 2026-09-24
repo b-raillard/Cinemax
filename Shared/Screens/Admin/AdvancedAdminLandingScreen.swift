@@ -3,9 +3,7 @@ import SwiftUI
 import CinemaxKit
 
 /// "Advanced admin" settings category — the long-tail operational entries.
-/// P1 ships Users / Devices / Activity as real screens. The rest are
-/// navigable coming-soon stubs so users can see the full menu shape from day
-/// one and we catch routing bugs early.
+/// Every row carries a one-line subtitle saying what the screen is for.
 struct AdvancedAdminLandingScreen: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ThemeManager.self) private var themeManager
@@ -44,7 +42,7 @@ struct AdvancedAdminLandingScreen: View {
                         icon: "play.square",
                         tint: themeManager.accent,
                         label: loc.localized("admin.playback.title"),
-                        subtitle: nil,
+                        subtitle: loc.localized("admin.playback.subtitle"),
                         destination: AdminPlaybackScreen()
                     )
                     iOSSettingsDivider
@@ -52,15 +50,15 @@ struct AdvancedAdminLandingScreen: View {
                         icon: "puzzlepiece.extension",
                         tint: themeManager.accent,
                         label: loc.localized("admin.plugins.title"),
-                        subtitle: nil,
+                        subtitle: loc.localized("admin.plugins.subtitle"),
                         destination: AdminPluginsScreen()
                     )
                     iOSSettingsDivider
                     adminNavRow(
-                        icon: "globe",
+                        icon: "shippingbox",
                         tint: themeManager.accent,
                         label: loc.localized("admin.catalog.title"),
-                        subtitle: nil,
+                        subtitle: loc.localized("admin.catalog.subtitle"),
                         destination: AdminCatalogScreen()
                     )
                     iOSSettingsDivider
@@ -68,7 +66,7 @@ struct AdvancedAdminLandingScreen: View {
                         icon: "calendar.badge.clock",
                         tint: themeManager.accent,
                         label: loc.localized("admin.tasks.title"),
-                        subtitle: nil,
+                        subtitle: loc.localized("admin.tasks.subtitle"),
                         destination: AdminScheduledTasksScreen()
                     )
                 }
@@ -78,7 +76,7 @@ struct AdvancedAdminLandingScreen: View {
                         icon: "network",
                         tint: themeManager.accent,
                         label: loc.localized("admin.network.title"),
-                        subtitle: nil,
+                        subtitle: loc.localized("admin.network.subtitle"),
                         destination: AdminNetworkScreen()
                     )
                     iOSSettingsDivider
@@ -86,7 +84,7 @@ struct AdvancedAdminLandingScreen: View {
                         icon: "doc.text.magnifyingglass",
                         tint: themeManager.accent,
                         label: loc.localized("admin.logs.title"),
-                        subtitle: nil,
+                        subtitle: loc.localized("admin.logs.subtitle"),
                         destination: AdminLogsScreen()
                     )
                     iOSSettingsDivider
@@ -94,7 +92,7 @@ struct AdvancedAdminLandingScreen: View {
                         icon: "key",
                         tint: themeManager.accent,
                         label: loc.localized("admin.apiKeys.title"),
-                        subtitle: nil,
+                        subtitle: loc.localized("admin.apiKeys.subtitle"),
                         destination: AdminApiKeysScreen()
                     )
                 }
