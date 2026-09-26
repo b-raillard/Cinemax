@@ -1,5 +1,6 @@
 import SwiftUI
 import JellyfinAPI
+import CinemaxKit
 
 @MainActor @Observable
 final class LocalizationManager {
@@ -87,6 +88,9 @@ final class LocalizationManager {
     /// string-match on the same markers `JellyfinAPIClient` uses for 401s,
     /// since `Get`/`URLError` are only transitive deps.
     func userFacingMessage(for error: Error) -> String {
+        if case JellyfinError.contentRestricted = error {
+            return localized("detail.restricted.subtitle")
+        }
         let raw = (error as NSError)
         if raw.domain == NSURLErrorDomain {
             switch raw.code {

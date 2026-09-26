@@ -23,6 +23,11 @@ public enum JellyfinError: LocalizedError, Sendable {
     /// by — a playlist entry with no `playlistItemID`, say. Refusing beats
     /// acting on the wrong occurrence.
     case malformedRecord
+    /// The item (or, for an episode, its series) is above the Privacy &
+    /// Security age cap. Raised by `getPlaybackInfo` BEFORE any stream is
+    /// negotiated, so every playback path — a Home rail card, a context menu,
+    /// the next episode, a retry — is refused the same way the fiche refuses.
+    case contentRestricted
 
     public var errorDescription: String? {
         switch self {
@@ -33,6 +38,7 @@ public enum JellyfinError: LocalizedError, Sendable {
         case .unauthorized:            "Session expired"
         case .invalidCredentials:      "The current password is incorrect"
         case .malformedRecord:         "This entry is missing the identifier the server needs"
+        case .contentRestricted:       "This title is above the age limit set on this device"
         }
     }
 }
