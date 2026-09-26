@@ -1089,7 +1089,10 @@ struct MediaDetailScreen: View {
         // lists that filter on the age cap — refuse rather than play (the
         // screen itself shows the restricted state). An episode is checked on
         // its own rating too: the series' may be absent or milder.
-        let requestedEpisode = viewModel.episodes.first(where: { $0.id == viewModel.itemId })
+        // The episode as fetched when the fiche was opened for it — not looked
+        // up in `episodes`, which holds only the first and next-up seasons.
+        let requestedEpisode = viewModel.requestedEpisode
+            ?? viewModel.episodes.first(where: { $0.id == viewModel.itemId })
         guard !viewModel.isAgeRestricted,
               MediaDetailViewModel.passesAgeCap(requestedEpisode?.officialRating) else {
             if groupTicks != nil {
