@@ -355,3 +355,19 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
   - des tests pouvaient se bloquer jusqu'au délai du job au lieu d'échouer : `TestLatch.wait` a désormais un délai (10 s), et les deux tests qui attendent une tâche ont un `.timeLimit` ;
   - le build Release se limite à arm64 pour rester dans le délai du job ;
   - la section « Titres similaires » de la fiche différait encore mal sa destination (P3) ; corrigé.
+
+## 11 bis. Étape 0 et lot 6 (2026-09-25 → 26)
+
+**Étape 0 — inventaire.** Chaque constat non listé comme fait ci-dessus a été revérifié dans le code de `main` (`1f59baf`). Attention : ✅ dans ce rapport signifie « contre-vérifié », pas « corrigé » — P2 et T8, marqués ✅, étaient encore ouverts. Constats nouveaux relevés à cette occasion : épisode demandé par id hors des saisons chargées (lu à la place de « À suivre »), texte blanc sur l'accent dans les onglets et badges admin, `WideCard.detail` à 1,44:1, deux suites de tests écrivant encore `UserDefaults.standard` (historique de recherche), relecture des commits ajoutés pendant la recette (fenêtre des toasts qui ne suit pas le mode clair/sombre, `"Unknown"` en dur, exception « titre de héros » périmée dans `conventions.md`, Face ID bloqué lu comme un changement de visages). CI : « Select Xcode » sélectionnait bien 26.5 ; la CI passe à Xcode 27.0 (image `xcode-27`, PR #259).
+
+**Lot 6 — sécurité, fait.**
+- S3 (trou restant) : le plafond d'âge est vérifié dans `getPlaybackInfo`, avant toute négociation — toutes les lectures y passent (cartes, menus, héros, épisode suivant, nouvel essai). Décision produit : un épisode sans note hérite de celle de sa série ; les deux doivent passer. Refus « Contenu restreint » affiché par le lecteur ; VLC quitte un groupe Regarder ensemble.
+- Épisode demandé par id hors des saisons chargées : la fiche garde l'épisode chargé à l'ouverture.
+- S7 : jeton du socket dans l'en-tête `Authorization`, `ApiKey` en repli seulement sur refus répondu par le serveur ; identité du hub explicite (URL du socket + jeton, l'utilisateur étant lié au jeton).
+- S8 : mémo de la session partagée pris après une écriture réussie ; effacement raté réessayé au retour au premier plan.
+- S9 : temporisation du PIN sur l'horloge monotone (changer la date ou redémarrer ne fait que rallonger l'attente). Décision produit : nouveau code de 6 à 8 chiffres, un ancien code de 4–5 chiffres ouvre toujours et la ligne « Changer le code » invite à l'allonger.
+- S11 : identifiants en chiffres pleine chasse refusés ; titre des messages reçus fixé par l'app (Jellyfin ne transmet pas l'émetteur) ; redirection authentifiée non suivie hors de son origine ; `LogScrubber` masque les formes JSON et encodées ; journaux admin nettoyés ligne par ligne (le texte reste sélectionnable — décision : copier une ligne d'erreur est l'usage de l'écran).
+- Certificats auto-signés : l'empreinte approuvée du serveur actif est publiée dans la session partagée ; le widget et le Top Shelf l'honorent (`ExtensionServerTrust`, partagé par source). Limite : les images du Top Shelf, chargées par le système.
+- Relecture de ee87c6b : un état biométrique illisible (Face ID bloqué) n'est plus un changement de visages.
+- Point 7 : `restoreSession` journalise l'emplacement réel de `access_token` (« private » attendu).
+- **Reporté** : ancien S5 (`device_id` hors `allSucceeded`, sans effet de sécurité) ; test de câblage de `enforceContentAgeCap` et de `retryFailedClear` (aucun point d'injection réseau ni de trousseau dans le client) ; corrections de 3619595 (lecteur) au lot 7.

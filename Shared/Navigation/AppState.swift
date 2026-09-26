@@ -134,7 +134,7 @@ final class AppState {
         // The one place the S1 move can be checked on a signed device: this
         // line reaches the diagnostics export (« private » expected).
         if let real = keychain as? KeychainService {
-            logger.info("Keychain ▸ access_token in \(real.accessGroupPlacement(ofAccount: "access_token").rawValue, privacy: .public) group")
+            logger.notice("Keychain ▸ access_token in \(real.accessGroupPlacement(ofAccount: "access_token").rawValue, privacy: .public) group")
         }
         keychain.migrateToMultiServerIfNeeded()
         loadServersFromKeychain()
