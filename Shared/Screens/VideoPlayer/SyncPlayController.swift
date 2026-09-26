@@ -275,18 +275,18 @@ final class SyncPlayController {
 
     func userDidPlay() {
         guard isInGroup, let api else { return }
-        Task { try? await api.syncPlayUnpause() }
+        enqueueOutbound("Unpause") { try await api.syncPlayUnpause() }
     }
 
     func userDidPause() {
         guard isInGroup, let api else { return }
-        Task { try? await api.syncPlayPause() }
+        enqueueOutbound("Pause") { try await api.syncPlayPause() }
     }
 
     func userDidSeek(toMs ms: Int) {
         guard isInGroup, let api else { return }
         let ticks = max(0, ms) * Self.ticksPerMillisecond
-        Task { try? await api.syncPlaySeek(positionTicks: ticks) }
+        enqueueOutbound("Seek") { try await api.syncPlaySeek(positionTicks: ticks) }
     }
 
     // MARK: - Buffering / ready reporting
@@ -295,7 +295,7 @@ final class SyncPlayController {
         guard isInGroup, !isApplyingRemoteCommand, let api, let bridge else { return }
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
         let entry = currentPlaylistItemId
-        Task { try? await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: entry) }
+        enqueueOutbound("Buffering") { try await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: entry) }
     }
 
     func reportReady(isPlaying: Bool) {
@@ -306,7 +306,7 @@ final class SyncPlayController {
         // because sending none is invisible from the outside and stalls the
         // whole group in `Waiting`.
         trace("Ready envoyé position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
-        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
+        enqueueOutbound("Ready") { try await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
     }
 
     /// A seek has settled: frames are flowing again at the new position.
@@ -347,7 +347,30 @@ final class SyncPlayController {
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
         let entry = currentPlaylistItemId
         trace("calage terminé — Ready réémis position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
-        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
+        enqueueOutbound("Ready") { try await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
+    }
+
+    /// The last outbound command in flight. Each new one waits for it, so the
+    /// server receives them in the order the user acted — pause → seek →
+    /// unpause used to be three independent tasks that could land in any order
+    /// (audit 2026-09-22, low). A failure is logged, where `try?` dropped it.
+    @ObservationIgnored private var outboundTail: Task<Void, Never>?
+
+    private func enqueueOutbound(_ label: String, _ command: @escaping @Sendable () async throws -> Void) {
+        let previous = outboundTail
+        outboundTail = Task {
+            await previous?.value
+            do {
+                try await command()
+            } catch {
+                syncLogger.error("SyncPlay: \(label, privacy: .public) failed — \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Test seam: waits for every outbound command queued so far.
+    func drainOutbound() async {
+        await outboundTail?.value
     }
 
     // MARK: - Session plumbing

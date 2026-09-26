@@ -267,3 +267,42 @@ struct SyncPlayReadyPolicyTests {
             mediaConfirmedOpen: true, startSeekPending: false, isSeekSettling: false) == true)
     }
 }
+
+/// Audit 2026-09-22 (bug bas) : pause → recherche → reprise partaient en trois
+/// tâches indépendantes, dans un ordre quelconque, et un échec ne laissait
+/// aucune trace.
+private final class OrderedSyncPlayAPI: SyncPlayAPI, @unchecked Sendable {
+    let slowPause = TestLatch()
+    private let store = OSAllocatedUnfairLock<[String]>(initialState: [])
+    var calls: [String] { store.withLock { $0 } }
+    func reset() { store.withLock { $0.removeAll() } }
+
+    func syncPlayPause() async throws {
+        await slowPause.wait()
+        store.withLock { $0.append("pause") }
+    }
+    func syncPlaySeek(positionTicks: Int) async throws { store.withLock { $0.append("seek") } }
+    func syncPlayUnpause() async throws { store.withLock { $0.append("unpause") } }
+}
+
+@MainActor
+@Suite("SyncPlayController — commandes sortantes dans l'ordre", .serialized)
+struct SyncPlayOutboundOrderTests {
+    @Test("A slow pause does not let the seek and the unpause overtake it")
+    func outboundCommandsKeepTheirOrder() async {
+        let api = OrderedSyncPlayAPI()
+        let c = SyncPlayController.shared
+        _ = await c.createGroup(named: "test", api: api, loc: LocalizationManager(), toast: ToastCenter(), currentUserName: "moi")
+        defer { c.leaveGroup() }
+        await c.drainOutbound()
+        api.reset()
+
+        c.userDidPause()
+        c.userDidSeek(toMs: 60_000)
+        c.userDidPlay()
+        api.slowPause.open()
+        await c.drainOutbound()
+
+        #expect(api.calls == ["pause", "seek", "unpause"])
+    }
+}
