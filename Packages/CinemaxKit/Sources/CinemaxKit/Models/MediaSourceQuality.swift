@@ -272,6 +272,29 @@ public enum MediaSourceQuality {
     /// the full badge row carries, because at row width they push the useful
     /// distinctions off the end.
     public static func summary(for source: MediaSourceInfo) -> String {
+        summaryParts(for: source).joined(separator: " · ")
+    }
+
+    /// The summary shown BESIDE a version name: every part that merely repeats
+    /// that name is dropped. Jellyfin names a version after its filename suffix
+    /// (`Sintel (2010) - 4K.mkv` → "4K"), which is usually the resolution the
+    /// summary starts with — so the row read « 4K · 4K · Dolby Digital ».
+    public static func summary(for source: MediaSourceInfo, besideName name: String?) -> String {
+        distinctParts(summaryParts(for: source), excluding: name).joined(separator: " · ")
+    }
+
+    /// Pure core of `summary(for:besideName:)`: drops the parts equal to `name`,
+    /// ignoring case, diacritics and surrounding whitespace. A nil or blank name
+    /// drops nothing.
+    public static func distinctParts(_ parts: [String], excluding name: String?) -> [String] {
+        guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return parts }
+        return parts.filter {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                .compare(name, options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame
+        }
+    }
+
+    private static func summaryParts(for source: MediaSourceInfo) -> [String] {
         let streams = source.mediaStreams ?? []
         let video = streams.first { $0.type == .video }
         let audio = defaultAudioStream(in: source)
@@ -280,7 +303,7 @@ public enum MediaSourceQuality {
         if let v = video, let r = resolutionLabel(of: v) { parts.append(r) }
         if let v = video, let h = hdrLabel(of: v) { parts.append(h) }
         if let a = audio, let f = audioFormatLabel(of: a) { parts.append(f) }
-        return parts.joined(separator: " · ")
+        return parts
     }
 
     /// The server-provided version name, trimmed. Nil when absent or blank so

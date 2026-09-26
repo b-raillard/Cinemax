@@ -390,3 +390,30 @@ struct MediaSourceQualityTests {
         #expect(MediaSourceQuality.defaultAudioStream(in: noDefault)?.codec == "aac")
     }
 }
+
+/// The version row printed « 4K · 4K · Dolby Digital »: Jellyfin names a version
+/// after its filename suffix (`Sintel (2010) - 4K.mkv` → "4K"), which is the
+/// resolution the summary already starts with.
+@Suite("Version summary beside its name")
+struct VersionSummaryBesideNameTests {
+    @Test("a part repeating the version name is dropped")
+    func dropsRepeatedResolution() {
+        #expect(MediaSourceQuality.distinctParts(["4K", "Dolby Digital"], excluding: "4K") == ["Dolby Digital"])
+    }
+
+    @Test("the comparison ignores case, diacritics and whitespace")
+    func tolerantComparison() {
+        #expect(MediaSourceQuality.distinctParts(["1080p", "HDR10"], excluding: " 1080P ") == ["HDR10"])
+    }
+
+    @Test("a distinctive name keeps the whole summary")
+    func distinctiveNameKeepsEverything() {
+        #expect(MediaSourceQuality.distinctParts(["4K", "Dolby Digital"], excluding: "IMAX") == ["4K", "Dolby Digital"])
+    }
+
+    @Test("no name, or a blank one, drops nothing")
+    func noNameDropsNothing() {
+        #expect(MediaSourceQuality.distinctParts(["4K"], excluding: nil) == ["4K"])
+        #expect(MediaSourceQuality.distinctParts(["4K"], excluding: "  ") == ["4K"])
+    }
+}

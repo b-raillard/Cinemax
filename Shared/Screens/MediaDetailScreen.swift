@@ -607,74 +607,80 @@ struct MediaDetailScreen: View {
 
     @ViewBuilder
     private func backdropSectionContent(_ item: BaseItemDto) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                CinemaLazyImage(
-                    url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
-                    fallbackIcon: nil,
-                    fallbackBackground: CinemaColor.surfaceContainerLow
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityHidden(true)
-            } else {
-                BackdropFallbackView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // `Color.clear` sizing driver with the backdrop, gradient and title
+        // layered as overlays — the pattern of `HomeScreen.heroSection` and
+        // `LibraryHeroSection`. Overlays cannot grow the parent. The previous
+        // ZStack took the `.fill` backdrop's natural height (width × 9/16, so
+        // ≈ 774 pt on a landscape 13" iPad) against a 460 pt frame, was centred
+        // in it and clipped: the title logo was cut in half and the genres
+        // pushed out of the bottom of the hero.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            #if os(tvOS)
+            .frame(height: backdropHeight)
+            #else
+            // iPad hardening: clamp the backdrop to ~55% of the scroll viewport
+            // so action buttons / overview stay reachable in short Stage Manager
+            // or Split View windows. Full-screen sizes resolve to `backdropHeight`.
+            .containerRelativeFrame(.vertical) { length, _ in
+                min(backdropHeight, length * 0.55)
             }
+            // Measured AFTER the clamp, so the logo is sized against the hero the
+            // user actually sees — wide enough to carry one at all, and short
+            // enough that it must shrink (iPhone in landscape).
+            .onGeometryChange(for: CGFloat?.self) { proxy in
+                AdaptiveLayout.detailLogoHeight(forHero: proxy.size)
+            } action: { height in
+                heroLogoHeight = height
+            }
+            #endif
+            .overlay {
+                if item.hasBackdropImage, let backdropId = item.backdropItemID {
+                    CinemaLazyImage(
+                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
+                        fallbackIcon: nil,
+                        fallbackBackground: CinemaColor.surfaceContainerLow
+                    )
+                    .accessibilityHidden(true)
+                } else {
+                    BackdropFallbackView()
+                }
+            }
+            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: detailHeroSpacing) {
+                    // Badges
+                    HStack(spacing: 8) {
+                        if let rating = item.officialRating {
+                            RatingBadge(rating: rating)
+                        }
 
-            CinemaGradient.heroOverlay
+                        metadataLine(item)
+                    }
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
 
-            VStack(alignment: .leading, spacing: detailHeroSpacing) {
-                // Badges
-                HStack(spacing: 8) {
-                    if let rating = item.officialRating {
-                        RatingBadge(rating: rating)
+                    // Title — the work's own logo when the server holds one, since
+                    // that is the mark a viewer recognises from the couch, and text
+                    // otherwise. Most libraries have no logo, so the fallback is the
+                    // ordinary case, not an error path.
+                    titleBlock(item)
+
+                    // Genres
+                    if let genres = item.genres, !genres.isEmpty {
+                        Text(genres.prefix(3).joined(separator: " · "))
+                            .font(.system(size: genreFontSize, weight: .medium))
+                            .foregroundStyle(themeManager.accent)
                     }
 
-                    metadataLine(item)
+                    // Community + critic ratings (audience on left, critics on right)
+                    ratingsRow(item)
                 }
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-
-                // Title — the work's own logo when the server holds one, since
-                // that is the mark a viewer recognises from the couch, and text
-                // otherwise. Most libraries have no logo, so the fallback is the
-                // ordinary case, not an error path.
-                titleBlock(item)
-
-                // Genres
-                if let genres = item.genres, !genres.isEmpty {
-                    Text(genres.prefix(3).joined(separator: " · "))
-                        .font(.system(size: genreFontSize, weight: .medium))
-                        .foregroundStyle(themeManager.accent)
-                }
-
-                // Community + critic ratings (audience on left, critics on right)
-                ratingsRow(item)
+                .padding(.horizontal, contentPadding)
+                .padding(.top, contentPadding)
+                .padding(.bottom, contentPadding + CinemaSpacing.spacing4)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, contentPadding)
-            .padding(.top, contentPadding)
-            .padding(.bottom, contentPadding + CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity)
-        #if os(tvOS)
-        .frame(height: backdropHeight)
-        #else
-        // iPad hardening: clamp the backdrop to ~55% of the scroll viewport
-        // so action buttons / overview stay reachable in short Stage Manager
-        // or Split View windows. Full-screen sizes resolve to `backdropHeight`.
-        .containerRelativeFrame(.vertical) { length, _ in
-            min(backdropHeight, length * 0.55)
-        }
-        // Measured AFTER the clamp, so the logo is sized against the hero the
-        // user actually sees — wide enough to carry one at all, and short
-        // enough that it must shrink (iPhone in landscape).
-        .onGeometryChange(for: CGFloat?.self) { proxy in
-            AdaptiveLayout.detailLogoHeight(forHero: proxy.size)
-        } action: { height in
-            heroLogoHeight = height
-        }
-        #endif
-        .clipped()
+            .clipped()
     }
 
     // MARK: - Ratings Row (backdrop)
@@ -856,7 +862,11 @@ struct MediaDetailScreen: View {
     private func versionDetail(_ source: MediaSourceInfo) -> String {
         // `sizeLabel` is optional and `summary` can be empty — compact both away
         // so a source missing either doesn't leave a dangling separator.
-        [MediaSourceQuality.summary(for: source), MediaSourceQuality.sizeLabel(for: source) ?? ""]
+        // An unnamed source is already LABELLED by its summary, so the detail
+        // carries only what the label does not: the size.
+        let name = MediaSourceQuality.versionName(for: source)
+        let summary = name.map { MediaSourceQuality.summary(for: source, besideName: $0) } ?? ""
+        return [summary, MediaSourceQuality.sizeLabel(for: source) ?? ""]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
@@ -975,10 +985,13 @@ struct MediaDetailScreen: View {
     /// Row value: version name plus the spec summary when they differ (a source
     /// named only by its specs shouldn't repeat itself).
     private func versionRowValue(_ source: MediaSourceInfo, index: Int) -> String {
-        let name = versionLabel(source, index: index)
-        let summary = MediaSourceQuality.summary(for: source)
-        guard !summary.isEmpty, name != summary else { return name }
-        return "\(name) · \(summary)"
+        // An unnamed source is labelled by its summary: nothing to add.
+        guard let name = MediaSourceQuality.versionName(for: source) else {
+            return versionLabel(source, index: index)
+        }
+        // Parts repeating the name are dropped (« 4K · 4K · Dolby Digital »).
+        let summary = MediaSourceQuality.summary(for: source, besideName: name)
+        return summary.isEmpty ? name : "\(name) · \(summary)"
     }
 
     private func episodeNavigation(for episodeId: String) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
