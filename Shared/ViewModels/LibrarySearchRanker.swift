@@ -1,6 +1,6 @@
 import Foundation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Turns raw user input into a ranked set of library items.
 ///

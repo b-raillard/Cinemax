@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import OSLog
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Library")
 
