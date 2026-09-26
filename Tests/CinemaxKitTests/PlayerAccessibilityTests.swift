@@ -118,6 +118,26 @@ struct PlayerAccessibilityTests {
 /// floor WCAG sets even for large text — on « Lecture » and « Connexion ».
 @Suite("Accent label contrast")
 struct AccentLabelContrastTests {
+    /// The picker's selection check sits on the SWATCH fill (`accentLight` /
+    /// `accentDark`). White was ~1.6:1 on the dark-mode yellow and cyan swatches;
+    /// every check must now clear the 3:1 floor for graphical objects.
+    @Test("Every swatch check clears 3:1, yellow and cyan go dark")
+    func swatchChecksReadOnTheirFill() {
+        func ratio(label: UInt, fill: UInt) -> Double {
+            AccentLabelContrast.contrast(AccentLabelContrast.luminance(hex: label), AccentLabelContrast.luminance(hex: fill))
+        }
+        for option in AccentOption.allCases where option != .rainbow {
+            for fill in [option.palette.accentLight, option.palette.accentDark] {
+                let label: UInt = AccentLabelContrast.prefersDarkLabel(hex: fill) ? AccentLabelContrast.darkLabel : 0xFFFFFF
+                #expect(ratio(label: label, fill: fill) >= 3.0, "\(option) on \(String(fill, radix: 16))")
+            }
+        }
+        for option in [AccentOption.yellow, .cyan] {
+            #expect(AccentLabelContrast.prefersDarkLabel(hex: option.palette.accentDark), "\(option)")
+            #expect(ratio(label: 0xFFFFFF, fill: option.palette.accentDark) < 2.0, "\(option): white really was unreadable")
+        }
+    }
+
 
     @Test("yellow, cyan and orange fills take a dark label, and it reads")
     func paleFillsGoDark() {
