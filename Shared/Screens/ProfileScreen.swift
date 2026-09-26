@@ -419,7 +419,6 @@ private struct ProfileTVPickerRow: View {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($isFocused)
-        .accessibilityValue(value)
         .fullScreenCover(isPresented: $showPicker) {
             ProfileTVOptionList(title: label, options: options, selectedCode: selectedCode) { code in
                 onSelect(code.isEmpty ? nil : code)
@@ -463,7 +462,10 @@ private struct ProfileTVOptionList: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: CinemaSpacing.spacing2) {
+                    // A plain `VStack`: ~190 text rows are cheap, and every row
+                    // then EXISTS when `defaultFocus` / `scrollTo` look for the
+                    // current one (a lazy stack may not have built it yet).
+                    VStack(spacing: CinemaSpacing.spacing2) {
                         ForEach(options, id: \.0) { option in
                             row(option)
                         }
@@ -505,6 +507,10 @@ private struct ProfileTVOptionList: View {
             )
         }
         .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+        // The validated full-width-row pattern: without these two, the system
+        // focus effect draws on top of the accent stroke.
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
         .focused($focused, equals: option.0)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .id(option.0)

@@ -28,6 +28,7 @@ struct GlassPanelModifier: ViewModifier {
             .overlay {
                 if contrast == .increased {
                     shape.strokeBorder(CinemaColor.onSurfaceVariant.opacity(0.6), lineWidth: 1)
+                        .allowsHitTesting(false)
                 }
             }
     }

@@ -169,6 +169,15 @@ struct MediaDetailScreen: View {
 
             if viewModel.isLoading {
                 LoadingStateView()
+                    #if os(tvOS)
+                    // Something must hold focus while the fiche loads: pushed
+                    // inside a cover whose root owns Menu (Réglages → Compte →
+                    // Favoris), a fiche with nothing focusable left focus on
+                    // the covered root, and Menu closed the whole cover instead
+                    // of popping (the cover RULE: ≥ 1 focusable in EVERY state).
+                    .focusable()
+                    .focusEffectDisabled()
+                    #endif
             } else if let error = viewModel.errorMessage {
                 errorView(error)
             } else if viewModel.isAgeRestricted {
