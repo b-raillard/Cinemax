@@ -134,13 +134,7 @@ final class VideoPlayerCoordinator {
     /// where playback is driven by this coordinator rather than `VideoPlayerView`.
     private func presentPlaybackError(_ message: String) {
         guard let loc = localizationManager else { return }
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first,
-              let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
-            return
-        }
-        var top: UIViewController = root
-        while let presented = top.presentedViewController { top = presented }
+        guard let top = PlayerPresentation.topMostViewController() else { return }
         let alert = UIAlertController(
             title: loc.localized("playback.error.title"),
             message: message,

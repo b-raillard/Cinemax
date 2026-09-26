@@ -70,6 +70,11 @@ final class ToastWindowInstallerView: UIView {
 final class ToastPassthroughWindow: UIWindow {
     var toastFrame: CGRect = .zero
 
+    /// Never key: the keyboard and the responder chain belong to the app's
+    /// window, and every « top view controller » lookup takes the key window
+    /// (see `PlayerPresentation.topMostViewController`).
+    override var canBecomeKey: Bool { false }
+
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard toastFrame.contains(point) else { return nil }
         return super.hitTest(point, with: event)

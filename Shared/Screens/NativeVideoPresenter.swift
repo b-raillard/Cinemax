@@ -256,16 +256,10 @@ final class NativeVideoPresenter {
     func present(info: PlaybackInfo) {
         self.playbackInfo = info
 
-        guard let windowScene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = (windowScene.windows.first(where: { $0.isKeyWindow })
-                ?? windowScene.windows.first)?.rootViewController else {
+        guard let topVC = PlayerPresentation.topMostViewController() else {
             logger.error("NativeVideoPresenter: no root view controller")
             return
         }
-
-        var topVC = rootVC
-        while let presented = topVC.presentedViewController { topVC = presented }
 
         // Store track state
         self.audioTracks = info.audioTracks
@@ -884,18 +878,7 @@ final class NativeVideoPresenter {
     /// pulled for the server to have started a job before failing.
     private func releaseServerSessionAfterFailure() {
         guard let info = playbackInfo else { return }
-        let client = apiClient
-        let liveStreamId = info.liveStreamId
-        let playSessionId = info.playSessionId
-        guard liveStreamId != nil || playSessionId != nil else { return }
-        Task.detached {
-            if let liveStreamId {
-                await client.closeLiveStream(liveStreamId: liveStreamId)
-            }
-            if let playSessionId {
-                await client.stopEncoding(playSessionId: playSessionId)
-            }
-        }
+        PlayerPresentation.releaseServerSession(info, client: apiClient)
     }
 
     private func errorMessage(for error: Error?) -> String {
@@ -1112,11 +1095,7 @@ final class NativeVideoPresenter {
     /// AVKit removed `playerVC` from its previous host on PiP start; addChild in
     /// the new host adopts it.
     fileprivate func restoreFromPiP(completion: @escaping (Bool) -> Void) {
-        guard let vc = playerVC,
-              let windowScene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = (windowScene.windows.first(where: { $0.isKeyWindow })
-                ?? windowScene.windows.first)?.rootViewController else {
+        guard let vc = playerVC, let topVC = PlayerPresentation.topMostViewController() else {
             completion(false); return
         }
         // If the modal somehow stayed up (shouldn't happen with default
@@ -1124,8 +1103,6 @@ final class NativeVideoPresenter {
         guard vc.presentingViewController == nil else {
             completion(true); return
         }
-        var topVC = rootVC
-        while let presented = topVC.presentedViewController { topVC = presented }
         topVC.present(makeIOSHostingVC(for: vc), animated: true) {
             completion(true)
         }

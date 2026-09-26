@@ -183,18 +183,7 @@ struct VideoPlayerView: View {
     /// resources back here (same pair as the presenters' abandon path).
     private func abandonNegotiation(_ info: PlaybackInfo) {
         logger.info("iOS play: closed during negotiation — not presenting")
-        let client = appState.apiClient
-        let liveStreamId = info.liveStreamId
-        let playSessionId = info.playSessionId
-        guard liveStreamId != nil || playSessionId != nil else { return }
-        Task.detached {
-            if let liveStreamId {
-                await client.closeLiveStream(liveStreamId: liveStreamId)
-            }
-            if let playSessionId {
-                await client.stopEncoding(playSessionId: playSessionId)
-            }
-        }
+        PlayerPresentation.releaseServerSession(info, client: appState.apiClient)
     }
 
     /// Matches the player HUD's own close control

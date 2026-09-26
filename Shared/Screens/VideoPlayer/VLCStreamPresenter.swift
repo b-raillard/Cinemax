@@ -88,7 +88,7 @@ final class VLCStreamPresenter: NSObject {
 
     /// Presents modally on top of the active scene and starts streaming.
     func present(info: PlaybackInfo) {
-        guard let topVC = Self.topMostViewController() else {
+        guard let topVC = PlayerPresentation.topMostViewController() else {
             logger.error("VLC stream present: no top view controller")
             onDismiss?()
             return
@@ -159,21 +159,6 @@ final class VLCStreamPresenter: NSObject {
     nonisolated static func streamURL(_ url: URL, token: String?, isRetry: Bool, viaProxy: Bool) -> URL {
         guard isRetry, !viaProxy else { return url }
         return authedURL(url, token: token)
-    }
-
-    private static func topMostViewController() -> UIViewController? {
-        guard let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
-            return nil
-        }
-        var top: UIViewController = root
-        while let presented = top.presentedViewController {
-            top = presented
-        }
-        return top
     }
 }
 
@@ -4808,18 +4793,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// release a *superseded* negotiation (the wake re-resolve replaces `info`
     /// wholesale) as well as the current one.
     private func releaseServerSession(_ stale: PlaybackInfo) {
-        let client = apiClient
-        let liveStreamId = stale.liveStreamId
-        let playSessionId = stale.playSessionId
-        guard liveStreamId != nil || playSessionId != nil else { return }
-        Task.detached {
-            if let liveStreamId {
-                await client.closeLiveStream(liveStreamId: liveStreamId)
-            }
-            if let playSessionId {
-                await client.stopEncoding(playSessionId: playSessionId)
-            }
-        }
+        PlayerPresentation.releaseServerSession(stale, client: apiClient)
     }
 
     /// The open watchdog already surfaced the failure alert, but libVLC then
