@@ -34,36 +34,69 @@ public func redactedURL(_ raw: String?) -> String {
 public func redactedURL(_ url: URL) -> String { redactedURL(url.absoluteString) }
 
 public final class JellyfinAPIClient: Sendable {
-    // `JellyfinClient` (from jellyfin-sdk-swift) is not marked `Sendable`, but we need
-    // cross-actor access. Invariant: every access to `_jellyfinClient` / `_serverURL`
-    // goes through `getClient()` / `getServerURL()` / `setClient(_:url:)` which all
-    // acquire `lock`. Do not read or write these fields directly outside those helpers.
+    /// Everything that describes the live connection, read and replaced in ONE
+    /// critical section (audit 2026-09-22, Q3).
+    ///
+    /// These used to be seven `nonisolated(unsafe)` fields, each behind its own
+    /// short lock: a reader could see the new client with the old URL, and a
+    /// writer that had awaited — `connectToServer`'s `/System/Info/Public`, the
+    /// version probe of `fetchServerInfo` — wrote after a `reconnect` that
+    /// landed meanwhile, pointing the app back at the server it had just left
+    /// or stamping one server's version onto another.
+    struct ClientState {
+        /// `JellyfinClient` (jellyfin-sdk-swift) is not `Sendable`; it is only
+        /// ever read or replaced inside `withState`.
+        var client: JellyfinClient?
+        var serverURL: URL?
+        /// The token the current client was built with, kept so a language
+        /// change can rebuild an authenticated client without a re-login.
+        /// `nil` while the client is the pre-auth one from `connectToServer`.
+        var accessToken: String?
+        /// Version of the server currently pointed at, parsed from
+        /// `/System/Info/Public`. `nil` means "not learned yet" — every
+        /// capability gate MUST read that as "unsupported", because the window
+        /// exists on every cold launch (the probe runs in the background while
+        /// the UI is already live).
+        var serverVersion: ServerVersion?
+        /// The app language every request asks the server to answer in (`"fr"`
+        /// / `"en"`). Baked into the `URLSessionConfiguration` at client
+        /// construction, so a change rebuilds the client (`setPreferredLanguage`).
+        var preferredLanguage: String?
+        var maxContentAge: Int = 0
+        /// Fired by `notifyIfUnauthorized` on a genuine 401. Set once at launch
+        /// by `AppState.init()`; `@Sendable` because it runs on whatever actor
+        /// the failing call ran on.
+        var onUnauthorized: (@Sendable () -> Void)?
+        /// Bumped every time the client is replaced. A write computed from an
+        /// older generation — i.e. across an `await` — is dropped.
+        var generation: UInt64 = 0
+
+        /// Installs `client` for `url` unless the connection moved on since
+        /// `expected` was read. Returns whether it was installed.
+        mutating func install(
+            _ client: JellyfinClient,
+            url: URL,
+            accessToken: String?,
+            ifGeneration expected: UInt64? = nil
+        ) -> Bool {
+            if let expected, expected != generation { return false }
+            self.client = client
+            serverURL = url
+            self.accessToken = accessToken
+            generation &+= 1
+            return true
+        }
+    }
+
     private let lock = NSLock()
-    nonisolated(unsafe) private var _jellyfinClient: JellyfinClient?
-    nonisolated(unsafe) private var _serverURL: URL?
-    nonisolated(unsafe) private var _maxContentAge: Int = 0
-    /// Version of the server currently pointed at, parsed from
-    /// `/System/Info/Public`. `nil` means "not learned yet" — every capability
-    /// gate MUST read that as "unsupported" and stay on the path that works
-    /// everywhere, because the window exists on every cold launch (the version
-    /// probe is dispatched in the background by `AppState.restoreSession` while
-    /// the UI is already live).
-    nonisolated(unsafe) private var _serverVersion: ServerVersion?
-    /// The app language every request asks the server to answer in, as the
-    /// app's own code (`"fr"` / `"en"`). Baked into the `URLSessionConfiguration`
-    /// at client construction — `httpAdditionalHeaders` is the only place a
-    /// default header can live with the SDK's client — so a change has to
-    /// rebuild the client; `setPreferredLanguage` does, in place.
-    nonisolated(unsafe) private var _preferredLanguage: String?
-    /// The token the current client was built with, kept so a language change
-    /// can rebuild an authenticated client without a re-login. `nil` while the
-    /// client is the pre-auth one from `connectToServer`.
-    nonisolated(unsafe) private var _accessToken: String?
-    /// Fired by `notifyIfUnauthorized` whenever the Jellyfin SDK surfaces an
-    /// HTTP 401 from any session-scoped call. Set once at app launch by
-    /// `AppState.init()`; the closure must be `@Sendable` because it's
-    /// invoked from whatever actor the failing API call ran on.
-    nonisolated(unsafe) private var _onUnauthorized: (@Sendable () -> Void)?
+    /// The ONE unsafe field, and nothing touches it outside `withState`.
+    nonisolated(unsafe) private var _state = ClientState()
+
+    private func withState<T>(_ body: (inout ClientState) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(&_state)
+    }
     internal let cache = APICache()
 
     /// Every short-TTL cache key whose payload carries per-item **userData**
@@ -84,34 +117,31 @@ public final class JellyfinAPIClient: Sendable {
     public init() {}
 
     internal func getClient() -> JellyfinClient? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _jellyfinClient
-    }
-
-    internal func setClient(_ client: JellyfinClient, url: URL) {
-        lock.lock()
-        defer { lock.unlock() }
-        _jellyfinClient = client
-        _serverURL = url
-    }
-
-    private func setAccessToken(_ token: String?) {
-        lock.lock()
-        defer { lock.unlock() }
-        _accessToken = token
+        withState { $0.client }
     }
 
     internal func getServerURL() -> URL? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _serverURL
+        withState { $0.serverURL }
+    }
+
+    /// Client and URL read together — never one from before a `reconnect` and
+    /// the other from after it.
+    internal func getConnection() -> (client: JellyfinClient, serverURL: URL)? {
+        withState { state in
+            guard let client = state.client, let url = state.serverURL else { return nil }
+            return (client, url)
+        }
+    }
+
+    private func connectionWithGeneration() -> (client: JellyfinClient, serverURL: URL, generation: UInt64)? {
+        withState { state in
+            guard let client = state.client, let url = state.serverURL else { return nil }
+            return (client, url, state.generation)
+        }
     }
 
     internal func getPreferredLanguage() -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _preferredLanguage
+        withState { $0.preferredLanguage }
     }
 
     /// Records the language and, when a client already exists, rebuilds it so
@@ -121,27 +151,18 @@ public final class JellyfinAPIClient: Sendable {
     /// carry no language, and a cached season list would otherwise keep
     /// serving the previous locale's stream titles for its TTL.
     public func setPreferredLanguage(_ languageCode: String?) {
-        lock.lock()
-        _preferredLanguage = languageCode
-        let url = _serverURL
-        let token = _accessToken
-        let hasClient = _jellyfinClient != nil
-        lock.unlock()
+        let snapshot = withState { state -> (url: URL?, token: String?, hasClient: Bool, generation: UInt64) in
+            state.preferredLanguage = languageCode
+            return (state.serverURL, state.accessToken, state.client != nil, state.generation)
+        }
 
-        guard hasClient, let url else { return }
+        guard snapshot.hasClient, let url = snapshot.url else { return }
+        let token = snapshot.token
         cache.clear()
-        let client = JellyfinClient(
-            configuration: .init(
-                url: url,
-                accessToken: token,
-                client: "Cinemax",
-                deviceName: deviceName,
-                deviceID: deviceID,
-                version: appVersion
-            ),
-            sessionConfiguration: currentSessionConfiguration()
-        )
-        setClient(client, url: url)
+        let client = makeClient(url: url, accessToken: token)
+        // A reconnect that landed while this client was being built already
+        // carries the new language (recorded first, above): keep it.
+        _ = withState { $0.install(client, url: url, accessToken: token, ifGeneration: snapshot.generation) }
     }
 
     /// `Accept-Language` value for an app language code, or `nil` for a blank
@@ -159,22 +180,40 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     /// The session configuration for the language currently recorded.
+    /// The ONLY place a `JellyfinClient` is built. Every one carries the
+    /// certificate delegate: #186 wired it into the two post-login clients
+    /// only, so the client `reconnect` rebuilds at every launch — and the ones
+    /// from `connectToServer` and a language change — refused a user-approved
+    /// self-signed certificate: the server worked until the next relaunch.
+    private func makeClient(url: URL, accessToken: String?) -> JellyfinClient {
+        JellyfinClient(
+            configuration: .init(
+                url: url,
+                accessToken: accessToken,
+                client: "Cinemax",
+                deviceName: deviceName,
+                deviceID: deviceID,
+                version: appVersion
+            ),
+            sessionConfiguration: currentSessionConfiguration(),
+            // Must be the TASK-level delegate — see the RULE on
+            // `ServerTrustDelegate`.
+            sessionDelegate: ServerTrustDelegate.shared
+        )
+    }
+
     private func currentSessionConfiguration() -> URLSessionConfiguration {
         Self.sessionConfiguration(acceptLanguage: getPreferredLanguage().flatMap(Self.acceptLanguageHeader(for:)))
     }
 
     internal func getMaxContentAge() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _maxContentAge
+        withState { $0.maxContentAge }
     }
 
     /// The server's version, or `nil` while it hasn't been learned. See
-    /// `_serverVersion` for why `nil` must gate *off*.
+    /// `ClientState.serverVersion` for why `nil` must gate *off*.
     internal func getServerVersion() -> ServerVersion? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _serverVersion
+        withState { $0.serverVersion }
     }
 
     /// Records the version reported by `/System/Info/Public`. An unparseable
@@ -182,16 +221,14 @@ public final class JellyfinAPIClient: Sendable {
     /// version would enable an endpoint the current server may not have.
     internal func setServerVersion(_ raw: String?) {
         let parsed = raw.flatMap(ServerVersion.init)
-        lock.lock()
-        defer { lock.unlock() }
-        _serverVersion = parsed
+        withState { $0.serverVersion = parsed }
     }
 
     /// Whether `url` names the server the client is already pointed at, in the
     /// registry's own equivalence class (`ServerURLNormalizer.dedupKey`). A
     /// client with no URL yet is not "the same server" as anything.
-    private func isSameServer(as url: URL) -> Bool {
-        guard let current = getServerURL() else { return false }
+    private static func isSameServer(_ current: URL?, as url: URL) -> Bool {
+        guard let current else { return false }
         return ServerURLNormalizer.dedupKey(current) == ServerURLNormalizer.dedupKey(url)
     }
 
@@ -207,15 +244,11 @@ public final class JellyfinAPIClient: Sendable {
     public func knownServerVersion() -> ServerVersion? { getServerVersion() }
 
     public func setOnUnauthorized(_ callback: @escaping @Sendable () -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-        _onUnauthorized = callback
+        withState { $0.onUnauthorized = callback }
     }
 
     private func getOnUnauthorized() -> (@Sendable () -> Void)? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _onUnauthorized
+        withState { $0.onUnauthorized }
     }
 
     /// Precise 401 classifier — the SINGLE source of truth for "is this error
@@ -257,9 +290,7 @@ public final class JellyfinAPIClient: Sendable {
     /// Security selection into the client so every subsequent item query picks
     /// it up automatically — no per-call plumbing needed.
     public func applyContentRatingLimit(maxAge: Int) {
-        lock.lock()
-        defer { lock.unlock() }
-        _maxContentAge = max(0, maxAge)
+        withState { $0.maxContentAge = max(0, maxAge) }
         cache.clear()
     }
 
@@ -272,23 +303,22 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     public func connectToServer(url: URL) async throws -> ServerInfo {
-        let client = JellyfinClient(
-            configuration: .init(
-                url: url,
-                client: "Cinemax",
-                deviceName: deviceName,
-                deviceID: deviceID,
-                version: appVersion
-            ),
-            sessionConfiguration: currentSessionConfiguration()
-        )
+        let generation = withState { $0.generation }
+        let client = makeClient(url: url, accessToken: nil)
 
         let response = try await client.send(Paths.getPublicSystemInfo)
         let info = response.value
 
-        setAccessToken(nil)
-        setClient(client, url: url)
-        setServerVersion(info.version)
+        // Installed only if nothing replaced the client during the probe: a
+        // `reconnect` that landed meanwhile (a restore, a server switch) is
+        // newer, and this pre-auth client must not point the app back.
+        let version = info.version.flatMap(ServerVersion.init)
+        let installed = withState { state in
+            guard state.install(client, url: url, accessToken: nil, ifGeneration: generation) else { return false }
+            state.serverVersion = version
+            return true
+        }
+        guard installed else { throw CancellationError() }
 
         return ServerInfo(
             name: info.serverName ?? "Jellyfin Server",
@@ -311,14 +341,18 @@ public final class JellyfinAPIClient: Sendable {
             return cached
         }
 
-        guard let client = getClient(),
-              let url = getServerURL() else {
+        guard let (client, url, generation) = connectionWithGeneration() else {
             throw JellyfinError.notConnected
         }
 
         let response = try await client.send(Paths.getPublicSystemInfo)
         let info = response.value
-        setServerVersion(info.version)
+        // Only onto the client it was asked of: a switch that landed during the
+        // probe would otherwise get the previous server's version.
+        let version = info.version.flatMap(ServerVersion.init)
+        withState { state in
+            if state.generation == generation { state.serverVersion = version }
+        }
 
         let result = ServerInfo(
             name: info.serverName ?? "Jellyfin Server",
@@ -331,7 +365,7 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     public func authenticate(username: String, password: String) async throws -> UserSession {
-        guard let client = getClient() else {
+        guard let (client, url, generation) = connectionWithGeneration() else {
             throw JellyfinError.notConnected
         }
 
@@ -345,25 +379,11 @@ public final class JellyfinAPIClient: Sendable {
             throw JellyfinError.authenticationFailed
         }
 
-        // Reconfigure client with access token
-        if let url = getServerURL() {
-            let authedClient = JellyfinClient(
-                configuration: .init(
-                    url: url,
-                    accessToken: accessToken,
-                    client: "Cinemax",
-                    deviceName: deviceName,
-                    deviceID: deviceID,
-                    version: appVersion
-                ),
-                sessionConfiguration: currentSessionConfiguration(),
-                // One explicit certificate approval covers every session in the
-                // app. Must be the TASK-level delegate — see the RULE on
-                // `ServerTrustDelegate`.
-                sessionDelegate: ServerTrustDelegate.shared
-            )
-            setAccessToken(accessToken)
-            setClient(authedClient, url: url)
+        // Onto the client the credentials were checked against: a switch that
+        // landed during the request owns the connection now.
+        let authedClient = makeClient(url: url, accessToken: accessToken)
+        guard withState({ $0.install(authedClient, url: url, accessToken: accessToken, ifGeneration: generation) }) else {
+            throw CancellationError()
         }
 
         return UserSession(
@@ -402,7 +422,7 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     public func authenticateWithQuickConnect(secret: String) async throws -> UserSession {
-        guard let client = getClient() else { throw JellyfinError.notConnected }
+        guard let (client, url, generation) = connectionWithGeneration() else { throw JellyfinError.notConnected }
 
         let body = QuickConnectDto(secret: secret)
         let result = try await client.send(Paths.authenticateWithQuickConnect(body)).value
@@ -414,24 +434,11 @@ public final class JellyfinAPIClient: Sendable {
 
         // Reconfigure client with the issued access token — identical to the
         // password path so every downstream call is authenticated.
-        if let url = getServerURL() {
-            let authedClient = JellyfinClient(
-                configuration: .init(
-                    url: url,
-                    accessToken: accessToken,
-                    client: "Cinemax",
-                    deviceName: deviceName,
-                    deviceID: deviceID,
-                    version: appVersion
-                ),
-                sessionConfiguration: currentSessionConfiguration(),
-                // One explicit certificate approval covers every session in the
-                // app. Must be the TASK-level delegate — see the RULE on
-                // `ServerTrustDelegate`.
-                sessionDelegate: ServerTrustDelegate.shared
-            )
-            setAccessToken(accessToken)
-            setClient(authedClient, url: url)
+        // Onto the client the credentials were checked against: a switch that
+        // landed during the request owns the connection now.
+        let authedClient = makeClient(url: url, accessToken: accessToken)
+        guard withState({ $0.install(authedClient, url: url, accessToken: accessToken, ifGeneration: generation) }) else {
+            throw CancellationError()
         }
 
         return UserSession(
@@ -486,22 +493,11 @@ public final class JellyfinAPIClient: Sendable {
         // server ⇒ same version, so it is kept. Equality is the registry's own
         // `dedupKey`, not raw `URL` equality, so a trailing slash or an
         // uppercase host doesn't read as a different server.
-        if !isSameServer(as: url) {
-            setServerVersion(nil)
+        let client = makeClient(url: url, accessToken: accessToken)
+        withState { state in
+            if !Self.isSameServer(state.serverURL, as: url) { state.serverVersion = nil }
+            _ = state.install(client, url: url, accessToken: accessToken)
         }
-        let client = JellyfinClient(
-            configuration: .init(
-                url: url,
-                accessToken: accessToken,
-                client: "Cinemax",
-                deviceName: deviceName,
-                deviceID: deviceID,
-                version: appVersion
-            ),
-            sessionConfiguration: currentSessionConfiguration()
-        )
-        setAccessToken(accessToken)
-        setClient(client, url: url)
     }
 
     /// URLSession configuration applied to every `JellyfinClient` we hand out.
