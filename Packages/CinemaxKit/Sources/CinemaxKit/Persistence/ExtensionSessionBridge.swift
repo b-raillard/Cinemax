@@ -44,27 +44,48 @@ public enum ExtensionSessionBridge {
         /// `UserDefaults` the extensions cannot read, and this blob is the only
         /// channel that already exists.
         public let maxContentAge: Int?
+        /// SHA-256 of the leaf certificate the user approved for THIS server
+        /// (`ServerTrustDelegate`'s pin for its `host:port`), or `nil` when the
+        /// server needs none. The pins live in the app-private Keychain group,
+        /// which the extensions cannot read — without this, a self-signed server
+        /// the app uses read as « not connected » in the widget and the Top
+        /// Shelf. Optional for the same backward-compatibility reason as the cap.
+        public let pinnedCertificateSHA256: String?
 
-        /// `maxContentAge` defaults here — unlike on `publish`, which must never
-        /// let a call site forget it. Only `publish` builds one in production;
-        /// the default exists so a test can state just the fields it cares about.
-        public init(serverURL: URL, accessToken: String, userId: String, maxContentAge: Int? = nil) {
+        /// `maxContentAge` / `pinnedCertificateSHA256` default here — unlike on
+        /// `publish`, which must never let a call site forget them. Only
+        /// `publish` builds one in production; the defaults exist so a test can
+        /// state just the fields it cares about.
+        public init(
+            serverURL: URL,
+            accessToken: String,
+            userId: String,
+            maxContentAge: Int? = nil,
+            pinnedCertificateSHA256: String? = nil
+        ) {
             self.serverURL = serverURL
             self.accessToken = accessToken
             self.userId = userId
             self.maxContentAge = maxContentAge
+            self.pinnedCertificateSHA256 = pinnedCertificateSHA256
         }
     }
 
     /// Publishes the current session, or clears it when any part is nil
     /// (logout / disconnect).
     ///
-    /// `maxContentAge` carries **no default value**, deliberately: a defaulted
+    /// `maxContentAge` and `pinnedCertificateSHA256` carry **no default value**, deliberately: a defaulted
     /// `nil` would let a future publish site forget the parental cap and ship a
     /// widget that silently ignores it — exactly the defect #230 exists to
     /// close. A new call site gets a compile error instead, the same discipline
     /// as `MediaCardContextMenu`'s required `artwork:`.
-    public static func publish(serverURL: URL?, accessToken: String?, userId: String?, maxContentAge: Int?) {
+    public static func publish(
+        serverURL: URL?,
+        accessToken: String?,
+        userId: String?,
+        maxContentAge: Int?,
+        pinnedCertificateSHA256: String?
+    ) {
         // Runs on BOTH paths (publish + clear) and *before* the skip
         // early-return below, so an upgraded install's leftover plaintext copy
         // is deleted even when the session itself hasn't changed.
@@ -77,7 +98,8 @@ public enum ExtensionSessionBridge {
                 serverURL: serverURL,
                 accessToken: accessToken,
                 userId: userId,
-                maxContentAge: maxContentAge
+                maxContentAge: maxContentAge,
+                pinnedCertificateSHA256: pinnedCertificateSHA256
             )
         }()
 
@@ -200,7 +222,7 @@ public enum ExtensionSessionBridge {
         let pending = _clearFailed
         memoLock.unlock()
         guard pending else { return }
-        publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil)
+        publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
     }
 
     private static var lastPublishedInProcess: PublishedMemo? {

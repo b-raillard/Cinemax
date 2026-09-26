@@ -246,6 +246,15 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
         pin(forTrustKey: key) != nil
     }
 
+    /// The approved fingerprint for a server, for the extensions (see
+    /// `ExtensionSessionBridge.Session.pinnedCertificateSHA256`). Only an
+    /// `https` server can carry one, so a plain `http` one costs no Keychain read.
+    public func pinnedFingerprint(for serverURL: URL) -> String? {
+        guard serverURL.scheme?.lowercased() == "https",
+              let key = ServerCertificateTrust.trustKey(for: serverURL) else { return nil }
+        return pin(forTrustKey: key)
+    }
+
     private func pin(forTrustKey key: String) -> String? {
         lock.lock()
         defer { lock.unlock() }

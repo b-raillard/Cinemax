@@ -90,6 +90,22 @@ struct ExtensionSessionContractTests {
         #expect(back.maxContentAge == 12)
     }
 
+    /// Lot 6 (2026-09-25) : l'empreinte approuvée d'un serveur auto-signé
+    /// voyage avec la session, les épingles vivant dans le groupe privé de l'app.
+    @Test("L'empreinte approuvée fait l'aller-retour, absente par défaut")
+    func pinnedCertificateRoundTrips() throws {
+        let pinned = ExtensionSessionBridge.Session(
+            serverURL: URL(string: "https://nas.local")!, accessToken: "t", userId: "u",
+            pinnedCertificateSHA256: "ab12")
+        let data = try JSONEncoder().encode(pinned)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["pinnedCertificateSHA256"] as? String == "ab12")
+        #expect(try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: data).pinnedCertificateSHA256 == "ab12")
+        // Un blob d'avant ce champ se décode, sans épingle.
+        let legacy = Data(#"{"serverURL":"https://nas.local","accessToken":"t","userId":"u","maxContentAge":12}"#.utf8)
+        #expect(try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: legacy).pinnedCertificateSHA256 == nil)
+    }
+
     @Test("La forme de fil AVEC plafond se décode telle que les extensions la lisent")
     func decodesWireShapeWithCap() throws {
         let json = Data("""

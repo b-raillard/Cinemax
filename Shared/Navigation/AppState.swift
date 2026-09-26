@@ -186,7 +186,10 @@ final class AppState {
             serverURL: serverURL,
             accessToken: accessToken,
             userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
+            // A self-signed server's approved certificate: the pins live in
+            // the app-private Keychain group the extensions cannot read.
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
         guard let id = currentUserId else {
             if currentUser != nil { currentUser = nil }
@@ -687,7 +690,10 @@ final class AppState {
             serverURL: serverURL,
             accessToken: accessToken,
             userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
+            // A self-signed server's approved certificate: the pins live in
+            // the app-private Keychain group the extensions cannot read.
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
     }
 
@@ -722,7 +728,7 @@ final class AppState {
         if let active { clearSession(of: active) }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
-        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil)
+        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
         serverTransitionGeneration &+= 1
         isAuthenticated = false
         currentUserId = nil

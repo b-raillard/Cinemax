@@ -16,6 +16,9 @@ enum JellyfinLite {
         /// by a build predating it still decodes — keep in sync with
         /// `ExtensionSessionBridge.Session`.
         let maxContentAge: Int?
+        /// The approved certificate of a self-signed server, or `nil`. Optional
+        /// for the same reason — keep in sync with `ExtensionSessionBridge.Session`.
+        let pinnedCertificateSHA256: String?
     }
 
     /// Minimal copy of CinemaxKit's `ContentRatingClassifier`: the extension
@@ -104,7 +107,12 @@ enum JellyfinLite {
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 10
         config.waitsForConnectivity = false
-        return URLSession(configuration: config)
+        // Honours the certificate the user approved in the app for a
+        // self-signed server — read from the session blob at challenge time.
+        let trust = ExtensionServerTrust {
+            readSession().flatMap { ExtensionServerTrust.pin(serverURL: $0.serverURL, fingerprint: $0.pinnedCertificateSHA256) }
+        }
+        return URLSession(configuration: config, delegate: trust, delegateQueue: nil)
     }()
 
     /// Sole store: the shared, device-only Keychain group the app publishes

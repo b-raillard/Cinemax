@@ -64,6 +64,9 @@ targets:
       # CINEMAX_APP. It stays under Widgets/ because the extension's whole
       # directory is its source path; the app opts in explicitly.
       - path: Widgets/CinemaxWidget/ResumeControl.swift
+      # Shared by source with BOTH extensions (see the file): the app targets
+      # carry it only so its trust decision can be unit-tested.
+      - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
     dependencies:
       - package: CinemaxKit
       - package: SwiftVLC
@@ -183,6 +186,9 @@ targets:
     platform: tvOS
     sources:
       - path: tvOS
+      # Shared by source with the Top Shelf; carried here so the tvOS test
+      # bundle can test its trust decision too.
+      - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
       # Same exclusion as the iOS target (per-area CLAUDE.md agent rules).
       - path: Shared
         excludes:
@@ -301,6 +307,8 @@ targets:
     platform: tvOS
     sources:
       - path: TopShelf/CinemaxTopShelf
+      # The widget's copy, shared by source — see the file.
+      - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
     entitlements:
       path: TopShelf/CinemaxTopShelf.entitlements
       properties:

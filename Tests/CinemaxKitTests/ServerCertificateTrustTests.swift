@@ -174,3 +174,29 @@ struct AuthenticatedRedirectTests {
         #expect(AuthenticatedRedirect.keepsCredentials(from: nil, to: URL(string: "https://nas.local/")) == false)
     }
 }
+
+/// Lot 6 (2026-09-25) : le widget et le Top Shelf honorent le certificat
+/// approuvé du serveur actif, publié avec la session.
+@Suite("Confiance certificat — extensions")
+struct ExtensionServerTrustTests {
+    @Test("La clé d'épingle des extensions est celle de l'app")
+    func trustKeyParity() {
+        for raw in ["https://NAS.local", "https://nas.local:8920/jellyfin", "http://10.0.0.2:8096", "https://nas.local:443"] {
+            let url = URL(string: raw)!
+            #expect(ExtensionServerTrust.pin(serverURL: url, fingerprint: "ab")?.trustKey
+                == ServerCertificateTrust.trustKey(for: url))
+        }
+        #expect(ExtensionServerTrust.pin(serverURL: URL(string: "https://nas.local")!, fingerprint: nil) == nil)
+    }
+
+    @Test("Seule l'empreinte approuvée, sur son hôte, est acceptée — jamais à la place du système")
+    func acceptsOnlyThePin() {
+        let pin = ExtensionServerTrust.Pin(trustKey: "nas.local:443", fingerprint: "AB12")
+        #expect(ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "nas.local:443", leafFingerprint: "ab12", pin: pin))
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "nas.local:443", leafFingerprint: "cd34", pin: pin), "certificat changé")
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "evil.local:443", leafFingerprint: "ab12", pin: pin), "autre hôte")
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "nas.local:443", leafFingerprint: "ab12", pin: nil))
+        // Un certificat que le système accepte passe par le traitement par défaut.
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: true, challengeKey: "nas.local:443", leafFingerprint: "ab12", pin: pin))
+    }
+}
