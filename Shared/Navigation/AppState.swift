@@ -316,7 +316,10 @@ final class AppState {
     /// persisted shortcut identities against it from a non-isolated context;
     /// a second copy would be free to drift from the deep-link check.
     nonisolated static func isValidItemId(_ id: String) -> Bool {
-        if id.count == 32, id.allSatisfy(\.isHexDigit) { return true }
+        // `isASCII` too: `Character.isHexDigit` also answers yes for the
+        // FULL-WIDTH digits and letters (`０`…`９`, `ａ`…`ｆ`), which no
+        // Jellyfin id contains (audit 2026-09-22, S11).
+        if id.count == 32, id.allSatisfy({ $0.isASCII && $0.isHexDigit }) { return true }
         return UUID(uuidString: id) != nil
     }
 

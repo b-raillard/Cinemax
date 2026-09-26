@@ -30,6 +30,16 @@ struct DeepLinkRouteTests {
         #expect(route("https://\(host)/home") == .home)
     }
 
+    /// Audit 2026-09-22 (S11) : `isHexDigit` accepte aussi les chiffres et
+    /// lettres pleine chasse, qu'aucun identifiant Jellyfin ne contient.
+    @Test("Un identifiant en chiffres pleine chasse est refusé")
+    func fullWidthHexRefused() {
+        let fullWidth = String(repeating: "０１２３４５６７８９ａｂｃｄｅｆ", count: 2)
+        #expect(fullWidth.count == 32)
+        #expect(AppState.isValidItemId(fullWidth) == false)
+        #expect(AppState.isValidItemId(undashed))
+    }
+
     @Test("Hôte et schéma insensibles à la casse, verbe non")
     func caseFolding() {
         #expect(route("HTTPS://\(host.uppercased())/item/\(undashed)") == .item(id: undashed))
