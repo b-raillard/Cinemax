@@ -201,6 +201,15 @@ final class AppState {
             if isAdministrator { isAdministrator = false }
             return
         }
+        // The cached record belongs to ANOTHER account (a user or server
+        // switch): drop it now rather than keep that account's name and
+        // admin rights on screen until — or, if the fetch fails, beyond — the
+        // answer (audit 2026-09-22, low). A blip for the same account still
+        // keeps the last-known values below.
+        if Self.cachedUserBelongsElsewhere(cachedId: currentUser?.id, currentId: id) {
+            currentUser = nil
+            if isAdministrator { isAdministrator = false }
+        }
         do {
             let user = try await apiClient.getUserByID(id: id)
             // Equality-guarded: this runs on EVERY return to the foreground and
@@ -217,6 +226,14 @@ final class AppState {
         } catch {
             // Network blip — keep last-known values.
         }
+    }
+
+    /// Whether the cached user record is another account's. `nonisolated` +
+    /// static: a pure comparison (testable without a Keychain-publishing
+    /// `refreshCurrentUser`).
+    nonisolated static func cachedUserBelongsElsewhere(cachedId: String?, currentId: String) -> Bool {
+        guard let cachedId else { return false }
+        return cachedId != currentId
     }
 
     /// The fields of the signed-in user the UI actually reads (name, avatar,
