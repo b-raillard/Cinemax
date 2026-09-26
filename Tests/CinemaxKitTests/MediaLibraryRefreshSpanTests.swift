@@ -3,7 +3,7 @@ import Foundation
 // `@preconcurrency`, as in `FavoritesViewModelTests`: the SDK ships
 // `BaseItemDto` without a Sendable conformance, so a plain import turns every
 // read of the `@MainActor` loader's items into a hard error.
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 import CinemaxKit
 @testable import Cinemax
 
