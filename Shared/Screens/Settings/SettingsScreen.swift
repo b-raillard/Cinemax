@@ -519,16 +519,22 @@ struct SettingsScreen: View {
         // tvOS draws no toolbar on a cover, so it carries its own Done button —
         // which is also the focusable every state of the screen needs, per the
         // pushed-inside-a-cover rule.
+        // The design-system cover chrome (`WatchedHistoryScreen.tvHeader`):
+        // the title rides in the header, not in the scroll (audit §5, lot 9).
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Spacer()
+            HStack(alignment: .center) {
+                Text(loc.localized("profile.title"))
+                    .font(CinemaFont.headline(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer(minLength: CinemaSpacing.spacing6)
                 CinemaButton(title: loc.localized("action.done"), style: .accent) {
                     showProfile = false
                 }
                 .frame(width: CinemaTVLayout.ctaWidth)
             }
             .padding(.horizontal, CinemaTVLayout.pagePadding)
-            .padding(.top, CinemaSpacing.spacing5)
+            .padding(.top, CinemaSpacing.spacing8)
+            .padding(.bottom, CinemaSpacing.spacing5)
             .focusSection()
 
             ProfileScreen()
