@@ -126,4 +126,57 @@ struct AdminLogViewerScrubTests {
         #expect(vm.contents.hasSuffix("\n\nfin"), "les lignes (vides comprises) sont conservées")
     }
 }
+
+/// Audit 2026-09-22 (T5) : l'éditeur d'utilisateur réécrit la politique
+/// ENTIÈRE qu'il a lue (lecture-modification-écriture) — une case cochée ne
+/// doit remettre à zéro aucun autre droit.
+@MainActor
+@Suite("Admin — politique d'un utilisateur")
+struct AdminUserPolicyWriteTests {
+    private func user() -> UserDto {
+        var policy = UserPolicy(authenticationProviderID: "p", enableCollectionManagement: true,
+                                enableLyricManagement: false, enableSubtitleManagement: true, passwordResetProviderID: "r")
+        policy.isAdministrator = false
+        policy.enableAllFolders = false
+        policy.enabledFolders = ["films"]
+        policy.syncPlayAccess = .createAndJoinGroups
+        policy.enableRemoteControlOfOtherUsers = true
+        policy.maxParentalRating = 12
+        var user = UserDto()
+        user.id = "u1"
+        user.name = "Alice"
+        user.policy = policy
+        return user
+    }
+
+    @Test("Granting one library keeps every other right exactly as read")
+    func folderToggleKeepsTheRest() async {
+        let api = MockAPIClient()
+        let vm = AdminUserDetailViewModel(user: user())
+        vm.toggleFolder("series")
+        let saved = await vm.save(using: api, loc: LocalizationManager())
+
+        #expect(saved)
+        let written = api.updatedUserPolicies.last
+        #expect(Set(written?.enabledFolders ?? []) == ["films", "series"])
+        #expect(written?.syncPlayAccess == .createAndJoinGroups)
+        #expect(written?.enableRemoteControlOfOtherUsers == true)
+        #expect(written?.maxParentalRating == 12)
+        #expect(written?.enableCollectionManagement == true)
+        #expect(written?.authenticationProviderID == "p")
+        #expect(vm.isDirty == false, "saved state becomes the new baseline")
+    }
+
+    @Test("A failed save keeps the edit and says why")
+    func failedSaveKeepsEdit() async {
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        let vm = AdminUserDetailViewModel(user: user())
+        vm.toggleFolder("series")
+        let saved = await vm.save(using: api, loc: LocalizationManager())
+        #expect(!saved)
+        #expect(vm.isDirty)
+        #expect(vm.errorMessage != nil)
+    }
+}
 #endif
