@@ -956,6 +956,7 @@
 "accessibility.playItem" = "Lire %@";
 "accessibility.moreInfoAbout" = "Plus d'informations sur %@";
 "accessibility.resumeProgress" = "%d %% regardé";
+"accessibility.episodeCard" = "%1$@, saison %2$d, épisode %3$d, %4$@";
 "accessibility.criticRating" = "Critiques : %d pour cent";
 "detail.restricted.title" = "Contenu restreint";
 "detail.restricted.subtitle" = "Ce titre dépasse la limite d'âge définie dans Confidentialité et sécurité.";

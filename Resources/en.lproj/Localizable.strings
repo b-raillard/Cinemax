@@ -955,6 +955,7 @@
 "accessibility.playItem" = "Play %@";
 "accessibility.moreInfoAbout" = "More information about %@";
 "accessibility.resumeProgress" = "%d%% watched";
+"accessibility.episodeCard" = "%1$@, season %2$d, episode %3$d, %4$@";
 "accessibility.criticRating" = "Critics: %d percent";
 "detail.restricted.title" = "Restricted content";
 "detail.restricted.subtitle" = "This title is above the age limit set in Privacy & Security.";

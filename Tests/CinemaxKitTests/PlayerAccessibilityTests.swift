@@ -1,4 +1,5 @@
 import Testing
+import JellyfinAPI
 import UIKit
 @testable import Cinemax
 
@@ -295,5 +296,30 @@ struct ToastWindowPresentationTests {
         window.toastFrame = .zero
         #expect(window.hitTest(CGPoint(x: 200, y: 100), with: nil) == nil)
         window.isHidden = true
+    }
+}
+
+/// The « Reprendre » / « À suivre » cards announced half of what they draw —
+/// Next Up the series alone, Continue Watching the episode's bare name.
+@Suite("Spoken episode card label")
+struct SpokenEpisodeCardLabelTests {
+    private func localize(_ language: String) -> (String) -> String {
+        let bundle = Bundle.localizedBundle(for: language)
+        return { bundle.localizedString(forKey: $0, value: nil, table: nil) }
+    }
+
+    @Test("An episode says series, season, episode and title, in words")
+    func episode() {
+        var item = BaseItemDto(indexNumber: 2, name: "Deux hommes morts", parentIndexNumber: 1, seriesName: "Andor", type: .episode)
+        #expect(item.spokenCardLabel(localize: localize("fr")) == "Andor, saison 1, épisode 2, Deux hommes morts")
+        #expect(item.spokenCardLabel(localize: localize("en")) == "Andor, season 1, episode 2, Deux hommes morts")
+        item.indexNumber = nil
+        #expect(item.spokenCardLabel(localize: localize("fr")) == "Andor, Deux hommes morts")
+    }
+
+    @Test("A film says its title")
+    func movie() {
+        let item = BaseItemDto(name: "Sintel", type: .movie)
+        #expect(item.spokenCardLabel(localize: localize("fr")) == "Sintel")
     }
 }

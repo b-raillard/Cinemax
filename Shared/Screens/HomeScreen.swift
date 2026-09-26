@@ -1254,7 +1254,7 @@ struct HomeScreen: View {
                 },
                 onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
-            .accessibilityLabel(item.name ?? "")
+            .accessibilityLabel(item.spokenCardLabel(localize: loc.localized))
             .accessibilityValue(resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) } ?? "")
         }
     }
@@ -1324,7 +1324,7 @@ struct HomeScreen: View {
             #else
             .buttonStyle(.plain)
             #endif
-            .accessibilityLabel(item.seriesName ?? item.name ?? "")
+            .accessibilityLabel(item.spokenCardLabel(localize: loc.localized))
             // On the PlayLink (the focusable button), never its label, so
             // tvOS focus is untouched.
             .mediaCardContextMenu(
