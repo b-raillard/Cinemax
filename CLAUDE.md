@@ -2,6 +2,8 @@
 
 Native Jellyfin client for iOS 26+ and tvOS 26+. "Cinema Glass" design system (dark glassmorphism, editorial layouts, no borders). SwiftUI multi-platform, single Xcode project (iOS + tvOS targets). Swift 6 strict concurrency.
 
+**RULE — the product is called JellyGlass (display name, App Store, Jellyfin `Client` header) since 2026-09-22; the CODE keeps `Cinemax`, and must.** `CFBundleDisplayName` (set on all 4 targets in `project.yml`) carries the new name; `PRODUCT_NAME`, modules (`Cinemax`, `CinemaxKit`), bundle ids, targets, schemes, the `cinemax://` scheme, the widget `kind:`s (renaming one wipes every widget already placed) and the legacy `Application Support/Cinemax/Downloads` purge path stay as they are. The pre-auth wordmark is TEXT (`login.header` / `server.header`, in capitals) — search `grep -i`. Changing the `Client` header logs nobody out (Jellyfin never compares it).
+
 > This file = the cross-cutting rules, gotchas and non-derivable context; each feature's own rules live in the area files listed below. Feature *behavior* is derivable from the code — read the owning file. Lines tagged **RULE** override default behavior.
 ## Where the rules live — READ THE FILE FOR THE AREA YOU TOUCH
 

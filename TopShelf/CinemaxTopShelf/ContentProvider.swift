@@ -134,8 +134,8 @@ final class ContentProvider: TVTopShelfContentProvider {
             // writes/reads its own private items). A diagnostic tile beats a
             // silent static image.
             handler.call(diagnosticContent(
-                fr: "Ouvrez Cinemax pour activer cette rangée",
-                en: "Open Cinemax to enable this row"
+                fr: "Ouvrez JellyGlass pour activer cette rangée",
+                en: "Open JellyGlass to enable this row"
             ))
             return
         }
@@ -175,7 +175,7 @@ final class ContentProvider: TVTopShelfContentProvider {
             item.displayAction = TVTopShelfAction(url: url)
         }
         let section = TVTopShelfItemCollection(items: [item])
-        section.title = "Cinemax"
+        section.title = "JellyGlass"
         return TVTopShelfSectionedContent(sections: [section])
     }
 

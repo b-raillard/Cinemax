@@ -199,7 +199,7 @@ struct DiagnosticsReportTests {
             openedAt: utcDate(2026, 9, 11, 10, 12, 0)
         )
         #expect(DiagnosticsReport.header(facts(playback: playback)) == [
-            "# Cinemax diagnostics",
+            "# JellyGlass diagnostics",
             "generated_at: 2026-09-11T10:15:00.500Z",
             "app_version: 2.0.0 (42)",
             "device: iPhone17,1",
@@ -250,7 +250,7 @@ struct DiagnosticsReportTests {
 
     @Test("export file name is timestamped and a .txt")
     func exportFileName() {
-        #expect(DiagnosticsExporter.fileName(for: utcDate(2026, 9, 11, 10, 15, 0)) == "cinemax-diagnostics-20260911T101500500Z.txt")
+        #expect(DiagnosticsExporter.fileName(for: utcDate(2026, 9, 11, 10, 15, 0)) == "jellyglass-diagnostics-20260911T101500500Z.txt")
     }
 }
 

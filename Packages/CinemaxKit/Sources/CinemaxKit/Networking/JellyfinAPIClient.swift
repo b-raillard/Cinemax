@@ -190,7 +190,7 @@ public final class JellyfinAPIClient: Sendable {
             configuration: .init(
                 url: url,
                 accessToken: accessToken,
-                client: "Cinemax",
+                client: "JellyGlass",
                 deviceName: deviceName,
                 deviceID: deviceID,
                 version: appVersion
