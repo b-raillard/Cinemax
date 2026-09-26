@@ -70,7 +70,7 @@ struct IdentifyResultsGridView: View {
             if let year = result.productionYear {
                 Text(String(year))
                     .font(CinemaFont.label(.small))
-                    .foregroundStyle(CinemaColor.outline)
+                    .foregroundStyle(CinemaColor.onSurfaceMuted)
                     .lineLimit(1)
             }
         }

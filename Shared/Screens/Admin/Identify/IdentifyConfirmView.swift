@@ -41,7 +41,7 @@ struct IdentifyConfirmView: View {
                     if let provider = result.searchProviderName {
                         Text(provider)
                             .font(CinemaFont.label(.small))
-                            .foregroundStyle(CinemaColor.outline)
+                            .foregroundStyle(CinemaColor.onSurfaceMuted)
                             .padding(.top, 2)
                     }
 

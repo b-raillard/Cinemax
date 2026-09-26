@@ -92,7 +92,7 @@ For each component below: file, signature, purpose, platform, dependencies, anat
   │            │
   └────────────┘
    Title text   ← label(.large), onSurfaceVariant, lineLimit(2)
-   Subtitle     ← label(.medium), outline, lineLimit(1), optional
+   Subtitle     ← label(.medium), onSurfaceMuted, lineLimit(1), optional
   ```
 - **Notes**:
   - A hidden `Text("M\nM")` placeholder fixes the title-area height so adjacent cards in a row align even when titles wrap to 1 vs 2 lines.
