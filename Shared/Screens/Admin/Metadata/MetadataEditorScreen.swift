@@ -19,7 +19,6 @@ struct MetadataEditorScreen: View {
     let item: BaseItemDto
 
     @Environment(AppState.self) private var appState
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss

@@ -713,9 +713,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     // `PlayMethod` is disambiguated with `CinemaxKit.` prefix because JellyfinAPI
     // exports a type of the same name; Swift can't tell which one the protocol
     // signature refers to without the explicit module qualifier.
-    func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: CinemaxKit.PlayMethod) async {}
-    func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod) async {}
-    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {}
+    func reportPlaybackStart(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: CinemaxKit.PlayMethod) async {}
+    func reportPlaybackProgress(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod) async {}
+    func reportPlaybackStopped(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {}
 
     func getPlaybackInfo(
         itemId: String, userId: String, maxBitrate: Int,

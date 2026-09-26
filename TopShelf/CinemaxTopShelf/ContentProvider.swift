@@ -48,11 +48,10 @@ final class ContentProvider: TVTopShelfContentProvider {
         let name: String?
         let seriesName: String?
         let seriesId: String?
-        let parentBackdropItemId: String?
         let officialRating: String?
         enum CodingKeys: String, CodingKey {
             case id = "Id", name = "Name", seriesName = "SeriesName"
-            case seriesId = "SeriesId", parentBackdropItemId = "ParentBackdropItemId"
+            case seriesId = "SeriesId"
             case officialRating = "OfficialRating"
         }
     }

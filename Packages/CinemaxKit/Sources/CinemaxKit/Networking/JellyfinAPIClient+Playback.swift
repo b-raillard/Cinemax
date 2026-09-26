@@ -493,7 +493,7 @@ extension JellyfinAPIClient {
 
     // MARK: - Playback Reporting
 
-    public func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {
+    public func reportPlaybackStart(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {
         guard let client = getClient() else { return }
         let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
         let body = PlaybackStateInfo(
@@ -507,7 +507,7 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.reportPlaybackStart(body))
     }
 
-    public func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {
+    public func reportPlaybackProgress(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {
         guard let client = getClient() else { return }
         let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
         let body = PlaybackStateInfo(
@@ -522,7 +522,7 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.reportPlaybackProgress(body))
     }
 
-    public func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {
+    public func reportPlaybackStopped(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {
         guard let client = getClient() else { return }
         let body = PlaybackStopInfo(
             itemID: itemId,

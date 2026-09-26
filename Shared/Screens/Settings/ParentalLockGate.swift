@@ -167,7 +167,6 @@ private struct ParentalUnlockView: View {
 /// would bring its own chrome and focus contract for two pad screens.
 struct ParentalLockEnrollView: View {
     @Environment(ParentalLockController.self) private var lock
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
 
     /// `true` once a PIN is in place (or the user cancelled — the caller only

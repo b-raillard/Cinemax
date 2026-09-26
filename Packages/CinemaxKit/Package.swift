@@ -26,10 +26,9 @@ let package = Package(
                 .product(name: "NukeUI", package: "Nuke"),
                 .product(name: "Get", package: "Get")
             ]
-        ),
-        .testTarget(
-            name: "CinemaxKitTests",
-            dependencies: ["CinemaxKit"]
         )
+        // No SwiftPM test target: the package's tests run inside the app test
+        // bundles (`CinemaxTests` / `CinemaxTVTests`, Tests/CinemaxKitTests/) —
+        // see project.yml. The old target held one `#expect(true)` placeholder.
     ]
 )

@@ -116,22 +116,6 @@ struct AppNavigation: View {
     }()
 
     #if os(iOS)
-    /// One-shot cleanup for installs that used the removed (1.0.5, App Review
-    /// 5.2.3) offline-downloads feature — the media tree can hold multiple GB
-    /// and no UI remains to clear it. Cheap existence check; safe to re-run.
-    private static func purgeLegacyDownloads() {
-        UserDefaults.standard.removeObject(forKey: "downloads.userFlagCache")
-        Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            guard let appSupport = fm.urls(for: .applicationSupportDirectory,
-                                           in: .userDomainMask).first else { return }
-            let legacyRoot = appSupport.appendingPathComponent("Cinemax/Downloads",
-                                                               isDirectory: true)
-            if fm.fileExists(atPath: legacyRoot.path) {
-                try? fm.removeItem(at: legacyRoot)
-            }
-        }
-    }
     /// MetricKit subscription, once per process for the same reason as
     /// `configurePipeline`: scene events recreate this struct. iOS only — every
     /// MetricKit class is `API_UNAVAILABLE(tvos)`. See `MetricKitSubscriber`.
@@ -416,12 +400,6 @@ struct AppNavigation: View {
                 appState.pendingIntentPlaybackStartTicks = startTicks
                 appState.pendingDeepLinkItemId = itemId
             }
-            #if os(iOS)
-            // One-shot cleanup for installs that used the removed offline-
-            // downloads feature — purge the (potentially multi-GB) media tree
-            // that no longer has any UI to clear it.
-            Self.purgeLegacyDownloads()
-            #endif
             // Decide once, in the background, whether this server needs the
             // loopback stream proxy (dual-stack host with a black-holed IPv6
             // that libVLC would stall on). Non-blocking; cached for the session.

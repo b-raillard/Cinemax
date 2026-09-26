@@ -22,7 +22,6 @@ struct AdminFormScreen<Content: View>: View {
     @ViewBuilder let content: Content
 
     @Environment(LocalizationManager.self) private var loc
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dismiss) private var dismiss
     @State private var showDiscardConfirm = false
 

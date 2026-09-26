@@ -325,16 +325,6 @@ public enum MediaSourceQuality {
         return f.string(fromByteCount: Int64(size))
     }
 
-    /// Overall bitrate in Mbps, e.g. "68 Mbps" / "9.8 Mbps". Nil when unknown.
-    public static func bitrateLabel(for source: MediaSourceInfo) -> String? {
-        guard let bitrate = source.bitrate, bitrate > 0 else { return nil }
-        let mbps = Double(bitrate) / 1_000_000
-        let rendered = mbps >= 10
-            ? String(format: "%.0f", mbps)
-            : String(format: "%.1f", mbps)
-        return "\(rendered) Mbps"
-    }
-
     // MARK: - Label helpers
 
     private static func resolutionLabel(of stream: MediaStream) -> String? {

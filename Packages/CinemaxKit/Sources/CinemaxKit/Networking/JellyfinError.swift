@@ -5,7 +5,6 @@ import Foundation
 public enum JellyfinError: LocalizedError, Sendable {
     case notConnected
     case authenticationFailed
-    case invalidURL
     case playbackFailed(String)
     /// A structured HTTP 401 surfaced from a raw (non-`Get`) request path —
     /// notably the raw PlaybackInfo POST. Carrying it as its own case lets
@@ -33,7 +32,6 @@ public enum JellyfinError: LocalizedError, Sendable {
         switch self {
         case .notConnected:            "Not connected to a server"
         case .authenticationFailed:    "Authentication failed"
-        case .invalidURL:              "Invalid server URL"
         case .playbackFailed(let reason): "Playback failed: \(reason)"
         case .unauthorized:            "Session expired"
         case .invalidCredentials:      "The current password is incorrect"

@@ -274,13 +274,7 @@ struct SettingsScreen: View {
     }
 
     var deviceName: String {
-        #if os(tvOS)
         UIDevice.current.name
-        #elseif os(iOS)
-        UIDevice.current.name
-        #else
-        Host.current().localizedName ?? "Mac"
-        #endif
     }
 
     var networkName: String {

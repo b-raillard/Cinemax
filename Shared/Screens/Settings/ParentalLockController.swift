@@ -101,13 +101,6 @@ final class ParentalLockController {
 
     // MARK: - Gate
 
-    /// Opens the gate without a credential check. Reached only when no lock is
-    /// enrolled — i.e. the screen is not protected — so it grants nothing.
-    func openWhenNotEnabled() {
-        guard credential == nil else { return }
-        isUnlocked = true
-    }
-
     /// Closes the gate. Called from `AppNavigation` on `scenePhase == .background`
     /// only: `.inactive` also fires for an app-switcher peek or a Control Center
     /// swipe, and dropping the unlock there would make the parent re-enter the

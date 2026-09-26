@@ -368,14 +368,6 @@ struct MediaSourceQualityTests {
         #expect(MediaSourceQuality.versionName(for: source(id: "3")) == nil)
     }
 
-    @Test("Bitrate label switches precision at 10 Mbps")
-    func bitrateLabel() {
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "1", bitrate: 68_000_000)) == "68 Mbps")
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "2", bitrate: 9_800_000)) == "9.8 Mbps")
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "3")) == nil)
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "4", bitrate: 0)) == nil)
-    }
-
     @Test("Default audio stream index is honored when present")
     func defaultAudioStream() {
         let aac = audio(codec: "aac")

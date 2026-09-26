@@ -52,7 +52,6 @@ final class VLCStreamPresenter: NSObject {
     /// launch would get force-transcoded on resume.
     private let maxBitrate: Int
 
-    private weak var hostingVC: VLCStreamViewController?
 
     /// Stream init — online playback negotiated through Jellyfin's PlaybackInfo
     /// flow with VLC's broad DirectPlay profile.
@@ -102,7 +101,6 @@ final class VLCStreamPresenter: NSObject {
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
-        hostingVC = vc
         topVC.present(vc, animated: true)
     }
 
@@ -974,7 +972,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         nowPlaying.attach(itemId: itemId, title: titleText, durationSeconds: nil)
         reporter = PlaybackReporter(
             apiClient: apiClient,
-            userId: userId,
             context: { [weak self] in
                 guard let self else { return nil }
                 // Live read, not a bound snapshot: the same reporter instance
