@@ -279,7 +279,12 @@ final class HomeViewModel {
                 //
                 // Each source degrades on its own — one failing leaves the other
                 // populating the row rather than blanking it.
-                let newTitles = try? await appState.apiClient.getItems(
+                //
+                // Fetched CONCURRENTLY: this branch feeds `heroItem`, so it sits on
+                // the first-display path, and the two queries used to run one
+                // after the other — 184 ms against 128 ms in parallel on the LAN
+                // (median of 7, lot 8, audit P6), more through a remote proxy.
+                async let newTitlesFetch = try? appState.apiClient.getItems(
                     userId: userId,
                     includeItemTypes: [.movie, .series],
                     sortBy: [.dateCreated],
@@ -287,9 +292,10 @@ final class HomeViewModel {
                     limit: Self.recentlyAddedLimit,
                     enableTotalRecordCount: false
                 ).items
-                let showsWithNewEpisodes = try? await appState.apiClient.getSeriesWithRecentEpisodes(
+                async let showsFetch = try? appState.apiClient.getSeriesWithRecentEpisodes(
                     userId: userId, limit: Self.newEpisodeShowsLimit
                 )
+                let (newTitles, showsWithNewEpisodes) = await (newTitlesFetch, showsFetch)
                 if newTitles == nil && showsWithNewEpisodes == nil {
                     logger.warning("Home latest fetch failed: both sources errored")
                     return nil
