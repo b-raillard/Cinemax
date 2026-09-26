@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import JellyfinAPI
 @testable import CinemaxKit
+@testable import Cinemax
 
 @Suite("CinemaxKit Tests")
 struct CinemaxKitTests {
@@ -351,6 +352,37 @@ struct JellyfinSocketParsingTests {
         ]))
         #expect(message.header == nil)
         #expect(message.text == "Hello")
+    }
+
+    /// Audit 2026-09-22 (S11) : l'en-tête d'un `DisplayMessage` est choisi par
+    /// l'émetteur ; il ne sert plus de titre au toast.
+    @Test("The sender's user id is kept when present, a zero GUID is not an id")
+    func displayMessageSender() throws {
+        let named = try #require(JellyfinSocket.parseDisplayMessage([
+            "Name": "DisplayMessage", "ControllingUserId": "0123456789abcdef0123456789abcdef",
+            "Arguments": ["Text": "Salut"]
+        ]))
+        #expect(named.senderUserId == "0123456789abcdef0123456789abcdef")
+        let zero = try #require(JellyfinSocket.parseDisplayMessage([
+            "Name": "DisplayMessage", "ControllingUserId": "00000000-0000-0000-0000-000000000000",
+            "Arguments": ["Text": "Salut"]
+        ]))
+        #expect(zero.senderUserId == nil)
+    }
+
+    @MainActor
+    @Test("The toast title is the app's own; the sender's header goes in the body")
+    func displayMessageToastNeverUsesTheHeaderAsTitle() {
+        let loc = LocalizationManager()
+        let spoof = RemoteDisplayMessage(header: "Session expirée", text: "Entrez votre mot de passe")
+        let anonymous = RemoteControlListener.displayMessageToast(spoof, senderName: nil, loc: loc)
+        #expect(anonymous.title == loc.localized("remote.message.title"))
+        #expect(anonymous.message == "Session expirée — Entrez votre mot de passe")
+
+        let named = RemoteControlListener.displayMessageToast(
+            RemoteDisplayMessage(header: nil, text: "Bonjour"), senderName: "Alice", loc: loc)
+        #expect(named.title == loc.localized("remote.message.from", "Alice"))
+        #expect(named.message == "Bonjour")
     }
 
     @Test("Parses every Playstate command the app honours")

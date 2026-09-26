@@ -45,6 +45,8 @@ final class RemoteControlListener {
     /// Our handle on the shared socket. Nil when not listening.
     private var subscription: UUID?
     private var consumeTask: Task<Void, Never>?
+    /// For the `DisplayMessage` toast's fixed title. Set by every `apply`.
+    private var loc: LocalizationManager?
     /// Bumped by every `apply`, and re-checked after each await inside `start`.
     /// A logout / server switch that lands while `publishCapabilities` is in
     /// flight must not go on to open a socket against the session it just left.
@@ -63,7 +65,8 @@ final class RemoteControlListener {
     /// Single entry point: reconciles the live socket against what the app state
     /// says it should be. Safe to call repeatedly — on auth changes, server
     /// switches, foregrounding, and the settings toggle.
-    func apply(appState: AppState, toasts: ToastCenter, enabled: Bool) {
+    func apply(appState: AppState, toasts: ToastCenter, loc: LocalizationManager, enabled: Bool) {
+        self.loc = loc
         guard appState.isAuthenticated,
               let userId = appState.currentUserId,
               let serverURL = appState.serverURL else {
@@ -136,6 +139,30 @@ final class RemoteControlListener {
         }
     }
 
+    /// Title and body of an inbound `DisplayMessage`: a fixed title naming
+    /// where it comes from, the sender's own header folded into the body.
+    static func displayMessageToast(
+        _ message: RemoteDisplayMessage,
+        senderName: String?,
+        loc: LocalizationManager
+    ) -> (title: String, message: String) {
+        let title = senderName.map { loc.localized("remote.message.from", $0) }
+            ?? loc.localized("remote.message.title")
+        let body = message.header.map { "\($0) — \(message.text)" } ?? message.text
+        return (title, body)
+    }
+
+    /// The display name of the account that sent a message, when the frame
+    /// names one and the server lets this account read it. Best-effort.
+    private static func senderName(_ userId: String?, appState: AppState) async -> String? {
+        guard let userId else { return nil }
+        let normalized = { (id: String) in id.replacingOccurrences(of: "-", with: "").lowercased() }
+        if let me = appState.currentUserId, normalized(me) == normalized(userId) {
+            return appState.currentUser?.name
+        }
+        return (try? await appState.apiClient.getUserByID(id: userId))?.name
+    }
+
     /// The hub delivers every frame to every consumer, so this sees SyncPlay
     /// traffic too and ignores it — `SyncPlayController` owns that half.
     private func handle(_ message: JellyfinSocketMessage, appState: AppState, toasts: ToastCenter) {
@@ -174,10 +201,15 @@ final class RemoteControlListener {
             Task { await appState.refreshCurrentUser() }
         case .displayMessage(let message):
             // The only `GeneralCommandType` the capability post advertises.
-            if let header = message.header {
-                toasts.info(header, message: message.text)
-            } else {
-                toasts.info(message.text)
+            // The title is OURS, never the sender's header (audit 2026-09-22,
+            // S11): anybody allowed to drive this session could otherwise raise
+            // a toast titled « Session expirée » and pass it off as the app.
+            if let loc {
+                Task {
+                    let sender = await Self.senderName(message.senderUserId, appState: appState)
+                    let toast = Self.displayMessageToast(message, senderName: sender, loc: loc)
+                    toasts.info(toast.title, message: toast.message)
+                }
             }
             // A message is also the only shape an invitation to a Watch
             // Together session can take — Jellyfin has no invitation primitive,

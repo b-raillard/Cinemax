@@ -435,7 +435,7 @@ struct AppNavigation: View {
             // Advertise this device as a remote-control target and start
             // listening. Idempotent — `apply` no-ops when nothing changed, so
             // the observers below can call it freely.
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
         }
         // RULE — DECLARATION ORDER IS LOAD-BEARING: `activeServerId` must be
         // observed BEFORE `currentUserId`. A server switch mutates both (and
@@ -492,7 +492,7 @@ struct AppNavigation: View {
             // Capabilities are per-session, so a login / user switch has to
             // re-declare them; a logout tears the socket down (`apply` sees
             // `isAuthenticated == false`).
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
             // Same rationale as the `serverURL` reset above: a different
             // signed-in user (switch, or logout → nil) may see a different
             // controllable-session landscape, so the last poll's count can't
@@ -507,13 +507,13 @@ struct AppNavigation: View {
             // Without this second call the device was no « Lire sur… » target
             // and heard no invitation until the next trip to the foreground.
             // Idempotent: `apply` no-ops on an unchanged state.
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
         }
         .onChange(of: remoteControlEnabled) { _, enabled in
             // Withdrawing re-posts with `supportsMediaControl: false`, which is
             // what actually removes this device from other clients' pickers —
             // just closing the socket would leave the stale declaration standing.
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: enabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: enabled)
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
@@ -562,7 +562,7 @@ struct AppNavigation: View {
                 }
                 // Re-open the socket dropped on background and re-declare the
                 // capabilities, since the session may have been reaped while away.
-                remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+                remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
                 // Re-derive the update decision, and re-ask the Store if a day
                 // has passed. Free on the common path: the decision comes from
                 // the stored release, and the request is behind its own throttle.

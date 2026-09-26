@@ -1136,6 +1136,8 @@
 
 // MARK: - Remote control ("Play on…")
 
+"remote.message.title" = "Message from another device";
+"remote.message.from" = "Message from %@";
 "remote.title" = "Play on…";
 "remote.sent" = "Started playing on %@";
 "remote.unknownDevice" = "Unknown device";

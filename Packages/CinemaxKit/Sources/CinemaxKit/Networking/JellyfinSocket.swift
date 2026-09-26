@@ -281,7 +281,11 @@ public actor JellyfinSocket {
         guard let text = (arguments["Text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else { return nil }
         let header = (arguments["Header"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return RemoteDisplayMessage(header: (header?.isEmpty == false) ? header : nil, text: text)
+        let sender = (d["ControllingUserId"] as? String).flatMap { id -> String? in
+            let digits = id.replacingOccurrences(of: "-", with: "")
+            return digits.isEmpty || digits.allSatisfy({ $0 == "0" }) ? nil : id
+        }
+        return RemoteDisplayMessage(header: (header?.isEmpty == false) ? header : nil, text: text, senderUserId: sender)
     }
 
     /// `Playstate` → `{ Command, SeekPositionTicks, ControllingUserId }`
