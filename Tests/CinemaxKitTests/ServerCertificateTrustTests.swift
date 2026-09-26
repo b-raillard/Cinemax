@@ -127,3 +127,50 @@ struct ServerCertificateTrustTests {
         #expect(ServerSetupViewModel.isCertificateError(wrapped))
     }
 }
+
+/// Audit 2026-09-22 (S11) : URLSession recopie `Authorization` sur la requête
+/// redirigée, quel que soit l'hôte du `Location`. La redirection reste suivie
+/// (un `.strm` rebondit légitimement ailleurs), mais sans le jeton.
+@Suite("Redirection d'une requête authentifiée")
+struct AuthenticatedRedirectTests {
+    private func request(_ url: String) -> URLRequest {
+        var r = URLRequest(url: URL(string: url)!)
+        r.setValue(#"MediaBrowser Token="secret""#, forHTTPHeaderField: "Authorization")
+        r.setValue("secret", forHTTPHeaderField: "X-Emby-Token")
+        r.setValue("application/json", forHTTPHeaderField: "Accept")
+        return r
+    }
+
+    @Test("Même hôte : la requête suit telle quelle")
+    func sameHostKeepsCredentials() {
+        let from = URL(string: "https://nas.local:8920/Items")!
+        let r = request("https://NAS.local:8920/Items/1?ApiKey=secret")
+        #expect(AuthenticatedRedirect.sanitized(r, redirectedFrom: from) == r)
+        // Passage en https sur le même hôte : le jeton peut suivre.
+        #expect(AuthenticatedRedirect.keepsCredentials(from: URL(string: "http://nas.local:8096/x"), to: URL(string: "https://nas.local:8920/x")))
+    }
+
+    @Test("Autre hôte : en-têtes et ApiKey retirés, le reste conservé")
+    func otherHostStripsCredentials() {
+        let from = URL(string: "https://nas.local/Videos/1/stream")!
+        let r = request("https://cdn.example/file.mkv?ApiKey=secret&static=true&api_key=old")
+        let followed = AuthenticatedRedirect.sanitized(r, redirectedFrom: from)
+        #expect(followed.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(followed.value(forHTTPHeaderField: "X-Emby-Token") == nil)
+        #expect(followed.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(followed.url?.absoluteString == "https://cdn.example/file.mkv?static=true")
+    }
+
+    @Test("Même hôte mais https → http : le jeton ne descend pas en clair")
+    func downgradeStripsCredentials() {
+        let from = URL(string: "https://nas.local/Items")!
+        let followed = AuthenticatedRedirect.sanitized(request("http://nas.local/Items"), redirectedFrom: from)
+        #expect(followed.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(AuthenticatedRedirect.keepsCredentials(from: URL(string: "wss://nas.local/socket"), to: URL(string: "ws://nas.local/socket")) == false)
+    }
+
+    @Test("Origine inconnue : prudence, le jeton ne suit pas")
+    func unknownOriginStrips() {
+        #expect(AuthenticatedRedirect.keepsCredentials(from: nil, to: URL(string: "https://nas.local/")) == false)
+    }
+}

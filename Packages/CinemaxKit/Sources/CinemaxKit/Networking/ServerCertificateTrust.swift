@@ -298,6 +298,24 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
         }
     }
 
+    /// Every authenticated session installs this delegate, so this is the one
+    /// place a redirect is kept from carrying the token to another host (see
+    /// `AuthenticatedRedirect`). `Get`'s and Nuke's `DataLoader`s both forward
+    /// this task-level callback to the delegate they were handed.
+    public func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        let followed = AuthenticatedRedirect.sanitized(request, redirectedFrom: response.url)
+        if followed != request {
+            trustLog.notice("ServerTrust ▸ redirection vers \(request.url?.host ?? "?", privacy: .public) suivie SANS le jeton")
+        }
+        completionHandler(followed)
+    }
+
     private func rememberPending(trust: SecTrust, host: String, port: Int, key: String) {
         guard let summary = ServerCertificateTrust.summary(for: trust, host: host, port: port) else { return }
         lock.lock()
