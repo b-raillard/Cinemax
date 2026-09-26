@@ -52,7 +52,6 @@ final class VLCStreamPresenter: NSObject {
     /// launch would get force-transcoded on resume.
     private let maxBitrate: Int
 
-
     /// Stream init — online playback negotiated through Jellyfin's PlaybackInfo
     /// flow with VLC's broad DirectPlay profile.
     init(
