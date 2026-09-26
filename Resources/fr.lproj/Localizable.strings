@@ -1146,6 +1146,7 @@
 "remote.title" = "Lire sur…";
 "remote.sent" = "Lecture lancée sur %@";
 "remote.unknownDevice" = "Appareil inconnu";
+"settings.server.unknownAddress" = "Adresse inconnue";
 "remote.idle" = "Prêt";
 "remote.nowPlaying" = "lit %@";
 "remote.noTargets.title" = "Aucun appareil disponible";

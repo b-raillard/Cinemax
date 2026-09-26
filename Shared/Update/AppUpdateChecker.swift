@@ -78,13 +78,22 @@ final class AppUpdateChecker {
     var storeURLToOpen: URL? {
         guard let page = pendingRelease?.storeURL else { return nil }
         #if os(tvOS)
-        guard let url = AppStoreLookup.tvAppStoreURL(for: page),
-              UIApplication.shared.canOpenURL(url) else { return nil }
+        // `canOpenURL` is an IPC to LaunchServices, and the alert reads this
+        // property twice per render; the answer only changes with the page.
+        if let cached = tvStoreURLCache, cached.page == page { return cached.url }
+        let url = AppStoreLookup.tvAppStoreURL(for: page).flatMap {
+            UIApplication.shared.canOpenURL($0) ? $0 : nil
+        }
+        tvStoreURLCache = (page, url)
         return url
         #else
         return page
         #endif
     }
+
+    #if os(tvOS)
+    @ObservationIgnored private var tvStoreURLCache: (page: URL, url: URL?)?
+    #endif
 
     /// Opens the Store page. Leaving the app for the Store is what the user
     /// just asked for, so there is no "you are leaving" confirmation.

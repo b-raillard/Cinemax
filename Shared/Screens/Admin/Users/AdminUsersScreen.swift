@@ -118,10 +118,10 @@ struct AdminUsersScreen: View {
         Text(loc.localized("settings.admin"))
             .font(.system(size: CinemaScale.pt(10), weight: .bold))
             .tracking(0.5)
-            .foregroundStyle(.white)
+            .foregroundStyle(themeManager.onAccentContainer)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(Capsule().fill(themeManager.accent))
+            .background(Capsule().fill(themeManager.accentContainer))
     }
 
     private func lastActivityText(for user: UserDto) -> String {

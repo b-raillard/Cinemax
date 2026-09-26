@@ -267,7 +267,7 @@ struct SettingsScreen: View {
     }
 
     var serverAddress: String {
-        appState.serverURL?.host ?? appState.serverURL?.absoluteString ?? "Unknown"
+        appState.activeServerAddress ?? loc.localized("settings.server.unknownAddress")
     }
 
     var appVersion: String {

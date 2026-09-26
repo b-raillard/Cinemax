@@ -1144,6 +1144,7 @@
 "remote.title" = "Play on…";
 "remote.sent" = "Started playing on %@";
 "remote.unknownDevice" = "Unknown device";
+"settings.server.unknownAddress" = "Unknown address";
 "remote.idle" = "Ready";
 "remote.nowPlaying" = "playing %@";
 "remote.noTargets.title" = "No device available";
