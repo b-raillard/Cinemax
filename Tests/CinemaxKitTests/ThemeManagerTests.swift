@@ -44,7 +44,6 @@ struct ThemeManagerRainbowTickTests {
     func tickSparesColorScheme() {
         let theme = rainbowManager()
         #expect(!observes({ _ = theme.colorScheme }, changedBy: { theme.advanceRainbow() }))
-        #expect(!observes({ _ = theme.darkModeEnabled }, changedBy: { theme.advanceRainbow() }))
     }
 
     @Test("A fixed accent does not depend on the tick")

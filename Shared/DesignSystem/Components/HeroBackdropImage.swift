@@ -79,8 +79,13 @@ private struct DriftingBackdropRepresentable: UIViewRepresentable {
 /// image's pixel size as its intrinsic size and push back on the hero's frame.
 final class DriftingBackdropView: UIView {
     let imageView = UIImageView()
-    private var loadedURL: URL?
-    private var loadTask: Task<Void, Never>?
+    private var requestedURL: URL?
+    /// The in-flight fetch — internal so a test can await it.
+    private(set) var loadTask: Task<Void, Never>?
+    /// The last fetch failed; the next window entry retries it — what
+    /// `LazyImage` did on every appear, so a backdrop that failed on a flaky
+    /// link heals on the next tab switch or pop instead of staying blank.
+    private(set) var hasFailedLoad = false
     private(set) var isDrifting = false
 
     override init(frame: CGRect) {
@@ -99,11 +104,18 @@ final class DriftingBackdropView: UIView {
 
     /// Same pipeline and same plain `ImageRequest(url:)` as `LazyImage`, so the
     /// backdrop hits the cache entry the prefetcher and the iOS hero warm.
+    /// A repeated URL is a no-op: `updateUIView` runs on every parent update.
     func load(_ url: URL?) {
-        guard url != loadedURL else { return }
-        loadedURL = url
+        guard url != requestedURL else { return }
+        requestedURL = url
+        startLoad()
+    }
+
+    private func startLoad() {
         loadTask?.cancel()
-        guard let url else {
+        loadTask = nil
+        hasFailedLoad = false
+        guard let url = requestedURL else {
             imageView.image = nil
             return
         }
@@ -114,8 +126,12 @@ final class DriftingBackdropView: UIView {
         imageView.image = nil
         loadTask = Task { [weak self] in
             let image = try? await ImagePipeline.shared.image(for: url)
-            guard let self, !Task.isCancelled, self.loadedURL == url else { return }
-            self.imageView.image = image
+            guard let self, !Task.isCancelled, self.requestedURL == url else { return }
+            if let image {
+                self.imageView.image = image
+            } else {
+                self.hasFailedLoad = true
+            }
         }
     }
 
@@ -132,6 +148,7 @@ final class DriftingBackdropView: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window != nil, hasFailedLoad { startLoad() }
         applyDrift()
     }
 

@@ -47,6 +47,32 @@ struct HeroBackdropDriftTests {
         #expect(view.imageView.layer.animation(forKey: HeroDrift.animationKey) != nil)
     }
 
+    @Test("A failed load retries on the next window entry")
+    func failedLoadRetriesOnWindowEntry() async {
+        let view = DriftingBackdropView(frame: .zero)
+        view.load(URL(fileURLWithPath: "/nonexistent/cinemax-hero-\(UUID().uuidString).jpg"))
+        await view.loadTask?.value
+        #expect(view.hasFailedLoad)
+        #expect(view.imageView.image == nil)
+
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1920, height: 1080))
+        window.addSubview(view)
+        #expect(!view.hasFailedLoad)
+        #expect(view.loadTask != nil)
+        await view.loadTask?.value
+        #expect(view.hasFailedLoad)
+    }
+
+    @Test("The same URL again is not refetched")
+    func sameURLIsNoOp() async {
+        let view = DriftingBackdropView(frame: .zero)
+        let url = URL(fileURLWithPath: "/nonexistent/cinemax-hero-\(UUID().uuidString).jpg")
+        view.load(url)
+        await view.loadTask?.value
+        view.load(url)
+        #expect(view.hasFailedLoad)
+    }
+
     @Test("The backdrop never takes a touch or focus")
     func backdropIsInert() {
         let view = DriftingBackdropView(frame: .zero)
