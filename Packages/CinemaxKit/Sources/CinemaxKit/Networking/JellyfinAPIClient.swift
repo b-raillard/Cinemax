@@ -347,11 +347,16 @@ public final class JellyfinAPIClient: Sendable {
 
         let response = try await client.send(Paths.getPublicSystemInfo)
         let info = response.value
-        // Only onto the client it was asked of: a switch that landed during the
-        // probe would otherwise get the previous server's version.
+        // Only onto the server it was asked of: a switch that landed during the
+        // probe would otherwise get the previous server's version. Compared on
+        // the SERVER, not the generation — a language change or a re-login on
+        // the same server rebuilds the client too, and dropping the version
+        // then would leave the whole session on « unknown » (every 12.0 gate off).
         let version = info.version.flatMap(ServerVersion.init)
         withState { state in
-            if state.generation == generation { state.serverVersion = version }
+            if state.generation == generation || Self.isSameServer(state.serverURL, as: url) {
+                state.serverVersion = version
+            }
         }
 
         let result = ServerInfo(

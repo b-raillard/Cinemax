@@ -33,7 +33,7 @@ git diff --cached --name-only | grep -qx "$PBXPROJ" || exit 0
 # The pinned version CI regenerates with (ci.yml). A different local xcodegen
 # can format the project differently, and CI's verify step would then reject
 # the very file this hook produced — so a mismatch is refused up front.
-PINNED="$(sed -n 's/^[[:space:]]*XCODEGEN_VERSION:[[:space:]]*//p' .github/workflows/ci.yml | head -n 1)"
+PINNED="$(sed -n 's/^[[:space:]]*XCODEGEN_VERSION:[[:space:]]*//p' .github/workflows/ci.yml | head -n 1 | sed 's/[[:space:]]*#.*$//' | tr -d '"\r' | tr -d "'")"
 if command -v xcodegen >/dev/null 2>&1 && [ -n "$PINNED" ]; then
     LOCAL="$(xcodegen --version 2>/dev/null | sed -n 's/^Version:[[:space:]]*//p')"
     if [ "$LOCAL" != "$PINNED" ]; then

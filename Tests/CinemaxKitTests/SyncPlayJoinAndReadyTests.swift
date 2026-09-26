@@ -86,8 +86,16 @@ private func settle(until condition: @MainActor () -> Bool, tries: Int = 50) asy
 /// same millisecond and **neither ever sent `Ready` again** — a full-screen
 /// "En attente d'un participant" veil for at least 7 min 41 s over a picture
 /// playing normally, ended by tearing the players down rather than by the app.
+/// Parent of every suite driving `SyncPlayController.shared`: `.serialized` is
+/// only honoured INSIDE a suite, so two sibling suites each marked serialized
+/// still interleave at their `await`s over the one shared controller (review
+/// of audit lot 7). Nested here, they run one after the other.
+@Suite("SyncPlayController partagé", .serialized)
+struct SyncPlayControllerSharedSuites {}
+
+extension SyncPlayControllerSharedSuites {
 @MainActor
-@Suite("SyncPlayController — un calage de recherche réannonce la disponibilité", .serialized)
+@Suite("SyncPlayController — un calage de recherche réannonce la disponibilité")
 struct SyncPlaySeekSettleReadyTests {
 
     private func inGroup(
@@ -182,6 +190,7 @@ struct SyncPlaySeekSettleReadyTests {
         await settle(until: { !api.ready.isEmpty }, tries: 10)
         #expect(api.ready.isEmpty)
     }
+}
 }
 
 // MARK: - Announcing readiness at a position the engine has actually reached
@@ -285,8 +294,9 @@ private final class OrderedSyncPlayAPI: SyncPlayAPI, @unchecked Sendable {
     func syncPlayUnpause() async throws { store.withLock { $0.append("unpause") } }
 }
 
+extension SyncPlayControllerSharedSuites {
 @MainActor
-@Suite("SyncPlayController — commandes sortantes dans l'ordre", .serialized)
+@Suite("SyncPlayController — commandes sortantes dans l'ordre")
 struct SyncPlayOutboundOrderTests {
     @Test("A slow pause does not let the seek and the unpause overtake it")
     func outboundCommandsKeepTheirOrder() async {
@@ -305,4 +315,5 @@ struct SyncPlayOutboundOrderTests {
 
         #expect(api.calls == ["pause", "seek", "unpause"])
     }
+}
 }

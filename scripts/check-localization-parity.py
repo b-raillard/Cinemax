@@ -14,17 +14,27 @@ ROOT = Path(__file__).resolve().parent.parent
 LANGS = ("fr", "en")
 TABLES = ("Localizable.strings", "InfoPlist.strings", "AppShortcuts.strings")
 ENTRY = re.compile(r'^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;', re.M)
-SPEC = re.compile(r"%(?:\d+\$)?[-+ #0]*\d*(?:\.\d+)?(?:ll|l|h)?[@dDiuUxXoOfFeEgGcCsSp]")
+SPEC = re.compile(r"%(?:\d+\$)?[-+ #0]*\d*(?:\.\d+)?(?:ll|l|h|z|q)?[@dDiuUxXoOfFeEgGcCsSp]")
+
+
+DUPLICATES: list[str] = []
 
 
 def parse(path: Path) -> dict[str, str]:
     text = path.read_text(encoding="utf-8")
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return {m.group(1): m.group(2) for m in ENTRY.finditer(text)}
+    entries: dict[str, str] = {}
+    for m in ENTRY.finditer(text):
+        if m.group(1) in entries:
+            DUPLICATES.append(f"{path.parent.name}/{path.name}: '{m.group(1)}' defined twice")
+        entries[m.group(1)] = m.group(2)
+    return entries
 
 
 def specifiers(value: str) -> list[str]:
-    return sorted(SPEC.findall(value.replace("%%", "")))
+    # `%1$@` and `%@` are the same argument type: compare without positions.
+    found = SPEC.findall(value.replace("%%", ""))
+    return sorted(re.sub(r"^%\d+\$", "%", f) for f in found)
 
 
 def main() -> int:
@@ -51,12 +61,14 @@ def main() -> int:
             for key in sorted(k for k in fr if k.endswith(".one")):
                 if key[:-4] not in fr:
                     problems.append(f"{table}: '{key}' has no base key '{key[:-4]}'")
+    problems.extend(DUPLICATES)
     if problems:
         print("Localization parity FAILED:")
         for p in problems:
             print(f"  - {p}")
         return 1
     count = len(parse(ROOT / "Resources" / "fr.lproj" / "Localizable.strings"))
+    DUPLICATES.clear()
     print(f"Localization parity OK ({count} keys in Localizable.strings).")
     return 0
 

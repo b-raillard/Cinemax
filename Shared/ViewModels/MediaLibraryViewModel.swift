@@ -549,6 +549,9 @@ final class MediaLibraryViewModel {
                 hasNavigator=\(nav.navigator != nil, privacy: .public)
                 """)
         } catch {
+            // A failed pass for a hero already replaced must not clear the
+            // button its successor's pass has written.
+            guard heroItem?.id == seriesId else { return }
             logger.notice("hero-nav failed: \(error.localizedDescription, privacy: .public)")
             heroPlay = nil
         }
