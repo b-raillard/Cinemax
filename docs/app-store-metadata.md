@@ -1,4 +1,4 @@
-# Cinemax — App Store Connect Metadata
+# JellyGlass — App Store Connect Metadata
 
 Document non public, sert de copy-paste source pour App Store Connect. Identique pour iOS et tvOS sauf indication.
 
@@ -8,7 +8,9 @@ Document non public, sert de copy-paste source pour App Store Connect. Identique
 
 | Champ | Valeur |
 |---|---|
-| **Nom de l'app** (30 char) | `Cinemax` |
+| **Nom de l'app FR** (30 char) | `JellyGlass pour Jellyfin` *(24)* |
+| **Nom de l'app EN** (30 char) | `JellyGlass for Jellyfin` *(23)* |
+| **Ancien nom** | `Cinemax` — abandonné : marque de Warner Bros. Discovery, même catégorie |
 | **Bundle ID iOS** | `com.cinemax.Cinemax` *(à vérifier dans ASC — déjà set par TestFlight)* |
 | **Bundle ID tvOS** | `com.cinemax.CinemaxTV` *(à vérifier dans ASC — déjà set par TestFlight)* |
 | **SKU** | `cinemax-ios-1` / `cinemax-tvos-1` (libre, jamais affiché) |
@@ -26,19 +28,19 @@ Document non public, sert de copy-paste source pour App Store Connect. Identique
 
 ### Sous-titre (30 caractères max)
 ```
-Lecteur Jellyfin pour Apple
+Médiathèque, films et séries
 ```
-*(27 caractères)*
+*(28 caractères — « Jellyfin » a quitté ce champ : il est déjà dans le nom, qui pèse plus lourd)*
 
 ### Texte promotionnel (170 caractères max — modifiable sans review)
 ```
-Nouvelle version : lecteur VLC intégré pour la prise en charge native du MKV, du Dolby Vision et du HDR.
+Le client Jellyfin qui ne fait pas transcoder votre serveur : MKV, Dolby Vision, HDR10+, Atmos lus tels quels sur iPhone, iPad et Apple TV.
 ```
-*(104 caractères)*
+*(139 caractères)*
 
 ### Description (4000 caractères max)
 ```
-Cinemax est un client moderne pour vos serveurs Jellyfin, conçu spécifiquement pour iPhone, iPad et Apple TV. Profitez de votre médiathèque personnelle avec une interface élégante, fluide et entièrement adaptée à chaque appareil Apple.
+JellyGlass est un client moderne pour vos serveurs Jellyfin, conçu spécifiquement pour iPhone, iPad et Apple TV. Profitez de votre médiathèque personnelle avec une interface élégante, fluide et entièrement adaptée à chaque appareil Apple.
 
 — DESIGN PENSÉ POUR APPLE
 • Design « Cinema Glass » : interface sombre, transparences subtiles, mises en page éditoriales
@@ -78,14 +80,14 @@ Cinemax est un client moderne pour vos serveurs Jellyfin, conçu spécifiquement
 • Toutes les communications se font directement entre votre appareil et votre serveur Jellyfin
 • Code source ouvert : https://github.com/b-raillard/Cinemax
 
-Cinemax requiert un serveur Jellyfin déjà installé (jellyfin.org). Cinemax diffuse (streaming) exclusivement les vidéos de votre propre serveur : l'application ne contient aucun contenu, ne propose aucune fonction de téléchargement et ne permet d'enregistrer aucun média, quelle qu'en soit la source. Cinemax n'est ni développé ni soutenu par l'équipe officielle Jellyfin.
+JellyGlass requiert un serveur Jellyfin déjà installé (jellyfin.org). JellyGlass diffuse (streaming) exclusivement les vidéos de votre propre serveur : l'application ne contient aucun contenu, ne propose aucune fonction de téléchargement et ne permet d'enregistrer aucun média, quelle qu'en soit la source. JellyGlass n'est ni développé ni soutenu par l'équipe officielle Jellyfin.
 ```
 
 ### Mots-clés (100 caractères max, séparés par virgules, sans espace)
 ```
-jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotique
+mediatheque,serveur,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,videotheque,cinema,films,series
 ```
-*(91 caractères)*
+*(98 caractères)*
 
 ### Notes de version / What's New (4000 caractères max)
 
@@ -95,22 +97,22 @@ jellyfin,mediatheque,streaming,film,serie,plex,emby,videotheque,musique,domotiqu
 
 #### iOS — 2.1.1
 ```
-Cinemax 2.1.1 : une lecture qui tient la distance.
+JellyGlass 2.1.1 : une lecture qui tient la distance.
 
 — LECTURE PLUS FIABLE
-• Quand le serveur cesse d'alimenter un film en cours de lecture, Cinemax le voit maintenant pendant que l'image tourne encore, et se raccroche tout seul : un court rechargement remplace l'écran figé
+• Quand le serveur cesse d'alimenter un film en cours de lecture, JellyGlass le voit maintenant pendant que l'image tourne encore, et se raccroche tout seul : un court rechargement remplace l'écran figé
 • Une image et un compteur figés ensemble relancent désormais la lecture, comme le faisait déjà une image figée seule
 • Un peu plus de marge de tampon, pour absorber les coupures passagères sans rien interrompre
 
 — BUGS CORRIGÉS
 • Les cartes de la rangée « En direct » ont toutes la même hauteur, quel que soit le texte qu'elles portent
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 2.1.0
 ```
-Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
+JellyGlass 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
 
 — LECTURE PLUS FIABLE
 • « Lecture impossible » ne s'installe plus sur tous les titres jusqu'au redémarrage de l'app
@@ -125,7 +127,7 @@ Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
 • Un contrôle « Reprendre la lecture » pour le Centre de contrôle et le bouton Action, et le widget « Reprendre la lecture » sur l'écran verrouillé
 • Renommez et réordonnez vos serveurs ; l'historique de recherche est propre à chaque serveur
 • Un serveur au certificat auto-signé s'approuve explicitement, sans repasser en http
-• Cinemax obéit à la pause, aux sauts et à l'arrêt envoyés depuis un autre appareil Jellyfin
+• JellyGlass obéit à la pause, aux sauts et à l'arrêt envoyés depuis un autre appareil Jellyfin
 • Fermer le lecteur pendant une séance « Regarder ensemble » demande confirmation
 • Une affiche s'ouvre sur sa page par un zoom, et le logo du titre s'affiche quand l'écran est assez large
 • Une présentation au premier lancement, les nouveautés après chaque mise à jour, et un rappel quand une nouvelle version est disponible
@@ -148,12 +150,12 @@ Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
 • Le réglage de taille des sous-titres, sans effet sur les sous-titres au format ASS
 • L'activité en direct : l'écran verrouillé affiche déjà le titre, l'affiche et la progression de la lecture
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 2.0.0
 ```
-Cinemax 2.0 : regardez ensemble, prêt pour Jellyfin 12, et une Apple TV refaite.
+JellyGlass 2.0 : regardez ensemble, prêt pour Jellyfin 12, et une Apple TV refaite.
 
 — NOUVEAU
 • Regarder ensemble : lancez une séance depuis la page d'un titre ; vos proches la rejoignent depuis la rangée « En direct » de l'accueil, et lecture, pause et sauts restent synchronisés pour tout le monde. L'administrateur l'accorde compte par compte
@@ -178,7 +180,7 @@ Cinemax 2.0 : regardez ensemble, prêt pour Jellyfin 12, et une Apple TV refaite
 • La page d'un titre se rafraîchit après une identification ou une modification de métadonnées
 • Identifier applique l'affiche que vous avez choisie, et changer une affiche n'efface plus vos modifications en cours
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.4.0
@@ -205,7 +207,7 @@ Les collections ont enfin une vraie page, et vos playlists se retrouvent.
 • Les deux compteurs de temps ne se contredisent plus pendant un calage
 • Le bouton « épisode précédent » répond là où on le voit, sur les écrans où la rangée était trop serrée
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.3.0
@@ -240,7 +242,7 @@ Une nouveauté, et surtout beaucoup de corrections — dont plusieurs bugs qui o
 — LIRE SUR…
 • Une lecture envoyée depuis un autre appareil n'est plus perdue si une fiche est déjà ouverte
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.2.0
@@ -259,7 +261,7 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • L'aperçu montre l'image du titre seule, sans texte qui déborde sur la rangée voisine
 
 — LIRE SUR UN AUTRE APPAREIL
-• Cinemax reçoit maintenant la lecture : choisissez un film sur votre iPhone, il démarre sur votre Apple TV
+• JellyGlass reçoit maintenant la lecture : choisissez un film sur votre iPhone, il démarre sur votre Apple TV
 • Déclenchable depuis n'importe quel titre, et plus seulement depuis sa page
 • La reprise et la version choisie sont respectées, exactement comme une lecture locale
 • Désactivable dans Réglages › Lecture
@@ -269,15 +271,15 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
 • Même correction dans le widget
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 2.1.1
 ```
-Cinemax 2.1.1 : une lecture qui tient la distance.
+JellyGlass 2.1.1 : une lecture qui tient la distance.
 
 — LECTURE PLUS FIABLE
-• Quand le serveur cesse d'alimenter un film en cours de lecture, Cinemax le voit maintenant pendant que l'image tourne encore, et se raccroche tout seul : un court rechargement remplace l'écran figé
+• Quand le serveur cesse d'alimenter un film en cours de lecture, JellyGlass le voit maintenant pendant que l'image tourne encore, et se raccroche tout seul : un court rechargement remplace l'écran figé
 • Une image et un compteur figés ensemble relancent désormais la lecture, comme le faisait déjà une image figée seule
 • Un peu plus de marge de tampon, pour absorber les coupures passagères sans rien interrompre
 
@@ -285,12 +287,12 @@ Cinemax 2.1.1 : une lecture qui tient la distance.
 • « Passer l'intro » répond de nouveau quand les commandes de lecture sont masquées : le clic passe l'intro au lieu de mettre en pause
 • Les cartes de la rangée « En direct » ont toutes la même hauteur, quel que soit le texte qu'elles portent
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 2.1.0
 ```
-Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
+JellyGlass 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
 
 — LECTURE PLUS FIABLE
 • « Lecture impossible » ne s'installe plus sur tous les titres jusqu'au redémarrage de l'app
@@ -322,12 +324,12 @@ Cinemax 2.1 : une lecture plus fiable, et beaucoup de petites attentions.
 — RETIRÉ
 • Le réglage de taille des sous-titres, sans effet sur les sous-titres au format ASS
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 2.0.0
 ```
-Cinemax 2.0 : regardez ensemble, prêt pour Jellyfin 12, et une Apple TV refaite.
+JellyGlass 2.0 : regardez ensemble, prêt pour Jellyfin 12, et une Apple TV refaite.
 
 — NOUVEAU
 • Regarder ensemble : lancez une séance depuis la page d'un titre ; vos proches la rejoignent depuis la rangée « En direct » de l'accueil, et lecture, pause et sauts restent synchronisés pour tout le monde. L'administrateur l'accorde compte par compte
@@ -355,7 +357,7 @@ Cinemax 2.0 : regardez ensemble, prêt pour Jellyfin 12, et une Apple TV refaite
 • Le sélecteur de piste ne coche plus toutes les pistes à la fois
 • La carte « Épisode suivant » n'apparaît plus un quart d'heure avant la fin sur un générique mal détecté
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.4.0
@@ -380,7 +382,7 @@ Les collections ont enfin une vraie page, et vos playlists se retrouvent.
 — LECTEUR
 • Les deux compteurs de temps ne se contredisent plus pendant un calage
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.3.0
@@ -415,7 +417,7 @@ Une nouveauté, et surtout beaucoup de corrections — dont plusieurs bugs qui o
 — RÉGLAGES
 • La grille de changement de profil s'affiche à nouveau correctement
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.2.0
@@ -442,7 +444,7 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
 • Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.1.0
@@ -479,7 +481,7 @@ Plusieurs serveurs et une lecture nettement plus solide.
 — SÉCURITÉ
 • Stockage de session renforcé et durcissement des échanges avec votre serveur
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.1.0
@@ -511,7 +513,7 @@ Plusieurs serveurs et une lecture nettement plus solide.
 — SÉCURITÉ
 • Stockage de session renforcé et durcissement des échanges avec votre serveur
 
-Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
 ---
@@ -520,19 +522,19 @@ Merci d'utiliser Cinemax. Rapports de bugs et suggestions : https://github.com/b
 
 ### Subtitle (30 chars max)
 ```
-Jellyfin player for Apple
+Media library, movies and TV
 ```
-*(25 chars)*
+*(28 chars — “Jellyfin” left this field: it is already in the name, which ranks heavier)*
 
 ### Promotional Text (170 chars max)
 ```
-New release: built-in VLC engine for native MKV, Dolby Vision and HDR playback.
+The Jellyfin client that never makes your server transcode: MKV, Dolby Vision, HDR10+, Atmos played as-is on iPhone, iPad and Apple TV.
 ```
-*(79 chars)*
+*(135 chars)*
 
 ### Description (4000 chars max)
 ```
-Cinemax is a modern client for your Jellyfin media servers, designed specifically for iPhone, iPad and Apple TV. Enjoy your personal library with an elegant, fluid interface tailored to every Apple device.
+JellyGlass is a modern client for your Jellyfin media servers, designed specifically for iPhone, iPad and Apple TV. Enjoy your personal library with an elegant, fluid interface tailored to every Apple device.
 
 — DESIGN BUILT FOR APPLE
 • "Cinema Glass" design: dark interface, subtle transparencies, editorial layouts
@@ -572,14 +574,14 @@ Cinemax is a modern client for your Jellyfin media servers, designed specificall
 • All communications happen directly between your device and your Jellyfin server
 • Open source: https://github.com/b-raillard/Cinemax
 
-Cinemax requires a Jellyfin server already running (jellyfin.org). Cinemax only streams the videos from your own server: the app contains no content of its own, has no download feature, and does not save or download media of any kind, from any source. Cinemax is neither developed nor endorsed by the official Jellyfin team.
+JellyGlass requires a Jellyfin server already running (jellyfin.org). JellyGlass only streams the videos from your own server: the app contains no content of its own, has no download feature, and does not save or download media of any kind, from any source. JellyGlass is neither developed nor endorsed by the official Jellyfin team.
 ```
 
 ### Keywords (100 chars max, comma-separated, no spaces)
 ```
-jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
+media,server,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,library,cinema,movies,shows,homelab
 ```
-*(79 chars)*
+*(95 chars)*
 
 ### What's New (4000 chars max)
 
@@ -588,22 +590,22 @@ jellyfin,media,server,streaming,movies,tv,shows,plex,emby,library,hdr,dolby,vlc
 
 #### iOS — 2.1.1
 ```
-Cinemax 2.1.1: playback that goes the distance.
+JellyGlass 2.1.1: playback that goes the distance.
 
 — MORE DEPENDABLE PLAYBACK
-• When your server stops feeding a film mid-playback, Cinemax now notices while the picture is still running and reconnects on its own: a short reload instead of a frozen screen
+• When your server stops feeding a film mid-playback, JellyGlass now notices while the picture is still running and reconnects on its own: a short reload instead of a frozen screen
 • A picture and a counter that freeze together now restart playback, as a frozen picture alone already did
 • A little more buffer, to absorb brief interruptions without interrupting anything
 
 — BUGS FIXED
 • The cards in the "Live" row all share the same height, whatever text they carry
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 2.1.0
 ```
-Cinemax 2.1: more dependable playback, and plenty of small touches.
+JellyGlass 2.1: more dependable playback, and plenty of small touches.
 
 — MORE DEPENDABLE PLAYBACK
 • "Couldn't play this video" no longer sticks to every title until the app is relaunched
@@ -618,7 +620,7 @@ Cinemax 2.1: more dependable playback, and plenty of small touches.
 • A "Continue watching" control for Control Center and the Action button, and the "Continue Watching" widget on the Lock Screen
 • Rename and reorder your servers; search history is kept per server
 • A server with a self-signed certificate can be explicitly approved, without falling back to http
-• Cinemax follows pause, seek and stop commands sent from another Jellyfin device
+• JellyGlass follows pause, seek and stop commands sent from another Jellyfin device
 • Closing the player during a Watch Together session asks for confirmation first
 • A poster zooms into its title's page, and the title's logo shows when the screen is wide enough
 • A tour on first launch, what's new after each update, and a reminder when a new version is available
@@ -641,12 +643,12 @@ Cinemax 2.1: more dependable playback, and plenty of small touches.
 • The subtitle size setting, which had no effect on ASS subtitles
 • The Live Activity: the Lock Screen already shows the title, artwork and playback progress
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 2.0.0
 ```
-Cinemax 2.0: watch together, ready for Jellyfin 12, and a rebuilt Apple TV app.
+JellyGlass 2.0: watch together, ready for Jellyfin 12, and a rebuilt Apple TV app.
 
 — NEW
 • Watch Together: start a session from a title's page; the people you share the server with join it from the "Live" row on the home screen, and play, pause and seeks stay in sync for everyone. Granted by the administrator, account by account
@@ -671,7 +673,7 @@ Cinemax 2.0: watch together, ready for Jellyfin 12, and a rebuilt Apple TV app.
 • A title's page refreshes after an identification or a metadata edit
 • Identify applies the poster you picked, and changing a poster no longer discards your pending edits
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.4.0
@@ -698,7 +700,7 @@ Collections finally have a real page, and your playlists can be found again.
 • The two time counters no longer contradict each other while a seek settles
 • The "previous episode" button responds where you can see it, on screens where the row was too tight
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.3.0
@@ -733,7 +735,7 @@ One new feature, and a lot of fixes — including several bugs that forced you t
 — PLAY ON…
 • Playback sent from another device is no longer lost when a title page is already open
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.2.0
@@ -752,7 +754,7 @@ Long-press a title and it now does everything, without opening its page.
 • The preview shows the title's artwork alone — no more text spilling over the row below
 
 — PLAY ON ANOTHER DEVICE
-• Cinemax now receives playback: pick a film on your iPhone and it starts on your Apple TV
+• JellyGlass now receives playback: pick a film on your iPhone and it starts on your Apple TV
 • Available from any title, not just from its page
 • Resume point and chosen version are honored, exactly like local playback
 • Can be turned off in Settings › Playback
@@ -762,15 +764,15 @@ Long-press a title and it now does everything, without opening its page.
 • Series that just received episodes now surface there, alongside new movies and shows
 • Same fix in the widget
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 2.1.1
 ```
-Cinemax 2.1.1: playback that goes the distance.
+JellyGlass 2.1.1: playback that goes the distance.
 
 — MORE DEPENDABLE PLAYBACK
-• When your server stops feeding a film mid-playback, Cinemax now notices while the picture is still running and reconnects on its own: a short reload instead of a frozen screen
+• When your server stops feeding a film mid-playback, JellyGlass now notices while the picture is still running and reconnects on its own: a short reload instead of a frozen screen
 • A picture and a counter that freeze together now restart playback, as a frozen picture alone already did
 • A little more buffer, to absorb brief interruptions without interrupting anything
 
@@ -778,12 +780,12 @@ Cinemax 2.1.1: playback that goes the distance.
 • "Skip intro" responds again when the player controls are hidden: the click skips the intro instead of pausing
 • The cards in the "Live" row all share the same height, whatever text they carry
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 2.1.0
 ```
-Cinemax 2.1: more dependable playback, and plenty of small touches.
+JellyGlass 2.1: more dependable playback, and plenty of small touches.
 
 — MORE DEPENDABLE PLAYBACK
 • "Couldn't play this video" no longer sticks to every title until the app is relaunched
@@ -815,12 +817,12 @@ Cinemax 2.1: more dependable playback, and plenty of small touches.
 — REMOVED
 • The subtitle size setting, which had no effect on ASS subtitles
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 2.0.0
 ```
-Cinemax 2.0: watch together, ready for Jellyfin 12, and a rebuilt Apple TV app.
+JellyGlass 2.0: watch together, ready for Jellyfin 12, and a rebuilt Apple TV app.
 
 — NEW
 • Watch Together: start a session from a title's page; the people you share the server with join it from the "Live" row on the home screen, and play, pause and seeks stay in sync for everyone. Granted by the administrator, account by account
@@ -848,7 +850,7 @@ Cinemax 2.0: watch together, ready for Jellyfin 12, and a rebuilt Apple TV app.
 • The track picker no longer ticks every track at once
 • The "Next episode" card no longer shows up a quarter of an hour early on a misdetected outro
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.4.0
@@ -873,7 +875,7 @@ Collections finally have a real page, and your playlists can be found again.
 — PLAYER
 • The two time counters no longer contradict each other while a seek settles
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.3.0
@@ -908,7 +910,7 @@ One new feature, and a lot of fixes — including several bugs that forced you t
 — SETTINGS
 • The profile-switching grid renders correctly again
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.2.0
@@ -935,7 +937,7 @@ Long-press a title and it now does everything, without opening its page.
 • One show can no longer take over the row: importing a full season used to fill it entirely
 • Series that just received episodes now surface there, alongside new movies and shows
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### iOS — 1.1.0
@@ -972,7 +974,7 @@ Multiple servers and much more dependable playback.
 — SECURITY
 • Hardened session storage and tightened communication with your server
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 1.1.0
@@ -1004,7 +1006,7 @@ Multiple servers and much more dependable playback.
 — SECURITY
 • Hardened session storage and tightened communication with your server
 
-Thanks for using Cinemax. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
 ---
@@ -1028,7 +1030,7 @@ Tu dois fournir un **serveur Jellyfin de test public** accessible depuis Interne
 
 ### Notes pour le reviewer
 ```
-Cinemax is a third-party client for Jellyfin media servers (jellyfin.org).
+JellyGlass is a third-party client for Jellyfin media servers (jellyfin.org).
 It is not affiliated with the official Jellyfin project.
 
 A Jellyfin server is required to use the app. To test:
