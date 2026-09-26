@@ -119,10 +119,7 @@ struct VideoPlayerView: View {
             if !forceNativeAVPlayer {
                 // Default online path: VLC DirectPlays the raw file (no server
                 // transcode → no freeze, 4K/HEVC/Dolby Vision preserved).
-                let vlcInfo = try await appState.apiClient.getPlaybackInfo(
-                    itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .vlc,
-                    mediaSourceId: mediaSourceId
-                )
+                let vlcInfo = try await negotiate(userId: userId, bitrate: bitrate, engine: .vlc)
                 guard !Task.isCancelled else {
                     abandonNegotiation(vlcInfo)
                     return
@@ -144,7 +141,7 @@ struct VideoPlayerView: View {
                 v.present(info: vlcInfo)
                 return
             } else {
-                info = try await appState.apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: .native, mediaSourceId: mediaSourceId)
+                info = try await negotiate(userId: userId, bitrate: bitrate, engine: .native)
                 guard !Task.isCancelled else {
                     abandonNegotiation(info)
                     return
@@ -173,6 +170,24 @@ struct VideoPlayerView: View {
             logger.error("iOS playback error: \(error.localizedDescription)")
             errorMessage = loc.userFacingMessage(for: error)
         }
+    }
+
+    /// `getPlaybackInfo`, run to completion even when this shell's `.task` is
+    /// cancelled (✕, swipe): awaiting an unstructured task's value does not
+    /// forward the cancellation. Cancelled mid-POST, the request itself threw
+    /// `URLError.cancelled` while the server had already opened the session —
+    /// a live stream or transcode nobody would ever close (review of 3619595).
+    /// Finishing it hands `abandonNegotiation` the ids to release.
+    private func negotiate(userId: String, bitrate: Int, engine: VideoPlaybackEngine) async throws -> PlaybackInfo {
+        let api = appState.apiClient
+        let itemId = itemId
+        let mediaSourceId = mediaSourceId
+        return try await Task {
+            try await api.getPlaybackInfo(
+                itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
+                mediaSourceId: mediaSourceId
+            )
+        }.value
     }
 
     /// The user closed this shell (✕, swipe) while `getPlaybackInfo` was in
