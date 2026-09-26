@@ -109,4 +109,21 @@ struct AdminActivityRowTests {
         #expect(AdminActivityScreen.displayedShortOverview("Adresse IP : 172.17.0.1") == "Adresse IP : 172.17.0.1")
     }
 }
+
+/// Audit 2026-09-22 (S11) : le journal serveur reste sélectionnable (copier
+/// une ligne d'erreur est l'usage de l'écran), mais sans les jetons qu'il porte.
+@MainActor
+@Suite("Journal serveur — jetons masqués")
+struct AdminLogViewerScrubTests {
+    @Test("Les jetons d'un journal sont masqués avant affichage, ligne par ligne")
+    func logContentsAreScrubbed() async {
+        let api = MockAPIClient()
+        api.stubbedLogFileContents = "GET /Items?api_key=abc123&x=1 200\nAuthorization: MediaBrowser Token=\"tok456\"\n\nfin"
+        let vm = AdminLogViewerViewModel(fileName: "log_1.log")
+        await vm.load(using: api, loc: LocalizationManager())
+        #expect(!vm.contents.contains("abc123"))
+        #expect(!vm.contents.contains("tok456"))
+        #expect(vm.contents.hasSuffix("\n\nfin"), "les lignes (vides comprises) sont conservées")
+    }
+}
 #endif

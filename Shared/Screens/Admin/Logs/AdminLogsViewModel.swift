@@ -49,6 +49,12 @@ final class AdminLogViewerViewModel {
         self.fileName = fileName
     }
 
+    static func scrubbed(_ log: String) -> String {
+        log.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { LogScrubber.scrubbed(String($0)) }
+            .joined(separator: "\n")
+    }
+
     func load(using apiClient: any AdminAPI, loc: LocalizationManager) async {
         isLoading = true
         errorMessage = nil
@@ -72,6 +78,12 @@ final class AdminLogViewerViewModel {
                 contents = full
                 isTruncated = false
             }
+            // A server log carries other users' tokens (request URLs with
+            // `api_key` / `ApiKey`, logged auth headers). The text stays
+            // selectable — copying an error line into a report is what this
+            // screen is for — so what can be copied is scrubbed first, per
+            // line as `LogScrubber` requires (audit 2026-09-22, S11).
+            contents = Self.scrubbed(contents)
         } catch {
             errorMessage = loc.userFacingMessage(for: error)
         }
