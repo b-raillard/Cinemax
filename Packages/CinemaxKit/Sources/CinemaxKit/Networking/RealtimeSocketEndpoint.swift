@@ -56,17 +56,18 @@ public struct RealtimeSocketEndpoint: Sendable {
 
 /// When the socket gives up on the header and falls back to the query item.
 public enum RealtimeSocketAuth {
-    /// Header-mode failures, in a row and before any frame arrived, after
-    /// which the upgrade is retried with the token in the URL even though no
-    /// HTTP status said why — a handshake failure does not always expose one.
+    /// Header-mode upgrades the server ANSWERED without a 401 / 403 (a proxy
+    /// rejecting the header form with a 400, say) and without any frame, after
+    /// which the token is tried in the URL. An attempt that never reached the
+    /// server is not counted by the caller: it says nothing about auth.
     public static let headerAttemptsBeforeFallback = 2
 
     /// Whether the next attempt should carry the token in the URL.
     ///
     /// Only while the header has NEVER worked on this socket: once a frame
     /// arrived, a later drop is the network, not the authentication. A 401 /
-    /// 403 on the upgrade falls back at once; an attempt that failed without a
-    /// status counts toward `headerAttemptsBeforeFallback`.
+    /// 403 on the upgrade falls back at once; another answered refusal counts
+    /// toward `headerAttemptsBeforeFallback`.
     public static func shouldFallBackToQuery(
         usingQuery: Bool,
         headerEverWorked: Bool,

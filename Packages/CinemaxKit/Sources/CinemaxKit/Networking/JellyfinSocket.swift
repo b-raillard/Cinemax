@@ -145,9 +145,12 @@ public actor JellyfinSocket {
             keepAliveTask?.cancel(); keepAliveTask = nil
             task = nil
             if isStopped { break }
-            if !usingQueryAuth, !receivedFrame {
+            // Only an upgrade the SERVER answered counts against the header:
+            // an attempt that never reached it (offline launch, an Apple TV
+            // waking before its Wi-Fi) says nothing about authentication, and
+            // counting it would put the token back in the URL for nothing.
+            if !usingQueryAuth, !receivedFrame, let status = (ws.response as? HTTPURLResponse)?.statusCode {
                 failedHeaderAttempts += 1
-                let status = (ws.response as? HTTPURLResponse)?.statusCode
                 if RealtimeSocketAuth.shouldFallBackToQuery(
                     usingQuery: usingQueryAuth,
                     headerEverWorked: headerEverWorked,
@@ -155,7 +158,7 @@ public actor JellyfinSocket {
                     failedHeaderAttempts: failedHeaderAttempts
                 ) {
                     usingQueryAuth = true
-                    socketLogger.notice("Socket: header authentication refused (status \(status.map(String.init) ?? "none", privacy: .public)) — falling back to the ApiKey query item")
+                    socketLogger.notice("Socket: header authentication refused (status \(status, privacy: .public)) — falling back to the ApiKey query item")
                     continue   // retry now, no backoff: nothing is wrong with the network
                 }
             }
@@ -309,11 +312,7 @@ public actor JellyfinSocket {
         guard let text = (arguments["Text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else { return nil }
         let header = (arguments["Header"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sender = (d["ControllingUserId"] as? String).flatMap { id -> String? in
-            let digits = id.replacingOccurrences(of: "-", with: "")
-            return digits.isEmpty || digits.allSatisfy({ $0 == "0" }) ? nil : id
-        }
-        return RemoteDisplayMessage(header: (header?.isEmpty == false) ? header : nil, text: text, senderUserId: sender)
+        return RemoteDisplayMessage(header: (header?.isEmpty == false) ? header : nil, text: text)
     }
 
     /// `Playstate` → `{ Command, SeekPositionTicks, ControllingUserId }`

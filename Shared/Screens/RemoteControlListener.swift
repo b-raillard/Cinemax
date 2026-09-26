@@ -139,28 +139,14 @@ final class RemoteControlListener {
         }
     }
 
-    /// Title and body of an inbound `DisplayMessage`: a fixed title naming
+    /// Title and body of an inbound `DisplayMessage`: a fixed title saying
     /// where it comes from, the sender's own header folded into the body.
     static func displayMessageToast(
         _ message: RemoteDisplayMessage,
-        senderName: String?,
         loc: LocalizationManager
     ) -> (title: String, message: String) {
-        let title = senderName.map { loc.localized("remote.message.from", $0) }
-            ?? loc.localized("remote.message.title")
         let body = message.header.map { "\($0) — \(message.text)" } ?? message.text
-        return (title, body)
-    }
-
-    /// The display name of the account that sent a message, when the frame
-    /// names one and the server lets this account read it. Best-effort.
-    private static func senderName(_ userId: String?, appState: AppState) async -> String? {
-        guard let userId else { return nil }
-        let normalized = { (id: String) in id.replacingOccurrences(of: "-", with: "").lowercased() }
-        if let me = appState.currentUserId, normalized(me) == normalized(userId) {
-            return appState.currentUser?.name
-        }
-        return (try? await appState.apiClient.getUserByID(id: userId))?.name
+        return (loc.localized("remote.message.title"), body)
     }
 
     /// The hub delivers every frame to every consumer, so this sees SyncPlay
@@ -204,12 +190,11 @@ final class RemoteControlListener {
             // The title is OURS, never the sender's header (audit 2026-09-22,
             // S11): anybody allowed to drive this session could otherwise raise
             // a toast titled « Session expirée » and pass it off as the app.
+            // Jellyfin never says who sent a `DisplayMessage` (10.9 → 12.0),
+            // so the title cannot name them either.
             if let loc {
-                Task {
-                    let sender = await Self.senderName(message.senderUserId, appState: appState)
-                    let toast = Self.displayMessageToast(message, senderName: sender, loc: loc)
-                    toasts.info(toast.title, message: toast.message)
-                }
+                let toast = Self.displayMessageToast(message, loc: loc)
+                toasts.info(toast.title, message: toast.message)
             }
             // A message is also the only shape an invitation to a Watch
             // Together session can take — Jellyfin has no invitation primitive,

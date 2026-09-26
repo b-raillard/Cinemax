@@ -97,12 +97,12 @@ struct JellyfinSocketHubTests {
         #expect(query.value(forHTTPHeaderField: "Authorization") != nil)
     }
 
-    @Test("Fallback to ApiKey: on 401/403, or after repeated silent failures, never once the header worked")
+    @Test("Fallback to ApiKey: on 401/403, or after repeated answered refusals, never once the header worked")
     func fallbackDecision() {
         #expect(RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: false, headerEverWorked: false, statusCode: 401, failedHeaderAttempts: 1))
         #expect(RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: false, headerEverWorked: false, statusCode: 403, failedHeaderAttempts: 1))
-        #expect(!RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: false, headerEverWorked: false, statusCode: nil, failedHeaderAttempts: 1))
-        #expect(RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: false, headerEverWorked: false, statusCode: nil, failedHeaderAttempts: 2))
+        #expect(!RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: false, headerEverWorked: false, statusCode: 400, failedHeaderAttempts: 1))
+        #expect(RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: false, headerEverWorked: false, statusCode: 400, failedHeaderAttempts: 2))
         #expect(!RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: false, headerEverWorked: true, statusCode: 401, failedHeaderAttempts: 5))
         #expect(!RealtimeSocketAuth.shouldFallBackToQuery(usingQuery: true, headerEverWorked: false, statusCode: 401, failedHeaderAttempts: 5))
     }

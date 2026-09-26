@@ -44,16 +44,10 @@ public struct RemotePlayRequest: Sendable, Equatable {
 public struct RemoteDisplayMessage: Sendable, Equatable {
     public let header: String?
     public let text: String
-    /// `ControllingUserId`, when the frame carries one. Jellyfin 10.9 → 12.0
-    /// never sets it on a `DisplayMessage` (only on `Play` / general commands
-    /// built by the server itself), so this is `nil` today and read in case a
-    /// server starts naming the sender.
-    public let senderUserId: String?
 
-    public init(header: String?, text: String, senderUserId: String? = nil) {
+    public init(header: String?, text: String) {
         self.header = header
         self.text = text
-        self.senderUserId = senderUserId
     }
 }
 

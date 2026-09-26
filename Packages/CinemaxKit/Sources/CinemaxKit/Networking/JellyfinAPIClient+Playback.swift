@@ -371,8 +371,6 @@ extension JellyfinAPIClient {
         return URLSession(configuration: config, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
     }()
 
-    /// Attaches the `Accept-Language` the SDK client would send, to a request
-    /// built outside it. Internal for `AcceptLanguageTests`.
     /// The `MediaBrowser …` Authorization value the SDK sends, for the requests
     /// built by hand (the PlaybackInfo POST, the realtime socket's upgrade).
     static func mediaBrowserAuthorization(configuration: JellyfinClient.Configuration, token: String?) -> String {
@@ -389,6 +387,8 @@ extension JellyfinAPIClient {
         return "MediaBrowser \(fields)"
     }
 
+    /// Attaches the `Accept-Language` the SDK client would send, to a request
+    /// built outside it. Internal for `AcceptLanguageTests`.
     internal static func applyAcceptLanguage(to request: inout URLRequest, languageCode: String?) {
         guard let value = languageCode.flatMap(acceptLanguageHeader(for:)) else { return }
         request.setValue(value, forHTTPHeaderField: "Accept-Language")

@@ -248,11 +248,23 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
 
     /// The approved fingerprint for a server, for the extensions (see
     /// `ExtensionSessionBridge.Session.pinnedCertificateSHA256`). Only an
-    /// `https` server can carry one, so a plain `http` one costs no Keychain read.
+    /// `https` server can carry one, so a plain `http` one costs nothing.
+    ///
+    /// Served from the snapshot WHATEVER its age, the Keychain being read only
+    /// when none was ever taken: this runs on every foreground publish, on the
+    /// main actor, and the pins are only ever written in-process by `trust` /
+    /// `forget`, which refresh the snapshot themselves. (The 5 s TTL governs
+    /// TLS challenges, where a fresh read costs nothing that matters.)
     public func pinnedFingerprint(for serverURL: URL) -> String? {
         guard serverURL.scheme?.lowercased() == "https",
               let key = ServerCertificateTrust.trustKey(for: serverURL) else { return nil }
-        return pin(forTrustKey: key)
+        lock.lock()
+        defer { lock.unlock() }
+        if cachedAt == nil {
+            cachedPins = keychain.getTrustedCertificates()
+            cachedAt = Date()
+        }
+        return cachedPins[key]
     }
 
     private func pin(forTrustKey key: String) -> String? {
@@ -318,9 +330,9 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
         newRequest request: URLRequest,
         completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
-        let followed = AuthenticatedRedirect.sanitized(request, redirectedFrom: response.url)
-        if followed != request {
-            trustLog.notice("ServerTrust ▸ redirection vers \(request.url?.host ?? "?", privacy: .public) suivie SANS le jeton")
+        let followed = AuthenticatedRedirect.followed(request, redirectedFrom: response.url)
+        if followed == nil {
+            trustLog.notice("ServerTrust ▸ redirection authentifiée vers \(request.url?.host ?? "?", privacy: .public) NON suivie (autre origine)")
         }
         completionHandler(followed)
     }
