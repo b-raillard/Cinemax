@@ -85,7 +85,7 @@ Online playback defaults to VLC on iOS + tvOS. Settings → Playback **"Use Nati
 
 ### Native Player (`NativeVideoPresenter.swift`)
 
-Both platforms `AVPlayerViewController` presented via UIKit modal. `@MainActor` sub-controllers in `Shared/Screens/VideoPlayer/`: `PlaybackReporter`, `SkipSegmentController`, `SleepTimerController`, `ChapterController`, `EndOfSeriesOverlayController`, `RemoteCommandController`, `NowPlayingInfoController`. Presenter keeps **one** `addPeriodicTimeObserver` (1s) fanning ticks to sub-controllers — sub-controllers never add their own.
+Both platforms `AVPlayerViewController` presented via UIKit modal. `@MainActor` sub-controllers in `Shared/Screens/VideoPlayer/`: `PlaybackReporter`, `SkipSegmentController`, `SleepTimerController`, `ChapterController`, `EndOfSeriesOverlayController`, `RemoteCommandController`, `NowPlayingInfoController`. Presenter keeps **one** `addPeriodicTimeObserver` (1s) fanning ticks to sub-controllers — sub-controllers never add their own. **One deliberate exception: `SleepTimerController`** keeps its own 1 s task, because it counts WALL time — the countdown must run while playback is paused or stalled, and AVPlayer's time observer only fires while the playhead moves (audit 2026-09-22 flagged it as a rule gap; kept on purpose, lot 7).
 
 - **RULE — MUST present via UIKit modal** — SwiftUI presentation corrupts `TabView`/`NavigationSplitView` focus on dismiss.
 - **RULE — Dismiss detection**: iOS `PlayerHostingVC.viewWillDisappear(isBeingDismissed:)`; tvOS `TVDismissDelegate.playerViewControllerDidEndDismissalTransition`. **Do NOT embed `AVPlayerViewController` as a child VC on tvOS** — internal constraint conflicts + `-12881`.
