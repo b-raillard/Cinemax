@@ -368,14 +368,6 @@ struct MediaSourceQualityTests {
         #expect(MediaSourceQuality.versionName(for: source(id: "3")) == nil)
     }
 
-    @Test("Bitrate label switches precision at 10 Mbps")
-    func bitrateLabel() {
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "1", bitrate: 68_000_000)) == "68 Mbps")
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "2", bitrate: 9_800_000)) == "9.8 Mbps")
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "3")) == nil)
-        #expect(MediaSourceQuality.bitrateLabel(for: source(id: "4", bitrate: 0)) == nil)
-    }
-
     @Test("Default audio stream index is honored when present")
     func defaultAudioStream() {
         let aac = audio(codec: "aac")
@@ -388,5 +380,32 @@ struct MediaSourceQualityTests {
         // Without a declared default, the first audio track stands in.
         let noDefault = MediaSourceInfo(mediaStreams: [video(height: 1080), aac, dts])
         #expect(MediaSourceQuality.defaultAudioStream(in: noDefault)?.codec == "aac")
+    }
+}
+
+/// The version row printed « 4K · 4K · Dolby Digital »: Jellyfin names a version
+/// after its filename suffix (`Sintel (2010) - 4K.mkv` → "4K"), which is the
+/// resolution the summary already starts with.
+@Suite("Version summary beside its name")
+struct VersionSummaryBesideNameTests {
+    @Test("a part repeating the version name is dropped")
+    func dropsRepeatedResolution() {
+        #expect(MediaSourceQuality.distinctParts(["4K", "Dolby Digital"], excluding: "4K") == ["Dolby Digital"])
+    }
+
+    @Test("the comparison ignores case, diacritics and whitespace")
+    func tolerantComparison() {
+        #expect(MediaSourceQuality.distinctParts(["1080p", "HDR10"], excluding: " 1080P ") == ["HDR10"])
+    }
+
+    @Test("a distinctive name keeps the whole summary")
+    func distinctiveNameKeepsEverything() {
+        #expect(MediaSourceQuality.distinctParts(["4K", "Dolby Digital"], excluding: "IMAX") == ["4K", "Dolby Digital"])
+    }
+
+    @Test("no name, or a blank one, drops nothing")
+    func noNameDropsNothing() {
+        #expect(MediaSourceQuality.distinctParts(["4K"], excluding: nil) == ["4K"])
+        #expect(MediaSourceQuality.distinctParts(["4K"], excluding: "  ") == ["4K"])
     }
 }

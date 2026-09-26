@@ -52,8 +52,6 @@ final class VLCStreamPresenter: NSObject {
     /// launch would get force-transcoded on resume.
     private let maxBitrate: Int
 
-    private weak var hostingVC: VLCStreamViewController?
-
     /// Stream init — online playback negotiated through Jellyfin's PlaybackInfo
     /// flow with VLC's broad DirectPlay profile.
     init(
@@ -88,7 +86,7 @@ final class VLCStreamPresenter: NSObject {
 
     /// Presents modally on top of the active scene and starts streaming.
     func present(info: PlaybackInfo) {
-        guard let topVC = Self.topMostViewController() else {
+        guard let topVC = PlayerPresentation.topMostViewController() else {
             logger.error("VLC stream present: no top view controller")
             onDismiss?()
             return
@@ -102,7 +100,6 @@ final class VLCStreamPresenter: NSObject {
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
-        hostingVC = vc
         topVC.present(vc, animated: true)
     }
 
@@ -160,21 +157,6 @@ final class VLCStreamPresenter: NSObject {
         guard isRetry, !viaProxy else { return url }
         return authedURL(url, token: token)
     }
-
-    private static func topMostViewController() -> UIViewController? {
-        guard let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
-            return nil
-        }
-        var top: UIViewController = root
-        while let presented = top.presentedViewController {
-            top = presented
-        }
-        return top
-    }
 }
 
 /// One row of a player picker. `badge` is an SF Symbol the tvOS
@@ -191,6 +173,17 @@ private struct PickerOption {
 // MARK: - View controller
 
 private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+    /// Safety net only — `teardown` is what stops playback. If a dismissal
+    /// path ever skips it, the controller can still be released (the event
+    /// loop no longer pins it, see `startEventLoop`), and this stops what it
+    /// would otherwise leave running. The debug line is how a leak check reads
+    /// that a player was released at all.
+    isolated deinit {
+        eventsTask?.cancel()
+        progressTimer?.invalidate()
+        logger.info("VLC player controller released")
+    }
+
     // Mutable across episode navigation.
     private var itemId: String
     private var info: PlaybackInfo
@@ -290,6 +283,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `fetchChapters`, so dropping it there loses the thumbnails for good.
     private var pendingChapterThumbnails: (@MainActor () -> Void)?
     private var chapterStartTicks: [Int] = []
+    /// The chip carrying `.selected` — the chapter playing now. Written on
+    /// change only, from `writeTimeLabels` (see `markCurrentChapter`).
+    private var selectedChapterIndex: Int?
     private var chapterHeightConstraint: NSLayoutConstraint?
     private let centerGlyph = UIImageView()
     private var centerGlyphHide: DispatchWorkItem?
@@ -786,7 +782,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Cached media length in ms (mirrors `mediaPlayer.media?.length.intValue`).
     private var lengthMs: Int32 { mediaLengthMs }
 
-    /// True only while actively playing (matches VLCKit's `isPlaying`, which
+    /// True only while actively playing (as libVLC's own `isPlaying`, which
     /// was false during pause/stop/buffering).
     private var enginePlaying: Bool { player.state == .playing }
 
@@ -833,8 +829,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // without this guard `stopAnimating()` is re-sent thousands of times to an
         // indicator that is already stopped and hidden.
         guard loading != loadingIndicator.isAnimating else { return }
-        // DIAG (recette loader) — only real transitions reach here.
-        logger.notice("spinner \(loading ? "ON" : "OFF", privacy: .public)")
+        // Diagnostics (only real transitions reach here): `.info`, kept out of
+        // the persisted log but still in this launch's diagnostics export.
+        logger.info("spinner \(loading ? "ON" : "OFF", privacy: .public)")
         if loading { loadingIndicator.startAnimating() }
         else { loadingIndicator.stopAnimating() }
     }
@@ -902,7 +899,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     /// Builds the SwiftVLC `Media` for a streamed URL with `network-caching`
-    /// (matches the VLCKit path).
+    /// (as the libVLC 3 engine did).
     private func makeMedia(_ url: URL) -> Media? {
         guard let media = try? Media(url: url) else { return nil }
         // Every fresh open funnels through here with `info` and `usingProxy`
@@ -926,9 +923,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// rebinding media (episode nav / retry) keeps the same stream.
     private func startEventLoop() {
         guard eventsTask == nil else { return }
-        eventsTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            for await event in self.player.events {
+        // `self` is re-acquired per event, never held across the `await` of the
+        // loop (audit 2026-09-22, P12): bound once before it, as it used to be,
+        // the task kept the whole controller — engine, 1 s timer, HUD — alive
+        // for as long as the stream stayed open, i.e. for ever if a dismissal
+        // path ever skipped `teardown`.
+        eventsTask = Task { @MainActor [weak self, events = player.events] in
+            for await event in events {
+                guard let self else { return }
                 switch event {
                 case .lengthChanged(let d):
                     let c = d.components
@@ -972,7 +974,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         nowPlaying.attach(itemId: itemId, title: titleText, durationSeconds: nil)
         reporter = PlaybackReporter(
             apiClient: apiClient,
-            userId: userId,
             context: { [weak self] in
                 guard let self else { return nil }
                 // Live read, not a bound snapshot: the same reporter instance
@@ -1419,7 +1420,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // SwiftVLC renders through a SwiftUI representable. Host it in a child
         // UIHostingController pinned to `videoView`. Interaction is disabled so
         // the tap recognizer on `videoView` keeps receiving HUD toggles (the
-        // old VLCKit `drawable` was a plain UIView with the same behavior).
+        // libVLC 3 engine's `drawable` was a plain UIView with the same behavior).
         let surface = PlayerEngineSurface(player: player) { [weak self] controller in
             #if os(iOS)
             self?.pipController = controller as? PiPController
@@ -2508,6 +2509,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingChapterThumbnails = nil
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
+        selectedChapterIndex = nil
         #if os(tvOS)
         tvScrub.setChapterMarks([])
         contextArtworkTask?.cancel()
@@ -2577,8 +2579,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                               !Task.isCancelled,
                               let img = UIImage(data: data), let self,
                               i < self.chapterStack.arrangedSubviews.count,
-                              let chip = self.chapterStack.arrangedSubviews[i] as? UIButton,
-                              let iv = chip.viewWithTag(99) as? UIImageView else { return }
+                              let chip = self.chapterStack.arrangedSubviews[i] as? ChapterChip else { return }
+                        let iv = chip.thumbnailView
                         iv.image = img
                         iv.contentMode = .scaleAspectFill
                     }
@@ -2654,8 +2656,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         b.accessibilityLabel = "\(loc.localized("player.chapter")): \(title), \(time)"
         b.accessibilityTraits = .button
 
-        let thumb = UIImageView()
-        thumb.tag = 99
+        let thumb = b.thumbnailView
         thumb.translatesAutoresizingMaskIntoConstraints = false
         thumb.backgroundColor = UIColor.white.withAlphaComponent(0.12)
         // Intentional placeholder until (if) a real thumbnail loads.
@@ -3930,11 +3931,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // lookups, no network) — this presenter owns the negotiation, with
             // the VLC device profile.
             let nav = navigator(ref.id)
-            guard let vlcInfo = try? await self.apiClient.getPlaybackInfo(
-                itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
-            ) else {
+            let vlcInfo: PlaybackInfo
+            do {
+                vlcInfo = try await self.apiClient.getPlaybackInfo(
+                    itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
+                )
+            } catch {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
-                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay, abandonedRetry: abandonedRetry)
+                self.handleFailedEpisodeNav(
+                    gen: gen, isAutoplay: isAutoplay, abandonedRetry: abandonedRetry,
+                    restricted: { if case JellyfinError.contentRestricted = error { return true } else { return false } }()
+                )
                 return
             }
             // Dismissed mid-nav, or a newer nav superseded this one: applying
@@ -4011,17 +4018,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// - autoplay at end of episode: nothing is playing any more, so there is no
     ///   session to restore. Surface a terminal alert with a single dismiss
     ///   action, mirroring `showEndOfSeriesOverlay`'s end-of-playback precedent.
-    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, abandonedRetry: Bool) {
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, abandonedRetry: Bool, restricted: Bool = false) {
         // A teardown, or a newer nav that already re-armed the timers, owns the
         // session now — recovering here would double-arm / resurrect state.
         guard !isTearingDown, gen == navGeneration else { return }
+        // Refused by the age cap (`getPlaybackInfo`): in a Watch Together group
+        // this participant can never follow the group onto that episode, and
+        // the group would wait for its `Ready` for ever — leave, as the fiche
+        // does for a restricted join.
+        if restricted, syncPlay.isInGroup { syncPlay.leaveGroup() }
         guard !isAutoplay else {
             // The engine already stopped; re-latch the end guard so a stray
             // `.stopped` can't stack a second alert behind this one.
             didReportEnd = true
             let alert = UIAlertController(
-                title: loc.localized("player.episodeNav.failed"),
-                message: loc.localized("player.episodeNav.failed.message"),
+                title: loc.localized(restricted ? "detail.restricted.title" : "player.episodeNav.failed"),
+                message: loc.localized(restricted ? "detail.restricted.subtitle" : "player.episodeNav.failed.message"),
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default) { [weak self] _ in
@@ -4044,7 +4056,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         reporter?.resetTicking()
         reporter?.reportStart(startTime: pendingResumeSecondsForReport ?? Double(currentMs) / 1000.0)
         startProgressTimer()
-        showSkipHUD(loc.localized("player.episodeNav.failed"), duration: 1.8)
+        showSkipHUD(loc.localized(restricted ? "detail.restricted.title" : "player.episodeNav.failed"), duration: 1.8)
     }
 
     #if os(iOS)
@@ -4363,9 +4375,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// from teardown / media-swap via the tear-down flag + a near-end / not-
     /// just-started guard.
     private func onEngineStateChanged(_ state: PlayerState) {
-        // DIAG (recette loader) — libVLC's own view of the seek, next to the
-        // settle window's. `.buffering` while frames flow is the suspect.
-        logger.notice("engine-state \(String(describing: state), privacy: .public)")
+        // Diagnostics: libVLC's own view of the seek, next to the settle
+        // window's (`.buffering` while frames flow is the suspect).
+        logger.info("engine-state \(String(describing: state), privacy: .public)")
         switch state {
         case .error:
             handlePlaybackError()
@@ -4377,13 +4389,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if syncPlay.isInGroup { syncPlay.reportBuffering() }
         case .stopped:
             seeks.endSettle() // no frames are coming — a pending settle is moot
-            // DIAG (recette A7) — libVLC has no distinct `.ended`, so every
-            // teardown, error and real EOF arrives here. Log the four gate
-            // inputs so a missing end-of-series card can be attributed to the
-            // gate rather than guessed at.
+            // Diagnostics: libVLC has no distinct `.ended`, so every teardown,
+            // error and real EOF arrives here. Log the four gate inputs so a
+            // missing end-of-series card can be attributed to the gate rather
+            // than guessed at.
             // nil ⇒ a fresh open has not reached its play() yet (logged as -1).
             let sincePlay = lastPlayStart.map { Date().timeIntervalSince($0) }
-            logger.notice("""
+            logger.info("""
                 end-gate .stopped tearingDown=\(self.isTearingDown, privacy: .public) \
                 sincePlay=\(sincePlay ?? -1, format: .fixed(precision: 2), privacy: .public) \
                 currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public) \
@@ -4477,9 +4489,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackEnded() {
         guard !didReportEnd else { return }
         didReportEnd = true
-        // DIAG (recette A7) — the three inputs that decide between autoplay,
-        // the end-of-series card and a bare dismiss.
-        logger.notice("""
+        // Diagnostics: the three inputs that decide between autoplay, the
+        // end-of-series card and a bare dismiss.
+        logger.info("""
             end-branch autoPlayNext=\(self.autoPlayNext, privacy: .public) \
             nextUpCancelled=\(self.nextUpCancelledForThisItem, privacy: .public) \
             hasNext=\(self.nextEpisode != nil, privacy: .public) \
@@ -4781,18 +4793,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// release a *superseded* negotiation (the wake re-resolve replaces `info`
     /// wholesale) as well as the current one.
     private func releaseServerSession(_ stale: PlaybackInfo) {
-        let client = apiClient
-        let liveStreamId = stale.liveStreamId
-        let playSessionId = stale.playSessionId
-        guard liveStreamId != nil || playSessionId != nil else { return }
-        Task.detached {
-            if let liveStreamId {
-                await client.closeLiveStream(liveStreamId: liveStreamId)
-            }
-            if let playSessionId {
-                await client.stopEncoding(playSessionId: playSessionId)
-            }
-        }
+        PlayerPresentation.releaseServerSession(stale, client: apiClient)
     }
 
     /// The open watchdog already surfaced the failure alert, but libVLC then
@@ -5083,6 +5084,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #else
         tvScrub.accessibilityValue = spokenPosition
         #endif
+        markCurrentChapter(positionMs: ms)
+    }
+
+    /// Gives the chip of the chapter playing now the `.selected` trait, so
+    /// VoiceOver says which chapter is current while the user moves along the
+    /// strip. Rides the sole position writer, like the scrub control's value;
+    /// touches two chips at most, and only when the chapter changes.
+    private func markCurrentChapter(positionMs: Int32) {
+        let index = PlayerChapterSelection.currentIndex(
+            startTicks: chapterStartTicks, positionTicks: Int(positionMs) * 10_000
+        )
+        guard index != selectedChapterIndex else { return }
+        let chips = chapterStack.arrangedSubviews
+        if let old = selectedChapterIndex, chips.indices.contains(old) {
+            chips[old].accessibilityTraits.remove(.selected)
+        }
+        if let index, chips.indices.contains(index) {
+            chips[index].accessibilityTraits.insert(.selected)
+        }
+        selectedChapterIndex = index
     }
 
     /// Writes one position to the time labels and the platform scrub control.

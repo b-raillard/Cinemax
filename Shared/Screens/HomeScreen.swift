@@ -161,6 +161,7 @@ struct HomeScreen: View {
         // screen root (NOT inside the lazy scroll content — lazy-container RULE).
         .navigationDestination(item: $favoritesDestination) { _ in
             FavoritesScreen()
+                .tvPushedScreen()
         }
         // "View All" on the Playlists row → every playlist, read straight from
         // `getPlaylists` so the screen doesn't depend on the server exposing a
@@ -351,7 +352,7 @@ struct HomeScreen: View {
                 systemImage: "tv.slash",
                 illustration: .emptyLibrary,
                 title: loc.localized("empty.home.title"),
-                subtitle: loc.localized("empty.home.subtitle"),
+                subtitle: loc.localized(LocalizationManager.platformVariant("empty.home.subtitle")),
                 actionTitle: loc.localized("action.refresh")
             ) {
                 Task { await viewModel.reload(using: appState) }
@@ -642,12 +643,11 @@ struct HomeScreen: View {
         // Simultaneous (not exclusive) so button taps inside the hero still
         // land; the direction guard keeps vertical scrolls from switching heroes.
         .simultaneousGesture(heroSwipeGesture(count: candidates.count))
-        // VoiceOver three-finger swipe pages the carousel (the drag gesture above
-        // is invisible to assistive tech).
-        .accessibilityScrollAction { edge in
-            guard candidates.count > 1 else { return }
-            advanceHero(forward: edge == .trailing || edge == .bottom, count: candidates.count)
-        }
+        // VoiceOver pages the carousel through the page dots, an ADJUSTABLE
+        // element (« À la une, 2 sur 5 »). It was an `accessibilityScrollAction`
+        // on the whole hero, which also took the VERTICAL three-finger swipe —
+        // the gesture that scrolls Home — and paged the carousel instead
+        // (audit §5, lot 9).
         // Task lifecycle is tied to the view — auto-cancels on disappear (pauses
         // rotation) and never strongly retains the screen. Restarts when the
         // candidate count or the motion-effects gate changes.
@@ -667,7 +667,16 @@ struct HomeScreen: View {
         .frame(maxWidth: .infinity)
         .padding(.bottom, heroPadding)
         .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("home.hero.a11y"))
+        .accessibilityValue(loc.localized("home.hero.position", active + 1, count))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: advanceHero(forward: true, count: count)
+            case .decrement: advanceHero(forward: false, count: count)
+            @unknown default: break
+            }
+        }
     }
 
     private func heroSwipeGesture(count: Int) -> some Gesture {
@@ -743,14 +752,7 @@ struct HomeScreen: View {
             #endif
             .overlay {
                 if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                    CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
-                        fallbackIcon: nil,
-                        fallbackBackground: CinemaColor.surfaceContainerLow
-                    )
-                    #if os(tvOS)
-                    .heroKenBurns()
-                    #endif
+                    HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
                     .accessibilityHidden(true)
                 } else {
                     BackdropFallbackView()
@@ -1260,7 +1262,7 @@ struct HomeScreen: View {
                 },
                 onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
-            .accessibilityLabel(item.name ?? "")
+            .accessibilityLabel(item.spokenCardLabel(localize: loc.localized))
             .accessibilityValue(resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) } ?? "")
         }
     }
@@ -1330,7 +1332,7 @@ struct HomeScreen: View {
             #else
             .buttonStyle(.plain)
             #endif
-            .accessibilityLabel(item.seriesName ?? item.name ?? "")
+            .accessibilityLabel(item.spokenCardLabel(localize: loc.localized))
             // On the PlayLink (the focusable button), never its label, so
             // tvOS focus is untouched.
             .mediaCardContextMenu(

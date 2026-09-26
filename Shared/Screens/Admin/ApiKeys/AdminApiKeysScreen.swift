@@ -2,7 +2,7 @@
 import SwiftUI
 import CinemaxKit
 import UniformTypeIdentifiers
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// API Keys admin. Security-sensitive — tokens grant full admin access to
 /// the server, so the UI treats them like passwords:
@@ -157,10 +157,10 @@ struct AdminApiKeysScreen: View {
                                 Text(loc.localized("admin.apiKeys.thisSession"))
                                     .font(.system(size: CinemaScale.pt(10), weight: .bold))
                                     .tracking(0.5)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(themeManager.onAccentContainer)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Capsule().fill(themeManager.accent))
+                                    .background(Capsule().fill(themeManager.accentContainer))
                             }
                         }
                         if let date = key.dateCreated {

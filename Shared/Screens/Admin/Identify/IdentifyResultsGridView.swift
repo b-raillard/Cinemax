@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Results pane of the Identify wizard. `LazyVGrid` of poster tiles — matches
 /// Jellyfin iOS's "Résultats de la recherche" layout. Tapping a tile fires
@@ -70,7 +70,7 @@ struct IdentifyResultsGridView: View {
             if let year = result.productionYear {
                 Text(String(year))
                     .font(CinemaFont.label(.small))
-                    .foregroundStyle(CinemaColor.outline)
+                    .foregroundStyle(CinemaColor.onSurfaceMuted)
                     .lineLimit(1)
             }
         }

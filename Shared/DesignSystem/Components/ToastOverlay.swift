@@ -61,12 +61,15 @@ private struct ToastView: View {
             VStack(alignment: .leading, spacing: 2) {
                 // Dynamic Type: a toast is reading text, and the fixed sizes
                 // ignored the user's text size (audit 2026-09-22).
-                // No line limit: a toast is one sentence, and three lines cut
-                // « Vous restez connecté au serveur actuel » mid-word on an
-                // iPhone — the half that says nothing went wrong.
+                // Six lines, not three: three cut « Vous restez connecté au
+                // serveur actuel » mid-word on an iPhone — the half that says
+                // nothing went wrong. But not unbounded either: at AX5 a long
+                // title covered much of the screen, and the pill takes every
+                // touch in its frame.
                 Text(toast.title)
                     .font(CinemaFont.dynamicLabel(.large))
                     .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(6)
                     .fixedSize(horizontal: false, vertical: true)
                 if let msg = toast.message {
                     Text(msg)

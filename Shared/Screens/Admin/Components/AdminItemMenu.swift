@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Admin 3-dot menu shared between `MediaDetailScreen` and the admin
 /// overlay on poster cards. Always scoped to one `BaseItemDto`; the

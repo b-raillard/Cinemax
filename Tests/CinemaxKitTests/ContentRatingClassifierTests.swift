@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import CinemaxKit
+@testable import Cinemax
 
 @Suite("ContentRatingClassifier")
 struct ContentRatingClassifierTests {
@@ -72,6 +73,42 @@ struct ContentRatingClassifierTests {
     func unratedPasses() {
         #expect(ContentRatingClassifier.passes(rating: nil, maxAge: 10))
         #expect(ContentRatingClassifier.passes(rating: "MYSTERY", maxAge: 10))
+    }
+
+    // MARK: passes(rating:seriesRating:maxAge:)
+
+    /// Audit 2026-09-22 (S3, trou restant) : une carte « Reprendre » / « À
+    /// suivre » lançait un épisode sans note — il hérite de celle de sa série,
+    /// et `/Shows/NextUp` ne la renvoie même pas. Décision produit : l'épisode
+    /// hérite de la note de sa série ; les deux doivent passer, comme sur la fiche.
+    @Test("An unrated episode inherits its series' rating")
+    func unratedEpisodeInheritsSeries() {
+        #expect(!ContentRatingClassifier.passes(rating: nil, seriesRating: "TV-MA", maxAge: 12))
+        #expect(!ContentRatingClassifier.passes(rating: nil, seriesRating: "FR-16", maxAge: 12))
+        #expect(ContentRatingClassifier.passes(rating: nil, seriesRating: "TV-PG", maxAge: 12))
+    }
+
+    @Test("An episode rated above a milder series is refused too")
+    func episodeAboveSeries() {
+        #expect(!ContentRatingClassifier.passes(rating: "TV-MA", seriesRating: "TV-PG", maxAge: 12))
+        #expect(ContentRatingClassifier.passes(rating: "TV-PG", seriesRating: "TV-PG", maxAge: 12))
+    }
+
+    @Test("Film, unrated series, or no cap: nothing new is refused")
+    func noSeriesOrNoCap() {
+        #expect(ContentRatingClassifier.passes(rating: "PG-13", seriesRating: nil, maxAge: 16))
+        #expect(!ContentRatingClassifier.passes(rating: "R", seriesRating: nil, maxAge: 16))
+        #expect(ContentRatingClassifier.passes(rating: nil, seriesRating: nil, maxAge: 10))
+        #expect(ContentRatingClassifier.passes(rating: "NC-17", seriesRating: "TV-MA", maxAge: 0))
+    }
+
+    @MainActor
+    @Test("A refused playback reads as « Contenu restreint », never as a generic error")
+    func restrictedErrorMessage() {
+        let loc = LocalizationManager()
+        let message = loc.userFacingMessage(for: JellyfinError.contentRestricted)
+        #expect(message == loc.localized("detail.restricted.subtitle"))
+        #expect(message != loc.localized("error.generic"))
     }
 
     // MARK: maxOfficialRatingCode(forAge:)

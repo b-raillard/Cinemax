@@ -282,8 +282,11 @@ public struct KeychainService: Sendable {
     /// UserDefaults. Scoped to the shared group via an explicit
     /// `kSecAttrAccessGroup` so it never disturbs the app-private session items.
     /// No-op when the shared group can't be resolved.
-    public func saveSharedSession(_ data: Data) {
-        guard let group = Self.sharedAccessGroup else { return }
+    /// `true` once the item holds `data`. The caller must not treat the
+    /// session as published otherwise (see `ExtensionSessionBridge.publish`).
+    @discardableResult
+    public func saveSharedSession(_ data: Data) -> Bool {
+        guard let group = Self.sharedAccessGroup else { return false }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.serviceName,
@@ -294,6 +297,7 @@ public struct KeychainService: Sendable {
         if status != errSecSuccess {
             keychainLog.error("Shared session write failed (status \(status))")
         }
+        return status == errSecSuccess
     }
 
     /// Reads the shared session blob back (used by the round-trip test; the
@@ -313,8 +317,10 @@ public struct KeychainService: Sendable {
         return result as? Data
     }
 
-    public func deleteSharedSession() {
-        guard let group = Self.sharedAccessGroup else { return }
+    /// `true` once no shared session remains — deleted now, or already absent.
+    @discardableResult
+    public func deleteSharedSession() -> Bool {
+        guard let group = Self.sharedAccessGroup else { return false }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.serviceName,
@@ -325,6 +331,7 @@ public struct KeychainService: Sendable {
         if status != errSecSuccess && status != errSecItemNotFound {
             keychainLog.error("Shared session delete failed (status \(status))")
         }
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 
     // MARK: - Private access-group migration
@@ -384,6 +391,51 @@ public struct KeychainService: Sendable {
         if allSucceeded {
             UserDefaults.standard.set(true, forKey: Self.privateGroupMigratedKey)
         }
+    }
+
+    // MARK: - Placement check (audit S1, verified on a signed device)
+
+    /// Where an app-private item actually sits. The S1 move can only be
+    /// verified on a SIGNED build (the simulator and unsigned CI have no
+    /// access groups), so `AppState.restoreSession` logs this for `access_token`
+    /// once per launch — the line reaches the diagnostics export.
+    public enum AccessGroupPlacement: String, Sendable, Equatable {
+        case privateGroup = "private"
+        case sharedGroup = "shared"
+        case absent
+        case other
+        case unsigned
+    }
+
+    /// Pure reading of the groups an item was found in. `shared` wins over
+    /// `private`: a copy left in the shared group is the defect, whatever else
+    /// exists.
+    public static func placement(
+        ofGroups groups: [String],
+        privateGroup: String?,
+        sharedGroup: String?
+    ) -> AccessGroupPlacement {
+        guard let privateGroup, let sharedGroup else { return .unsigned }
+        if groups.isEmpty { return .absent }
+        if groups.contains(sharedGroup) { return .sharedGroup }
+        if groups.allSatisfy({ $0 == privateGroup }) { return .privateGroup }
+        return .other
+    }
+
+    /// The placement of `account` (attributes only, the secret is not read).
+    public func accessGroupPlacement(ofAccount account: String) -> AccessGroupPlacement {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.serviceName,
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let items = status == errSecSuccess ? (result as? [[String: Any]] ?? []) : []
+        let groups = items.compactMap { $0[kSecAttrAccessGroup as String] as? String }
+        return Self.placement(ofGroups: groups, privateGroup: Self.privateAccessGroup, sharedGroup: Self.sharedAccessGroup)
     }
 
     // MARK: - Accessibility migration

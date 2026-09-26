@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Full-bleed hero block at the top of the library browse view. Used on
 /// both iOS and tvOS — sizing/typography branch on platform via the
@@ -54,14 +54,7 @@ struct LibraryHeroSection: View {
             #endif
             .overlay {
                 if item.hasBackdropImage, let id = item.id {
-                    CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
-                        fallbackIcon: nil,
-                        fallbackBackground: CinemaColor.surfaceContainerLow
-                    )
-                    #if os(tvOS)
-                    .heroKenBurns()
-                    #endif
+                    HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
                     .accessibilityHidden(true)
                 } else {
                     BackdropFallbackView()

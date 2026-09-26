@@ -1,5 +1,8 @@
 import Foundation
 
+// Shared BY SOURCE with the Widget and the Top Shelf (listed in their `sources`
+// in project.yml): keep this file importing Foundation alone.
+
 /// Maps Jellyfin's free-form `officialRating` strings onto a numeric age threshold.
 ///
 /// Jellyfin stores per-item ratings as the raw code published by each region's
@@ -67,6 +70,20 @@ public enum ContentRatingClassifier {
     public static func passes(rating: String?, maxAge: Int) -> Bool {
         guard maxAge > 0 else { return true }
         return age(forRating: rating) <= maxAge
+    }
+
+    /// The verdict for something about to PLAY: the item's own rating and, for
+    /// an episode or a season, its series' rating must both clear `maxAge`.
+    ///
+    /// An episode almost always arrives unrated — it inherits its rating from
+    /// the series, and `/Shows/NextUp` does not even return the field — so
+    /// judging it alone let every episode of an 18-rated series through the
+    /// Home rails. Requiring BOTH is also what the fiche does (the series'
+    /// `isAgeRestricted`, then the requested episode's own rating): an episode
+    /// rated above a milder series is refused too. `seriesRating` is `nil` for
+    /// a film, and an absent rating still passes on either side.
+    public static func passes(rating: String?, seriesRating: String?, maxAge: Int) -> Bool {
+        passes(rating: rating, maxAge: maxAge) && passes(rating: seriesRating, maxAge: maxAge)
     }
 
     /// The `maxOfficialRating` to send on server-side `/Items` queries for a

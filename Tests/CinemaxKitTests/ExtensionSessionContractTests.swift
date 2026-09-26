@@ -90,6 +90,22 @@ struct ExtensionSessionContractTests {
         #expect(back.maxContentAge == 12)
     }
 
+    /// Lot 6 (2026-09-25) : l'empreinte approuvée d'un serveur auto-signé
+    /// voyage avec la session, les épingles vivant dans le groupe privé de l'app.
+    @Test("L'empreinte approuvée fait l'aller-retour, absente par défaut")
+    func pinnedCertificateRoundTrips() throws {
+        let pinned = ExtensionSessionBridge.Session(
+            serverURL: URL(string: "https://nas.local")!, accessToken: "t", userId: "u",
+            pinnedCertificateSHA256: "ab12")
+        let data = try JSONEncoder().encode(pinned)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["pinnedCertificateSHA256"] as? String == "ab12")
+        #expect(try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: data).pinnedCertificateSHA256 == "ab12")
+        // Un blob d'avant ce champ se décode, sans épingle.
+        let legacy = Data(#"{"serverURL":"https://nas.local","accessToken":"t","userId":"u","maxContentAge":12}"#.utf8)
+        #expect(try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: legacy).pinnedCertificateSHA256 == nil)
+    }
+
     @Test("La forme de fil AVEC plafond se décode telle que les extensions la lisent")
     func decodesWireShapeWithCap() throws {
         let json = Data("""
@@ -99,14 +115,12 @@ struct ExtensionSessionContractTests {
         #expect(session.maxContentAge == 16)
     }
 
-    /// Verrouille la table classification → âge que **trois** binaires portent à
-    /// la main (l'app via `ContentRatingClassifier`, le widget via
-    /// `JellyfinLite.ContentRating`, le Top Shelf via la sienne) — même raison
-    /// que les trois copies de la forme de session : les extensions ne peuvent
-    /// pas lier CinemaxKit, et les tests ne peuvent pas atteindre leur code.
-    /// Ce test fixe donc les verdicts attendus côté app ; une copie qui dérive se
-    /// repère en comparant sa table à celle-ci.
-    @Test("Verdicts du plafond parental, communs aux trois copies", arguments: [
+    /// Verrouille la table classification → âge. Depuis le lot 7 (Q9), c'est
+    /// UN seul fichier source, `ContentRatingClassifier.swift`, compilé dans le
+    /// paquet ET dans le widget et le Top Shelf (listé dans leurs `sources`) : ces
+    /// verdicts sont ceux des trois binaires. Il y avait trois copies à la main,
+    /// que ce test ne pouvait verrouiller que côté app.
+    @Test("Verdicts du plafond parental, communs aux trois binaires", arguments: [
         // (classification, plafond, doit passer)
         ("TV-MA", 12, false),
         ("PG-13", 12, false),
@@ -190,6 +204,21 @@ struct ExtensionSessionSkipDecisionTests {
         userId: "user-abc"
     )
 
+    /// Audit 2026-09-22 (S8) : le mémo était posé AVANT l'écriture. Une
+    /// écriture ratée était alors sautée par toutes les publications suivantes
+    /// du même état, et un effacement raté à la déconnexion laissait l'ancien
+    /// jeton au widget jusqu'à la fin du processus.
+    @Test("A failed write leaves no memo; a successful one memoises what was written")
+    func memoOnlyAfterSuccessfulWrite() {
+        let session = ExtensionSessionBridge.Session(
+            serverURL: URL(string: "https://jf.example")!, accessToken: "tok", userId: "u1", maxContentAge: 12)
+        #expect(ExtensionSessionBridge.memoAfterWrite(of: session, succeeded: false) == nil)
+        #expect(ExtensionSessionBridge.memoAfterWrite(of: nil, succeeded: false) == nil)
+        #expect(ExtensionSessionBridge.memoAfterWrite(of: session, succeeded: true)?.value == session)
+        let cleared = ExtensionSessionBridge.memoAfterWrite(of: nil, succeeded: true)
+        #expect(cleared != nil && cleared?.value == nil, "a successful clear is remembered as « cleared »")
+    }
+
     @Test("Keychain blob matches ⇒ current, skip publish")
     func matchingKeychainBlobSkips() throws {
         let data = try JSONEncoder().encode(session)
@@ -233,6 +262,25 @@ struct ExtensionSessionSkipDecisionTests {
 /// Audit 2026-09-22 (S1) : les éléments « privés » atterrissaient dans le groupe
 /// partagé avec les extensions. La migration déplace exactement cette liste —
 /// elle doit couvrir tout ce que l'app stocke, SAUF la session partagée.
+/// Audit S1 : le déplacement vers le groupe privé ne se vérifie que sur un
+/// build signé ; la lecture de l'emplacement, elle, est pure.
+@Suite("Keychain — emplacement d'un élément privé")
+struct KeychainPlacementTests {
+    private let priv = "TEAM.com.cinemax.ios"
+    private let shared = "TEAM.com.cinemax.shared"
+
+    @Test("Privé, partagé, absent, non signé")
+    func placements() {
+        #expect(KeychainService.placement(ofGroups: [priv], privateGroup: priv, sharedGroup: shared) == .privateGroup)
+        #expect(KeychainService.placement(ofGroups: [shared], privateGroup: priv, sharedGroup: shared) == .sharedGroup)
+        #expect(KeychainService.placement(ofGroups: [priv, shared], privateGroup: priv, sharedGroup: shared) == .sharedGroup,
+                "une copie restée dans le groupe partagé est LE défaut")
+        #expect(KeychainService.placement(ofGroups: [], privateGroup: priv, sharedGroup: shared) == .absent)
+        #expect(KeychainService.placement(ofGroups: ["X.other"], privateGroup: priv, sharedGroup: shared) == .other)
+        #expect(KeychainService.placement(ofGroups: [priv], privateGroup: nil, sharedGroup: nil) == .unsigned)
+    }
+}
+
 @Suite("Keychain private accounts")
 struct KeychainPrivateAccountsTests {
     @Test("Every app-private account migrates; the shared session never does")

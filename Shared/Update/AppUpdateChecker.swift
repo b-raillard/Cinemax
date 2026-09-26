@@ -23,9 +23,19 @@ final class AppUpdateChecker {
     private(set) var decision: AppUpdateDecision = .none
 
     private let defaults: UserDefaults
+    private let bundleId: String?
+    /// The Store lookup. Injected so a test can count calls and hold one open
+    /// (the « stamp before the await » rule below); production passes nothing.
+    private let lookup: @Sendable (String) async -> AppStoreRelease?
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        bundleId: String? = AppStoreLookup.bundleIdentifier,
+        lookup: @escaping @Sendable (String) async -> AppStoreRelease? = { await AppStoreLookup.fetch(bundleId: $0) }
+    ) {
         self.defaults = defaults
+        self.bundleId = bundleId
+        self.lookup = lookup
     }
 
     // MARK: - Entry points
@@ -36,13 +46,13 @@ final class AppUpdateChecker {
     func refresh(now: Date = Date()) async {
         recompute()
         guard AppUpdatePolicy.shouldQueryStore(lastCheckedAt: lastCheckedAt, now: now) else { return }
-        guard let bundleId = AppStoreLookup.bundleIdentifier else { return }
+        guard let bundleId else { return }
 
         // Stamped BEFORE the await, not after: a server that is slow or down
         // would otherwise let every foreground in the meantime start its own
         // lookup, since none of them would see a stamp yet.
         lastCheckedAt = now
-        guard let release = await AppStoreLookup.fetch(bundleId: bundleId) else { return }
+        guard let release = await lookup(bundleId) else { return }
         store(release)
         recompute()
     }
@@ -68,13 +78,22 @@ final class AppUpdateChecker {
     var storeURLToOpen: URL? {
         guard let page = pendingRelease?.storeURL else { return nil }
         #if os(tvOS)
-        guard let url = AppStoreLookup.tvAppStoreURL(for: page),
-              UIApplication.shared.canOpenURL(url) else { return nil }
+        // `canOpenURL` is an IPC to LaunchServices, and the alert reads this
+        // property twice per render; the answer only changes with the page.
+        if let cached = tvStoreURLCache, cached.page == page { return cached.url }
+        let url = AppStoreLookup.tvAppStoreURL(for: page).flatMap {
+            UIApplication.shared.canOpenURL($0) ? $0 : nil
+        }
+        tvStoreURLCache = (page, url)
         return url
         #else
         return page
         #endif
     }
+
+    #if os(tvOS)
+    @ObservationIgnored private var tvStoreURLCache: (page: URL, url: URL?)?
+    #endif
 
     /// Opens the Store page. Leaving the app for the Store is what the user
     /// just asked for, so there is no "you are leaving" confirmation.

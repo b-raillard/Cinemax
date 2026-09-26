@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Image management for the edited item. Singleton image types render a
 /// single slot; Backdrop is indexed so we list every known index with its

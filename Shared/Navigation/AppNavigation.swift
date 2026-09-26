@@ -2,7 +2,7 @@ import SwiftUI
 import CinemaxKit
 import Nuke
 import OSLog
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // `AppState` lives in `AppState.swift` (extracted 2026-09-22, audit Q8).
 
@@ -116,22 +116,6 @@ struct AppNavigation: View {
     }()
 
     #if os(iOS)
-    /// One-shot cleanup for installs that used the removed (1.0.5, App Review
-    /// 5.2.3) offline-downloads feature — the media tree can hold multiple GB
-    /// and no UI remains to clear it. Cheap existence check; safe to re-run.
-    private static func purgeLegacyDownloads() {
-        UserDefaults.standard.removeObject(forKey: "downloads.userFlagCache")
-        Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            guard let appSupport = fm.urls(for: .applicationSupportDirectory,
-                                           in: .userDomainMask).first else { return }
-            let legacyRoot = appSupport.appendingPathComponent("Cinemax/Downloads",
-                                                               isDirectory: true)
-            if fm.fileExists(atPath: legacyRoot.path) {
-                try? fm.removeItem(at: legacyRoot)
-            }
-        }
-    }
     /// MetricKit subscription, once per process for the same reason as
     /// `configurePipeline`: scene events recreate this struct. iOS only — every
     /// MetricKit class is `API_UNAVAILABLE(tvos)`. See `MetricKitSubscriber`.
@@ -416,12 +400,6 @@ struct AppNavigation: View {
                 appState.pendingIntentPlaybackStartTicks = startTicks
                 appState.pendingDeepLinkItemId = itemId
             }
-            #if os(iOS)
-            // One-shot cleanup for installs that used the removed offline-
-            // downloads feature — purge the (potentially multi-GB) media tree
-            // that no longer has any UI to clear it.
-            Self.purgeLegacyDownloads()
-            #endif
             // Decide once, in the background, whether this server needs the
             // loopback stream proxy (dual-stack host with a black-holed IPv6
             // that libVLC would stall on). Non-blocking; cached for the session.
@@ -435,7 +413,7 @@ struct AppNavigation: View {
             // Advertise this device as a remote-control target and start
             // listening. Idempotent — `apply` no-ops when nothing changed, so
             // the observers below can call it freely.
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
         }
         // RULE — DECLARATION ORDER IS LOAD-BEARING: `activeServerId` must be
         // observed BEFORE `currentUserId`. A server switch mutates both (and
@@ -492,7 +470,7 @@ struct AppNavigation: View {
             // Capabilities are per-session, so a login / user switch has to
             // re-declare them; a logout tears the socket down (`apply` sees
             // `isAuthenticated == false`).
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
             // Same rationale as the `serverURL` reset above: a different
             // signed-in user (switch, or logout → nil) may see a different
             // controllable-session landscape, so the last poll's count can't
@@ -507,13 +485,13 @@ struct AppNavigation: View {
             // Without this second call the device was no « Lire sur… » target
             // and heard no invitation until the next trip to the foreground.
             // Idempotent: `apply` no-ops on an unchanged state.
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
         }
         .onChange(of: remoteControlEnabled) { _, enabled in
             // Withdrawing re-posts with `supportsMediaControl: false`, which is
             // what actually removes this device from other clients' pickers —
             // just closing the socket would leave the stale declaration standing.
-            remoteControl.apply(appState: appState, toasts: toasts, enabled: enabled)
+            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: enabled)
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
@@ -532,6 +510,12 @@ struct AppNavigation: View {
                 // Network conditions may have changed while backgrounded —
                 // re-evaluate whether the proxy is needed for this server.
                 StreamTransportPolicy.shared.refresh()
+                // A logout whose Keychain clear failed left the previous token
+                // with the widget / Top Shelf; retry it (no-op otherwise).
+                ExtensionSessionBridge.retryFailedClear()
+                // A date set forward in the Settings app must not have closed
+                // the parental PIN back-off: re-read it on the monotonic clock.
+                parentalLock.refreshThrottle()
                 // Part E — proactive re-validation after a MEANINGFUL background
                 // gap (overnight standby is the bug; ignore quick app-switcher
                 // peeks). Reuses the same coordinator: it gates on connectivity,
@@ -556,7 +540,7 @@ struct AppNavigation: View {
                 }
                 // Re-open the socket dropped on background and re-declare the
                 // capabilities, since the session may have been reaped while away.
-                remoteControl.apply(appState: appState, toasts: toasts, enabled: remoteControlEnabled)
+                remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
                 // Re-derive the update decision, and re-ask the Store if a day
                 // has passed. Free on the common path: the decision comes from
                 // the stored release, and the request is behind its own throttle.

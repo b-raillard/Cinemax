@@ -1,8 +1,6 @@
 import Testing
 import Foundation
-// `@preconcurrency` for the same reason as `MediaLibraryRefreshSpanTests`: the
-// SDK ships `BaseItemDto` without a Sendable conformance.
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 import CinemaxKit
 @testable import Cinemax
 

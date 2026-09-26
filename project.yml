@@ -37,9 +37,10 @@ settings:
     MARKETING_VERSION: "2.1.1"
     CURRENT_PROJECT_VERSION: "2.1.1"
     # Distribution signing: Xcode auto-creates an "iOS App Store" / "tvOS App
-    # Store" provisioning profile on first archive when DEVELOPMENT_TEAM is set
-    # below. Override DEVELOPMENT_TEAM per-machine in Xcode (Signing & Capabilities)
-    # rather than committing it — open-source friendly.
+    # Store" provisioning profile on first archive once DEVELOPMENT_TEAM is set.
+    # It is deliberately NOT set here: set it per machine (Xcode › Signing &
+    # Capabilities, or `DEVELOPMENT_TEAM=` on the xcodebuild line); the
+    # pre-commit hook keeps it out of the committed project.
     CODE_SIGN_STYLE: Automatic
 
 targets:
@@ -64,6 +65,9 @@ targets:
       # CINEMAX_APP. It stays under Widgets/ because the extension's whole
       # directory is its source path; the app opts in explicitly.
       - path: Widgets/CinemaxWidget/ResumeControl.swift
+      # Shared by source with BOTH extensions (see the file): the app targets
+      # carry it only so its trust decision can be unit-tested.
+      - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
     dependencies:
       - package: CinemaxKit
       - package: SwiftVLC
@@ -95,6 +99,9 @@ targets:
     info:
       path: iOS/Info.plist
       properties:
+        # Nom affiché (écran d'accueil, Réglages). PRODUCT_NAME reste Cinemax/CinemaxTV :
+        # il nomme le .app, le module et TEST_HOST — le renommer casserait tout ça pour rien.
+        CFBundleDisplayName: JellyGlass
         # Team prefix (e.g. "ABCDE12345.") injected at sign time. Read at
         # runtime to build the shared Keychain access group string without
         # hardcoding the team id. Keep in sync across all four targets.
@@ -183,6 +190,9 @@ targets:
     platform: tvOS
     sources:
       - path: tvOS
+      # Shared by source with the Top Shelf; carried here so the tvOS test
+      # bundle can test its trust decision too.
+      - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
       # Same exclusion as the iOS target (per-area CLAUDE.md agent rules).
       - path: Shared
         excludes:
@@ -216,6 +226,9 @@ targets:
     info:
       path: tvOS/Info.plist
       properties:
+        # Nom affiché (écran d'accueil, Réglages). PRODUCT_NAME reste Cinemax/CinemaxTV :
+        # il nomme le .app, le module et TEST_HOST — le renommer casserait tout ça pour rien.
+        CFBundleDisplayName: JellyGlass
         # Team prefix injected at sign time — see iOS note. Used to build the
         # shared Keychain access group at runtime.
         AppIdentifierPrefix: $(AppIdentifierPrefix)
@@ -263,6 +276,9 @@ targets:
     platform: iOS
     sources:
       - path: Widgets/CinemaxWidget
+      # The age-cap table, shared by SOURCE with CinemaxKit (the extension links
+      # no package): one file, compiled into the package and both extensions.
+      - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/ContentRatingClassifier.swift
     entitlements:
       path: Widgets/CinemaxWidget.entitlements
       properties:
@@ -276,7 +292,7 @@ targets:
         # Team prefix injected at sign time — see iOS note. Used to build the
         # shared Keychain access group at runtime.
         AppIdentifierPrefix: $(AppIdentifierPrefix)
-        CFBundleDisplayName: Cinemax
+        CFBundleDisplayName: JellyGlass
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Mirror the app's ATS posture — without it the extension's fetches
@@ -301,6 +317,10 @@ targets:
     platform: tvOS
     sources:
       - path: TopShelf/CinemaxTopShelf
+      # The widget's copy, shared by source — see the file.
+      - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
+      # The age-cap table, shared by source with CinemaxKit (see the widget).
+      - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/ContentRatingClassifier.swift
     entitlements:
       path: TopShelf/CinemaxTopShelf.entitlements
       properties:
@@ -314,7 +334,7 @@ targets:
         # Team prefix injected at sign time — see iOS note. Used to build the
         # shared Keychain access group at runtime.
         AppIdentifierPrefix: $(AppIdentifierPrefix)
-        CFBundleDisplayName: Cinemax
+        CFBundleDisplayName: JellyGlass
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Mirror the app's ATS posture — without it the shelf's resume fetch

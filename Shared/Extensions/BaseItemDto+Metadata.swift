@@ -61,4 +61,20 @@ extension BaseItemDto {
         }
         return label.isEmpty ? nil : label
     }
+
+    /// What VoiceOver says for a card of the « Reprendre » / « À suivre » rails:
+    /// « Andor, saison 1, épisode 2, Deux hommes morts » for an episode, the
+    /// title alone otherwise. The rails drew the series and « S01:E02 » but
+    /// announced only one of the two — Next Up the series, Continue Watching
+    /// the episode's bare name — and a spoken « S01:E02 » is letters and
+    /// digits anyway (audit §5, lot 9). `localize` resolves the format key.
+    func spokenCardLabel(localize: (String) -> String) -> String {
+        guard type == .episode else { return name ?? "" }
+        let series = seriesName ?? ""
+        let title = name ?? ""
+        if let season = parentIndexNumber, let episode = indexNumber {
+            return String(format: localize("accessibility.episodeCard"), series, season, episode, title)
+        }
+        return [series, title].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
 }

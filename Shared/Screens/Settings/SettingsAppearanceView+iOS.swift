@@ -234,7 +234,9 @@ struct IOSAppearanceDetailView: View {
 
                     Image(systemName: "checkmark")
                         .font(.system(size: CinemaScale.pt(13), weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(option == .rainbow ? .white : option.swatchCheckColor)
+                        // The rainbow swatch sweeps every hue under the check: a shadow, not a colour.
+                        .shadow(color: option == .rainbow ? .black.opacity(0.6) : .clear, radius: 1.5)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 44)

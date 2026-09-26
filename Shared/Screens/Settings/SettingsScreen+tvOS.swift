@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // MARK: - tvOS Layout
 
@@ -357,6 +357,14 @@ extension SettingsScreen {
                 label: loc.localized("profile.title"),
                 showsChevron: true,
                 action: { showProfile = true }
+            )
+
+            tvActionRow(
+                id: "favorites",
+                icon: "heart",
+                label: loc.localized("home.favorites"),
+                showsChevron: true,
+                action: { showFavoritesScreen = true }
             )
 
             tvActionRow(
@@ -894,7 +902,6 @@ struct TVHomeGenrePickerView: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
-    @Environment(\.motionEffectsEnabled) private var motionEffects
     /// Held only for reactivity — the source of truth is `HomeGenrePreferences`.
     @AppStorage(SettingsKey.homeSelectedGenres) private var selectionJSON: String = ""
     @State private var availableGenres: [String] = []

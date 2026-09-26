@@ -275,18 +275,18 @@ final class SyncPlayController {
 
     func userDidPlay() {
         guard isInGroup, let api else { return }
-        Task { try? await api.syncPlayUnpause() }
+        enqueueOutbound("Unpause") { try await api.syncPlayUnpause() }
     }
 
     func userDidPause() {
         guard isInGroup, let api else { return }
-        Task { try? await api.syncPlayPause() }
+        enqueueOutbound("Pause") { try await api.syncPlayPause() }
     }
 
     func userDidSeek(toMs ms: Int) {
         guard isInGroup, let api else { return }
         let ticks = max(0, ms) * Self.ticksPerMillisecond
-        Task { try? await api.syncPlaySeek(positionTicks: ticks) }
+        enqueueOutbound("Seek") { try await api.syncPlaySeek(positionTicks: ticks) }
     }
 
     // MARK: - Buffering / ready reporting
@@ -295,7 +295,7 @@ final class SyncPlayController {
         guard isInGroup, !isApplyingRemoteCommand, let api, let bridge else { return }
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
         let entry = currentPlaylistItemId
-        Task { try? await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: entry) }
+        sendReport("Buffering") { try await api.syncPlayBuffering(positionTicks: ticks, isPlaying: false, playlistItemId: entry) }
     }
 
     func reportReady(isPlaying: Bool) {
@@ -306,7 +306,7 @@ final class SyncPlayController {
         // because sending none is invisible from the outside and stalls the
         // whole group in `Waiting`.
         trace("Ready envoyé position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
-        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
+        sendReport("Ready") { try await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
     }
 
     /// A seek has settled: frames are flowing again at the new position.
@@ -347,7 +347,53 @@ final class SyncPlayController {
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
         let entry = currentPlaylistItemId
         trace("calage terminé — Ready réémis position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
-        Task { try? await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
+        sendReport("Ready") { try await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
+    }
+
+    /// The last outbound TRANSPORT command in flight. Each new one waits for
+    /// it, so the server receives pause / seek / unpause in the order the user
+    /// acted — three independent tasks could land in any order (audit
+    /// 2026-09-22, low). A failure is logged, where `try?` dropped it.
+    ///
+    /// Only the transport commands queue. `Ready` / `Buffering` are state
+    /// REPORTS the group is waiting on: queued behind a request stalled for
+    /// the session's 30–60 s, they would hold every participant in `Waiting`,
+    /// the very state the SyncPlay RULEs exist to end — and the server would
+    /// date their position at the send, not at the report. They go out at
+    /// once (`sendReport`), as before, only now with the failure logged.
+    @ObservationIgnored private var outboundTail: Task<Void, Never>?
+    /// Bumped by `teardownSession`: a command queued for a group that has
+    /// since been left (or a server switched away from) is dropped instead of
+    /// reaching the next group or the next server.
+    @ObservationIgnored private var outboundSession = 0
+
+    private func enqueueOutbound(_ label: String, _ command: @escaping @Sendable () async throws -> Void) {
+        let previous = outboundTail
+        let session = outboundSession
+        outboundTail = Task { [weak self] in
+            await previous?.value
+            guard let self, self.outboundSession == session else { return }
+            do {
+                try await command()
+            } catch {
+                syncLogger.error("SyncPlay: \(label, privacy: .public) failed — \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func sendReport(_ label: String, _ report: @escaping @Sendable () async throws -> Void) {
+        Task {
+            do {
+                try await report()
+            } catch {
+                syncLogger.error("SyncPlay: \(label, privacy: .public) failed — \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Test seam: waits for every outbound command queued so far.
+    func drainOutbound() async {
+        await outboundTail?.value
     }
 
     // MARK: - Session plumbing
@@ -370,8 +416,8 @@ final class SyncPlayController {
     }
 
     private func startSocket() {
-        guard let api, let url = api.makeRealtimeSocketURL() else {
-            syncLogger.error("SyncPlay: no realtime socket URL (not connected?)")
+        guard let api, let endpoint = api.makeRealtimeSocketEndpoint() else {
+            syncLogger.error("SyncPlay: no realtime socket endpoint (not connected?)")
             return
         }
         socketTask?.cancel()
@@ -379,7 +425,7 @@ final class SyncPlayController {
         subscription = nil
 
         socketTask = Task { @MainActor [weak self] in
-            let handle = await JellyfinSocketHub.shared.subscribe(url: url)
+            let handle = await JellyfinSocketHub.shared.subscribe(endpoint: endpoint)
             // Re-check AFTER the hop. `teardownSession` cancels this task, but
             // it cannot unsubscribe a handle that did not exist yet — and since
             // `self` is a process singleton, a `weak self` guard can never fail
@@ -409,6 +455,7 @@ final class SyncPlayController {
     }
 
     private func teardownSession() {
+        outboundSession &+= 1
         group = nil
         participants = []
         groupState = .idle

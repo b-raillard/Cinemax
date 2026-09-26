@@ -1,7 +1,7 @@
 import SwiftUI
 import OSLog
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "WatchedHistory")
 
@@ -102,7 +102,6 @@ final class WatchedHistoryViewModel {
 struct WatchedHistoryScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dismiss) private var dismiss
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass

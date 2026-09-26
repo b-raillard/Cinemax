@@ -25,6 +25,11 @@ import Foundation
 ///   harmless text, a false negative ships a credential.
 /// - `X-Emby-Token:` / `X-MediaBrowser-Token:` — the header forms, where a
 ///   colon and optional spaces precede the value.
+/// - `token":` / `apikey":` / `api_key":` — a JSON body (`"AccessToken":"…"`,
+///   what `/Users/AuthenticateByName` answers), whose value is quoted.
+/// - `ApiKey%3D` / `api_key%3D` / `token%3D` — the same query items once
+///   percent-encoded inside another URL (a redirect target, a `url=` parameter);
+///   `%` ends such a value, a token never containing one (audit 2026-09-22, S11).
 ///
 /// A value opening with a quote runs to the matching quote (`Token="abc"` →
 /// `Token="***"`); otherwise it runs to the first `valueTerminators` character.
@@ -66,6 +71,8 @@ enum LogScrubber {
     /// Order is irrelevant — the earliest match in the text wins.
     private static let tokenMarkers = [
         "ApiKey=", "api_key=", "token=", "X-Emby-Token:", "X-MediaBrowser-Token:",
+        "token\":", "apikey\":", "api_key\":",
+        "ApiKey%3D", "api_key%3D", "token%3D",
     ]
 
     /// The earliest token marker in `text`, whichever spelling it uses.
@@ -81,6 +88,6 @@ enum LogScrubber {
     /// terminator would end the value mid-token and leave the tail in the log.
     private static let valueTerminators: Set<Character> = [
         "&", "#", " ", "\t", "\n", "\r", "'", "\"", "`",
-        "(", ")", "[", "]", "{", "}", "<", ">", ",", ";", "|", "\\",
+        "(", ")", "[", "]", "{", "}", "<", ">", ",", ";", "|", "\\", "%",
     ]
 }

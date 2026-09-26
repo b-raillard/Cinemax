@@ -23,8 +23,18 @@ public struct ParentalLockCredential: Codable, Sendable, Equatable {
     /// Consecutive wrong PINs since the last success. Reset by a success, and
     /// stored so a force-quit cannot clear the back-off.
     public var failedAttempts: Int
-    /// Instant before which no attempt is even hashed. `nil` = no back-off.
+    /// Instant before which no attempt is even hashed, on the WALL clock.
+    /// Kept for display and for credentials written before `backoffAnchor`;
+    /// the back-off itself is measured on `backoffAnchor` (see there).
     public var lockedUntil: Date?
+    /// The open back-off window, measured on the monotonic clock. `nil` = none,
+    /// or a credential written before it existed (see
+    /// `ParentalLockPolicy.backoffRemaining`).
+    public var backoffAnchor: ParentalLockBackoffAnchor?
+    /// Number of digits of the enrolled PIN, when known: recorded at
+    /// enrolment and learned at the next PIN unlock of an older credential.
+    /// Only used to invite the parent to move to `minPINLength` digits.
+    public var pinLength: Int?
     /// Whether Face ID / Touch ID may unlock instead of the PIN. Advisory: the
     /// PIN always remains a valid path, so a broken sensor can never lock the
     /// parent out of their own settings.
@@ -43,7 +53,9 @@ public struct ParentalLockCredential: Codable, Sendable, Equatable {
         failedAttempts: Int = 0,
         lockedUntil: Date? = nil,
         biometricsEnabled: Bool = false,
-        biometricDomainState: Data? = nil
+        biometricDomainState: Data? = nil,
+        backoffAnchor: ParentalLockBackoffAnchor? = nil,
+        pinLength: Int? = nil
     ) {
         self.salt = salt
         self.hash = hash
@@ -52,7 +64,58 @@ public struct ParentalLockCredential: Codable, Sendable, Equatable {
         self.lockedUntil = lockedUntil
         self.biometricsEnabled = biometricsEnabled
         self.biometricDomainState = biometricDomainState
+        self.backoffAnchor = backoffAnchor
+        self.pinLength = pinLength
     }
+}
+
+/// One reading of the two clocks the back-off is measured on.
+///
+/// The WALL clock is the user's to set: moving the date forward used to close
+/// an open back-off window at once (audit 2026-09-22, S9), and the person the
+/// lock restrains is the one holding the device. The MONOTONIC clock cannot be
+/// set; it restarts at boot, and keeps counting while the device sleeps.
+public struct ParentalLockClock: Sendable, Equatable {
+    public var wall: Date
+    /// Seconds on `CLOCK_MONOTONIC`, which on Darwin keeps counting during
+    /// sleep and cannot be adjusted.
+    public var monotonic: TimeInterval
+
+    public init(wall: Date, monotonic: TimeInterval) {
+        self.wall = wall
+        self.monotonic = monotonic
+    }
+
+    public static func now() -> ParentalLockClock {
+        ParentalLockClock(
+            wall: Date(),
+            monotonic: TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000
+        )
+    }
+
+    /// The wall instant this reading places the boot at. Constant across the
+    /// readings of one boot — until somebody sets the clock, or the device
+    /// reboots, which is exactly what it is used to notice.
+    var impliedBoot: TimeInterval { wall.timeIntervalSince1970 - monotonic }
+}
+
+/// An open back-off window: `duration` seconds from `monotonic`.
+public struct ParentalLockBackoffAnchor: Codable, Sendable, Equatable {
+    public var wall: Date
+    public var monotonic: TimeInterval
+    public var duration: TimeInterval
+
+    public init(wall: Date, monotonic: TimeInterval, duration: TimeInterval) {
+        self.wall = wall
+        self.monotonic = monotonic
+        self.duration = duration
+    }
+
+    init(clock: ParentalLockClock, duration: TimeInterval) {
+        self.init(wall: clock.wall, monotonic: clock.monotonic, duration: duration)
+    }
+
+    var impliedBoot: TimeInterval { wall.timeIntervalSince1970 - monotonic }
 }
 
 /// Outcome of one unlock attempt. Carries the UPDATED credential so the caller
@@ -65,7 +128,9 @@ public enum ParentalLockVerdict: Sendable, Equatable {
     /// back-off window opens (0 once one is open).
     case wrong(ParentalLockCredential, attemptsLeft: Int)
     /// A back-off window is still open; the PIN was NOT hashed or compared.
-    case throttled(until: Date)
+    /// `reanchored` is non-nil when the clock could not be trusted (reboot,
+    /// date changed) and the window was restarted — persist it.
+    case throttled(until: Date, reanchored: ParentalLockCredential?)
 }
 
 /// Pure logic of the parental-controls lock: PIN shape, hashing, verification
@@ -100,9 +165,25 @@ public enum ParentalLockPolicy {
         return armedState == currentState
     }
 
-    /// Shortest PIN accepted. Four digits is the familiar length and gives
-    /// 10 000 combinations, which the back-off below turns into days of guessing.
-    public static let minPINLength = 4
+    /// Whether a PIN unlock should switch the biometric shortcut OFF: the set
+    /// it was armed on has been replaced. An unreadable current state (`nil` —
+    /// biometrics locked out after failed attempts, precisely when the parent
+    /// falls back to the PIN) is not a change.
+    public static func biometricSetChanged(armedState: Data?, currentState: Data?) -> Bool {
+        guard let armedState, let currentState else { return false }
+        return armedState != currentState
+    }
+
+    /// Shortest PIN a parent can CHOOSE. Six digits — a million combinations —
+    /// since audit lot 6 (2026-09-25); it was four. The back-off below turns
+    /// even four into days of guessing, but a 4-digit PIN is also the one a
+    /// child sees typed over a shoulder, or guesses as a birth year.
+    public static let minPINLength = 6
+    /// Shortest PIN still ACCEPTED at unlock: a lock enrolled with 4 or 5
+    /// digits before the minimum rose keeps working — rejecting it would lock
+    /// the parent out of their own settings — and the Privacy screen invites
+    /// them to choose a longer one (`needsLongerPIN`).
+    public static let minUnlockPINLength = 4
     /// Longest PIN accepted, so the pad's dot row stays readable.
     public static let maxPINLength = 8
 
@@ -126,8 +207,25 @@ public enum ParentalLockPolicy {
     /// Digits only because the pad that enters it has ten keys, on both
     /// platforms — a PIN a remote cannot type would be a lockout, not a lock.
     public static func isValidPIN(_ pin: String) -> Bool {
-        guard pin.count >= minPINLength, pin.count <= maxPINLength else { return false }
+        isDigits(pin, minLength: minPINLength)
+    }
+
+    /// Whether `pin` is worth hashing at unlock: digits, `minUnlockPINLength`
+    /// … `maxPINLength` of them (an older, shorter PIN still opens the lock).
+    public static func isUnlockCandidate(_ pin: String) -> Bool {
+        isDigits(pin, minLength: minUnlockPINLength)
+    }
+
+    private static func isDigits(_ pin: String, minLength: Int) -> Bool {
+        guard pin.count >= minLength, pin.count <= maxPINLength else { return false }
         return pin.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    /// Whether the enrolled PIN is shorter than today's minimum. Unknown length
+    /// (a credential not unlocked by PIN since this existed) reads `false`.
+    public static func needsLongerPIN(_ credential: ParentalLockCredential) -> Bool {
+        guard let length = credential.pinLength else { return false }
+        return length < minPINLength
     }
 
     // MARK: - Hashing
@@ -161,7 +259,8 @@ public enum ParentalLockPolicy {
             salt: salt,
             hash: hash(pin: pin, salt: salt, iterations: iterations),
             iterations: iterations,
-            biometricsEnabled: biometricsEnabled
+            biometricsEnabled: biometricsEnabled,
+            pinLength: pin.count
         )
     }
 
@@ -190,10 +289,11 @@ public enum ParentalLockPolicy {
     public static func verify(
         pin: String,
         against credential: ParentalLockCredential,
-        now: Date = Date()
+        clock: ParentalLockClock = .now()
     ) -> ParentalLockVerdict {
-        if let until = credential.lockedUntil, until > now {
-            return .throttled(until: until)
+        let window = backoffRemaining(credential, at: clock)
+        if window.remaining > 0 {
+            return .throttled(until: clock.wall.addingTimeInterval(window.remaining), reanchored: window.reanchored)
         }
 
         let candidate = hash(pin: pin, salt: credential.salt, iterations: credential.iterations)
@@ -201,6 +301,8 @@ public enum ParentalLockPolicy {
             var cleared = credential
             cleared.failedAttempts = 0
             cleared.lockedUntil = nil
+            cleared.backoffAnchor = nil
+            cleared.pinLength = pin.count
             return .unlocked(cleared)
         }
 
@@ -208,10 +310,75 @@ public enum ParentalLockPolicy {
         failed.failedAttempts = credential.failedAttempts + 1
         // An expired window is cleared, not carried: the next failure re-derives
         // its own from the (now higher) count.
-        failed.lockedUntil = backoff(afterFailures: failed.failedAttempts).map { now.addingTimeInterval($0) }
+        let duration = backoff(afterFailures: failed.failedAttempts)
+        failed.backoffAnchor = duration.map { ParentalLockBackoffAnchor(clock: clock, duration: $0) }
+        failed.lockedUntil = duration.map { clock.wall.addingTimeInterval($0) }
         let left = max(0, freeAttempts - failed.failedAttempts)
         return .wrong(failed, attemptsLeft: left)
     }
+
+    /// How far a reading may place the boot from where the window's anchor
+    /// placed it before the clock is considered SET (or the device rebooted).
+    /// Network time corrections are milliseconds; a hand-set date is minutes.
+    public static let clockTolerance: TimeInterval = 10
+
+    /// Seconds left in the open back-off window at `clock` (0 = none), and a
+    /// credential to persist when the window had to be restarted.
+    ///
+    /// Measured on the MONOTONIC clock (audit 2026-09-22, S9): on the wall
+    /// clock, setting the date forward closed the window at once. When the two
+    /// clocks disagree with the anchor — the date was set, or the device
+    /// rebooted, which restarts the monotonic clock — the time elapsed cannot
+    /// be known, so the window RESTARTS with its full duration: moving the
+    /// clock can only lengthen a wait, never shorten it. The cost, accepted: a
+    /// parent rebooting mid-window waits it out again (at most an hour) — or
+    /// uses Face ID, which no window blocks.
+    ///
+    /// A window found over is returned CLEARED, to persist: an expired anchor
+    /// left behind would restart at the next reboot.
+    ///
+    /// A credential written before the anchor existed carries only
+    /// `lockedUntil`; its remaining time (bounded by the longest back-off) is
+    /// re-anchored on the monotonic clock here.
+    public static func backoffRemaining(
+        _ credential: ParentalLockCredential,
+        at clock: ParentalLockClock
+    ) -> (remaining: TimeInterval, reanchored: ParentalLockCredential?) {
+        if let anchor = credential.backoffAnchor {
+            let sameBoot = abs(anchor.impliedBoot - clock.impliedBoot) <= clockTolerance
+                && clock.monotonic >= anchor.monotonic
+            if sameBoot {
+                let remaining = anchor.duration - (clock.monotonic - anchor.monotonic)
+                if remaining > 0 { return (remaining, nil) }
+                // Over, and measured so: drop the anchor, or a later reboot
+                // would read it as a window of unknown age and restart it.
+                var expired = credential
+                expired.backoffAnchor = nil
+                expired.lockedUntil = nil
+                return (0, expired)
+            }
+            guard anchor.duration > 0 else { return (0, nil) }
+            return (anchor.duration, restarted(credential, duration: anchor.duration, at: clock))
+        }
+        guard let until = credential.lockedUntil else { return (0, nil) }
+        let remaining = min(until.timeIntervalSince(clock.wall), maxBackoff)
+        guard remaining > 0 else { return (0, nil) }
+        return (remaining, restarted(credential, duration: remaining, at: clock))
+    }
+
+    private static func restarted(
+        _ credential: ParentalLockCredential,
+        duration: TimeInterval,
+        at clock: ParentalLockClock
+    ) -> ParentalLockCredential {
+        var updated = credential
+        updated.backoffAnchor = ParentalLockBackoffAnchor(clock: clock, duration: duration)
+        updated.lockedUntil = clock.wall.addingTimeInterval(duration)
+        return updated
+    }
+
+    /// The plateau of `backoff(afterFailures:)`.
+    static let maxBackoff: TimeInterval = 60 * 60
 
     /// Back-off for a given number of CONSECUTIVE failures, or `nil` while the
     /// free attempts last.
@@ -226,7 +393,7 @@ public enum ParentalLockPolicy {
         case 2:  return 60
         case 3:  return 5 * 60
         case 4:  return 15 * 60
-        default: return 60 * 60
+        default: return maxBackoff
         }
     }
 

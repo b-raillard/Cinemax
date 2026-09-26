@@ -92,7 +92,7 @@ For each component below: file, signature, purpose, platform, dependencies, anat
   │            │
   └────────────┘
    Title text   ← label(.large), onSurfaceVariant, lineLimit(2)
-   Subtitle     ← label(.medium), outline, lineLimit(1), optional
+   Subtitle     ← label(.medium), onSurfaceMuted, lineLimit(1), optional
   ```
 - **Notes**:
   - A hidden `Text("M\nM")` placeholder fixes the title-area height so adjacent cards in a row align even when titles wrap to 1 vs 2 lines.
@@ -255,7 +255,7 @@ These four cover every "not the happy path" surface. Use them — don't build ad
   // AppNavigation (root) — never mount ToastOverlay in the view tree
   .background(ToastWindowHost(toasts: toasts, loc: loc, themeManager: themeManager))
   ```
-- **RULE — toasts live in a separate `UIWindow` above the app's (`windowLevel = .normal + 1`)**: an in-tree overlay draws underneath every sheet, cover and the UIKit player, so a toast raised from inside a modal was only seen once it closed. The window passes every touch outside the pill's own frame through (`ToastPassthroughWindow.toastFrame`, reported by SwiftUI — inferring "empty space" from the hit view let a tap on ✕ fall through to the sheet below), pushes the app's dark/light choice onto itself (`overrideUserInterfaceStyle`), and on tvOS takes no input at all, so it can never compete with the focus engine.
+- **Toasts live in a separate `UIWindow` above the app's** (the RULE is in `Shared/DesignSystem/CLAUDE.md`): an in-tree overlay draws underneath every sheet, cover and the UIKit player, so a toast raised from inside a modal was only seen once it closed. The window passes every touch outside the pill's own frame through (`ToastPassthroughWindow.toastFrame`, reported by SwiftUI — inferring "empty space" from the hit view let a tap on ✕ fall through to the sheet below), pushes the app's dark/light choice onto itself (`overrideUserInterfaceStyle`), and on tvOS takes no input at all, so it can never compete with the focus engine.
 - **Emitting toasts**:
   ```swift
   @Environment(ToastCenter.self) private var toasts

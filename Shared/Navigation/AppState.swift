@@ -2,7 +2,7 @@ import SwiftUI
 import CinemaxKit
 import Nuke
 import OSLog
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Servers")
 
@@ -131,6 +131,11 @@ final class AppState {
         // First of all: take the app-private items out of the group the
         // extensions can read (one-shot, a move — nothing is deleted).
         keychain.migrateToPrivateAccessGroupIfNeeded()
+        // The one place the S1 move can be checked on a signed device: this
+        // line reaches the diagnostics export (« private » expected).
+        if let real = keychain as? KeychainService {
+            logger.notice("Keychain ▸ access_token in \(real.accessGroupPlacement(ofAccount: "access_token").rawValue, privacy: .public) group")
+        }
         keychain.migrateToMultiServerIfNeeded()
         loadServersFromKeychain()
 
@@ -186,12 +191,24 @@ final class AppState {
             serverURL: serverURL,
             accessToken: accessToken,
             userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
+            // A self-signed server's approved certificate: the pins live in
+            // the app-private Keychain group the extensions cannot read.
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
         guard let id = currentUserId else {
             if currentUser != nil { currentUser = nil }
             if isAdministrator { isAdministrator = false }
             return
+        }
+        // The cached record belongs to ANOTHER account (a user or server
+        // switch): drop it now rather than keep that account's name and
+        // admin rights on screen until — or, if the fetch fails, beyond — the
+        // answer (audit 2026-09-22, low). A blip for the same account still
+        // keeps the last-known values below.
+        if Self.cachedUserBelongsElsewhere(cachedId: currentUser?.id, currentId: id) {
+            currentUser = nil
+            if isAdministrator { isAdministrator = false }
         }
         do {
             let user = try await apiClient.getUserByID(id: id)
@@ -209,6 +226,14 @@ final class AppState {
         } catch {
             // Network blip — keep last-known values.
         }
+    }
+
+    /// Whether the cached user record is another account's. `nonisolated` +
+    /// static: a pure comparison (testable without a Keychain-publishing
+    /// `refreshCurrentUser`).
+    nonisolated static func cachedUserBelongsElsewhere(cachedId: String?, currentId: String) -> Bool {
+        guard let cachedId else { return false }
+        return cachedId != currentId
     }
 
     /// The fields of the signed-in user the UI actually reads (name, avatar,
@@ -316,7 +341,10 @@ final class AppState {
     /// persisted shortcut identities against it from a non-isolated context;
     /// a second copy would be free to drift from the deep-link check.
     nonisolated static func isValidItemId(_ id: String) -> Bool {
-        if id.count == 32, id.allSatisfy(\.isHexDigit) { return true }
+        // `isASCII` too: `Character.isHexDigit` also answers yes for the
+        // FULL-WIDTH digits and letters (`０`…`９`, `ａ`…`ｆ`), which no
+        // Jellyfin id contains (audit 2026-09-22, S11).
+        if id.count == 32, id.allSatisfy({ $0.isASCII && $0.isHexDigit }) { return true }
         return UUID(uuidString: id) != nil
     }
 
@@ -382,11 +410,19 @@ final class AppState {
     /// placeholder, then the name, on every switch. Keyed on `activeServerId`
     /// for the same reason as `activeServerNameOverride`.
     var activeServerDisplayName: String {
+        // `ServerEntry.displayName` is the one reading of override-vs-name;
+        // only the placeholder falls through to the live `serverInfo`.
         if let activeServerId, let entry = servers.first(where: { $0.id == activeServerId }) {
-            if let override = entry.displayNameOverride, !override.isEmpty { return override }
-            if !entry.name.isEmpty, entry.name != ServerEntry.fallbackName { return entry.name }
+            let name = entry.displayName
+            if !name.isEmpty, name != ServerEntry.fallbackName { return name }
         }
         return serverInfo?.name ?? ServerEntry.fallbackName
+    }
+
+    /// The active server's host (or whole URL when it has none) — `nil`
+    /// before a server is known. The views supply the localized placeholder.
+    var activeServerAddress: String? {
+        serverURL?.host ?? serverURL?.absoluteString
     }
 
     /// Hydrates the observable registry from the Keychain. Called once from
@@ -684,7 +720,10 @@ final class AppState {
             serverURL: serverURL,
             accessToken: accessToken,
             userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
+            // A self-signed server's approved certificate: the pins live in
+            // the app-private Keychain group the extensions cannot read.
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
     }
 
@@ -719,7 +758,7 @@ final class AppState {
         if let active { clearSession(of: active) }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
-        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil)
+        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
         serverTransitionGeneration &+= 1
         isAuthenticated = false
         currentUserId = nil

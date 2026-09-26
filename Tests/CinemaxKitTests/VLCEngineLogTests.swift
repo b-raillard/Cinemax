@@ -64,6 +64,24 @@ struct VLCEngineLogTests {
     // `&ApiKey=`), so a scrubber that only knew `api_key=` let the token of
     // every forced-transcode HLS open through to the system log.
 
+    // Audit 2026-09-22 (S11) : ni la forme JSON ni la forme encodée n'étaient
+    // reconnues — un corps d'authentification journalisé ou une URL imbriquée
+    // gardaient le jeton en clair.
+
+    @Test("a JSON token field is scrubbed, quotes kept")
+    func stripsJSONTokenField() {
+        let scrubbed = LogScrubber.scrubbed(#"{"User":{"Name":"bob"},"AccessToken":"abc123","ServerId":"s"}"#)
+        #expect(scrubbed == #"{"User":{"Name":"bob"},"AccessToken":"***","ServerId":"s"}"#)
+        #expect(LogScrubber.scrubbed(#""ApiKey": "k9""#) == #""ApiKey": "***""#)
+    }
+
+    @Test("a percent-encoded ApiKey inside another URL is scrubbed up to the next escape")
+    func stripsPercentEncodedApiKey() {
+        let scrubbed = LogScrubber.scrubbed("redirect=https%3A%2F%2Fh%2Fs%3FApiKey%3Dabc123%26x%3D1 done")
+        #expect(scrubbed == "redirect=https%3A%2F%2Fh%2Fs%3FApiKey%3D***%26x%3D1 done")
+        #expect(!scrubbed.contains("abc123"))
+    }
+
     @Test("the ApiKey spelling is scrubbed too")
     func stripsApiKeySpelling() {
         let scrubbed = LogScrubber.scrubbed(

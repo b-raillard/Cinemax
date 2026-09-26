@@ -48,7 +48,10 @@ final class RemotePlayModel {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            let sessions = try await api.getControllableSessions(userId: userId)
+            // `cached: false` spelled out: the picker's list is what a command
+            // is sent against (see the RULE), and an omitted argument used to
+            // bind to the protocol extension's no-op instead of the client.
+            let sessions = try await api.getControllableSessions(userId: userId, cached: false)
             targets = RemotePlayTarget.resolve(
                 sessions: sessions,
                 currentUserId: userId,

@@ -38,6 +38,9 @@ struct EpisodeOverviewSheet: View {
                         .padding(10)
                         .background(themeManager.accentContainer)
                         .clipShape(Circle())
+                        // A 34 pt disc inside a 44 pt target (audit §5, lot 9).
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(loc.localized("action.done"))

@@ -33,54 +33,9 @@ final class ContentProvider: TVTopShelfContentProvider {
         /// by a build predating it still decodes — keep in sync with
         /// `ExtensionSessionBridge.Session`.
         let maxContentAge: Int?
-    }
-
-    /// Minimal copy of CinemaxKit's `ContentRatingClassifier`: this extension
-    /// deliberately links no package, so the table is duplicated here — the same
-    /// precedent as the three hand-copied `Session` shapes. Locked by the
-    /// extension-parity cases in `ExtensionSessionContractTests`.
-    private enum ContentRating {
-        private static let ageMap: [String: Int] = [
-            "G": 0, "PG": 10, "PG-13": 13, "R": 17, "NC-17": 18,
-            "TV-Y": 0, "TV-Y7": 7, "TV-G": 0, "TV-PG": 10, "TV-14": 14, "TV-MA": 17,
-            "U": 0, "12": 12, "12A": 12, "15": 15, "18": 18,
-            "-10": 10, "-12": 12, "-16": 16, "-18": 18,
-            "TOUS PUBLICS": 0,
-            "FSK-0": 0, "FSK-6": 6, "FSK-12": 12, "FSK-16": 16, "FSK-18": 18
-        ]
-
-        /// Unknown or missing ⇒ `0`, i.e. permissive — the app's own rule, since
-        /// an episode routinely inherits its rating from its series and arrives
-        /// absent.
-        static func age(forRating rating: String?) -> Int {
-            guard let rating else { return 0 }
-            var key = rating.trimmingCharacters(in: .whitespaces).uppercased()
-            // "Rated R" and friends — the server strips the same prefixes.
-            if let prefix = ["RATED :", "RATED:", "RATED "].first(where: { key.hasPrefix($0) }) {
-                key = String(key.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
-            }
-            if let age = ageMap[key] { return age }
-            let bare = key.hasSuffix("+") ? String(key.dropLast()) : key
-            if let age = ageMap[bare] { return age }
-            // A bare age ("16", "12+") is read as that age, like the server does.
-            if let age = Int(bare), age >= 0 { return age }
-            // A country or board prefix before the code: "FR-12", "DE-16",
-            // "Germany: FSK-18" — the TMDb provider writes the first form for every
-            // non-US country, i.e. the ordinary case of a French library.
-            if let separator = key.firstIndex(where: { $0 == "-" || $0 == ":" }) {
-                let left = key[..<separator]
-                let right = key[key.index(after: separator)...].trimmingCharacters(in: .whitespaces)
-                if left.count >= 2, left.allSatisfy(\.isLetter), !right.isEmpty {
-                    return age(forRating: right)
-                }
-            }
-            return 0
-        }
-
-        static func passes(rating: String?, maxAge: Int?) -> Bool {
-            guard let maxAge, maxAge > 0 else { return true }
-            return age(forRating: rating) <= maxAge
-        }
+        /// The approved certificate of a self-signed server, or `nil`. Optional
+        /// for the same reason — keep in sync with `ExtensionSessionBridge.Session`.
+        let pinnedCertificateSHA256: String?
     }
 
     private struct ItemsResponse: Decodable, Sendable {
@@ -93,11 +48,10 @@ final class ContentProvider: TVTopShelfContentProvider {
         let name: String?
         let seriesName: String?
         let seriesId: String?
-        let parentBackdropItemId: String?
         let officialRating: String?
         enum CodingKeys: String, CodingKey {
             case id = "Id", name = "Name", seriesName = "SeriesName"
-            case seriesId = "SeriesId", parentBackdropItemId = "ParentBackdropItemId"
+            case seriesId = "SeriesId"
             case officialRating = "OfficialRating"
         }
     }
@@ -131,8 +85,8 @@ final class ContentProvider: TVTopShelfContentProvider {
             // writes/reads its own private items). A diagnostic tile beats a
             // silent static image.
             handler.call(diagnosticContent(
-                fr: "Ouvrez Cinemax pour activer cette rangée",
-                en: "Open Cinemax to enable this row"
+                fr: "Ouvrez JellyGlass pour activer cette rangée",
+                en: "Open JellyGlass to enable this row"
             ))
             return
         }
@@ -172,7 +126,7 @@ final class ContentProvider: TVTopShelfContentProvider {
             item.displayAction = TVTopShelfAction(url: url)
         }
         let section = TVTopShelfItemCollection(items: [item])
-        section.title = "Cinemax"
+        section.title = "JellyGlass"
         return TVTopShelfSectionedContent(sections: [section])
     }
 
@@ -236,7 +190,14 @@ final class ContentProvider: TVTopShelfContentProvider {
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 10
         config.waitsForConnectivity = false
-        return URLSession(configuration: config)
+        // Honours the certificate the user approved in the app for a
+        // self-signed server. The shelf IMAGES are fetched by the system
+        // (`setImageURL`), which no delegate reaches: on such a server the
+        // shelf lists its items but its artwork stays blank.
+        let trust = ExtensionServerTrust {
+            readSession().flatMap { ExtensionServerTrust.pin(serverURL: $0.serverURL, fingerprint: $0.pinnedCertificateSHA256) }
+        }
+        return URLSession(configuration: config, delegate: trust, delegateQueue: nil)
     }()
 
     /// nil = the request failed (network / auth); empty = nothing in progress.
@@ -265,7 +226,7 @@ final class ContentProvider: TVTopShelfContentProvider {
         // The Apple TV shelf is the family screen: without this, a title rated
         // above the user's cap reached it with no interaction at all (#230).
         return decoded.items.filter {
-            ContentRating.passes(rating: $0.officialRating, maxAge: session.maxContentAge)
+            ContentRatingClassifier.passes(rating: $0.officialRating, maxAge: session.maxContentAge ?? 0)
         }
     }
 

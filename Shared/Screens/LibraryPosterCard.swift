@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Poster card with a navigation link into `MediaDetailScreen`, used by
 /// `LibraryGenreRow` and by the filtered grids in `MediaLibraryScreen`.
@@ -217,7 +217,7 @@ private struct PosterCardContent: View {
             if !subtitle.isEmpty {
                 Text(subtitle)
                     .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.outline)
+                    .foregroundStyle(CinemaColor.onSurfaceMuted)
                     .lineLimit(1)
             }
         }

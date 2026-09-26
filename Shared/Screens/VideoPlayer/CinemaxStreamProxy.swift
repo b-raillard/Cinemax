@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Security
 import OSLog
+import os
 import CinemaxKit
 
 private let proxyLog = Logger(subsystem: "com.cinemax", category: "StreamProxy")
@@ -536,7 +537,9 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         startListenerIfNeeded()
         while Date() < deadline {
             if stateLock.withLock({ listenerPort }) != nil { return true }
-            try? await Task.sleep(for: .milliseconds(20))
+            // A cancelled caller stops waiting at once: `try?` used to swallow
+            // the cancellation and spin until the deadline.
+            do { try await Task.sleep(for: .milliseconds(20)) } catch { break }
         }
         return stateLock.withLock { listenerPort } != nil
     }
@@ -923,11 +926,24 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard !isHead else { return }
         let sem = DispatchSemaphore(value: 0)
-        conn.send(content: data, completion: .contentProcessed { _ in sem.signal() })
+        let sendError = OSAllocatedUnfairLock<NWError?>(initialState: nil)
+        conn.send(content: data, completion: .contentProcessed { error in
+            sendError.withLock { $0 = error }
+            sem.signal()
+        })
         // Bounded: if a loopback send's completion never fires (peer wedged),
         // don't pin this thread forever — abort the request instead.
         if sem.wait(timeout: .now() + 20) == .timedOut {
             proxyLog.error("StreamProxy ▸ \(self.label, privacy: .public) send stalled — aborting")
+            conn.cancel()
+            task?.cancel()
+            return
+        }
+        // A FAILED send (libVLC closed its end) used to be ignored: the task
+        // went on pulling the rest of the file from the server into a
+        // connection nobody reads (audit 2026-09-22, low).
+        if let error = sendError.withLock({ $0 }) {
+            proxyLog.error("StreamProxy ▸ \(self.label, privacy: .public) loopback send failed (\(String(describing: error), privacy: .public)) — aborting")
             conn.cancel()
             task?.cancel()
             return

@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Which Jellyfin libraries the browse layout's « Collections » row asks about.
 ///

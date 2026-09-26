@@ -25,7 +25,7 @@ struct SearchViewModelTests {
     func emptyQueryIsNoop() async {
         let api = MockAPIClient()
         api.stubbedSearchResults = [makeItem(id: "1", name: "Inception")]
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         vm.searchText = "   "
 
         vm.search(using: makeAppState(api: api))
@@ -42,7 +42,7 @@ struct SearchViewModelTests {
     func successfulSearchCompletes() async {
         let api = MockAPIClient()
         api.stubbedSearchResults = [makeItem(id: "1", name: "Dune")]
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         vm.searchText = "Dune"
 
         vm.search(using: makeAppState(api: api))
@@ -61,7 +61,7 @@ struct SearchViewModelTests {
         let api = MockAPIClient()
         api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
         api.stubbedPersonResults = [makeItem(id: "p1", name: "Cillian Murphy")]
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         vm.scope = .all
         vm.searchText = "Cillian Murphy"
 
@@ -79,7 +79,7 @@ struct SearchViewModelTests {
         let api = MockAPIClient()
         api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
         api.stubbedPersonResults = [makeItem(id: "p1", name: "Cillian Murphy")]
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         vm.scope = .movies
         vm.searchText = "Cillian Murphy"
 
@@ -97,7 +97,7 @@ struct SearchViewModelTests {
         let api = MockAPIClient()
         api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
         api.searchPersonsHandler = { _ in throw MockError.genericFailure }
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         vm.searchText = "Oppenheimer"
 
         vm.search(using: makeAppState(api: api))
@@ -113,7 +113,7 @@ struct SearchViewModelTests {
         let api = MockAPIClient()
         api.stubbedSearchResults = [makeItem(id: "1", name: "Oppenheimer")]
         api.stubbedPersonResults = [makeItem(id: "p1", name: "Cillian Murphy")]
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         vm.searchText = "Cillian"
         vm.search(using: makeAppState(api: api))
         await vm.searchTask?.value
@@ -140,7 +140,7 @@ struct SearchViewModelTests {
             try? await Task.sleep(for: .milliseconds(300))
             return [BaseItemDto]()
         }
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         let appState = makeAppState(api: api)
 
         // First query: debounce + 300 ms API. Will be cancelled once the API await starts.
@@ -165,7 +165,7 @@ struct SearchViewModelTests {
     func apiFailureClearsState() async {
         let api = MockAPIClient()
         api.searchItemsHandler = { _ in throw MockError.genericFailure }
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
         vm.searchText = "query"
 
         vm.search(using: makeAppState(api: api))
@@ -179,7 +179,7 @@ struct SearchViewModelTests {
     func fetchRandomMovieReturnsItem() async {
         let api = MockAPIClient()
         api.stubbedItems = [makeItem(id: "m1", name: "Arrival")]
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
 
         let result = await vm.fetchRandomMovie(using: makeAppState(api: api))
 
@@ -190,7 +190,7 @@ struct SearchViewModelTests {
     func fetchRandomMovieNilOnError() async {
         let api = MockAPIClient()
         api.shouldThrow = true
-        let vm = SearchViewModel()
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
 
         let result = await vm.fetchRandomMovie(using: makeAppState(api: api))
 

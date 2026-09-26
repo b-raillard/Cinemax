@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Horizontally-scrolling row of posters for a single genre, with a
 /// "See all" affordance that should pin the catalogue to that genre.

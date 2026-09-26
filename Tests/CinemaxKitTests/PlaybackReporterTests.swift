@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import os
+import MediaPlayer
 @testable import Cinemax
 @testable import CinemaxKit
 import JellyfinAPI
@@ -30,8 +31,7 @@ struct PlaybackReporterTests {
     func resetClearsCounter() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
         )
         // Without a player, reportPeriodicProgress guards out — progressCount
         // always 0. This test verifies resetTicking is callable and no fire
@@ -47,8 +47,7 @@ struct PlaybackReporterTests {
     func noContextNoReport() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { nil }
+            apiClient: mock, context: { nil }
         )
 
         for _ in 0..<20 { reporter.onTick() }
@@ -60,8 +59,7 @@ struct PlaybackReporterTests {
     func startFires() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
         )
 
         reporter.reportStart(startTime: nil)
@@ -75,8 +73,7 @@ struct PlaybackReporterTests {
     func startWithoutContext() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { nil }
+            apiClient: mock, context: { nil }
         )
         reporter.reportStart(startTime: nil)
         await reporter.drain()
@@ -109,8 +106,7 @@ struct PlaybackReporterTests {
     func stopWithNaNTimeSource() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: .nan, isPaused: false) }
         )
 
@@ -124,8 +120,7 @@ struct PlaybackReporterTests {
     func backgroundProgressWithInfiniteTimeSource() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: .infinity, isPaused: false) }
         )
 
@@ -139,8 +134,7 @@ struct PlaybackReporterTests {
     func periodicProgressWithNaNTimeSource() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: .nan, isPaused: true) }
         )
 
@@ -154,8 +148,7 @@ struct PlaybackReporterTests {
     func startWithNaNStartTime() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
         )
 
         reporter.reportStart(startTime: .nan)
@@ -174,8 +167,7 @@ struct PlaybackReporterTests {
     func stopCarriesLiveStreamId() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(liveStreamId: "ls-42"), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(liveStreamId: "ls-42"), player: nil) }
         )
 
         reporter.reportStop()
@@ -188,8 +180,7 @@ struct PlaybackReporterTests {
     func stopWithoutLiveStreamId() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
         )
 
         reporter.reportStop()
@@ -202,8 +193,7 @@ struct PlaybackReporterTests {
     func stopThenStopEncoding() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(liveStreamId: "ls-1"), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(liveStreamId: "ls-1"), player: nil) }
         )
 
         reporter.reportStop()
@@ -217,8 +207,7 @@ struct PlaybackReporterTests {
     func stopEncodingIsUnconditional() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(playMethod: .directPlay), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(playMethod: .directPlay), player: nil) }
         )
 
         reporter.reportStop()
@@ -238,8 +227,7 @@ struct PlaybackReporterTests {
     func pingFiresWhilePausedOnTranscode() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
             timeSource: { (seconds: 42, isPaused: true) }
         )
 
@@ -255,8 +243,7 @@ struct PlaybackReporterTests {
     func noPingWhilePlaying() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
@@ -269,8 +256,7 @@ struct PlaybackReporterTests {
     func noPingOnDirectPlay() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(playMethod: .directPlay), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(playMethod: .directPlay), player: nil) },
             timeSource: { (seconds: 42, isPaused: true) }
         )
 
@@ -286,8 +272,7 @@ struct PlaybackReporterTests {
         // paused ticks would cross the 30-tick threshold and fire a ping.
         nonisolated(unsafe) var paused = true
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(playMethod: .transcode), player: nil) },
             timeSource: { (seconds: 42, isPaused: paused) }
         )
 
@@ -305,8 +290,7 @@ struct PlaybackReporterTests {
     func finiteTimeSourceReportsPosition() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
@@ -335,8 +319,7 @@ struct PlaybackReporterTests {
     func stopBeforeResumeKeepsResumePoint() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: 0, isPaused: false) },
             pendingResume: { 4800 }
         )
@@ -350,8 +333,7 @@ struct PlaybackReporterTests {
     func secondStopOfSameSessionIsDropped() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
@@ -365,8 +347,7 @@ struct PlaybackReporterTests {
     func sessionEndAfterEpisodeSwapStillGoesOut() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
@@ -384,8 +365,7 @@ struct PlaybackReporterTests {
     func reportsReachTheServerInOrder() async {
         let mock = CountingPlaybackAPI(startDelay: .milliseconds(150))
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
@@ -400,8 +380,7 @@ struct PlaybackReporterTests {
     func stopCancelsHungProgress() async {
         let mock = CountingPlaybackAPI(progressDelay: .seconds(20))
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
@@ -419,8 +398,7 @@ struct PlaybackReporterTests {
     func startReopensStoppedSession() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
             timeSource: { (seconds: 42, isPaused: false) }
         )
 
@@ -443,8 +421,7 @@ struct PlaybackReporterTests {
     func sessionEndAnnouncesAfterServerReport() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
         )
         let witness = NotificationWitness()
         let token = NotificationCenter.default.addObserver(
@@ -471,8 +448,7 @@ struct PlaybackReporterTests {
     func episodeSwapStaysSilent() async throws {
         let mock = CountingPlaybackAPI()
         let reporter = PlaybackReporter(
-            apiClient: mock, userId: "u1",
-            context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) }
         )
         let witness = NotificationWitness()
         let token = NotificationCenter.default.addObserver(
@@ -556,7 +532,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     var callOrder: [String] { state.withLock { $0.order } }
 
     func reportPlaybackStart(
-        itemId: String, userId: String,
+        itemId: String,
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, playMethod: CinemaxKit.PlayMethod
     ) async {
@@ -565,7 +541,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     }
 
     func reportPlaybackProgress(
-        itemId: String, userId: String,
+        itemId: String,
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, isPaused: Bool, playMethod: CinemaxKit.PlayMethod
     ) async {
@@ -576,7 +552,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     }
 
     func reportPlaybackStopped(
-        itemId: String, userId: String,
+        itemId: String,
         mediaSourceId: String?, playSessionId: String?,
         positionTicks: Int?, liveStreamId: String?
     ) async {
@@ -618,5 +594,40 @@ private extension PlaybackInfo {
             authToken: nil,
             liveStreamId: liveStreamId
         )
+    }
+}
+
+/// Audit 2026-09-22 (T5) : `NowPlayingInfoController` écarte l'enrichissement
+/// d'un élément quitté (génération) — sans quoi le titre de l'épisode précédent,
+/// arrivé en retard, remplaçait celui du nouveau sur l'écran verrouillé.
+@MainActor
+@Suite("Now Playing — génération", .serialized)
+struct NowPlayingGenerationTests {
+    @Test("A slow enrichment of the item just left never overwrites the new one")
+    func staleEnrichmentIgnored() async {
+        let api = MockAPIClient()
+        let slow = TestLatch()
+        api.getItemHandler = { id in
+            if id == "old" { await slow.wait() }
+            var item = BaseItemDto()
+            item.id = id
+            item.name = id == "old" ? "Ancien épisode" : "Nouvel épisode"
+            return item
+        }
+        let controller = NowPlayingInfoController(
+            apiClient: api, userId: "u",
+            imageBuilder: ImageURLBuilder(serverURL: URL(string: "http://127.0.0.1:9")!),
+            authToken: nil
+        )
+        controller.attach(itemId: "old", title: "old", durationSeconds: nil)
+        controller.attach(itemId: "new", title: "new", durationSeconds: nil)
+        func title() -> String? { MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyTitle] as? String }
+        #expect(await eventually { title() == "Nouvel épisode" })
+
+        slow.open()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(title() == "Nouvel épisode")
+        controller.detach()
+        #expect(MPNowPlayingInfoCenter.default().nowPlayingInfo == nil)
     }
 }

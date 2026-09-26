@@ -2,7 +2,7 @@
 import AppIntents
 import Foundation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// A library item as Siri and the Shortcuts editor see it.
 ///

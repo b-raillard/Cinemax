@@ -46,13 +46,6 @@ struct ProfileScreen: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                #if os(tvOS)
-                // tvOS draws no navigation bar, so the title rides in-scroll.
-                Text(loc.localized("profile.title"))
-                    .font(CinemaFont.display(.small))
-                    .foregroundStyle(CinemaColor.onSurface)
-                #endif
-
                 header
                 passwordSection
                 preferencesSection
@@ -62,9 +55,9 @@ struct ProfileScreen: View {
             .padding(.horizontal, pagePadding)
             .padding(.top, CinemaSpacing.spacing5)
         }
-        #if os(tvOS)
-        .scrollClipDisabled()
-        #endif
+        // tvOS: no `.scrollClipDisabled()` — nothing here grows on focus, and
+        // with the clip off the rows scrolled under the cover's header (the
+        // design-system cover RULE). The title lives in that header.
         .background(CinemaColor.surface.ignoresSafeArea())
     }
 
@@ -236,6 +229,7 @@ struct ProfileScreen: View {
             label: label,
             value: languageName(selection),
             options: pickerOptions,
+            selectedCode: selection ?? "",
             onSelect: onSelect
         )
         #else
@@ -247,9 +241,16 @@ struct ProfileScreen: View {
                 .font(CinemaFont.label(.large))
                 .foregroundStyle(CinemaColor.onSurface)
             Spacer()
+            // A `Picker` inside the `Menu`, so the current language carries
+            // the system checkmark (and « sélectionné » for VoiceOver).
             Menu {
-                ForEach(pickerOptions, id: \.0) { option in
-                    Button(option.1) { onSelect(option.0.isEmpty ? nil : option.0) }
+                Picker(label, selection: Binding(
+                    get: { selection ?? "" },
+                    set: { onSelect($0.isEmpty ? nil : $0) }
+                )) {
+                    ForEach(pickerOptions, id: \.0) { option in
+                        Text(option.1).tag(option.0)
+                    }
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -286,7 +287,8 @@ struct ProfileScreen: View {
             icon: "text.bubble",
             label: loc.localized("profile.subtitleMode"),
             value: current,
-            options: options
+            options: options,
+            selectedCode: model.preferences.subtitleMode.rawValue
         ) { raw in
             guard let raw, let mode = UserPlaybackPreferences.SubtitleMode(rawValue: raw) else { return }
             Task { await save { $0.subtitleMode = mode } }
@@ -301,10 +303,15 @@ struct ProfileScreen: View {
                 .foregroundStyle(CinemaColor.onSurface)
             Spacer()
             Menu {
-                ForEach(options, id: \.0) { option in
-                    Button(option.1) {
-                        guard let mode = UserPlaybackPreferences.SubtitleMode(rawValue: option.0) else { return }
+                Picker(loc.localized("profile.subtitleMode"), selection: Binding(
+                    get: { model.preferences.subtitleMode.rawValue },
+                    set: { raw in
+                        guard let mode = UserPlaybackPreferences.SubtitleMode(rawValue: raw) else { return }
                         Task { await save { $0.subtitleMode = mode } }
+                    }
+                )) {
+                    ForEach(options, id: \.0) { option in
+                        Text(option.1).tag(option.0)
                     }
                 }
             } label: {
@@ -359,18 +366,22 @@ struct ProfileScreen: View {
 }
 
 #if os(tvOS)
-/// A settings-shaped value row with a `confirmationDialog` picker — the same
-/// idiom as the sleep-timer and subtitle-size rows, but standalone so it can
-/// own the `@FocusState` each instance needs.
+/// A settings-shaped value row that opens `ProfileTVOptionList`. It was a
+/// `confirmationDialog`: fine for the five subtitle modes, unusable for the ~190
+/// cultures a server lists, and neither said which option was current
+/// (audit §5, lot 9).
 private struct ProfileTVPickerRow: View {
     let icon: String
     let label: String
     let value: String
     /// `(code, display)`. An empty code means "no preference".
     let options: [(String, String)]
+    /// The current option's code (`""` = no preference).
+    let selectedCode: String
     let onSelect: (String?) -> Void
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @FocusState private var isFocused: Bool
     @State private var showPicker = false
@@ -391,7 +402,7 @@ private struct ProfileTVPickerRow: View {
                 Text(value)
                     .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
-                Image(systemName: "chevron.up.chevron.down")
+                Image(systemName: "chevron.right")
                     .font(CinemaFont.label(.small))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
             }
@@ -408,11 +419,101 @@ private struct ProfileTVPickerRow: View {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($isFocused)
-        .confirmationDialog(label, isPresented: $showPicker) {
-            ForEach(options, id: \.0) { option in
-                Button(option.1) { onSelect(option.0.isEmpty ? nil : option.0) }
+        .fullScreenCover(isPresented: $showPicker) {
+            ProfileTVOptionList(title: label, options: options, selectedCode: selectedCode) { code in
+                onSelect(code.isEmpty ? nil : code)
             }
+            // A presentation does not inherit the injected environment.
+            .environment(themeManager)
+            .environment(loc)
         }
+    }
+}
+
+/// The option list behind `ProfileTVPickerRow`: the standard cover chrome
+/// (title + accent Cancel, `onExitCommand`), one focusable row per option, a
+/// check and `.isSelected` on the current one, and focus + scroll starting
+/// THERE rather than at the top of 190 languages.
+private struct ProfileTVOptionList: View {
+    let title: String
+    let options: [(String, String)]
+    let selectedCode: String
+    let onSelect: (String) -> Void
+
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focused: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center) {
+                Text(title)
+                    .font(CinemaFont.headline(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer(minLength: CinemaSpacing.spacing6)
+                CinemaButton(title: loc.localized("action.cancel"), style: .accent) { dismiss() }
+                    .frame(width: CinemaTVLayout.ctaWidth)
+            }
+            .padding(.horizontal, CinemaTVLayout.pagePadding)
+            .padding(.top, CinemaSpacing.spacing8)
+            .padding(.bottom, CinemaSpacing.spacing5)
+            .focusSection()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    // A plain `VStack`: ~190 text rows are cheap, and every row
+                    // then EXISTS when `defaultFocus` / `scrollTo` look for the
+                    // current one (a lazy stack may not have built it yet).
+                    VStack(spacing: CinemaSpacing.spacing2) {
+                        ForEach(options, id: \.0) { option in
+                            row(option)
+                        }
+                    }
+                    .padding(.horizontal, CinemaTVLayout.pagePadding)
+                    .padding(.bottom, CinemaSpacing.spacing8)
+                }
+                .onAppear { proxy.scrollTo(selectedCode, anchor: .center) }
+            }
+            .focusSection()
+        }
+        .background(CinemaColor.surface.ignoresSafeArea())
+        .defaultFocus($focused, selectedCode)
+        .onExitCommand { dismiss() }
+    }
+
+    private func row(_ option: (String, String)) -> some View {
+        let isSelected = option.0 == selectedCode
+        return Button {
+            onSelect(option.0)
+            dismiss()
+        } label: {
+            HStack {
+                Text(option.1)
+                    .font(.system(size: CinemaScale.pt(20), weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(CinemaColor.onSurface)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: CinemaScale.pt(18), weight: .bold))
+                        .foregroundStyle(themeManager.accent)
+                }
+            }
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .background(
+                RoundedRectangle(cornerRadius: CinemaRadius.large)
+                    .fill(CinemaColor.surfaceContainerHigh)
+            )
+        }
+        .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+        // The validated full-width-row pattern: without these two, the system
+        // focus effect draws on top of the accent stroke.
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focused, equals: option.0)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .id(option.0)
     }
 }
 #endif

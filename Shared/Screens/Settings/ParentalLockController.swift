@@ -52,14 +52,36 @@ final class ParentalLockController {
     func acknowledgeBiometricSetChange() { biometricSetChanged = false }
 
     /// The instant a back-off window closes, or `nil` when none is open.
-    /// Recomputed from the stored credential, so it survives a force-quit.
-    var throttledUntil: Date? {
-        guard let until = credential?.lockedUntil, until > Date() else { return nil }
-        return until
+    /// Derived from the stored credential on the monotonic clock
+    /// (`ParentalLockPolicy.backoffRemaining`), so it survives a force-quit and
+    /// setting the date forward does not close it. Stored rather than computed
+    /// so the gate's countdown task keys on a stable value.
+    private(set) var throttledUntil: Date?
+
+    /// Whether the enrolled PIN is shorter than `ParentalLockPolicy.minPINLength`
+    /// — the Privacy screen then invites the parent to choose a longer one.
+    var suggestsLongerPIN: Bool {
+        credential.map(ParentalLockPolicy.needsLongerPIN) ?? false
     }
 
     init() {
         credential = keychain.getParentalLock()
+        refreshThrottle()
+    }
+
+    /// Re-reads the back-off window: at launch, after an attempt, when the
+    /// gate's countdown ends, and on every return to the foreground — where a
+    /// date changed in the Settings app is noticed and the window restarted.
+    func refreshThrottle() {
+        guard let credential else {
+            if throttledUntil != nil { throttledUntil = nil }
+            return
+        }
+        let clock = ParentalLockClock.now()
+        let window = ParentalLockPolicy.backoffRemaining(credential, at: clock)
+        if let updated = window.reanchored { persist(updated) }
+        let until = window.remaining > 0 ? clock.wall.addingTimeInterval(window.remaining) : nil
+        if throttledUntil != until { throttledUntil = until }
     }
 
     // MARK: - Biometrics availability
@@ -78,13 +100,6 @@ final class ParentalLockController {
     }
 
     // MARK: - Gate
-
-    /// Opens the gate without a credential check. Reached only when no lock is
-    /// enrolled — i.e. the screen is not protected — so it grants nothing.
-    func openWhenNotEnabled() {
-        guard credential == nil else { return }
-        isUnlocked = true
-    }
 
     /// Closes the gate. Called from `AppNavigation` on `scenePhase == .background`
     /// only: `.inactive` also fires for an app-switcher peek or a Control Center
@@ -127,7 +142,12 @@ final class ParentalLockController {
                 let current = Self.currentBiometricDomainState()
                 if updated.biometricDomainState == nil {
                     updated.biometricDomainState = current
-                } else if updated.biometricDomainState != current {
+                } else if ParentalLockPolicy.biometricSetChanged(
+                    armedState: updated.biometricDomainState, currentState: current
+                ) {
+                    // An unreadable state (`nil`, biometrics locked out after
+                    // failed Face ID attempts) is not a change — it used to
+                    // switch the shortcut off with a false explanation.
                     updated.biometricsEnabled = false
                     updated.biometricDomainState = nil
                     biometricSetChanged = true
@@ -138,9 +158,10 @@ final class ParentalLockController {
             isUnlocked = true
         case .wrong(let updated, _):
             persist(updated)
-        case .throttled:
-            break
+        case .throttled(_, let reanchored):
+            if let reanchored { persist(reanchored) }
         }
+        refreshThrottle()
         return verdict
     }
 
@@ -187,7 +208,9 @@ final class ParentalLockController {
         var cleared = credential
         cleared.failedAttempts = 0
         cleared.lockedUntil = nil
+        cleared.backoffAnchor = nil
         persist(cleared)
+        refreshThrottle()
         isUnlocked = true
         return true
     }
@@ -224,6 +247,7 @@ final class ParentalLockController {
         guard var fresh = made else { return false }
         if fresh.biometricsEnabled { fresh.biometricDomainState = Self.currentBiometricDomainState() }
         guard persist(fresh) else { return false }
+        refreshThrottle()
         // Enrolling from an open screen must leave it open: the parent is
         // standing right there, and re-asking for the PIN they just chose reads
         // as the lock having failed.
@@ -249,6 +273,7 @@ final class ParentalLockController {
         guard isUnlocked else { return }
         keychain.deleteParentalLock()
         credential = nil
+        refreshThrottle()
         isUnlocked = true
     }
 

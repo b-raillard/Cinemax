@@ -84,11 +84,11 @@ struct AppUpdatePresentation: ViewModifier {
         switch checker.decision {
         case .none:
             EmptyView()
-        case .offer(let release):
-            updateButton(for: release)
+        case .offer:
+            updateButton()
             Button(loc.localized("update.action.later"), role: .cancel) { checker.decline() }
-        case .required(let release):
-            updateButton(for: release)
+        case .required:
+            updateButton()
             #if os(tvOS)
             // The only honest action left on tvOS: re-ask the Store, so a user
             // who has just updated from the system App Store gets out of here
@@ -104,7 +104,7 @@ struct AppUpdatePresentation: ViewModifier {
     /// a page and this device can open it (see `storeURLToOpen`). A button
     /// that silently does nothing is worse than an absent one.
     @ViewBuilder
-    private func updateButton(for release: AppStoreRelease) -> some View {
+    private func updateButton() -> some View {
         if checker.storeURLToOpen != nil {
             Button(loc.localized("update.action.update")) { checker.openStore() }
         }

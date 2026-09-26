@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Admin Devices list. Mirrors Jellyfin web's Devices panel: every
 /// registered client with its user, app, and last-seen timestamp. Swipe to
@@ -107,10 +107,10 @@ struct AdminDevicesScreen: View {
                         Text(loc.localized("admin.devices.thisDevice"))
                             .font(.system(size: CinemaScale.pt(10), weight: .bold))
                             .tracking(0.5)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(themeManager.onAccentContainer)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(themeManager.accent))
+                            .background(Capsule().fill(themeManager.accentContainer))
                     }
                 }
 

@@ -1,5 +1,5 @@
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Cinemax — English Localization
+   JellyGlass — English Localization
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 // MARK: - Tabs & Navigation
@@ -45,6 +45,7 @@
 "home.nextUp" = "Next Up";
 "favorites.empty.title" = "No favorites yet";
 "favorites.empty.subtitle" = "Tap the heart on a movie or show to add it here.";
+"favorites.empty.subtitle.tv" = "Select the heart on a movie or show's page to add it here.";
 "watchedHistory.empty.title" = "No history yet";
 "watchedHistory.empty.subtitle" = "Movies and shows you watch will appear here.";
 "home.liveSession" = "LIVE";
@@ -113,6 +114,7 @@
 "library.playlists.empty" = "No playlists here yet";
 "empty.home.title" = "Your library is empty";
 "empty.home.subtitle" = "Add movies or TV shows to your Jellyfin server and pull down to refresh.";
+"empty.home.subtitle.tv" = "Add movies or TV shows to your Jellyfin server and they will appear here.";
 
 // MARK: - Sleep Timer
 
@@ -256,6 +258,7 @@
 "privacy.lock.biometrics.subtitle" = "A shortcut instead of the PIN. The PIN always stays valid.";
 "privacy.lock.biometrics.reset" = "The enrolled faces or fingerprints changed, so Face ID was turned off. Turn it back on if you made the change.";
 "privacy.lock.change" = "Change PIN";
+"privacy.lock.change.tooShort" = "This PIN is too short. Choose one with 6 digits or more.";
 "privacy.lock.disable" = "Turn off the lock";
 "privacy.lock.footer" = "This PIN protects the settings on this device. For a limit a reinstall cannot lift, create a dedicated Jellyfin account and set its age limit on the server.";
 "privacy.lock.unlock.title" = "Protected settings";
@@ -269,8 +272,8 @@
 "privacy.lock.throttled.minutes" = "Too many attempts. Try again in %d min.";
 "privacy.lock.enroll.title" = "Choose a PIN";
 "privacy.lock.enroll.confirm" = "Confirm the PIN";
-"privacy.lock.enroll.hint" = "4 to 8 digits.";
-"privacy.lock.enroll.invalid" = "The PIN must be 4 to 8 digits.";
+"privacy.lock.enroll.hint" = "6 to 8 digits.";
+"privacy.lock.enroll.invalid" = "The PIN must be 6 to 8 digits.";
 "privacy.lock.enroll.mismatch" = "The two PINs differ. Start again.";
 "privacy.lock.enroll.failed" = "Could not save the PIN.";
 "privacy.lock.enabled" = "Lock enabled.";
@@ -390,7 +393,7 @@
 "admin.user.access.syncPlay.createAndJoin" = "Create and join";
 "admin.user.access.liveSessions.title" = "See \"Live\"";
 "admin.user.access.liveSessions.label" = "See other people's activity";
-"admin.user.access.liveSessions.footer" = "Shows this user who is watching what right now, and lets them notify someone from a lobby. Without it they see Watch Together sessions only. Only devices that accept remote control (“Play on…” enabled in Cinemax) are visible to them. Note: Jellyfin does not separate seeing from controlling — this permission also lets the account drive playback on other people's devices.";
+"admin.user.access.liveSessions.footer" = "Shows this user who is watching what right now, and lets them notify someone from a lobby. Without it they see Watch Together sessions only. Only devices that accept remote control (“Play on…” enabled in JellyGlass) are visible to them. Note: Jellyfin does not separate seeing from controlling — this permission also lets the account drive playback on other people's devices.";
 
 "admin.user.parental.rating.title" = "Max content rating";
 "admin.user.parental.rating.footer" = "Hides content rated above the chosen age for this user. Unrated titles stay visible.";
@@ -803,7 +806,7 @@
 
 // MARK: - Login
 
-"login.header" = "CINEMAX";
+"login.header" = "JELLYGLASS";
 "login.title" = "SIGN IN";
 "login.subtitle" = "Enter your credentials to access your library";
 "login.mobileTitle" = "Sign In";
@@ -833,7 +836,7 @@
 
 // MARK: - Server Setup
 
-"server.header" = "CINEMAX";
+"server.header" = "JELLYGLASS";
 "server.title" = "Connect to Server";
 "server.subtitle" = "Enter the address of your Jellyfin media server to start streaming your collection.";
 "server.mobileTitle" = "Setup Server";
@@ -878,7 +881,7 @@
 "onboarding.start" = "Get started";
 "onboarding.page" = "Page %d of %d";
 "onboarding.server.title" = "Your own server";
-"onboarding.server.body" = "Cinemax plays the library of a Jellyfin server — yours. On the same network the app can find it by itself; otherwise its address is all it needs.";
+"onboarding.server.body" = "JellyGlass plays the library of a Jellyfin server — yours. On the same network the app can find it by itself; otherwise its address is all it needs.";
 "onboarding.quickConnect.title" = "Sign in without typing";
 "onboarding.quickConnect.body" = "Quick Connect shows a code you approve from a device already signed in. It earns its keep on the Apple TV, where typing a password with the remote is a chore.";
 "onboarding.personalize.title" = "Customisable to your liking";
@@ -922,7 +925,7 @@
 // MARK: - Licenses
 
 "settings.licenses" = "Open Source Licenses";
-"settings.licenses.description" = "Cinemax uses the following open source libraries:";
+"settings.licenses.description" = "JellyGlass uses the following open source libraries:";
 
 // MARK: - Accessibility
 
@@ -945,13 +948,14 @@
 
 // MARK: - Player (tvOS dismiss hint)
 
-"player.tvOS.dismissHint" = "Press Menu to dismiss.";
+"player.tvOS.dismissHint" = "Press Back to dismiss.";
 
 // MARK: - Accessibility (added in v1.0 audit)
 
 "accessibility.playItem" = "Play %@";
 "accessibility.moreInfoAbout" = "More information about %@";
 "accessibility.resumeProgress" = "%d%% watched";
+"accessibility.episodeCard" = "%1$@, season %2$d, episode %3$d, %4$@";
 "accessibility.criticRating" = "Critics: %d percent";
 "detail.restricted.title" = "Restricted content";
 "detail.restricted.subtitle" = "This title is above the age limit set in Privacy & Security.";
@@ -1057,6 +1061,7 @@
 "syncplay.leaveConfirm.title" = "Leave the session?";
 "syncplay.leaveConfirm.message" = "Closing the player takes you out of the session. The other participants will carry on without you.";
 "syncplay.leaveConfirm.leave" = "Leave session";
+"syncplay.lobby.leaveConfirm.message" = "Going back takes you out of the session. The other participants will carry on without you.";
 "syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
 "syncplay.needsVLC.footnote" = "\"Native player\" is on: to join a session, turn it off in Settings → Playback.";
 
@@ -1109,7 +1114,7 @@
 "intent.resume.title" = "Resume watching";
 "intent.resume.description" = "Picks up the last title you started.";
 "intent.resumeControl.title" = "Continue watching";
-"intent.resumeControl.description" = "Opens Cinemax on the last thing you were watching.";
+"intent.resumeControl.description" = "Opens JellyGlass on the last thing you were watching.";
 "intent.resume.shortTitle" = "Resume";
 
 "intent.play.title" = "Play a title";
@@ -1128,16 +1133,18 @@
 "intent.search.description" = "Opens search for a term.";
 "intent.search.shortTitle" = "Search";
 
-"intent.error.notSignedIn" = "Sign in to your server in Cinemax first.";
+"intent.error.notSignedIn" = "Sign in to your server in JellyGlass first.";
 "intent.error.nothingToResume" = "Nothing in progress to resume.";
 "intent.error.itemUnavailable" = "That title isn't available on the active server.";
 "intent.error.notEpisodic" = "That title isn't a series.";
 
 // MARK: - Remote control ("Play on…")
 
+"remote.message.title" = "Message from another device";
 "remote.title" = "Play on…";
 "remote.sent" = "Started playing on %@";
 "remote.unknownDevice" = "Unknown device";
+"settings.server.unknownAddress" = "Unknown address";
 "remote.idle" = "Ready";
 "remote.nowPlaying" = "playing %@";
 "remote.noTargets.title" = "No device available";
@@ -1238,9 +1245,9 @@
 
 /* Launch version check */
 "update.available.title" = "A new version is available";
-"update.available.message" = "Cinemax %@ is available on the App Store. You're running version %@.";
+"update.available.message" = "JellyGlass %@ is available on the App Store. You're running version %@.";
 "update.required.title" = "Update required";
-"update.required.message" = "This version of Cinemax is no longer supported. Install version %@ to continue.";
+"update.required.message" = "This version of JellyGlass is no longer supported. Install version %@ to continue.";
 "update.tvos.hint" = "Open the App Store on your Apple TV to install the update.";
 "update.action.update" = "Update";
 "update.action.later" = "Later";
@@ -1254,3 +1261,8 @@
 "item.kind.collection" = "Collection";
 "item.kind.playlist" = "Playlist";
 "item.kind.video" = "Video";
+"library.jumpBar.a11y" = "Alphabetical index";
+"library.jumpBar.digits" = "Numbers and symbols";
+"library.jumpBar.hint" = "Swipe up or down to move to another letter.";
+"home.hero.a11y" = "Featured";
+"home.hero.position" = "%1$d of %2$d";

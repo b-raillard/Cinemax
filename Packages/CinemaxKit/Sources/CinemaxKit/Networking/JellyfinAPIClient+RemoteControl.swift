@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // MARK: - Remote control ("Play on…")
 //
@@ -165,20 +165,20 @@ extension JellyfinAPIClient: RemoteControlAPI {
     ///
     /// Note the `setEndpointPath` base-path preservation, without which a
     /// sub-path-hosted server (`https://host/jellyfin`) gets a socket URL that 404s.
-    public func makeRealtimeSocketURL() -> URL? {
-        guard let client = getClient(),
-              let serverURL = getServerURL(),
+    public func makeRealtimeSocketEndpoint() -> RealtimeSocketEndpoint? {
+        guard let (client, serverURL) = getConnection(),
               let token = client.accessToken else { return nil }
         guard var comps = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.setEndpointPath("/socket", preservingBasePathOf: serverURL)
         comps.scheme = (serverURL.scheme?.lowercased() == "https") ? "wss" : "ws"
-        // `ApiKey`, not the legacy `api_key` — rejected once Jellyfin 12.0's
-        // `EnableLegacyAuthorization = false` default lands; a socket has no
-        // header to carry the token any other way.
-        comps.queryItems = [
-            URLQueryItem(name: "ApiKey", value: token),
-            URLQueryItem(name: "deviceId", value: deviceID)
-        ]
-        return comps.url
+        // The token is NOT in the URL: it rides in the `Authorization` header
+        // of the upgrade request, like every REST call (audit 2026-09-22, S7).
+        comps.queryItems = [URLQueryItem(name: "deviceId", value: deviceID)]
+        guard let url = comps.url else { return nil }
+        return RealtimeSocketEndpoint(
+            url: url,
+            token: token,
+            authorization: Self.mediaBrowserAuthorization(configuration: client.configuration, token: token)
+        )
     }
 }

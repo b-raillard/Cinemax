@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Multi-tab item editor. Shared entry point for both the settings-level
 /// metadata browser and the `MediaDetailScreen` "Edit metadata" button on
@@ -19,7 +19,6 @@ struct MetadataEditorScreen: View {
     let item: BaseItemDto
 
     @Environment(AppState.self) private var appState
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss

@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 import CinemaxKit
 @testable import Cinemax
 
@@ -84,6 +84,33 @@ struct LibraryHeroNavigationTests {
         #expect(play?.navigator != nil, "sans navigateur, pas de carte de fin de série")
         #expect(play?.previous?.id == "ep1")
         #expect(play?.next?.id == "ep3")
+    }
+
+    /// Audit 2026-09-22 (bug bas) : `heroPlay` était écrit sans vérifier que
+    /// le héros n'avait pas changé pendant les requêtes — le bouton Lecture du
+    /// nouveau héros lançait alors un épisode de l'ancien.
+    @Test("Un héros remplacé pendant la résolution n'écrit pas son épisode")
+    func replacedHeroDoesNotWrite() async {
+        let api = MockAPIClient()
+        api.stubbedNextUp = makeHeroEpisode(id: "ep2", index: 2, seasonId: "s1")
+        let gate = TestLatch()
+        api.getEpisodesHandler = { _ in
+            await gate.wait()
+            return makeHeroSeason()
+        }
+        let vm = MediaLibraryViewModel(itemType: .series)
+        vm.heroItem = makeSeriesHeroItem()
+        let pass = Task { await vm.loadHeroNavigation(using: makeAppState(api: api)) }
+        #expect(await eventually { api.getNextUpCallCount == 1 })
+
+        var other = BaseItemDto()
+        other.id = "movie9"
+        other.type = .movie
+        vm.heroItem = other
+        gate.open()
+        await pass.value
+
+        #expect(vm.heroPlay == nil, "l'épisode résolu appartient à l'ancien héros")
     }
 
     @Test("Dernier épisode : navigateur présent, pas d'épisode suivant")

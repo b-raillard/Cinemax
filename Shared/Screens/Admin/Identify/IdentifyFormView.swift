@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Form pane of the Identify wizard. Matches Jellyfin iOS's first step:
 /// read-only "Chemin" row, then Nom / Année / provider-id fields, and a
@@ -15,7 +15,6 @@ struct IdentifyFormView: View {
     let onSearch: () -> Void
 
     @Environment(LocalizationManager.self) private var loc
-    @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {

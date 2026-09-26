@@ -42,8 +42,7 @@ public extension JellyfinAPIClient {
     /// administers.
     func uploadDiagnostics(_ document: String) async -> String? {
         guard !document.isEmpty,
-              let client = getClient(),
-              let serverURL = getServerURL(),
+              let (client, serverURL) = getConnection(),
               var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)
         else { return nil }
         // Never `components.path = …`: that would drop the sub-path of a

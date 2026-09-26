@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Standalone Identify flow — pushed from the admin 3-dot menu on
 /// `MediaDetailScreen` and on poster cards in library grids. Three-step
@@ -20,7 +20,6 @@ struct IdentifyScreen: View {
     @State private var pendingResult: RemoteSearchResult?
 
     @Environment(AppState.self) private var appState
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss

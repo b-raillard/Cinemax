@@ -355,3 +355,66 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
   - des tests pouvaient se bloquer jusqu'au délai du job au lieu d'échouer : `TestLatch.wait` a désormais un délai (10 s), et les deux tests qui attendent une tâche ont un `.timeLimit` ;
   - le build Release se limite à arm64 pour rester dans le délai du job ;
   - la section « Titres similaires » de la fiche différait encore mal sa destination (P3) ; corrigé.
+
+## 11 bis. Étape 0 et lot 6 (2026-09-25 → 26)
+
+**Étape 0 — inventaire.** Chaque constat non listé comme fait ci-dessus a été revérifié dans le code de `main` (`1f59baf`). Attention : ✅ dans ce rapport signifie « contre-vérifié », pas « corrigé » — P2 et T8, marqués ✅, étaient encore ouverts. Constats nouveaux relevés à cette occasion : épisode demandé par id hors des saisons chargées (lu à la place de « À suivre »), texte blanc sur l'accent dans les onglets et badges admin, `WideCard.detail` à 1,44:1, deux suites de tests écrivant encore `UserDefaults.standard` (historique de recherche), relecture des commits ajoutés pendant la recette (fenêtre des toasts qui ne suit pas le mode clair/sombre, `"Unknown"` en dur, exception « titre de héros » périmée dans `conventions.md`, Face ID bloqué lu comme un changement de visages). CI : « Select Xcode » sélectionnait bien 26.5 ; la CI passe à Xcode 27.0 (image `xcode-27`, PR #259).
+
+**Lot 6 — sécurité, fait.**
+- S3 (trou restant) : le plafond d'âge est vérifié dans `getPlaybackInfo`, avant toute négociation — toutes les lectures y passent (cartes, menus, héros, épisode suivant, nouvel essai). Décision produit : un épisode sans note hérite de celle de sa série ; les deux doivent passer. Refus « Contenu restreint » affiché par le lecteur ; VLC quitte un groupe Regarder ensemble.
+- Épisode demandé par id hors des saisons chargées : la fiche garde l'épisode chargé à l'ouverture.
+- S7 : jeton du socket dans l'en-tête `Authorization`, `ApiKey` en repli seulement sur refus répondu par le serveur ; identité du hub explicite (URL du socket + jeton, l'utilisateur étant lié au jeton).
+- S8 : mémo de la session partagée pris après une écriture réussie ; effacement raté réessayé au retour au premier plan.
+- S9 : temporisation du PIN sur l'horloge monotone (changer la date ou redémarrer ne fait que rallonger l'attente). Décision produit : nouveau code de 6 à 8 chiffres, un ancien code de 4–5 chiffres ouvre toujours et la ligne « Changer le code » invite à l'allonger.
+- S11 : identifiants en chiffres pleine chasse refusés ; titre des messages reçus fixé par l'app (Jellyfin ne transmet pas l'émetteur) ; redirection authentifiée non suivie hors de son origine ; `LogScrubber` masque les formes JSON et encodées ; journaux admin nettoyés ligne par ligne (le texte reste sélectionnable — décision : copier une ligne d'erreur est l'usage de l'écran).
+- Certificats auto-signés : l'empreinte approuvée du serveur actif est publiée dans la session partagée ; le widget et le Top Shelf l'honorent (`ExtensionServerTrust`, partagé par source). Limite : les images du Top Shelf, chargées par le système.
+- Relecture de ee87c6b : un état biométrique illisible (Face ID bloqué) n'est plus un changement de visages.
+- Point 7 : `restoreSession` journalise l'emplacement réel de `access_token` (« private » attendu).
+- **Trouvé pendant la validation, corrigé** : le sélecteur « Lire sur… » disait « Aucun appareil disponible » à chaque ouverture depuis `a60e999` — l'appel sans `cached:` sur un `any RemoteControlAPI` se liait statiquement à l'implémentation vide de l'extension de protocole et n'atteignait jamais le serveur.
+- **Relecture adversariale intégrée** : redirection authentifiée non suivie hors de son origine (la version « retirer le jeton et suivre » aurait déconnecté l'utilisateur) ; seul un refus répondu par le serveur compte contre l'en-tête du socket ; pas de résolution du nom de l'émetteur (membre d'AdminAPI) ; empreinte publiée lue sans trousseau à chaque premier plan ; épisode suivant refusé par le plafond = « Contenu restreint » et VLC quitte le groupe.
+- **Validé sur le serveur réel (NAS, Jellyfin 12.0.0)** : socket authentifié par en-tête avec `EnableLegacyAuthorization` à false puis true (config remise à l'identique) ; `Play` entrant sur Apple TV et iPhone ; « Lire sur… » iPhone → Apple TV ; `Playstate Stop` ; message entrant au titre fixe ; iPhone physique mis à jour par-dessus JellyGlass 2.1.1 : session conservée, `access_token` dans le groupe privé, socket par en-tête via Cloudflare.
+- **Non validé** : Regarder ensemble (pas de second compte partageant une bibliothèque avec le droit SyncPlay), rangée « En direct », certificat auto-signé dans le widget / Top Shelf, repli `ApiKey` du socket (le serveur accepte l'en-tête ; testé unitairement).
+- **Limite antérieure relevée** : un second « Lire sur… » reçu pendant qu'une fiche ouverte par lien profond est affichée sur l'Apple TV est ignoré.
+- **Reporté** : ancien S5 (`device_id` hors `allSucceeded`, sans effet de sécurité) ; test de câblage de `enforceContentAgeCap` et de `retryFailedClear` (aucun point d'injection réseau ni de trousseau dans le client) ; corrections de 3619595 (lecteur) au lot 7.
+
+**Lot 7 — concurrence et qualité, fait.**
+- Q6 : `@preconcurrency import JellyfinAPI` retiré des 82 fichiers (un commit par dossier). Aucune erreur ni avertissement de concurrence sur iOS et tvOS : le SDK 3.1 déclare ses DTO `Sendable`. Aucun `@preconcurrency` conservé.
+- Q3 : l'état du client (client, URL, jeton, version, langue, plafond, rappel 401) forme un seul `ClientState` sous un seul verrou, avec une génération qui refuse une écriture périmée. **Trouvé en passant** : #186 n'avait branché le délégué de certificat que sur 2 des 5 clients ; un serveur auto-signé approuvé cessait de répondre au lancement suivant. Une seule fabrique, `makeClient`.
+- P12 : la boucle d'événements VLC ne retient plus le contrôleur ; `isolated deinit` en filet. Vérifié au simulateur : contrôleur libéré après un arrêt à distance (2/2), un glissement et le ✕.
+- Q10 : journaux DIAG en `.info` (ils restent dans l'export sur iPhone, vérifié sur appareil), `ChapterChip.thumbnailView` au lieu de `viewWithTag(99)`, `waitUntilReady` sensible à l'annulation, commentaires VLCKit.
+- Q9 : `ContentRatingClassifier.swift` partagé par source avec le widget et le Top Shelf ; les deux copies sont supprimées.
+- Q4 : `PlayerPresentation` (contrôleur du haut en ignorant la fenêtre des toasts, libération d'une session non clôturée) ; la fenêtre des toasts ne devient jamais clé. Laissés à chaque lecteur, volontairement : le signal d'arrière-plan et la traduction des erreurs AVFoundation.
+- SwiftLint : version épinglée (0.63.2, somme vérifiée), base de 295 violations, job bloquant. Vérifié en CI.
+- T5 : tests d'`AppUpdateChecker` (point d'injection de la requête), de la génération de Now Playing et de l'écriture de la politique d'un utilisateur (admin). `SleepTimerController` garde sa propre boucle : exception documentée (il compte le temps réel, pause comprise).
+- Bugs bas de la section 1, tous corrigés : héros de bibliothèque, fiche d'un autre compte en cache, envoi local échoué du proxy, ordre des commandes SyncPlay.
+- Relecture de 3619595 : fermer « Préparation du flux… » ne laisse plus de session ouverte sur le serveur.
+- T2 (reste), T12 : tests de recherche isolés ; parité FR/EN vérifiée en CI ; hook sur la version épinglée de xcodegen ; déclencheur mort et commentaire périmé.
+- **Reporté** : Q2 (découpage de `VLCStreamPresenter`, hors lot) ; le `sleep` fixe de `StreamProxyTests` (il attend l'ABSENCE d'un rappel asynchrone de `NWListener`, sans point d'observation) ; T12 restants (clé du cache CI, numéro de build = version, README / LICENSE, logo en double) : décisions de publication.
+
+**Lot 8 — performance, mesurée sur Apple TV 4K (A15, « Séjour », tvOS 27.0), fait en partie.**
+Méthode : build Release signé installé sur l'appareil, `xctrace` (Time Profiler, Activity Monitor), accueil au repos, fenêtre de 15 s prise 20 s après le lancement ; « échantillons » = échantillons du processus sur cette fenêtre.
+- **Trouvé en mesurant — la dérive du héros tvOS** (`heroKenBurns`, non listée dans l'audit) : un `scaleEffect` SwiftUI en `.repeatForever` que SwiftUI anime sur le fil principal à chaque image, avec re-rastérisation continue du texte du héros. Accueil au repos : **1 760 échantillons** (≈ 10-12 % de CPU en continu, Activity Monitor) contre **42** avec les effets de mouvement coupés. Remplacée par une `CABasicAnimation` exécutée par le serveur de rendu (`HeroBackdropImage`) : **36 échantillons**, dérive vérifiée à l'écran.
+- P7 : confirmé. Arc-en-ciel au repos : **2 989 → 1 355 échantillons** ; `AppNavigation.body` réévalué à chaque tic (**127 → 0**) parce que `colorScheme` lisait le compteur du tic. Compteur `_rainbowTick` séparé. La mémoïsation des `Color` n'est **pas** faite : sans arc-en-ciel, les accesseurs de ThemeManager ne pèsent aucun échantillon sur 35 s, lancement compris.
+- P6 : confirmé. Les deux requêtes d'« Ajouts récents » mesurées contre le NAS (LAN, médiane de 7) : **184 ms en série, 128 ms en parallèle** ; `async let` dans l'app et le widget.
+- P14 : **non confirmé, rien changé**. Empreinte physique au lancement (Activity Monitor) : pic **24,4 Mio**, stable à 23,6 Mio 40 s après, loin des ~150 Mo estimés.
+- Bas (lancement) : **non confirmés, rien changé**. Aucun échantillon dans le trousseau (`SecItemCopyMatching`), `@AppStorage`, la sonde de transport ou Now Playing sur les 35 s du lancement. **Constaté, non corrigé** : 73 % du décodage JSON du lancement (143 / 195 échantillons, hors fil principal) est dans le décodage des dates du SDK.
+- **Non mesurés, rien changé** : P13 (journal libVLC), P11 (vignettes de chapitres) et Now Playing en lecture — ils demandent une lecture sur l'Apple TV, et la commande de lecture à distance vers la session de l'appareil a été refusée par le garde-fou de permissions de la session. P6 n'a pas de trace Instruments (le modèle Network a rendu une trace vide) : chronométrage direct du serveur à la place. « JellyfinClient jamais invalidé » : pas de mesure possible sans changement de serveur sur l'appareil.
+
+**Lot 9 — accessibilité, UX, code mort, fait en grande partie.**
+- `PlayerChapterSelection` branché : le chapitre en cours porte le trait « sélectionné » dans la bande de chapitres VLC.
+- Coche des pastilles d'accent : couleur choisie par la règle numérique d'`AccentLabelContrast` sur la couleur de la pastille (jaune et cyan : ~1,6:1 → ≥ 3:1) ; test sur toutes les pastilles.
+- Section 5, points « Moyenne » :
+  - sous-titres et détails des cartes : nouveau jeton de texte `onSurfaceMuted` (4,8 / 5,8:1 sur `surface`, contre 2,0:1 et ~1,4:1) ;
+  - cartes Reprendre / À suivre : VoiceOver dit « série, saison N, épisode N, titre » ;
+  - textes tactiles sur tvOS (« tirez », « touchez ») remplacés par des variantes `.tv` ; « Menu » → « Retour » ;
+  - `ProfileScreen` tvOS : en-tête de couverture standard, sans `.scrollClipDisabled()` ; sélecteurs de langue avec l'option courante marquée (liste plein écran sur tvOS, focus et défilement dessus ; `Picker` dans le `Menu` sur iOS) ;
+  - **décidé** : Menu dans le salon « Regarder ensemble » demande « Quitter la séance ? » ; « Réinitialiser le menu » reste **sans** confirmation ;
+  - **décidé** : Favoris accessible depuis Réglages → Compte (iOS + tvOS) ;
+  - carrousel iOS : l'`accessibilityScrollAction` qui détournait le balayage vertical à trois doigts est remplacée par des points de pagination ajustables ;
+  - barre A–Z : un élément « Index alphabétique » ajustable pour VoiceOver ;
+  - cibles de 44 pt pour les croix des feuilles (Quoi de neuf, Aperçu d'épisode, Quick Connect × 2) ;
+  - `glassPanel` suit Réduire la transparence (fond opaque) et Augmenter le contraste (bord de 1 pt).
+- Relecture des commits d'intégration : fenêtre des toasts (thème suivi en direct, barre d'état et indicateur d'accueil laissés à la fenêtre de l'app, titre borné à 6 lignes), « Unknown » en dur, badges admin blanc sur accent, `canOpenURL` à chaque rendu, paramètre `release` inutilisé, exception « héros en blanc » périmée dans `conventions.md`.
+- Code mort : les éléments sûrs de la section 6 et les quatre décidés (`purgeLegacyDownloads()`, `bitrateLabel`, `userId:` de `reportPlayback*`, cible de test SwiftPM).
+- Captures (simulateurs, compte réel) : iPhone FR sombre, EN clair, FR clair en AX3 (Accueil, Compte, Favoris, Profil) ; Apple TV FR sombre et EN clair (Accueil). Libellés VoiceOver vérifiés dans l'arbre d'accessibilité (« Arrow, season 2, episode 11, Le masque tombe »).
+- **Reporté** : Dynamic Type au-delà des réglages, états vides et toasts (≈ 510 polices fixes, chantier écran par écran) ; trait « sélectionné » ailleurs qu'aux endroits déjà traités ; parcours tvOS au-delà de l'Accueil non capturés (Xcode 27 n'a plus de Simulator.app, donc pas de télécommande simulée) — Favoris, Profil et salon à valider sur l'Apple TV.

@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Confirm pane of the Identify wizard. Matches Jellyfin iOS's last step:
 /// left-aligned poster, title + year on the right, "Remplacer les images
@@ -41,7 +41,7 @@ struct IdentifyConfirmView: View {
                     if let provider = result.searchProviderName {
                         Text(provider)
                             .font(CinemaFont.label(.small))
-                            .foregroundStyle(CinemaColor.outline)
+                            .foregroundStyle(CinemaColor.onSurfaceMuted)
                             .padding(.top, 2)
                     }
 

@@ -55,10 +55,17 @@ final class ThemeManager {
     /// Tracked revision counter — triggers SwiftUI updates when AppStorage values change.
     private var _accentRevision: Int = 0
 
+    /// Tracked rainbow tick — bumped 10×/s by the rainbow task, and read ONLY
+    /// by the rainbow branch of the accent getters. Kept apart from
+    /// `_accentRevision` so the ticks reach the views that paint the accent and
+    /// nothing else: while it shared the counter, `colorScheme` re-ran the root
+    /// `AppNavigation.body` ten times a second (Instruments, lot 8 — audit P7).
+    private var _rainbowTick: Int = 0
+
     // MARK: - Rainbow Easter Egg
     //
     // When `accentColorKey == "rainbow"`, a Task on the main actor advances
-    // `_rainbowHue` and bumps `_accentRevision`, which forces every view reading
+    // `_rainbowHue` and bumps `_rainbowTick`, which forces every view reading
     // `themeManager.accent`/`.accentContainer`/`.accentDim` to re-evaluate.
     // That's effectively the whole app tree, so we tick at 10 Hz (100 ms) rather
     // than 30 Hz to keep the cost bounded, and compensate with a larger per-tick
@@ -83,7 +90,13 @@ final class ThemeManager {
 
     var isRainbow: Bool { accentColorKey == "rainbow" }
 
-    init() {
+    /// `defaults` is a test seam (`UserDefaults.isolatedForTesting()`); the app
+    /// always runs on `.standard`, where every `@AppStorage` view reads the same keys.
+    init(defaults: UserDefaults = .standard) {
+        __accentColorKey = AppStorage(wrappedValue: SettingsKey.Default.accentColor, SettingsKey.accentColor, store: defaults)
+        __darkModeEnabled = AppStorage(wrappedValue: SettingsKey.Default.darkMode, SettingsKey.darkMode, store: defaults)
+        __uiScale = AppStorage(wrappedValue: SettingsKey.Default.uiScale, SettingsKey.uiScale, store: defaults)
+        __motionEffectsSetting = AppStorage(wrappedValue: SettingsKey.Default.motionEffects, SettingsKey.motionEffects, store: defaults)
         startRainbowIfNeeded()
     }
 
@@ -107,10 +120,16 @@ final class ThemeManager {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 guard let self, self.isRainbow, self._motionEffectsEnabled else { return }
-                self._rainbowHue = (self._rainbowHue + 0.018).truncatingRemainder(dividingBy: 1.0)
-                self._accentRevision += 1
+                self.advanceRainbow()
             }
         }
+    }
+
+    /// One rainbow step. Internal so `ThemeManagerRainbowTickTests` can drive it
+    /// without the 100 ms task.
+    func advanceRainbow() {
+        _rainbowHue = (_rainbowHue + 0.018).truncatingRemainder(dividingBy: 1.0)
+        _rainbowTick += 1
     }
 
     // MARK: - Dynamic Accent Colors
@@ -129,6 +148,7 @@ final class ThemeManager {
     var accent: Color {
         _ = _accentRevision
         if isRainbow {
+            _ = _rainbowTick
             return Color(hue: _rainbowHue, saturation: 0.85, brightness: 0.95)
         }
         let p = palette
@@ -140,6 +160,7 @@ final class ThemeManager {
     var accentContainer: Color {
         _ = _accentRevision
         if isRainbow {
+            _ = _rainbowTick
             return Color(hue: _rainbowHue, saturation: 0.9, brightness: 0.88)
         }
         let p = palette
@@ -150,6 +171,7 @@ final class ThemeManager {
     var accentDim: Color {
         _ = _accentRevision
         if isRainbow {
+            _ = _rainbowTick
             return Color(hue: _rainbowHue, saturation: 0.75, brightness: 0.7)
         }
         let p = palette
@@ -176,6 +198,7 @@ final class ThemeManager {
         _ = _accentRevision
         let dark: Bool
         if isRainbow {
+            _ = _rainbowTick
             let rgb = UIColor(hue: CGFloat(_rainbowHue), saturation: 0.9, brightness: 0.88, alpha: 1)
             var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
             rgb.getRed(&r, green: &g, blue: &b, alpha: &a)

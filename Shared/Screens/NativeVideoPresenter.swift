@@ -73,7 +73,6 @@ final class NativeVideoPresenter {
     private var subtitleTracks: [MediaTrackInfo] = []
     private var currentAudioIndex: Int? = nil
     private var currentSubtitleIndex: Int? = nil
-    private var currentPlayMethod: CinemaxKit.PlayMethod = .transcode
 
     // Shared periodic time observer. Fans out to SkipSegmentController.onTick
     // and PlaybackReporter.onTick from startProgressReporting.
@@ -125,8 +124,7 @@ final class NativeVideoPresenter {
         self.onDismiss = onDismiss
 
         self.playbackReporter = PlaybackReporter(
-            apiClient: apiClient, userId: userId,
-            context: { [weak self] in
+            apiClient: apiClient, context: { [weak self] in
                 guard let self, let info = self.playbackInfo else { return nil }
                 return .init(itemId: self.itemId, info: info, player: self.playerVC?.player)
             },
@@ -256,23 +254,16 @@ final class NativeVideoPresenter {
     func present(info: PlaybackInfo) {
         self.playbackInfo = info
 
-        guard let windowScene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = (windowScene.windows.first(where: { $0.isKeyWindow })
-                ?? windowScene.windows.first)?.rootViewController else {
+        guard let topVC = PlayerPresentation.topMostViewController() else {
             logger.error("NativeVideoPresenter: no root view controller")
             return
         }
-
-        var topVC = rootVC
-        while let presented = topVC.presentedViewController { topVC = presented }
 
         // Store track state
         self.audioTracks = info.audioTracks
         self.subtitleTracks = info.subtitleTracks
         self.currentAudioIndex = info.selectedAudioIndex
         self.currentSubtitleIndex = info.selectedSubtitleIndex
-        self.currentPlayMethod = info.playMethod
         recordPlaybackDiagnostics(info)
 
         // Start with nil item — native player chrome appears immediately while
@@ -386,7 +377,7 @@ final class NativeVideoPresenter {
             avPlayer.play()
             self.playbackReporter.reportStart(startTime: self.startTime)
             startProgressReporting()
-            observeItemEnd(playerItem, player: avPlayer)
+            observeItemEnd(playerItem)
             self.skipSegments.load(for: self.itemId)
             self.chapters.fetchAndApply(
                 itemId: self.itemId,
@@ -458,7 +449,7 @@ final class NativeVideoPresenter {
         }
         player.replaceCurrentItem(with: playerItem)
         player.play()
-        observeItemEnd(playerItem, player: player)
+        observeItemEnd(playerItem)
     }
     #endif
 
@@ -566,7 +557,6 @@ final class NativeVideoPresenter {
         self.currentSubtitleIndex = subtitleIndex ?? info.selectedSubtitleIndex
         self.audioTracks = info.audioTracks
         self.subtitleTracks = info.subtitleTracks
-        self.currentPlayMethod = info.playMethod
         recordPlaybackDiagnostics(info)
 
         let playerItem = makePlayerItem(for: info)
@@ -600,7 +590,7 @@ final class NativeVideoPresenter {
 
         player.replaceCurrentItem(with: playerItem)
         startProgressReporting()
-        observeItemEnd(playerItem, player: player)
+        observeItemEnd(playerItem)
         setupTrackMenus()
     }
 
@@ -620,11 +610,16 @@ final class NativeVideoPresenter {
             playbackReporter.reportStop(reason: .episodeSwap)
             // Neighbors resolve synchronously (pure index lookups); this
             // presenter owns the negotiation, with the Apple device profile.
-            guard let (prev, next) = navigator(ep.id),
-                  let info = try? await apiClient.getPlaybackInfo(
-                      itemId: ep.id, userId: userId, maxBitrate: maxBitrate
-                  ) else {
-                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay)
+            let negotiated: PlaybackInfo?
+            var failure: Error?
+            do {
+                negotiated = try await apiClient.getPlaybackInfo(itemId: ep.id, userId: userId, maxBitrate: maxBitrate)
+            } catch {
+                negotiated = nil
+                failure = error
+            }
+            guard let (prev, next) = navigator(ep.id), let info = negotiated else {
+                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay, error: failure)
                 return
             }
             // Superseded by a newer nav, or dismissed, while negotiating.
@@ -645,7 +640,6 @@ final class NativeVideoPresenter {
             self.subtitleTracks = info.subtitleTracks
             self.currentAudioIndex = info.selectedAudioIndex
             self.currentSubtitleIndex = info.selectedSubtitleIndex
-            self.currentPlayMethod = info.playMethod
             self.recordPlaybackDiagnostics(info)
 
             // The episode we're leaving can have died during a device sleep, which
@@ -684,7 +678,7 @@ final class NativeVideoPresenter {
             avPlayer.play()
             playbackReporter.reportStart(startTime: self.startTime)
             startProgressReporting()
-            observeItemEnd(playerItem, player: avPlayer)
+            observeItemEnd(playerItem)
             skipSegments.load(for: ep.id)
             chapters.fetchAndApply(
                 itemId: ep.id,
@@ -705,14 +699,14 @@ final class NativeVideoPresenter {
     /// its progress and resume point would stay frozen at the press); an
     /// autoplay hand-off has nothing left playing, so it ends on the error
     /// alert instead of a silent, finished player.
-    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, error: Error? = nil) {
         guard gen == navGeneration, let player = playerVC?.player else { return }
         logger.error("Native episode nav: negotiation failed (autoplay=\(isAutoplay, privacy: .public))")
         // An earlier nav may already have torn the old item down and then been
         // superseded by this one: nothing is left playing, which is the
         // autoplay case in all but name (adversarial review, 2026-09-22).
         if isAutoplay || player.currentItem == nil {
-            showPlaybackErrorAlert(error: nil)
+            showPlaybackErrorAlert(error: error)
             return
         }
         let position = player.currentTime().seconds
@@ -775,7 +769,7 @@ final class NativeVideoPresenter {
         }
     }
 
-    private func observeItemEnd(_ item: AVPlayerItem, player: AVPlayer) {
+    private func observeItemEnd(_ item: AVPlayerItem) {
         if let obs = itemEndObserver { NotificationCenter.default.removeObserver(obs) }
         itemEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
@@ -785,11 +779,11 @@ final class NativeVideoPresenter {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let autoPlay = UserDefaults.standard.object(forKey: SettingsKey.autoPlayNextEpisode) as? Bool ?? SettingsKey.Default.autoPlayNextEpisode
-                // DIAG (recette A7) — the four inputs that decide between
-                // autoplay, the end-of-series card and doing nothing. Note the
-                // native path additionally requires a resolved series name,
-                // which the VLC path does not.
-                logger.notice("""
+                // Diagnostics: the four inputs that decide between autoplay,
+                // the end-of-series card and doing nothing. Note the native
+                // path additionally requires a resolved series name, which the
+                // VLC path does not.
+                logger.info("""
                     end-branch autoPlay=\(autoPlay, privacy: .public) \
                     hasNext=\(self.nextEpisode != nil, privacy: .public) \
                     hasNavigator=\(self.episodeNavigator != nil, privacy: .public) \
@@ -879,21 +873,14 @@ final class NativeVideoPresenter {
     /// pulled for the server to have started a job before failing.
     private func releaseServerSessionAfterFailure() {
         guard let info = playbackInfo else { return }
-        let client = apiClient
-        let liveStreamId = info.liveStreamId
-        let playSessionId = info.playSessionId
-        guard liveStreamId != nil || playSessionId != nil else { return }
-        Task.detached {
-            if let liveStreamId {
-                await client.closeLiveStream(liveStreamId: liveStreamId)
-            }
-            if let playSessionId {
-                await client.stopEncoding(playSessionId: playSessionId)
-            }
-        }
+        PlayerPresentation.releaseServerSession(info, client: apiClient)
     }
 
     private func errorMessage(for error: Error?) -> String {
+        // Refused by the age cap before any stream was negotiated.
+        if case JellyfinError.contentRestricted? = error {
+            return loc.userFacingMessage(for: JellyfinError.contentRestricted)
+        }
         guard let nsError = error as NSError? else {
             return loc.localized("playback.error.generic")
         }
@@ -1103,11 +1090,7 @@ final class NativeVideoPresenter {
     /// AVKit removed `playerVC` from its previous host on PiP start; addChild in
     /// the new host adopts it.
     fileprivate func restoreFromPiP(completion: @escaping (Bool) -> Void) {
-        guard let vc = playerVC,
-              let windowScene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = (windowScene.windows.first(where: { $0.isKeyWindow })
-                ?? windowScene.windows.first)?.rootViewController else {
+        guard let vc = playerVC, let topVC = PlayerPresentation.topMostViewController() else {
             completion(false); return
         }
         // If the modal somehow stayed up (shouldn't happen with default
@@ -1115,8 +1098,6 @@ final class NativeVideoPresenter {
         guard vc.presentingViewController == nil else {
             completion(true); return
         }
-        var topVC = rootVC
-        while let presented = topVC.presentedViewController { topVC = presented }
         topVC.present(makeIOSHostingVC(for: vc), animated: true) {
             completion(true)
         }

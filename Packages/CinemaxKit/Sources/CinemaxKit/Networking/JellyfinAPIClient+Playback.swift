@@ -20,8 +20,7 @@ extension JellyfinAPIClient {
     }
 
     private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?, engine: VideoPlaybackEngine, mediaSourceId: String? = nil, forceTranscode: Bool = false) async throws -> PlaybackInfo {
-        guard let client = getClient(),
-              let serverURL = getServerURL() else {
+        guard let (client, serverURL) = getConnection() else {
             throw JellyfinError.notConnected
         }
 
@@ -39,6 +38,14 @@ extension JellyfinAPIClient {
         let resolved = try await resolvePlayableEpisode(item: item, itemId: itemId, userId: userId)
         item = resolved.item
         effectiveItemId = resolved.itemId
+
+        // The age cap, checked on what is about to PLAY and before any stream
+        // is negotiated (a refused negotiation would still open a transcode or
+        // a live stream server-side). Lists hide what is over the cap, but a
+        // Home rail card, a context menu, the player's next episode and a retry
+        // all reach this point without the fiche — and an episode arrives
+        // unrated, so it is judged on its series' rating too.
+        try await enforceContentAgeCap(on: item, userId: userId)
 
         // Multi-version items (a 4K remux alongside a 1080p encode, an IMAX cut
         // alongside the theatrical) expose several sources here. Ranking is
@@ -272,6 +279,25 @@ extension JellyfinAPIClient {
         )
     }
 
+    /// Throws `JellyfinError.contentRestricted` when `item` — or, for an
+    /// episode, its series — is above the active age cap. Free when no cap is
+    /// set; otherwise an episode costs one `getItem` of its series, which the
+    /// fiche has usually just cached.
+    func enforceContentAgeCap(on item: BaseItemDto, userId: String) async throws {
+        let maxAge = getMaxContentAge()
+        guard maxAge > 0 else { return }
+        var seriesRating: String?
+        if item.type == .episode || item.type == .season, let seriesId = item.seriesID {
+            seriesRating = try await getItem(userId: userId, itemId: seriesId).officialRating
+        }
+        guard ContentRatingClassifier.passes(rating: item.officialRating, seriesRating: seriesRating, maxAge: maxAge) else {
+            #if DEBUG
+            debugLog("Playback refused: '\(item.name ?? "?")' is above the \(maxAge)+ cap")
+            #endif
+            throw JellyfinError.contentRestricted
+        }
+    }
+
     /// Resolves a Series/Season to a playable Episode, fetching the full DTO.
     /// Movies (and any other already-playable kind) pass through unchanged.
     /// Series prefers the user's "Next Up" episode; falls back to the first
@@ -344,6 +370,22 @@ extension JellyfinAPIClient {
         return URLSession(configuration: config, delegate: ServerTrustDelegate.shared, delegateQueue: nil)
     }()
 
+    /// The `MediaBrowser …` Authorization value the SDK sends, for the requests
+    /// built by hand (the PlaybackInfo POST, the realtime socket's upgrade).
+    static func mediaBrowserAuthorization(configuration: JellyfinClient.Configuration, token: String?) -> String {
+        var rawFields = [
+            "DeviceId": configuration.deviceID,
+            "Device": configuration.deviceName,
+            "Client": configuration.client,
+            "Version": configuration.version,
+        ]
+        if let token {
+            rawFields["Token"] = token
+        }
+        let fields = rawFields.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+        return "MediaBrowser \(fields)"
+    }
+
     /// Attaches the `Accept-Language` the SDK client would send, to a request
     /// built outside it. Internal for `AcceptLanguageTests`.
     internal static func applyAcceptLanguage(to request: inout URLRequest, languageCode: String?) {
@@ -364,17 +406,10 @@ extension JellyfinAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Build the same auth header the SDK uses
-        var rawFields = [
-            "DeviceId": client.configuration.deviceID,
-            "Device": client.configuration.deviceName,
-            "Client": client.configuration.client,
-            "Version": client.configuration.version,
-        ]
-        if let token = client.accessToken {
-            rawFields["Token"] = token
-        }
-        let fields = rawFields.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
-        request.setValue("MediaBrowser \(fields)", forHTTPHeaderField: "Authorization")
+        request.setValue(
+            Self.mediaBrowserAuthorization(configuration: client.configuration, token: client.accessToken),
+            forHTTPHeaderField: "Authorization"
+        )
         // This POST bypasses the SDK client's `URLSessionConfiguration`, so the
         // app language has to be re-attached by hand — and THIS is the request
         // whose response carries the media-stream `DisplayTitle`s the track
@@ -458,7 +493,7 @@ extension JellyfinAPIClient {
 
     // MARK: - Playback Reporting
 
-    public func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {
+    public func reportPlaybackStart(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async {
         guard let client = getClient() else { return }
         let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
         let body = PlaybackStateInfo(
@@ -472,7 +507,7 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.reportPlaybackStart(body))
     }
 
-    public func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {
+    public func reportPlaybackProgress(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async {
         guard let client = getClient() else { return }
         let jellyfinMethod = JellyfinAPI.PlayMethod(rawValue: playMethod.rawValue)
         let body = PlaybackStateInfo(
@@ -487,7 +522,7 @@ extension JellyfinAPIClient {
         _ = try? await client.send(Paths.reportPlaybackProgress(body))
     }
 
-    public func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {
+    public func reportPlaybackStopped(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async {
         guard let client = getClient() else { return }
         let body = PlaybackStopInfo(
             itemID: itemId,

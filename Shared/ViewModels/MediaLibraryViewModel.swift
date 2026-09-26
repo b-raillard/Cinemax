@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import OSLog
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Library")
 
@@ -510,6 +510,10 @@ final class MediaLibraryViewModel {
                     resolved = nil
                 }
             }
+            // The hero may have changed during those awaits (a refresh, a
+            // filter): what was resolved belongs to the previous one, and the
+            // pass started for the new hero writes its own (audit B, low).
+            guard heroItem?.id == seriesId else { return }
             guard let resolved else {
                 logger.debug("hero-nav unresolved series=\(seriesId, privacy: .public)")
                 heroPlay = nil
@@ -520,6 +524,7 @@ final class MediaLibraryViewModel {
             let episodes = try await appState.apiClient.getEpisodes(
                 seriesId: seriesId, seasonId: seasonId, userId: userId
             )
+            guard heroItem?.id == seriesId else { return }
             let nav = buildEpisodeNavigation(for: episodeId, in: episodes)
             // Take the title and resume position from the episode as it appears
             // in the season list, so both resolution paths (next-up and the
@@ -544,6 +549,9 @@ final class MediaLibraryViewModel {
                 hasNavigator=\(nav.navigator != nil, privacy: .public)
                 """)
         } catch {
+            // A failed pass for a hero already replaced must not clear the
+            // button its successor's pass has written.
+            guard heroItem?.id == seriesId else { return }
             logger.notice("hero-nav failed: \(error.localizedDescription, privacy: .public)")
             heroPlay = nil
         }

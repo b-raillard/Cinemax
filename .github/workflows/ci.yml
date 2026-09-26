@@ -227,12 +227,26 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Pinned like xcodegen: a new SwiftLint release can add or tighten a rule
+      # and turn every PR red overnight. Bump SWIFTLINT_VERSION + checksum
+      # together, and regenerate the baseline with that version if it moves.
       - name: Install SwiftLint
-        run: brew install swiftlint
+        env:
+          SWIFTLINT_VERSION: 0.63.2
+          SWIFTLINT_SHA256: c59a405c85f95b92ced677a500804e081596a4cae4a6a485af76065557d6ed29
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/swiftlint.zip "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          echo "${SWIFTLINT_SHA256}  /tmp/swiftlint.zip" | shasum -a 256 -c -
+          unzip -q /tmp/swiftlint.zip -d /tmp/swiftlint-dist
+          echo "/tmp/swiftlint-dist" >> "$GITHUB_PATH"
 
+      # Blocking: every violation that predates the job going strict is in the
+      # baseline (paths relative to the repo root); anything NEW fails the PR.
       - name: Run SwiftLint
-        run: swiftlint --strict --quiet
-        continue-on-error: true
+        run: |
+          swiftlint version
+          swiftlint lint --strict --quiet --baseline .swiftlint-baseline.json
 
   # Dependency drift + SBOM (#187). Plain Python 3 on Linux: no Xcode, no
   # toolchain install. `check` fails when Package.resolved, the recorded list
@@ -248,6 +262,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Check pins, licences and binary artifacts
         run: python3 scripts/dependency-audit.py check
+
+      # FR/EN key parity, `.one` plurals, and matching format specifiers —
+      # was only a local skill (`localize-check`), never enforced.
+      - name: Check localization parity
+        run: python3 scripts/check-localization-parity.py
 
       # Generated on every run so a broken generator shows up in the PR that
       # breaks it; uploaded only for main.

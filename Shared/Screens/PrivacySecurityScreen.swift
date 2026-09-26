@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 import Nuke
 
 /// Settings → Account → Privacy & Security.
@@ -321,8 +321,10 @@ struct PrivacySecurityScreen: View {
                     icon: "faceid",
                     label: loc.localized("privacy.lock.biometrics"),
                     // Says WHY the switch is off when the enrolled faces /
-                    // fingers changed and the PIN unlock turned it off — this
-                    // screen is a sheet, above the root toast overlay.
+                    // fingers changed and the PIN unlock turned it off. A toast
+                    // would be seen now (toasts have their own window) but would
+                    // be gone by the time the parent looks; the reason belongs
+                    // on the switch it explains.
                     subtitle: loc.localized(parentalLock.biometricSetChanged
                         ? "privacy.lock.biometrics.reset"
                         : "privacy.lock.biometrics.subtitle"),
@@ -339,7 +341,9 @@ struct PrivacySecurityScreen: View {
             lockToggleRow(
                 icon: "number.square",
                 label: loc.localized("privacy.lock.change"),
-                subtitle: nil,
+                // A PIN enrolled with 4 or 5 digits before the minimum rose to
+                // 6 still works; this is the one place that asks for a longer one.
+                subtitle: parentalLock.suggestsLongerPIN ? loc.localized("privacy.lock.change.tooShort") : nil,
                 isOn: nil,
                 focusTarget: .lockChange
             ) {

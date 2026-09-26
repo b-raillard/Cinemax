@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Actions tab — refresh metadata and delete item. Refresh is a fire-and-forget
 /// server job (the scheduled-task system picks it up); Delete is final and
