@@ -23,9 +23,19 @@ final class AppUpdateChecker {
     private(set) var decision: AppUpdateDecision = .none
 
     private let defaults: UserDefaults
+    private let bundleId: String?
+    /// The Store lookup. Injected so a test can count calls and hold one open
+    /// (the « stamp before the await » rule below); production passes nothing.
+    private let lookup: @Sendable (String) async -> AppStoreRelease?
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        bundleId: String? = AppStoreLookup.bundleIdentifier,
+        lookup: @escaping @Sendable (String) async -> AppStoreRelease? = { await AppStoreLookup.fetch(bundleId: $0) }
+    ) {
         self.defaults = defaults
+        self.bundleId = bundleId
+        self.lookup = lookup
     }
 
     // MARK: - Entry points
@@ -36,13 +46,13 @@ final class AppUpdateChecker {
     func refresh(now: Date = Date()) async {
         recompute()
         guard AppUpdatePolicy.shouldQueryStore(lastCheckedAt: lastCheckedAt, now: now) else { return }
-        guard let bundleId = AppStoreLookup.bundleIdentifier else { return }
+        guard let bundleId else { return }
 
         // Stamped BEFORE the await, not after: a server that is slow or down
         // would otherwise let every foreground in the meantime start its own
         // lookup, since none of them would see a stamp yet.
         lastCheckedAt = now
-        guard let release = await AppStoreLookup.fetch(bundleId: bundleId) else { return }
+        guard let release = await lookup(bundleId) else { return }
         store(release)
         recompute()
     }
