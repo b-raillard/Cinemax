@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import JellyfinAPI
 @testable import CinemaxKit
+@testable import Cinemax
 
 @Suite("CinemaxKit Tests")
 struct CinemaxKitTests {
@@ -351,6 +352,20 @@ struct JellyfinSocketParsingTests {
         ]))
         #expect(message.header == nil)
         #expect(message.text == "Hello")
+    }
+
+    /// Audit 2026-09-22 (S11) : l'en-tête d'un `DisplayMessage` est choisi par
+    /// l'émetteur ; il ne sert plus de titre au toast.
+    @MainActor
+    @Test("The toast title is the app's own; the sender's header goes in the body")
+    func displayMessageToastNeverUsesTheHeaderAsTitle() {
+        let loc = LocalizationManager()
+        let spoof = RemoteDisplayMessage(header: "Session expirée", text: "Entrez votre mot de passe")
+        let toast = RemoteControlListener.displayMessageToast(spoof, loc: loc)
+        #expect(toast.title == loc.localized("remote.message.title"))
+        #expect(toast.message == "Session expirée — Entrez votre mot de passe")
+        let plain = RemoteControlListener.displayMessageToast(RemoteDisplayMessage(header: nil, text: "Bonjour"), loc: loc)
+        #expect(plain.message == "Bonjour")
     }
 
     @Test("Parses every Playstate command the app honours")

@@ -63,7 +63,7 @@ private struct ParentalUnlockView: View {
                     .multilineTextAlignment(.center)
             }
 
-            ParentalPINDots(count: entry.count)
+            ParentalPINDots(count: entry.count, minimumSlots: ParentalLockPolicy.minUnlockPINLength)
 
             if let text = statusMessage {
                 Text(text)
@@ -75,6 +75,7 @@ private struct ParentalUnlockView: View {
 
             ParentalPINPad(
                 entry: $entry,
+                minimumLength: ParentalLockPolicy.minUnlockPINLength,
                 isDisabled: lock.isVerifying || throttledUntil != nil,
                 onSubmit: { Task { await submit() } }
             )
@@ -108,6 +109,9 @@ private struct ParentalUnlockView: View {
                 tick = Date()
             }
             tick = Date()
+            // The deadline is a display of the monotonic window: re-read it
+            // rather than trust the wall clock to have closed it.
+            if !Task.isCancelled { lock.refreshThrottle() }
         }
     }
 
@@ -123,7 +127,9 @@ private struct ParentalUnlockView: View {
 
     private func submit() async {
         let pin = entry
-        guard ParentalLockPolicy.isValidPIN(pin) else {
+        // `isUnlockCandidate`, not `isValidPIN`: a PIN enrolled with 4 or 5
+        // digits before the minimum rose to 6 must still open the lock.
+        guard ParentalLockPolicy.isUnlockCandidate(pin) else {
             message = loc.localized("privacy.lock.enroll.invalid")
             entry = ""
             return
@@ -186,7 +192,7 @@ struct ParentalLockEnrollView: View {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .multilineTextAlignment(.center)
 
-            ParentalPINDots(count: entry.count)
+            ParentalPINDots(count: entry.count, minimumSlots: ParentalLockPolicy.minPINLength)
 
             if let message {
                 Text(message)
@@ -197,6 +203,7 @@ struct ParentalLockEnrollView: View {
 
             ParentalPINPad(
                 entry: $entry,
+                minimumLength: ParentalLockPolicy.minPINLength,
                 isDisabled: isSaving,
                 onSubmit: { Task { await advance() } }
             )
@@ -251,14 +258,17 @@ struct ParentalLockEnrollView: View {
 
 // MARK: - Dots
 
-/// Entered-digit indicator. Shows at least `minPINLength` slots so the required
+/// Entered-digit indicator. Shows at least `minimumSlots` slots so the required
 /// length is legible before anything is typed, and grows with a longer PIN.
 private struct ParentalPINDots: View {
     @Environment(ThemeManager.self) private var themeManager
     let count: Int
+    /// `minPINLength` when choosing a PIN, `minUnlockPINLength` when typing
+    /// one — so an older 4-digit PIN is not shown six slots it can never fill.
+    let minimumSlots: Int
 
     var body: some View {
-        let slots = max(count, ParentalLockPolicy.minPINLength)
+        let slots = max(count, minimumSlots)
         HStack(spacing: CinemaSpacing.spacing2) {
             ForEach(0..<slots, id: \.self) { index in
                 Circle()
@@ -296,6 +306,9 @@ struct ParentalPINPad: View {
     @Environment(\.motionEffectsEnabled) private var motionEffects
 
     @Binding var entry: String
+    /// Digits required before submit is enabled — `minPINLength` to choose a
+    /// PIN, `minUnlockPINLength` to type an existing one.
+    let minimumLength: Int
     let isDisabled: Bool
     let onSubmit: () -> Void
 
@@ -385,7 +398,7 @@ struct ParentalPINPad: View {
         }
     }
 
-    private var canSubmit: Bool { entry.count >= ParentalLockPolicy.minPINLength }
+    private var canSubmit: Bool { entry.count >= minimumLength }
 
     private func press(_ key: Key) {
         switch key {

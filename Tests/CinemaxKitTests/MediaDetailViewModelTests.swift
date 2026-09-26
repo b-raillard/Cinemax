@@ -196,6 +196,53 @@ struct MediaDetailViewModelTests {
         #expect(vm.similarItems.map(\.id) == ["other"])
     }
 
+    // MARK: - Épisode demandé hors des saisons chargées (étape 0, 2026-09-25)
+
+    /// Une demande par id (« Lire sur… », file Regarder ensemble, Siri) pour un
+    /// épisode de la saison 3 cherchait l'épisode dans `episodes` (saison 1
+    /// seulement), ne le trouvait pas et lançait le « À suivre » de la série.
+    @Test("A fiche opened for an episode of an unloaded season keeps that episode")
+    func requestedEpisodeOutsideLoadedSeasons() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in
+            if id == "ep-s3e4" {
+                var ep = makeEpisodeInSeason(id: id, name: "S3E4", seasonId: "season-3")
+                ep.type = .episode
+                ep.seriesID = "series-1"
+                return ep
+            }
+            return makeSeries(id: id, played: false)
+        }
+        api.getSeasonsHandler = { _ in
+            var s1 = BaseItemDto(); s1.id = "season-1"
+            var s3 = BaseItemDto(); s3.id = "season-3"
+            return [s1, s3]
+        }
+        api.getEpisodesHandler = { seasonId in
+            [makeEpisodeInSeason(id: "ep-s1e1", name: "S1E1", seasonId: seasonId)]
+        }
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "ep-s3e4", itemType: .episode)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+
+        #expect(vm.item?.id == "series-1", "the fiche shows the series")
+        #expect(!vm.episodes.contains { $0.id == "ep-s3e4" }, "pré-condition : saison non chargée")
+        #expect(vm.requestedEpisode?.id == "ep-s3e4")
+    }
+
+    @Test("A fiche opened for the series itself names no requested episode")
+    func noRequestedEpisodeForSeries() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeSeries(id: id, played: false) }
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+
+        #expect(vm.requestedEpisode == nil)
+    }
+
     @Test("A successful retry clears the error screen")
     func retryClearsError() async {
         let api = MockAPIClient()
@@ -447,6 +494,30 @@ struct MediaDetailViewModelTests {
         #expect(api.controllableSessionsCallCount == 1)
         #expect(vm.remoteTargets.map(\.id) == ["s1"])
         #expect(vm.remoteTargets.first?.name == "Salon")
+    }
+
+    /// 2026-09-26 : le sélecteur appelait `getControllableSessions(userId:)` sur
+    /// un `any RemoteControlAPI` ; l'argument par défaut n'existant que sur la
+    /// méthode d'extension no-op, l'appel s'y liait statiquement et rendait `[]`
+    /// sans jamais interroger le client — « Aucun appareil disponible » alors
+    /// que la fiche affichait le bouton. Le test passe par l'existentiel exprès.
+    @Test("The « Lire sur… » picker really asks the client, through the protocol")
+    func remotePickerReachesTheClient() async {
+        let api = MockAPIClient()
+        var tv = SessionInfoDto()
+        tv.id = "s1"
+        tv.userID = "user1"
+        tv.deviceID = "apple-tv"
+        tv.deviceName = "Salon"
+        tv.isSupportsRemoteControl = true
+        api.stubbedControllableSessions = [tv]
+        let slice: any RemoteControlAPI = api
+        let model = RemotePlayModel()
+
+        await model.load(userId: "user1", api: slice, loc: LocalizationManager())
+
+        #expect(api.controllableSessionsCallCount == 1, "the no-op default must not answer")
+        #expect(model.targets.map(\.id) == ["s1"])
     }
 
     @Test("loadRemoteTargets swallows a failure — no targets, no error on screen")

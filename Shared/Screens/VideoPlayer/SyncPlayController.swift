@@ -370,8 +370,8 @@ final class SyncPlayController {
     }
 
     private func startSocket() {
-        guard let api, let url = api.makeRealtimeSocketURL() else {
-            syncLogger.error("SyncPlay: no realtime socket URL (not connected?)")
+        guard let api, let endpoint = api.makeRealtimeSocketEndpoint() else {
+            syncLogger.error("SyncPlay: no realtime socket endpoint (not connected?)")
             return
         }
         socketTask?.cancel()
@@ -379,7 +379,7 @@ final class SyncPlayController {
         subscription = nil
 
         socketTask = Task { @MainActor [weak self] in
-            let handle = await JellyfinSocketHub.shared.subscribe(url: url)
+            let handle = await JellyfinSocketHub.shared.subscribe(endpoint: endpoint)
             // Re-check AFTER the hop. `teardownSession` cancels this task, but
             // it cannot unsubscribe a handle that did not exist yet — and since
             // `self` is a process singleton, a `weak self` guard can never fail

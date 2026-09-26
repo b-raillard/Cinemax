@@ -127,3 +127,80 @@ struct ServerCertificateTrustTests {
         #expect(ServerSetupViewModel.isCertificateError(wrapped))
     }
 }
+
+/// Audit 2026-09-22 (S11) : URLSession recopie `Authorization` sur la requête
+/// redirigée, quel que soit l'hôte du `Location`. Une requête authentifiée ne
+/// suit plus une redirection hors de son origine : le 3xx remonte tel quel
+/// (retirer le jeton et suivre ferait répondre 401 à l'autre hôte, et
+/// déconnecterait l'utilisateur d'un serveur qui ne fait que rediriger).
+@Suite("Redirection d'une requête authentifiée")
+struct AuthenticatedRedirectTests {
+    private func request(_ url: String, authenticated: Bool = true) -> URLRequest {
+        var r = URLRequest(url: URL(string: url)!)
+        if authenticated {
+            r.setValue(#"MediaBrowser Token="secret""#, forHTTPHeaderField: "Authorization")
+        }
+        return r
+    }
+
+    @Test("Même origine : la requête suit telle quelle")
+    func sameOriginFollows() {
+        let r = request("https://NAS.local:8920/Items/1")
+        #expect(AuthenticatedRedirect.followed(r, redirectedFrom: URL(string: "https://nas.local:8920/Items")) == r)
+    }
+
+    @Test("« Exiger HTTPS » de Jellyfin (http:8096 → https:8920, même hôte) est suivi")
+    func httpsUpgradeFollows() {
+        let r = request("https://nas.local:8920/Items")
+        #expect(AuthenticatedRedirect.followed(r, redirectedFrom: URL(string: "http://nas.local:8096/Items")) == r)
+    }
+
+    @Test("Autre hôte, autre port en clair, ou https → http : non suivi")
+    func otherOriginStops() {
+        let from = URL(string: "https://nas.local/Items")!
+        #expect(AuthenticatedRedirect.followed(request("https://cdn.example/x"), redirectedFrom: from) == nil)
+        #expect(AuthenticatedRedirect.followed(request("http://nas.local/Items"), redirectedFrom: from) == nil)
+        #expect(AuthenticatedRedirect.followed(request("http://nas.local:8080/x"),
+                                               redirectedFrom: URL(string: "http://nas.local:8096/x")) == nil)
+        #expect(AuthenticatedRedirect.followed(request("wss://other/socket"), redirectedFrom: URL(string: "wss://nas.local/socket")) == nil)
+    }
+
+    @Test("Un ApiKey dans l'URL compte comme un jeton ; sans jeton, tout est suivi")
+    func queryTokenAndAnonymous() {
+        let from = URL(string: "https://nas.local/Videos/1/stream")!
+        #expect(AuthenticatedRedirect.followed(request("https://cdn.example/f?ApiKey=secret", authenticated: false), redirectedFrom: from) == nil)
+        let anonymous = request("https://cdn.example/poster.jpg", authenticated: false)
+        #expect(AuthenticatedRedirect.followed(anonymous, redirectedFrom: from) == anonymous)
+    }
+
+    @Test("Origine inconnue : prudence, la requête authentifiée ne suit pas")
+    func unknownOriginStops() {
+        #expect(AuthenticatedRedirect.followed(request("https://nas.local/"), redirectedFrom: nil) == nil)
+    }
+}
+
+/// Lot 6 (2026-09-25) : le widget et le Top Shelf honorent le certificat
+/// approuvé du serveur actif, publié avec la session.
+@Suite("Confiance certificat — extensions")
+struct ExtensionServerTrustTests {
+    @Test("La clé d'épingle des extensions est celle de l'app")
+    func trustKeyParity() {
+        for raw in ["https://NAS.local", "https://nas.local:8920/jellyfin", "http://10.0.0.2:8096", "https://nas.local:443"] {
+            let url = URL(string: raw)!
+            #expect(ExtensionServerTrust.pin(serverURL: url, fingerprint: "ab")?.trustKey
+                == ServerCertificateTrust.trustKey(for: url))
+        }
+        #expect(ExtensionServerTrust.pin(serverURL: URL(string: "https://nas.local")!, fingerprint: nil) == nil)
+    }
+
+    @Test("Seule l'empreinte approuvée, sur son hôte, est acceptée — jamais à la place du système")
+    func acceptsOnlyThePin() {
+        let pin = ExtensionServerTrust.Pin(trustKey: "nas.local:443", fingerprint: "AB12")
+        #expect(ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "nas.local:443", leafFingerprint: "ab12", pin: pin))
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "nas.local:443", leafFingerprint: "cd34", pin: pin), "certificat changé")
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "evil.local:443", leafFingerprint: "ab12", pin: pin), "autre hôte")
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: false, challengeKey: "nas.local:443", leafFingerprint: "ab12", pin: nil))
+        // Un certificat que le système accepte passe par le traitement par défaut.
+        #expect(!ExtensionServerTrust.accepts(systemTrusts: true, challengeKey: "nas.local:443", leafFingerprint: "ab12", pin: pin))
+    }
+}

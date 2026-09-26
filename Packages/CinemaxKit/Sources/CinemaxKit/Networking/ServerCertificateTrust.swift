@@ -246,6 +246,27 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
         pin(forTrustKey: key) != nil
     }
 
+    /// The approved fingerprint for a server, for the extensions (see
+    /// `ExtensionSessionBridge.Session.pinnedCertificateSHA256`). Only an
+    /// `https` server can carry one, so a plain `http` one costs nothing.
+    ///
+    /// Served from the snapshot WHATEVER its age, the Keychain being read only
+    /// when none was ever taken: this runs on every foreground publish, on the
+    /// main actor, and the pins are only ever written in-process by `trust` /
+    /// `forget`, which refresh the snapshot themselves. (The 5 s TTL governs
+    /// TLS challenges, where a fresh read costs nothing that matters.)
+    public func pinnedFingerprint(for serverURL: URL) -> String? {
+        guard serverURL.scheme?.lowercased() == "https",
+              let key = ServerCertificateTrust.trustKey(for: serverURL) else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        if cachedAt == nil {
+            cachedPins = keychain.getTrustedCertificates()
+            cachedAt = Date()
+        }
+        return cachedPins[key]
+    }
+
     private func pin(forTrustKey key: String) -> String? {
         lock.lock()
         defer { lock.unlock() }
@@ -296,6 +317,24 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
             rememberPending(trust: trust, host: space.host, port: space.port, key: key)
             completionHandler(.performDefaultHandling, nil)
         }
+    }
+
+    /// Every authenticated session installs this delegate, so this is the one
+    /// place a redirect is kept from carrying the token to another host (see
+    /// `AuthenticatedRedirect`). `Get`'s and Nuke's `DataLoader`s both forward
+    /// this task-level callback to the delegate they were handed.
+    public func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        let followed = AuthenticatedRedirect.followed(request, redirectedFrom: response.url)
+        if followed == nil {
+            trustLog.notice("ServerTrust ▸ redirection authentifiée vers \(request.url?.host ?? "?", privacy: .public) NON suivie (autre origine)")
+        }
+        completionHandler(followed)
     }
 
     private func rememberPending(trust: SecTrust, host: String, port: Int, key: String) {

@@ -23,6 +23,15 @@ final class MediaDetailViewModel {
     /// child's capped Apple TV with no interaction at all. The fiche now shows
     /// a restricted state instead, and the automatic playback is refused.
     private(set) var isAgeRestricted = false
+    /// The episode this fiche was opened FOR, when it was reached by an
+    /// episode's id and resolved up to its series — kept as fetched.
+    ///
+    /// `episodes` only holds the first season (plus the next-up one), so a
+    /// request naming an episode of any other season — « Lire sur… », a Watch
+    /// Together queue, a Siri shortcut — was looked up there, not found, and
+    /// fell through to the series' next-up: the wrong episode played, and in a
+    /// group this participant drifted out of step with everybody else.
+    private(set) var requestedEpisode: BaseItemDto?
     /// The side task filling `similarItems` (see `loadSimilar`). Internal so a
     /// test can await it instead of racing it.
     private(set) var similarTask: Task<Void, Never>?
@@ -171,6 +180,7 @@ final class MediaDetailViewModel {
                 let seriesItem = try await appState.apiClient.getItem(userId: userId, itemId: seriesId)
                 guard loadGeneration == generation else { return }
                 item = seriesItem
+                requestedEpisode = effectiveType == .episode ? loadedItem : nil
                 resolvedType = .series
 
                 try await loadSeriesDetail(seriesId: seriesId, apiClient: appState.apiClient, userId: userId, generation: generation)
@@ -178,6 +188,7 @@ final class MediaDetailViewModel {
             } else {
                 item = loadedItem
                 resolvedType = effectiveType
+                requestedEpisode = nil
 
                 if effectiveType == .series {
                     try await loadSeriesDetail(seriesId: itemId, apiClient: appState.apiClient, userId: userId, generation: generation)

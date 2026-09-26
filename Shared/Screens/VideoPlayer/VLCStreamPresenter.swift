@@ -3930,11 +3930,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // lookups, no network) — this presenter owns the negotiation, with
             // the VLC device profile.
             let nav = navigator(ref.id)
-            guard let vlcInfo = try? await self.apiClient.getPlaybackInfo(
-                itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
-            ) else {
+            let vlcInfo: PlaybackInfo
+            do {
+                vlcInfo = try await self.apiClient.getPlaybackInfo(
+                    itemId: ref.id, userId: self.userId, maxBitrate: self.maxBitrate, engine: .vlc
+                )
+            } catch {
                 logger.error("VLC episode nav: failed to negotiate \(ref.id, privacy: .public)")
-                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay, abandonedRetry: abandonedRetry)
+                self.handleFailedEpisodeNav(
+                    gen: gen, isAutoplay: isAutoplay, abandonedRetry: abandonedRetry,
+                    restricted: { if case JellyfinError.contentRestricted = error { return true } else { return false } }()
+                )
                 return
             }
             // Dismissed mid-nav, or a newer nav superseded this one: applying
@@ -4011,17 +4017,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// - autoplay at end of episode: nothing is playing any more, so there is no
     ///   session to restore. Surface a terminal alert with a single dismiss
     ///   action, mirroring `showEndOfSeriesOverlay`'s end-of-playback precedent.
-    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, abandonedRetry: Bool) {
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, abandonedRetry: Bool, restricted: Bool = false) {
         // A teardown, or a newer nav that already re-armed the timers, owns the
         // session now — recovering here would double-arm / resurrect state.
         guard !isTearingDown, gen == navGeneration else { return }
+        // Refused by the age cap (`getPlaybackInfo`): in a Watch Together group
+        // this participant can never follow the group onto that episode, and
+        // the group would wait for its `Ready` for ever — leave, as the fiche
+        // does for a restricted join.
+        if restricted, syncPlay.isInGroup { syncPlay.leaveGroup() }
         guard !isAutoplay else {
             // The engine already stopped; re-latch the end guard so a stray
             // `.stopped` can't stack a second alert behind this one.
             didReportEnd = true
             let alert = UIAlertController(
-                title: loc.localized("player.episodeNav.failed"),
-                message: loc.localized("player.episodeNav.failed.message"),
+                title: loc.localized(restricted ? "detail.restricted.title" : "player.episodeNav.failed"),
+                message: loc.localized(restricted ? "detail.restricted.subtitle" : "player.episodeNav.failed.message"),
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: loc.localized("playback.error.close"), style: .default) { [weak self] _ in
@@ -4044,7 +4055,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         reporter?.resetTicking()
         reporter?.reportStart(startTime: pendingResumeSecondsForReport ?? Double(currentMs) / 1000.0)
         startProgressTimer()
-        showSkipHUD(loc.localized("player.episodeNav.failed"), duration: 1.8)
+        showSkipHUD(loc.localized(restricted ? "detail.restricted.title" : "player.episodeNav.failed"), duration: 1.8)
     }
 
     #if os(iOS)

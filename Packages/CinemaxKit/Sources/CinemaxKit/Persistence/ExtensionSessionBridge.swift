@@ -44,27 +44,48 @@ public enum ExtensionSessionBridge {
         /// `UserDefaults` the extensions cannot read, and this blob is the only
         /// channel that already exists.
         public let maxContentAge: Int?
+        /// SHA-256 of the leaf certificate the user approved for THIS server
+        /// (`ServerTrustDelegate`'s pin for its `host:port`), or `nil` when the
+        /// server needs none. The pins live in the app-private Keychain group,
+        /// which the extensions cannot read — without this, a self-signed server
+        /// the app uses read as « not connected » in the widget and the Top
+        /// Shelf. Optional for the same backward-compatibility reason as the cap.
+        public let pinnedCertificateSHA256: String?
 
-        /// `maxContentAge` defaults here — unlike on `publish`, which must never
-        /// let a call site forget it. Only `publish` builds one in production;
-        /// the default exists so a test can state just the fields it cares about.
-        public init(serverURL: URL, accessToken: String, userId: String, maxContentAge: Int? = nil) {
+        /// `maxContentAge` / `pinnedCertificateSHA256` default here — unlike on
+        /// `publish`, which must never let a call site forget them. Only
+        /// `publish` builds one in production; the defaults exist so a test can
+        /// state just the fields it cares about.
+        public init(
+            serverURL: URL,
+            accessToken: String,
+            userId: String,
+            maxContentAge: Int? = nil,
+            pinnedCertificateSHA256: String? = nil
+        ) {
             self.serverURL = serverURL
             self.accessToken = accessToken
             self.userId = userId
             self.maxContentAge = maxContentAge
+            self.pinnedCertificateSHA256 = pinnedCertificateSHA256
         }
     }
 
     /// Publishes the current session, or clears it when any part is nil
     /// (logout / disconnect).
     ///
-    /// `maxContentAge` carries **no default value**, deliberately: a defaulted
+    /// `maxContentAge` and `pinnedCertificateSHA256` carry **no default value**, deliberately: a defaulted
     /// `nil` would let a future publish site forget the parental cap and ship a
     /// widget that silently ignores it — exactly the defect #230 exists to
     /// close. A new call site gets a compile error instead, the same discipline
     /// as `MediaCardContextMenu`'s required `artwork:`.
-    public static func publish(serverURL: URL?, accessToken: String?, userId: String?, maxContentAge: Int?) {
+    public static func publish(
+        serverURL: URL?,
+        accessToken: String?,
+        userId: String?,
+        maxContentAge: Int?,
+        pinnedCertificateSHA256: String?
+    ) {
         // Runs on BOTH paths (publish + clear) and *before* the skip
         // early-return below, so an upgraded install's leftover plaintext copy
         // is deleted even when the session itself hasn't changed.
@@ -77,7 +98,8 @@ public enum ExtensionSessionBridge {
                 serverURL: serverURL,
                 accessToken: accessToken,
                 userId: userId,
-                maxContentAge: maxContentAge
+                maxContentAge: maxContentAge,
+                pinnedCertificateSHA256: pinnedCertificateSHA256
             )
         }()
 
@@ -97,25 +119,33 @@ public enum ExtensionSessionBridge {
 
         let keychain = KeychainService()
         let existingKeychainData = keychain.readSharedSession()
+        guard !isCurrent(session: incoming, keychainData: existingKeychainData) else {
+            rememberPublished(incoming)
+            logger.debug("ExtensionBridge ▸ session unchanged, skipped")
+            return
+        }
+        // Sole store: the shared, device-only Keychain group — the token is
+        // never written in plaintext nor included in device backups.
+        let written: Bool
         if let session = incoming {
-            guard !isCurrent(session: session, keychainData: existingKeychainData) else {
-                rememberPublished(session)
-                logger.debug("ExtensionBridge ▸ session unchanged, skipped")
-                return
-            }
-            rememberPublished(session)
-            // Sole store: the shared, device-only Keychain group — the token
-            // is never written in plaintext nor included in device backups.
-            if let data = try? JSONEncoder().encode(session) { keychain.saveSharedSession(data) }
+            written = (try? JSONEncoder().encode(session)).map { keychain.saveSharedSession($0) } ?? false
+        } else {
+            written = keychain.deleteSharedSession()
+        }
+        // The memo is taken only once the store really holds what was
+        // intended (audit 2026-09-22, S8). Taken BEFORE the write, as it used to
+        // be, a failed write was then skipped by every later publish of the
+        // same session — and a failed clear at logout left the previous token
+        // with the widget for the rest of the process.
+        guard let memo = memoAfterWrite(of: incoming, succeeded: written) else {
+            forgetPublished(clearFailed: incoming == nil)
+            logger.error("ExtensionBridge ▸ \(incoming == nil ? "clear" : "publish", privacy: .public) failed — retried on the next publish")
+            return
+        }
+        rememberPublished(memo.value)
+        if let session = incoming {
             logger.info("ExtensionBridge ▸ session published host=\(session.serverURL.host() ?? "?", privacy: .public)")
         } else {
-            guard !isCurrent(session: nil, keychainData: existingKeychainData) else {
-                rememberPublished(nil)
-                logger.debug("ExtensionBridge ▸ session unchanged, skipped")
-                return
-            }
-            rememberPublished(nil)
-            keychain.deleteSharedSession()
             logger.info("ExtensionBridge ▸ session cleared")
         }
         // Writing the snapshot is not enough — the extensions render from
@@ -170,9 +200,30 @@ public enum ExtensionSessionBridge {
     /// actor; `nonisolated(unsafe)` for the same reason `JellyfinAPIClient`'s
     /// fields are, with the same invariant: no access outside these two
     /// helpers.
-    private struct PublishedMemo: Sendable { let value: Session? }
+    struct PublishedMemo: Sendable, Equatable { let value: Session? }
     private static let memoLock = NSLock()
     nonisolated(unsafe) private static var _lastPublishedInProcess: PublishedMemo?
+    /// Set when a CLEAR failed, so `retryFailedClear()` knows there is a token
+    /// left behind to remove. Same lock and invariant as the memo.
+    nonisolated(unsafe) private static var _clearFailed = false
+
+    /// What the memo becomes after a write: the intended session when the
+    /// store took it, nothing when it did not — so the next publish goes back
+    /// to the Keychain instead of trusting a write that never happened.
+    static func memoAfterWrite(of session: Session?, succeeded: Bool) -> PublishedMemo? {
+        succeeded ? PublishedMemo(value: session) : nil
+    }
+
+    /// Retries a clear that failed at logout. Called on every return to the
+    /// foreground; a no-op unless a clear failed in this process, so it never
+    /// touches a session published since (a successful publish resets it).
+    public static func retryFailedClear() {
+        memoLock.lock()
+        let pending = _clearFailed
+        memoLock.unlock()
+        guard pending else { return }
+        publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
+    }
 
     private static var lastPublishedInProcess: PublishedMemo? {
         memoLock.lock()
@@ -183,6 +234,14 @@ public enum ExtensionSessionBridge {
     private static func rememberPublished(_ session: Session?) {
         memoLock.lock()
         _lastPublishedInProcess = PublishedMemo(value: session)
+        _clearFailed = false
+        memoLock.unlock()
+    }
+
+    private static func forgetPublished(clearFailed: Bool) {
+        memoLock.lock()
+        _lastPublishedInProcess = nil
+        _clearFailed = clearFailed
         memoLock.unlock()
     }
 

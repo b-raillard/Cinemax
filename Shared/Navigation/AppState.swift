@@ -131,6 +131,11 @@ final class AppState {
         // First of all: take the app-private items out of the group the
         // extensions can read (one-shot, a move — nothing is deleted).
         keychain.migrateToPrivateAccessGroupIfNeeded()
+        // The one place the S1 move can be checked on a signed device: this
+        // line reaches the diagnostics export (« private » expected).
+        if let real = keychain as? KeychainService {
+            logger.notice("Keychain ▸ access_token in \(real.accessGroupPlacement(ofAccount: "access_token").rawValue, privacy: .public) group")
+        }
         keychain.migrateToMultiServerIfNeeded()
         loadServersFromKeychain()
 
@@ -186,7 +191,10 @@ final class AppState {
             serverURL: serverURL,
             accessToken: accessToken,
             userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
+            // A self-signed server's approved certificate: the pins live in
+            // the app-private Keychain group the extensions cannot read.
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
         guard let id = currentUserId else {
             if currentUser != nil { currentUser = nil }
@@ -316,7 +324,10 @@ final class AppState {
     /// persisted shortcut identities against it from a non-isolated context;
     /// a second copy would be free to drift from the deep-link check.
     nonisolated static func isValidItemId(_ id: String) -> Bool {
-        if id.count == 32, id.allSatisfy(\.isHexDigit) { return true }
+        // `isASCII` too: `Character.isHexDigit` also answers yes for the
+        // FULL-WIDTH digits and letters (`０`…`９`, `ａ`…`ｆ`), which no
+        // Jellyfin id contains (audit 2026-09-22, S11).
+        if id.count == 32, id.allSatisfy({ $0.isASCII && $0.isHexDigit }) { return true }
         return UUID(uuidString: id) != nil
     }
 
@@ -684,7 +695,10 @@ final class AppState {
             serverURL: serverURL,
             accessToken: accessToken,
             userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
+            // A self-signed server's approved certificate: the pins live in
+            // the app-private Keychain group the extensions cannot read.
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
     }
 
@@ -719,7 +733,7 @@ final class AppState {
         if let active { clearSession(of: active) }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
-        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil)
+        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
         serverTransitionGeneration &+= 1
         isAuthenticated = false
         currentUserId = nil

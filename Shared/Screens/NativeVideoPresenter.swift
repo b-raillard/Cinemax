@@ -620,11 +620,16 @@ final class NativeVideoPresenter {
             playbackReporter.reportStop(reason: .episodeSwap)
             // Neighbors resolve synchronously (pure index lookups); this
             // presenter owns the negotiation, with the Apple device profile.
-            guard let (prev, next) = navigator(ep.id),
-                  let info = try? await apiClient.getPlaybackInfo(
-                      itemId: ep.id, userId: userId, maxBitrate: maxBitrate
-                  ) else {
-                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay)
+            let negotiated: PlaybackInfo?
+            var failure: Error?
+            do {
+                negotiated = try await apiClient.getPlaybackInfo(itemId: ep.id, userId: userId, maxBitrate: maxBitrate)
+            } catch {
+                negotiated = nil
+                failure = error
+            }
+            guard let (prev, next) = navigator(ep.id), let info = negotiated else {
+                self.handleFailedEpisodeNav(gen: gen, isAutoplay: isAutoplay, error: failure)
                 return
             }
             // Superseded by a newer nav, or dismissed, while negotiating.
@@ -705,14 +710,14 @@ final class NativeVideoPresenter {
     /// its progress and resume point would stay frozen at the press); an
     /// autoplay hand-off has nothing left playing, so it ends on the error
     /// alert instead of a silent, finished player.
-    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool) {
+    private func handleFailedEpisodeNav(gen: Int, isAutoplay: Bool, error: Error? = nil) {
         guard gen == navGeneration, let player = playerVC?.player else { return }
         logger.error("Native episode nav: negotiation failed (autoplay=\(isAutoplay, privacy: .public))")
         // An earlier nav may already have torn the old item down and then been
         // superseded by this one: nothing is left playing, which is the
         // autoplay case in all but name (adversarial review, 2026-09-22).
         if isAutoplay || player.currentItem == nil {
-            showPlaybackErrorAlert(error: nil)
+            showPlaybackErrorAlert(error: error)
             return
         }
         let position = player.currentTime().seconds
@@ -894,6 +899,10 @@ final class NativeVideoPresenter {
     }
 
     private func errorMessage(for error: Error?) -> String {
+        // Refused by the age cap before any stream was negotiated.
+        if case JellyfinError.contentRestricted? = error {
+            return loc.userFacingMessage(for: JellyfinError.contentRestricted)
+        }
         guard let nsError = error as NSError? else {
             return loc.localized("playback.error.generic")
         }

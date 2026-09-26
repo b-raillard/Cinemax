@@ -256,6 +256,7 @@
 "privacy.lock.biometrics.subtitle" = "Raccourci à la place du code. Le code reste toujours accepté.";
 "privacy.lock.biometrics.reset" = "Les visages ou empreintes enregistrés ont changé : Face ID a été désactivé. Réactivez-le si le changement vient de vous.";
 "privacy.lock.change" = "Changer le code";
+"privacy.lock.change.tooShort" = "Ce code est trop court. Choisissez-en un de 6 chiffres ou plus.";
 "privacy.lock.disable" = "Désactiver le verrouillage";
 "privacy.lock.footer" = "Ce code protège les réglages de cet appareil. Pour une limite qu'une réinstallation ne lève pas, créez un compte Jellyfin dédié et réglez sa limite d'âge sur le serveur.";
 "privacy.lock.unlock.title" = "Réglages protégés";
@@ -269,8 +270,8 @@
 "privacy.lock.throttled.minutes" = "Trop d'essais. Réessayez dans %d min.";
 "privacy.lock.enroll.title" = "Choisissez un code";
 "privacy.lock.enroll.confirm" = "Confirmez le code";
-"privacy.lock.enroll.hint" = "De 4 à 8 chiffres.";
-"privacy.lock.enroll.invalid" = "Le code doit comporter de 4 à 8 chiffres.";
+"privacy.lock.enroll.hint" = "De 6 à 8 chiffres.";
+"privacy.lock.enroll.invalid" = "Le code doit comporter de 6 à 8 chiffres.";
 "privacy.lock.enroll.mismatch" = "Les deux codes diffèrent. Recommencez.";
 "privacy.lock.enroll.failed" = "Impossible d'enregistrer le code.";
 "privacy.lock.enabled" = "Verrouillage activé.";
@@ -1137,6 +1138,7 @@
 
 // MARK: - Remote control ("Play on…")
 
+"remote.message.title" = "Message d'un autre appareil";
 "remote.title" = "Lire sur…";
 "remote.sent" = "Lecture lancée sur %@";
 "remote.unknownDevice" = "Appareil inconnu";
