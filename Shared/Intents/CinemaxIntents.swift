@@ -2,7 +2,7 @@
 import AppIntents
 import Foundation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // MARK: - Errors
 

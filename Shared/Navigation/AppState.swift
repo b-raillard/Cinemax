@@ -2,7 +2,7 @@ import SwiftUI
 import CinemaxKit
 import Nuke
 import OSLog
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Servers")
 

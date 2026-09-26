@@ -2,7 +2,7 @@
 import AppIntents
 import Foundation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Resolves library items for Siri and the Shortcuts editor.
 ///
