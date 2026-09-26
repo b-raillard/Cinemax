@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Server log browser. Lists log files newest-first with a read-only viewer
 /// on tap. No share sheet, no save-to-files — logs can contain usernames,

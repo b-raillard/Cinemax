@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Admin Users grid. Mirrors Jellyfin web's Users panel: a grid of avatar
 /// tiles with last-activity timestamps, a `+` toolbar button for creating

@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Server-side transcoding defaults. Pragmatic subset of Jellyfin web's
 /// Lecture admin panel — the levers most worth flipping from a phone.

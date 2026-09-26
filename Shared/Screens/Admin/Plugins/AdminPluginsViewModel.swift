@@ -2,7 +2,7 @@
 import Foundation
 import Observation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 @MainActor @Observable
 final class AdminPluginsViewModel {

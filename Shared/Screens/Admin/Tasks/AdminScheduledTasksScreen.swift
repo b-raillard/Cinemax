@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Scheduled tasks list. Mirrors Jellyfin web's Tâches planifiées panel —
 /// tasks grouped by category with inline start/stop actions. When any task

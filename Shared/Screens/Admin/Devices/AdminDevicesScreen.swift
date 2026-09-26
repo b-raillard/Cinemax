@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Admin Devices list. Mirrors Jellyfin web's Devices panel: every
 /// registered client with its user, app, and last-seen timestamp. Swipe to

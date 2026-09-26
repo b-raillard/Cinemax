@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Entry point for admin metadata editing from Settings.
 /// Library picker first (users usually know which library an item is in),

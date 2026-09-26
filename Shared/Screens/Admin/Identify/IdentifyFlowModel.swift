@@ -2,7 +2,7 @@
 import Foundation
 import Observation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Shared state + network logic for the Identify flow. Hosted both by the
 /// standalone `IdentifyScreen` (pushed from the admin 3-dot menu on detail

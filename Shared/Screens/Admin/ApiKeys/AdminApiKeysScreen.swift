@@ -2,7 +2,7 @@
 import SwiftUI
 import CinemaxKit
 import UniformTypeIdentifiers
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// API Keys admin. Security-sensitive — tokens grant full admin access to
 /// the server, so the UI treats them like passwords:

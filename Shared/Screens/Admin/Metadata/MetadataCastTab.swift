@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Cast + crew editor. Renders the current `item.people` array with each
 /// person's primary image (when one exists), name, role, and kind (Actor /

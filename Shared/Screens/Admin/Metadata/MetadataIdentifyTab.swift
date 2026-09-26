@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Identify tab — hosts the shared `IdentifyFormView` + `IdentifyResultsGridView`
 /// inside the Metadata Editor. Apply confirmation is rendered as a sheet here

@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Admin Dashboard — mirrors Jellyfin web's "Tableau de bord": a snapshot of
 /// live server state (active playback sessions + server info). Task summary

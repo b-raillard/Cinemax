@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Installed plugins list. Enable/disable is a toggle on each row; uninstall
 /// is a menu action guarded by a confirmation dialog. Disabled plugins and
