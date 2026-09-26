@@ -191,6 +191,17 @@ private struct PickerOption {
 // MARK: - View controller
 
 private final class VLCStreamViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+    /// Safety net only — `teardown` is what stops playback. If a dismissal
+    /// path ever skips it, the controller can still be released (the event
+    /// loop no longer pins it, see `startEventLoop`), and this stops what it
+    /// would otherwise leave running. The debug line is how a leak check reads
+    /// that a player was released at all.
+    isolated deinit {
+        eventsTask?.cancel()
+        progressTimer?.invalidate()
+        logger.info("VLC player controller released")
+    }
+
     // Mutable across episode navigation.
     private var itemId: String
     private var info: PlaybackInfo
@@ -926,9 +937,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// rebinding media (episode nav / retry) keeps the same stream.
     private func startEventLoop() {
         guard eventsTask == nil else { return }
-        eventsTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            for await event in self.player.events {
+        // `self` is re-acquired per event, never held across the `await` of the
+        // loop (audit 2026-09-22, P12): bound once before it, as it used to be,
+        // the task kept the whole controller — engine, 1 s timer, HUD — alive
+        // for as long as the stream stayed open, i.e. for ever if a dismissal
+        // path ever skipped `teardown`.
+        eventsTask = Task { @MainActor [weak self, events = player.events] in
+            for await event in events {
+                guard let self else { return }
                 switch event {
                 case .lengthChanged(let d):
                     let c = d.components
