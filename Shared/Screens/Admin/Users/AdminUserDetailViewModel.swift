@@ -2,7 +2,7 @@
 import Foundation
 import Observation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Tabs mirroring the Jellyfin web admin user detail view.
 enum AdminUserDetailTab: String, CaseIterable, Identifiable, Hashable {

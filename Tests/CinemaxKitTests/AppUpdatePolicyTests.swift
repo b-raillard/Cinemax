@@ -260,3 +260,79 @@ struct AppStoreLookupParsingTests {
         }
     }
 }
+
+/// Audit 2026-09-22 (T5) : `AppUpdateChecker` porte deux RULES — la décision
+/// se recalcule à chaque lancement depuis la version mémorisée (seule la
+/// REQUÊTE est limitée à une par jour), et l'horodatage est posé AVANT l'attente
+/// réseau. Aucun test ne les tenait.
+@MainActor
+@Suite("Vérification de version — orchestration")
+struct AppUpdateCheckerTests {
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func increment() { lock.withLock { value += 1 } }
+        var count: Int { lock.withLock { value } }
+    }
+
+    nonisolated private static func release(_ raw: String) -> AppStoreRelease {
+        AppStoreRelease(version: ServerVersion(raw)!, displayVersion: raw, storeURL: URL(string: "https://apps.apple.com/app/id1"))
+    }
+
+    @Test("A stored newer release is offered again at launch without any request")
+    func storedReleaseOfferedWithoutRequest() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let calls = Counter()
+        let first = AppUpdateChecker(defaults: defaults, bundleId: "com.test") { _ in calls.increment(); return Self.release("99.0") }
+        await first.refresh(now: Date(timeIntervalSince1970: 1_000_000))
+        #expect(calls.count == 1)
+        #expect(first.decision == .offer(Self.release("99.0")))
+
+        // Next launch, same day: throttled — but the offer stands.
+        let second = AppUpdateChecker(defaults: defaults, bundleId: "com.test") { _ in calls.increment(); return nil }
+        await second.refresh(now: Date(timeIntervalSince1970: 1_000_000 + 3600))
+        #expect(calls.count == 1, "one Store query a day")
+        #expect(second.decision == .offer(Self.release("99.0")))
+    }
+
+    @Test("« Plus tard » silences that version only; a newer one speaks again")
+    func declineIsPerVersion() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let checker = AppUpdateChecker(defaults: defaults, bundleId: "com.test") { _ in Self.release("99.0") }
+        await checker.refresh(now: Date(timeIntervalSince1970: 1_000_000))
+        checker.decline()
+        #expect(checker.decision == .none)
+
+        let nextDay = AppUpdateChecker(defaults: defaults, bundleId: "com.test") { _ in Self.release("99.1") }
+        await nextDay.refresh(now: Date(timeIntervalSince1970: 1_000_000 + 2 * 86_400))
+        #expect(nextDay.decision == .offer(Self.release("99.1")))
+    }
+
+    @Test("The check is stamped BEFORE the lookup: a second refresh during a slow one asks nothing")
+    func stampedBeforeAwait() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let calls = Counter()
+        let gate = TestLatch()
+        let checker = AppUpdateChecker(defaults: defaults, bundleId: "com.test") { _ in
+            calls.increment()
+            await gate.wait()
+            return nil
+        }
+        let slow = Task { await checker.refresh(now: Date(timeIntervalSince1970: 1_000_000)) }
+        #expect(await eventually { calls.count == 1 })
+        await checker.refresh(now: Date(timeIntervalSince1970: 1_000_000 + 60))
+        #expect(calls.count == 1)
+        gate.open()
+        await slow.value
+    }
+
+    @Test("No Store page, no button")
+    func noStoreURLNoButton() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let checker = AppUpdateChecker(defaults: defaults, bundleId: "com.test") { _ in
+            AppStoreRelease(version: ServerVersion("99.0")!, displayVersion: "99.0", storeURL: nil)
+        }
+        await checker.refresh(now: Date(timeIntervalSince1970: 1_000_000))
+        #expect(checker.storeURLToOpen == nil)
+    }
+}

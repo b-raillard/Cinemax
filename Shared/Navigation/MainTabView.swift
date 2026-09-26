@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Top-level tab container. Hardcoded tabs have been replaced by a dynamic
 /// list resolved from `MenuConfigStore` — the user can choose between the

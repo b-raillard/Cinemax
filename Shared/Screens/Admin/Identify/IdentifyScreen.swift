@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Standalone Identify flow — pushed from the admin 3-dot menu on
 /// `MediaDetailScreen` and on poster cards in library grids. Three-step

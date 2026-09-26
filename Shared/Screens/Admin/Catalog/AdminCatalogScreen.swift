@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Plugin catalog. Lists packages advertised by the server's configured
 /// repositories, grouped by category with a search filter. Tapping a row

@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // MARK: - Unified Media Library Screen
 

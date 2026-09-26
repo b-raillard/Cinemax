@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import CinemaxKit
+import JellyfinAPI
 
 /// The app's compatibility floor is **Jellyfin 10.9** (see CLAUDE.md): since
 /// jellyfin-sdk-swift 0.6.0 the generator no longer emits the `/Users/{userId}/…`
@@ -167,5 +168,47 @@ struct ServerCompatibilityTests {
         let url = builder.userImageURL(userId: "user-1")
         #expect(url.path() == "/jellyfin/UserImage")
         #expect(url.absoluteString.contains("userId=user-1"))
+    }
+}
+
+/// Audit 2026-09-22 (Q3) : l'état de connexion du client est lu et remplacé
+/// d'un bloc, et une écriture calculée avant un `await` ne s'installe que si
+/// rien n'a remplacé le client entre-temps.
+@Suite("JellyfinAPIClient — état de connexion")
+struct JellyfinClientStateTests {
+    @Test("An install computed from a superseded generation is dropped")
+    func staleInstallDropped() {
+        var state = JellyfinAPIClient.ClientState()
+        let a = JellyfinClient(configuration: .init(url: URL(string: "https://a")!, client: "t", deviceName: "d", deviceID: "i", version: "1"))
+        let b = JellyfinClient(configuration: .init(url: URL(string: "https://b")!, client: "t", deviceName: "d", deviceID: "i", version: "1"))
+        let before = state.generation
+        let reconnected = state.install(b, url: URL(string: "https://b")!, accessToken: "tok-b")   // a reconnect lands
+        // …then the probe that started before it finishes: refused.
+        let stale = state.install(a, url: URL(string: "https://a")!, accessToken: nil, ifGeneration: before)
+        #expect(reconnected)
+        #expect(stale == false)
+        #expect(state.serverURL == URL(string: "https://b"))
+        #expect(state.accessToken == "tok-b")
+    }
+
+    @Test("Client, URL and token move together")
+    func connectionIsConsistent() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: URL(string: "https://one.example")!, accessToken: "t1")
+        api.reconnect(url: URL(string: "https://two.example")!, accessToken: "t2")
+        let connection = api.getConnection()
+        #expect(connection?.serverURL == URL(string: "https://two.example"))
+        #expect(connection?.client.configuration.url == URL(string: "https://two.example"))
+        #expect(connection?.client.accessToken == "t2")
+    }
+
+    @Test("A language change keeps the connection's server and token")
+    func languageChangeKeepsConnection() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: URL(string: "https://nas.local")!, accessToken: "tok")
+        api.setPreferredLanguage("en")
+        #expect(api.getConnection()?.client.accessToken == "tok")
+        #expect(api.getServerURL() == URL(string: "https://nas.local"))
+        #expect(api.getPreferredLanguage() == "en")
     }
 }

@@ -895,3 +895,16 @@ struct ServerSessionValidatorTests {
         #expect(ServerSessionValidator.classify(statusCode: nil, body: user) == .indeterminate)
     }
 }
+
+/// Audit 2026-09-22 (bug bas) : après un changement de compte ou de serveur,
+/// le nom et les droits d'administrateur du compte précédent restaient affichés
+/// si la relecture échouait.
+@Suite("Utilisateur en cache — appartenance")
+struct CachedUserOwnershipTests {
+    @Test("Another account's cached record is dropped; the same account's is kept")
+    func ownership() {
+        #expect(AppState.cachedUserBelongsElsewhere(cachedId: "a", currentId: "b"))
+        #expect(!AppState.cachedUserBelongsElsewhere(cachedId: "a", currentId: "a"))
+        #expect(!AppState.cachedUserBelongsElsewhere(cachedId: nil, currentId: "a"))
+    }
+}

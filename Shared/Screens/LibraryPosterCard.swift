@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Poster card with a navigation link into `MediaDetailScreen`, used by
 /// `LibraryGenreRow` and by the filtered grids in `MediaLibraryScreen`.

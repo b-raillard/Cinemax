@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 #if os(iOS)
 import Speech
 import AVFoundation

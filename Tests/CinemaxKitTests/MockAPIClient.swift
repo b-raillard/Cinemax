@@ -205,8 +205,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func updateUser(id: String, user: UserDto) async throws {
         if shouldThrow { throw stubbedError }
     }
+    /// Every policy `updateUserPolicy` was asked to write, in order.
+    private(set) var updatedUserPolicies: [UserPolicy] = []
     func updateUserPolicy(id: String, policy: UserPolicy) async throws {
         if shouldThrow { throw stubbedError }
+        updatedUserPolicies.append(policy)
     }
     func updateUserPassword(id: String, newPassword: String, resetPassword: Bool) async throws {
         if shouldThrow { throw stubbedError }

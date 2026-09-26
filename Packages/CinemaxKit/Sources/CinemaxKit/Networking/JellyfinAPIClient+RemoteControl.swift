@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // MARK: - Remote control ("Play on…")
 //
@@ -166,8 +166,7 @@ extension JellyfinAPIClient: RemoteControlAPI {
     /// Note the `setEndpointPath` base-path preservation, without which a
     /// sub-path-hosted server (`https://host/jellyfin`) gets a socket URL that 404s.
     public func makeRealtimeSocketEndpoint() -> RealtimeSocketEndpoint? {
-        guard let client = getClient(),
-              let serverURL = getServerURL(),
+        guard let (client, serverURL) = getConnection(),
               let token = client.accessToken else { return nil }
         guard var comps = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.setEndpointPath("/socket", preservingBasePathOf: serverURL)

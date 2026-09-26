@@ -64,6 +64,10 @@ final class SleepTimerController {
         showIndicator()
         updateIndicator(remaining: seconds)
 
+        // Its own 1 s task, the one exception to « sub-controllers never add
+        // their own tick » (see Shared/Screens/VideoPlayer/CLAUDE.md): the
+        // countdown is WALL time and must run while playback is paused, when
+        // the presenter's periodic time observer stays silent.
         tickTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self, let end = self.endDate else { return }

@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Full-bleed hero block at the top of the library browse view. Used on
 /// both iOS and tvOS — sizing/typography branch on platform via the

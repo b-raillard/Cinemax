@@ -229,3 +229,29 @@ struct AppLocaleTests {
         #expect(7.5.formatted(.number.precision(.fractionLength(1)).locale(en)) == "7.5")
     }
 }
+
+/// Audit 2026-09-22 (Q4) : la fenêtre des toasts est plein écran et laisse
+/// passer tout toucher hors du toast. Si elle devenait « clé », le lecteur
+/// serait présenté dedans, inutilisable. Elle ne le devient jamais, et la
+/// recherche du contrôleur du haut l'ignore.
+@MainActor
+@Suite("Fenêtre des toasts — jamais hôte d'une présentation")
+struct ToastWindowPresentationTests {
+    @Test("The toast window refuses to become key")
+    func toastWindowNeverKey() {
+        #expect(ToastPassthroughWindow().canBecomeKey == false)
+    }
+
+    @Test("A touch outside the toast falls through; one inside is kept")
+    func hitTestPassesThroughOutsideTheToast() {
+        let window = ToastPassthroughWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        window.rootViewController = UIViewController()
+        window.isHidden = false
+        window.toastFrame = CGRect(x: 20, y: 60, width: 360, height: 80)
+        #expect(window.hitTest(CGPoint(x: 200, y: 400), with: nil) == nil)
+        #expect(window.hitTest(CGPoint(x: 200, y: 100), with: nil) != nil)
+        window.toastFrame = .zero
+        #expect(window.hitTest(CGPoint(x: 200, y: 100), with: nil) == nil)
+        window.isHidden = true
+    }
+}

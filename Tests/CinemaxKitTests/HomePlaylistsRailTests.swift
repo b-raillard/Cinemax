@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 import CinemaxKit
 @testable import Cinemax
 

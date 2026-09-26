@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 import CinemaxKit
 
 /// Minimal builder — `SessionInfoDto` carries ~28 optional fields and the

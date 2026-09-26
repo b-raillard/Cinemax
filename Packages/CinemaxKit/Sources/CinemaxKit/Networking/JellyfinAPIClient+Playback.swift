@@ -20,8 +20,7 @@ extension JellyfinAPIClient {
     }
 
     private func _getPlaybackInfo(itemId: String, userId: String, maxBitrate: Int, audioStreamIndex: Int?, subtitleStreamIndex: Int?, engine: VideoPlaybackEngine, mediaSourceId: String? = nil, forceTranscode: Bool = false) async throws -> PlaybackInfo {
-        guard let client = getClient(),
-              let serverURL = getServerURL() else {
+        guard let (client, serverURL) = getConnection() else {
             throw JellyfinError.notConnected
         }
 

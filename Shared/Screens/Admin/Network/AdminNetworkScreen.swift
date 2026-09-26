@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Network admin panel. Editing network config from a phone is inherently
 /// risky — wrong ports or LAN subnets can make the server unreachable until

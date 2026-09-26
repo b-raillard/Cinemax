@@ -86,8 +86,16 @@ private func settle(until condition: @MainActor () -> Bool, tries: Int = 50) asy
 /// same millisecond and **neither ever sent `Ready` again** — a full-screen
 /// "En attente d'un participant" veil for at least 7 min 41 s over a picture
 /// playing normally, ended by tearing the players down rather than by the app.
+/// Parent of every suite driving `SyncPlayController.shared`: `.serialized` is
+/// only honoured INSIDE a suite, so two sibling suites each marked serialized
+/// still interleave at their `await`s over the one shared controller (review
+/// of audit lot 7). Nested here, they run one after the other.
+@Suite("SyncPlayController partagé", .serialized)
+struct SyncPlayControllerSharedSuites {}
+
+extension SyncPlayControllerSharedSuites {
 @MainActor
-@Suite("SyncPlayController — un calage de recherche réannonce la disponibilité", .serialized)
+@Suite("SyncPlayController — un calage de recherche réannonce la disponibilité")
 struct SyncPlaySeekSettleReadyTests {
 
     private func inGroup(
@@ -183,6 +191,7 @@ struct SyncPlaySeekSettleReadyTests {
         #expect(api.ready.isEmpty)
     }
 }
+}
 
 // MARK: - Announcing readiness at a position the engine has actually reached
 
@@ -266,4 +275,45 @@ struct SyncPlayReadyPolicyTests {
         #expect(SyncPlayReadyPolicy.shouldAnnounceReady(
             mediaConfirmedOpen: true, startSeekPending: false, isSeekSettling: false) == true)
     }
+}
+
+/// Audit 2026-09-22 (bug bas) : pause → recherche → reprise partaient en trois
+/// tâches indépendantes, dans un ordre quelconque, et un échec ne laissait
+/// aucune trace.
+private final class OrderedSyncPlayAPI: SyncPlayAPI, @unchecked Sendable {
+    let slowPause = TestLatch()
+    private let store = OSAllocatedUnfairLock<[String]>(initialState: [])
+    var calls: [String] { store.withLock { $0 } }
+    func reset() { store.withLock { $0.removeAll() } }
+
+    func syncPlayPause() async throws {
+        await slowPause.wait()
+        store.withLock { $0.append("pause") }
+    }
+    func syncPlaySeek(positionTicks: Int) async throws { store.withLock { $0.append("seek") } }
+    func syncPlayUnpause() async throws { store.withLock { $0.append("unpause") } }
+}
+
+extension SyncPlayControllerSharedSuites {
+@MainActor
+@Suite("SyncPlayController — commandes sortantes dans l'ordre")
+struct SyncPlayOutboundOrderTests {
+    @Test("A slow pause does not let the seek and the unpause overtake it")
+    func outboundCommandsKeepTheirOrder() async {
+        let api = OrderedSyncPlayAPI()
+        let c = SyncPlayController.shared
+        _ = await c.createGroup(named: "test", api: api, loc: LocalizationManager(), toast: ToastCenter(), currentUserName: "moi")
+        defer { c.leaveGroup() }
+        await c.drainOutbound()
+        api.reset()
+
+        c.userDidPause()
+        c.userDidSeek(toMs: 60_000)
+        c.userDidPlay()
+        api.slowPause.open()
+        await c.drainOutbound()
+
+        #expect(api.calls == ["pause", "seek", "unpause"])
+    }
+}
 }

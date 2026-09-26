@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 @testable import CinemaxKit
 
 /// A server generation whose raw responses sit in `Fixtures/`. Adding one is a

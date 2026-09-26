@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import os
+import MediaPlayer
 @testable import Cinemax
 @testable import CinemaxKit
 import JellyfinAPI
@@ -618,5 +619,40 @@ private extension PlaybackInfo {
             authToken: nil,
             liveStreamId: liveStreamId
         )
+    }
+}
+
+/// Audit 2026-09-22 (T5) : `NowPlayingInfoController` écarte l'enrichissement
+/// d'un élément quitté (génération) — sans quoi le titre de l'épisode précédent,
+/// arrivé en retard, remplaçait celui du nouveau sur l'écran verrouillé.
+@MainActor
+@Suite("Now Playing — génération", .serialized)
+struct NowPlayingGenerationTests {
+    @Test("A slow enrichment of the item just left never overwrites the new one")
+    func staleEnrichmentIgnored() async {
+        let api = MockAPIClient()
+        let slow = TestLatch()
+        api.getItemHandler = { id in
+            if id == "old" { await slow.wait() }
+            var item = BaseItemDto()
+            item.id = id
+            item.name = id == "old" ? "Ancien épisode" : "Nouvel épisode"
+            return item
+        }
+        let controller = NowPlayingInfoController(
+            apiClient: api, userId: "u",
+            imageBuilder: ImageURLBuilder(serverURL: URL(string: "http://127.0.0.1:9")!),
+            authToken: nil
+        )
+        controller.attach(itemId: "old", title: "old", durationSeconds: nil)
+        controller.attach(itemId: "new", title: "new", durationSeconds: nil)
+        func title() -> String? { MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyTitle] as? String }
+        #expect(await eventually { title() == "Nouvel épisode" })
+
+        slow.open()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(title() == "Nouvel épisode")
+        controller.detach()
+        #expect(MPNowPlayingInfoCenter.default().nowPlayingInfo == nil)
     }
 }

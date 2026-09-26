@@ -2,7 +2,7 @@ import SwiftUI
 import CinemaxKit
 import Nuke
 import OSLog
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // `AppState` lives in `AppState.swift` (extracted 2026-09-22, audit Q8).
 

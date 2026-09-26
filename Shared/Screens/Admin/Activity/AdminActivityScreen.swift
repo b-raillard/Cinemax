@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Paginated activity log. Mirrors Jellyfin web's Activité panel. Infinite
 /// scroll at 50/page — no in-memory cap since iOS lazy lists handle thousands

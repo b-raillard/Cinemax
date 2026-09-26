@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Multi-tab item editor. Shared entry point for both the settings-level
 /// metadata browser and the `MediaDetailScreen` "Edit metadata" button on

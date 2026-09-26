@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 // MARK: - Playlists (write)
 //

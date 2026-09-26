@@ -1,7 +1,7 @@
 import SwiftUI
 import OSLog
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 private let menuLog = Logger(subsystem: "com.cinemax", category: "Menu")
 

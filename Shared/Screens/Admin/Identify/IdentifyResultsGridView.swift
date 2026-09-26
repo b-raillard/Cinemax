@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Results pane of the Identify wizard. `LazyVGrid` of poster tiles — matches
 /// Jellyfin iOS's "Résultats de la recherche" layout. Tapping a tile fires

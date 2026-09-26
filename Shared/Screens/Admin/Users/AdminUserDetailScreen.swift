@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Four-tab user editor: Profile / Access / Parental / Password. Profile +
 /// Access + Parental share a Save footer (all touch the user policy + DTO).
