@@ -45,6 +45,7 @@
 "home.nextUp" = "Next Up";
 "favorites.empty.title" = "No favorites yet";
 "favorites.empty.subtitle" = "Tap the heart on a movie or show to add it here.";
+"favorites.empty.subtitle.tv" = "Select the heart on a movie or show's page to add it here.";
 "watchedHistory.empty.title" = "No history yet";
 "watchedHistory.empty.subtitle" = "Movies and shows you watch will appear here.";
 "home.liveSession" = "LIVE";
@@ -113,6 +114,7 @@
 "library.playlists.empty" = "No playlists here yet";
 "empty.home.title" = "Your library is empty";
 "empty.home.subtitle" = "Add movies or TV shows to your Jellyfin server and pull down to refresh.";
+"empty.home.subtitle.tv" = "Add movies or TV shows to your Jellyfin server and they will appear here.";
 
 // MARK: - Sleep Timer
 
@@ -946,7 +948,7 @@
 
 // MARK: - Player (tvOS dismiss hint)
 
-"player.tvOS.dismissHint" = "Press Menu to dismiss.";
+"player.tvOS.dismissHint" = "Press Back to dismiss.";
 
 // MARK: - Accessibility (added in v1.0 audit)
 

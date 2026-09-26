@@ -352,7 +352,7 @@ struct HomeScreen: View {
                 systemImage: "tv.slash",
                 illustration: .emptyLibrary,
                 title: loc.localized("empty.home.title"),
-                subtitle: loc.localized("empty.home.subtitle"),
+                subtitle: loc.localized(LocalizationManager.platformVariant("empty.home.subtitle")),
                 actionTitle: loc.localized("action.refresh")
             ) {
                 Task { await viewModel.reload(using: appState) }

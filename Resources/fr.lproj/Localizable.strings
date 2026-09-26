@@ -45,6 +45,7 @@
 "home.nextUp" = "À suivre";
 "favorites.empty.title" = "Aucun favori";
 "favorites.empty.subtitle" = "Touchez le cœur sur un film ou une série pour l'ajouter ici.";
+"favorites.empty.subtitle.tv" = "Choisissez le cœur sur la fiche d'un film ou d'une série pour l'ajouter ici.";
 "watchedHistory.empty.title" = "Aucun historique";
 "watchedHistory.empty.subtitle" = "Les films et séries que vous regardez apparaîtront ici.";
 "home.liveSession" = "EN DIRECT";
@@ -113,6 +114,7 @@
 "library.playlists.empty" = "Aucune playlist pour le moment";
 "empty.home.title" = "Votre bibliothèque est vide";
 "empty.home.subtitle" = "Ajoutez des films ou séries à votre serveur Jellyfin puis tirez pour actualiser.";
+"empty.home.subtitle.tv" = "Ajoutez des films ou séries à votre serveur Jellyfin : ils apparaîtront ici.";
 
 // MARK: - Sleep Timer
 
@@ -947,7 +949,7 @@
 
 // MARK: - Player (tvOS dismiss hint)
 
-"player.tvOS.dismissHint" = "Appuyez sur Menu pour quitter.";
+"player.tvOS.dismissHint" = "Appuyez sur Retour pour quitter.";
 
 // MARK: - Accessibility (added in v1.0 audit)
 

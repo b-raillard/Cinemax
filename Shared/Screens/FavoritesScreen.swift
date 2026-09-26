@@ -221,7 +221,7 @@ struct FavoritesScreen: View {
                 systemImage: "heart",
                 illustration: .noFavorites,
                 title: loc.localized("favorites.empty.title"),
-                subtitle: loc.localized("favorites.empty.subtitle")
+                subtitle: loc.localized(LocalizationManager.platformVariant("favorites.empty.subtitle"))
             )
         } else {
             grid

@@ -204,6 +204,28 @@ struct ToastAnnouncementTests {
 @Suite("Plural rule")
 struct PluralRuleTests {
 
+    /// Apple TV has no touch: « tirez pour actualiser » and « touchez le cœur »
+    /// were shown there verbatim (audit §5, lot 9).
+    @Test("tvOS variants exist in both languages and never speak of touch")
+    func tvVariantsAvoidTouch() {
+        let touchWords = ["tirez", "touchez", "pull down", "tap "]
+        for language in ["fr", "en"] {
+            let bundle = Bundle.localizedBundle(for: language)
+            for key in ["favorites.empty.subtitle", "empty.home.subtitle"] {
+                let tv = bundle.localizedString(forKey: key + ".tv", value: nil, table: nil)
+                #expect(tv != key + ".tv", "\(language): \(key).tv")
+                for word in touchWords {
+                    #expect(!tv.lowercased().contains(word), "\(language): \(key).tv says « \(word) »")
+                }
+            }
+        }
+        #if os(tvOS)
+        #expect(LocalizationManager.platformVariant("empty.home.subtitle") == "empty.home.subtitle.tv")
+        #else
+        #expect(LocalizationManager.platformVariant("empty.home.subtitle") == "empty.home.subtitle")
+        #endif
+    }
+
     @Test("French puts 0 and 1 in the singular, English only 1")
     func singularRule() {
         #expect(LocalizationManager.usesSingular(0, languageCode: "fr"))
