@@ -496,6 +496,30 @@ struct MediaDetailViewModelTests {
         #expect(vm.remoteTargets.first?.name == "Salon")
     }
 
+    /// 2026-09-26 : le sélecteur appelait `getControllableSessions(userId:)` sur
+    /// un `any RemoteControlAPI` ; l'argument par défaut n'existant que sur la
+    /// méthode d'extension no-op, l'appel s'y liait statiquement et rendait `[]`
+    /// sans jamais interroger le client — « Aucun appareil disponible » alors
+    /// que la fiche affichait le bouton. Le test passe par l'existentiel exprès.
+    @Test("The « Lire sur… » picker really asks the client, through the protocol")
+    func remotePickerReachesTheClient() async {
+        let api = MockAPIClient()
+        var tv = SessionInfoDto()
+        tv.id = "s1"
+        tv.userID = "user1"
+        tv.deviceID = "apple-tv"
+        tv.deviceName = "Salon"
+        tv.isSupportsRemoteControl = true
+        api.stubbedControllableSessions = [tv]
+        let slice: any RemoteControlAPI = api
+        let model = RemotePlayModel()
+
+        await model.load(userId: "user1", api: slice, loc: LocalizationManager())
+
+        #expect(api.controllableSessionsCallCount == 1, "the no-op default must not answer")
+        #expect(model.targets.map(\.id) == ["s1"])
+    }
+
     @Test("loadRemoteTargets swallows a failure — no targets, no error on screen")
     func loadRemoteTargetsSwallowsFailure() async {
         let api = MockAPIClient()

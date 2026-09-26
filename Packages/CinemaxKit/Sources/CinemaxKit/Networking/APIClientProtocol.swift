@@ -632,7 +632,14 @@ public protocol RemoteControlAPI: RealtimeSocketAPI {
 }
 
 public extension RemoteControlAPI {
-    func getControllableSessions(userId: String, cached: Bool = false) async throws -> [SessionInfoDto] { [] }
+    /// No-op default for test mocks. **Never give it a default argument**: a
+    /// call that leaned on it (`api.getControllableSessions(userId:)` on an
+    /// `any RemoteControlAPI`) bound STATICALLY to this extension method — a
+    /// default argument is not part of the requirement — and returned `[]`
+    /// without ever reaching the server, whatever the conforming type. That is
+    /// how the « Lire sur… » picker said « Aucun appareil disponible » while the
+    /// fiche, calling the concrete client, drew the button (2026-09-26).
+    func getControllableSessions(userId: String, cached: Bool) async throws -> [SessionInfoDto] { [] }
     func playOnSession(
         sessionId: String,
         itemIds: [String],
