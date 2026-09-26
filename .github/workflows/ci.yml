@@ -255,6 +255,11 @@ jobs:
       - name: Check pins, licences and binary artifacts
         run: python3 scripts/dependency-audit.py check
 
+      # FR/EN key parity, `.one` plurals, and matching format specifiers —
+      # was only a local skill (`localize-check`), never enforced.
+      - name: Check localization parity
+        run: python3 scripts/check-localization-parity.py
+
       # Generated on every run so a broken generator shows up in the PR that
       # breaks it; uploaded only for main.
       - name: Generate CycloneDX SBOM

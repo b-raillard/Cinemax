@@ -30,6 +30,19 @@ cd "$(git rev-parse --show-toplevel)"
 # Nothing to do unless the project file is actually part of this commit.
 git diff --cached --name-only | grep -qx "$PBXPROJ" || exit 0
 
+# The pinned version CI regenerates with (ci.yml). A different local xcodegen
+# can format the project differently, and CI's verify step would then reject
+# the very file this hook produced — so a mismatch is refused up front.
+PINNED="$(sed -n 's/^[[:space:]]*XCODEGEN_VERSION:[[:space:]]*//p' .github/workflows/ci.yml | head -n 1)"
+if command -v xcodegen >/dev/null 2>&1 && [ -n "$PINNED" ]; then
+    LOCAL="$(xcodegen --version 2>/dev/null | sed -n 's/^Version:[[:space:]]*//p')"
+    if [ "$LOCAL" != "$PINNED" ]; then
+        echo "pre-commit: xcodegen $LOCAL is installed, CI pins $PINNED — commit aborted." >&2
+        echo "  Install xcodegen $PINNED (see XCODEGEN_VERSION in ci.yml), or commit without staging $PBXPROJ." >&2
+        exit 1
+    fi
+fi
+
 if command -v xcodegen >/dev/null 2>&1; then
     # Preferred path: regenerate and stage that. Catches every flavour of Xcode
     # rewrite, not just the team id — which a line filter cannot do.
