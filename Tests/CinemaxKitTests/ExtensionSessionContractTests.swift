@@ -115,14 +115,12 @@ struct ExtensionSessionContractTests {
         #expect(session.maxContentAge == 16)
     }
 
-    /// Verrouille la table classification → âge que **trois** binaires portent à
-    /// la main (l'app via `ContentRatingClassifier`, le widget via
-    /// `JellyfinLite.ContentRating`, le Top Shelf via la sienne) — même raison
-    /// que les trois copies de la forme de session : les extensions ne peuvent
-    /// pas lier CinemaxKit, et les tests ne peuvent pas atteindre leur code.
-    /// Ce test fixe donc les verdicts attendus côté app ; une copie qui dérive se
-    /// repère en comparant sa table à celle-ci.
-    @Test("Verdicts du plafond parental, communs aux trois copies", arguments: [
+    /// Verrouille la table classification → âge. Depuis le lot 7 (Q9), c'est
+    /// UN seul fichier source, `ContentRatingClassifier.swift`, compilé dans le
+    /// paquet ET dans le widget et le Top Shelf (listé dans leurs `sources`) : ces
+    /// verdicts sont ceux des trois binaires. Il y avait trois copies à la main,
+    /// que ce test ne pouvait verrouiller que côté app.
+    @Test("Verdicts du plafond parental, communs aux trois binaires", arguments: [
         // (classification, plafond, doit passer)
         ("TV-MA", 12, false),
         ("PG-13", 12, false),

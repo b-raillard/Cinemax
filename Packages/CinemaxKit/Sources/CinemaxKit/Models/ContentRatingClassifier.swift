@@ -1,5 +1,8 @@
 import Foundation
 
+// Shared BY SOURCE with the Widget and the Top Shelf (listed in their `sources`
+// in project.yml): keep this file importing Foundation alone.
+
 /// Maps Jellyfin's free-form `officialRating` strings onto a numeric age threshold.
 ///
 /// Jellyfin stores per-item ratings as the raw code published by each region's

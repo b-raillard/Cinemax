@@ -275,6 +275,9 @@ targets:
     platform: iOS
     sources:
       - path: Widgets/CinemaxWidget
+      # The age-cap table, shared by SOURCE with CinemaxKit (the extension links
+      # no package): one file, compiled into the package and both extensions.
+      - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/ContentRatingClassifier.swift
     entitlements:
       path: Widgets/CinemaxWidget.entitlements
       properties:
@@ -315,6 +318,8 @@ targets:
       - path: TopShelf/CinemaxTopShelf
       # The widget's copy, shared by source — see the file.
       - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
+      # The age-cap table, shared by source with CinemaxKit (see the widget).
+      - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/ContentRatingClassifier.swift
     entitlements:
       path: TopShelf/CinemaxTopShelf.entitlements
       properties:
