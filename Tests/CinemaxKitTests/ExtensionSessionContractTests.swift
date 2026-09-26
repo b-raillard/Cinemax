@@ -264,6 +264,25 @@ struct ExtensionSessionSkipDecisionTests {
 /// Audit 2026-09-22 (S1) : les éléments « privés » atterrissaient dans le groupe
 /// partagé avec les extensions. La migration déplace exactement cette liste —
 /// elle doit couvrir tout ce que l'app stocke, SAUF la session partagée.
+/// Audit S1 : le déplacement vers le groupe privé ne se vérifie que sur un
+/// build signé ; la lecture de l'emplacement, elle, est pure.
+@Suite("Keychain — emplacement d'un élément privé")
+struct KeychainPlacementTests {
+    private let priv = "TEAM.com.cinemax.ios"
+    private let shared = "TEAM.com.cinemax.shared"
+
+    @Test("Privé, partagé, absent, non signé")
+    func placements() {
+        #expect(KeychainService.placement(ofGroups: [priv], privateGroup: priv, sharedGroup: shared) == .privateGroup)
+        #expect(KeychainService.placement(ofGroups: [shared], privateGroup: priv, sharedGroup: shared) == .sharedGroup)
+        #expect(KeychainService.placement(ofGroups: [priv, shared], privateGroup: priv, sharedGroup: shared) == .sharedGroup,
+                "une copie restée dans le groupe partagé est LE défaut")
+        #expect(KeychainService.placement(ofGroups: [], privateGroup: priv, sharedGroup: shared) == .absent)
+        #expect(KeychainService.placement(ofGroups: ["X.other"], privateGroup: priv, sharedGroup: shared) == .other)
+        #expect(KeychainService.placement(ofGroups: [priv], privateGroup: nil, sharedGroup: nil) == .unsigned)
+    }
+}
+
 @Suite("Keychain private accounts")
 struct KeychainPrivateAccountsTests {
     @Test("Every app-private account migrates; the shared session never does")

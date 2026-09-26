@@ -393,6 +393,51 @@ public struct KeychainService: Sendable {
         }
     }
 
+    // MARK: - Placement check (audit S1, verified on a signed device)
+
+    /// Where an app-private item actually sits. The S1 move can only be
+    /// verified on a SIGNED build (the simulator and unsigned CI have no
+    /// access groups), so `AppState.restoreSession` logs this for `access_token`
+    /// once per launch — the line reaches the diagnostics export.
+    public enum AccessGroupPlacement: String, Sendable, Equatable {
+        case privateGroup = "private"
+        case sharedGroup = "shared"
+        case absent
+        case other
+        case unsigned
+    }
+
+    /// Pure reading of the groups an item was found in. `shared` wins over
+    /// `private`: a copy left in the shared group is the defect, whatever else
+    /// exists.
+    public static func placement(
+        ofGroups groups: [String],
+        privateGroup: String?,
+        sharedGroup: String?
+    ) -> AccessGroupPlacement {
+        guard let privateGroup, let sharedGroup else { return .unsigned }
+        if groups.isEmpty { return .absent }
+        if groups.contains(sharedGroup) { return .sharedGroup }
+        if groups.allSatisfy({ $0 == privateGroup }) { return .privateGroup }
+        return .other
+    }
+
+    /// The placement of `account` (attributes only, the secret is not read).
+    public func accessGroupPlacement(ofAccount account: String) -> AccessGroupPlacement {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.serviceName,
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let items = status == errSecSuccess ? (result as? [[String: Any]] ?? []) : []
+        let groups = items.compactMap { $0[kSecAttrAccessGroup as String] as? String }
+        return Self.placement(ofGroups: groups, privateGroup: Self.privateAccessGroup, sharedGroup: Self.sharedAccessGroup)
+    }
+
     // MARK: - Accessibility migration
 
     /// Re-saves already-stored items under the new `AfterFirstUnlock`

@@ -131,6 +131,11 @@ final class AppState {
         // First of all: take the app-private items out of the group the
         // extensions can read (one-shot, a move — nothing is deleted).
         keychain.migrateToPrivateAccessGroupIfNeeded()
+        // The one place the S1 move can be checked on a signed device: this
+        // line reaches the diagnostics export (« private » expected).
+        if let real = keychain as? KeychainService {
+            logger.info("Keychain ▸ access_token in \(real.accessGroupPlacement(ofAccount: "access_token").rawValue, privacy: .public) group")
+        }
         keychain.migrateToMultiServerIfNeeded()
         loadServersFromKeychain()
 
