@@ -1,5 +1,5 @@
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Cinemax — French Localization (Default)
+   JellyGlass — French Localization (Default)
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 // MARK: - Tabs & Navigation
@@ -381,7 +381,7 @@
 
 // MARK: - Login
 
-"login.header" = "CINEMAX";
+"login.header" = "JELLYGLASS";
 "login.title" = "CONNEXION";
 "login.subtitle" = "Entrez vos identifiants pour accéder à votre bibliothèque";
 "login.mobileTitle" = "Connexion";
@@ -411,7 +411,7 @@
 
 // MARK: - Server Setup
 
-"server.header" = "CINEMAX";
+"server.header" = "JELLYGLASS";
 "server.title" = "Connexion au serveur";
 "server.subtitle" = "Entrez l'adresse de votre serveur Jellyfin pour commencer à diffuser votre collection.";
 "server.mobileTitle" = "Configuration du serveur";
@@ -455,7 +455,7 @@
 "onboarding.start" = "Commencer";
 "onboarding.page" = "Page %d sur %d";
 "onboarding.server.title" = "Votre propre serveur";
-"onboarding.server.body" = "Cinemax lit la bibliothèque d'un serveur Jellyfin — le vôtre. Sur le même réseau, l'app peut le trouver toute seule ; sinon, son adresse suffit.";
+"onboarding.server.body" = "JellyGlass lit la bibliothèque d'un serveur Jellyfin — le vôtre. Sur le même réseau, l'app peut le trouver toute seule ; sinon, son adresse suffit.";
 "onboarding.quickConnect.title" = "Se connecter sans rien taper";
 "onboarding.quickConnect.body" = "Quick Connect affiche un code à valider depuis un appareil déjà connecté. C'est surtout utile sur l'Apple TV, où saisir un mot de passe à la télécommande est pénible.";
 "onboarding.personalize.title" = "Personnalisable selon vos envies";
@@ -500,7 +500,7 @@
 // MARK: - Licenses
 
 "settings.licenses" = "Licences open source";
-"settings.licenses.description" = "Cinemax utilise les biblioth\U00E8ques open source suivantes :";
+"settings.licenses.description" = "JellyGlass utilise les biblioth\U00E8ques open source suivantes :";
 
 // MARK: - Accessibility
 
@@ -622,7 +622,7 @@
 "admin.user.access.syncPlay.createAndJoin" = "Créer et rejoindre";
 "admin.user.access.liveSessions.title" = "Voir « En direct »";
 "admin.user.access.liveSessions.label" = "Voir l'activité des autres";
-"admin.user.access.liveSessions.footer" = "Montre à cet utilisateur qui regarde quoi en ce moment, et lui permet de prévenir quelqu'un depuis une salle d'attente. Sans cela, il ne voit que les séances « Regarder ensemble ». Seuls les appareils qui acceptent le pilotage à distance (« Lire sur… » activé dans Cinemax) lui sont visibles. Attention : Jellyfin ne sépare pas voir et piloter — cette permission autorise aussi ce compte à commander la lecture sur les appareils des autres.";
+"admin.user.access.liveSessions.footer" = "Montre à cet utilisateur qui regarde quoi en ce moment, et lui permet de prévenir quelqu'un depuis une salle d'attente. Sans cela, il ne voit que les séances « Regarder ensemble ». Seuls les appareils qui acceptent le pilotage à distance (« Lire sur… » activé dans JellyGlass) lui sont visibles. Attention : Jellyfin ne sépare pas voir et piloter — cette permission autorise aussi ce compte à commander la lecture sur les appareils des autres.";
 
 "admin.user.parental.rating.title" = "Classification maximale";
 "admin.user.parental.rating.footer" = "Masque pour cet utilisateur tout contenu classé au-dessus du seuil choisi. Le contenu sans classification reste visible.";
@@ -1111,7 +1111,7 @@
 "intent.resume.title" = "Reprendre ma lecture";
 "intent.resume.description" = "Relance le dernier titre commencé.";
 "intent.resumeControl.title" = "Reprendre la lecture";
-"intent.resumeControl.description" = "Ouvre Cinemax sur le dernier titre commencé.";
+"intent.resumeControl.description" = "Ouvre JellyGlass sur le dernier titre commencé.";
 "intent.resume.shortTitle" = "Reprendre";
 
 "intent.play.title" = "Lire un titre";
@@ -1130,7 +1130,7 @@
 "intent.search.description" = "Ouvre la recherche sur un terme.";
 "intent.search.shortTitle" = "Rechercher";
 
-"intent.error.notSignedIn" = "Connectez-vous à votre serveur dans Cinemax d'abord.";
+"intent.error.notSignedIn" = "Connectez-vous à votre serveur dans JellyGlass d'abord.";
 "intent.error.nothingToResume" = "Aucune lecture en cours à reprendre.";
 "intent.error.itemUnavailable" = "Ce titre est introuvable sur le serveur actif.";
 "intent.error.notEpisodic" = "Ce titre n'est pas une série.";
@@ -1240,9 +1240,9 @@
 
 /* Vérification de version au lancement */
 "update.available.title" = "Une nouvelle version est disponible";
-"update.available.message" = "Cinemax %@ est disponible sur l'App Store. Vous utilisez la version %@.";
+"update.available.message" = "JellyGlass %@ est disponible sur l'App Store. Vous utilisez la version %@.";
 "update.required.title" = "Mise à jour requise";
-"update.required.message" = "Cette version de Cinemax n'est plus prise en charge. Installez la version %@ pour continuer.";
+"update.required.message" = "Cette version de JellyGlass n'est plus prise en charge. Installez la version %@ pour continuer.";
 "update.tvos.hint" = "Ouvrez l'App Store de l'Apple TV pour installer la mise à jour.";
 "update.action.update" = "Mettre à jour";
 "update.action.later" = "Plus tard";

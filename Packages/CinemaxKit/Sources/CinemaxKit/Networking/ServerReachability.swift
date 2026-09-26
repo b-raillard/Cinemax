@@ -146,7 +146,7 @@ public enum ServerSessionRevoker {
         let fields = [
             "DeviceId": deviceId,
             "Device": deviceName,
-            "Client": "Cinemax",
+            "Client": "JellyGlass",
             "Version": appVersion,
             "Token": accessToken
         ]

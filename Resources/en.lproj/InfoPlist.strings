@@ -1,11 +1,11 @@
 /* Local network permission (Jellyfin server discovery) */
-"NSLocalNetworkUsageDescription" = "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi.";
+"NSLocalNetworkUsageDescription" = "JellyGlass uses your local network to automatically discover Jellyfin servers running on your Wi-Fi.";
 
 /* Microphone permission (voice search) */
-"NSMicrophoneUsageDescription" = "Cinemax uses the microphone for voice search.";
+"NSMicrophoneUsageDescription" = "JellyGlass uses the microphone for voice search.";
 
 /* Speech recognition permission (voice search) */
-"NSSpeechRecognitionUsageDescription" = "Cinemax uses speech recognition for voice search to find movies and shows.";
+"NSSpeechRecognitionUsageDescription" = "JellyGlass uses speech recognition for voice search to find movies and shows.";
 
 /* Face ID: optional shortcut past the parental-controls PIN */
-"NSFaceIDUsageDescription" = "Cinemax can use Face ID to unlock the parental controls instead of typing your PIN.";
+"NSFaceIDUsageDescription" = "JellyGlass can use Face ID to unlock the parental controls instead of typing your PIN.";

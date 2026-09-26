@@ -272,7 +272,7 @@ struct PosterRailWidgetView: View {
     private var stateMessage: String? {
         switch entry.state {
         case .notConnected:
-            isFrench ? "Connectez-vous dans Cinemax" : "Sign in to Cinemax"
+            isFrench ? "Connectez-vous dans JellyGlass" : "Sign in to JellyGlass"
         case .unreachable:
             isFrench ? "Serveur Jellyfin inaccessible" : "Jellyfin server unreachable"
         case .ok:

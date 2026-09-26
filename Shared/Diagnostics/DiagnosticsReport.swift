@@ -91,7 +91,7 @@ struct DiagnosticsFacts: Sendable, Equatable {
 /// `LogScrubber` here — the one place the document is assembled — so no
 /// caller can forget to.
 enum DiagnosticsReport {
-    static let title = "# Cinemax diagnostics"
+    static let title = "# JellyGlass diagnostics"
 
     static func header(_ facts: DiagnosticsFacts) -> [String] {
         var lines = [
@@ -293,8 +293,8 @@ enum DiagnosticsExporter {
         return Result(url: url, logLineCount: lines.count)
     }
 
-    /// `cinemax-diagnostics-20260911T101500123Z.txt`
+    /// `jellyglass-diagnostics-20260911T101500123Z.txt`
     static func fileName(for date: Date) -> String {
-        "cinemax-diagnostics-\(MetricKitFileName.stamp(for: date)).txt"
+        "jellyglass-diagnostics-\(MetricKitFileName.stamp(for: date)).txt"
     }
 }
