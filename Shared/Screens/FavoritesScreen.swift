@@ -94,12 +94,23 @@ final class FavoritesViewModel {
     }
 }
 
-/// Full-screen grid of the user's favorites. Pushed onto Home's navigation
-/// stack — it does NOT declare its own `NavigationStack` (the parent provides
-/// one; nesting would break the per-card `NavigationLink` pushes).
+/// Full-screen grid of the user's favorites. Two doors: PUSHED onto Home's
+/// navigation stack (the Favoris row's « Voir tout »), and presented MODALLY
+/// from Réglages → Compte (`isModal`, wrapped in its own `NavigationStack` by
+/// `FavoritesSheet`). It never declares a `NavigationStack` itself: nesting one
+/// under Home's would break the per-card `NavigationLink` pushes.
+///
+/// The Settings door exists because Home was the only one — a hidden Favoris
+/// row, or a custom menu without Accueil, left the screen unreachable
+/// (audit 2026-09-22, §5).
 struct FavoritesScreen: View {
+    /// Presented from Settings: carries its own Done / Menu exit and title,
+    /// the way `WatchedHistoryScreen` does.
+    var isModal = false
+
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
+    @Environment(\.dismiss) private var dismiss
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -111,11 +122,38 @@ struct FavoritesScreen: View {
     var body: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
+            #if os(tvOS)
+            if isModal {
+                VStack(spacing: 0) {
+                    tvModalHeader
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // On the stack's ROOT content, never on the presentation: an
+                // ancestor `onExitCommand` swallows the pop of a fiche pushed
+                // from a card. Only in the modal branch — the pushed screen
+                // must keep Home's own Menu routing (and a `nil` handler
+                // would send the app to the background).
+                .onExitCommand { dismiss() }
+            } else {
+                content
+            }
+            #else
             content
+            #endif
         }
         #if os(iOS)
         .navigationTitle(loc.localized("home.favorites"))
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(isModal ? .inline : .large)
+        .toolbar {
+            if isModal {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(loc.localized("action.done")) { dismiss() }
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                }
+            }
+        }
         #endif
         .task {
             await viewModel.loadInitial(using: appState)
@@ -143,9 +181,32 @@ struct FavoritesScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxItemUserDataChanged)) { _ in
             Task { await viewModel.refresh(using: appState) }
         }
-        // Only ever pushed (Home's Favoris « Voir tout ») — see `tvPushedScreen`.
-        .tvPushedScreen()
+        // `tvPushedScreen()` is applied at Home's push site, not here: this
+        // screen is also a modal root (Settings), which must not register as a
+        // pushed screen.
     }
+
+    #if os(tvOS)
+    /// Title + Done, as `WatchedHistoryScreen.tvHeader`: Done guarantees a
+    /// focusable in the loading / empty / error states, where Menu alone would
+    /// have nothing to land on.
+    private var tvModalHeader: some View {
+        HStack(alignment: .center) {
+            Text(loc.localized("home.favorites"))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+            Spacer(minLength: CinemaSpacing.spacing6)
+            CinemaButton(title: loc.localized("action.done"), style: .accent) {
+                dismiss()
+            }
+            .frame(width: CinemaTVLayout.ctaWidth)
+        }
+        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        .padding(.top, CinemaSpacing.spacing8)
+        .padding(.bottom, CinemaSpacing.spacing5)
+        .focusSection()
+    }
+    #endif
 
     @ViewBuilder
     private var content: some View {
@@ -170,13 +231,16 @@ struct FavoritesScreen: View {
     private var grid: some View {
         ScrollView {
             #if os(tvOS)
-            // tvOS has no navigation bar — carry the title in-scroll.
+            // tvOS has no navigation bar — carry the title in-scroll (the modal
+            // carries it in its header instead).
+            if !isModal {
             Text(loc.localized("home.favorites"))
                 .font(CinemaFont.display(.small))
                 .foregroundStyle(CinemaColor.onSurface)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, gridPadding)
                 .padding(.top, CinemaSpacing.spacing5)
+            }
             #endif
 
             LazyVGrid(columns: columns, spacing: gridSpacing) {
@@ -300,5 +364,16 @@ struct FavoritesScreen: View {
         #else
         AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
+    }
+}
+
+/// Favorites as a modal from Réglages → Compte: its own `NavigationStack`, so
+/// a card still pushes its fiche. The caller re-injects the environment (a
+/// presentation does not inherit it).
+struct FavoritesSheet: View {
+    var body: some View {
+        NavigationStack {
+            FavoritesScreen(isModal: true)
+        }
     }
 }

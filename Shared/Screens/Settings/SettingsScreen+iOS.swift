@@ -230,6 +230,12 @@ extension SettingsScreen {
 
                     iOSSettingsDivider
 
+                    navigationRow(icon: "heart", label: loc.localized("home.favorites")) {
+                        showFavoritesScreen = true
+                    }
+
+                    iOSSettingsDivider
+
                     navigationRow(icon: "clock.arrow.circlepath", label: loc.localized("settings.watchedHistory")) {
                         showWatchedHistory = true
                     }

@@ -161,6 +161,7 @@ struct HomeScreen: View {
         // screen root (NOT inside the lazy scroll content — lazy-container RULE).
         .navigationDestination(item: $favoritesDestination) { _ in
             FavoritesScreen()
+                .tvPushedScreen()
         }
         // "View All" on the Playlists row → every playlist, read straight from
         // `getPlaylists` so the screen doesn't depend on the server exposing a

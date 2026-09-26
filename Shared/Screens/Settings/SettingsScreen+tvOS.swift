@@ -360,6 +360,14 @@ extension SettingsScreen {
             )
 
             tvActionRow(
+                id: "favorites",
+                icon: "heart",
+                label: loc.localized("home.favorites"),
+                showsChevron: true,
+                action: { showFavoritesScreen = true }
+            )
+
+            tvActionRow(
                 id: "watchedHistory",
                 icon: "clock.arrow.circlepath",
                 label: loc.localized("settings.watchedHistory"),

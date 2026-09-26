@@ -168,6 +168,7 @@ struct SettingsScreen: View {
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
+    @State var showFavoritesScreen = false
     @State var showProfile = false
     @State var showServers = false
     /// The first-run introduction, re-opened from Réglages → Serveur. The
@@ -399,6 +400,7 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .sheet(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .sheet(isPresented: $showWatchedHistory) { watchedHistorySheet }
+        .sheet(isPresented: $showFavoritesScreen) { favoritesSheet }
         .sheet(isPresented: $showServers) { serversSheet }
         .sheet(isPresented: $showOnboarding) { onboardingSheet }
         .whatsNewPresentation(isPresented: $showWhatsNew) { whatsNewSheet }
@@ -409,6 +411,7 @@ struct SettingsScreen: View {
         .fullScreenCover(isPresented: $showPrivacySecurity) { privacySecuritySheet }
         .fullScreenCover(isPresented: $showQuickConnectAuthorize) { quickConnectAuthorizeSheet }
         .fullScreenCover(isPresented: $showWatchedHistory) { watchedHistorySheet }
+        .fullScreenCover(isPresented: $showFavoritesScreen) { favoritesSheet }
         .fullScreenCover(isPresented: $showServers) { serversSheet }
         .fullScreenCover(isPresented: $showOnboarding) { onboardingSheet }
         .whatsNewPresentation(isPresented: $showWhatsNew) { whatsNewSheet }
@@ -475,6 +478,21 @@ struct SettingsScreen: View {
             // environment here — same reason `toasts` is re-injected above.
             .environment(playlists)
             // Same reason, for the menu's play / "play on…" entries.
+            .environment(cardActions)
+            #if os(tvOS)
+            .environment(playerCoordinator)
+            #endif
+    }
+
+    /// Same re-injection as `watchedHistorySheet`: the favourites grid's cards
+    /// carry the same context menu.
+    private var favoritesSheet: some View {
+        FavoritesSheet()
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
+            .environment(playlists)
             .environment(cardActions)
             #if os(tvOS)
             .environment(playerCoordinator)
