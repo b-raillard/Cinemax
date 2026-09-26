@@ -190,6 +190,21 @@ struct ExtensionSessionSkipDecisionTests {
         userId: "user-abc"
     )
 
+    /// Audit 2026-09-22 (S8) : le mémo était posé AVANT l'écriture. Une
+    /// écriture ratée était alors sautée par toutes les publications suivantes
+    /// du même état, et un effacement raté à la déconnexion laissait l'ancien
+    /// jeton au widget jusqu'à la fin du processus.
+    @Test("A failed write leaves no memo; a successful one memoises what was written")
+    func memoOnlyAfterSuccessfulWrite() {
+        let session = ExtensionSessionBridge.Session(
+            serverURL: URL(string: "https://jf.example")!, accessToken: "tok", userId: "u1", maxContentAge: 12)
+        #expect(ExtensionSessionBridge.memoAfterWrite(of: session, succeeded: false) == nil)
+        #expect(ExtensionSessionBridge.memoAfterWrite(of: nil, succeeded: false) == nil)
+        #expect(ExtensionSessionBridge.memoAfterWrite(of: session, succeeded: true)?.value == session)
+        let cleared = ExtensionSessionBridge.memoAfterWrite(of: nil, succeeded: true)
+        #expect(cleared != nil && cleared?.value == nil, "a successful clear is remembered as « cleared »")
+    }
+
     @Test("Keychain blob matches ⇒ current, skip publish")
     func matchingKeychainBlobSkips() throws {
         let data = try JSONEncoder().encode(session)

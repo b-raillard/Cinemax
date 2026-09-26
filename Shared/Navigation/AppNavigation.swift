@@ -532,6 +532,9 @@ struct AppNavigation: View {
                 // Network conditions may have changed while backgrounded —
                 // re-evaluate whether the proxy is needed for this server.
                 StreamTransportPolicy.shared.refresh()
+                // A logout whose Keychain clear failed left the previous token
+                // with the widget / Top Shelf; retry it (no-op otherwise).
+                ExtensionSessionBridge.retryFailedClear()
                 // Part E — proactive re-validation after a MEANINGFUL background
                 // gap (overnight standby is the bug; ignore quick app-switcher
                 // peeks). Reuses the same coordinator: it gates on connectivity,

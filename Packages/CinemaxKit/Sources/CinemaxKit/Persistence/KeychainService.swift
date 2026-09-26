@@ -282,8 +282,11 @@ public struct KeychainService: Sendable {
     /// UserDefaults. Scoped to the shared group via an explicit
     /// `kSecAttrAccessGroup` so it never disturbs the app-private session items.
     /// No-op when the shared group can't be resolved.
-    public func saveSharedSession(_ data: Data) {
-        guard let group = Self.sharedAccessGroup else { return }
+    /// `true` once the item holds `data`. The caller must not treat the
+    /// session as published otherwise (see `ExtensionSessionBridge.publish`).
+    @discardableResult
+    public func saveSharedSession(_ data: Data) -> Bool {
+        guard let group = Self.sharedAccessGroup else { return false }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.serviceName,
@@ -294,6 +297,7 @@ public struct KeychainService: Sendable {
         if status != errSecSuccess {
             keychainLog.error("Shared session write failed (status \(status))")
         }
+        return status == errSecSuccess
     }
 
     /// Reads the shared session blob back (used by the round-trip test; the
@@ -313,8 +317,10 @@ public struct KeychainService: Sendable {
         return result as? Data
     }
 
-    public func deleteSharedSession() {
-        guard let group = Self.sharedAccessGroup else { return }
+    /// `true` once no shared session remains — deleted now, or already absent.
+    @discardableResult
+    public func deleteSharedSession() -> Bool {
+        guard let group = Self.sharedAccessGroup else { return false }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.serviceName,
@@ -325,6 +331,7 @@ public struct KeychainService: Sendable {
         if status != errSecSuccess && status != errSecItemNotFound {
             keychainLog.error("Shared session delete failed (status \(status))")
         }
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 
     // MARK: - Private access-group migration

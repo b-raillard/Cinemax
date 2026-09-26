@@ -97,25 +97,33 @@ public enum ExtensionSessionBridge {
 
         let keychain = KeychainService()
         let existingKeychainData = keychain.readSharedSession()
+        guard !isCurrent(session: incoming, keychainData: existingKeychainData) else {
+            rememberPublished(incoming)
+            logger.debug("ExtensionBridge ▸ session unchanged, skipped")
+            return
+        }
+        // Sole store: the shared, device-only Keychain group — the token is
+        // never written in plaintext nor included in device backups.
+        let written: Bool
         if let session = incoming {
-            guard !isCurrent(session: session, keychainData: existingKeychainData) else {
-                rememberPublished(session)
-                logger.debug("ExtensionBridge ▸ session unchanged, skipped")
-                return
-            }
-            rememberPublished(session)
-            // Sole store: the shared, device-only Keychain group — the token
-            // is never written in plaintext nor included in device backups.
-            if let data = try? JSONEncoder().encode(session) { keychain.saveSharedSession(data) }
+            written = (try? JSONEncoder().encode(session)).map { keychain.saveSharedSession($0) } ?? false
+        } else {
+            written = keychain.deleteSharedSession()
+        }
+        // The memo is taken only once the store really holds what was
+        // intended (audit 2026-09-22, S8). Taken BEFORE the write, as it used to
+        // be, a failed write was then skipped by every later publish of the
+        // same session — and a failed clear at logout left the previous token
+        // with the widget for the rest of the process.
+        guard let memo = memoAfterWrite(of: incoming, succeeded: written) else {
+            forgetPublished(clearFailed: incoming == nil)
+            logger.error("ExtensionBridge ▸ \(incoming == nil ? "clear" : "publish", privacy: .public) failed — retried on the next publish")
+            return
+        }
+        rememberPublished(memo.value)
+        if let session = incoming {
             logger.info("ExtensionBridge ▸ session published host=\(session.serverURL.host() ?? "?", privacy: .public)")
         } else {
-            guard !isCurrent(session: nil, keychainData: existingKeychainData) else {
-                rememberPublished(nil)
-                logger.debug("ExtensionBridge ▸ session unchanged, skipped")
-                return
-            }
-            rememberPublished(nil)
-            keychain.deleteSharedSession()
             logger.info("ExtensionBridge ▸ session cleared")
         }
         // Writing the snapshot is not enough — the extensions render from
@@ -170,9 +178,30 @@ public enum ExtensionSessionBridge {
     /// actor; `nonisolated(unsafe)` for the same reason `JellyfinAPIClient`'s
     /// fields are, with the same invariant: no access outside these two
     /// helpers.
-    private struct PublishedMemo: Sendable { let value: Session? }
+    struct PublishedMemo: Sendable, Equatable { let value: Session? }
     private static let memoLock = NSLock()
     nonisolated(unsafe) private static var _lastPublishedInProcess: PublishedMemo?
+    /// Set when a CLEAR failed, so `retryFailedClear()` knows there is a token
+    /// left behind to remove. Same lock and invariant as the memo.
+    nonisolated(unsafe) private static var _clearFailed = false
+
+    /// What the memo becomes after a write: the intended session when the
+    /// store took it, nothing when it did not — so the next publish goes back
+    /// to the Keychain instead of trusting a write that never happened.
+    static func memoAfterWrite(of session: Session?, succeeded: Bool) -> PublishedMemo? {
+        succeeded ? PublishedMemo(value: session) : nil
+    }
+
+    /// Retries a clear that failed at logout. Called on every return to the
+    /// foreground; a no-op unless a clear failed in this process, so it never
+    /// touches a session published since (a successful publish resets it).
+    public static func retryFailedClear() {
+        memoLock.lock()
+        let pending = _clearFailed
+        memoLock.unlock()
+        guard pending else { return }
+        publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil)
+    }
 
     private static var lastPublishedInProcess: PublishedMemo? {
         memoLock.lock()
@@ -183,6 +212,14 @@ public enum ExtensionSessionBridge {
     private static func rememberPublished(_ session: Session?) {
         memoLock.lock()
         _lastPublishedInProcess = PublishedMemo(value: session)
+        _clearFailed = false
+        memoLock.unlock()
+    }
+
+    private static func forgetPublished(clearFailed: Bool) {
+        memoLock.lock()
+        _lastPublishedInProcess = nil
+        _clearFailed = clearFailed
         memoLock.unlock()
     }
 
