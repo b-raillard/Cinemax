@@ -149,7 +149,12 @@ final class ParentalLockController {
                 let current = Self.currentBiometricDomainState()
                 if updated.biometricDomainState == nil {
                     updated.biometricDomainState = current
-                } else if updated.biometricDomainState != current {
+                } else if ParentalLockPolicy.biometricSetChanged(
+                    armedState: updated.biometricDomainState, currentState: current
+                ) {
+                    // An unreadable state (`nil`, biometrics locked out after
+                    // failed Face ID attempts) is not a change — it used to
+                    // switch the shortcut off with a false explanation.
                     updated.biometricsEnabled = false
                     updated.biometricDomainState = nil
                     biometricSetChanged = true

@@ -331,6 +331,19 @@ struct ParentalLockPolicyTests {
         #expect(decoded.failedAttempts == 1)
     }
 
+    // MARK: - Jeu biométrique
+
+    /// Relecture de ee87c6b : Face ID bloqué après des échecs rend un état
+    /// `nil`, que le déverrouillage par code lisait comme un jeu modifié.
+    @Test("Un état biométrique illisible n'est pas un changement de visages")
+    func unreadableBiometricStateIsNotAChange() {
+        let armed = Data([1, 2, 3])
+        #expect(ParentalLockPolicy.biometricSetChanged(armedState: armed, currentState: nil) == false)
+        #expect(ParentalLockPolicy.biometricSetChanged(armedState: nil, currentState: armed) == false)
+        #expect(ParentalLockPolicy.biometricSetChanged(armedState: armed, currentState: armed) == false)
+        #expect(ParentalLockPolicy.biometricSetChanged(armedState: armed, currentState: Data([9])))
+    }
+
     // MARK: - Comparaison
 
     @Test("La comparaison refuse deux longueurs différentes")

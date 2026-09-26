@@ -165,6 +165,15 @@ public enum ParentalLockPolicy {
         return armedState == currentState
     }
 
+    /// Whether a PIN unlock should switch the biometric shortcut OFF: the set
+    /// it was armed on has been replaced. An unreadable current state (`nil` —
+    /// biometrics locked out after failed attempts, precisely when the parent
+    /// falls back to the PIN) is not a change.
+    public static func biometricSetChanged(armedState: Data?, currentState: Data?) -> Bool {
+        guard let armedState, let currentState else { return false }
+        return armedState != currentState
+    }
+
     /// Shortest PIN a parent can CHOOSE. Six digits — a million combinations —
     /// since audit lot 6 (2026-09-25); it was four. The back-off below turns
     /// even four into days of guessing, but a 4-digit PIN is also the one a
