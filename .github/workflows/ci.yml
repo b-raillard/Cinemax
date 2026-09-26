@@ -43,7 +43,10 @@ concurrency:
 jobs:
   build:
     name: Build & Test
-    runs-on: macos-26
+    # `xcode-27` = GitHub's macOS 27 image carrying Xcode 27.x (27.0 is its
+    # default and the local toolchain). Still labelled "preview" by GitHub —
+    # queueing can be slower than on macos-26.
+    runs-on: xcode-27
     # Two test bundles now (iOS + tvOS), built and run serially.
     timeout-minutes: 60
 
@@ -87,18 +90,21 @@ jobs:
       # Pinned: behaviour changes between Xcode releases are documented in
       # CLAUDE.md (a `sending`-closure error on 26.5 that 26.2 accepted), so the
       # runner image's default must not decide which compiler checks a PR. Bump
-      # together with `xcodeVersion` in project.yml.
+      # together with `xcodeVersion` in project.yml and `runs-on` above. A
+      # missing version FAILS the job: building with whatever the image
+      # defaults to would silently check the PR with another compiler.
       - name: Select Xcode
         if: steps.changes.outputs.code == 'true'
         env:
-          XCODE_VERSION: "26.5"
+          XCODE_VERSION: "27.0"
         run: |
           available=$(ls -d /Applications/Xcode*.app 2>/dev/null | tr '\n' ' ')
           if [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
             sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
             echo "::notice::Xcode ${XCODE_VERSION} selected (available: ${available})"
           else
-            echo "::warning::Xcode ${XCODE_VERSION} is not on this runner image — building with the default. Available: ${available}"
+            echo "::error::Xcode ${XCODE_VERSION} is not on this runner image. Available: ${available}"
+            exit 1
           fi
           xcode-select -p
           xcodebuild -version
@@ -158,6 +164,8 @@ jobs:
       # that platform. xcodebuild can report success after running ZERO
       # swift-testing tests (the `-only-testing` trap in CLAUDE.md), so the exit
       # code alone does not prove the suite ran.
+      # The xcode-27 image carries no "iPhone 17 Pro" simulator (iPhone 17,
+      # 17e, 18 Pro, Air…); any iPhone runs the same suite.
       - name: Build & test (iOS)
         if: steps.changes.outputs.code == 'true'
         run: |
@@ -165,7 +173,7 @@ jobs:
           xcodebuild test \
             -project Cinemax.xcodeproj \
             -scheme Cinemax \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
             -skipPackagePluginValidation \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/ios-test.log" | xcbeautify
