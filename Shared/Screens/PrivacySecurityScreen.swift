@@ -339,7 +339,9 @@ struct PrivacySecurityScreen: View {
             lockToggleRow(
                 icon: "number.square",
                 label: loc.localized("privacy.lock.change"),
-                subtitle: nil,
+                // A PIN enrolled with 4 or 5 digits before the minimum rose to
+                // 6 still works; this is the one place that asks for a longer one.
+                subtitle: parentalLock.suggestsLongerPIN ? loc.localized("privacy.lock.change.tooShort") : nil,
                 isOn: nil,
                 focusTarget: .lockChange
             ) {

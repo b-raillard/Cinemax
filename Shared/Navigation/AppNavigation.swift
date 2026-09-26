@@ -535,6 +535,9 @@ struct AppNavigation: View {
                 // A logout whose Keychain clear failed left the previous token
                 // with the widget / Top Shelf; retry it (no-op otherwise).
                 ExtensionSessionBridge.retryFailedClear()
+                // A date set forward in the Settings app must not have closed
+                // the parental PIN back-off: re-read it on the monotonic clock.
+                parentalLock.refreshThrottle()
                 // Part E — proactive re-validation after a MEANINGFUL background
                 // gap (overnight standby is the bug; ignore quick app-switcher
                 // peeks). Reuses the same coordinator: it gates on connectivity,

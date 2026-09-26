@@ -256,6 +256,7 @@
 "privacy.lock.biometrics.subtitle" = "A shortcut instead of the PIN. The PIN always stays valid.";
 "privacy.lock.biometrics.reset" = "The enrolled faces or fingerprints changed, so Face ID was turned off. Turn it back on if you made the change.";
 "privacy.lock.change" = "Change PIN";
+"privacy.lock.change.tooShort" = "This PIN is too short. Choose one with 6 digits or more.";
 "privacy.lock.disable" = "Turn off the lock";
 "privacy.lock.footer" = "This PIN protects the settings on this device. For a limit a reinstall cannot lift, create a dedicated Jellyfin account and set its age limit on the server.";
 "privacy.lock.unlock.title" = "Protected settings";
@@ -269,8 +270,8 @@
 "privacy.lock.throttled.minutes" = "Too many attempts. Try again in %d min.";
 "privacy.lock.enroll.title" = "Choose a PIN";
 "privacy.lock.enroll.confirm" = "Confirm the PIN";
-"privacy.lock.enroll.hint" = "4 to 8 digits.";
-"privacy.lock.enroll.invalid" = "The PIN must be 4 to 8 digits.";
+"privacy.lock.enroll.hint" = "6 to 8 digits.";
+"privacy.lock.enroll.invalid" = "The PIN must be 6 to 8 digits.";
 "privacy.lock.enroll.mismatch" = "The two PINs differ. Start again.";
 "privacy.lock.enroll.failed" = "Could not save the PIN.";
 "privacy.lock.enabled" = "Lock enabled.";
