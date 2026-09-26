@@ -1,5 +1,6 @@
 import Testing
 import JellyfinAPI
+import SwiftUI
 import UIKit
 @testable import Cinemax
 
@@ -323,3 +324,27 @@ struct SpokenEpisodeCardLabelTests {
         #expect(item.spokenCardLabel(localize: localize("fr")) == "Sintel")
     }
 }
+
+#if os(iOS)
+/// The toast window sits above the app's; its root controller must not answer
+/// « status bar shown » over a player that asked for it hidden.
+@MainActor
+@Suite("Toast window system chrome")
+struct ToastWindowChromeTests {
+    private final class HidingController: UIViewController {
+        override var prefersStatusBarHidden: Bool { true }
+        override var prefersHomeIndicatorAutoHidden: Bool { true }
+    }
+
+    @Test("The toast host defers to the app window's top-most controller")
+    func defersToAppWindow() {
+        let appWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        appWindow.rootViewController = HidingController()
+        let host = ToastHostingController(rootView: AnyView(EmptyView()))
+        #expect(!host.prefersStatusBarHidden)
+        host.appWindow = appWindow
+        #expect(host.prefersStatusBarHidden)
+        #expect(host.prefersHomeIndicatorAutoHidden)
+    }
+}
+#endif
