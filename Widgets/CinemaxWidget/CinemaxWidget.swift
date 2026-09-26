@@ -149,8 +149,10 @@ struct PosterRailProvider: TimelineProvider {
     /// renders a populated widget instead of the "unreachable" state.
     private static func loadRecentlyAdded(session: JellyfinLite.Session, maxPosters: Int) async -> [JellyfinLite.ResumeItem]? {
         let showsCap = max(1, maxPosters / 3)
-        let newTitles = await JellyfinLite.fetchRecentlyAdded(session: session, limit: maxPosters)
-        let showsWithNewEpisodes = await JellyfinLite.fetchSeriesWithRecentEpisodes(session: session, limit: showsCap)
+        // Concurrently, like the app's Home row (audit P6).
+        async let newTitlesFetch = JellyfinLite.fetchRecentlyAdded(session: session, limit: maxPosters)
+        async let showsFetch = JellyfinLite.fetchSeriesWithRecentEpisodes(session: session, limit: showsCap)
+        let (newTitles, showsWithNewEpisodes) = await (newTitlesFetch, showsFetch)
         if newTitles == nil && showsWithNewEpisodes == nil { return nil }
 
         var seen = Set<String>()

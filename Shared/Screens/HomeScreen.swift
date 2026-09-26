@@ -743,14 +743,7 @@ struct HomeScreen: View {
             #endif
             .overlay {
                 if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                    CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
-                        fallbackIcon: nil,
-                        fallbackBackground: CinemaColor.surfaceContainerLow
-                    )
-                    #if os(tvOS)
-                    .heroKenBurns()
-                    #endif
+                    HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
                     .accessibilityHidden(true)
                 } else {
                     BackdropFallbackView()

@@ -54,14 +54,7 @@ struct LibraryHeroSection: View {
             #endif
             .overlay {
                 if item.hasBackdropImage, let id = item.id {
-                    CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
-                        fallbackIcon: nil,
-                        fallbackBackground: CinemaColor.surfaceContainerLow
-                    )
-                    #if os(tvOS)
-                    .heroKenBurns()
-                    #endif
+                    HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
                     .accessibilityHidden(true)
                 } else {
                     BackdropFallbackView()
