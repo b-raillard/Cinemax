@@ -1266,3 +1266,5 @@
 "library.jumpBar.a11y" = "Index alphabétique";
 "library.jumpBar.digits" = "Chiffres et symboles";
 "library.jumpBar.hint" = "Balayez vers le haut ou le bas pour passer à une autre lettre.";
+"home.hero.a11y" = "À la une";
+"home.hero.position" = "%1$d sur %2$d";

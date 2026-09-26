@@ -643,12 +643,11 @@ struct HomeScreen: View {
         // Simultaneous (not exclusive) so button taps inside the hero still
         // land; the direction guard keeps vertical scrolls from switching heroes.
         .simultaneousGesture(heroSwipeGesture(count: candidates.count))
-        // VoiceOver three-finger swipe pages the carousel (the drag gesture above
-        // is invisible to assistive tech).
-        .accessibilityScrollAction { edge in
-            guard candidates.count > 1 else { return }
-            advanceHero(forward: edge == .trailing || edge == .bottom, count: candidates.count)
-        }
+        // VoiceOver pages the carousel through the page dots, an ADJUSTABLE
+        // element (« À la une, 2 sur 5 »). It was an `accessibilityScrollAction`
+        // on the whole hero, which also took the VERTICAL three-finger swipe —
+        // the gesture that scrolls Home — and paged the carousel instead
+        // (audit §5, lot 9).
         // Task lifecycle is tied to the view — auto-cancels on disappear (pauses
         // rotation) and never strongly retains the screen. Restarts when the
         // candidate count or the motion-effects gate changes.
@@ -668,7 +667,16 @@ struct HomeScreen: View {
         .frame(maxWidth: .infinity)
         .padding(.bottom, heroPadding)
         .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("home.hero.a11y"))
+        .accessibilityValue(loc.localized("home.hero.position", active + 1, count))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: advanceHero(forward: true, count: count)
+            case .decrement: advanceHero(forward: false, count: count)
+            @unknown default: break
+            }
+        }
     }
 
     private func heroSwipeGesture(count: Int) -> some Gesture {

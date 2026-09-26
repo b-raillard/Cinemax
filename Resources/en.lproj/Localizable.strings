@@ -1264,3 +1264,5 @@
 "library.jumpBar.a11y" = "Alphabetical index";
 "library.jumpBar.digits" = "Numbers and symbols";
 "library.jumpBar.hint" = "Swipe up or down to move to another letter.";
+"home.hero.a11y" = "Featured";
+"home.hero.position" = "%1$d of %2$d";
