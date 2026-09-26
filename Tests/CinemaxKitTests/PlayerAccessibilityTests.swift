@@ -1,4 +1,6 @@
 import Testing
+import JellyfinAPI
+import SwiftUI
 import UIKit
 @testable import Cinemax
 
@@ -118,6 +120,26 @@ struct PlayerAccessibilityTests {
 /// floor WCAG sets even for large text — on « Lecture » and « Connexion ».
 @Suite("Accent label contrast")
 struct AccentLabelContrastTests {
+    /// The picker's selection check sits on the SWATCH fill (`accentLight` /
+    /// `accentDark`). White was ~1.6:1 on the dark-mode yellow and cyan swatches;
+    /// every check must now clear the 3:1 floor for graphical objects.
+    @Test("Every swatch check clears 3:1, yellow and cyan go dark")
+    func swatchChecksReadOnTheirFill() {
+        func ratio(label: UInt, fill: UInt) -> Double {
+            AccentLabelContrast.contrast(AccentLabelContrast.luminance(hex: label), AccentLabelContrast.luminance(hex: fill))
+        }
+        for option in AccentOption.allCases where option != .rainbow {
+            for fill in [option.palette.accentLight, option.palette.accentDark] {
+                let label: UInt = AccentLabelContrast.prefersDarkLabel(hex: fill) ? AccentLabelContrast.darkLabel : 0xFFFFFF
+                #expect(ratio(label: label, fill: fill) >= 3.0, "\(option) on \(String(fill, radix: 16))")
+            }
+        }
+        for option in [AccentOption.yellow, .cyan] {
+            #expect(AccentLabelContrast.prefersDarkLabel(hex: option.palette.accentDark), "\(option)")
+            #expect(ratio(label: 0xFFFFFF, fill: option.palette.accentDark) < 2.0, "\(option): white really was unreadable")
+        }
+    }
+
 
     @Test("yellow, cyan and orange fills take a dark label, and it reads")
     func paleFillsGoDark() {
@@ -183,6 +205,28 @@ struct ToastAnnouncementTests {
 
 @Suite("Plural rule")
 struct PluralRuleTests {
+
+    /// Apple TV has no touch: « tirez pour actualiser » and « touchez le cœur »
+    /// were shown there verbatim (audit §5, lot 9).
+    @Test("tvOS variants exist in both languages and never speak of touch")
+    func tvVariantsAvoidTouch() {
+        let touchWords = ["tirez", "touchez", "pull down", "tap "]
+        for language in ["fr", "en"] {
+            let bundle = Bundle.localizedBundle(for: language)
+            for key in ["favorites.empty.subtitle", "empty.home.subtitle"] {
+                let tv = bundle.localizedString(forKey: key + ".tv", value: nil, table: nil)
+                #expect(tv != key + ".tv", "\(language): \(key).tv")
+                for word in touchWords {
+                    #expect(!tv.lowercased().contains(word), "\(language): \(key).tv says « \(word) »")
+                }
+            }
+        }
+        #if os(tvOS)
+        #expect(LocalizationManager.platformVariant("empty.home.subtitle") == "empty.home.subtitle.tv")
+        #else
+        #expect(LocalizationManager.platformVariant("empty.home.subtitle") == "empty.home.subtitle")
+        #endif
+    }
 
     @Test("French puts 0 and 1 in the singular, English only 1")
     func singularRule() {
@@ -253,5 +297,66 @@ struct ToastWindowPresentationTests {
         window.toastFrame = .zero
         #expect(window.hitTest(CGPoint(x: 200, y: 100), with: nil) == nil)
         window.isHidden = true
+    }
+}
+
+/// The « Reprendre » / « À suivre » cards announced half of what they draw —
+/// Next Up the series alone, Continue Watching the episode's bare name.
+@Suite("Spoken episode card label")
+struct SpokenEpisodeCardLabelTests {
+    private func localize(_ language: String) -> (String) -> String {
+        let bundle = Bundle.localizedBundle(for: language)
+        return { bundle.localizedString(forKey: $0, value: nil, table: nil) }
+    }
+
+    @Test("An episode says series, season, episode and title, in words")
+    func episode() {
+        var item = BaseItemDto(indexNumber: 2, name: "Deux hommes morts", parentIndexNumber: 1, seriesName: "Andor", type: .episode)
+        #expect(item.spokenCardLabel(localize: localize("fr")) == "Andor, saison 1, épisode 2, Deux hommes morts")
+        #expect(item.spokenCardLabel(localize: localize("en")) == "Andor, season 1, episode 2, Deux hommes morts")
+        item.indexNumber = nil
+        #expect(item.spokenCardLabel(localize: localize("fr")) == "Andor, Deux hommes morts")
+    }
+
+    @Test("A film says its title")
+    func movie() {
+        let item = BaseItemDto(name: "Sintel", type: .movie)
+        #expect(item.spokenCardLabel(localize: localize("fr")) == "Sintel")
+    }
+}
+
+#if os(iOS)
+/// The toast window sits above the app's; its root controller must not answer
+/// « status bar shown » over a player that asked for it hidden.
+@MainActor
+@Suite("Toast window system chrome")
+struct ToastWindowChromeTests {
+    private final class HidingController: UIViewController {
+        override var prefersStatusBarHidden: Bool { true }
+        override var prefersHomeIndicatorAutoHidden: Bool { true }
+    }
+
+    @Test("The toast host defers to the app window's top-most controller")
+    func defersToAppWindow() {
+        let appWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        appWindow.rootViewController = HidingController()
+        let host = ToastHostingController(rootView: AnyView(EmptyView()))
+        #expect(!host.prefersStatusBarHidden)
+        host.appWindow = appWindow
+        #expect(host.prefersStatusBarHidden)
+        #expect(host.prefersHomeIndicatorAutoHidden)
+    }
+}
+#endif
+
+@Suite("A–Z jump bar VoiceOver steps")
+struct AlphabeticalJumpStepTests {
+    @Test("One step along the alphabet, clamped at both ends")
+    func stepping() {
+        #expect(AlphabeticalJump.stepped(from: "#", by: 1) == "A")
+        #expect(AlphabeticalJump.stepped(from: "A", by: -1) == "#")
+        #expect(AlphabeticalJump.stepped(from: "#", by: -1) == "#")
+        #expect(AlphabeticalJump.stepped(from: "Z", by: 1) == "Z")
+        #expect(AlphabeticalJump.stepped(from: "?", by: 1) == "#")
     }
 }

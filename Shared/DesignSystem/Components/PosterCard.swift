@@ -61,7 +61,7 @@ struct PosterCard: View {
             if let subtitle {
                 Text(subtitle)
                     .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.outline)
+                    .foregroundStyle(CinemaColor.onSurfaceMuted)
                     .lineLimit(1)
             }
         }

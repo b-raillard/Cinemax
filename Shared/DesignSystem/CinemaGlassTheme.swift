@@ -47,6 +47,10 @@ enum CinemaColor {
     // Text
     static let onSurface        = Color.dynamic(light: 0x14161A, dark: 0xE7E5E4)
     static let onSurfaceVariant = Color.dynamic(light: 0x55585E, dark: 0xACABAA)
+    /// Tertiary TEXT — card subtitles and detail lines. `outline` is a stroke
+    /// colour and read 2.0:1 as text in light mode (4.2:1 in dark); this one
+    /// clears 4.5:1 on `surface` in both (4.8 / 5.8). Audit §5, lot 9.
+    static let onSurfaceMuted = Color.dynamic(light: 0x6B6E74, dark: 0x8E8D8D)
 
     // Primary
     static let primary          = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)

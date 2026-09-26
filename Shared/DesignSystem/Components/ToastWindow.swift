@@ -48,7 +48,8 @@ final class ToastWindowInstallerView: UIView {
         let overlay = ToastPassthroughWindow(windowScene: scene)
         overlay.windowLevel = .normal + 1
         overlay.backgroundColor = .clear
-        let host = UIHostingController(rootView: makeRoot(overlay))
+        let host = ToastHostingController(rootView: makeRoot(overlay))
+        host.appWindow = window
         host.view.backgroundColor = .clear
         overlay.rootViewController = host
         #if os(tvOS)
@@ -57,6 +58,30 @@ final class ToastWindowInstallerView: UIView {
         overlay.isHidden = false
         toastWindow = overlay
     }
+}
+
+/// The toast window's root controller, which answers every system-chrome
+/// question with the APP window's answer.
+///
+/// A visible full-screen window above the app is a candidate when UIKit asks
+/// who decides the status bar and the home indicator. A plain
+/// `UIHostingController` would say "shown" over the VLC player, which asks
+/// for both hidden (review of 142db6e, lot 9). Forwarding to the app window's
+/// top-most presented controller keeps the player — or a sheet — in charge.
+final class ToastHostingController: UIHostingController<AnyView> {
+    weak var appWindow: UIWindow?
+
+    #if os(iOS)
+    private var appTop: UIViewController? {
+        var top = appWindow?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
+    }
+
+    override var prefersStatusBarHidden: Bool { appTop?.prefersStatusBarHidden ?? false }
+    override var preferredStatusBarStyle: UIStatusBarStyle { appTop?.preferredStatusBarStyle ?? .default }
+    override var prefersHomeIndicatorAutoHidden: Bool { appTop?.prefersHomeIndicatorAutoHidden ?? false }
+    #endif
 }
 
 /// Lets every touch that does not land on the toast itself reach the app's
@@ -101,7 +126,10 @@ private struct ToastWindowRoot: View {
             // WINDOW's interface style, so the app's own dark/light choice has
             // to be pushed onto this window explicitly.
             .onAppear { applyStyle() }
-            .onChange(of: themeManager.darkModeEnabled) { _, _ in applyStyle() }
+            // `colorScheme`, not `darkModeEnabled`: the latter reads an
+            // `@ObservationIgnored` store and is not tracked, so a switch made in
+            // Réglages → Apparence never reached this window until relaunch.
+            .onChange(of: themeManager.colorScheme) { _, _ in applyStyle() }
     }
 
     private func applyStyle() {

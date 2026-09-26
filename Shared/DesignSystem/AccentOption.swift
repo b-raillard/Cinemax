@@ -101,6 +101,17 @@ enum AccentOption: String, CaseIterable, Identifiable {
     /// The key of the accent's localized name (`accent.name.<rawValue>`), read
     /// by VoiceOver on the picker's swatches — a colour dot says nothing to it.
     var nameKey: String { "accent.name.\(rawValue)" }
+
+    /// The selection check drawn ON the swatch, which is filled with `color`
+    /// (`accentLight` / `accentDark`), not with `accentContainer` — so it gets
+    /// its own reading of the same numeric rule. A white check was ~1.6:1 on
+    /// the dark-mode yellow and cyan swatches (audit lot 4, left for lot 9).
+    var swatchCheckColor: Color {
+        func label(on fill: UInt) -> UInt {
+            AccentLabelContrast.prefersDarkLabel(hex: fill) ? AccentLabelContrast.darkLabel : 0xFFFFFF
+        }
+        return Color.dynamic(light: label(on: palette.accentLight), dark: label(on: palette.accentDark))
+    }
 }
 
 // MARK: - Label contrast on accent fills

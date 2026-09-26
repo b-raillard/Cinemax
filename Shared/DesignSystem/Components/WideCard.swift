@@ -57,8 +57,10 @@ struct WideCard: View {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .lineLimit(1)
 
-            textLine(subtitle, font: CinemaFont.label(.medium), color: CinemaColor.outline)
-            textLine(detail, font: CinemaFont.label(.small), color: CinemaColor.outlineVariant)
+            // Both lines are text, so a text token — `outline` / `outlineVariant`
+            // are stroke colours (the detail line read ~1.4:1 in light mode).
+            textLine(subtitle, font: CinemaFont.label(.medium), color: CinemaColor.onSurfaceMuted)
+            textLine(detail, font: CinemaFont.label(.small), color: CinemaColor.onSurfaceMuted)
         }
     }
 

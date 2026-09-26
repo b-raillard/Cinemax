@@ -34,8 +34,10 @@ In `AppNavigation`. Setting it on a child view breaks `UITraitCollection` propag
 
 Allowed only:
 - Inside the video player (chrome is always dark).
-- On elements sitting directly on a saturated `accentContainer` fill (e.g. the `.accent` style's label, `RatingBadge` text).
-- Hero/display titles rendered over backdrop imagery + `CinemaGradient.heroOverlay` — the underlay is always dark regardless of mode (`HomeScreen`, `LibraryHeroSection`, `MediaDetailScreen`).
+
+**Not** an exception any more:
+- A label on an accent fill: the fill is `accentContainer` and the label `themeManager.onAccentContainer` — white where it reads, near-black on yellow / cyan / orange (audit 2026-09-22, U4; the admin « Admin » / « Cet appareil » / « Cette session » badges drew white on `accent` until lot 9).
+- Hero titles: `CinemaGradient.heroOverlay` ends on `CinemaColor.surface`, which is LIGHT in light mode, so a hero title is `CinemaColor.onSurface` like any other text.
 
 Everywhere else: `CinemaColor.onSurface` / `.onSurfaceVariant`.
 

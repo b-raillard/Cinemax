@@ -97,7 +97,6 @@ struct MetadataLibraryItemsScreen: View {
     let library: BaseItemDto
 
     @Environment(AppState.self) private var appState
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(\.horizontalSizeClass) private var sizeClass
 

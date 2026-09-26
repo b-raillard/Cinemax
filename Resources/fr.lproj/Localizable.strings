@@ -45,6 +45,7 @@
 "home.nextUp" = "À suivre";
 "favorites.empty.title" = "Aucun favori";
 "favorites.empty.subtitle" = "Touchez le cœur sur un film ou une série pour l'ajouter ici.";
+"favorites.empty.subtitle.tv" = "Choisissez le cœur sur la fiche d'un film ou d'une série pour l'ajouter ici.";
 "watchedHistory.empty.title" = "Aucun historique";
 "watchedHistory.empty.subtitle" = "Les films et séries que vous regardez apparaîtront ici.";
 "home.liveSession" = "EN DIRECT";
@@ -113,6 +114,7 @@
 "library.playlists.empty" = "Aucune playlist pour le moment";
 "empty.home.title" = "Votre bibliothèque est vide";
 "empty.home.subtitle" = "Ajoutez des films ou séries à votre serveur Jellyfin puis tirez pour actualiser.";
+"empty.home.subtitle.tv" = "Ajoutez des films ou séries à votre serveur Jellyfin : ils apparaîtront ici.";
 
 // MARK: - Sleep Timer
 
@@ -947,13 +949,14 @@
 
 // MARK: - Player (tvOS dismiss hint)
 
-"player.tvOS.dismissHint" = "Appuyez sur Menu pour quitter.";
+"player.tvOS.dismissHint" = "Appuyez sur Retour pour quitter.";
 
 // MARK: - Accessibility (added in v1.0 audit)
 
 "accessibility.playItem" = "Lire %@";
 "accessibility.moreInfoAbout" = "Plus d'informations sur %@";
 "accessibility.resumeProgress" = "%d %% regardé";
+"accessibility.episodeCard" = "%1$@, saison %2$d, épisode %3$d, %4$@";
 "accessibility.criticRating" = "Critiques : %d pour cent";
 "detail.restricted.title" = "Contenu restreint";
 "detail.restricted.subtitle" = "Ce titre dépasse la limite d'âge définie dans Confidentialité et sécurité.";
@@ -1062,6 +1065,7 @@
 "syncplay.leaveConfirm.title" = "Quitter la séance ?";
 "syncplay.leaveConfirm.message" = "Fermer le lecteur vous fait quitter la séance. Les autres participants continueront sans vous.";
 "syncplay.leaveConfirm.leave" = "Quitter la séance";
+"syncplay.lobby.leaveConfirm.message" = "Revenir en arrière vous fait quitter la séance. Les autres participants continueront sans vous.";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";
@@ -1142,6 +1146,7 @@
 "remote.title" = "Lire sur…";
 "remote.sent" = "Lecture lancée sur %@";
 "remote.unknownDevice" = "Appareil inconnu";
+"settings.server.unknownAddress" = "Adresse inconnue";
 "remote.idle" = "Prêt";
 "remote.nowPlaying" = "lit %@";
 "remote.noTargets.title" = "Aucun appareil disponible";
@@ -1258,3 +1263,8 @@
 "item.kind.collection" = "Collection";
 "item.kind.playlist" = "Playlist";
 "item.kind.video" = "Vidéo";
+"library.jumpBar.a11y" = "Index alphabétique";
+"library.jumpBar.digits" = "Chiffres et symboles";
+"library.jumpBar.hint" = "Balayez vers le haut ou le bas pour passer à une autre lettre.";
+"home.hero.a11y" = "À la une";
+"home.hero.position" = "%1$d sur %2$d";

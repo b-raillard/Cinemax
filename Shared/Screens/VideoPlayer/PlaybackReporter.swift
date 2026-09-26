@@ -41,7 +41,6 @@ final class PlaybackReporter {
     typealias PendingResumeSource = @MainActor () -> Double?
 
     private let apiClient: any PlaybackAPI
-    private let userId: String
     private let context: ContextProvider
     private let timeSource: TimeSource?
     private let pendingResume: PendingResumeSource?
@@ -83,13 +82,11 @@ final class PlaybackReporter {
 
     init(
         apiClient: any PlaybackAPI,
-        userId: String,
         context: @escaping ContextProvider,
         timeSource: TimeSource? = nil,
         pendingResume: PendingResumeSource? = nil
     ) {
         self.apiClient = apiClient
-        self.userId = userId
         self.context = context
         self.timeSource = timeSource
         self.pendingResume = pendingResume
@@ -152,12 +149,11 @@ final class PlaybackReporter {
         if let id = ctx.info.playSessionId { endedPlaySessionIds.remove(id) }
         let positionTicks = startTime.map { Self.positionTicks(fromSeconds: $0) } ?? 0
         let client = apiClient
-        let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
         enqueue {
             await client.reportPlaybackStart(
-                itemId: itemId, userId: uid,
+                itemId: itemId,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
                 positionTicks: positionTicks, playMethod: info.playMethod
             )
@@ -181,14 +177,13 @@ final class PlaybackReporter {
         }
         let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient
-        let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
         pendingProgress.forEach { $0.cancel() }
         pendingProgress.removeAll()
         enqueue {
             await client.reportPlaybackStopped(
-                itemId: itemId, userId: uid,
+                itemId: itemId,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
                 positionTicks: positionTicks, liveStreamId: info.liveStreamId
             )
@@ -218,12 +213,11 @@ final class PlaybackReporter {
         guard let ctx = context(), let state = currentState(ctx) else { return }
         let positionTicks = Self.positionTicks(fromSeconds: state.seconds)
         let client = apiClient
-        let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
         enqueueProgress {
             await client.reportPlaybackProgress(
-                itemId: itemId, userId: uid,
+                itemId: itemId,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
                 positionTicks: positionTicks, isPaused: true, playMethod: info.playMethod
             )
@@ -306,12 +300,11 @@ final class PlaybackReporter {
         let positionTicks = Self.positionTicks(fromSeconds: state.seconds)
         let isPaused = state.isPaused
         let client = apiClient
-        let uid = userId
         let itemId = ctx.itemId
         let info = ctx.info
         enqueueProgress {
             await client.reportPlaybackProgress(
-                itemId: itemId, userId: uid,
+                itemId: itemId,
                 mediaSourceId: info.mediaSourceId, playSessionId: info.playSessionId,
                 positionTicks: positionTicks, isPaused: isPaused, playMethod: info.playMethod
             )

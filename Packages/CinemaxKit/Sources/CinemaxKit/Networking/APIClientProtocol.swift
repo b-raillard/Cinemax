@@ -301,13 +301,13 @@ public protocol PlaybackAPI: Sendable {
     func getMediaSegments(itemId: String, includeSegmentTypes: [MediaSegmentType]?) async throws -> [MediaSegmentDto]
 
     /// Reports that playback has started. Fire-and-forget; errors are silently ignored.
-    func reportPlaybackStart(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async
+    func reportPlaybackStart(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, playMethod: PlayMethod) async
     /// Reports current playback position. Fire-and-forget; errors are silently ignored.
-    func reportPlaybackProgress(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async
+    func reportPlaybackProgress(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, isPaused: Bool, playMethod: PlayMethod) async
     /// Reports that playback has stopped at the given position. Fire-and-forget; errors are silently ignored.
     /// `liveStreamId` — when non-nil, tells the server to release the live
     /// stream it opened for this session.
-    func reportPlaybackStopped(itemId: String, userId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async
+    func reportPlaybackStopped(itemId: String, mediaSourceId: String?, playSessionId: String?, positionTicks: Int?, liveStreamId: String?) async
 
     /// Kills the server-side encoding job backing this play session. Idempotent
     /// server-side — a no-op when the session wasn't transcoding — so callers

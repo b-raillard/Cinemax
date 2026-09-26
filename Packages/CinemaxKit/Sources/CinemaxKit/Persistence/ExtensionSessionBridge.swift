@@ -245,14 +245,6 @@ public enum ExtensionSessionBridge {
         memoLock.unlock()
     }
 
-    /// Test seam: drops the in-process memo so a test can exercise the
-    /// Keychain-consulting path it would otherwise short-circuit.
-    static func resetPublishMemoForTesting() {
-        memoLock.lock()
-        _lastPublishedInProcess = nil
-        memoLock.unlock()
-    }
-
     static func isCurrent(session: Session?, keychainData: Data?) -> Bool {
         guard let session else {
             // Clearing: only current if the store is already empty — a stale

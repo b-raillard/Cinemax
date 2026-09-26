@@ -45,6 +45,7 @@
 "home.nextUp" = "Next Up";
 "favorites.empty.title" = "No favorites yet";
 "favorites.empty.subtitle" = "Tap the heart on a movie or show to add it here.";
+"favorites.empty.subtitle.tv" = "Select the heart on a movie or show's page to add it here.";
 "watchedHistory.empty.title" = "No history yet";
 "watchedHistory.empty.subtitle" = "Movies and shows you watch will appear here.";
 "home.liveSession" = "LIVE";
@@ -113,6 +114,7 @@
 "library.playlists.empty" = "No playlists here yet";
 "empty.home.title" = "Your library is empty";
 "empty.home.subtitle" = "Add movies or TV shows to your Jellyfin server and pull down to refresh.";
+"empty.home.subtitle.tv" = "Add movies or TV shows to your Jellyfin server and they will appear here.";
 
 // MARK: - Sleep Timer
 
@@ -946,13 +948,14 @@
 
 // MARK: - Player (tvOS dismiss hint)
 
-"player.tvOS.dismissHint" = "Press Menu to dismiss.";
+"player.tvOS.dismissHint" = "Press Back to dismiss.";
 
 // MARK: - Accessibility (added in v1.0 audit)
 
 "accessibility.playItem" = "Play %@";
 "accessibility.moreInfoAbout" = "More information about %@";
 "accessibility.resumeProgress" = "%d%% watched";
+"accessibility.episodeCard" = "%1$@, season %2$d, episode %3$d, %4$@";
 "accessibility.criticRating" = "Critics: %d percent";
 "detail.restricted.title" = "Restricted content";
 "detail.restricted.subtitle" = "This title is above the age limit set in Privacy & Security.";
@@ -1058,6 +1061,7 @@
 "syncplay.leaveConfirm.title" = "Leave the session?";
 "syncplay.leaveConfirm.message" = "Closing the player takes you out of the session. The other participants will carry on without you.";
 "syncplay.leaveConfirm.leave" = "Leave session";
+"syncplay.lobby.leaveConfirm.message" = "Going back takes you out of the session. The other participants will carry on without you.";
 "syncplay.needsVLC" = "Watch Together only works with the VLC player. Turn off \"Native player\" in Settings → Playback.";
 "syncplay.needsVLC.footnote" = "\"Native player\" is on: to join a session, turn it off in Settings → Playback.";
 
@@ -1140,6 +1144,7 @@
 "remote.title" = "Play on…";
 "remote.sent" = "Started playing on %@";
 "remote.unknownDevice" = "Unknown device";
+"settings.server.unknownAddress" = "Unknown address";
 "remote.idle" = "Ready";
 "remote.nowPlaying" = "playing %@";
 "remote.noTargets.title" = "No device available";
@@ -1256,3 +1261,8 @@
 "item.kind.collection" = "Collection";
 "item.kind.playlist" = "Playlist";
 "item.kind.video" = "Video";
+"library.jumpBar.a11y" = "Alphabetical index";
+"library.jumpBar.digits" = "Numbers and symbols";
+"library.jumpBar.hint" = "Swipe up or down to move to another letter.";
+"home.hero.a11y" = "Featured";
+"home.hero.position" = "%1$d of %2$d";

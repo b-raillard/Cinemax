@@ -89,6 +89,7 @@ Tonal hierarchy (dark mode):
 | --- | --- | --- | --- |
 | `onSurface` | `#14161A` | `#E7E5E4` | Primary text |
 | `onSurfaceVariant` | `#55585E` | `#ACABAA` | Secondary text, labels, metadata |
+| `onSurfaceMuted` | `#6B6E74` | `#8E8D8D` | Tertiary text — card subtitles / detail lines (≥ 4.5:1 on `surface` both modes) |
 
 ### Primary / Secondary — neutral action greys
 
@@ -113,7 +114,7 @@ Kept only for lingering call sites that haven't been migrated to `ThemeManager`.
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
-| `outline` | `#B0B1B5` | `#767575` | Ghost-button 1 pt stroke only |
+| `outline` | `#B0B1B5` | `#767575` | Ghost-button 1 pt stroke only — **never text** (2.0:1 in light) |
 | `outlineVariant` | `#CFD0D3` | `#484848` | Barely-visible separator |
 
 Don't reach for these to build hierarchy. Use tonal surface shifts.

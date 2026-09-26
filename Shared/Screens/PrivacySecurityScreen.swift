@@ -321,8 +321,10 @@ struct PrivacySecurityScreen: View {
                     icon: "faceid",
                     label: loc.localized("privacy.lock.biometrics"),
                     // Says WHY the switch is off when the enrolled faces /
-                    // fingers changed and the PIN unlock turned it off — this
-                    // screen is a sheet, above the root toast overlay.
+                    // fingers changed and the PIN unlock turned it off. A toast
+                    // would be seen now (toasts have their own window) but would
+                    // be gone by the time the parent looks; the reason belongs
+                    // on the switch it explains.
                     subtitle: loc.localized(parentalLock.biometricSetChanged
                         ? "privacy.lock.biometrics.reset"
                         : "privacy.lock.biometrics.subtitle"),

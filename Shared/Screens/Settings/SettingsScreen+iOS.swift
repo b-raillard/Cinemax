@@ -230,6 +230,12 @@ extension SettingsScreen {
 
                     iOSSettingsDivider
 
+                    navigationRow(icon: "heart", label: loc.localized("home.favorites")) {
+                        showFavoritesScreen = true
+                    }
+
+                    iOSSettingsDivider
+
                     navigationRow(icon: "clock.arrow.circlepath", label: loc.localized("settings.watchedHistory")) {
                         showWatchedHistory = true
                     }
@@ -697,6 +703,7 @@ extension SettingsScreen {
 /// previous server's name on it.
 struct IOSActiveServerLabel: View {
     @Environment(AppState.self) private var appState
+    @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -704,7 +711,7 @@ struct IOSActiveServerLabel: View {
                 .font(CinemaFont.dynamicLabel(.large))
                 .foregroundStyle(CinemaColor.onSurface)
 
-            Text(appState.serverURL?.host ?? appState.serverURL?.absoluteString ?? "Unknown")
+            Text(appState.activeServerAddress ?? loc.localized("settings.server.unknownAddress"))
                 .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .lineLimit(1)

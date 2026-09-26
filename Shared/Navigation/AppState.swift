@@ -410,11 +410,19 @@ final class AppState {
     /// placeholder, then the name, on every switch. Keyed on `activeServerId`
     /// for the same reason as `activeServerNameOverride`.
     var activeServerDisplayName: String {
+        // `ServerEntry.displayName` is the one reading of override-vs-name;
+        // only the placeholder falls through to the live `serverInfo`.
         if let activeServerId, let entry = servers.first(where: { $0.id == activeServerId }) {
-            if let override = entry.displayNameOverride, !override.isEmpty { return override }
-            if !entry.name.isEmpty, entry.name != ServerEntry.fallbackName { return entry.name }
+            let name = entry.displayName
+            if !name.isEmpty, name != ServerEntry.fallbackName { return name }
         }
         return serverInfo?.name ?? ServerEntry.fallbackName
+    }
+
+    /// The active server's host (or whole URL when it has none) — `nil`
+    /// before a server is known. The views supply the localized placeholder.
+    var activeServerAddress: String? {
+        serverURL?.host ?? serverURL?.absoluteString
     }
 
     /// Hydrates the observable registry from the Keychain. Called once from

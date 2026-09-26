@@ -82,6 +82,17 @@ final class LocalizationManager {
         return String(format: format, arguments: args)
     }
 
+    /// The Apple TV variant of a key whose wording is about TOUCH (« tirez
+    /// pour actualiser », « touchez le cœur »): `<key>.tv` on tvOS, the key
+    /// itself elsewhere. Both tables carry both variants (audit §5, lot 9).
+    nonisolated static func platformVariant(_ key: String) -> String {
+        #if os(tvOS)
+        key + ".tv"
+        #else
+        key
+        #endif
+    }
+
     /// Maps a thrown error to a localized, user-meaningful message. Keeps the
     /// cryptic SDK descriptions (e.g. `unacceptableStatusCode(401)`) out of the
     /// UI — callers should still log `error` raw for diagnostics. Detection is

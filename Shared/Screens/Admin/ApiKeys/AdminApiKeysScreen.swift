@@ -157,10 +157,10 @@ struct AdminApiKeysScreen: View {
                                 Text(loc.localized("admin.apiKeys.thisSession"))
                                     .font(.system(size: CinemaScale.pt(10), weight: .bold))
                                     .tracking(0.5)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(themeManager.onAccentContainer)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Capsule().fill(themeManager.accent))
+                                    .background(Capsule().fill(themeManager.accentContainer))
                             }
                         }
                         if let date = key.dateCreated {

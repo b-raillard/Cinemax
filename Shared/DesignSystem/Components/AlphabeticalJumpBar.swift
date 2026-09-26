@@ -13,6 +13,13 @@ enum AlphabeticalJump {
             .compactMap { UnicodeScalar($0).map { String(Character($0)) } })
         return list
     }()
+
+    /// The letter a VoiceOver adjust gesture lands on: one step along
+    /// `letters`, clamped at both ends (swiping past Z stays on Z).
+    static func stepped(from letter: String, by offset: Int) -> String {
+        guard let index = letters.firstIndex(of: letter) else { return letters[0] }
+        return letters[min(max(index + offset, 0), letters.count - 1)]
+    }
 }
 
 #if os(iOS)
@@ -32,6 +39,9 @@ struct AlphabeticalJumpBar: View {
     private static let letters = AlphabeticalJump.letters
 
     @State private var lastFired: String?
+    /// The letter VoiceOver's adjust gesture moves from — its spoken value.
+    @State private var spokenLetter = AlphabeticalJump.letters[0]
+    @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,7 +78,24 @@ struct AlphabeticalJumpBar: View {
                     lastFired = nil
                 }
         )
-        .accessibilityHidden(true)
+        // It was `accessibilityHidden`, with nothing in its place: VoiceOver
+        // users had no way to jump through a 500-film library (audit §5,
+        // lot 9). One adjustable element instead of 27 tiny targets — swipe
+        // up / down moves one letter and jumps there, as Contacts does.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("library.jumpBar.a11y"))
+        .accessibilityValue(spokenLetter == "#" ? loc.localized("library.jumpBar.digits") : spokenLetter)
+        .accessibilityHint(loc.localized("library.jumpBar.hint"))
+        .accessibilityAdjustableAction { direction in
+            let offset: Int
+            switch direction {
+            case .increment: offset = 1
+            case .decrement: offset = -1
+            @unknown default: return
+            }
+            spokenLetter = AlphabeticalJump.stepped(from: spokenLetter, by: offset)
+            fire(spokenLetter)
+        }
     }
 
     private func fire(_ letter: String) {

@@ -73,7 +73,6 @@ final class NativeVideoPresenter {
     private var subtitleTracks: [MediaTrackInfo] = []
     private var currentAudioIndex: Int? = nil
     private var currentSubtitleIndex: Int? = nil
-    private var currentPlayMethod: CinemaxKit.PlayMethod = .transcode
 
     // Shared periodic time observer. Fans out to SkipSegmentController.onTick
     // and PlaybackReporter.onTick from startProgressReporting.
@@ -125,8 +124,7 @@ final class NativeVideoPresenter {
         self.onDismiss = onDismiss
 
         self.playbackReporter = PlaybackReporter(
-            apiClient: apiClient, userId: userId,
-            context: { [weak self] in
+            apiClient: apiClient, context: { [weak self] in
                 guard let self, let info = self.playbackInfo else { return nil }
                 return .init(itemId: self.itemId, info: info, player: self.playerVC?.player)
             },
@@ -266,7 +264,6 @@ final class NativeVideoPresenter {
         self.subtitleTracks = info.subtitleTracks
         self.currentAudioIndex = info.selectedAudioIndex
         self.currentSubtitleIndex = info.selectedSubtitleIndex
-        self.currentPlayMethod = info.playMethod
         recordPlaybackDiagnostics(info)
 
         // Start with nil item — native player chrome appears immediately while
@@ -380,7 +377,7 @@ final class NativeVideoPresenter {
             avPlayer.play()
             self.playbackReporter.reportStart(startTime: self.startTime)
             startProgressReporting()
-            observeItemEnd(playerItem, player: avPlayer)
+            observeItemEnd(playerItem)
             self.skipSegments.load(for: self.itemId)
             self.chapters.fetchAndApply(
                 itemId: self.itemId,
@@ -452,7 +449,7 @@ final class NativeVideoPresenter {
         }
         player.replaceCurrentItem(with: playerItem)
         player.play()
-        observeItemEnd(playerItem, player: player)
+        observeItemEnd(playerItem)
     }
     #endif
 
@@ -560,7 +557,6 @@ final class NativeVideoPresenter {
         self.currentSubtitleIndex = subtitleIndex ?? info.selectedSubtitleIndex
         self.audioTracks = info.audioTracks
         self.subtitleTracks = info.subtitleTracks
-        self.currentPlayMethod = info.playMethod
         recordPlaybackDiagnostics(info)
 
         let playerItem = makePlayerItem(for: info)
@@ -594,7 +590,7 @@ final class NativeVideoPresenter {
 
         player.replaceCurrentItem(with: playerItem)
         startProgressReporting()
-        observeItemEnd(playerItem, player: player)
+        observeItemEnd(playerItem)
         setupTrackMenus()
     }
 
@@ -644,7 +640,6 @@ final class NativeVideoPresenter {
             self.subtitleTracks = info.subtitleTracks
             self.currentAudioIndex = info.selectedAudioIndex
             self.currentSubtitleIndex = info.selectedSubtitleIndex
-            self.currentPlayMethod = info.playMethod
             self.recordPlaybackDiagnostics(info)
 
             // The episode we're leaving can have died during a device sleep, which
@@ -683,7 +678,7 @@ final class NativeVideoPresenter {
             avPlayer.play()
             playbackReporter.reportStart(startTime: self.startTime)
             startProgressReporting()
-            observeItemEnd(playerItem, player: avPlayer)
+            observeItemEnd(playerItem)
             skipSegments.load(for: ep.id)
             chapters.fetchAndApply(
                 itemId: ep.id,
@@ -774,7 +769,7 @@ final class NativeVideoPresenter {
         }
     }
 
-    private func observeItemEnd(_ item: AVPlayerItem, player: AVPlayer) {
+    private func observeItemEnd(_ item: AVPlayerItem) {
         if let obs = itemEndObserver { NotificationCenter.default.removeObserver(obs) }
         itemEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,

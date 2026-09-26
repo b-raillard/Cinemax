@@ -399,3 +399,22 @@ Méthode : build Release signé installé sur l'appareil, `xctrace` (Time Profil
 - P14 : **non confirmé, rien changé**. Empreinte physique au lancement (Activity Monitor) : pic **24,4 Mio**, stable à 23,6 Mio 40 s après, loin des ~150 Mo estimés.
 - Bas (lancement) : **non confirmés, rien changé**. Aucun échantillon dans le trousseau (`SecItemCopyMatching`), `@AppStorage`, la sonde de transport ou Now Playing sur les 35 s du lancement. **Constaté, non corrigé** : 73 % du décodage JSON du lancement (143 / 195 échantillons, hors fil principal) est dans le décodage des dates du SDK.
 - **Non mesurés, rien changé** : P13 (journal libVLC), P11 (vignettes de chapitres) et Now Playing en lecture — ils demandent une lecture sur l'Apple TV, et la commande de lecture à distance vers la session de l'appareil a été refusée par le garde-fou de permissions de la session. P6 n'a pas de trace Instruments (le modèle Network a rendu une trace vide) : chronométrage direct du serveur à la place. « JellyfinClient jamais invalidé » : pas de mesure possible sans changement de serveur sur l'appareil.
+
+**Lot 9 — accessibilité, UX, code mort, fait en grande partie.**
+- `PlayerChapterSelection` branché : le chapitre en cours porte le trait « sélectionné » dans la bande de chapitres VLC.
+- Coche des pastilles d'accent : couleur choisie par la règle numérique d'`AccentLabelContrast` sur la couleur de la pastille (jaune et cyan : ~1,6:1 → ≥ 3:1) ; test sur toutes les pastilles.
+- Section 5, points « Moyenne » :
+  - sous-titres et détails des cartes : nouveau jeton de texte `onSurfaceMuted` (4,8 / 5,8:1 sur `surface`, contre 2,0:1 et ~1,4:1) ;
+  - cartes Reprendre / À suivre : VoiceOver dit « série, saison N, épisode N, titre » ;
+  - textes tactiles sur tvOS (« tirez », « touchez ») remplacés par des variantes `.tv` ; « Menu » → « Retour » ;
+  - `ProfileScreen` tvOS : en-tête de couverture standard, sans `.scrollClipDisabled()` ; sélecteurs de langue avec l'option courante marquée (liste plein écran sur tvOS, focus et défilement dessus ; `Picker` dans le `Menu` sur iOS) ;
+  - **décidé** : Menu dans le salon « Regarder ensemble » demande « Quitter la séance ? » ; « Réinitialiser le menu » reste **sans** confirmation ;
+  - **décidé** : Favoris accessible depuis Réglages → Compte (iOS + tvOS) ;
+  - carrousel iOS : l'`accessibilityScrollAction` qui détournait le balayage vertical à trois doigts est remplacée par des points de pagination ajustables ;
+  - barre A–Z : un élément « Index alphabétique » ajustable pour VoiceOver ;
+  - cibles de 44 pt pour les croix des feuilles (Quoi de neuf, Aperçu d'épisode, Quick Connect × 2) ;
+  - `glassPanel` suit Réduire la transparence (fond opaque) et Augmenter le contraste (bord de 1 pt).
+- Relecture des commits d'intégration : fenêtre des toasts (thème suivi en direct, barre d'état et indicateur d'accueil laissés à la fenêtre de l'app, titre borné à 6 lignes), « Unknown » en dur, badges admin blanc sur accent, `canOpenURL` à chaque rendu, paramètre `release` inutilisé, exception « héros en blanc » périmée dans `conventions.md`.
+- Code mort : les éléments sûrs de la section 6 et les quatre décidés (`purgeLegacyDownloads()`, `bitrateLabel`, `userId:` de `reportPlayback*`, cible de test SwiftPM).
+- Captures (simulateurs, compte réel) : iPhone FR sombre, EN clair, FR clair en AX3 (Accueil, Compte, Favoris, Profil) ; Apple TV FR sombre et EN clair (Accueil). Libellés VoiceOver vérifiés dans l'arbre d'accessibilité (« Arrow, season 2, episode 11, Le masque tombe »).
+- **Reporté** : Dynamic Type au-delà des réglages, états vides et toasts (≈ 510 polices fixes, chantier écran par écran) ; trait « sélectionné » ailleurs qu'aux endroits déjà traités ; parcours tvOS au-delà de l'Accueil non capturés (Xcode 27 n'a plus de Simulator.app, donc pas de télécommande simulée) — Favoris, Profil et salon à valider sur l'Apple TV.

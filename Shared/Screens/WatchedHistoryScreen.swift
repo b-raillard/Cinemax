@@ -102,7 +102,6 @@ final class WatchedHistoryViewModel {
 struct WatchedHistoryScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dismiss) private var dismiss
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass

@@ -52,8 +52,6 @@ final class VLCStreamPresenter: NSObject {
     /// launch would get force-transcoded on resume.
     private let maxBitrate: Int
 
-    private weak var hostingVC: VLCStreamViewController?
-
     /// Stream init — online playback negotiated through Jellyfin's PlaybackInfo
     /// flow with VLC's broad DirectPlay profile.
     init(
@@ -102,7 +100,6 @@ final class VLCStreamPresenter: NSObject {
         )
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
-        hostingVC = vc
         topVC.present(vc, animated: true)
     }
 
@@ -286,6 +283,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `fetchChapters`, so dropping it there loses the thumbnails for good.
     private var pendingChapterThumbnails: (@MainActor () -> Void)?
     private var chapterStartTicks: [Int] = []
+    /// The chip carrying `.selected` — the chapter playing now. Written on
+    /// change only, from `writeTimeLabels` (see `markCurrentChapter`).
+    private var selectedChapterIndex: Int?
     private var chapterHeightConstraint: NSLayoutConstraint?
     private let centerGlyph = UIImageView()
     private var centerGlyphHide: DispatchWorkItem?
@@ -974,7 +974,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         nowPlaying.attach(itemId: itemId, title: titleText, durationSeconds: nil)
         reporter = PlaybackReporter(
             apiClient: apiClient,
-            userId: userId,
             context: { [weak self] in
                 guard let self else { return nil }
                 // Live read, not a bound snapshot: the same reporter instance
@@ -2510,6 +2509,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingChapterThumbnails = nil
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
+        selectedChapterIndex = nil
         #if os(tvOS)
         tvScrub.setChapterMarks([])
         contextArtworkTask?.cancel()
@@ -5084,6 +5084,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #else
         tvScrub.accessibilityValue = spokenPosition
         #endif
+        markCurrentChapter(positionMs: ms)
+    }
+
+    /// Gives the chip of the chapter playing now the `.selected` trait, so
+    /// VoiceOver says which chapter is current while the user moves along the
+    /// strip. Rides the sole position writer, like the scrub control's value;
+    /// touches two chips at most, and only when the chapter changes.
+    private func markCurrentChapter(positionMs: Int32) {
+        let index = PlayerChapterSelection.currentIndex(
+            startTicks: chapterStartTicks, positionTicks: Int(positionMs) * 10_000
+        )
+        guard index != selectedChapterIndex else { return }
+        let chips = chapterStack.arrangedSubviews
+        if let old = selectedChapterIndex, chips.indices.contains(old) {
+            chips[old].accessibilityTraits.remove(.selected)
+        }
+        if let index, chips.indices.contains(index) {
+            chips[index].accessibilityTraits.insert(.selected)
+        }
+        selectedChapterIndex = index
     }
 
     /// Writes one position to the time labels and the platform scrub control.
