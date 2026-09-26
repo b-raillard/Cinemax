@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// One Jellyfin session this user can drive from here — the "Play on…" picker's
 /// row model. A flattened, `Sendable` projection of `SessionInfoDto`: the DTO
