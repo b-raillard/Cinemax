@@ -1261,3 +1261,6 @@
 "item.kind.collection" = "Collection";
 "item.kind.playlist" = "Playlist";
 "item.kind.video" = "Video";
+"library.jumpBar.a11y" = "Alphabetical index";
+"library.jumpBar.digits" = "Numbers and symbols";
+"library.jumpBar.hint" = "Swipe up or down to move to another letter.";

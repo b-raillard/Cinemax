@@ -348,3 +348,15 @@ struct ToastWindowChromeTests {
     }
 }
 #endif
+
+@Suite("A–Z jump bar VoiceOver steps")
+struct AlphabeticalJumpStepTests {
+    @Test("One step along the alphabet, clamped at both ends")
+    func stepping() {
+        #expect(AlphabeticalJump.stepped(from: "#", by: 1) == "A")
+        #expect(AlphabeticalJump.stepped(from: "A", by: -1) == "#")
+        #expect(AlphabeticalJump.stepped(from: "#", by: -1) == "#")
+        #expect(AlphabeticalJump.stepped(from: "Z", by: 1) == "Z")
+        #expect(AlphabeticalJump.stepped(from: "?", by: 1) == "#")
+    }
+}

@@ -1263,3 +1263,6 @@
 "item.kind.collection" = "Collection";
 "item.kind.playlist" = "Playlist";
 "item.kind.video" = "Vidéo";
+"library.jumpBar.a11y" = "Index alphabétique";
+"library.jumpBar.digits" = "Chiffres et symboles";
+"library.jumpBar.hint" = "Balayez vers le haut ou le bas pour passer à une autre lettre.";
