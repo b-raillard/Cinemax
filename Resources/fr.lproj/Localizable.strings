@@ -1062,6 +1062,7 @@
 "syncplay.leaveConfirm.title" = "Quitter la séance ?";
 "syncplay.leaveConfirm.message" = "Fermer le lecteur vous fait quitter la séance. Les autres participants continueront sans vous.";
 "syncplay.leaveConfirm.leave" = "Quitter la séance";
+"syncplay.lobby.leaveConfirm.message" = "Revenir en arrière vous fait quitter la séance. Les autres participants continueront sans vous.";
 
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";

@@ -35,6 +35,7 @@ struct WatchTogetherLobby: View {
     @State private var invitees: [InviteTarget] = []
     @State private var notified: Set<String> = []
     @State private var isLeaving = false
+    @State private var confirmingLeave = false
 
     private var controller: SyncPlayController { .shared }
 
@@ -57,7 +58,17 @@ struct WatchTogetherLobby: View {
             .background { backdrop }
             .task { await loadInvitees() }
         #if os(tvOS)
-        .onExitCommand { leave() }
+        // Menu is a « back » reflex, and here it ends the session for this
+        // viewer — ask first, the way closing the player does (audit §5). The
+        // on-screen « Quitter la séance » button is already an explicit choice
+        // and leaves at once.
+        .onExitCommand { if !isLeaving { confirmingLeave = true } }
+        .alert(loc.localized("syncplay.leaveConfirm.title"), isPresented: $confirmingLeave) {
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+            Button(loc.localized("syncplay.leaveConfirm.leave"), role: .destructive) { leave() }
+        } message: {
+            Text(loc.localized("syncplay.lobby.leaveConfirm.message"))
+        }
         #endif
     }
 
