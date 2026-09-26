@@ -144,8 +144,8 @@ final class SeekMachine {
     /// also PAINTS the clamped target before the debounced commit.
     func engineSeek(_ ms: Int32) {
         let target = SeekCoalescer.clamp(target: ms, lengthMs: lengthMs())
-        // DIAG (recette loader) — every seek path funnels here.
-        logger.notice("""
+        // Diagnostics: every seek path funnels here.
+        logger.info("""
             seek-fire target=\(target, privacy: .public) \
             from=\(self.currentMs(), privacy: .public) \
             state=\(self.engineState().description, privacy: .public)

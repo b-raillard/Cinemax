@@ -536,7 +536,9 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         startListenerIfNeeded()
         while Date() < deadline {
             if stateLock.withLock({ listenerPort }) != nil { return true }
-            try? await Task.sleep(for: .milliseconds(20))
+            // A cancelled caller stops waiting at once: `try?` used to swallow
+            // the cancellation and spin until the deadline.
+            do { try await Task.sleep(for: .milliseconds(20)) } catch { break }
         }
         return stateLock.withLock { listenerPort } != nil
     }

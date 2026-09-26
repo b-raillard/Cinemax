@@ -245,15 +245,19 @@ final class PlayerScrubSlider: UISlider {
 /// so the focused chapter is unmistakable. On iOS it never receives focus, so
 /// `didUpdateFocus` simply never fires and it behaves as a plain button.
 final class ChapterChip: UIButton {
+    /// The chapter's thumbnail — a typed reference, not `viewWithTag(99)`,
+    /// which any subview carrying the same tag would have answered.
+    let thumbnailView = UIImageView()
+
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         let focused = isFocused
-        let thumb = viewWithTag(99)
+        let thumb = thumbnailView
         coordinator.addCoordinatedAnimations({
             self.alpha = focused ? 1.0 : 0.5
             self.transform = focused ? CGAffineTransform(scaleX: 1.04, y: 1.04) : .identity
-            thumb?.layer.borderWidth = focused ? 3 : 0
-            thumb?.layer.borderColor = UIColor.white.cgColor
+            thumb.layer.borderWidth = focused ? 3 : 0
+            thumb.layer.borderColor = UIColor.white.cgColor
         })
     }
 }

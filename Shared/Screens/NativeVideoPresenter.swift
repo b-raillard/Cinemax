@@ -790,11 +790,11 @@ final class NativeVideoPresenter {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let autoPlay = UserDefaults.standard.object(forKey: SettingsKey.autoPlayNextEpisode) as? Bool ?? SettingsKey.Default.autoPlayNextEpisode
-                // DIAG (recette A7) — the four inputs that decide between
-                // autoplay, the end-of-series card and doing nothing. Note the
-                // native path additionally requires a resolved series name,
-                // which the VLC path does not.
-                logger.notice("""
+                // Diagnostics: the four inputs that decide between autoplay,
+                // the end-of-series card and doing nothing. Note the native
+                // path additionally requires a resolved series name, which the
+                // VLC path does not.
+                logger.info("""
                     end-branch autoPlay=\(autoPlay, privacy: .public) \
                     hasNext=\(self.nextEpisode != nil, privacy: .public) \
                     hasNavigator=\(self.episodeNavigator != nil, privacy: .public) \

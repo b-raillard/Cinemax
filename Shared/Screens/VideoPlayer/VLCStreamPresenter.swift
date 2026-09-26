@@ -797,7 +797,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Cached media length in ms (mirrors `mediaPlayer.media?.length.intValue`).
     private var lengthMs: Int32 { mediaLengthMs }
 
-    /// True only while actively playing (matches VLCKit's `isPlaying`, which
+    /// True only while actively playing (as libVLC's own `isPlaying`, which
     /// was false during pause/stop/buffering).
     private var enginePlaying: Bool { player.state == .playing }
 
@@ -844,8 +844,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // without this guard `stopAnimating()` is re-sent thousands of times to an
         // indicator that is already stopped and hidden.
         guard loading != loadingIndicator.isAnimating else { return }
-        // DIAG (recette loader) — only real transitions reach here.
-        logger.notice("spinner \(loading ? "ON" : "OFF", privacy: .public)")
+        // Diagnostics (only real transitions reach here): `.info`, kept out of
+        // the persisted log but still in this launch's diagnostics export.
+        logger.info("spinner \(loading ? "ON" : "OFF", privacy: .public)")
         if loading { loadingIndicator.startAnimating() }
         else { loadingIndicator.stopAnimating() }
     }
@@ -913,7 +914,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     /// Builds the SwiftVLC `Media` for a streamed URL with `network-caching`
-    /// (matches the VLCKit path).
+    /// (as the libVLC 3 engine did).
     private func makeMedia(_ url: URL) -> Media? {
         guard let media = try? Media(url: url) else { return nil }
         // Every fresh open funnels through here with `info` and `usingProxy`
@@ -1435,7 +1436,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // SwiftVLC renders through a SwiftUI representable. Host it in a child
         // UIHostingController pinned to `videoView`. Interaction is disabled so
         // the tap recognizer on `videoView` keeps receiving HUD toggles (the
-        // old VLCKit `drawable` was a plain UIView with the same behavior).
+        // libVLC 3 engine's `drawable` was a plain UIView with the same behavior).
         let surface = PlayerEngineSurface(player: player) { [weak self] controller in
             #if os(iOS)
             self?.pipController = controller as? PiPController
@@ -2593,8 +2594,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                               !Task.isCancelled,
                               let img = UIImage(data: data), let self,
                               i < self.chapterStack.arrangedSubviews.count,
-                              let chip = self.chapterStack.arrangedSubviews[i] as? UIButton,
-                              let iv = chip.viewWithTag(99) as? UIImageView else { return }
+                              let chip = self.chapterStack.arrangedSubviews[i] as? ChapterChip else { return }
+                        let iv = chip.thumbnailView
                         iv.image = img
                         iv.contentMode = .scaleAspectFill
                     }
@@ -2670,8 +2671,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         b.accessibilityLabel = "\(loc.localized("player.chapter")): \(title), \(time)"
         b.accessibilityTraits = .button
 
-        let thumb = UIImageView()
-        thumb.tag = 99
+        let thumb = b.thumbnailView
         thumb.translatesAutoresizingMaskIntoConstraints = false
         thumb.backgroundColor = UIColor.white.withAlphaComponent(0.12)
         // Intentional placeholder until (if) a real thumbnail loads.
@@ -4390,9 +4390,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// from teardown / media-swap via the tear-down flag + a near-end / not-
     /// just-started guard.
     private func onEngineStateChanged(_ state: PlayerState) {
-        // DIAG (recette loader) — libVLC's own view of the seek, next to the
-        // settle window's. `.buffering` while frames flow is the suspect.
-        logger.notice("engine-state \(String(describing: state), privacy: .public)")
+        // Diagnostics: libVLC's own view of the seek, next to the settle
+        // window's (`.buffering` while frames flow is the suspect).
+        logger.info("engine-state \(String(describing: state), privacy: .public)")
         switch state {
         case .error:
             handlePlaybackError()
@@ -4404,13 +4404,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if syncPlay.isInGroup { syncPlay.reportBuffering() }
         case .stopped:
             seeks.endSettle() // no frames are coming — a pending settle is moot
-            // DIAG (recette A7) — libVLC has no distinct `.ended`, so every
-            // teardown, error and real EOF arrives here. Log the four gate
-            // inputs so a missing end-of-series card can be attributed to the
-            // gate rather than guessed at.
+            // Diagnostics: libVLC has no distinct `.ended`, so every teardown,
+            // error and real EOF arrives here. Log the four gate inputs so a
+            // missing end-of-series card can be attributed to the gate rather
+            // than guessed at.
             // nil ⇒ a fresh open has not reached its play() yet (logged as -1).
             let sincePlay = lastPlayStart.map { Date().timeIntervalSince($0) }
-            logger.notice("""
+            logger.info("""
                 end-gate .stopped tearingDown=\(self.isTearingDown, privacy: .public) \
                 sincePlay=\(sincePlay ?? -1, format: .fixed(precision: 2), privacy: .public) \
                 currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public) \
@@ -4504,9 +4504,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func handlePlaybackEnded() {
         guard !didReportEnd else { return }
         didReportEnd = true
-        // DIAG (recette A7) — the three inputs that decide between autoplay,
-        // the end-of-series card and a bare dismiss.
-        logger.notice("""
+        // Diagnostics: the three inputs that decide between autoplay, the
+        // end-of-series card and a bare dismiss.
+        logger.info("""
             end-branch autoPlayNext=\(self.autoPlayNext, privacy: .public) \
             nextUpCancelled=\(self.nextUpCancelledForThisItem, privacy: .public) \
             hasNext=\(self.nextEpisode != nil, privacy: .public) \
