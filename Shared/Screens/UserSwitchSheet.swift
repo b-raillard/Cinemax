@@ -1,6 +1,6 @@
 import SwiftUI
 import CinemaxKit
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 /// Two-step user switcher presented from Settings → Account. Avoids the full
 /// server-setup + login flow when families share a single device (common on tvOS).

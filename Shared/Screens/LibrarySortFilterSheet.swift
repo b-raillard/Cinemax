@@ -1,5 +1,5 @@
 import SwiftUI
-@preconcurrency import JellyfinAPI
+import JellyfinAPI
 
 struct LibrarySortFilterSheet: View {
     @Binding var sortFilter: LibrarySortFilterState
