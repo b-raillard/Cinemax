@@ -1,4 +1,4 @@
-# Cinemax — Guide de captures d'écran App Store
+# JellyGlass — Guide de captures d'écran App Store
 
 Apple exige **au minimum 1 capture** par taille obligatoire. Recommandé : **3 à 5 captures par taille** pour maximiser la conversion.
 
@@ -6,29 +6,45 @@ Apple exige **au minimum 1 capture** par taille obligatoire. Recommandé : **3 �
 
 ## 1. Tailles obligatoires (App Store Connect 2026)
 
-Pour Cinemax tu as besoin de **3 tailles** :
+Pour JellyGlass tu as besoin de **3 tailles** :
 
-| Plateforme | Appareil cible | Résolution exacte (portrait) | Sert aussi pour |
+| Plateforme | Appareil cible | Résolution exacte | Sert aussi pour |
 |---|---|---|---|
-| iPhone | iPhone 17 Pro Max (6.9") | **1320 × 2868 px** | tous les iPhones 6.5"+ |
-| iPad | iPad Pro 13" (M4) | **2064 × 2752 px** | tous les iPads |
+| iPhone | iPhone 17 Pro Max (6.9") | **1320 × 2868 px** (portrait) | tous les iPhones 6.5"+ |
+| iPad | iPad Pro 13" (M5) | **2752 × 2064 px** (paysage ; 2064 × 2752 en portrait accepté aussi) | tous les iPads |
 | tvOS | Apple TV | **3840 × 2160 px** (paysage 4K) | toutes les Apple TV |
 
 Apple "remplit en cascade" automatiquement : si tu fournis seulement la plus grande taille iPhone, elle est utilisée pour tous les iPhones.
 
 ---
 
-## 2. Écrans à capturer (5 par appareil, conseillé)
+## 2. La série livrée (2026-09-26)
 
-Choix éditorial — ce qui met le mieux Cinemax en valeur :
+Compte `reviewer` sur la bibliothèque démo (Blender Open Movies uniquement), heure 9:41, gabarit du canvas de refonte
+(fond noir + halo accent, sur-titre, titre sur 2 lignes, appareil incliné). Exportée par Chrome headless à
+l'échelle exacte des planches (iPhone ×3, iPad ×4, Apple TV ×6), en RGB — App Store Connect refuse le canal alpha.
 
-1. **Home Screen** avec un hero plein écran (un film bien rendu, backdrop riche)
-2. **MediaDetailScreen** d'un film (badges qualité visibles : 4K, Dolby Vision, Atmos)
-3. **VideoPlayer en lecture** avec HUD visible (chapitres, scrub bar)
-4. **Library** en mode grid avec un filtre actif (chips colorés)
-5. **Settings → Appearance** avec accent rainbow ou couleur originale
+| Appareil | Ordre |
+|---|---|
+| iPhone | Accueil · Fiche (Sintel, ligne Version) · Médiathèque (grille) · Lecteur (chapitres) · Recherche « an » · Widgets |
+| iPad (paysage) | Fiche en deux colonnes (Caminandes) · Accueil (barre latérale) · Médiathèque (onglets en haut, 13 films) |
+| Apple TV | Accueil · Médiathèque · Lecteur · Contrôle parental (pavé du code) |
 
-Pour Apple TV : remplacer #5 par un écran de **lecture tvOS** avec chapter strip visible.
+« Regarder ensemble » n'y figure pas : une vraie capture exige deux comptes dans la même séance, et une
+reconstitution dessinée au milieu de vraies captures détonne.
+
+**Pièges rencontrés — à revérifier avant chaque nouvelle série :**
+
+- **Les widgets suivent la langue de l'APPAREIL**, pas celle de l'app : sur un simulateur en anglais ils
+  affichent « NEXT UP » / « See all ». Passer le simulateur en français (`defaults write -g AppleLanguages`
+  puis redémarrage) avant de capturer.
+- **Une limite d'âge active masque des titres** (`privacy.maxContentAge`) : 12 films au lieu de 13.
+- **La disposition « Grille » de la médiathèque** (`library.tvBrowseLayout = grid`) donne l'écran « toute la
+  collection » ; la disposition par défaut (héros + rangées de genres) montre peu d'affiches.
+- **Le lecteur** : couper les sous-titres (ils passent sur le curseur en portrait) et les statistiques de
+  débogage ; le HUD se masque seul, capturer juste après l'avoir fait apparaître.
+- **La fiche iPad en paysage coupait son titre** jusqu'au correctif du 2026-09-25 (voir la RULE « full-bleed
+  hero » dans `Shared/DesignSystem/CLAUDE.md`) : une série prise sur un binaire antérieur est à refaire.
 
 ---
 
@@ -88,7 +104,10 @@ ASC accepte un set distinct de screenshots **par langue**. Si tu as le temps :
 - [ ] Pas d'éléments "personnels" visibles (vraie bibliothèque privée → utiliser des médias libres de droits comme Blender Open Movies)
 - [ ] Pas de timestamp / heure système distractive (régler l'heure du Simulator avec `xcrun simctl status_bar booted override --time "9:41"` — convention Apple)
 - [ ] Pas d'indicateur batterie "low"
-- [ ] Pas de bordures / cadres ajoutés (Apple les rejette)
+- [ ] **Les captures « marketing » encadrées et légendées sont AUTORISÉES** — Apple ne les rejette pas, et la
+      quasi-totalité des apps du top en livrent. La consigne inverse qui figurait ici était fausse.
+      Le gabarit retenu (fond noir + halo accent, sur-titre, titre 2 lignes, appareil incliné) vit sur le
+      canvas de refonte ; seul le PNG de l'écran change d'une version à l'autre.
 - [ ] Vérifier que la résolution exacte est respectée (Apple rejette le upload sinon)
 
 ```bash

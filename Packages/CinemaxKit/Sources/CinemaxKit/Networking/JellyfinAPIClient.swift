@@ -134,7 +134,7 @@ public final class JellyfinAPIClient: Sendable {
             configuration: .init(
                 url: url,
                 accessToken: token,
-                client: "Cinemax",
+                client: "JellyGlass",
                 deviceName: deviceName,
                 deviceID: deviceID,
                 version: appVersion
@@ -275,7 +275,7 @@ public final class JellyfinAPIClient: Sendable {
         let client = JellyfinClient(
             configuration: .init(
                 url: url,
-                client: "Cinemax",
+                client: "JellyGlass",
                 deviceName: deviceName,
                 deviceID: deviceID,
                 version: appVersion
@@ -351,7 +351,7 @@ public final class JellyfinAPIClient: Sendable {
                 configuration: .init(
                     url: url,
                     accessToken: accessToken,
-                    client: "Cinemax",
+                    client: "JellyGlass",
                     deviceName: deviceName,
                     deviceID: deviceID,
                     version: appVersion
@@ -419,7 +419,7 @@ public final class JellyfinAPIClient: Sendable {
                 configuration: .init(
                     url: url,
                     accessToken: accessToken,
-                    client: "Cinemax",
+                    client: "JellyGlass",
                     deviceName: deviceName,
                     deviceID: deviceID,
                     version: appVersion
@@ -493,7 +493,7 @@ public final class JellyfinAPIClient: Sendable {
             configuration: .init(
                 url: url,
                 accessToken: accessToken,
-                client: "Cinemax",
+                client: "JellyGlass",
                 deviceName: deviceName,
                 deviceID: deviceID,
                 version: appVersion
