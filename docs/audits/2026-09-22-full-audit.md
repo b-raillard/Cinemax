@@ -376,3 +376,17 @@ Découpage de CLAUDE.md · poursuite de #193 (`PlaybackRetryPolicy` en premier) 
 - **Non validé** : Regarder ensemble (pas de second compte partageant une bibliothèque avec le droit SyncPlay), rangée « En direct », certificat auto-signé dans le widget / Top Shelf, repli `ApiKey` du socket (le serveur accepte l'en-tête ; testé unitairement).
 - **Limite antérieure relevée** : un second « Lire sur… » reçu pendant qu'une fiche ouverte par lien profond est affichée sur l'Apple TV est ignoré.
 - **Reporté** : ancien S5 (`device_id` hors `allSucceeded`, sans effet de sécurité) ; test de câblage de `enforceContentAgeCap` et de `retryFailedClear` (aucun point d'injection réseau ni de trousseau dans le client) ; corrections de 3619595 (lecteur) au lot 7.
+
+**Lot 7 — concurrence et qualité, fait.**
+- Q6 : `@preconcurrency import JellyfinAPI` retiré des 82 fichiers (un commit par dossier). Aucune erreur ni avertissement de concurrence sur iOS et tvOS : le SDK 3.1 déclare ses DTO `Sendable`. Aucun `@preconcurrency` conservé.
+- Q3 : l'état du client (client, URL, jeton, version, langue, plafond, rappel 401) forme un seul `ClientState` sous un seul verrou, avec une génération qui refuse une écriture périmée. **Trouvé en passant** : #186 n'avait branché le délégué de certificat que sur 2 des 5 clients ; un serveur auto-signé approuvé cessait de répondre au lancement suivant. Une seule fabrique, `makeClient`.
+- P12 : la boucle d'événements VLC ne retient plus le contrôleur ; `isolated deinit` en filet. Vérifié au simulateur : contrôleur libéré après un arrêt à distance (2/2), un glissement et le ✕.
+- Q10 : journaux DIAG en `.info` (ils restent dans l'export sur iPhone, vérifié sur appareil), `ChapterChip.thumbnailView` au lieu de `viewWithTag(99)`, `waitUntilReady` sensible à l'annulation, commentaires VLCKit.
+- Q9 : `ContentRatingClassifier.swift` partagé par source avec le widget et le Top Shelf ; les deux copies sont supprimées.
+- Q4 : `PlayerPresentation` (contrôleur du haut en ignorant la fenêtre des toasts, libération d'une session non clôturée) ; la fenêtre des toasts ne devient jamais clé. Laissés à chaque lecteur, volontairement : le signal d'arrière-plan et la traduction des erreurs AVFoundation.
+- SwiftLint : version épinglée (0.63.2, somme vérifiée), base de 295 violations, job bloquant. Vérifié en CI.
+- T5 : tests d'`AppUpdateChecker` (point d'injection de la requête), de la génération de Now Playing et de l'écriture de la politique d'un utilisateur (admin). `SleepTimerController` garde sa propre boucle : exception documentée (il compte le temps réel, pause comprise).
+- Bugs bas de la section 1, tous corrigés : héros de bibliothèque, fiche d'un autre compte en cache, envoi local échoué du proxy, ordre des commandes SyncPlay.
+- Relecture de 3619595 : fermer « Préparation du flux… » ne laisse plus de session ouverte sur le serveur.
+- T2 (reste), T12 : tests de recherche isolés ; parité FR/EN vérifiée en CI ; hook sur la version épinglée de xcodegen ; déclencheur mort et commentaire périmé.
+- **Reporté** : Q2 (découpage de `VLCStreamPresenter`, hors lot) ; le `sleep` fixe de `StreamProxyTests` (il attend l'ABSENCE d'un rappel asynchrone de `NWListener`, sans point d'observation) ; T12 restants (clé du cache CI, numéro de build = version, README / LICENSE, logo en double) : décisions de publication.
