@@ -122,9 +122,9 @@ final class RemoteControlListener {
     // MARK: - Socket
 
     private func openSocket(appState: AppState, toasts: ToastCenter, token: Int) {
-        guard let url = appState.apiClient.makeRealtimeSocketURL() else { return }
+        guard let endpoint = appState.apiClient.makeRealtimeSocketEndpoint() else { return }
         consumeTask = Task { [weak self] in
-            let handle = await JellyfinSocketHub.shared.subscribe(url: url)
+            let handle = await JellyfinSocketHub.shared.subscribe(endpoint: endpoint)
             guard let listener = self, token == listener.generation else {
                 await JellyfinSocketHub.shared.unsubscribe(handle.id)
                 return

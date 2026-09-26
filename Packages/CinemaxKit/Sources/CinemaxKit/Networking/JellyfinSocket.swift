@@ -54,7 +54,7 @@ public enum JellyfinSocketMessage: Sendable, Equatable {
 ///   3. On a drop we reconnect with bounded exponential backoff (up to ~30 s).
 ///   4. `stop()` tears everything down and finishes the stream.
 public actor JellyfinSocket {
-    private let url: URL
+    private let endpoint: RealtimeSocketEndpoint
     private let session: URLSession
     private let stream: AsyncStream<JellyfinSocketMessage>
     private let continuation: AsyncStream<JellyfinSocketMessage>.Continuation
@@ -64,9 +64,15 @@ public actor JellyfinSocket {
     private var keepAliveTask: Task<Void, Never>?
     private var isStopped = false
     private var reconnectAttempts = 0
+    /// Authentication mode of the upgrade request — see `RealtimeSocketAuth`.
+    /// Header first; the `ApiKey` query item only once the header was refused,
+    /// and for the rest of this socket's life.
+    private var usingQueryAuth = false
+    private var headerEverWorked = false
+    private var failedHeaderAttempts = 0
 
-    public init(url: URL) {
-        self.url = url
+    public init(endpoint: RealtimeSocketEndpoint) {
+        self.endpoint = endpoint
         // `wss://` to a self-signed server needs the same explicit approval as
         // every REST call, or « Lire sur… » and Watch Together would be the two
         // features that stayed broken after the user trusted the certificate.
@@ -111,9 +117,10 @@ public actor JellyfinSocket {
 
     private func connectLoop() async {
         while !isStopped {
-            let ws = session.webSocketTask(with: url)
+            let ws = session.webSocketTask(with: endpoint.request(queryAuth: usingQueryAuth))
             task = ws
             ws.resume()
+            var receivedFrame = false
             do {
                 while !isStopped {
                     let frame = try await ws.receive()
@@ -121,6 +128,13 @@ public actor JellyfinSocket {
                     // reset the backoff so a long-lived session that drops once
                     // reconnects fast rather than inheriting an old penalty.
                     reconnectAttempts = 0
+                    if !receivedFrame {
+                        receivedFrame = true
+                        if !usingQueryAuth { headerEverWorked = true }
+                        // One line per connection: which authentication the
+                        // server accepted is otherwise invisible.
+                        socketLogger.info("Socket connected (auth: \(self.usingQueryAuth ? "ApiKey query" : "header", privacy: .public))")
+                    }
                     handleFrame(frame)
                 }
             } catch {
@@ -131,6 +145,20 @@ public actor JellyfinSocket {
             keepAliveTask?.cancel(); keepAliveTask = nil
             task = nil
             if isStopped { break }
+            if !usingQueryAuth, !receivedFrame {
+                failedHeaderAttempts += 1
+                let status = (ws.response as? HTTPURLResponse)?.statusCode
+                if RealtimeSocketAuth.shouldFallBackToQuery(
+                    usingQuery: usingQueryAuth,
+                    headerEverWorked: headerEverWorked,
+                    statusCode: status,
+                    failedHeaderAttempts: failedHeaderAttempts
+                ) {
+                    usingQueryAuth = true
+                    socketLogger.notice("Socket: header authentication refused (status \(status.map(String.init) ?? "none", privacy: .public)) — falling back to the ApiKey query item")
+                    continue   // retry now, no backoff: nothing is wrong with the network
+                }
+            }
             reconnectAttempts += 1
             let delay = min(30.0, pow(2.0, Double(min(reconnectAttempts, 5))))
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -336,9 +364,9 @@ public actor JellyfinSocket {
 /// and closes when the last one leaves, so a device with Watch Together idle
 /// costs exactly what it costs today.
 ///
-/// A subscriber that asks for a **different** URL than the live one — a server
-/// switch, a re-login that mints a new token — rebuilds the socket for
-/// everybody, which is correct: the old URL points at a session that no longer
+/// A subscriber that asks for a **different** endpoint than the live one — a
+/// server switch, a re-login that mints a new token — rebuilds the socket for
+/// everybody, which is correct: the old one points at a session that no longer
 /// exists.
 public actor JellyfinSocketHub {
     public static let shared = JellyfinSocketHub()
@@ -350,7 +378,7 @@ public actor JellyfinSocketHub {
     }
 
     private var socket: JellyfinSocket?
-    private var activeURL: URL?
+    private var activeEndpoint: RealtimeSocketEndpoint?
     private var pump: Task<Void, Never>?
     private var subscribers: [UUID: AsyncStream<JellyfinSocketMessage>.Continuation] = [:]
 
@@ -360,11 +388,11 @@ public actor JellyfinSocketHub {
     /// is actually about.
     public var subscriberCount: Int { subscribers.count }
 
-    public func subscribe(url: URL) -> Subscription {
+    public func subscribe(endpoint: RealtimeSocketEndpoint) -> Subscription {
         let id = UUID()
         let (stream, continuation) = AsyncStream<JellyfinSocketMessage>.makeStream()
         subscribers[id] = continuation
-        ensureSocket(url: url)
+        ensureSocket(endpoint: endpoint)
         return Subscription(id: id, messages: stream)
     }
 
@@ -375,8 +403,10 @@ public actor JellyfinSocketHub {
 
     // MARK: - Private
 
-    private func ensureSocket(url: URL) {
-        if let activeURL, activeURL == url, socket != nil { return }
+    private func ensureSocket(endpoint: RealtimeSocketEndpoint) {
+        // Explicit identity (socket URL + token), never the tokenised URL it
+        // used to be — see `RealtimeSocketEndpoint.isSameConnection`.
+        if let activeEndpoint, activeEndpoint.isSameConnection(as: endpoint), socket != nil { return }
         // Close-before-open, and the ordering is load-bearing: a detached
         // `stop()` leaves the outgoing `URLSessionWebSocketTask` resumed and
         // connected until it wins its hop, so for that window the app holds TWO
@@ -386,12 +416,12 @@ public actor JellyfinSocketHub {
         //
         // `teardown` stays synchronous on purpose: making it `async` would open
         // a suspension point inside `ensureSocket`, letting two concurrent
-        // `subscribe` calls both pass the `activeURL` check and both build a
+        // `subscribe` calls both pass the `activeEndpoint` check and both build a
         // socket — trading one race for a worse one.
         let closing = teardown()
-        let socket = JellyfinSocket(url: url)
+        let socket = JellyfinSocket(endpoint: endpoint)
         self.socket = socket
-        self.activeURL = url
+        self.activeEndpoint = endpoint
         pump = Task { [weak self] in
             await closing.value
             await socket.start()
@@ -407,7 +437,7 @@ public actor JellyfinSocketHub {
         }
     }
 
-    /// Drops the socket but NOT the subscribers — a URL change rebuilds under
+    /// Drops the socket but NOT the subscribers — an endpoint change rebuilds under
     /// them and they keep receiving, which is what makes a server switch
     /// invisible to a consumer that is still interested.
     @discardableResult
@@ -416,7 +446,7 @@ public actor JellyfinSocketHub {
         pump = nil
         let outgoing = socket
         socket = nil
-        activeURL = nil
+        activeEndpoint = nil
         return Task { await outgoing?.stop() }
     }
 }

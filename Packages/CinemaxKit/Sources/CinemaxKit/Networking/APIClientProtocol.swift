@@ -563,20 +563,21 @@ public extension SyncPlayAPI {
 
 // MARK: - Realtime socket
 
-/// The URL of Jellyfin's realtime `/socket`, shared by every consumer of it.
+/// Where and as whom to open Jellyfin's realtime `/socket`, shared by every
+/// consumer of it.
 ///
-/// It is a **URL**, not a socket: the app is allowed exactly one connection
+/// It is an **endpoint**, not a socket: the app is allowed exactly one connection
 /// (Jellyfin keys a session on device + client + user, so a second one makes
 /// every message arrive twice), and `JellyfinSocketHub` is what owns it. Handing
 /// out a socket per slice is precisely the shape that made Watch Together and
 /// remote control mutually exclusive.
 public protocol RealtimeSocketAPI: Sendable {
     /// `nil` when not connected or unauthenticated.
-    func makeRealtimeSocketURL() -> URL?
+    func makeRealtimeSocketEndpoint() -> RealtimeSocketEndpoint?
 }
 
 public extension RealtimeSocketAPI {
-    func makeRealtimeSocketURL() -> URL? { nil }
+    func makeRealtimeSocketEndpoint() -> RealtimeSocketEndpoint? { nil }
 }
 
 // MARK: - Remote control ("Play on…")

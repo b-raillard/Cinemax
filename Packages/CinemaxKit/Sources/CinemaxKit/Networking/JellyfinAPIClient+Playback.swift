@@ -373,6 +373,22 @@ extension JellyfinAPIClient {
 
     /// Attaches the `Accept-Language` the SDK client would send, to a request
     /// built outside it. Internal for `AcceptLanguageTests`.
+    /// The `MediaBrowser …` Authorization value the SDK sends, for the requests
+    /// built by hand (the PlaybackInfo POST, the realtime socket's upgrade).
+    static func mediaBrowserAuthorization(configuration: JellyfinClient.Configuration, token: String?) -> String {
+        var rawFields = [
+            "DeviceId": configuration.deviceID,
+            "Device": configuration.deviceName,
+            "Client": configuration.client,
+            "Version": configuration.version,
+        ]
+        if let token {
+            rawFields["Token"] = token
+        }
+        let fields = rawFields.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+        return "MediaBrowser \(fields)"
+    }
+
     internal static func applyAcceptLanguage(to request: inout URLRequest, languageCode: String?) {
         guard let value = languageCode.flatMap(acceptLanguageHeader(for:)) else { return }
         request.setValue(value, forHTTPHeaderField: "Accept-Language")
@@ -391,17 +407,10 @@ extension JellyfinAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Build the same auth header the SDK uses
-        var rawFields = [
-            "DeviceId": client.configuration.deviceID,
-            "Device": client.configuration.deviceName,
-            "Client": client.configuration.client,
-            "Version": client.configuration.version,
-        ]
-        if let token = client.accessToken {
-            rawFields["Token"] = token
-        }
-        let fields = rawFields.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
-        request.setValue("MediaBrowser \(fields)", forHTTPHeaderField: "Authorization")
+        request.setValue(
+            Self.mediaBrowserAuthorization(configuration: client.configuration, token: client.accessToken),
+            forHTTPHeaderField: "Authorization"
+        )
         // This POST bypasses the SDK client's `URLSessionConfiguration`, so the
         // app language has to be re-attached by hand — and THIS is the request
         // whose response carries the media-stream `DisplayTitle`s the track
