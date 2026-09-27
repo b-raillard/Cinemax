@@ -317,3 +317,74 @@ struct PlaybackRetryPolicyTests {
         #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 4_915_487) == 4915.487)
     }
 }
+
+/// La position jugée à l'arrêt. Mesuré le 2026-09-27 (« Le Rouge et le Noir »
+/// ép. 2, recherche sur la fin bornée à `lengthMs − 250`) : EOF 0,3 s après la
+/// recherche, puis `.stopped` avec `currentMs=0`. Lu comme « arrêté 41 min
+/// avant la fin », donc comme une panne : nouvel essai 5 s avant la fin, et
+/// sur l'Apple TV la fin rejouée en boucle, sans jamais se terminer.
+@Suite("Fin de lecture — position à l'arrêt")
+struct PlaybackStopPositionTests {
+
+    private let runtime: Int32 = 2_503_936 // l'épisode mesuré
+
+    @Test("Une recherche sur la fin qui tombe sur l'EOF est une fin, pas une panne")
+    func seekIntoEOFIsAnEnd() {
+        let position = PlaybackEndPolicy.stopPositionMs(
+            engineMs: 0, lastKnownMs: 17_469, settlingSeekTargetMs: runtime - 250
+        )
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 19.01,
+            currentMs: position, lengthMs: Int64(runtime), mediaConfirmedOpen: true
+        )
+        #expect(decision == .ended)
+    }
+
+    @Test("Horloge remise à zéro sans recherche : la dernière position réelle compte")
+    func zeroedClockFallsBackToLastKnown() {
+        let position = PlaybackEndPolicy.stopPositionMs(
+            engineMs: 0, lastKnownMs: runtime - 136, settlingSeekTargetMs: nil
+        )
+        #expect(position == Int64(runtime - 136))
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 6.18,
+            currentMs: position, lengthMs: Int64(runtime), mediaConfirmedOpen: true
+        )
+        #expect(decision == .ended)
+    }
+
+    @Test("Le flux qui meurt en cours de film reste une panne")
+    func midFilmDeathStaysUnexpected() {
+        let position = PlaybackEndPolicy.stopPositionMs(
+            engineMs: 0, lastKnownMs: 1_200_000, settlingSeekTargetMs: nil
+        )
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 600,
+            currentMs: position, lengthMs: Int64(runtime), mediaConfirmedOpen: true
+        )
+        #expect(decision == .unexpectedStop)
+    }
+
+    @Test("Une recherche en ARRIÈRE depuis la fin, interrompue, n'est pas une fin")
+    func seekBackFromTheEndIsNotAnEnd() {
+        // L'horloge tient encore l'ancienne position près de la fin : c'est la
+        // cible qui dit où allait le moteur.
+        let position = PlaybackEndPolicy.stopPositionMs(
+            engineMs: runtime - 1_000, lastKnownMs: runtime - 1_000, settlingSeekTargetMs: 600_000
+        )
+        #expect(position == 600_000)
+        let decision = PlaybackEndPolicy.decide(
+            isTearingDown: false, secondsSincePlayStart: 600,
+            currentMs: position, lengthMs: Int64(runtime), mediaConfirmedOpen: true
+        )
+        #expect(decision == .unexpectedStop)
+    }
+
+    @Test("Une horloge encore valide l'emporte sur une dernière position plus ancienne")
+    func liveClockWinsOverOlderTick() {
+        let position = PlaybackEndPolicy.stopPositionMs(
+            engineMs: 2_503_800, lastKnownMs: 2_503_500, settlingSeekTargetMs: nil
+        )
+        #expect(position == 2_503_800)
+    }
+}

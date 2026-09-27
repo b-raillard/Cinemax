@@ -179,6 +179,34 @@ struct PictureStallPolicyTests {
         #expect(f.policy.recoveriesLeft == PictureStallPolicy.recoveryBudget)
     }
 
+    // MARK: - Budget partagé avec le filet des recherches bloquées
+
+    @Test("Une recherche bloquée dépense le MÊME budget que l'image figée")
+    func strandedSeekSharesTheBudget() {
+        var f = Feeder()
+        let spent = f.policy.spendRecovery()
+        #expect(spent)
+        #expect(f.policy.recoveriesLeft == PictureStallPolicy.recoveryBudget - 1)
+        // Il n'en reste qu'une pour l'image figée : deux filets, une seule borne.
+        var recoveries = 0
+        for _ in 0..<200 where f.tick(picturesMove: false) == .recover { recoveries += 1 }
+        #expect(recoveries == PictureStallPolicy.recoveryBudget - 1)
+        let spentAgain = f.policy.spendRecovery()
+        #expect(!spentAgain)
+        #expect(f.policy.recoveriesLeft == 0)
+    }
+
+    @Test("Après une recherche bloquée, le budget ne revient qu'après une vraie lecture")
+    func strandedSeekRestartsTheHealthyCount() {
+        var f = Feeder()
+        _ = f.run(PictureStallPolicy.budgetRenewSeconds - 5) // presque de quoi rendre le budget
+        let spent = f.policy.spendRecovery()
+        #expect(spent)
+        // Les secondes saines d'AVANT la reconstruction ne comptent pas pour elle.
+        _ = f.run(10)
+        #expect(f.policy.recoveriesLeft == PictureStallPolicy.recoveryBudget - 1)
+    }
+
     @Test("resetWindow coupe la comparaison à travers le trou")
     func resetWindowDropsTheComparison() {
         var f = Feeder()
