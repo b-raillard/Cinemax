@@ -54,7 +54,7 @@ JellyGlass est un client moderne pour vos serveurs Jellyfin, conçu spécifiquem
 • Sélection des pistes audio et sous-titres avec les vrais noms de votre serveur
 • Skip Intro et Skip Crédits compatibles avec le plugin Intro Skipper
 • Chapitres, miniatures de chapitres, lecture automatique de l'épisode suivant
-• AirPlay vers Apple TV et HomePod
+• Fonction "Lire sur" permettant l'envoi du média sur tout autre device connecté au même compte
 • Minuteur d'arrêt avec rappel « Toujours en train de regarder ? »
 
 — RECHERCHE ET NAVIGATION
@@ -652,7 +652,7 @@ JellyGlass is a modern client for your Jellyfin media servers, designed specific
 • Audio and subtitle track selection with your server's real track names
 • Skip Intro and Skip Credits compatible with the Intro Skipper plugin
 • Chapters, chapter thumbnails, autoplay next episode
-• AirPlay to Apple TV and HomePod
+• Send your content on any other connected device with same account
 • Sleep timer with "Still watching?" prompt
 
 — SEARCH AND BROWSING
