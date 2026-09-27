@@ -1236,6 +1236,10 @@
 "whatsNew.page" = "Page %d of %d";
 "whatsNew.newName.title" = "Cinemax is now JellyGlass";
 "whatsNew.newName.body" = "Same app, new name. Your servers, settings and widgets stay right where they were: nothing to set up again.";
+"whatsNew.parentalLock.title" = "Stronger parental controls";
+"whatsNew.parentalLock.body" = "The age limit now applies to everything you play, next episode included; an unrated episode is judged on its series' rating. A new PIN is 6 to 8 digits, and your current PIN still works.";
+"whatsNew.accessibility.title" = "More accessible";
+"whatsNew.accessibility.body" = "VoiceOver tells you whether a title is watched or in progress, and names the series, season and episode on Continue Watching and Next Up cards. Card subtitles are easier to read, and translucent panels follow Reduce Transparency and Increase Contrast.";
 "whatsNew.underTheHood.title" = "Under the hood";
 "whatsNew.underTheHood.body" = "This version fixes bugs and makes the app lighter. Playback above all: it now recovers on its own when your server briefly stops feeding it, instead of sitting on a frozen picture.";
 "whatsNew.watchTogether.title" = "Watch Together";

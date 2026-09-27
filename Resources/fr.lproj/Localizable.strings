@@ -1238,6 +1238,10 @@
 "whatsNew.page" = "Page %d sur %d";
 "whatsNew.newName.title" = "Cinemax devient JellyGlass";
 "whatsNew.newName.body" = "Même application, nouveau nom. Vos serveurs, vos réglages et vos widgets restent en place : rien à refaire.";
+"whatsNew.parentalLock.title" = "Contrôle parental renforcé";
+"whatsNew.parentalLock.body" = "La limite d'âge s'applique désormais à toute lecture, épisode suivant compris ; un épisode sans classification est jugé sur celle de sa série. Un nouveau code compte de 6 à 8 chiffres, et votre code actuel reste valable.";
+"whatsNew.accessibility.title" = "Plus accessible";
+"whatsNew.accessibility.body" = "VoiceOver annonce si un titre est vu ou en cours, et nomme la série, la saison et l'épisode des cartes « Reprendre » et « À suivre ». Les sous-titres des cartes sont plus lisibles, et les panneaux translucides suivent Réduire la transparence et Augmenter le contraste.";
 "whatsNew.underTheHood.title" = "Sous le capot";
 "whatsNew.underTheHood.body" = "Cette version corrige des bugs et allège l'application. La lecture, surtout : elle se rattrape maintenant toute seule quand le serveur cesse un instant de l'alimenter, au lieu de rester sur une image figée.";
 "whatsNew.watchTogether.title" = "Regarder ensemble";

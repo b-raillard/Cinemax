@@ -24,6 +24,10 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case underTheHood
     /// The app changed its name, not its content.
     case newName
+    /// Parental controls — a longer code being typed.
+    case parentalLock
+    /// Accessibility — a card held by the VoiceOver cursor.
+    case accessibility
 }
 
 struct WhatsNewIllustrationView: View {
@@ -56,6 +60,8 @@ struct WhatsNewIllustrationView: View {
             case .playlists:     playlists(u)
             case .underTheHood:  underTheHood(u)
             case .newName:       newName(u)
+            case .parentalLock:  parentalLock(u)
+            case .accessibility: accessibility(u)
             }
         }
         .frame(width: side, height: side)
@@ -151,6 +157,41 @@ struct WhatsNewIllustrationView: View {
                     .opacity(0.6)
                 bar(u, width: 40, fill: AnyShapeStyle(accentGradient))
             }
+        }
+    }
+
+    /// A screen over six code dots, four of them typed in the accent: the
+    /// lock's code, now six digits and more.
+    private func parentalLock(_ u: CGFloat) -> some View {
+        VStack(spacing: 9 * u) {
+            RoundedRectangle(cornerRadius: 4 * u)
+                .fill(CinemaColor.surfaceContainerHighest)
+                .frame(width: 54 * u, height: 30 * u)
+            HStack(spacing: 4 * u) {
+                ForEach(0..<6, id: \.self) { digit in
+                    Circle()
+                        .fill(digit < 4 ? AnyShapeStyle(accentGradient)
+                                        : AnyShapeStyle(CinemaColor.surfaceContainerHigh))
+                        .frame(width: 7 * u, height: 7 * u)
+                }
+            }
+        }
+    }
+
+    /// A poster inside an accent frame — the VoiceOver cursor resting on a
+    /// card, drawn as a slab behind it rather than a stroke (the register has
+    /// none), with the card's caption beneath.
+    private func accessibility(_ u: CGFloat) -> some View {
+        VStack(spacing: 6 * u) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7 * u)
+                    .fill(accentGradient)
+                    .frame(width: 42 * u, height: 56 * u)
+                RoundedRectangle(cornerRadius: 4 * u)
+                    .fill(CinemaColor.surfaceContainerHighest)
+                    .frame(width: 34 * u, height: 48 * u)
+            }
+            bar(u, width: 34, fill: AnyShapeStyle(CinemaColor.surfaceContainerHigh))
         }
     }
 
