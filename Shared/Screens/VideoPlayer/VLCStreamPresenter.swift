@@ -546,7 +546,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var didBackgroundWhilePlaying = false
     private var positionAtBackgroundMs: Int32 = 0
     private var backgroundedAt: Date?
-    private var isReResolvingAfterWake = false
+    private var reResolve = ReResolveGate()
     private var didBecomeActiveObserver: NSObjectProtocol?
     private var backgroundObserver: NSObjectProtocol?
     // A background longer than this is a genuine sleep/power-off: the VT decode
@@ -815,6 +815,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.syncPlay.reportSeekSettled(isPlaying: isPlaying)
         }
         machine.onStranded = { [weak self] target in self?.handleStrandedSeek(targetMs: target) ?? false }
+        // Where the playhead is after a landed seek, even with no tick to say
+        // so (a seek in pause) — what `PlaybackEndPolicy.stopPositionMs` and a
+        // retry's resume position read.
+        // Unconditional: a seek back to 0 from the last seconds must not leave
+        // the end-of-file position behind (`resumeSeconds` already refuses ≤ 1 s).
+        machine.onLanded = { [weak self] target in self?.lastKnownPositionMs = target }
         return machine
     }
 
@@ -951,7 +957,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 case .tracksChanged:
                     self.applyServerTrackDefaultsIfNeeded()
                 case .encounteredError:
-                    self.handlePlaybackError()
+                    self.handleEngineFailure("encountered-error")
                 default:
                     break
                 }
@@ -3581,6 +3587,21 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         CinemaxStreamProxy.isManifest(path: info.url.path)
     }
 
+    /// The engine reports a failure (`.error`, `.encounteredError`, a stop
+    /// short of the end). A rebuild already negotiating (stall net, stranded
+    /// seek, wake) owns the recovery: the old engine winding down is not a
+    /// second failure, and a retry now would race it — two `play(media)`
+    /// against one player. If that negotiation fails, its own branch surfaces
+    /// the error or arms the watchdog (`engineIsStopped` covers `.error`). The
+    /// decision is `ReResolveGate`'s, unit-tested.
+    private func handleEngineFailure(_ what: String) {
+        guard reResolve.admitsEngineFailure else {
+            logger.notice("\(what, privacy: .public) ignored — a re-resolve is already recovering this media")
+            return
+        }
+        handlePlaybackError()
+    }
+
     /// Nothing is opening or playing: the engine ended, is ending, or never
     /// started. What `PlaybackEndPolicy` calls `engineStopped` on a recheck.
     private var engineIsStopped: Bool {
@@ -4433,7 +4454,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         logger.info("engine-state \(String(describing: state), privacy: .public)")
         switch state {
         case .error:
-            handlePlaybackError()
+            handleEngineFailure("error")
         case .opening, .buffering:
             // Opening a stream or re-buffering mid-playback → show the spinner so
             // the gap reads as "loading", not "frozen". Cleared by .playing or the
@@ -4490,7 +4511,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     VLC stopped \(Int64(self.lengthMs) - stopPositionMs, privacy: .public)ms short of the end \
                     for \(self.itemId, privacy: .public) — treating as a stream failure
                     """)
-                handlePlaybackError()
+                handleEngineFailure("stop")
             case .ignore:
                 break
             }
@@ -4524,7 +4545,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             refreshNowPlayingRate(playing: true)
             announceSyncPlayReadyIfPositionIsReal(isPlaying: true)
         case .paused:
-            seeks.endSettle()
+            seeks.endSettleInPause()
             clearLoadingIfOpen()
             #if os(iOS)
             setPlayPauseIcon(playing: false)
@@ -4976,7 +4997,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// the current item and resumes from `ms`. Trimmed copy of
     /// `navigateToEpisode`'s media/proxy/seek machinery (no episode-graph
     /// changes). Guarded by `navGeneration` so a user episode-nav started during
-    /// the await wins, and one-shot via `isReResolvingAfterWake`.
+    /// the await wins, and one-shot via `reResolve` (`ReResolveGate`).
     @discardableResult
     ///
     /// `surfacingFailure`: a failed negotiation goes to the error path (retry,
@@ -4985,7 +5006,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// whose guard reads the OLD media's time and length, would do nothing and
     /// leave the spinner turning for ever.
     private func reResolveAndResume(from ms: Int32, surfacingFailure: Bool = false) -> Bool {
-        guard !isTearingDown, !isReResolvingAfterWake else { return false }
+        guard !isTearingDown, reResolve.begin() else { return false }
         // A committed-but-not-yet-landed skip is the user's intended position:
         // resume there rather than the stale pre-seek tick, then drop the pending
         // seek so it can't fire against the reloaded media or leave `refreshTimeUI`
@@ -4993,7 +5014,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // `seeks.cancelPending()` that `startPlayback`/`navigateToEpisode` do.
         let resumeMs = seeks.pendingTargetMs ?? ms
         seeks.cancelPending()
-        isReResolvingAfterWake = true
         navGeneration += 1
         let supersededRetry = pendingRetryToken != nil
         pendingRetryToken = nil // a retry of the media being replaced is moot
@@ -5012,7 +5032,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         logger.notice("VLC wake re-resolve for \(resumeItemId, privacy: .public) @ \(Int(resumeSeconds))s")
         Task { [weak self] in
             guard let self else { return }
-            defer { self.isReResolvingAfterWake = false }
+            defer { self.reResolve.end() }
             // Routes through `notifyIfUnauthorized`: a genuinely revoked token
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.
@@ -5030,12 +5050,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 // media from before the sleep, so it fired and did nothing — an
                 // infinite spinner (or a frozen frame) with no alert on a Wi-Fi
                 // that was not back yet.
-                if supersededRetry || surfacingFailure {
+                switch ReResolveGate.onNegotiationFailed(
+                    supersededRetry: supersededRetry, surfacingFailure: surfacingFailure,
+                    engineStopped: self.engineIsStopped
+                ) {
+                case .surfaceError:
                     // That retry was the one allowed attempt: surface the alert.
                     // (Or a stranded seek's rebuild: nothing else would.)
                     self.handlePlaybackError()
-                } else {
-                    if self.engineIsStopped {
+                case .armWatchdog(let markStopped):
+                    if markStopped {
                         // Nothing plays: make the watchdog see it, so it hands
                         // the media to the error path (retry, then alert) — and
                         // say so meanwhile, rather than a still frame.

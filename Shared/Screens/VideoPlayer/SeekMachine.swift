@@ -94,6 +94,12 @@ final class SeekMachine {
     /// hiding it; the reopen's own `beginOpenLoading` raises it again once the
     /// negotiation returns.
     var onStranded: (_ targetMs: Int32) -> Bool = { _ in false }
+    /// A seek LANDED (not the backstop), with its clamped target — the playhead
+    /// the engine is now at. The controller's `lastKnownPositionMs` is fed by
+    /// time ticks, and a seek that lands in PAUSE produces none: without this,
+    /// a seek back from the last 2 s, in pause, left the old near-end position
+    /// in place, and a `.stopped` before the next tick read as the end.
+    var onLanded: (_ targetMs: Int32) -> Void = { _ in }
 
     // MARK: State
 
@@ -277,6 +283,15 @@ final class SeekMachine {
         progressTicks = 0
     }
 
+    /// The engine went `.paused` with a window open: the frame at the target is
+    /// what a paused seek shows, so this is a landing (`onLanded`) — without
+    /// `onSettled`, the `.paused` handler announcing SyncPlay's `Ready` itself.
+    func endSettleInPause() {
+        let target = settlingTargetMs
+        endSettle()
+        if let target { onLanded(target) }
+    }
+
     /// Re-evaluates a settling seek against the live position. Returns true
     /// while the spinner must stay up; clears the window (and returns false) as
     /// soon as the playhead is moving again, the player has settled into pause,
@@ -333,6 +348,7 @@ final class SeekMachine {
         // on an already-open stream. The backstop reports too — a stranded
         // group is worse than a report made a beat late.
         onSettled(state == .playing)
+        if landed { onLanded(target) }
         // The backstop used to be the end of the story: spinner off over a
         // frozen picture, and — when the engine stayed `.opening`/`.buffering`
         // after refusing the seek — nothing ever recovered it, both stall

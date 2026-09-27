@@ -30,6 +30,7 @@ struct SeekMachineTests {
         var spinnerShown = 0
         var settledReports: [Bool] = []
         var strandedTargets: [Int32] = []
+        var landedTargets: [Int32] = []
         /// Ce que répond le contrôleur : une reconstruction a-t-elle pris le relais ?
         var recoveryTakesOver = true
 
@@ -50,6 +51,7 @@ struct SeekMachineTests {
                 strandedTargets.append($0)
                 return recoveryTakesOver
             }
+            machine.onLanded = { [unowned self] in landedTargets.append($0) }
             return machine
         }()
 
@@ -303,6 +305,67 @@ struct SeekMachineTests {
         bench.clock += SeekMachine.maxHold + 1
         bench.machine.sampleSettle()
         #expect(bench.strandedTargets == [2_503_936 - SeekCoalescer.endGuardMs])
+    }
+
+    // MARK: - Recherche posée : la position réelle suit
+
+    @Test("Une recherche posée donne sa cible, là où le moteur est désormais")
+    func landedSeekReportsItsTarget() {
+        let bench = Bench()
+        bench.position = 90_000
+        bench.machine.engineSeek(90_000)
+        bench.machine.sampleSettle()
+        bench.position = 90_200
+        #expect(!bench.machine.sampleSettle())
+        #expect(bench.landedTargets == [90_000])
+    }
+
+    @Test("En pause — aucun tick à venir — la recherche posée donne aussi sa cible")
+    func pausedLandingReportsItsTarget() {
+        // Le trou relevé par la relecture : un retour en arrière en pause depuis
+        // les 2 dernières secondes laissait l'ancienne position près de la fin,
+        // et un arrêt avant le tick suivant se lisait comme la fin.
+        let bench = Bench()
+        bench.state = .paused
+        bench.length = 2_503_936
+        bench.machine.engineSeek(600_000, byUser: true)
+        #expect(!bench.machine.sampleSettle())
+        #expect(bench.landedTargets == [600_000])
+    }
+
+    @Test("Le garde-fou n'est pas un atterrissage")
+    func backstopIsNotALanding() {
+        let bench = Bench()
+        _ = strand(bench, byUser: true)
+        _ = strand(bench, byUser: false)
+        #expect(bench.landedTargets.isEmpty)
+    }
+
+    @Test("Une recherche remplacée ne se pose jamais")
+    func supersededSeekNeverLands() {
+        let bench = Bench()
+        bench.machine.engineSeek(90_000)
+        bench.machine.cancelPending()
+        bench.position = 95_000
+        #expect(!bench.machine.sampleSettle())
+        #expect(bench.landedTargets.isEmpty)
+    }
+
+    @Test("Une pause pendant le calage est un atterrissage, sans rapport de calage")
+    func pauseDuringSettleLands() {
+        let bench = Bench()
+        bench.machine.engineSeek(90_000, byUser: true)
+        bench.machine.endSettleInPause()
+        #expect(bench.landedTargets == [90_000])
+        #expect(bench.settledReports.isEmpty)
+        #expect(bench.machine.settlingTargetMs == nil)
+    }
+
+    @Test("Une pause hors fenêtre n'annonce aucun atterrissage")
+    func pauseWithoutAWindowLandsNothing() {
+        let bench = Bench()
+        bench.machine.endSettleInPause()
+        #expect(bench.landedTargets.isEmpty)
     }
 
     @Test("Hors fenêtre, un échantillon ne fait rien")

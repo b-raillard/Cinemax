@@ -388,3 +388,72 @@ struct PlaybackStopPositionTests {
         #expect(position == 2_503_800)
     }
 }
+
+/// La reconstruction qui re-négocie un PlaybackInfo neuf (réveil, filet des
+/// gels, recherche bloquée) : une seule à la fois, et tant qu'elle négocie
+/// c'est elle qui possède la reprise — une défaillance du vieux moteur ne
+/// doit pas lancer un second `play(media)` en parallèle.
+@Suite("Reconstruction en cours — défaillances du moteur")
+struct ReResolveGateTests {
+
+    @Test("Hors reconstruction, une défaillance du moteur va au chemin d'erreur")
+    func idleGateAdmitsFailures() {
+        let gate = ReResolveGate()
+        #expect(!gate.isNegotiating)
+        #expect(gate.admitsEngineFailure)
+    }
+
+    @Test("Pendant la négociation, une défaillance du vieux moteur est ignorée")
+    func negotiationSwallowsOldEngineFailures() {
+        var gate = ReResolveGate()
+        let started = gate.begin()
+        #expect(started)
+        #expect(gate.isNegotiating)
+        #expect(!gate.admitsEngineFailure)
+    }
+
+    @Test("Une seule reconstruction à la fois")
+    func oneShot() {
+        var gate = ReResolveGate()
+        let first = gate.begin()
+        let second = gate.begin()
+        #expect(first)
+        #expect(!second)
+        #expect(gate.isNegotiating)
+    }
+
+    @Test("Négociation terminée : les défaillances du nouveau média comptent de nouveau")
+    func endReopensTheErrorPath() {
+        var gate = ReResolveGate()
+        _ = gate.begin()
+        gate.end()
+        #expect(gate.admitsEngineFailure)
+        let next = gate.begin() // et une reconstruction suivante est permise
+        #expect(next)
+    }
+
+    @Test("Négociation échouée après un nouvel essai remplacé : l'alerte, pas le watchdog")
+    func supersededRetrySurfaces() {
+        #expect(ReResolveGate.onNegotiationFailed(supersededRetry: true, surfacingFailure: false,
+                                                  engineStopped: false) == .surfaceError)
+        #expect(ReResolveGate.onNegotiationFailed(supersededRetry: true, surfacingFailure: false,
+                                                  engineStopped: true) == .surfaceError)
+    }
+
+    @Test("Négociation échouée d'une recherche bloquée : l'alerte, jamais un loader sans fin")
+    func strandedSeekSurfaces() {
+        #expect(ReResolveGate.onNegotiationFailed(supersededRetry: false, surfacingFailure: true,
+                                                  engineStopped: false) == .surfaceError)
+    }
+
+    @Test("Négociation échouée d'un réveil : le watchdog, avec le média marqué arrêté si rien ne joue")
+    func wakeArmsTheWatchdog() {
+        // Moteur arrêté — y compris une erreur que la garde a tenue à l'écart
+        // du chemin d'erreur : le watchdog doit voir un média mort.
+        #expect(ReResolveGate.onNegotiationFailed(supersededRetry: false, surfacingFailure: false,
+                                                  engineStopped: true) == .armWatchdog(markStopped: true))
+        // Le média joue encore : réarmer seulement, sans effacer l'image.
+        #expect(ReResolveGate.onNegotiationFailed(supersededRetry: false, surfacingFailure: false,
+                                                  engineStopped: false) == .armWatchdog(markStopped: false))
+    }
+}
