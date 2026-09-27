@@ -1072,7 +1072,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Spent only once the rebuild is actually under way: `false` means a
         // re-resolve is already running (it owns the recovery) or the player
         // is closing — neither used anything.
-        guard reResolveAndResume(from: targetMs) else { return false }
+        guard reResolveAndResume(from: targetMs, surfacingFailure: true) else { return false }
         _ = pictureStall.spendRecovery()
         return true
     }
@@ -3706,7 +3706,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             guard let ticks = command.seekPositionTicks, mediaConfirmedOpen else { return false }
             // A local ±N burst still waiting to commit must not land after it.
             seeks.cancelPending()
-            seeks.engineSeek(Int32(clamping: ticks / 10_000))
+            // A seek the viewer asked for, from another device: a refusal
+            // rebuilds like a local scrub would (`handleStrandedSeek`).
+            seeks.engineSeek(Int32(clamping: ticks / 10_000), byUser: true)
             refreshTimeUISoon()
             return true
         case .stop:
@@ -4976,7 +4978,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// changes). Guarded by `navGeneration` so a user episode-nav started during
     /// the await wins, and one-shot via `isReResolvingAfterWake`.
     @discardableResult
-    private func reResolveAndResume(from ms: Int32) -> Bool {
+    ///
+    /// `surfacingFailure`: a failed negotiation goes to the error path (retry,
+    /// then the alert) instead of the open watchdog. The stranded-seek rebuild
+    /// needs it — its media is neither stopped nor re-opening, so the watchdog,
+    /// whose guard reads the OLD media's time and length, would do nothing and
+    /// leave the spinner turning for ever.
+    private func reResolveAndResume(from ms: Int32, surfacingFailure: Bool = false) -> Bool {
         guard !isTearingDown, !isReResolvingAfterWake else { return false }
         // A committed-but-not-yet-landed skip is the user's intended position:
         // resume there rather than the stale pre-seek tick, then drop the pending
@@ -5022,8 +5030,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 // media from before the sleep, so it fired and did nothing — an
                 // infinite spinner (or a frozen frame) with no alert on a Wi-Fi
                 // that was not back yet.
-                if supersededRetry {
+                if supersededRetry || surfacingFailure {
                     // That retry was the one allowed attempt: surface the alert.
+                    // (Or a stranded seek's rebuild: nothing else would.)
                     self.handlePlaybackError()
                 } else {
                     if self.engineIsStopped {

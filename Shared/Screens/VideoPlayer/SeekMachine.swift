@@ -90,8 +90,9 @@ final class SeekMachine {
     /// re-anchor, track switch, SyncPlay echo, auto-skip): the recovery it
     /// triggers is itself a reopen that seeks, and a reopen whose seek is
     /// refused again would rebuild in a loop. Returns whether a recovery took
-    /// over — the spinner then stays up for it instead of going off over a
-    /// frozen picture while the recovery negotiates.
+    /// over — the sample that fired it then keeps the spinner up rather than
+    /// hiding it; the reopen's own `beginOpenLoading` raises it again once the
+    /// negotiation returns.
     var onStranded: (_ targetMs: Int32) -> Bool = { _ in false }
 
     // MARK: State
@@ -158,7 +159,8 @@ final class SeekMachine {
     /// also PAINTS the clamped target before the debounced commit.
     ///
     /// `byUser` marks a seek the viewer asked for (scrub release, ±N, chapter,
-    /// manual skip intro/outro) — the only kind `onStranded` may rebuild on.
+    /// manual skip intro/outro, an inbound remote Seek) — the only kind
+    /// `onStranded` may rebuild on.
     func engineSeek(_ ms: Int32, byUser: Bool = false) {
         let target = SeekCoalescer.clamp(target: ms, lengthMs: lengthMs())
         // Diagnostics: every seek path funnels here.
