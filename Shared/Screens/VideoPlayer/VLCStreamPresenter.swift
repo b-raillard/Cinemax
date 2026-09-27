@@ -815,6 +815,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.syncPlay.reportSeekSettled(isPlaying: isPlaying)
         }
         machine.onStranded = { [weak self] target in self?.handleStrandedSeek(targetMs: target) ?? false }
+        // Where the playhead is after a landed seek, even with no tick to say
+        // so (a seek in pause) — what `PlaybackEndPolicy.stopPositionMs` and a
+        // retry's resume position read.
+        // Unconditional: a seek back to 0 from the last seconds must not leave
+        // the end-of-file position behind (`resumeSeconds` already refuses ≤ 1 s).
+        machine.onLanded = { [weak self] target in self?.lastKnownPositionMs = target }
         return machine
     }
 
@@ -951,7 +957,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 case .tracksChanged:
                     self.applyServerTrackDefaultsIfNeeded()
                 case .encounteredError:
-                    self.handlePlaybackError()
+                    self.handleEngineFailure("encountered-error")
                 default:
                     break
                 }
@@ -3581,6 +3587,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         CinemaxStreamProxy.isManifest(path: info.url.path)
     }
 
+    /// The engine reports a failure (`.error`, `.encounteredError`, a stop
+    /// short of the end). A rebuild already negotiating (stall net, stranded
+    /// seek, wake) owns the recovery: the old engine winding down is not a
+    /// second failure, and a retry now would race it — two `play(media)`
+    /// against one player. If that negotiation fails, its own branch surfaces
+    /// the error or arms the watchdog (`engineIsStopped` covers `.error`).
+    private func handleEngineFailure(_ what: String) {
+        guard !isReResolvingAfterWake else {
+            logger.notice("\(what, privacy: .public) ignored — a re-resolve is already recovering this media")
+            return
+        }
+        handlePlaybackError()
+    }
+
     /// Nothing is opening or playing: the engine ended, is ending, or never
     /// started. What `PlaybackEndPolicy` calls `engineStopped` on a recheck.
     private var engineIsStopped: Bool {
@@ -4433,7 +4453,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         logger.info("engine-state \(String(describing: state), privacy: .public)")
         switch state {
         case .error:
-            handlePlaybackError()
+            handleEngineFailure("error")
         case .opening, .buffering:
             // Opening a stream or re-buffering mid-playback → show the spinner so
             // the gap reads as "loading", not "frozen". Cleared by .playing or the
@@ -4490,7 +4510,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     VLC stopped \(Int64(self.lengthMs) - stopPositionMs, privacy: .public)ms short of the end \
                     for \(self.itemId, privacy: .public) — treating as a stream failure
                     """)
-                handlePlaybackError()
+                handleEngineFailure("stop")
             case .ignore:
                 break
             }
@@ -4524,7 +4544,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             refreshNowPlayingRate(playing: true)
             announceSyncPlayReadyIfPositionIsReal(isPlaying: true)
         case .paused:
-            seeks.endSettle()
+            seeks.endSettleInPause()
             clearLoadingIfOpen()
             #if os(iOS)
             setPlayPauseIcon(playing: false)
