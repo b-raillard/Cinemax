@@ -31,7 +31,9 @@ enum WhatsNewCatalogue {
 
     static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(version: ServerVersion(2, 2, 0), pages: [
-            WhatsNewPage(id: "newName", illustration: .newName)
+            WhatsNewPage(id: "newName", illustration: .newName),
+            WhatsNewPage(id: "parentalLock", illustration: .parentalLock),
+            WhatsNewPage(id: "accessibility", illustration: .accessibility)
         ]),
         WhatsNewRelease(version: ServerVersion(2, 1, 1), pages: [
             WhatsNewPage(id: "underTheHood", illustration: .underTheHood)
