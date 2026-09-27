@@ -22,6 +22,8 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case playlists
     /// A release that changed nothing on screen — fixes and performance.
     case underTheHood
+    /// The app changed its name, not its content.
+    case newName
 }
 
 struct WhatsNewIllustrationView: View {
@@ -53,6 +55,7 @@ struct WhatsNewIllustrationView: View {
             case .playOn:        playOn(u)
             case .playlists:     playlists(u)
             case .underTheHood:  underTheHood(u)
+            case .newName:       newName(u)
             }
         }
         .frame(width: side, height: side)
@@ -133,6 +136,21 @@ struct WhatsNewIllustrationView: View {
                 .fill(themeManager.accentDim)
                 .frame(width: 11 * u, height: 11 * u)
                 .offset(x: -23 * u, y: 15 * u)
+        }
+    }
+
+    /// The same tile beside two labels, the old one faded and the accent one
+    /// longer: the app did not move, only what it is called.
+    private func newName(_ u: CGFloat) -> some View {
+        HStack(spacing: 8 * u) {
+            RoundedRectangle(cornerRadius: 9 * u)
+                .fill(CinemaColor.surfaceContainerHighest)
+                .frame(width: 34 * u, height: 34 * u)
+            VStack(alignment: .leading, spacing: 6 * u) {
+                bar(u, width: 30, fill: AnyShapeStyle(CinemaColor.surfaceContainerHighest))
+                    .opacity(0.6)
+                bar(u, width: 40, fill: AnyShapeStyle(accentGradient))
+            }
         }
     }
 

@@ -1236,6 +1236,8 @@
 "whatsNew.skip" = "Passer";
 "whatsNew.done" = "Terminé";
 "whatsNew.page" = "Page %d sur %d";
+"whatsNew.newName.title" = "Cinemax devient JellyGlass";
+"whatsNew.newName.body" = "Même application, nouveau nom. Vos serveurs, vos réglages et vos widgets restent en place : rien à refaire.";
 "whatsNew.underTheHood.title" = "Sous le capot";
 "whatsNew.underTheHood.body" = "Cette version corrige des bugs et allège l'application. La lecture, surtout : elle se rattrape maintenant toute seule quand le serveur cesse un instant de l'alimenter, au lieu de rester sur une image figée.";
 "whatsNew.watchTogether.title" = "Regarder ensemble";
