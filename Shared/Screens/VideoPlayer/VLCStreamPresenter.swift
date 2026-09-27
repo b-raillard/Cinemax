@@ -4439,6 +4439,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             setLoading(true)
             if syncPlay.isInGroup { syncPlay.reportBuffering() }
         case .stopped:
+            // Read BEFORE the window is dropped: a seek that ran into EOF is
+            // where the engine was, and the clock may say 0 by now.
+            let stopPositionMs = PlaybackEndPolicy.stopPositionMs(
+                engineMs: currentMs, lastKnownMs: lastKnownPositionMs,
+                settlingSeekTargetMs: seeks.settlingTargetMs
+            )
             seeks.endSettle() // no frames are coming — a pending settle is moot
             // Diagnostics: libVLC has no distinct `.ended`, so every teardown,
             // error and real EOF arrives here. Log the four gate inputs so a
@@ -4449,13 +4455,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             logger.info("""
                 end-gate .stopped tearingDown=\(self.isTearingDown, privacy: .public) \
                 sincePlay=\(sincePlay ?? -1, format: .fixed(precision: 2), privacy: .public) \
-                currentMs=\(self.currentMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public) \
+                currentMs=\(self.currentMs, privacy: .public) \
+                stopPos=\(stopPositionMs, privacy: .public) lengthMs=\(self.lengthMs, privacy: .public) \
                 opened=\(self.mediaConfirmedOpen, privacy: .public) hls=\(self.isAdaptiveStream, privacy: .public)
                 """)
             switch PlaybackEndPolicy.decide(
                 isTearingDown: isTearingDown,
                 secondsSincePlayStart: sincePlay,
-                currentMs: Int64(currentMs), lengthMs: Int64(lengthMs),
+                currentMs: stopPositionMs, lengthMs: Int64(lengthMs),
                 mediaConfirmedOpen: mediaConfirmedOpen,
                 isAdaptiveStream: isAdaptiveStream
             ) {
@@ -4478,7 +4485,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 // no alert and no spinner (95 s measured in recette). Route it
                 // to the same one-shot retry the error path uses.
                 logger.error("""
-                    VLC stopped \(Int64(self.lengthMs) - Int64(self.currentMs), privacy: .public)ms short of the end \
+                    VLC stopped \(Int64(self.lengthMs) - stopPositionMs, privacy: .public)ms short of the end \
                     for \(self.itemId, privacy: .public) — treating as a stream failure
                     """)
                 handlePlaybackError()

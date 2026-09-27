@@ -106,8 +106,10 @@ final class SeekMachine {
     /// libVLC echoes the target as a time update the instant the seek is
     /// issued — long before it has re-opened the byte range and re-buffered —
     /// so the time tick alone would clear the spinner while the picture is
-    /// still frozen (the "no loader after a fast-forward" bug).
-    private var settlingTargetMs: Int32?
+    /// still frozen (the "no loader after a fast-forward" bug). Readable: a
+    /// `.stopped` that interrupts the window judges the end against it
+    /// (`PlaybackEndPolicy.stopPositionMs`).
+    private(set) var settlingTargetMs: Int32?
     /// Whether the settling seek was the user's — the only kind `onStranded`
     /// reports.
     private var settlingIsUserSeek = false

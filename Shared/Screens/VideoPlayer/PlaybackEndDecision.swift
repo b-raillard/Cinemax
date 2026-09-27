@@ -49,6 +49,31 @@ enum PlaybackEndPolicy {
     /// is unambiguously outside it and can never schedule a third.
     static let recheckMargin: TimeInterval = 0.25
 
+    /// Where playback WAS when libVLC reported `.stopped` — the position
+    /// `decide` must judge, which is not what the engine's clock says by then.
+    ///
+    /// libVLC may zero its clock on stop, and a seek that runs straight into
+    /// EOF stops before its first time tick at the new position. Measured
+    /// 2026-09-27 (« Le Rouge et le Noir » ép. 2, a seek to the end, clamped to
+    /// `lengthMs − 250`): EOF 0.3 s after the seek, then `.stopped` with
+    /// `currentMs=0` — read as "stopped 41 min short", i.e. a stream failure.
+    /// The retry reopened 5 s before the end; on the simulator those 5 s ran
+    /// out into a normal end, but on the Apple TV the episode replayed its last
+    /// seconds in a loop, never ending, each reopen renewing the retry.
+    ///
+    /// So: a seek still settling says where the engine was going — its target
+    /// is the position, whatever the clock or the pre-seek playhead say (a seek
+    /// BACK from the end must not read as an end). Otherwise the last real
+    /// playhead the ticks saw, unless the clock still holds a later one.
+    static func stopPositionMs(
+        engineMs: Int32,
+        lastKnownMs: Int32,
+        settlingSeekTargetMs: Int32?
+    ) -> Int64 {
+        if let target = settlingSeekTargetMs { return Int64(target) }
+        return Int64(max(engineMs, lastKnownMs))
+    }
+
     /// - Parameters:
     ///   - secondsSincePlayStart: time since the CURRENT media's `play()`, or
     ///     nil while a fresh open is still on its way to `play()`: every stop
