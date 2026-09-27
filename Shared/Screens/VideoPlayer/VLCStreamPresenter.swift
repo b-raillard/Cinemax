@@ -814,6 +814,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             guard let self, self.syncPlay.isInGroup else { return }
             self.syncPlay.reportSeekSettled(isPlaying: isPlaying)
         }
+        machine.onStranded = { [weak self] target in self?.handleStrandedSeek(targetMs: target) ?? false }
         return machine
     }
 
@@ -1028,6 +1029,52 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             sleepRemaining -= 1
             if sleepRemaining <= 0 { fireSleepTimer() }
         }
+    }
+
+    /// A seek the user asked for was never honoured: the settle window reached
+    /// its 30 s backstop without the playhead moving (`SeekMachine.onStranded`).
+    ///
+    /// Before this, the backstop only turned the spinner off — over a frozen
+    /// picture under a HUD still reading "playing" (measured 2026-08-21, the
+    /// right-edge scrub libVLC refused). When the engine stayed `.playing`,
+    /// `PictureStallPolicy` rebuilt ~8 s later; when it stayed `.opening` /
+    /// `.buffering`, nothing ever did, both watchdogs requiring `.playing`.
+    /// The cure is the one the stall net already uses — a fresh negotiation
+    /// resumed at the target — and it spends the SAME budget, so the two nets
+    /// together rebuild at most `PictureStallPolicy.recoveryBudget` times.
+    ///
+    /// Out of scope on purpose: a group (its echo is not `byUser`, and a solo
+    /// rebuild would desynchronise it); an engine in any other state — paused
+    /// lands at once, stopped / error belong to `PlaybackEndPolicy` and
+    /// `handlePlaybackError`; and the open phase, which the open watchdog owns.
+    ///
+    /// Returns whether the rebuild started — the spinner then stays up through
+    /// the negotiation, which is asynchronous and runs on the old, frozen
+    /// picture until the fresh stream opens.
+    private func handleStrandedSeek(targetMs: Int32) -> Bool {
+        guard !isTearingDown, mediaConfirmedOpen, !syncPlay.isInGroup else { return false }
+        switch player.state {
+        case .playing, .opening, .buffering: break
+        default: return false
+        }
+        guard pictureStall.recoveriesLeft > 0 else {
+            logger.error("seek-stranded no recovery left target=\(targetMs, privacy: .public)")
+            DiagnosticsUploader.send(reason: "seek-stranded-exhausted", engine: "vlc")
+            return false
+        }
+        logger.notice("""
+            seek-stranded recover target=\(targetMs, privacy: .public) \
+            state=\(self.player.state.description, privacy: .public) \
+            modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
+            """)
+        // Sent BEFORE the rebuild, which resets what the document describes.
+        DiagnosticsUploader.send(reason: "seek-stranded", engine: "vlc")
+        // Spent only once the rebuild is actually under way: `false` means a
+        // re-resolve is already running (it owns the recovery) or the player
+        // is closing — neither used anything.
+        guard reResolveAndResume(from: targetMs) else { return false }
+        _ = pictureStall.spendRecovery()
+        return true
     }
 
     /// The one guard that watches the PICTURE instead of the clock, the engine
@@ -1255,7 +1302,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     if let next = nextEpisode { navigateToEpisode(next, isAutoplay: true) }
                 case .seekToEnd:
                     showSkipHUD(loc.localized(segment.type == .intro ? "player.autoSkipped.intro" : "player.autoSkipped.credits"), duration: 1.6)
-                    userEngineSeek(ms: Int32(end * 1000))
+                    userEngineSeek(ms: Int32(end * 1000), byUser: false)
                     refreshTimeUISoon()
                 case .none:
                     break
@@ -3897,11 +3944,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// A user-initiated seek. In a group it becomes a server Seek request (the
     /// echo does the actual engine seek); otherwise it seeks locally.
-    private func userEngineSeek(ms: Int32) {
+    ///
+    /// `byUser: false` is the auto-skip, which routes like a user seek (so a
+    /// group follows it) but is the app's own decision — it must not arm the
+    /// stranded-seek rebuild (`handleStrandedSeek`).
+    private func userEngineSeek(ms: Int32, byUser: Bool = true) {
         if syncPlay.isInGroup {
             syncPlay.userDidSeek(toMs: Int(max(0, ms)))
         } else {
-            seeks.engineSeek(ms)
+            seeks.engineSeek(ms, byUser: byUser)
         }
     }
 

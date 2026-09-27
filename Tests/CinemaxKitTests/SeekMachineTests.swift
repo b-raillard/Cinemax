@@ -29,6 +29,9 @@ struct SeekMachineTests {
         var paints: [Int32] = []
         var spinnerShown = 0
         var settledReports: [Bool] = []
+        var strandedTargets: [Int32] = []
+        /// Ce que répond le contrôleur : une reconstruction a-t-elle pris le relais ?
+        var recoveryTakesOver = true
 
         lazy var machine: SeekMachine = {
             let machine = SeekMachine(
@@ -43,6 +46,10 @@ struct SeekMachineTests {
             machine.paint = { [unowned self] ms, _ in paints.append(ms) }
             machine.showSpinner = { [unowned self] in spinnerShown += 1 }
             machine.onSettled = { [unowned self] in settledReports.append($0) }
+            machine.onStranded = { [unowned self] in
+                strandedTargets.append($0)
+                return recoveryTakesOver
+            }
             return machine
         }()
 
@@ -200,6 +207,102 @@ struct SeekMachineTests {
         #expect(!bench.machine.sampleSettle())
         // Un groupe bloqué en `Waiting` vaut moins qu'un rapport tardif.
         #expect(bench.settledReports == [true])
+    }
+
+    // MARK: - Recherche bloquée (filet)
+
+    /// Une recherche de l'utilisateur tirée à 90 s, puis 31 s sans que la tête
+    /// de lecture bouge — la forme du refus mesuré le 21/08.
+    private func strand(_ bench: Bench, byUser: Bool, state: SeekMachine.EngineState = .playing) -> Bool {
+        bench.state = state
+        bench.position = 90_000
+        bench.machine.engineSeek(90_000, byUser: byUser)
+        bench.machine.sampleSettle() // référence
+        bench.clock += SeekMachine.maxHold + 1
+        return bench.machine.sampleSettle()
+    }
+
+    @Test("Une recherche de l'utilisateur jamais posée est signalée une fois, avec sa cible")
+    func strandedUserSeekIsReported() {
+        let bench = Bench()
+        let spinnerStays = strand(bench, byUser: true)
+        #expect(bench.strandedTargets == [90_000])
+        // La reconstruction a pris le relais : le loader reste, la fenêtre est close.
+        #expect(spinnerStays)
+        #expect(!bench.machine.isSettling)
+        // Le groupe est prévenu comme avant, et une seule fois.
+        #expect(bench.settledReports == [true])
+        #expect(!bench.machine.sampleSettle())
+        #expect(bench.strandedTargets == [90_000])
+    }
+
+    @Test("Le moteur resté en chargement est signalé aussi — le cas que rien ne rattrapait")
+    func strandedWhileBufferingIsReported() {
+        let bench = Bench()
+        _ = strand(bench, byUser: true, state: .buffering)
+        #expect(bench.strandedTargets == [90_000])
+    }
+
+    @Test("Sans reconstruction possible, le loader s'éteint comme avant")
+    func declinedRecoveryReleasesTheSpinner() {
+        let bench = Bench()
+        bench.recoveryTakesOver = false
+        #expect(!strand(bench, byUser: true))
+        #expect(bench.strandedTargets == [90_000])
+    }
+
+    @Test("Une recherche de l'app (reprise, recalage, piste, écho) ne déclenche jamais le filet")
+    func appSeekIsNeverReported() {
+        let bench = Bench()
+        #expect(!strand(bench, byUser: false))
+        #expect(bench.strandedTargets.isEmpty)
+        #expect(bench.settledReports == [true])
+    }
+
+    @Test("Une recherche de l'utilisateur qui se pose n'est pas signalée")
+    func landedUserSeekIsNotReported() {
+        let bench = Bench()
+        bench.position = 90_000
+        bench.machine.engineSeek(90_000, byUser: true)
+        bench.machine.sampleSettle()
+        bench.position = 90_200
+        #expect(!bench.machine.sampleSettle())
+        bench.clock += SeekMachine.maxHold + 1
+        #expect(!bench.machine.sampleSettle())
+        #expect(bench.strandedTargets.isEmpty)
+    }
+
+    @Test("En pause, une recherche de l'utilisateur est posée, jamais bloquée")
+    func pausedUserSeekIsNotReported() {
+        let bench = Bench()
+        bench.state = .paused
+        bench.machine.engineSeek(90_000, byUser: true)
+        #expect(!bench.machine.sampleSettle())
+        bench.clock += SeekMachine.maxHold + 1
+        #expect(!bench.machine.sampleSettle())
+        #expect(bench.strandedTargets.isEmpty)
+    }
+
+    @Test("Une recherche de l'utilisateur remplacée ne laisse pas son drapeau à la suivante")
+    func userFlagDoesNotLeakToTheNextSeek() {
+        let bench = Bench()
+        bench.machine.engineSeek(90_000, byUser: true)
+        bench.machine.cancelPending()
+        // La reprise de l'app qui suit se bloque : ce n'est pas au filet d'agir.
+        #expect(!strand(bench, byUser: false))
+        #expect(bench.strandedTargets.isEmpty)
+    }
+
+    @Test("La cible signalée est la cible bornée, pas la fin exacte")
+    func strandedTargetIsTheClampedOne() {
+        let bench = Bench()
+        bench.length = 2_503_936
+        bench.position = 1_000_000
+        bench.machine.engineSeek(2_503_936, byUser: true)
+        bench.machine.sampleSettle()
+        bench.clock += SeekMachine.maxHold + 1
+        bench.machine.sampleSettle()
+        #expect(bench.strandedTargets == [2_503_936 - SeekCoalescer.endGuardMs])
     }
 
     @Test("Hors fenêtre, un échantillon ne fait rien")

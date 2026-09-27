@@ -84,6 +84,15 @@ final class SeekMachine {
     /// A settle window closed (landed or backstop). The flag is whether the
     /// engine is playing — what a SyncPlay `Ready` report carries.
     var onSettled: (_ isPlaying: Bool) -> Void = { _ in }
+    /// A seek the USER asked for outlived the backstop without landing — the
+    /// engine refused it and has not recovered. Fired once, after `onSettled`,
+    /// with the clamped target. Never for the app's own seeks (resume, feed
+    /// re-anchor, track switch, SyncPlay echo, auto-skip): the recovery it
+    /// triggers is itself a reopen that seeks, and a reopen whose seek is
+    /// refused again would rebuild in a loop. Returns whether a recovery took
+    /// over — the spinner then stays up for it instead of going off over a
+    /// frozen picture while the recovery negotiates.
+    var onStranded: (_ targetMs: Int32) -> Bool = { _ in false }
 
     // MARK: State
 
@@ -99,6 +108,9 @@ final class SeekMachine {
     /// so the time tick alone would clear the spinner while the picture is
     /// still frozen (the "no loader after a fast-forward" bug).
     private var settlingTargetMs: Int32?
+    /// Whether the settling seek was the user's — the only kind `onStranded`
+    /// reports.
+    private var settlingIsUserSeek = false
     private var settle = SeekSettleTracker()
     /// Consecutive samples that showed forward progress. While the engine still
     /// reports `.opening`/`.buffering` two in a row are required.
@@ -142,15 +154,19 @@ final class SeekMachine {
     /// 2026-08-21: `target=2503936` on a `lengthMs` of 2503936). The ±N path
     /// clamps a second time — idempotent, and it keeps its own call because it
     /// also PAINTS the clamped target before the debounced commit.
-    func engineSeek(_ ms: Int32) {
+    ///
+    /// `byUser` marks a seek the viewer asked for (scrub release, ±N, chapter,
+    /// manual skip intro/outro) — the only kind `onStranded` may rebuild on.
+    func engineSeek(_ ms: Int32, byUser: Bool = false) {
         let target = SeekCoalescer.clamp(target: ms, lengthMs: lengthMs())
         // Diagnostics: every seek path funnels here.
         logger.info("""
             seek-fire target=\(target, privacy: .public) \
             from=\(self.currentMs(), privacy: .public) \
-            state=\(self.engineState().description, privacy: .public)
+            state=\(self.engineState().description, privacy: .public) \
+            user=\(byUser, privacy: .public)
             """)
-        beginSettle(target: target)
+        beginSettle(target: target, byUser: byUser)
         performSeek(target)
     }
 
@@ -228,8 +244,9 @@ final class SeekMachine {
 
     /// Arm the settle window for a seek that just fired. The spinner only shows
     /// if the seek hasn't produced real frames within `spinnerDelay`.
-    private func beginSettle(target: Int32) {
+    private func beginSettle(target: Int32, byUser: Bool) {
         settlingTargetMs = target
+        settlingIsUserSeek = byUser
         settle.reset()
         progressTicks = 0
         settleStartedAt = now()
@@ -251,6 +268,7 @@ final class SeekMachine {
         spinnerWork?.cancel()
         spinnerWork = nil
         settlingTargetMs = nil
+        settlingIsUserSeek = false
         settle.reset()
         progressTicks = 0
     }
@@ -258,12 +276,14 @@ final class SeekMachine {
     /// Re-evaluates a settling seek against the live position. Returns true
     /// while the spinner must stay up; clears the window (and returns false) as
     /// soon as the playhead is moving again, the player has settled into pause,
-    /// or the backstop expires. Called from the time tick, the 1 s heartbeat
+    /// or the backstop expires — except that a stranded user seek whose
+    /// recovery took over (`onStranded` → true) returns true with the window
+    /// already closed, the spinner being the recovery's now. Called from the time tick, the 1 s heartbeat
     /// and the `.playing` state change — every path that would otherwise hide
     /// the spinner.
     @discardableResult
     func sampleSettle() -> Bool {
-        guard settlingTargetMs != nil else { return false }
+        guard let target = settlingTargetMs else { return false }
         let position = currentMs()
         let state = engineState()
         // The tracker keeps its baseline until progress is actually confirmed.
@@ -302,12 +322,26 @@ final class SeekMachine {
         // Backstop: a missed engine signal must never strand the spinner.
         let expired = elapsed > Self.maxHold
         guard landed || expired else { return true }
+        let wasUserSeek = settlingIsUserSeek
         endSettle()
         // The one moment a SyncPlay group in `Waiting` can hear that this
         // participant arrived: libVLC emits no state change when a seek settles
         // on an already-open stream. The backstop reports too — a stranded
         // group is worse than a report made a beat late.
         onSettled(state == .playing)
+        // The backstop used to be the end of the story: spinner off over a
+        // frozen picture, and — when the engine stayed `.opening`/`.buffering`
+        // after refusing the seek — nothing ever recovered it, both stall
+        // watchdogs requiring `.playing`.
+        if !landed, wasUserSeek {
+            logger.error("""
+                seek-stranded target=\(target, privacy: .public) \
+                now=\(position, privacy: .public) state=\(state.description, privacy: .public)
+                """)
+            // The window is closed either way; `true` only keeps the caller
+            // from hiding the spinner the recovery now owns.
+            return onStranded(target)
+        }
         return false
     }
 }

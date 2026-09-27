@@ -114,6 +114,23 @@ struct PictureStallPolicy {
         healthySeconds = 0
     }
 
+    /// Spends one recovery on behalf of the OTHER net that rebuilds the player
+    /// — a user seek stranded past the settle backstop (`SeekMachine.onStranded`).
+    /// Returns whether one was left.
+    ///
+    /// One budget for both nets, on purpose: they end in the same
+    /// `reResolveAndResume`, so two separate allowances would let a stream that
+    /// breaks the same way every time alternate between them and rebuild four
+    /// times instead of two. The healthy-frames count restarts too, so only a
+    /// rebuild that actually plays earns the budget back.
+    mutating func spendRecovery() -> Bool {
+        guard recoveriesLeft > 0 else { return false }
+        recoveriesLeft -= 1
+        stalledSeconds = 0
+        healthySeconds = 0
+        return true
+    }
+
     /// One sample per second, from the player's existing 1 s heartbeat.
     ///
     /// - Parameters:
