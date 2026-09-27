@@ -177,3 +177,62 @@ enum PlaybackRetryPolicy {
     }
 }
 
+// MARK: - Rebuild in progress
+
+/// The one rebuild that re-negotiates a fresh PlaybackInfo for the current
+/// item (`VLCStreamPresenter.reResolveAndResume` — wake, picture / feed stall
+/// net, stranded user seek): one at a time, and while it negotiates it OWNS
+/// the recovery. Pure for the same reason as `PlaybackRetryPolicy`; the
+/// presenter keeps the negotiation and its effects. Locked by
+/// `ReResolveGateTests`.
+struct ReResolveGate {
+    /// What a FAILED negotiation does next.
+    enum NegotiationFailure: Equatable {
+        /// To the error path (retry, then « Lecture impossible »): the
+        /// rebuild superseded a retry — that was the one allowed attempt — or
+        /// it is a stranded seek's, whose media is neither stopped nor
+        /// reopening, so the open watchdog (which reads the OLD media's time
+        /// and length) would do nothing and leave the spinner turning for ever.
+        case surfaceError
+        /// Leave it to the open watchdog. `markStopped`: nothing plays, so the
+        /// presenter blanks the old media's time and length for the watchdog
+        /// to see it, and puts the spinner up rather than a still frame.
+        case armWatchdog(markStopped: Bool)
+    }
+
+    private(set) var isNegotiating = false
+
+    /// Starts a negotiation; false if one is already running (one-shot).
+    mutating func begin() -> Bool {
+        guard !isNegotiating else { return false }
+        isNegotiating = true
+        return true
+    }
+
+    /// The negotiation is over — succeeded (the new media is handed to the
+    /// engine in the same main-actor turn, so its own first engine event,
+    /// delivered on a later one, is judged normally), failed, or superseded.
+    mutating func end() {
+        isNegotiating = false
+    }
+
+    /// Whether an engine failure (`.error`, `.encounteredError`, a stop short
+    /// of the end) may reach `handlePlaybackError`. Not while a rebuild
+    /// negotiates: the old engine winding down is not a second failure, and a
+    /// retry would race the rebuild — two `play(media)` against one player.
+    var admitsEngineFailure: Bool { !isNegotiating }
+
+    /// - Parameters:
+    ///   - supersededRetry: the rebuild cleared a pending error retry.
+    ///   - surfacingFailure: a stranded seek's rebuild.
+    ///   - engineStopped: the old engine is stopped, stopping, idle or in
+    ///     error — including an error this gate kept from the error path.
+    static func onNegotiationFailed(
+        supersededRetry: Bool,
+        surfacingFailure: Bool,
+        engineStopped: Bool
+    ) -> NegotiationFailure {
+        if supersededRetry || surfacingFailure { return .surfaceError }
+        return .armWatchdog(markStopped: engineStopped)
+    }
+}
