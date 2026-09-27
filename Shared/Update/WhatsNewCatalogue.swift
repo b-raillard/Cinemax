@@ -18,7 +18,7 @@ struct WhatsNewRelease: Equatable, Sendable {
     let pages: [WhatsNewPage]
 }
 
-/// What each version of Cinemax announced about itself.
+/// What each version of the app announced about itself.
 ///
 /// **Deliberately DATA, not code.** Publishing a version means writing its
 /// pages here and their two strings in both catalogues — nothing else. That is
@@ -30,6 +30,9 @@ enum WhatsNewCatalogue {
     static let maxPages = 6
 
     static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(version: ServerVersion(2, 2, 0), pages: [
+            WhatsNewPage(id: "newName", illustration: .newName)
+        ]),
         WhatsNewRelease(version: ServerVersion(2, 1, 1), pages: [
             WhatsNewPage(id: "underTheHood", illustration: .underTheHood)
         ]),
