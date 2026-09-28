@@ -328,6 +328,12 @@ extension SettingsScreen {
 
             tvAccentColorPicker
 
+            if let theme = seasonal.activeTheme {
+                Text(loc.localized("settings.seasonal.accentNote", loc.localized(theme.nameKey)))
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+
             tvLanguagePicker
 
             // The row keeps the app's own preference; when the system's Reduce
@@ -339,6 +345,31 @@ extension SettingsScreen {
                 key: "motion",
                 value: $motionEffectsSetting,
                 subtitle: systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : nil
+            )
+
+            tvGlassToggle(
+                icon: "calendar",
+                label: loc.localized("settings.seasonal.toggle"),
+                key: "seasonalTheme",
+                value: Binding(
+                    get: { seasonal.setting == .automatic },
+                    set: { seasonal.setSetting($0 ? .automatic : .off) }
+                ),
+                subtitle: SeasonalSettingsText.catalogueSummary(loc: loc)
+            )
+
+            tvGlassToggle(
+                icon: "sparkles",
+                label: loc.localized("settings.seasonal.ambiance"),
+                key: "seasonalAmbiance",
+                value: Binding(get: { seasonal.ambianceEnabled }, set: { seasonal.setAmbianceEnabled($0) })
+            )
+
+            tvGlassToggle(
+                icon: "rectangle.stack",
+                label: loc.localized("settings.seasonal.row"),
+                key: "seasonalRow",
+                value: Binding(get: { seasonal.rowEnabled }, set: { seasonal.setRowEnabled($0) })
             )
 
             tvFontSizeRow

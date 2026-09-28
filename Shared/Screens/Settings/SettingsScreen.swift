@@ -140,6 +140,7 @@ struct SettingsScreen: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) var toasts
+    @Environment(SeasonalThemeController.self) var seasonal
     /// Forwarded into `watchedHistorySheet`, whose cards raise the "add to a
     /// playlist" sheet. Optional so a preview / test host without the root
     /// injection doesn't trap (see `MediaCardContextMenu`).
@@ -353,7 +354,18 @@ struct SettingsScreen: View {
         [
             .init(id: "debugFastSleep", icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"), value: $debugFastSleepTimer, tint: .orange),
             .init(id: "debugSkipToEnd", icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"), value: $debugShowSkipToEnd, tint: .orange)
-        ]
+        ] + SeasonalThemeCatalogue.all.map { theme in
+            .init(
+                id: "debugSeason.\(theme.id)",
+                icon: "calendar.badge.exclamationmark",
+                label: loc.localized("settings.debug.forceSeason", loc.localized(theme.nameKey)),
+                value: Binding(
+                    get: { seasonal.forcedSeasonID == theme.id },
+                    set: { seasonal.setForcedSeason($0 ? theme.id : "") }
+                ),
+                tint: .orange
+            )
+        }
     }
 
     // MARK: Body

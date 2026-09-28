@@ -12,6 +12,7 @@ import CinemaxKit
 struct IOSAppearanceDetailView: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
+    @Environment(SeasonalThemeController.self) private var seasonal
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @AppStorage(SettingsKey.motionEffects) private var motionEffectsStorage: Bool = SettingsKey.Default.motionEffects
@@ -78,7 +79,13 @@ struct IOSAppearanceDetailView: View {
                                 accentDot(option)
                             }
                         }
-                    }
+                        if let theme = seasonal.activeTheme {
+                            Text(loc.localized("settings.seasonal.accentNote", loc.localized(theme.nameKey)))
+                                .font(CinemaFont.dynamicLabel(.small))
+                                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                         }
                     .hoverEffectDisabled()
                 }
 
@@ -170,6 +177,60 @@ struct IOSAppearanceDetailView: View {
                         .tint(themeManager.accent)
                     }
                 }
+            }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+
+            iOSSettingsSectionHeader(loc.localized("settings.seasonal.section"))
+                .padding(.top, CinemaSpacing.spacing4)
+
+            VStack(spacing: 0) {
+                Button {
+                    seasonal.setSetting(seasonal.setting == .automatic ? .off : .automatic)
+                    Haptics.tap()
+                } label: {
+                    iOSSettingsRow {
+                        SettingsRowAdaptiveLayout {
+                            HStack {
+                                iOSRowIcon(systemName: "calendar", color: themeManager.accent)
+                                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                                    Text(loc.localized("settings.seasonal.toggle"))
+                                        .font(CinemaFont.dynamicLabel(.large))
+                                        .foregroundStyle(CinemaColor.onSurface)
+                                    Text(SeasonalSettingsText.catalogueSummary(loc: loc))
+                                        .font(CinemaFont.dynamicLabel(.small))
+                                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        } control: {
+                            CinemaToggleIndicator(isOn: seasonal.setting == .automatic, accent: themeManager.accent, animated: motionEffects)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(loc.localized("settings.seasonal.toggle"))
+                .accessibilityValue(loc.localized(seasonal.setting == .automatic ? "a11y.toggle.on" : "a11y.toggle.off"))
+                .accessibilityHint(SeasonalSettingsText.catalogueSummary(loc: loc))
+                .accessibilityAddTraits(.isToggle)
+
+                iOSSettingsDivider
+
+                iOSToggleRow(
+                    icon: "sparkles",
+                    label: loc.localized("settings.seasonal.ambiance"),
+                    value: Binding(get: { seasonal.ambianceEnabled }, set: { seasonal.setAmbianceEnabled($0) }),
+                    accent: themeManager.accent, animated: motionEffects, loc: loc
+                )
+
+                iOSSettingsDivider
+
+                iOSToggleRow(
+                    icon: "rectangle.stack",
+                    label: loc.localized("settings.seasonal.row"),
+                    value: Binding(get: { seasonal.rowEnabled }, set: { seasonal.setRowEnabled($0) }),
+                    accent: themeManager.accent, animated: motionEffects, loc: loc
+                )
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
         }

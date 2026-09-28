@@ -183,4 +183,21 @@ struct SeasonalThemePolicyTests {
         #expect(SeasonRowMatcher.match(candidates: ["Horror"], in: ["Comédie"]) == nil)
         #expect(SeasonRowMatcher.match(candidates: ["Horror"], in: []) == nil)
     }
+
+    @Test("Settings summary: season name and dates, day-month order of the locale")
+    @MainActor
+    func windowSummary() {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let fr = SeasonalSettingsText.windowSummary(
+            for: halloween, name: "Nuit d'Halloween", template: "%1$@, du %2$@ au %3$@",
+            locale: Locale(identifier: "fr_FR"), calendar: utc
+        )
+        let en = SeasonalSettingsText.windowSummary(
+            for: halloween, name: "Halloween Night", template: "%1$@, %2$@ to %3$@",
+            locale: Locale(identifier: "en_US"), calendar: utc
+        )
+        #expect(fr == "Nuit d'Halloween, du 15 octobre au 2 novembre")
+        #expect(en == "Halloween Night, October 15 to November 2")
+    }
 }

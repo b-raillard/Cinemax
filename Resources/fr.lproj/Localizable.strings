@@ -1276,3 +1276,10 @@
 "home.hero.position" = "%1$d sur %2$d";
 "season.halloween.name" = "Nuit d'Halloween";
 "season.halloween.row" = "Frissons d'Halloween";
+"settings.seasonal.section" = "Thème saisonnier";
+"settings.seasonal.toggle" = "Thème saisonnier";
+"settings.seasonal.window" = "%1$@, du %2$@ au %3$@";
+"settings.seasonal.ambiance" = "Animations d'ambiance";
+"settings.seasonal.row" = "Rangée de saison";
+"settings.seasonal.accentNote" = "Pendant « %@ », la couleur de la saison remplace la vôtre.";
+"settings.debug.forceSeason" = "Forcer « %@ »";

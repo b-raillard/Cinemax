@@ -102,6 +102,7 @@
 		276021C21CB270437185ACF2 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1B61BF8E4B4D7BFFEEDF40 /* MainTabView.swift */; };
 		2795FD90A8FA67405535C2B7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 653AA083295D61DCACCEC0A1 /* PrivacyInfo.xcprivacy */; };
 		27A0E4768C9B9FBFAEB53C0A /* ChapterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA375893B142E24F3FA77C9E /* ChapterController.swift */; };
+		2810093D70829A8CC3E1C023 /* SeasonalSettingsText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6354229D6092EEBD6DAD919C /* SeasonalSettingsText.swift */; };
 		28247D55CC29D95670733239 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81F4A35762E8619A3D24747 /* EmptyStateView.swift */; };
 		283176386959EFAD7BE0E52D /* HeroBackdropImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89294A4325865302AB163A3C /* HeroBackdropImage.swift */; };
 		2853B78C03BA5522E348B212 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 280786386ED204F8AAAF36B6 /* Assets.xcassets */; };
@@ -441,6 +442,7 @@
 		A59E601D1EA5DF77E3739D76 /* DiagnosticsUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2476F64981986D065EC567DD /* DiagnosticsUploader.swift */; };
 		A5BDB9B097C212892B4AEB36 /* BaseItemDto+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */; };
 		A65121DE3A93947D016F8E4A /* SyncPlayQueueParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF6EED4756FEC6BE0B6AE1 /* SyncPlayQueueParsingTests.swift */; };
+		A723DFB8E6932A36313A3480 /* SeasonalSettingsText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6354229D6092EEBD6DAD919C /* SeasonalSettingsText.swift */; };
 		A7510BDC29E8467D2D6D0ACC /* AdminPlaybackViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31BE49E5CAB346FED9224CE /* AdminPlaybackViewModel.swift */; };
 		A7C164F2107BCAE1DE8AF0A6 /* PlayerTimeFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C78DE5E6487FF7D0204D485 /* PlayerTimeFormatTests.swift */; };
 		A81200195BF6A58309CBB25F /* MetadataEditorEditPreservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7750ED007F8E5EC5ADD00E1 /* MetadataEditorEditPreservationTests.swift */; };
@@ -840,6 +842,7 @@
 		611E44F72064D91AE6DBCC6C /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		61714AC7F3CC3943BC414EF6 /* AdminApiKeysTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminApiKeysTests.swift; sourceTree = "<group>"; };
 		61D3BBFCAEC88F1DBEFC8F74 /* PictureStallPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PictureStallPolicy.swift; sourceTree = "<group>"; };
+		6354229D6092EEBD6DAD919C /* SeasonalSettingsText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalSettingsText.swift; sourceTree = "<group>"; };
 		653AA083295D61DCACCEC0A1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		655E740F16DBC1E3870F546C /* MediaDetailRemotePlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailRemotePlay.swift; sourceTree = "<group>"; };
 		65D2110246789FDDD6EC3AE0 /* AcceptLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptLanguageTests.swift; sourceTree = "<group>"; };
@@ -1235,6 +1238,7 @@
 		5E6DFDAC477F6F7DE6AE0409 /* Seasons */ = {
 			isa = PBXGroup;
 			children = (
+				6354229D6092EEBD6DAD919C /* SeasonalSettingsText.swift */,
 				C71C62C18C28EFC1BA9F4CBA /* SeasonalTheme.swift */,
 				BC9B237028DF07917F35B879 /* SeasonalThemeCatalogue.swift */,
 				FE72D408E45F4A44348AE5E8 /* SeasonalThemeController.swift */,
@@ -2290,6 +2294,7 @@
 				72281CF32299F9545AA48ED7 /* SearchScreen.swift in Sources */,
 				B80500609E8D56844738FB4A /* SearchViewModel.swift in Sources */,
 				7C9C58E59079EA2467FEDBA6 /* SeasonTrait.swift in Sources */,
+				2810093D70829A8CC3E1C023 /* SeasonalSettingsText.swift in Sources */,
 				8BDB9C1786E43DF94E915686 /* SeasonalTheme.swift in Sources */,
 				594BFAE0E5378F92C85DE77E /* SeasonalThemeCatalogue.swift in Sources */,
 				9C2C28E25BC0B5FA6C1C4D01 /* SeasonalThemeController.swift in Sources */,
@@ -2625,6 +2630,7 @@
 				A38CC2D23545EA9986CB053F /* SearchScreen.swift in Sources */,
 				1695AF73A0D756A11490FF4B /* SearchViewModel.swift in Sources */,
 				FA3C232AAD4821CA7F0ECAC3 /* SeasonTrait.swift in Sources */,
+				A723DFB8E6932A36313A3480 /* SeasonalSettingsText.swift in Sources */,
 				C97482DA24D2DFD0355B2D46 /* SeasonalTheme.swift in Sources */,
 				19C820C3E43CE5C5F9AA06AB /* SeasonalThemeCatalogue.swift in Sources */,
 				DEF222CC1CE5B8E900EDC7D8 /* SeasonalThemeController.swift in Sources */,
