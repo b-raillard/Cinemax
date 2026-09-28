@@ -14,6 +14,10 @@ enum SettingsKey {
     static let accentColor = "accentColor"
     static let uiScale = "uiScale"
     static let appLanguage = "appLanguage"
+    /// Seasonal themes (`SeasonalThemeController`): `SeasonalSetting` raw value.
+    static let seasonalTheme = "appearance.seasonalTheme"
+    static let seasonalAmbiance = "appearance.seasonalAmbiance"
+    static let seasonalRow = "appearance.seasonalRow"
 
     // Interface
     static let motionEffects = "motionEffects"
@@ -121,6 +125,8 @@ enum SettingsKey {
     // Debug
     static let debugFastSleepTimer = "debug.fastSleepTimer"
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
+    /// Debug: id of a catalogue season to force regardless of the date ("" = none).
+    static let debugForcedSeason = "debug.forcedSeason"
 
     // Main menu customization — one `MenuProfile` per registered server,
     // keyed by `ServerEntry.id`. See `MenuConfigStore.activate(serverId:…)`.
@@ -172,6 +178,9 @@ enum SettingsKey {
         static let accentColor = "green"
         static let uiScale = 1.0
         static let appLanguage = "fr"
+        static let seasonalTheme = SeasonalSetting.automatic.rawValue
+        static let seasonalAmbiance = true
+        static let seasonalRow = true
 
         static let motionEffects = true
         static let render4K = true
@@ -211,6 +220,7 @@ enum SettingsKey {
 
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false
+        static let debugForcedSeason = ""
 
         static let rainbowUnlocked = false
 

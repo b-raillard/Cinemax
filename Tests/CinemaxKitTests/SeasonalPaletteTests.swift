@@ -123,3 +123,37 @@ struct SeasonalPaletteTests {
         #expect(seen.id == .some(nil))
     }
 }
+
+@Suite("Season trait applier", .serialized)
+@MainActor
+struct SeasonTraitApplierTests {
+    /// The applier writes the test host's REAL scene; every test leaves it
+    /// without a season override, as the app starts.
+    private func hosted() throws -> (UIWindow, SeasonTraitApplierView, UIWindowScene) {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        let view = SeasonTraitApplierView()
+        window.addSubview(view)
+        return (window, view, scene)
+    }
+
+    @Test("No season on a scene that never had one: no override, no crash")
+    func noSeasonNoOverride() throws {
+        let (window, view, scene) = try hosted()
+        view.setSeasonID(nil)
+        #expect(!scene.traitOverrides.contains(SeasonTrait.self))
+        _ = window
+    }
+
+    @Test("A season is written on the scene, and removed when it ends")
+    func writesAndRemoves() throws {
+        let (window, view, scene) = try hosted()
+        defer { if scene.traitOverrides.contains(SeasonTrait.self) { scene.traitOverrides.remove(SeasonTrait.self) } }
+        view.setSeasonID("halloween")
+        #expect(scene.traitOverrides.contains(SeasonTrait.self))
+        #expect(scene.traitOverrides[SeasonTrait.self] == "halloween")
+        view.setSeasonID(nil)
+        #expect(!scene.traitOverrides.contains(SeasonTrait.self))
+        _ = window
+    }
+}

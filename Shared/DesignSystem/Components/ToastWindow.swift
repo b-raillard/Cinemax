@@ -20,15 +20,17 @@ struct ToastWindowHost: UIViewRepresentable {
     let toasts: ToastCenter
     let loc: LocalizationManager
     let themeManager: ThemeManager
+    let seasonal: SeasonalThemeController
 
     func makeUIView(context: Context) -> ToastWindowInstallerView {
         let view = ToastWindowInstallerView()
         view.isUserInteractionEnabled = false
-        view.makeRoot = { [toasts, loc, themeManager] window in
+        view.makeRoot = { [toasts, loc, themeManager, seasonal] window in
             AnyView(ToastWindowRoot(window: window)
                 .environment(toasts)
                 .environment(loc)
-                .environment(themeManager))
+                .environment(themeManager)
+                .environment(seasonal))
         }
         return view
     }
@@ -113,11 +115,15 @@ private struct ToastWindowRoot: View {
     weak var window: ToastPassthroughWindow?
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(SeasonalThemeController.self) private var seasonal
     @AppStorage(SettingsKey.motionEffects) private var motionEffects: Bool = SettingsKey.Default.motionEffects
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     var body: some View {
         ToastOverlay(onToastFrameChange: { window?.toastFrame = $0 })
+            // The scene trait already reaches this window; set explicitly too,
+            // so the pill never depends on the bridge alone.
+            .environment(\.seasonID, seasonal.activeTheme?.id)
             .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
                 appToggle: motionEffects,
                 systemReduceMotion: systemReduceMotion

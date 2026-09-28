@@ -81,10 +81,18 @@ final class SeasonTraitApplierView: UIView {
         apply()
     }
 
+    /// Reading an override that was never set THROWS (`Can't return value for
+    /// trait … that has no override`), so presence is checked first, and no
+    /// season means no override at all rather than an override set to `nil`.
     private func apply() {
         guard let scene = window?.windowScene else { return }
-        if scene.traitOverrides[SeasonTrait.self] != seasonID {
-            scene.traitOverrides[SeasonTrait.self] = seasonID
+        let hasOverride = scene.traitOverrides.contains(SeasonTrait.self)
+        if let seasonID {
+            if !hasOverride || scene.traitOverrides[SeasonTrait.self] != seasonID {
+                scene.traitOverrides[SeasonTrait.self] = seasonID
+            }
+        } else if hasOverride {
+            scene.traitOverrides.remove(SeasonTrait.self)
         }
     }
 }

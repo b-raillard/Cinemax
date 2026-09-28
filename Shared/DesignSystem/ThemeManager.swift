@@ -62,6 +62,22 @@ final class ThemeManager {
     /// `AppNavigation.body` ten times a second (Instruments, lot 8 — audit P7).
     private var _rainbowTick: Int = 0
 
+    /// The active season's accent (`SeasonalThemeController` → `AppNavigation`).
+    /// Replaces the DISPLAYED accent — rainbow included — and never touches
+    /// `accentColorKey`, which comes back as soon as the season ends.
+    private var _seasonAccent: AccentOption.Palette?
+
+    var isSeasonAccentActive: Bool { _seasonAccent != nil }
+
+    func setSeasonAccent(_ palette: AccentOption.Palette?) {
+        guard palette != _seasonAccent else { return }
+        _seasonAccent = palette
+        _accentRevision += 1
+        // `isRainbow` depends on the season: stop the tick for its duration,
+        // restart it when the season hands the rainbow back.
+        startRainbowIfNeeded()
+    }
+
     // MARK: - Rainbow Easter Egg
     //
     // When `accentColorKey == "rainbow"`, a Task on the main actor advances
@@ -88,7 +104,7 @@ final class ThemeManager {
         )
     }
 
-    var isRainbow: Bool { accentColorKey == "rainbow" }
+    var isRainbow: Bool { accentColorKey == "rainbow" && _seasonAccent == nil }
 
     /// `defaults` is a test seam (`UserDefaults.isolatedForTesting()`); the app
     /// always runs on `.standard`, where every `@AppStorage` view reads the same keys.
@@ -140,7 +156,7 @@ final class ThemeManager {
 
     /// Current palette. Falls back to green if `accentColorKey` is unrecognised (e.g. stale storage).
     private var palette: AccentOption.Palette {
-        (AccentOption(rawValue: accentColorKey) ?? .green).palette
+        _seasonAccent ?? (AccentOption(rawValue: accentColorKey) ?? .green).palette
     }
 
     /// Accent "light" variant — used for text, icons, active indicators.
