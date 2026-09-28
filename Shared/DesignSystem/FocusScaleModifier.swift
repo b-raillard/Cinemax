@@ -40,10 +40,29 @@ struct CinemaFocusModifier: ViewModifier {
     @Environment(\.isFocused) private var isFocused
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.motionEffectsEnabled) private var motionEnabled
+    #if os(tvOS)
+    @Environment(\.seasonID) private var seasonID
+    @AppStorage(SettingsKey.seasonalAmbiance) private var ambianceEnabled: Bool = SettingsKey.Default.seasonalAmbiance
+
+    private var seasonGlow: Bool {
+        AmbiancePolicy.effects(
+            theme: SeasonalThemeCatalogue.theme(id: seasonID),
+            ambianceEnabled: ambianceEnabled, motionEnabled: motionEnabled
+        ).contains(.focusGlow)
+    }
+    #endif
 
     func body(content: Content) -> some View {
         content
             #if os(tvOS)
+            // Seasonal « lueur » behind the focused card. The closure keeps the
+            // content's identity when the season toggles; nothing is created
+            // out of season.
+            .background {
+                if seasonGlow {
+                    SeasonalFocusGlow(active: isFocused, color: themeManager.accent, cornerRadius: CinemaRadius.large)
+                }
+            }
             // Crisper 3 pt accent ring at full opacity (was 2 pt @ 0.8) so the
             // focused card reads unambiguously from the couch.
             .overlay(
