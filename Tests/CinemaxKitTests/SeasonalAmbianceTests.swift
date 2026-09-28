@@ -22,6 +22,9 @@ struct SeasonalAmbianceTests {
         let fog = view.fogEmitter
         #expect(fog != nil)
         #expect(fog?.emitterCells?.isEmpty == false)
+        // Longitude 0 rises (see the pumpkins): at ±π/2 the smoke slid out
+        // sideways along the bottom edge.
+        #expect(fog?.emitterCells?.first?.emissionLongitude == 0)
         #expect((fog?.emitterPosition.y ?? 0) >= view.bounds.height * 0.8)
         #expect((fog?.emitterPosition.y ?? .infinity) <= view.bounds.height)
         view.setEffects([])
@@ -60,7 +63,10 @@ struct SeasonalAmbianceTests {
         let fall = view.pumpkinEmitter
         #expect(fall != nil)
         #expect(fall?.emitterCells?.first?.contents != nil)
-        #expect(fall?.emitterCells?.first?.emissionLongitude == .pi / 2)   // straight down
+        // An emitter's longitude 0 points UP the screen and π DOWN (±π/2 go
+        // sideways — the pumpkins left through the side edges at first).
+        #expect(fall?.emitterCells?.first?.emissionLongitude == .pi)
+        #expect((fall?.emitterCells?.first?.yAcceleration ?? 0) > 0)
         #expect((fall?.emitterPosition.y ?? 1) <= 0)
         view.setEffects([])
         #expect(view.pumpkinEmitter == nil)

@@ -107,8 +107,11 @@ final class AmbianceView: UIView {
         let format = UIGraphicsImageRendererFormat.preferred()
         format.scale = 1
         return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
-            let colors = [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0.5).cgColor, UIColor.white.withAlphaComponent(0).cgColor]
-            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 0.45, 1]) else { return }
+            // A near-gaussian falloff: no visible edge, so a puff never « pops ».
+            let alphas: [CGFloat] = [0.55, 0.45, 0.28, 0.12, 0.03, 0]
+            let colors = alphas.map { UIColor.white.withAlphaComponent($0).cgColor }
+            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray,
+                                            locations: [0, 0.2, 0.45, 0.7, 0.88, 1]) else { return }
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             ctx.cgContext.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: size.width / 2, options: [])
         }.cgImage
@@ -258,21 +261,25 @@ final class AmbianceView: UIView {
         emitter.emitterShape = .rectangle
         let cell = CAEmitterCell()
         cell.contents = Self.puffImage
-        cell.birthRate = 1.6
-        cell.lifetime = 16
-        cell.lifetimeRange = 5
-        cell.velocity = 18
-        cell.velocityRange = 10
-        cell.emissionLongitude = -.pi / 2           // up
-        cell.emissionRange = .pi / 5
-        cell.xAcceleration = 3                       // a breeze pushes it sideways
-        cell.scale = 2.6
-        cell.scaleRange = 0.9
-        cell.scaleSpeed = 0.08                       // puffs swell as they rise
-        cell.spin = 0.05
-        cell.spinRange = 0.12                        // and turn slowly
-        cell.color = Self.mistColor.withAlphaComponent(0.28).cgColor
-        cell.alphaSpeed = -0.022                     // then dissolve
+        // Many faint, small-born puffs that swell slowly, rather than a few
+        // thick ones appearing whole: a continuous, fluid smoke.
+        cell.birthRate = 3.2
+        cell.lifetime = 18
+        cell.lifetimeRange = 4
+        cell.velocity = 14
+        cell.velocityRange = 6
+        // An emitter's longitude 0 points UP the screen, π DOWN, ±π/2
+        // sideways — at ±π/2 the smoke slid out along the bottom edge.
+        cell.emissionLongitude = 0
+        cell.emissionRange = .pi / 6
+        cell.xAcceleration = 2.5                     // a breeze pushes it sideways
+        cell.scale = 0.7
+        cell.scaleRange = 0.3
+        cell.scaleSpeed = 0.2                        // born small, swelling as it rises
+        cell.spin = 0.03
+        cell.spinRange = 0.08                        // turning slowly
+        cell.color = Self.mistColor.withAlphaComponent(0.16).cgColor
+        cell.alphaSpeed = -0.008                     // then thinning out
         emitter.emitterCells = [cell]
         // Pre-warmed: the smoke is already there when the screen appears.
         emitter.beginTime = CACurrentMediaTime() - 10
@@ -286,9 +293,10 @@ final class AmbianceView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         emitter.frame = bounds
-        // Born INSIDE the bottom band, not below the edge: visible at once.
-        emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.height * 0.93)
-        emitter.emitterSize = CGSize(width: bounds.width * 1.2, height: bounds.height * 0.14)
+        // Born along the bottom edge (half of the band below it), so the smoke
+        // drifts in rather than appearing mid-screen.
+        emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.height)
+        emitter.emitterSize = CGSize(width: bounds.width * 1.2, height: bounds.height * 0.12)
         emitter.birthRate = widthFactor
         CATransaction.commit()
     }
@@ -304,7 +312,9 @@ final class AmbianceView: UIView {
         cell.lifetime = 14
         cell.velocity = 85
         cell.velocityRange = 35
-        cell.emissionLongitude = .pi / 2             // straight down
+        // π points DOWN (see the smoke). At ±π/2 the pumpkins left sideways
+        // and only ever showed along the top edge.
+        cell.emissionLongitude = .pi
         cell.emissionRange = .pi / 14
         cell.yAcceleration = 12
         cell.spin = 0.5
