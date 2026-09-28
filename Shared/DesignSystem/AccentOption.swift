@@ -202,3 +202,7 @@ enum AccentEasterEgg {
         return TapResult(nextAccentKey: cycle.first?.rawValue ?? "green", unlockedRainbow: false)
     }
 }
+
+// Seasonal themes carry an accent palette (`SeasonalTheme.accent`), and a
+// theme is a `Sendable` value read from a UIColor provider.
+extension AccentOption.Palette: Sendable, Equatable {}

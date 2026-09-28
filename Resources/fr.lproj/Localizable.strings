@@ -1274,3 +1274,5 @@
 "library.jumpBar.hint" = "Balayez vers le haut ou le bas pour passer à une autre lettre.";
 "home.hero.a11y" = "À la une";
 "home.hero.position" = "%1$d sur %2$d";
+"season.halloween.name" = "Nuit d'Halloween";
+"season.halloween.row" = "Frissons d'Halloween";
