@@ -236,6 +236,11 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
+    /// READ through `@AppStorage`, written through `seasonal.setForcedSeason`: the
+    /// Debug rows live in a pushed destination, which re-renders on an
+    /// `@AppStorage` change but not on the controller's `@Observable` one
+    /// (root RULE on `navigationDestination`) — the switch stayed « on ».
+    @AppStorage(SettingsKey.debugForcedSeason) var debugForcedSeason: String = SettingsKey.Default.debugForcedSeason
     @AppStorage(SettingsKey.rainbowUnlocked) var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @State var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
     @State var showFontSizePicker = false
@@ -360,7 +365,7 @@ struct SettingsScreen: View {
                 icon: "calendar.badge.exclamationmark",
                 label: loc.localized("settings.debug.forceSeason", loc.localized(theme.nameKey)),
                 value: Binding(
-                    get: { seasonal.forcedSeasonID == theme.id },
+                    get: { debugForcedSeason == theme.id },
                     set: { seasonal.setForcedSeason($0 ? theme.id : "") }
                 ),
                 tint: .orange

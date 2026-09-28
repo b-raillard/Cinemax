@@ -8,11 +8,18 @@ import UIKit
 // TV 4K ~10–12 % CPU on an idle Home (lot 8). Not interactive, hidden from
 // VoiceOver, ABSENT (not frozen) when `AmbiancePolicy` says no.
 
+extension EnvironmentValues {
+    /// The « Animations d'ambiance » switch, written ONCE at the root from
+    /// `SeasonalThemeController` — every card reads it for the tvOS focus
+    /// glow, and one `@AppStorage` observer per card was the cost to avoid.
+    @Entry var seasonalAmbianceEnabled: Bool = true
+}
+
 /// Laid over a hero, above its gradient.
 struct SeasonalAmbianceOverlay: View {
     @Environment(\.seasonID) private var seasonID
     @Environment(\.motionEffectsEnabled) private var motionEnabled
-    @AppStorage(SettingsKey.seasonalAmbiance) private var ambianceEnabled: Bool = SettingsKey.Default.seasonalAmbiance
+    @Environment(\.seasonalAmbianceEnabled) private var ambianceEnabled
 
     var body: some View {
         let effects = AmbiancePolicy.effects(
@@ -92,6 +99,7 @@ final class AmbianceView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         layoutMist()
+        startMistDrift()
         if batsPending, bounds.width > 0 { launchBats() }
     }
 
@@ -121,10 +129,18 @@ final class AmbianceView: UIView {
             mistLayers.append(l)
         }
         layoutMist()
-        for (l, blob) in zip(mistLayers, Self.mist) {
+        startMistDrift()
+    }
+
+    /// The drift is a share of the hero's WIDTH, so it waits for one: SwiftUI
+    /// gives the representable its frame after `didMoveToWindow`, and a drift
+    /// computed at width 0 left the mist still.
+    private func startMistDrift() {
+        guard bounds.width > 0 else { return }
+        for (l, blob) in zip(mistLayers, Self.mist) where l.animation(forKey: Self.mistKey) == nil {
             let a = CABasicAnimation(keyPath: "transform.translation.x")
             a.fromValue = 0
-            a.toValue = max(bounds.width, 1) * blob.drift
+            a.toValue = bounds.width * blob.drift
             a.duration = blob.period
             a.autoreverses = true
             a.repeatCount = .infinity
@@ -198,7 +214,9 @@ final class AmbianceView: UIView {
             flap.toValue = flight.scale * 0.55
             flap.duration = 0.16
             flap.autoreverses = true
-            flap.repeatCount = .infinity
+            // Flaps for the flight only — no animation left running on a bat
+            // parked off-screen afterwards.
+            flap.repeatCount = Float((flight.delay + flight.duration) / (flap.duration * 2)) + 1
             shape.add(flap, forKey: Self.batKey)
         }
     }
@@ -223,7 +241,9 @@ struct SeasonalFocusGlow: UIViewRepresentable {
 
 final class SeasonalFocusGlowView: UIView {
     static let animationKey = "cinemax.season.focusGlow"
-    var glowColor: UIColor = .clear
+    /// Resolved in `layoutSubviews`; a new colour (season, accent, dark mode)
+    /// asks for one.
+    var glowColor: UIColor = .clear { didSet { setNeedsLayout() } }
     var cornerRadius: CGFloat = 0
     private(set) var isGlowing = false
 

@@ -48,6 +48,19 @@ struct SeasonalAmbianceTests {
         #expect(view.mistLayers.count == 3)
     }
 
+    @Test("Mist added before its frame drifts by a share of the final width")
+    func mistDriftUsesTheLaidOutWidth() throws {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1200, height: 600))
+        let view = AmbianceView(frame: .zero)          // SwiftUI sizes it later
+        window.addSubview(view)
+        view.setEffects([.mist])
+        view.frame = window.bounds
+        view.layoutIfNeeded()
+        let drift = try #require(view.mistLayers.first?.animation(forKey: AmbianceView.mistKey) as? CABasicAnimation)
+        let toValue = try #require(drift.toValue as? CGFloat)
+        #expect(abs(toValue) > 10, "drift \(toValue) pt")
+    }
+
     #if os(tvOS)
     @Test("Focus glow pulses only while focused")
     func focusGlow() {

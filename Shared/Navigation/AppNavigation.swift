@@ -203,6 +203,7 @@ struct AppNavigation: View {
         .environment(settingsNav)
         .environment(parentalLock)
         .environment(seasonal)
+        .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         .onChange(of: seasonal.activeTheme?.id, initial: true) { _, _ in
             themeManager.setSeasonAccent(seasonal.activeTheme?.accent)
         }

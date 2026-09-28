@@ -76,4 +76,27 @@ struct SeasonalHomeRowTests {
         #expect(vm.seasonRowItems.isEmpty)
         #expect(api.getGenresCallCount == 0)
     }
+
+    @Test("A fetch that lands after the row changed never writes")
+    func staleFetchDoesNotWrite() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Horror"]
+        let entered = TestLatch(), release = TestLatch()
+        let late = [item("late")]
+        api.getItemsHandler = { _ in
+            entered.open()
+            await release.wait()
+            return (late, 1)
+        }
+        let vm = HomeViewModel(defaults: defaults)
+        let state = appState(api)
+        vm.setSeasonRow(row)
+        let first = Task { await vm.refreshSeasonRow(using: state) }
+        await entered.wait()
+        vm.setSeasonRow(nil)                      // the season ended meanwhile
+        await vm.refreshSeasonRow(using: state)
+        release.open()
+        await first.value
+        #expect(vm.seasonRowItems.isEmpty)
+    }
 }

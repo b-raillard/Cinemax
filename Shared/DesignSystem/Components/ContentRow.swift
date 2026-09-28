@@ -23,6 +23,9 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
             HStack {
                 Text(title)
                     .font(titleFont ?? CinemaFont.headline(.large))
+                    // A season's display face runs wider than the system
+                    // headline: « Frissons d'Halloween » truncated on iPhone.
+                    .minimumScaleFactor(titleFont == nil ? 1 : 0.7)
                     .foregroundStyle(CinemaColor.onSurface)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)

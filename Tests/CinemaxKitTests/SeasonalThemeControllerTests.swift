@@ -5,6 +5,9 @@ import UIKit
 @testable import Cinemax
 
 /// A clock a test can move. Read from the controller's `@Sendable` `now`.
+/// `@unchecked`: only ever set and read on the main actor (the suite and the
+/// controller are both `@MainActor`); a test moving it off the main actor
+/// would need a lock.
 private final class TestClock: @unchecked Sendable {
     var date: Date
     init(_ iso: String) { date = ISO8601DateFormatter().date(from: iso)! }
