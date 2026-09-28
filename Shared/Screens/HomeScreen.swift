@@ -6,6 +6,8 @@ struct HomeScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(\.seasonID) private var seasonID
+    @AppStorage(SettingsKey.seasonalRow) private var showSeasonRow: Bool = SettingsKey.Default.seasonalRow
     @Environment(ToastCenter.self) private var toast
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -103,6 +105,13 @@ struct HomeScreen: View {
         .task {
             await viewModel.loadInitial(using: appState)
             prefetchCardImages()
+        }
+        // `initial` hands the row to the view model before its first load
+        // reads it (that load fetches it); a later change — the season, or
+        // its row switch — re-fetches just that row.
+        .onChange(of: "\(seasonID ?? "")-\(showSeasonRow)", initial: true) { old, new in
+            viewModel.setSeasonRow(seasonRow)
+            if old != new { Task { await viewModel.refreshSeasonRow(using: appState) } }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             // Tier-1: full reload while visible, otherwise defer to next appear.
@@ -457,6 +466,13 @@ struct HomeScreen: View {
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
+                    // The season's row (« Frissons d'Halloween ») — right under
+                    // Continue Watching, as on the design canvas.
+                    if let row = seasonRow, !viewModel.seasonRowItems.isEmpty {
+                        seasonalRow(title: loc.localized(row.titleKey), items: viewModel.seasonRowItems)
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
                     // Next Up (next unwatched episode per in-progress series)
                     if showNextUp, !viewModel.nextUpItems.isEmpty {
                         nextUpRow
@@ -536,12 +552,27 @@ struct HomeScreen: View {
 
     private var scrollTopID: String { "home.top" }
 
+    private var activeSeason: SeasonalTheme? { SeasonalThemeCatalogue.theme(id: seasonID) }
+    private var seasonRow: SeasonRow? { showSeasonRow ? activeSeason?.row : nil }
+
     // MARK: - Genre Rows
 
     @ViewBuilder
     private func genreRow(genre: String, items: [BaseItemDto]) -> some View {
         ContentRow(title: genre, data: items, id: \.id) { item in
             recentlyAddedCard(item, surface: "home.genre.\(genre)")
+                .frame(width: posterCardWidth)
+        }
+    }
+
+    @ViewBuilder
+    private func seasonalRow(title: String, items: [BaseItemDto]) -> some View {
+        ContentRow(
+            title: title,
+            titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(32)),
+            data: items, id: \.id
+        ) { item in
+            recentlyAddedCard(item, surface: "home.season")
                 .frame(width: posterCardWidth)
         }
     }

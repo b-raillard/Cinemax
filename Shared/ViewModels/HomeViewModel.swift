@@ -66,6 +66,12 @@ final class HomeViewModel {
     /// Ordered genre rows. `.failed` rows render a retry chip; rows that
     /// succeed but return zero items are dropped.
     var genreRows: [GenreRow] = []
+    /// « Frissons d'Halloween » and the like — the active season's row
+    /// (`SeasonRow`). Decorative: empty on no match, no items or failure,
+    /// never a retry chip.
+    var seasonRowItems: [BaseItemDto] = []
+    /// Set by `HomeScreen` from the active season + the row switch.
+    @ObservationIgnored private var seasonRowConfig: SeasonRow?
     /// Episode navigation keyed by episode item ID. Populated after resumeItems loads.
     var resumeNavigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Episode navigation for the Next Up rail, keyed by episode item ID. Mirrors
@@ -196,7 +202,9 @@ final class HomeViewModel {
         becauseYouWatched = nil
         nextUpItems = []
         genreRows = []
+        seasonRowItems = []
         resumeNavigation = [:]
+
         nextUpNavigation = [:]
         activeSessions = []
         syncPlayGroups = []
@@ -441,6 +449,8 @@ final class HomeViewModel {
         async let becauseYouWatchedDone: Void = rails.becauseYouWatched
             ? loadBecauseYouWatched(userId: userId, appState: appState, generation: generation)
             : ()
+        // The season's row: its own slice, nothing to wait for.
+        async let seasonRowDone: Void = loadSeasonRow(userId: userId, appState: appState, generation: generation)
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
         // Watching and Next Up. Fetch every referenced season's episode list
@@ -457,7 +467,7 @@ final class HomeViewModel {
         resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
         nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
 
-        _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone)
+        _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone, seasonRowDone)
 
         guard generation == loadGeneration else { return }
         isFullyLoaded = true
@@ -966,6 +976,32 @@ final class HomeViewModel {
     func reloadGenreRows(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         await loadGenreRows(userId: userId, appState: appState, generation: loadGeneration)
+    }
+
+    func setSeasonRow(_ row: SeasonRow?) {
+        seasonRowConfig = row
+    }
+
+    /// Re-fetches only the season row — the season or its switch changed.
+    func refreshSeasonRow(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        await loadSeasonRow(userId: userId, appState: appState, generation: loadGeneration)
+    }
+
+    private func loadSeasonRow(userId: String, appState: AppState, generation: Int) async {
+        guard let row = seasonRowConfig else {
+            if isCurrent(generation) { seasonRowItems = [] }
+            return
+        }
+        guard let genres = try? await appState.apiClient.getGenres(userId: userId, includeItemTypes: [.movie, .series]),
+              let genre = SeasonRowMatcher.match(candidates: row.genreCandidates, in: genres),
+              let items = try? await Self.fetchGenreItems(genre: genre, userId: userId, appState: appState)
+        else {
+            if isCurrent(generation) { seasonRowItems = [] }
+            return
+        }
+        guard isCurrent(generation) else { return }
+        seasonRowItems = items
     }
 
     private func loadGenreRows(userId: String, appState: AppState, generation: Int) async {
