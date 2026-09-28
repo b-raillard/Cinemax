@@ -126,6 +126,7 @@ Les ~800 appels `CinemaColor.*` ne changent pas. La fenêtre des toasts (`ToastW
 ## 7. Ambiance
 
 - `AmbianceEffect` : `.mist`, `.bats`, `.focusGlow` (Noël ajoutera ses cas, `.snow` par exemple).
+- *(Révisé à nouveau le 2026-09-28 : fumée SUPPRIMÉE ; deux plans — lointain derrière le contenu avec un ciel étoilé et des toiles d'araignée, proche devant, rare ; 30 s d'ouverture dense puis un tiers ; zones calmes Recherche et Réglages ; densité moitié sur Apple TV.)*
 - *(Révisé le 2026-09-28 après essai sur iPhone : l'ambiance couvre TOUTE l'app connectée, un seul calque posé à la racine ; la brume devient une fumée qui monte — émetteur de particules ; dix chauves-souris en boucle et des citrouilles qui tombent, le tout dès l'ouverture — on lance un film en 20 à 30 s et le lecteur n'en montre rien.)*
 - `SeasonalAmbianceLayer` : un calque unique posé sur les trois héros, `allowsHitTesting(false)`, `accessibilityHidden(true)`, animé par Core Animation (même approche que la dérive de `HeroBackdropImage` sur tvOS), sans travail SwiftUI par image.
   - Brume : deux ou trois ellipses floues couleur `#CFC3E6` (8–18 % d'opacité), qui dérivent lentement en bas du héros.

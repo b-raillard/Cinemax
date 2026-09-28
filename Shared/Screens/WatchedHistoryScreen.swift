@@ -157,7 +157,7 @@ struct WatchedHistoryScreen: View {
     #if !os(tvOS)
     private var iOSChrome: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            SeasonalBackdrop().ignoresSafeArea()
             content
         }
         .navigationTitle(loc.localized("settings.watchedHistory"))
@@ -174,7 +174,7 @@ struct WatchedHistoryScreen: View {
     #if os(tvOS)
     private var tvOSChrome: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            SeasonalBackdrop().ignoresSafeArea()
 
             VStack(spacing: 0) {
                 tvHeader

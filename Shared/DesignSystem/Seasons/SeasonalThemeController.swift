@@ -12,6 +12,9 @@ final class SeasonalThemeController {
     private(set) var ambianceEnabled: Bool
     private(set) var rowEnabled: Bool
     private(set) var forcedSeasonID: String
+    /// A calm zone is on screen (Search, Settings — set by `MainTabView`): the
+    /// near ambiance plane stays away where people read and type.
+    private(set) var calmZone = false
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let catalogue: [SeasonalTheme]
@@ -62,6 +65,11 @@ final class SeasonalThemeController {
     func setRowEnabled(_ value: Bool) {
         rowEnabled = value
         defaults.set(value, forKey: SettingsKey.seasonalRow)
+    }
+
+    func setCalmZone(_ value: Bool) {
+        guard value != calmZone else { return }
+        calmZone = value
     }
 
     func setForcedSeason(_ id: String) {

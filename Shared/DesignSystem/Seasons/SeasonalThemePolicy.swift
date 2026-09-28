@@ -17,6 +17,21 @@ enum SeasonalThemePolicy {
 }
 
 enum AmbiancePolicy {
+    /// The opening burst: full density, because people start a film within
+    /// 20–30 s of opening the app and the player shows none of this.
+    static let introDuration: TimeInterval = 30
+
+    /// 1 during the opening, then about a third; halved on Apple TV, where a
+    /// pumpkin crossing the focused card gets in the way of the remote.
+    static func density(elapsed: TimeInterval, isTV: Bool) -> Double {
+        (elapsed < introDuration ? 1 : 0.35) * (isTV ? 0.5 : 1)
+    }
+
+    /// How many of a plane's `dense` bats fly at that density — never none.
+    static func batCount(dense: Int, elapsed: TimeInterval, isTV: Bool) -> Int {
+        max(1, Int((Double(dense) * density(elapsed: elapsed, isTV: isTV)).rounded()))
+    }
+
     /// Nothing moves when the user turned ambiance off, or when the app's
     /// motion effects / the system's Reduce Motion say no (`motionEnabled` is
     /// the combined `\.motionEffectsEnabled`). Off means ABSENT, not frozen.

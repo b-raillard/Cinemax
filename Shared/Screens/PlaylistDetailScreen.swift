@@ -132,7 +132,7 @@ struct PlaylistDetailScreen: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(CinemaColor.surface.ignoresSafeArea())
+        .background(SeasonalBackdrop().ignoresSafeArea())
         .refreshable {
             await viewModel.load(playlistId: playlistId, using: appState)
         }

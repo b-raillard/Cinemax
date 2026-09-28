@@ -80,7 +80,7 @@ struct HomeScreen: View {
 
     var body: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            SeasonalBackdrop().ignoresSafeArea()
 
             if viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded) {
                 // Skeleton during phase-1, and kept up while a phase-1-empty

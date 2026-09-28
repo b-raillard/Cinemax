@@ -7,6 +7,13 @@ import UIKit
 // `.repeatForever` ticks on the main thread every frame, which cost the Apple
 // TV 4K ~10–12 % CPU on an idle Home (lot 8). Not interactive, hidden from
 // VoiceOver, ABSENT (not frozen) when `AmbiancePolicy` says no.
+//
+// Two planes: FAR (small, dim, slow — in `SeasonalBackdrop`, BEHIND the
+// content of the browsing screens, with the night sky) and NEAR (two big bats,
+// a rare lit pumpkin — `SeasonalAmbianceOverlay`, over the whole app, except
+// the calm zones). Both open with 30 s at full density — people start a film
+// within 20–30 s and the player shows none of it — then settle to about a third
+// (`AmbiancePolicy.density`), half again on Apple TV.
 
 extension EnvironmentValues {
     /// The « Animations d'ambiance » switch, written ONCE at the root from
@@ -15,9 +22,33 @@ extension EnvironmentValues {
     @Entry var seasonalAmbianceEnabled: Bool = true
 }
 
-/// Laid over the WHOLE app (`AppNavigation`, above the tabs and every pushed
-/// screen; under sheets and the player, which are their own presentations).
-/// Never interactive, never read by VoiceOver.
+/// Which depth an `AmbianceView` paints.
+enum AmbiancePlane: Sendable {
+    case far, near
+}
+
+/// Seconds since the ambiance first showed in this app session: the opening
+/// burst is the SESSION's, not each screen's.
+@MainActor
+enum AmbianceClock {
+    private static var start: CFTimeInterval?
+
+    static func elapsed() -> TimeInterval {
+        let now = CACurrentMediaTime()
+        if start == nil { start = now }
+        return now - (start ?? now)
+    }
+}
+
+#if os(tvOS)
+private let ambianceIsTV = true
+#else
+private let ambianceIsTV = false
+#endif
+
+/// The NEAR plane, over the whole signed-in app (`AppNavigation`): above the
+/// tabs and every pushed screen, under sheets and the player. Hidden in the
+/// calm zones (Search, Settings — `SeasonalThemeController.calmZone`).
 struct SeasonalAmbianceOverlay: View {
     @Environment(\.seasonID) private var seasonID
     @Environment(\.motionEffectsEnabled) private var motionEnabled
@@ -27,45 +58,64 @@ struct SeasonalAmbianceOverlay: View {
         let effects = AmbiancePolicy.effects(
             theme: SeasonalThemeCatalogue.theme(id: seasonID),
             ambianceEnabled: ambianceEnabled, motionEnabled: motionEnabled
-        ).intersection([.mist, .bats, .pumpkins])
+        ).intersection([.bats, .pumpkins])
         if !effects.isEmpty {
-            AmbianceRepresentable(effects: effects)
+            AmbianceRepresentable(effects: effects, plane: .near)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
     }
 }
 
+/// A browsing screen's background: the surface colour, and in season its
+/// backdrop (night sky) with the FAR ambiance plane — behind the content, so
+/// posters and text stay clean. Out of season: exactly `CinemaColor.surface`.
+struct SeasonalBackdrop: View {
+    @Environment(\.seasonID) private var seasonID
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+    @Environment(\.seasonalAmbianceEnabled) private var ambianceEnabled
+
+    var body: some View {
+        let theme = SeasonalThemeCatalogue.theme(id: seasonID)
+        let effects = AmbiancePolicy.effects(
+            theme: theme, ambianceEnabled: ambianceEnabled, motionEnabled: motionEnabled
+        ).intersection([.bats, .pumpkins])
+        ZStack {
+            CinemaColor.surface
+            if theme?.backdrop == .nightSky {
+                NightSkyRepresentable(dark: colorScheme == .dark, twinkle: motionEnabled && ambianceEnabled)
+            }
+            if !effects.isEmpty {
+                AmbianceRepresentable(effects: effects, plane: .far)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct AmbianceRepresentable: UIViewRepresentable {
     let effects: Set<AmbianceEffect>
-    func makeUIView(context: Context) -> AmbianceView { AmbianceView() }
+    let plane: AmbiancePlane
+    func makeUIView(context: Context) -> AmbianceView { AmbianceView(plane: plane) }
     func updateUIView(_ view: AmbianceView, context: Context) { view.setEffects(effects) }
 }
 
 final class AmbianceView: UIView {
-    static let mistKey = "cinemax.ambiance.mist"
     static let batKey = "cinemax.ambiance.bat"
+    /// Bats on the far plane at full density (the near plane has two).
+    static let farBatCount = 8
 
-    /// The fog bank lying along the bottom edge (slow horizontal drift).
-    private(set) var mistLayers: [CAGradientLayer] = []
-    /// The moving smoke: soft puffs born in the bottom band, rising, swelling,
-    /// turning and dissolving.
-    private(set) var fogEmitter: CAEmitterLayer?
-    /// Bats crossing again and again, from the first seconds — people open
-    /// a film within 20–30 s, and the player shows none of this.
+    /// Bats on their loops.
     private(set) var batLayers: [CALayer] = []
-    /// Orange pumpkins tumbling down from the top edge.
+    /// Pumpkins tumbling down from the top edge.
     private(set) var pumpkinEmitter: CAEmitterLayer?
+    private let plane: AmbiancePlane
+    private let clock: () -> TimeInterval
     private var effects: Set<AmbianceEffect> = []
     private var batsPending = false
-
-    /// A fog-bank blob, in fractions of the screen.
-    private struct MistBlob {
-        let frame: CGRect
-        let opacity: CGFloat
-        let drift: CGFloat
-        let period: CFTimeInterval
-    }
+    private var calmTask: Task<Void, Never>?
 
     /// One bat's loop: size, height (fraction of the screen), direction, when
     /// its first crossing starts, how long a crossing lasts, and how often it
@@ -79,68 +129,57 @@ final class AmbianceView: UIView {
         let period: CFTimeInterval
     }
 
-    private static let mist: [MistBlob] = [
-        MistBlob(frame: CGRect(x: -0.10, y: 0.78, width: 0.80, height: 0.32), opacity: 0.16, drift: 0.06, period: 22),
-        MistBlob(frame: CGRect(x: 0.35, y: 0.82, width: 0.80, height: 0.28), opacity: 0.12, drift: -0.05, period: 26),
-        MistBlob(frame: CGRect(x: 0.05, y: 0.88, width: 1.00, height: 0.26), opacity: 0.20, drift: 0.04, period: 30)
+    private static let farRoutes: [BatRoute] = [
+        BatRoute(scale: 0.50, y: 0.16, leftToRight: true, start: 0.3, duration: 10, period: 13),
+        BatRoute(scale: 0.34, y: 0.30, leftToRight: false, start: 1.1, duration: 12, period: 16),
+        BatRoute(scale: 0.44, y: 0.46, leftToRight: true, start: 1.8, duration: 11, period: 15),
+        BatRoute(scale: 0.30, y: 0.62, leftToRight: false, start: 2.6, duration: 13, period: 17),
+        BatRoute(scale: 0.55, y: 0.24, leftToRight: false, start: 0.7, duration: 9.5, period: 14),
+        BatRoute(scale: 0.38, y: 0.54, leftToRight: true, start: 3.2, duration: 12, period: 18),
+        BatRoute(scale: 0.32, y: 0.10, leftToRight: false, start: 2.2, duration: 13, period: 16),
+        BatRoute(scale: 0.46, y: 0.72, leftToRight: true, start: 3.8, duration: 11, period: 15)
     ]
 
-    private static let batRoutes: [BatRoute] = [
-        BatRoute(scale: 1.0, y: 0.18, leftToRight: true, start: 0.3, duration: 6.0, period: 9),
-        BatRoute(scale: 0.6, y: 0.26, leftToRight: false, start: 0.9, duration: 7.5, period: 11),
-        BatRoute(scale: 0.8, y: 0.12, leftToRight: true, start: 1.6, duration: 6.5, period: 10),
-        BatRoute(scale: 0.5, y: 0.34, leftToRight: false, start: 2.2, duration: 8.5, period: 13),
-        BatRoute(scale: 0.9, y: 0.44, leftToRight: true, start: 2.8, duration: 7.0, period: 12),
-        BatRoute(scale: 0.55, y: 0.22, leftToRight: false, start: 3.3, duration: 8.0, period: 10),
-        BatRoute(scale: 0.7, y: 0.52, leftToRight: true, start: 3.7, duration: 7.5, period: 14),
-        BatRoute(scale: 0.45, y: 0.08, leftToRight: false, start: 1.2, duration: 9.0, period: 12),
-        BatRoute(scale: 0.85, y: 0.38, leftToRight: false, start: 0.5, duration: 6.5, period: 15),
-        BatRoute(scale: 0.6, y: 0.60, leftToRight: true, start: 2.5, duration: 8.0, period: 11)
+    private static let nearRoutes: [BatRoute] = [
+        BatRoute(scale: 1.35, y: 0.20, leftToRight: true, start: 1.5, duration: 5.5, period: 24),
+        BatRoute(scale: 1.15, y: 0.42, leftToRight: false, start: 9, duration: 6.0, period: 30)
     ]
 
-    private static let mistColor = UIColor(red: 0xD9 / 255, green: 0xCC / 255, blue: 0xEF / 255, alpha: 1)
-    private static let batColor = UIColor(red: 0xB3 / 255, green: 0xA8 / 255, blue: 0xB8 / 255, alpha: 0.8)
+    private static let farBatColor = UIColor(red: 0xB3 / 255, green: 0xA8 / 255, blue: 0xB8 / 255, alpha: 0.5)
+    private static let nearBatColor = UIColor(red: 0x1C / 255, green: 0x17 / 255, blue: 0x26 / 255, alpha: 0.92)
 
-    /// A soft round puff (white, radial alpha falloff) tinted by the emitter cell.
-    private static let puffImage: CGImage? = {
+    private enum PumpkinFace { case plain, carved }
+
+    /// An orange pumpkin, 128 pt with room for its glow; the carved one is lit
+    /// from inside.
+    private static func pumpkinImage(_ face: PumpkinFace) -> CGImage? {
         let size = CGSize(width: 128, height: 128)
         let format = UIGraphicsImageRendererFormat.preferred()
         format.scale = 1
         return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
-            // A near-gaussian falloff: no visible edge, so a puff never « pops ».
-            let alphas: [CGFloat] = [0.55, 0.45, 0.28, 0.12, 0.03, 0]
-            let colors = alphas.map { UIColor.white.withAlphaComponent($0).cgColor }
-            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray,
-                                            locations: [0, 0.2, 0.45, 0.7, 0.88, 1]) else { return }
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            ctx.cgContext.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: size.width / 2, options: [])
-        }.cgImage
-    }()
-
-    /// An orange jack-o'-lantern, 96 pt, drawn once.
-    private static let pumpkinImage: CGImage? = {
-        let size = CGSize(width: 96, height: 96)
-        let format = UIGraphicsImageRendererFormat.preferred()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
             let c = ctx.cgContext
+            c.translateBy(x: 16, y: 16)                 // the 96-pt pumpkin, centred
             let side = UIColor(red: 0xE0 / 255, green: 0x62 / 255, blue: 0x0C / 255, alpha: 1)
             let body = UIColor(red: 0xFF / 255, green: 0x7A / 255, blue: 0x1A / 255, alpha: 1)
             let light = UIColor(red: 0xFF / 255, green: 0x9A / 255, blue: 0x45 / 255, alpha: 1)
-            // Stem.
+            if face == .carved {
+                // A warm halo around the lit pumpkin.
+                c.setShadow(offset: .zero, blur: 14, color: UIColor(red: 1, green: 0.55, blue: 0.1, alpha: 0.9).cgColor)
+            }
             c.setFillColor(UIColor(red: 0x4F / 255, green: 0x6B / 255, blue: 0x24 / 255, alpha: 1).cgColor)
             c.fill(CGRect(x: 44, y: 12, width: 9, height: 16))
-            // Lobes, back to front.
             c.setFillColor(side.cgColor)
             c.fillEllipse(in: CGRect(x: 6, y: 24, width: 50, height: 64))
             c.fillEllipse(in: CGRect(x: 40, y: 24, width: 50, height: 64))
             c.setFillColor(body.cgColor)
             c.fillEllipse(in: CGRect(x: 22, y: 22, width: 52, height: 68))
+            c.setShadow(offset: .zero, blur: 0, color: nil)
             c.setFillColor(light.withAlphaComponent(0.55).cgColor)
             c.fillEllipse(in: CGRect(x: 30, y: 28, width: 18, height: 40))
-            // Face.
-            let face = UIColor(red: 0x3A / 255, green: 0x16 / 255, blue: 0x05 / 255, alpha: 1)
-            c.setFillColor(face.cgColor)
+            guard face == .carved else { return }
+            // Carved face, glowing from inside.
+            c.setFillColor(UIColor(red: 0xFF / 255, green: 0xD3 / 255, blue: 0x4D / 255, alpha: 1).cgColor)
+            c.setShadow(offset: .zero, blur: 6, color: UIColor(red: 1, green: 0.85, blue: 0.3, alpha: 1).cgColor)
             for eyeX in [30.0, 54.0] {
                 c.move(to: CGPoint(x: eyeX, y: 52)); c.addLine(to: CGPoint(x: eyeX + 12, y: 52))
                 c.addLine(to: CGPoint(x: eyeX + 6, y: 42)); c.closePath(); c.fillPath()
@@ -153,10 +192,15 @@ final class AmbianceView: UIView {
             c.addQuadCurve(to: CGPoint(x: 28, y: 62), control: CGPoint(x: 49, y: 82))
             c.fillPath()
         }.cgImage
-    }()
+    }
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    private static let plainPumpkin = pumpkinImage(.plain)
+    private static let carvedPumpkin = pumpkinImage(.carved)
+
+    init(plane: AmbiancePlane, clock: @escaping () -> TimeInterval = { AmbianceClock.elapsed() }) {
+        self.plane = plane
+        self.clock = clock
+        super.init(frame: .zero)
         isUserInteractionEnabled = false
         clipsToBounds = true
         backgroundColor = .clear
@@ -164,6 +208,8 @@ final class AmbianceView: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    deinit { calmTask?.cancel() }
 
     func setEffects(_ newValue: Set<AmbianceEffect>) {
         guard newValue != effects else { return }
@@ -178,152 +224,79 @@ final class AmbianceView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        layoutMist()
-        layoutFog()
         layoutPumpkins()
-        startMistDrift()
         if batsPending, bounds.width > 0 { launchBats() }
     }
 
     private func rebuild() {
-        mistLayers.forEach { $0.removeFromSuperlayer() }
-        mistLayers = []
-        fogEmitter?.removeFromSuperlayer()
-        fogEmitter = nil
+        calmTask?.cancel()
+        calmTask = nil
         batLayers.forEach { $0.removeFromSuperlayer() }
         batLayers = []
         pumpkinEmitter?.removeFromSuperlayer()
         pumpkinEmitter = nil
         batsPending = false
-        guard window != nil else { return }
-        if effects.contains(.mist) {
-            addMist()
-            addFog()
-        }
+        guard window != nil, !effects.isEmpty else { return }
+        let elapsed = clock()
         if effects.contains(.pumpkins) { addPumpkins() }
         if effects.contains(.bats) {
             batsPending = true
             if bounds.width > 0 { launchBats() }
         }
+        // Still in the opening: settle the pumpkins when it ends. (The extra
+        // bats end on their own — `launchBats`.)
+        let remaining = AmbiancePolicy.introDuration - elapsed
+        if remaining > 0, pumpkinEmitter != nil {
+            calmTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(remaining))
+                guard !Task.isCancelled else { return }
+                self?.layoutPumpkins()
+            }
+        }
     }
 
     /// As many particles per point of width on a phone as on a TV.
-    private var widthFactor: Float { Float(min(max(bounds.width / 1000, 0.4), 1.8)) }
-
-    // MARK: Fog bank
-
-    private func addMist() {
-        for blob in Self.mist {
-            let l = CAGradientLayer()
-            l.type = .radial
-            l.colors = [Self.mistColor.withAlphaComponent(blob.opacity).cgColor, Self.mistColor.withAlphaComponent(0).cgColor]
-            l.startPoint = CGPoint(x: 0.5, y: 0.5)
-            l.endPoint = CGPoint(x: 1, y: 1)
-            layer.addSublayer(l)
-            mistLayers.append(l)
-        }
-        layoutMist()
-        startMistDrift()
-    }
-
-    /// The drift is a share of the WIDTH, so it waits for one: SwiftUI gives
-    /// the representable its frame after `didMoveToWindow`, and a drift
-    /// computed at width 0 left the mist still.
-    private func startMistDrift() {
-        guard bounds.width > 0 else { return }
-        for (l, blob) in zip(mistLayers, Self.mist) where l.animation(forKey: Self.mistKey) == nil {
-            let a = CABasicAnimation(keyPath: "transform.translation.x")
-            a.fromValue = 0
-            a.toValue = bounds.width * blob.drift
-            a.duration = blob.period
-            a.autoreverses = true
-            a.repeatCount = .infinity
-            a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            a.isRemovedOnCompletion = false
-            l.add(a, forKey: Self.mistKey)
-        }
-    }
-
-    private func layoutMist() {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for (l, blob) in zip(mistLayers, Self.mist) {
-            l.frame = CGRect(x: blob.frame.minX * bounds.width, y: blob.frame.minY * bounds.height,
-                             width: blob.frame.width * bounds.width, height: blob.frame.height * bounds.height)
-        }
-        CATransaction.commit()
-    }
-
-    // MARK: Rising smoke
-
-    private func addFog() {
-        let emitter = CAEmitterLayer()
-        emitter.emitterShape = .rectangle
-        let cell = CAEmitterCell()
-        cell.contents = Self.puffImage
-        // Many faint, small-born puffs that swell slowly, rather than a few
-        // thick ones appearing whole: a continuous, fluid smoke.
-        cell.birthRate = 3.2
-        cell.lifetime = 18
-        cell.lifetimeRange = 4
-        cell.velocity = 14
-        cell.velocityRange = 6
-        // An emitter's longitude 0 points UP the screen, π DOWN, ±π/2
-        // sideways — at ±π/2 the smoke slid out along the bottom edge.
-        cell.emissionLongitude = 0
-        cell.emissionRange = .pi / 6
-        cell.xAcceleration = 2.5                     // a breeze pushes it sideways
-        cell.scale = 0.7
-        cell.scaleRange = 0.3
-        cell.scaleSpeed = 0.2                        // born small, swelling as it rises
-        cell.spin = 0.03
-        cell.spinRange = 0.08                        // turning slowly
-        cell.color = Self.mistColor.withAlphaComponent(0.16).cgColor
-        cell.alphaSpeed = -0.008                     // then thinning out
-        emitter.emitterCells = [cell]
-        // Pre-warmed: the smoke is already there when the screen appears.
-        emitter.beginTime = CACurrentMediaTime() - 10
-        layer.addSublayer(emitter)
-        fogEmitter = emitter
-        layoutFog()
-    }
-
-    private func layoutFog() {
-        guard let emitter = fogEmitter else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        emitter.frame = bounds
-        // Born along the bottom edge (half of the band below it), so the smoke
-        // drifts in rather than appearing mid-screen.
-        emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.height)
-        emitter.emitterSize = CGSize(width: bounds.width * 1.2, height: bounds.height * 0.12)
-        emitter.birthRate = widthFactor
-        CATransaction.commit()
-    }
+    private var widthFactor: Float { Float(min(max(bounds.width / 1000, 0.8), 1.8)) }
 
     // MARK: Pumpkins
 
     private func addPumpkins() {
         let emitter = CAEmitterLayer()
         emitter.emitterShape = .line
-        let cell = CAEmitterCell()
-        cell.contents = Self.pumpkinImage
-        cell.birthRate = 1.4
-        cell.lifetime = 14
-        cell.velocity = 85
-        cell.velocityRange = 35
-        // π points DOWN (see the smoke). At ±π/2 the pumpkins left sideways
-        // and only ever showed along the top edge.
-        cell.emissionLongitude = .pi
-        cell.emissionRange = .pi / 14
-        cell.yAcceleration = 12
-        cell.spin = 0.5
-        cell.spinRange = 1.4                         // tumbling, both ways
-        cell.scale = 0.42
-        cell.scaleRange = 0.18
-        emitter.emitterCells = [cell]
-        // Pre-warmed: pumpkins are already falling when the app opens.
-        emitter.beginTime = CACurrentMediaTime() - 6
+        func cell(_ image: CGImage?, rate: Float, scale: CGFloat, velocity: CGFloat, alpha: CGFloat) -> CAEmitterCell {
+            let c = CAEmitterCell()
+            c.contents = image
+            c.birthRate = rate
+            c.lifetime = Float(1400 / velocity)     // long enough to cross any screen
+            c.velocity = velocity
+            c.velocityRange = velocity * 0.35
+            // An emitter's longitude 0 points UP the screen, π DOWN, ±π/2
+            // sideways — at ±π/2 the pumpkins left through the side edges.
+            c.emissionLongitude = .pi
+            c.emissionRange = .pi / 14
+            c.yAcceleration = 10
+            c.spin = 0.4
+            c.spinRange = 1.2                        // tumbling, both ways
+            c.scale = scale
+            c.scaleRange = scale * 0.3
+            c.color = UIColor.white.withAlphaComponent(alpha).cgColor
+            return c
+        }
+        switch plane {
+        case .far:
+            // Small, dim and slow: far away, behind the posters.
+            emitter.emitterCells = [
+                cell(Self.plainPumpkin, rate: 0.9, scale: 0.2, velocity: 45, alpha: 0.6),
+                cell(Self.carvedPumpkin, rate: 0.5, scale: 0.22, velocity: 40, alpha: 0.7)
+            ]
+        case .near:
+            // Now and then a big lit one tumbles past in front of everything.
+            emitter.emitterCells = [
+                cell(Self.carvedPumpkin, rate: 0.12, scale: 0.7, velocity: 120, alpha: 1)
+            ]
+        }
+        // Pre-warmed: already falling when the screen appears.
+        emitter.beginTime = CACurrentMediaTime() - 8
         layer.addSublayer(emitter)
         pumpkinEmitter = emitter
         layoutPumpkins()
@@ -334,10 +307,9 @@ final class AmbianceView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         emitter.frame = bounds
-        emitter.emitterPosition = CGPoint(x: bounds.midX, y: -40)
+        emitter.emitterPosition = CGPoint(x: bounds.midX, y: -60)
         emitter.emitterSize = CGSize(width: bounds.width * 1.05, height: 1)
-        // Not below ~one pumpkin a second, even on a phone.
-        emitter.birthRate = max(widthFactor, 0.8)
+        emitter.birthRate = widthFactor * Float(AmbiancePolicy.density(elapsed: clock(), isTV: ambianceIsTV))
         CATransaction.commit()
     }
 
@@ -363,24 +335,33 @@ final class AmbianceView: UIView {
         return p.cgPath
     }
 
-    /// Every bat on its own endless loop, the whole thing run by the render
-    /// server: no timer, no main-thread work after this.
+    /// Every bat on its own loop, run by the render server. During the
+    /// opening the plane flies its full count; the bats beyond the calm count
+    /// stop at the end of the crossing that outlasts it (whole cycles, so they
+    /// never vanish mid-flight). After the opening, only the calm count flies.
     private func launchBats() {
         batsPending = false
         let w = bounds.width, h = bounds.height
-        for route in Self.batRoutes {
+        let elapsed = clock()
+        let routes = plane == .far ? Self.farRoutes : Self.nearRoutes
+        let dense = AmbiancePolicy.batCount(dense: routes.count, elapsed: 0, isTV: ambianceIsTV)
+        let calm = AmbiancePolicy.batCount(dense: routes.count, elapsed: .infinity, isTV: ambianceIsTV)
+        let remaining = AmbiancePolicy.introDuration - elapsed
+        let flying = remaining > 0 ? dense : calm
+        let color = plane == .far ? Self.farBatColor : Self.nearBatColor
+        for (index, route) in routes.prefix(flying).enumerated() {
             let container = CALayer()
-            container.position = CGPoint(x: -100, y: -100)   // off-screen between crossings
+            container.position = CGPoint(x: -140, y: -140)   // off-screen between crossings
             let shape = CAShapeLayer()
             shape.path = Self.batPath()
-            shape.fillColor = Self.batColor.cgColor
+            shape.fillColor = color.cgColor
             shape.setAffineTransform(CGAffineTransform(scaleX: route.scale, y: route.scale))
             container.addSublayer(shape)
             layer.addSublayer(container)
             batLayers.append(container)
 
-            let from = CGPoint(x: route.leftToRight ? -60 : w + 60, y: h * (route.y + 0.06))
-            let to = CGPoint(x: route.leftToRight ? w + 60 : -60, y: h * route.y)
+            let from = CGPoint(x: route.leftToRight ? -80 : w + 80, y: h * (route.y + 0.06))
+            let to = CGPoint(x: route.leftToRight ? w + 80 : -80, y: h * route.y)
             let path = UIBezierPath()
             path.move(to: from)
             path.addQuadCurve(to: to, controlPoint: CGPoint(x: w * 0.5, y: h * (route.y - 0.08)))
@@ -392,17 +373,202 @@ final class AmbianceView: UIView {
             let flap = CABasicAnimation(keyPath: "transform.scale.y")
             flap.fromValue = 1
             flap.toValue = 0.55
-            flap.duration = 0.16
+            flap.duration = plane == .far ? 0.2 : 0.14
             flap.autoreverses = true
             flap.beginTime = route.start
             flap.repeatCount = Float(route.duration / (flap.duration * 2))
             let cycle = CAAnimationGroup()
             cycle.animations = [fly, flap]
             cycle.duration = route.start + route.period
-            cycle.repeatCount = .infinity
+            if remaining > 0, index >= calm {
+                cycle.repeatDuration = (remaining / cycle.duration).rounded(.up) * cycle.duration
+            } else {
+                cycle.repeatCount = .infinity
+            }
             cycle.isRemovedOnCompletion = false
             container.add(cycle, forKey: Self.batKey)
         }
+    }
+}
+
+// MARK: - Night sky
+
+private struct NightSkyRepresentable: UIViewRepresentable {
+    let dark: Bool
+    let twinkle: Bool
+    func makeUIView(context: Context) -> NightSkyView { NightSkyView(frame: .zero) }
+    func updateUIView(_ view: NightSkyView, context: Context) { view.configure(dark: dark, twinkle: twinkle) }
+}
+
+/// The season's background: scattered stars (dark mode only), a few that
+/// twinkle (with motion), and cobwebs in the two top corners with a spider on
+/// its thread. Drawn from a fixed seed, so it never reshuffles.
+final class NightSkyView: UIView {
+    static let twinkleKey = "cinemax.nightsky.twinkle"
+    static let spiderKey = "cinemax.nightsky.spider"
+
+    let starLayer = CAShapeLayer()
+    private(set) var twinkleLayers: [CAShapeLayer] = []
+    private(set) var webLayers: [CAShapeLayer] = []
+    private let spiderLayer = CAShapeLayer()
+    private var dark = true
+    private var twinkle = true
+    private var drawnSize: CGSize = .zero
+
+    private static let starColor = UIColor(red: 0xF1 / 255, green: 0xE9 / 255, blue: 0xE0 / 255, alpha: 1)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+        layer.addSublayer(starLayer)
+        layer.addSublayer(spiderLayer)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func configure(dark: Bool, twinkle: Bool) {
+        guard dark != self.dark || twinkle != self.twinkle || drawnSize == .zero else { return }
+        self.dark = dark
+        self.twinkle = twinkle
+        drawnSize = .zero
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.size != drawnSize, bounds.width > 0 else { return }
+        drawnSize = bounds.size
+        draw()
+    }
+
+    /// SplitMix64: the same sky on every launch and every screen.
+    private struct Seeded {
+        var state: UInt64
+        mutating func next() -> Double {
+            state &+= 0x9E3779B97F4A7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+            z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+            return Double((z ^ (z >> 31)) >> 11) / Double(1 << 53)
+        }
+    }
+
+    private func draw() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        twinkleLayers.forEach { $0.removeFromSuperlayer() }
+        twinkleLayers = []
+        webLayers.forEach { $0.removeFromSuperlayer() }
+        webLayers = []
+        let w = bounds.width, h = bounds.height
+        var rng = Seeded(state: 0x5EA50A)
+
+        // Stars: dark mode only (a starry sky on white reads as dirt).
+        if dark {
+            let stars = CGMutablePath()
+            let count = Int(w * h / 7000)
+            for _ in 0..<count {
+                let r = 0.4 + rng.next() * 1.1
+                stars.addEllipse(in: CGRect(x: rng.next() * w, y: rng.next() * h, width: r * 2, height: r * 2))
+            }
+            starLayer.path = stars
+            starLayer.fillColor = Self.starColor.withAlphaComponent(0.45).cgColor
+            for index in 0..<max(6, count / 12) {
+                let star = CAShapeLayer()
+                let r = 1.2 + rng.next() * 1.2
+                star.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2), transform: nil)
+                star.position = CGPoint(x: rng.next() * w, y: rng.next() * h)
+                star.fillColor = Self.starColor.cgColor
+                star.opacity = 0.8
+                if twinkle {
+                    let a = CABasicAnimation(keyPath: "opacity")
+                    a.fromValue = 0.9
+                    a.toValue = 0.15
+                    a.duration = 1.4 + rng.next() * 2.2
+                    a.beginTime = CACurrentMediaTime() + Double(index) * 0.37
+                    a.autoreverses = true
+                    a.repeatCount = .infinity
+                    a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    star.add(a, forKey: Self.twinkleKey)
+                }
+                layer.insertSublayer(star, above: starLayer)
+                twinkleLayers.append(star)
+            }
+        } else {
+            starLayer.path = nil
+        }
+
+        // Cobwebs in the two top corners.
+        let webColor = dark
+            ? UIColor(red: 0xB3 / 255, green: 0xA8 / 255, blue: 0xB8 / 255, alpha: 0.22)
+            : UIColor(red: 0x55 / 255, green: 0x58 / 255, blue: 0x5E / 255, alpha: 0.18)
+        let radius = min(w, h) * 0.34
+        for corner in [CGPoint.zero, CGPoint(x: w, y: 0)] {
+            let web = CAShapeLayer()
+            web.path = Self.webPath(corner: corner, radius: radius, mirrored: corner.x > 0)
+            web.strokeColor = webColor.cgColor
+            web.fillColor = nil
+            web.lineWidth = 0.8
+            layer.insertSublayer(web, below: spiderLayer)
+            webLayers.append(web)
+        }
+
+        // A spider on its thread, from the right-hand web.
+        let thread = radius * 0.55
+        let spider = CGMutablePath()
+        spider.move(to: CGPoint(x: 0, y: -thread)); spider.addLine(to: CGPoint(x: 0, y: -4))
+        spider.addEllipse(in: CGRect(x: -4, y: -4, width: 8, height: 9))
+        for side in [-1.0, 1.0] {
+            for leg in 0..<4 {
+                let y = -1.0 + Double(leg) * 2.0
+                spider.move(to: CGPoint(x: side * 3, y: y))
+                spider.addLine(to: CGPoint(x: side * 8, y: y - 3 + Double(leg)))
+                spider.addLine(to: CGPoint(x: side * 10, y: y + 2 + Double(leg)))
+            }
+        }
+        spiderLayer.path = spider
+        spiderLayer.strokeColor = webColor.withAlphaComponent(dark ? 0.6 : 0.5).cgColor
+        spiderLayer.fillColor = webColor.withAlphaComponent(dark ? 0.6 : 0.5).cgColor
+        spiderLayer.lineWidth = 1
+        spiderLayer.position = CGPoint(x: w - radius * 0.42, y: thread)
+        spiderLayer.removeAnimation(forKey: Self.spiderKey)
+        if twinkle {
+            let bob = CABasicAnimation(keyPath: "position.y")
+            bob.fromValue = thread
+            bob.toValue = thread + radius * 0.18
+            bob.duration = 3.5
+            bob.autoreverses = true
+            bob.repeatCount = .infinity
+            bob.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            spiderLayer.add(bob, forKey: Self.spiderKey)
+        }
+    }
+
+    /// Radial threads from the corner, joined by sagging spiral rings.
+    private static func webPath(corner: CGPoint, radius: CGFloat, mirrored: Bool) -> CGPath {
+        let p = CGMutablePath()
+        let threads = 7
+        let angles = (0..<threads).map { Double($0) / Double(threads - 1) * (.pi / 2) }
+        func point(_ angle: Double, _ r: CGFloat) -> CGPoint {
+            let dx = CGFloat(cos(angle)) * r, dy = CGFloat(sin(angle)) * r
+            return CGPoint(x: corner.x + (mirrored ? -dx : dx), y: corner.y + dy)
+        }
+        for a in angles {
+            p.move(to: corner)
+            p.addLine(to: point(a, radius))
+        }
+        for ring in 1...6 {
+            let r = radius * CGFloat(ring) / 6.4
+            p.move(to: point(angles[0], r))
+            for i in 1..<angles.count {
+                let mid = (angles[i - 1] + angles[i]) / 2
+                p.addQuadCurve(to: point(angles[i], r), control: point(mid, r * 0.86))
+            }
+        }
+        return p
     }
 }
 

@@ -78,7 +78,13 @@ struct SeasonFont: Sendable, Equatable {
 }
 
 enum AmbianceEffect: String, Sendable, CaseIterable {
-    case mist, bats, pumpkins, focusGlow
+    case bats, pumpkins, focusGlow
+}
+
+/// What a season paints BEHIND the browsing screens (`SeasonalBackdrop`).
+enum SeasonBackdrop: Sendable {
+    /// Stars (dark mode), a few twinkling, cobwebs in the top corners.
+    case nightSky
 }
 
 struct SeasonRow: Sendable, Equatable {
@@ -100,6 +106,7 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
     let titleFont: SeasonFont?
     let ambiance: Set<AmbianceEffect>
     let row: SeasonRow?
+    let backdrop: SeasonBackdrop?
 }
 
 /// Settings → Appearance. No « always »: with several seasons it has no

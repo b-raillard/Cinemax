@@ -114,4 +114,14 @@ struct SeasonalThemeControllerTests {
         #expect(darkHex(tm.accent) == 0xFF7A1A)
         #expect(darkHex(tm.accentContainer) == 0xE06A1A)
     }
+
+    @Test("Calm zone: set by the tab bar, read by the root overlay")
+    func calmZone() {
+        let c = make(TestClock("2026-10-20T12:00:00Z"))
+        #expect(c.calmZone == false)
+        c.setCalmZone(true)
+        #expect(c.calmZone)
+        c.setCalmZone(false)
+        #expect(c.calmZone == false)
+    }
 }

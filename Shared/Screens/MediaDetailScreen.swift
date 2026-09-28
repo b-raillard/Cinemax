@@ -165,7 +165,7 @@ struct MediaDetailScreen: View {
 
     var body: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            SeasonalBackdrop().ignoresSafeArea()
 
             if viewModel.isLoading {
                 LoadingStateView()

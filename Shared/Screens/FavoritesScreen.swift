@@ -121,7 +121,7 @@ struct FavoritesScreen: View {
 
     var body: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            SeasonalBackdrop().ignoresSafeArea()
             #if os(tvOS)
             if isModal {
                 VStack(spacing: 0) {

@@ -5,95 +5,119 @@ import UIKit
 @MainActor
 @Suite("Seasonal ambiance")
 struct SeasonalAmbianceTests {
-    private func hosted() -> (UIWindow, AmbianceView) {
+    private func hosted(_ plane: AmbiancePlane, elapsed: TimeInterval = 0) -> (UIWindow, AmbianceView) {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1200, height: 600))
-        let view = AmbianceView(frame: window.bounds)
+        let view = AmbianceView(plane: plane, clock: { elapsed })
+        view.frame = window.bounds
         window.addSubview(view)
         return (window, view)
     }
 
-    @Test("Mist: a fog bank and smoke rising from the bottom band, gone when turned off")
-    func mist() {
-        let (window, view) = hosted()
-        view.setEffects([.mist])
-        #expect(view.mistLayers.count == 3)
-        #expect(view.mistLayers.allSatisfy { $0.animation(forKey: AmbianceView.mistKey) != nil })
-        // The moving smoke: emitted INSIDE the bottom band, so it shows at once.
-        let fog = view.fogEmitter
-        #expect(fog != nil)
-        #expect(fog?.emitterCells?.isEmpty == false)
-        // Longitude 0 rises (see the pumpkins): at ±π/2 the smoke slid out
-        // sideways along the bottom edge.
-        #expect(fog?.emitterCells?.first?.emissionLongitude == 0)
-        #expect((fog?.emitterPosition.y ?? 0) >= view.bounds.height * 0.8)
-        #expect((fog?.emitterPosition.y ?? .infinity) <= view.bounds.height)
-        view.setEffects([])
-        #expect(view.mistLayers.isEmpty)
-        #expect(view.fogEmitter == nil)
-        _ = window
-    }
+    #if os(tvOS)
+    private let isTV = true
+    #else
+    private let isTV = false
+    #endif
 
-    @Test("Bats keep crossing from the first seconds, never just once")
-    func batsKeepFlying() throws {
-        let (window, view) = hosted()
+    @Test("Far plane: small dim bats on endless loops, from the first seconds")
+    func farBats() throws {
+        let (window, view) = hosted(.far)
         view.setEffects([.bats])
         view.layoutIfNeeded()
-        #expect(view.batLayers.count >= 8)
-        for bat in view.batLayers {
-            let cycle = try #require(bat.animation(forKey: AmbianceView.batKey) as? CAAnimationGroup)
-            #expect(cycle.repeatCount == .infinity)
-            let fly = try #require(cycle.animations?.first)
-            #expect(fly.beginTime <= 4)             // the first crossing starts at once
-        }
-        // A second screen gets its own bats: no once-per-session latch any more.
-        let (window2, other) = hosted()
-        other.setEffects([.bats])
-        other.layoutIfNeeded()
-        #expect(other.batLayers.count >= 8)
+        #expect(view.batLayers.count == AmbiancePolicy.batCount(dense: AmbianceView.farBatCount, elapsed: 0, isTV: isTV))
+        let first = try #require(view.batLayers.first?.animation(forKey: AmbianceView.batKey) as? CAAnimationGroup)
+        #expect(first.repeatCount == .infinity)
+        #expect((first.animations?.first?.beginTime ?? 99) <= 4)
         view.setEffects([])
         #expect(view.batLayers.isEmpty)
-        _ = (window, window2)
+        _ = window
     }
 
-    @Test("Pumpkins fall from the top edge, gone when turned off")
-    func pumpkins() {
-        let (window, view) = hosted()
-        view.setEffects([.pumpkins])
+    @Test("During the opening, the extra bats stop after it, on a crossing boundary")
+    func extraBatsEndAfterTheIntro() throws {
+        let (window, view) = hosted(.far, elapsed: 10)
+        view.setEffects([.bats])
         view.layoutIfNeeded()
-        let fall = view.pumpkinEmitter
-        #expect(fall != nil)
-        #expect(fall?.emitterCells?.first?.contents != nil)
-        // An emitter's longitude 0 points UP the screen and π DOWN (±π/2 go
-        // sideways — the pumpkins left through the side edges at first).
-        #expect(fall?.emitterCells?.first?.emissionLongitude == .pi)
-        #expect((fall?.emitterCells?.first?.yAcceleration ?? 0) > 0)
-        #expect((fall?.emitterPosition.y ?? 1) <= 0)
-        view.setEffects([])
-        #expect(view.pumpkinEmitter == nil)
+        let calm = AmbiancePolicy.batCount(dense: AmbianceView.farBatCount, elapsed: 999, isTV: isTV)
+        let extras = view.batLayers.dropFirst(calm)
+        #expect(!extras.isEmpty)
+        for bat in extras {
+            let cycle = try #require(bat.animation(forKey: AmbianceView.batKey) as? CAAnimationGroup)
+            #expect(cycle.repeatCount == 0)
+            #expect(cycle.repeatDuration >= 20)               // outlives the remaining opening
+            let rounds = cycle.repeatDuration / cycle.duration
+            #expect(abs(rounds - rounds.rounded()) < 0.001)   // ends between two crossings
+        }
         _ = window
+    }
+
+    @Test("After the opening, a new screen only gets the calm count")
+    func calmAfterIntro() {
+        let (window, view) = hosted(.far, elapsed: 120)
+        view.setEffects([.bats])
+        view.layoutIfNeeded()
+        #expect(view.batLayers.count == AmbiancePolicy.batCount(dense: AmbianceView.farBatCount, elapsed: 120, isTV: isTV))
+        _ = window
+    }
+
+    @Test("Near plane: two large bats at most")
+    func nearBats() {
+        let (window, view) = hosted(.near)
+        view.setEffects([.bats])
+        view.layoutIfNeeded()
+        #expect(view.batLayers.count <= 2)
+        #expect(!view.batLayers.isEmpty)
+        _ = window
+    }
+
+    @Test("Pumpkins fall (longitude π); far = plain + carved, near = lit only")
+    func pumpkins() {
+        let (w1, far) = hosted(.far)
+        far.setEffects([.pumpkins])
+        far.layoutIfNeeded()
+        let cells = far.pumpkinEmitter?.emitterCells ?? []
+        #expect(cells.count == 2)
+        #expect(cells.allSatisfy { $0.emissionLongitude == .pi && $0.contents != nil })
+        #expect((far.pumpkinEmitter?.emitterPosition.y ?? 1) <= 0)
+        let (w2, near) = hosted(.near)
+        near.setEffects([.pumpkins])
+        near.layoutIfNeeded()
+        #expect(near.pumpkinEmitter?.emitterCells?.count == 1)
+        near.setEffects([])
+        #expect(near.pumpkinEmitter == nil)
+        _ = (w1, w2)
     }
 
     @Test("Off-window, nothing is added until the window")
     func offWindow() {
-        let view = AmbianceView(frame: CGRect(x: 0, y: 0, width: 1200, height: 600))
-        view.setEffects([.mist])
-        #expect(view.mistLayers.isEmpty)
+        let view = AmbianceView(plane: .far, clock: { 0 })
+        view.frame = CGRect(x: 0, y: 0, width: 1200, height: 600)
+        view.setEffects([.bats])
+        #expect(view.batLayers.isEmpty)
         let window = UIWindow(frame: view.frame)
         window.addSubview(view)
-        #expect(view.mistLayers.count == 3)
+        view.layoutIfNeeded()
+        #expect(!view.batLayers.isEmpty)
     }
 
-    @Test("Mist added before its frame drifts by a share of the final width")
-    func mistDriftUsesTheLaidOutWidth() throws {
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1200, height: 600))
-        let view = AmbianceView(frame: .zero)          // SwiftUI sizes it later
-        window.addSubview(view)
-        view.setEffects([.mist])
-        view.frame = window.bounds
-        view.layoutIfNeeded()
-        let drift = try #require(view.mistLayers.first?.animation(forKey: AmbianceView.mistKey) as? CABasicAnimation)
-        let toValue = try #require(drift.toValue as? CGFloat)
-        #expect(abs(toValue) > 10, "drift \(toValue) pt")
+    // MARK: Night sky
+
+    @Test("Night sky: stars in dark mode only, webs in both, twinkle only with motion")
+    func nightSky() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
+        let sky = NightSkyView(frame: window.bounds)
+        window.addSubview(sky)
+        sky.configure(dark: true, twinkle: true)
+        sky.layoutIfNeeded()
+        #expect(sky.starLayer.path?.isEmpty == false)
+        #expect(sky.webLayers.count == 2)
+        #expect(!sky.twinkleLayers.isEmpty)
+        #expect(sky.twinkleLayers.allSatisfy { $0.animation(forKey: NightSkyView.twinkleKey) != nil })
+        sky.configure(dark: false, twinkle: false)
+        sky.layoutIfNeeded()
+        #expect(sky.starLayer.path == nil || sky.starLayer.path?.isEmpty == true)
+        #expect(sky.webLayers.count == 2)
+        #expect(sky.twinkleLayers.allSatisfy { $0.animation(forKey: NightSkyView.twinkleKey) == nil })
     }
 
     #if os(tvOS)

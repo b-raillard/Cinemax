@@ -184,10 +184,11 @@ struct AppNavigation: View {
                     MainTabView()
                 }
             }
-            // Seasonal ambiance (smoke, bats, witches) over the whole signed-in
-            // app — above the tabs and every pushed screen, under sheets and
-            // the player. Absent out of season (`AmbiancePolicy`).
-            if appState.isAuthenticated {
+            // The NEAR ambiance plane (big bats, a rare lit pumpkin) over the
+            // whole signed-in app — above the tabs and every pushed screen,
+            // under sheets and the player; away from the calm zones. The far
+            // plane is in each browsing screen's `SeasonalBackdrop`.
+            if appState.isAuthenticated, !seasonal.calmZone {
                 SeasonalAmbianceOverlay()
                     .ignoresSafeArea()
             }

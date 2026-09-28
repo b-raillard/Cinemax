@@ -21,7 +21,7 @@ struct SeasonalThemePolicyTests {
         id: "test.winter", nameKey: "season.halloween.name",
         window: SeasonWindow(start: MonthDay(month: 12, day: 20), end: MonthDay(month: 1, day: 6)),
         dark: SeasonalThemeCatalogue.halloween.dark, light: nil,
-        accent: SeasonalThemeCatalogue.halloween.accent, titleFont: nil, ambiance: [], row: nil
+        accent: SeasonalThemeCatalogue.halloween.accent, titleFont: nil, ambiance: [], row: nil, backdrop: nil
     )
 
     @Test("Halloween starts on 15 October at midnight, local time")
@@ -165,7 +165,7 @@ struct SeasonalThemePolicyTests {
 
     @Test("Ambiance: season effects only when enabled and motion allowed")
     func ambiance() {
-        #expect(AmbiancePolicy.effects(theme: halloween, ambianceEnabled: true, motionEnabled: true) == [.mist, .bats, .pumpkins, .focusGlow])
+        #expect(AmbiancePolicy.effects(theme: halloween, ambianceEnabled: true, motionEnabled: true) == [.bats, .pumpkins, .focusGlow])
         #expect(AmbiancePolicy.effects(theme: halloween, ambianceEnabled: false, motionEnabled: true).isEmpty)
         #expect(AmbiancePolicy.effects(theme: nil, ambianceEnabled: true, motionEnabled: true).isEmpty)
     }
@@ -199,5 +199,34 @@ struct SeasonalThemePolicyTests {
         )
         #expect(fr == "Nuit d'Halloween, du 15 octobre au 2 novembre")
         #expect(en == "Halloween Night, October 15 to November 2")
+    }
+
+    // MARK: Density — an intense opening, then calm
+
+    @Test("Full density for the first 30 s, about a third after")
+    func densityIntroThenCalm() {
+        #expect(AmbiancePolicy.density(elapsed: 0, isTV: false) == 1)
+        #expect(AmbiancePolicy.density(elapsed: 29.9, isTV: false) == 1)
+        #expect(AmbiancePolicy.density(elapsed: 30, isTV: false) < 0.4)
+        #expect(AmbiancePolicy.density(elapsed: 600, isTV: false) < 0.4)
+    }
+
+    @Test("Apple TV runs at half the density")
+    func densityHalvedOnTV() {
+        #expect(AmbiancePolicy.density(elapsed: 0, isTV: true) == 0.5)
+        #expect(AmbiancePolicy.density(elapsed: 60, isTV: true) < 0.2)
+    }
+
+    @Test("Bat counts follow the density, never below one")
+    func batCounts() {
+        #expect(AmbiancePolicy.batCount(dense: 8, elapsed: 0, isTV: false) == 8)
+        #expect(AmbiancePolicy.batCount(dense: 8, elapsed: 45, isTV: false) == 3)
+        #expect(AmbiancePolicy.batCount(dense: 8, elapsed: 0, isTV: true) == 4)
+        #expect(AmbiancePolicy.batCount(dense: 2, elapsed: 45, isTV: true) == 1)
+    }
+
+    @Test("Halloween paints a night sky behind the browsing screens")
+    func halloweenBackdrop() {
+        #expect(halloween.backdrop == .nightSky)
     }
 }
