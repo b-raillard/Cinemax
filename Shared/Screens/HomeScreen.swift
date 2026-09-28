@@ -111,7 +111,13 @@ struct HomeScreen: View {
         // its row switch — re-fetches just that row.
         .onChange(of: "\(seasonID ?? "")-\(showSeasonRow)", initial: true) { old, new in
             viewModel.setSeasonRow(seasonRow)
-            if old != new { Task { await viewModel.refreshSeasonRow(using: appState) } }
+            // The genre rows too: in season they leave out the season row's genre.
+            if old != new {
+                Task {
+                    await viewModel.refreshSeasonRow(using: appState)
+                    if showGenreRows { await viewModel.reloadGenreRows(using: appState) }
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             // Tier-1: full reload while visible, otherwise defer to next appear.

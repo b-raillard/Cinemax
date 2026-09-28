@@ -1030,7 +1030,13 @@ final class HomeViewModel {
         // User-configurable: the explicit picks (no cap), or a deterministic
         // default set when unconfigured. Each row's item fetch is still bounded
         // (limit 10) — we bound the fetch, not the number of rows.
+        // In season, the season row already shows this genre's newest titles
+        // (same query): its genre row would repeat them a few rows down.
+        let seasonGenre = seasonRowConfig.flatMap {
+            SeasonRowMatcher.match(candidates: $0.genreCandidates, in: sortedGenres)
+        }
         let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres, in: defaults)
+            .filter { $0 != seasonGenre }
 
         guard !picked.isEmpty else {
             if isCurrent(generation) { genreRows = [] }

@@ -99,4 +99,28 @@ struct SeasonalHomeRowTests {
         await first.value
         #expect(vm.seasonRowItems.isEmpty)
     }
+
+    @Test("In season, the season row's genre is not repeated as a genre row")
+    func seasonGenreNotDuplicated() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action", "Horror"]
+        api.stubbedLatestItems = [item("x")]
+        HomeGenrePreferences.setSelectedGenres(["Action", "Horror"], in: defaults)
+        let vm = HomeViewModel(defaults: defaults)
+        vm.setSeasonRow(row)
+        await vm.load(using: appState(api))
+        #expect(vm.genreRows.map(\.genre) == ["Action"])
+    }
+
+    @Test("Out of season, the genre row stays")
+    func genreRowOutOfSeason() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action", "Horror"]
+        api.stubbedLatestItems = [item("x")]
+        HomeGenrePreferences.setSelectedGenres(["Action", "Horror"], in: defaults)
+        let vm = HomeViewModel(defaults: defaults)
+        vm.setSeasonRow(nil)
+        await vm.load(using: appState(api))
+        #expect(vm.genreRows.map(\.genre) == ["Action", "Horror"])
+    }
 }
