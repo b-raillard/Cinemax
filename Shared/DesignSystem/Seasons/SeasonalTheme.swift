@@ -11,7 +11,7 @@ struct MonthDay: Sendable, Equatable, Comparable {
     let month: Int   // 1…12
     let day: Int     // 1…31
 
-    static func < (a: MonthDay, b: MonthDay) -> Bool {
+    static func < (a: Self, b: Self) -> Bool {
         (a.month, a.day) < (b.month, b.day)
     }
 }

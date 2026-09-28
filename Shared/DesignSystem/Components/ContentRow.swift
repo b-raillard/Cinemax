@@ -12,7 +12,7 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
     var showViewAll: Bool = false
     var onViewAll: (() -> Void)? = nil
     /// A season row's display face (`SeasonalTypography.titleFont`); `nil` = the headline.
-    var titleFont: Font? = nil
+    var titleFont: Font?
     let data: Data
     let id: KeyPath<Data.Element, ItemID>
     @ViewBuilder let itemView: (Data.Element) -> ItemView

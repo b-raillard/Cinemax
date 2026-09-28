@@ -44,11 +44,26 @@ final class AmbianceView: UIView {
     private var effects: Set<AmbianceEffect> = []
     private var batsPending = false
 
-    /// Mist blobs, in fractions of the hero: frame, peak opacity, drift, period.
-    private static let mist: [(frame: CGRect, opacity: CGFloat, drift: CGFloat, period: CFTimeInterval)] = [
-        (CGRect(x: -0.10, y: 0.70, width: 0.80, height: 0.40), 0.14, 0.06, 22),
-        (CGRect(x: 0.35, y: 0.76, width: 0.80, height: 0.34), 0.10, -0.05, 26),
-        (CGRect(x: 0.05, y: 0.84, width: 1.00, height: 0.32), 0.18, 0.04, 30),
+    /// A mist blob, in fractions of the hero.
+    private struct MistBlob {
+        let frame: CGRect
+        let opacity: CGFloat
+        let drift: CGFloat
+        let period: CFTimeInterval
+    }
+
+    /// One bat's crossing: its size, its height (fraction of the hero), when and how long.
+    private struct BatFlight {
+        let scale: CGFloat
+        let y: CGFloat
+        let delay: CFTimeInterval
+        let duration: CFTimeInterval
+    }
+
+    private static let mist: [MistBlob] = [
+        MistBlob(frame: CGRect(x: -0.10, y: 0.70, width: 0.80, height: 0.40), opacity: 0.14, drift: 0.06, period: 22),
+        MistBlob(frame: CGRect(x: 0.35, y: 0.76, width: 0.80, height: 0.34), opacity: 0.10, drift: -0.05, period: 26),
+        MistBlob(frame: CGRect(x: 0.05, y: 0.84, width: 1.00, height: 0.32), opacity: 0.18, drift: 0.04, period: 30)
     ]
     private static let mistColor = UIColor(red: 0xCF / 255, green: 0xC3 / 255, blue: 0xE6 / 255, alpha: 1)
     private static let batColor = UIColor(red: 0xB3 / 255, green: 0xA8 / 255, blue: 0xB8 / 255, alpha: 0.75)
@@ -132,7 +147,7 @@ final class AmbianceView: UIView {
     /// The canvas's bat silhouette, 80 × 20 around its origin.
     private static func batPath() -> CGPath {
         let p = UIBezierPath()
-        p.move(to: CGPoint(x: 0, y: 0))
+        p.move(to: .zero)
         p.addLine(to: CGPoint(x: -6, y: -8))
         p.addLine(to: CGPoint(x: -7, y: -3))
         p.addCurve(to: CGPoint(x: -40, y: -6), controlPoint1: CGPoint(x: -14, y: -10), controlPoint2: CGPoint(x: -26, y: -12))
@@ -151,8 +166,10 @@ final class AmbianceView: UIView {
     private func launchBats() {
         batsPending = false
         let w = bounds.width, h = bounds.height
-        let flights: [(scale: CGFloat, y: CGFloat, delay: CFTimeInterval, duration: CFTimeInterval)] = [
-            (1.0, 0.22, 0.4, 6.5), (0.7, 0.30, 1.6, 7.5), (0.5, 0.16, 2.4, 8.5),
+        let flights = [
+            BatFlight(scale: 1.0, y: 0.22, delay: 0.4, duration: 6.5),
+            BatFlight(scale: 0.7, y: 0.30, delay: 1.6, duration: 7.5),
+            BatFlight(scale: 0.5, y: 0.16, delay: 2.4, duration: 8.5)
         ]
         for flight in flights {
             let container = CALayer()

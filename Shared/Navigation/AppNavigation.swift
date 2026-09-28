@@ -50,7 +50,7 @@ struct AppNavigation: View {
     @State private var network = AppNavigation.sharedNetworkMonitor
     @State private var menuConfig = AppNavigation.sharedMenuConfig
     @State private var parentalLock = AppNavigation.sharedParentalLock
-    @State private var seasonal = AppNavigation.sharedSeasonal
+    @State private var seasonal = Self.sharedSeasonal
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
