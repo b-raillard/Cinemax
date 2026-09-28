@@ -280,6 +280,12 @@ struct LicensesView: View {
                 url: "github.com/apple/swift-system",
                 text: "Copyright (c) Apple Inc. and the Swift System project authors\n\n" + apacheLicense
             ),
+            OSSLicense(
+                name: "Fraunces",
+                version: "1.000",
+                url: "github.com/undercasetype/Fraunces",
+                text: "Copyright 2020 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces)\n\nThis Font Software is licensed under the SIL Open Font License, Version 1.1.\nhttps://openfontlicense.org"
+            ),
         ]
     }
 }

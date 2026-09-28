@@ -238,6 +238,7 @@
 		54ABC261EA095B616920C206 /* MediaItemQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC029829C85BBFD16FF3B63F /* MediaItemQuery.swift */; };
 		556CE0103B594F6C9F8768E0 /* CinemaxIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C675F04EABA7C6F9C6292F /* CinemaxIntents.swift */; };
 		558BB88F463A93FA7EBE9838 /* AdminUserDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */; };
+		559D6520F46915A619ACF77B /* Fraunces-BlackItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6F57A383893FE04A69495009 /* Fraunces-BlackItalic.ttf */; };
 		55DDC66E0CC921159717737F /* ServersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */; };
 		562ECFF99482CFF3CEC6435D /* CinemaxKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223258AFA0F2668369423520 /* CinemaxKitTests.swift */; };
 		5696ECB7B9811A5CD17279E7 /* AdminRelativeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54A9FC0F398EBC3E87764B50 /* AdminRelativeFormatter.swift */; };
@@ -510,6 +511,7 @@
 		C5C3810A18222D30E7BA422E /* LibraryHeroSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40DF377C72F0695AEC1CB0D6 /* LibraryHeroSection.swift */; };
 		C5D36C26403F925F329F9896 /* VLCStreamPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D742BCF96212F6A06B3E40 /* VLCStreamPresenter.swift */; };
 		C66DEBC7160DF78205F50CAB /* LoginViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */; };
+		C6E0C3AD2F43862B73C2A143 /* SeasonalTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */; };
 		C6ECB352E613955A5A110A8E /* LibraryLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB36F2BA2BA2F32157D2B57 /* LibraryLogicTests.swift */; };
 		C71D58C3EE1FD8D23F042C29 /* PreAuthChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B5D2636A930296A6BD74ED /* PreAuthChrome.swift */; };
 		C97482DA24D2DFD0355B2D46 /* SeasonalTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71C62C18C28EFC1BA9F4CBA /* SeasonalTheme.swift */; };
@@ -592,6 +594,7 @@
 		E7480A3BA5C2DC1639C0EFA8 /* SeasonalThemePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D8436C1CFF104C77B3237D /* SeasonalThemePolicyTests.swift */; };
 		E7716088FB4DEE5121D1ABB2 /* SeekCoalescerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E3E989946C44C0AAA0640F /* SeekCoalescerTests.swift */; };
 		E84BE53D54D8E3D1974872D9 /* MenuSettingsScreen+tvOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9D01599D90904C2EF5B69CE /* MenuSettingsScreen+tvOS.swift */; };
+		E88BC25DD9A4B069B282FC19 /* SeasonalTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */; };
 		E967D51AA273F5658F8A9493 /* SettingsScreen+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66D79E78292DF655B3F508E /* SettingsScreen+iOS.swift */; };
 		EA0632228FDBF2CE744BDE18 /* CinemaLazyImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F3D66A0647688B34958DEF /* CinemaLazyImage.swift */; };
 		EA8D01A984329CE0A45EBB34 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B5A6240F3E4871F763D087 /* Haptics.swift */; };
@@ -626,6 +629,7 @@
 		F659036207BF0E0CA1DF4E8A /* RainbowAccentSwatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = A862B86E04553CE19E85DEA1 /* RainbowAccentSwatch.swift */; };
 		F6AEFA6E7D556EDD983AF54F /* PictureStallPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D3BBFCAEC88F1DBEFC8F74 /* PictureStallPolicy.swift */; };
 		F70AB7AD18EED3CCB23671EC /* MediaDetailWatchTogether.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C8261D26852CF6D06906E30 /* MediaDetailWatchTogether.swift */; };
+		F72DC196CFCA31A325880758 /* Fraunces-BlackItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6F57A383893FE04A69495009 /* Fraunces-BlackItalic.ttf */; };
 		F771347360945CBA5FABD8C6 /* LiveSessionsRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C4EAEE97333D74D6523155 /* LiveSessionsRowTests.swift */; };
 		F77189A34674CDE16A0C7F4F /* AdminUsersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C4BDE5967D19D5A14647B4 /* AdminUsersViewModel.swift */; };
 		F7B273773AA4C5CAA1D8BD3F /* UserSwitchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF66FBCB52822C36CFD91DA /* UserSwitchSheet.swift */; };
@@ -861,6 +865,7 @@
 		6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminActivityScreen.swift; sourceTree = "<group>"; };
 		6C9E3A0CDA86FD6E609A719F /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		6E2E6BDC1B376722400F1A3C /* MenuConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuConfig.swift; sourceTree = "<group>"; };
+		6F57A383893FE04A69495009 /* Fraunces-BlackItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fraunces-BlackItalic.ttf"; sourceTree = "<group>"; };
 		70046F639E1635F36221E545 /* MetadataIdentifyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataIdentifyTab.swift; sourceTree = "<group>"; };
 		71EDA47106672004DE07BDCF /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		7245AC0008EF86CB3AF4972B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -892,6 +897,7 @@
 		82450169A96719815C44F205 /* CinemaxTopShelf.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CinemaxTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		82A628B8872B47A31F501C42 /* RemotePlayTargetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlayTargetTests.swift; sourceTree = "<group>"; };
 		8324C15002E8D55B4849D71F /* MediaDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailScreen.swift; sourceTree = "<group>"; };
+		84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalTypography.swift; sourceTree = "<group>"; };
 		84F1A68472889D5AC4CE030A /* QuickConnectAuthorizeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickConnectAuthorizeViewModel.swift; sourceTree = "<group>"; };
 		8635A30F9E6F82CEC1D61220 /* PaginatedLoaderInterlockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaginatedLoaderInterlockTests.swift; sourceTree = "<group>"; };
 		87E3960725C47DF87C9D4987 /* VLCEngineLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VLCEngineLogTests.swift; sourceTree = "<group>"; };
@@ -1243,6 +1249,7 @@
 				BC9B237028DF07917F35B879 /* SeasonalThemeCatalogue.swift */,
 				FE72D408E45F4A44348AE5E8 /* SeasonalThemeController.swift */,
 				756663BDEA8390301E8117E8 /* SeasonalThemePolicy.swift */,
+				84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */,
 				9330A1B51ADCA7853DF7FE1A /* SeasonTrait.swift */,
 			);
 			path = Seasons;
@@ -1314,6 +1321,14 @@
 				84944B3992ABC270A4DA1598 /* Models */,
 			);
 			path = CinemaxKit;
+			sourceTree = "<group>";
+		};
+		6F2CDA19AD2F7F0090758F26 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				6F57A383893FE04A69495009 /* Fraunces-BlackItalic.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 		70D820A9675620BBFBC70468 /* ApiKeys */ = {
@@ -1541,6 +1556,7 @@
 			isa = PBXGroup;
 			children = (
 				E4D43C12622E0B2AACF89D1A /* AppShortcuts.strings */,
+				6F2CDA19AD2F7F0090758F26 /* Fonts */,
 				03A665C8AC6BE9D36AD43C7F /* InfoPlist.strings */,
 				AF177D070920EC62E7827637 /* Localizable.strings */,
 				280786386ED204F8AAAF36B6 /* Assets.xcassets */,
@@ -1975,6 +1991,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9F7E13CC3312F27A84915032 /* Assets.xcassets in Resources */,
+				F72DC196CFCA31A325880758 /* Fraunces-BlackItalic.ttf in Resources */,
 				0E311694DD10CE61A29C7E5D /* InfoPlist.strings in Resources */,
 				64406006E2A4AB13FDE38E19 /* Localizable.strings in Resources */,
 				0C4FDF863DEADECFEBABE17B /* PrivacyInfo.xcprivacy in Resources */,
@@ -2003,6 +2020,7 @@
 			files = (
 				3067F37BBC4A112F223D5B39 /* AppShortcuts.strings in Resources */,
 				2853B78C03BA5522E348B212 /* Assets.xcassets in Resources */,
+				559D6520F46915A619ACF77B /* Fraunces-BlackItalic.ttf in Resources */,
 				89BD7033117AAC2AD4EF269E /* InfoPlist.strings in Resources */,
 				C394E04E4C329F99F29E70D6 /* Localizable.strings in Resources */,
 				2795FD90A8FA67405535C2B7 /* PrivacyInfo.xcprivacy in Resources */,
@@ -2299,6 +2317,7 @@
 				594BFAE0E5378F92C85DE77E /* SeasonalThemeCatalogue.swift in Sources */,
 				9C2C28E25BC0B5FA6C1C4D01 /* SeasonalThemeController.swift in Sources */,
 				870ED1B70E8234C2FDBEAD6E /* SeasonalThemePolicy.swift in Sources */,
+				E88BC25DD9A4B069B282FC19 /* SeasonalTypography.swift in Sources */,
 				CCA01F1FD9DF944BFDEBD578 /* SeekCoalescer.swift in Sources */,
 				329C2104D5C6F3DEB74B09DB /* SeekMachine.swift in Sources */,
 				95D94E036EDA6AE3326386D4 /* ServerDiscoverySheet.swift in Sources */,
@@ -2635,6 +2654,7 @@
 				19C820C3E43CE5C5F9AA06AB /* SeasonalThemeCatalogue.swift in Sources */,
 				DEF222CC1CE5B8E900EDC7D8 /* SeasonalThemeController.swift in Sources */,
 				0FA139AA6DF7704853CEF41D /* SeasonalThemePolicy.swift in Sources */,
+				C6E0C3AD2F43862B73C2A143 /* SeasonalTypography.swift in Sources */,
 				F9A891C275B494CA3A05BF0C /* SeekCoalescer.swift in Sources */,
 				7C04769DD57EAB5A1B9B7B92 /* SeekMachine.swift in Sources */,
 				60C9BC65C7DCC678C8D21DA4 /* ServerDiscoverySheet.swift in Sources */,

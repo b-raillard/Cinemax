@@ -30,8 +30,8 @@ enum SeasonalThemeCatalogue {
             dimLight: 0x8A3806, dimDark: 0xCC5500,
             onAccentLight: 0xFFFFFF, onAccentDark: 0x1A0D05
         ),
-        // PostScript name checked against the bundled file in Task 6.
-        titleFont: SeasonFont(postScriptName: "Fraunces-BlackItalic", fileName: "Fraunces-BlackItalic.ttf"),
+        // Fraunces 1.000, static 72 pt optical size, Black Italic (OFL).
+        titleFont: SeasonFont(postScriptName: "Fraunces72pt-BlackItalic", fileName: "Fraunces-BlackItalic.ttf"),
         ambiance: [.mist, .bats, .focusGlow],
         row: SeasonRow(
             titleKey: "season.halloween.row",

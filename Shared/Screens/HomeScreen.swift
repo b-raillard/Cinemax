@@ -771,10 +771,9 @@ struct HomeScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
 
                     Text(item.name ?? "")
-                        .font(.system(size: heroTitleSize, weight: .black))
-                        .tracking(-1.5)
+
+                        .heroTitleStyle(size: heroTitleSize, uppercase: true)
                         .foregroundStyle(CinemaColor.onSurface)
-                        .textCase(.uppercase)
                         .lineLimit(2)
 
                     #if os(tvOS)

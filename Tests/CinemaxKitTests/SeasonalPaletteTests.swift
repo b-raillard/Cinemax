@@ -31,6 +31,20 @@ struct SeasonalPaletteTests {
         #expect(SeasonalColor.resolve(light: 0xC0392B, dark: 0xEE7D77, token: nil, isDark: true, season: halloween) == 0xEE7D77)
     }
 
+    @Test("Every season title font is bundled and registered")
+    func seasonFontsRegistered() {
+        for theme in SeasonalThemeCatalogue.all {
+            guard let font = theme.titleFont else { continue }
+            #expect(UIFont(name: font.postScriptName, size: 20) != nil, "\(font.postScriptName) not registered")
+            #expect(SeasonalTypography.titleFont(for: theme, size: 40) != nil)
+        }
+    }
+
+    @Test("No season: no title font override")
+    func noSeasonNoFont() {
+        #expect(SeasonalTypography.titleFont(for: nil, size: 40) == nil)
+    }
+
     // MARK: The chain, link by link
     //
     // An off-screen test window never commits SwiftUI content (only the
