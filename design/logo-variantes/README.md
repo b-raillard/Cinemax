@@ -1,6 +1,8 @@
 # Variantes de couleur du logo
 
-L'icône actuelle de l'app (`Resources/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png`), **recolorée sans être redessinée**. Seule la teinte de la méduse change. Les formes, les reflets, le diaphragme, le halo et la lumière sont les pixels d'origine. Le fond reste identique au pixel près, sauf dans la variante « fond aubergine ».
+L'icône actuelle de l'app (`Resources/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png`), **recolorée sans être redessinée**. Seule la teinte de la méduse change. Les formes, les reflets, le diaphragme, le halo et la lumière sont les pixels d'origine. Le fond reste identique au pixel près, sauf dans la variante « fond aubergine » et dans les quatre coins.
+
+**Coins.** La source a ses coins arrondis peints dans l'image, blancs à l'extérieur, avec un liseré le long de la courbe. iOS et tvOS appliquent leur propre masque à une icône **carrée**. `recolor.py` remplace donc ce blanc et ce liseré par le fond, prolongé en douceur depuis les pixels voisins (le reflet du bord haut s'estompe dans le coin). Hors des coins, aucun pixel ne change. La source ainsi nettoyée est écrite dans `cinemax_icone_actuelle.png`. Les planches montrent les icônes sous un masque arrondi, comme sur l'écran d'accueil.
 
 Rien ici n'est encore branché dans l'app. `design/` n'appartient à aucune cible Xcode, donc ces fichiers ne partent pas dans le bundle.
 
@@ -10,6 +12,7 @@ Rien ici n'est encore branché dans l'app. `design/` n'appartient à aucune cibl
 |---|---|
 | `accent/` | Une icône par couleur d'accent du thème : rouge, orange, jaune, vert, cyan, bleu, indigo, violet, rose. La teinte est l'`accentDark` de `AccentOption.swift`. Un léger dégradé sur la même teinte garde la profondeur de l'original. |
 | `halloween/` | Les teintes du thème saisonnier « Nuit d'Halloween » : Citrouille `#FF7A1A` et Potion `#A57BFF`. **A** : cloche citrouille, tentacules potion. **B** : l'inverse. **A + fond aubergine** : le fond gris prend les surfaces du thème, de Nuit `#0C0A10` à Tombe `#262033`. |
+| `cinemax_icone_actuelle.png` | L'icône actuelle, coins remplis, sans autre changement. |
 | `apercu_accents.png`, `apercu_halloween.png` | Planches de comparaison avec l'icône actuelle. |
 | `recolor.py` | Régénère tout (Pillow + numpy) : `python3 design/logo-variantes/recolor.py`. |
 
@@ -23,6 +26,7 @@ Le thème « Nuit d'Halloween » vient de la maquette « Cinemax — Logo & Hall
   - `ACCENT_SPREAD` : 0 donne une teinte unie, 1 garde tout l'écart de teinte d'origine.
   - les deux teintes Halloween ;
   - la rampe `AUBERGINE`.
+- `CORNER_BOX` et `CORNER_GROW` règlent la zone de coin traitée et la marge qui emporte le liseré.
 - Entre Potion et Citrouille, le dégradé passe par le magenta et le rouge, comme l'original passe par le cyan.
 
 ## Pour aller plus loin
