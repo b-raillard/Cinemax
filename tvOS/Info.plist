@@ -48,6 +48,10 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Cinemax uses your local network to automatically discover Jellyfin servers on your Wi-Fi.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fraunces-BlackItalic.ttf</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

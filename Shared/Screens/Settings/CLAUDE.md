@@ -66,6 +66,10 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 | `uiScale` | `1.0` | Font scale 80–130%. Bumps `_accentRevision` |
 | `darkMode` | `true` | **Via `themeManager.darkModeEnabled`**, not directly |
 | `accentColor` | `"green"` | **Via `themeManager.accentColorKey`** |
+| `appearance.seasonalTheme` | `"automatic"` | `SeasonalSetting` — **via `SeasonalThemeController.setSetting`**, which re-evaluates the season |
+| `appearance.seasonalAmbiance` | `true` | Mist / bats / tvOS focus glow; also off with motion effects or Reduce Motion (`AmbiancePolicy`) |
+| `appearance.seasonalRow` | `true` | The season's Home row (« Frissons d'Halloween ») |
+| `debug.forcedSeason` | `""` | Debug: force a catalogue season whatever the date |
 | `home.showContinueWatching` | `true` | Continue Watching row |
 | `home.showNextUp` | `true` | Global "Next Up" rail (next unwatched episode per in-progress series) |
 | `home.showRecentlyAdded` | `true` | Recently Added row |
