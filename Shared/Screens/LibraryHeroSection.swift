@@ -61,8 +61,6 @@ struct LibraryHeroSection: View {
                 }
             }
             .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
-            // Season ambiance (mist, bats) — nothing out of season.
-            .overlay { SeasonalAmbianceOverlay() }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroContentSpacing) {
                     HStack(spacing: 8) {

@@ -78,7 +78,7 @@ struct SeasonFont: Sendable, Equatable {
 }
 
 enum AmbianceEffect: String, Sendable, CaseIterable {
-    case mist, bats, focusGlow
+    case mist, bats, witches, focusGlow
 }
 
 struct SeasonRow: Sendable, Equatable {

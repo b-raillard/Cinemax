@@ -366,7 +366,14 @@ struct SettingsScreen: View {
                 label: loc.localized("settings.debug.forceSeason", loc.localized(theme.nameKey)),
                 value: Binding(
                     get: { debugForcedSeason == theme.id },
-                    set: { seasonal.setForcedSeason($0 ? theme.id : "") }
+                    // Through the `@AppStorage` setter first: that is what
+                    // invalidates this pushed page — a write the controller
+                    // makes on `UserDefaults` alone left the switch stale
+                    // until the page was reopened.
+                    set: {
+                        debugForcedSeason = $0 ? theme.id : ""
+                        seasonal.setForcedSeason(debugForcedSeason)
+                    }
                 ),
                 tint: .orange
             )

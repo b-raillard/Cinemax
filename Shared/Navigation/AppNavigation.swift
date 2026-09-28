@@ -184,6 +184,13 @@ struct AppNavigation: View {
                     MainTabView()
                 }
             }
+            // Seasonal ambiance (smoke, bats, witches) over the whole signed-in
+            // app — above the tabs and every pushed screen, under sheets and
+            // the player. Absent out of season (`AmbiancePolicy`).
+            if appState.isAuthenticated {
+                SeasonalAmbianceOverlay()
+                    .ignoresSafeArea()
+            }
         }
         // Toasts live in their OWN window above this one: an overlay here drew
         // underneath every sheet, cover and the player — see `ToastWindowHost`.

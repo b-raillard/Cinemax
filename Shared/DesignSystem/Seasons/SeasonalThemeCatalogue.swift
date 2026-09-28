@@ -32,7 +32,7 @@ enum SeasonalThemeCatalogue {
         ),
         // Fraunces 1.000, static 72 pt optical size, Black Italic (OFL).
         titleFont: SeasonFont(postScriptName: "Fraunces72pt-BlackItalic", fileName: "Fraunces-BlackItalic.ttf"),
-        ambiance: [.mist, .bats, .focusGlow],
+        ambiance: [.mist, .bats, .witches, .focusGlow],
         row: SeasonRow(
             titleKey: "season.halloween.row",
             genreCandidates: ["Horror", "Horreur", "Épouvante-horreur", "Épouvante"]

@@ -18,8 +18,14 @@ struct SeasonalAmbianceTests {
         view.setEffects([.mist])
         #expect(view.mistLayers.count == 3)
         #expect(view.mistLayers.allSatisfy { $0.animation(forKey: AmbianceView.mistKey) != nil })
+        // The moving smoke: a particle emitter rising from the bottom edge.
+        let fog = view.fogEmitter
+        #expect(fog != nil)
+        #expect(fog?.emitterCells?.isEmpty == false)
+        #expect((fog?.emitterPosition.y ?? 0) >= view.bounds.height)
         view.setEffects([])
         #expect(view.mistLayers.isEmpty)
+        #expect(view.fogEmitter == nil)
         _ = window
     }
 
@@ -36,6 +42,19 @@ struct SeasonalAmbianceTests {
         second.layoutIfNeeded()
         #expect(second.batLayers.isEmpty)
         _ = (w1, w2)
+    }
+
+    @Test("A witch crosses on a long repeating cycle, gone when turned off")
+    func witch() {
+        let (window, view) = hosted()
+        view.setEffects([.witches])
+        view.layoutIfNeeded()
+        let flight = view.witchLayer?.animation(forKey: AmbianceView.witchKey) as? CAAnimationGroup
+        #expect(flight?.repeatCount == .infinity)
+        #expect((flight?.duration ?? 0) >= 60)
+        view.setEffects([])
+        #expect(view.witchLayer == nil)
+        _ = window
     }
 
     @Test("Off-window, nothing is added until the window")
