@@ -49,3 +49,5 @@ Icônes alternatives (`CFBundleAlternateIcons` via `ASSETCATALOG_COMPILER_ALTERN
 - elles peuvent suivre l'accent choisi, ou s'activer pendant la période du thème Halloween ;
 - iOS affiche une alerte système à chaque changement d'icône ;
 - sur tvOS, chaque icône alternative est une pile de parallaxe complète (fond + face, déjà produites ici).
+
+Icône de saison : `python3 scripts/seasonal-icon.py halloween` pose la variante Halloween comme icône principale (App Store compris), `python3 scripts/seasonal-icon.py classique` la retire. Chaque bascule part dans une version. La variante `classique` (coins remplis, teinte d'origine) est produite par `recolor.py` pour ce retour.

@@ -241,6 +241,14 @@ def main():
         if not (np.array(Image.open(target).convert("RGB")) == np.array(to_image(rgb))).all():
             print(f"note: {rel} in Resources/ still has its painted corners (--install-corners)")
 
+    # 1b. « classique » — the identity variant (corners filled, original hue),
+    # written for EVERY recoloured file: scripts/seasonal-icon.py restores it.
+    for rel in RECOLOURED:
+        rgb, alpha, _ = sources[rel]
+        path = os.path.join(OUT, "classique", rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        to_image(rgb, alpha).save(path, optimize=True)
+
     # 2. Every variant of every recoloured source; only files that differ are written.
     written = {}
     for rel in RECOLOURED:
