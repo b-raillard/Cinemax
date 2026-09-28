@@ -27,7 +27,7 @@ struct SeasonalAmbianceOverlay: View {
         let effects = AmbiancePolicy.effects(
             theme: SeasonalThemeCatalogue.theme(id: seasonID),
             ambianceEnabled: ambianceEnabled, motionEnabled: motionEnabled
-        ).intersection([.mist, .bats, .witches])
+        ).intersection([.mist, .bats, .pumpkins])
         if !effects.isEmpty {
             AmbianceRepresentable(effects: effects)
                 .allowsHitTesting(false)
@@ -45,20 +45,19 @@ private struct AmbianceRepresentable: UIViewRepresentable {
 final class AmbianceView: UIView {
     static let mistKey = "cinemax.ambiance.mist"
     static let batKey = "cinemax.ambiance.bat"
-    static let witchKey = "cinemax.ambiance.witch"
-    /// Bats cross ONCE per app session — rare, as the canvas asks.
-    static var batsFlownThisSession = false
 
     /// The fog bank lying along the bottom edge (slow horizontal drift).
     private(set) var mistLayers: [CAGradientLayer] = []
-    /// The moving smoke: soft puffs rising from below the bottom edge, growing,
-    /// turning and dissolving — what makes the fog read as smoke.
+    /// The moving smoke: soft puffs born in the bottom band, rising, swelling,
+    /// turning and dissolving.
     private(set) var fogEmitter: CAEmitterLayer?
+    /// Bats crossing again and again, from the first seconds — people open
+    /// a film within 20–30 s, and the player shows none of this.
     private(set) var batLayers: [CALayer] = []
-    private(set) var witchLayer: CALayer?
+    /// Orange pumpkins tumbling down from the top edge.
+    private(set) var pumpkinEmitter: CAEmitterLayer?
     private var effects: Set<AmbianceEffect> = []
     private var batsPending = false
-    private var witchPending = false
 
     /// A fog-bank blob, in fractions of the screen.
     private struct MistBlob {
@@ -68,29 +67,39 @@ final class AmbianceView: UIView {
         let period: CFTimeInterval
     }
 
-    /// One bat's crossing: its size, its height (fraction of the screen), when and how long.
-    private struct BatFlight {
+    /// One bat's loop: size, height (fraction of the screen), direction, when
+    /// its first crossing starts, how long a crossing lasts, and how often it
+    /// comes back. Fixed values, so no two bats fly in step.
+    private struct BatRoute {
         let scale: CGFloat
         let y: CGFloat
-        let delay: CFTimeInterval
+        let leftToRight: Bool
+        let start: CFTimeInterval
         let duration: CFTimeInterval
-    }
-
-    /// A witch crosses 20 s after launch, then every 2 min 30 — rare enough to surprise.
-    private enum WitchFlight {
-        static let firstDelay: CFTimeInterval = 20
-        static let duration: CFTimeInterval = 11
-        static let period: CFTimeInterval = 150
+        let period: CFTimeInterval
     }
 
     private static let mist: [MistBlob] = [
-        MistBlob(frame: CGRect(x: -0.10, y: 0.80, width: 0.80, height: 0.30), opacity: 0.10, drift: 0.06, period: 22),
-        MistBlob(frame: CGRect(x: 0.35, y: 0.84, width: 0.80, height: 0.26), opacity: 0.07, drift: -0.05, period: 26),
-        MistBlob(frame: CGRect(x: 0.05, y: 0.90, width: 1.00, height: 0.24), opacity: 0.12, drift: 0.04, period: 30)
+        MistBlob(frame: CGRect(x: -0.10, y: 0.78, width: 0.80, height: 0.32), opacity: 0.16, drift: 0.06, period: 22),
+        MistBlob(frame: CGRect(x: 0.35, y: 0.82, width: 0.80, height: 0.28), opacity: 0.12, drift: -0.05, period: 26),
+        MistBlob(frame: CGRect(x: 0.05, y: 0.88, width: 1.00, height: 0.26), opacity: 0.20, drift: 0.04, period: 30)
     ]
-    private static let mistColor = UIColor(red: 0xCF / 255, green: 0xC3 / 255, blue: 0xE6 / 255, alpha: 1)
-    private static let batColor = UIColor(red: 0xB3 / 255, green: 0xA8 / 255, blue: 0xB8 / 255, alpha: 0.75)
-    private static let witchColor = UIColor(red: 0x15 / 255, green: 0x11 / 255, blue: 0x1C / 255, alpha: 0.85)
+
+    private static let batRoutes: [BatRoute] = [
+        BatRoute(scale: 1.0, y: 0.18, leftToRight: true, start: 0.3, duration: 6.0, period: 9),
+        BatRoute(scale: 0.6, y: 0.26, leftToRight: false, start: 0.9, duration: 7.5, period: 11),
+        BatRoute(scale: 0.8, y: 0.12, leftToRight: true, start: 1.6, duration: 6.5, period: 10),
+        BatRoute(scale: 0.5, y: 0.34, leftToRight: false, start: 2.2, duration: 8.5, period: 13),
+        BatRoute(scale: 0.9, y: 0.44, leftToRight: true, start: 2.8, duration: 7.0, period: 12),
+        BatRoute(scale: 0.55, y: 0.22, leftToRight: false, start: 3.3, duration: 8.0, period: 10),
+        BatRoute(scale: 0.7, y: 0.52, leftToRight: true, start: 3.7, duration: 7.5, period: 14),
+        BatRoute(scale: 0.45, y: 0.08, leftToRight: false, start: 1.2, duration: 9.0, period: 12),
+        BatRoute(scale: 0.85, y: 0.38, leftToRight: false, start: 0.5, duration: 6.5, period: 15),
+        BatRoute(scale: 0.6, y: 0.60, leftToRight: true, start: 2.5, duration: 8.0, period: 11)
+    ]
+
+    private static let mistColor = UIColor(red: 0xD9 / 255, green: 0xCC / 255, blue: 0xEF / 255, alpha: 1)
+    private static let batColor = UIColor(red: 0xB3 / 255, green: 0xA8 / 255, blue: 0xB8 / 255, alpha: 0.8)
 
     /// A soft round puff (white, radial alpha falloff) tinted by the emitter cell.
     private static let puffImage: CGImage? = {
@@ -102,6 +111,44 @@ final class AmbianceView: UIView {
             guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 0.45, 1]) else { return }
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             ctx.cgContext.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: size.width / 2, options: [])
+        }.cgImage
+    }()
+
+    /// An orange jack-o'-lantern, 96 pt, drawn once.
+    private static let pumpkinImage: CGImage? = {
+        let size = CGSize(width: 96, height: 96)
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            let c = ctx.cgContext
+            let side = UIColor(red: 0xE0 / 255, green: 0x62 / 255, blue: 0x0C / 255, alpha: 1)
+            let body = UIColor(red: 0xFF / 255, green: 0x7A / 255, blue: 0x1A / 255, alpha: 1)
+            let light = UIColor(red: 0xFF / 255, green: 0x9A / 255, blue: 0x45 / 255, alpha: 1)
+            // Stem.
+            c.setFillColor(UIColor(red: 0x4F / 255, green: 0x6B / 255, blue: 0x24 / 255, alpha: 1).cgColor)
+            c.fill(CGRect(x: 44, y: 12, width: 9, height: 16))
+            // Lobes, back to front.
+            c.setFillColor(side.cgColor)
+            c.fillEllipse(in: CGRect(x: 6, y: 24, width: 50, height: 64))
+            c.fillEllipse(in: CGRect(x: 40, y: 24, width: 50, height: 64))
+            c.setFillColor(body.cgColor)
+            c.fillEllipse(in: CGRect(x: 22, y: 22, width: 52, height: 68))
+            c.setFillColor(light.withAlphaComponent(0.55).cgColor)
+            c.fillEllipse(in: CGRect(x: 30, y: 28, width: 18, height: 40))
+            // Face.
+            let face = UIColor(red: 0x3A / 255, green: 0x16 / 255, blue: 0x05 / 255, alpha: 1)
+            c.setFillColor(face.cgColor)
+            for eyeX in [30.0, 54.0] {
+                c.move(to: CGPoint(x: eyeX, y: 52)); c.addLine(to: CGPoint(x: eyeX + 12, y: 52))
+                c.addLine(to: CGPoint(x: eyeX + 6, y: 42)); c.closePath(); c.fillPath()
+            }
+            c.move(to: CGPoint(x: 28, y: 62))
+            for (i, x) in stride(from: 32.0, through: 68.0, by: 6.0).enumerated() {
+                c.addLine(to: CGPoint(x: x, y: i.isMultiple(of: 2) ? 70 : 64))
+            }
+            c.addLine(to: CGPoint(x: 70, y: 62))
+            c.addQuadCurve(to: CGPoint(x: 28, y: 62), control: CGPoint(x: 49, y: 82))
+            c.fillPath()
         }.cgImage
     }()
 
@@ -130,9 +177,9 @@ final class AmbianceView: UIView {
         super.layoutSubviews()
         layoutMist()
         layoutFog()
+        layoutPumpkins()
         startMistDrift()
         if batsPending, bounds.width > 0 { launchBats() }
-        if witchPending, bounds.width > 0 { launchWitch() }
     }
 
     private func rebuild() {
@@ -142,25 +189,23 @@ final class AmbianceView: UIView {
         fogEmitter = nil
         batLayers.forEach { $0.removeFromSuperlayer() }
         batLayers = []
-        witchLayer?.removeFromSuperlayer()
-        witchLayer = nil
+        pumpkinEmitter?.removeFromSuperlayer()
+        pumpkinEmitter = nil
         batsPending = false
-        witchPending = false
         guard window != nil else { return }
         if effects.contains(.mist) {
             addMist()
             addFog()
         }
-        if effects.contains(.bats), !Self.batsFlownThisSession {
-            Self.batsFlownThisSession = true
+        if effects.contains(.pumpkins) { addPumpkins() }
+        if effects.contains(.bats) {
             batsPending = true
             if bounds.width > 0 { launchBats() }
         }
-        if effects.contains(.witches) {
-            witchPending = true
-            if bounds.width > 0 { launchWitch() }
-        }
     }
+
+    /// As many particles per point of width on a phone as on a TV.
+    private var widthFactor: Float { Float(min(max(bounds.width / 1000, 0.4), 1.8)) }
 
     // MARK: Fog bank
 
@@ -210,27 +255,27 @@ final class AmbianceView: UIView {
 
     private func addFog() {
         let emitter = CAEmitterLayer()
-        emitter.emitterShape = .line
+        emitter.emitterShape = .rectangle
         let cell = CAEmitterCell()
         cell.contents = Self.puffImage
-        cell.birthRate = 0.9
-        cell.lifetime = 20
+        cell.birthRate = 1.6
+        cell.lifetime = 16
         cell.lifetimeRange = 5
-        cell.velocity = 24
-        cell.velocityRange = 8
+        cell.velocity = 18
+        cell.velocityRange = 10
         cell.emissionLongitude = -.pi / 2           // up
-        cell.emissionRange = .pi / 6
-        cell.xAcceleration = 2.5                     // a breeze pushes it sideways
-        cell.scale = 2.4
-        cell.scaleRange = 0.8
-        cell.scaleSpeed = 0.07                       // puffs swell as they rise
-        cell.spin = 0.04
-        cell.spinRange = 0.1                         // and turn slowly
-        cell.color = Self.mistColor.withAlphaComponent(0.30).cgColor
-        cell.alphaSpeed = -0.015                     // then dissolve
+        cell.emissionRange = .pi / 5
+        cell.xAcceleration = 3                       // a breeze pushes it sideways
+        cell.scale = 2.6
+        cell.scaleRange = 0.9
+        cell.scaleSpeed = 0.08                       // puffs swell as they rise
+        cell.spin = 0.05
+        cell.spinRange = 0.12                        // and turn slowly
+        cell.color = Self.mistColor.withAlphaComponent(0.28).cgColor
+        cell.alphaSpeed = -0.022                     // then dissolve
         emitter.emitterCells = [cell]
         // Pre-warmed: the smoke is already there when the screen appears.
-        emitter.beginTime = CACurrentMediaTime() - 12
+        emitter.beginTime = CACurrentMediaTime() - 10
         layer.addSublayer(emitter)
         fogEmitter = emitter
         layoutFog()
@@ -241,16 +286,55 @@ final class AmbianceView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         emitter.frame = bounds
-        emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY + 40)
-        emitter.emitterSize = CGSize(width: bounds.width * 1.3, height: 1)
-        // As many puffs per point of width on a phone as on a TV.
-        emitter.birthRate = Float(min(max(bounds.width / 1000, 0.4), 1.8))
+        // Born INSIDE the bottom band, not below the edge: visible at once.
+        emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.height * 0.93)
+        emitter.emitterSize = CGSize(width: bounds.width * 1.2, height: bounds.height * 0.14)
+        emitter.birthRate = widthFactor
+        CATransaction.commit()
+    }
+
+    // MARK: Pumpkins
+
+    private func addPumpkins() {
+        let emitter = CAEmitterLayer()
+        emitter.emitterShape = .line
+        let cell = CAEmitterCell()
+        cell.contents = Self.pumpkinImage
+        cell.birthRate = 1.4
+        cell.lifetime = 14
+        cell.velocity = 85
+        cell.velocityRange = 35
+        cell.emissionLongitude = .pi / 2             // straight down
+        cell.emissionRange = .pi / 14
+        cell.yAcceleration = 12
+        cell.spin = 0.5
+        cell.spinRange = 1.4                         // tumbling, both ways
+        cell.scale = 0.42
+        cell.scaleRange = 0.18
+        emitter.emitterCells = [cell]
+        // Pre-warmed: pumpkins are already falling when the app opens.
+        emitter.beginTime = CACurrentMediaTime() - 6
+        layer.addSublayer(emitter)
+        pumpkinEmitter = emitter
+        layoutPumpkins()
+    }
+
+    private func layoutPumpkins() {
+        guard let emitter = pumpkinEmitter else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        emitter.frame = bounds
+        emitter.emitterPosition = CGPoint(x: bounds.midX, y: -40)
+        emitter.emitterSize = CGSize(width: bounds.width * 1.05, height: 1)
+        // Not below ~one pumpkin a second, even on a phone.
+        emitter.birthRate = max(widthFactor, 0.8)
         CATransaction.commit()
     }
 
     // MARK: Bats
 
-    /// The canvas's bat silhouette, 80 × 20 around its origin.
+    /// The canvas's bat silhouette, 80 × 20 around its origin (symmetric, so it
+    /// reads the same flying either way).
     private static func batPath() -> CGPath {
         let p = UIBezierPath()
         p.move(to: .zero)
@@ -269,138 +353,46 @@ final class AmbianceView: UIView {
         return p.cgPath
     }
 
+    /// Every bat on its own endless loop, the whole thing run by the render
+    /// server: no timer, no main-thread work after this.
     private func launchBats() {
         batsPending = false
         let w = bounds.width, h = bounds.height
-        let flights = [
-            BatFlight(scale: 1.0, y: 0.22, delay: 0.4, duration: 6.5),
-            BatFlight(scale: 0.7, y: 0.30, delay: 1.6, duration: 7.5),
-            BatFlight(scale: 0.5, y: 0.16, delay: 2.4, duration: 8.5)
-        ]
-        for flight in flights {
+        for route in Self.batRoutes {
             let container = CALayer()
-            container.position = CGPoint(x: -100, y: -100)   // off-screen between flights
+            container.position = CGPoint(x: -100, y: -100)   // off-screen between crossings
             let shape = CAShapeLayer()
             shape.path = Self.batPath()
             shape.fillColor = Self.batColor.cgColor
-            shape.setAffineTransform(CGAffineTransform(scaleX: flight.scale, y: flight.scale))
+            shape.setAffineTransform(CGAffineTransform(scaleX: route.scale, y: route.scale))
             container.addSublayer(shape)
             layer.addSublayer(container)
             batLayers.append(container)
 
+            let from = CGPoint(x: route.leftToRight ? -60 : w + 60, y: h * (route.y + 0.06))
+            let to = CGPoint(x: route.leftToRight ? w + 60 : -60, y: h * route.y)
             let path = UIBezierPath()
-            path.move(to: CGPoint(x: -60, y: h * (flight.y + 0.08)))
-            path.addQuadCurve(to: CGPoint(x: w + 60, y: h * flight.y), controlPoint: CGPoint(x: w * 0.5, y: h * (flight.y - 0.1)))
+            path.move(to: from)
+            path.addQuadCurve(to: to, controlPoint: CGPoint(x: w * 0.5, y: h * (route.y - 0.08)))
             let fly = CAKeyframeAnimation(keyPath: "position")
             fly.path = path.cgPath
-            fly.duration = flight.duration
-            fly.beginTime = CACurrentMediaTime() + flight.delay
-            fly.fillMode = .backwards
             fly.calculationMode = .paced
-            container.add(fly, forKey: Self.batKey)
-
+            fly.beginTime = route.start
+            fly.duration = route.duration
             let flap = CABasicAnimation(keyPath: "transform.scale.y")
-            flap.fromValue = flight.scale
-            flap.toValue = flight.scale * 0.55
+            flap.fromValue = 1
+            flap.toValue = 0.55
             flap.duration = 0.16
             flap.autoreverses = true
-            // Flaps for the flight only — no animation left running on a bat
-            // parked off-screen afterwards.
-            flap.repeatCount = Float((flight.delay + flight.duration) / (flap.duration * 2)) + 1
-            shape.add(flap, forKey: Self.batKey)
+            flap.beginTime = route.start
+            flap.repeatCount = Float(route.duration / (flap.duration * 2))
+            let cycle = CAAnimationGroup()
+            cycle.animations = [fly, flap]
+            cycle.duration = route.start + route.period
+            cycle.repeatCount = .infinity
+            cycle.isRemovedOnCompletion = false
+            container.add(cycle, forKey: Self.batKey)
         }
-    }
-
-    // MARK: Witch
-
-    /// A witch on her broom flying right, ~190 × 90 around the seat. Drawn as
-    /// separate parts, then unioned: overlapping parts of opposite winding
-    /// punched holes in the cloak.
-    private static func witchPath() -> CGPath {
-        var parts: [CGPath] = []
-        func part(_ build: (CGMutablePath) -> Void) {
-            let p = CGMutablePath()
-            build(p)
-            parts.append(p)
-        }
-        part { p in   // broom stick
-            p.move(to: CGPoint(x: -58, y: 9)); p.addLine(to: CGPoint(x: 52, y: -3))
-            p.addLine(to: CGPoint(x: 52, y: 0)); p.addLine(to: CGPoint(x: -58, y: 12)); p.closeSubpath()
-        }
-        part { p in   // bristles
-            p.move(to: CGPoint(x: -52, y: 8))
-            p.addCurve(to: CGPoint(x: -92, y: 0), control1: CGPoint(x: -66, y: 2), control2: CGPoint(x: -80, y: -4))
-            p.addCurve(to: CGPoint(x: -88, y: 12), control1: CGPoint(x: -94, y: 5), control2: CGPoint(x: -92, y: 9))
-            p.addCurve(to: CGPoint(x: -94, y: 22), control1: CGPoint(x: -92, y: 16), control2: CGPoint(x: -96, y: 19))
-            p.addCurve(to: CGPoint(x: -52, y: 14), control1: CGPoint(x: -80, y: 22), control2: CGPoint(x: -64, y: 18))
-            p.closeSubpath()
-        }
-        part { p in   // cloak, flowing back in two tails
-            p.move(to: CGPoint(x: 8, y: 6))
-            p.addCurve(to: CGPoint(x: 6, y: -24), control1: CGPoint(x: 14, y: -4), control2: CGPoint(x: 12, y: -18))
-            p.addCurve(to: CGPoint(x: -40, y: -14), control1: CGPoint(x: -8, y: -24), control2: CGPoint(x: -26, y: -22))
-            p.addCurve(to: CGPoint(x: -24, y: -6), control1: CGPoint(x: -34, y: -10), control2: CGPoint(x: -30, y: -8))
-            p.addCurve(to: CGPoint(x: -46, y: 2), control1: CGPoint(x: -32, y: -2), control2: CGPoint(x: -40, y: 0))
-            p.addCurve(to: CGPoint(x: -8, y: 8), control1: CGPoint(x: -30, y: 8), control2: CGPoint(x: -18, y: 10))
-            p.closeSubpath()
-        }
-        part { p in   // leg and boot
-            p.move(to: CGPoint(x: 4, y: 6)); p.addLine(to: CGPoint(x: 14, y: 20)); p.addLine(to: CGPoint(x: 22, y: 20))
-            p.addLine(to: CGPoint(x: 20, y: 24)); p.addLine(to: CGPoint(x: 9, y: 24)); p.addLine(to: CGPoint(x: -2, y: 8))
-            p.closeSubpath()
-        }
-        part { p in   // arm to the front of the broom
-            p.move(to: CGPoint(x: 4, y: -18)); p.addLine(to: CGPoint(x: 26, y: -2))
-            p.addLine(to: CGPoint(x: 24, y: 2)); p.addLine(to: CGPoint(x: 0, y: -12)); p.closeSubpath()
-        }
-        part { $0.addEllipse(in: CGRect(x: 2, y: -35, width: 12, height: 12)) }    // head
-        part { $0.addEllipse(in: CGRect(x: -6, y: -36, width: 26, height: 5)) }    // hat brim
-        part { p in   // crooked hat
-            p.move(to: CGPoint(x: 0, y: -34))
-            p.addCurve(to: CGPoint(x: -4, y: -62), control1: CGPoint(x: 2, y: -46), control2: CGPoint(x: 4, y: -56))
-            p.addCurve(to: CGPoint(x: -14, y: -58), control1: CGPoint(x: -8, y: -64), control2: CGPoint(x: -12, y: -62))
-            p.addCurve(to: CGPoint(x: 14, y: -34), control1: CGPoint(x: -4, y: -56), control2: CGPoint(x: 8, y: -46))
-            p.closeSubpath()
-        }
-        return parts.dropFirst().reduce(parts[0]) { $0.union($1, using: .winding) }
-    }
-
-    private func launchWitch() {
-        witchPending = false
-        let w = bounds.width, h = bounds.height
-        let container = CALayer()
-        container.position = CGPoint(x: -300, y: -300)       // off-screen between crossings
-        let shape = CAShapeLayer()
-        shape.path = Self.witchPath()
-        shape.fillColor = Self.witchColor.cgColor
-        let scale = min(max(w / 1400, 0.55), 1.1)
-        shape.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
-        container.addSublayer(shape)
-        layer.addSublayer(container)
-        witchLayer = container
-
-        let path = UIBezierPath()
-        path.move(to: CGPoint(x: -140, y: h * 0.32))
-        path.addQuadCurve(to: CGPoint(x: w + 140, y: h * 0.16), controlPoint: CGPoint(x: w * 0.5, y: h * 0.06))
-        let fly = CAKeyframeAnimation(keyPath: "position")
-        fly.path = path.cgPath
-        fly.calculationMode = .paced
-        fly.beginTime = WitchFlight.firstDelay
-        fly.duration = WitchFlight.duration
-        // A gentle bob on the broom, for the crossing only.
-        let bob = CABasicAnimation(keyPath: "transform.rotation.z")
-        bob.fromValue = -0.05
-        bob.toValue = 0.05
-        bob.duration = 0.9
-        bob.autoreverses = true
-        bob.beginTime = WitchFlight.firstDelay
-        bob.repeatCount = Float(WitchFlight.duration / (bob.duration * 2))
-        let cycle = CAAnimationGroup()
-        cycle.animations = [fly, bob]
-        cycle.duration = WitchFlight.period
-        cycle.repeatCount = .infinity
-        cycle.isRemovedOnCompletion = false
-        container.add(cycle, forKey: Self.witchKey)
     }
 }
 

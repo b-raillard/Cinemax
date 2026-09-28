@@ -364,17 +364,10 @@ struct SettingsScreen: View {
                 id: "debugSeason.\(theme.id)",
                 icon: "calendar.badge.exclamationmark",
                 label: loc.localized("settings.debug.forceSeason", loc.localized(theme.nameKey)),
-                value: Binding(
-                    get: { debugForcedSeason == theme.id },
-                    // Through the `@AppStorage` setter first: that is what
-                    // invalidates this pushed page — a write the controller
-                    // makes on `UserDefaults` alone left the switch stale
-                    // until the page was reopened.
-                    set: {
-                        debugForcedSeason = $0 ? theme.id : ""
-                        seasonal.setForcedSeason(debugForcedSeason)
-                    }
-                ),
+                // A binding PROJECTED from the `@AppStorage` (like every other
+                // Debug switch): the only kind a pushed destination re-renders
+                // on. The controller follows through `onChange` in `body`.
+                value: $debugForcedSeason[isForcedSeason: theme.id],
                 tint: .orange
             )
         }
@@ -414,6 +407,14 @@ struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         #endif
+        // The Debug « Forcer … » switches write `debug.forcedSeason` through
+        // `@AppStorage`; the controller, which re-evaluates the season, follows.
+        .onChange(of: debugForcedSeason) { _, id in
+            // NEXT turn, not this update: flipping the season in the same
+            // update as the switch rebuilt the app root first, and the pushed
+            // Debug page kept its old rendering (switch still « on »).
+            Task { @MainActor in seasonal.setForcedSeason(id) }
+        }
         // tvOS `.sheet` renders a cramped modal (same reason the login Quick
         // Connect sheet uses `.fullScreenCover` there), so split the
         // presentation by platform. Licences and the user switcher used to sit
@@ -590,5 +591,15 @@ struct SettingsScreen: View {
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+    }
+}
+
+private extension String {
+    /// `debug.forcedSeason` seen as one season's switch: on ⇔ it names that
+    /// season. A writable subscript, so `$debugForcedSeason[isForcedSeason:]`
+    /// stays a binding projected from the `@AppStorage`.
+    subscript(isForcedSeason id: String) -> Bool {
+        get { self == id }
+        set { self = newValue ? id : "" }
     }
 }

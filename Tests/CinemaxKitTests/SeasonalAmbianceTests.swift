@@ -3,7 +3,7 @@ import UIKit
 @testable import Cinemax
 
 @MainActor
-@Suite("Seasonal ambiance", .serialized)
+@Suite("Seasonal ambiance")
 struct SeasonalAmbianceTests {
     private func hosted() -> (UIWindow, AmbianceView) {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1200, height: 600))
@@ -12,48 +12,58 @@ struct SeasonalAmbianceTests {
         return (window, view)
     }
 
-    @Test("Mist: three drifting layers, gone when turned off")
+    @Test("Mist: a fog bank and smoke rising from the bottom band, gone when turned off")
     func mist() {
         let (window, view) = hosted()
         view.setEffects([.mist])
         #expect(view.mistLayers.count == 3)
         #expect(view.mistLayers.allSatisfy { $0.animation(forKey: AmbianceView.mistKey) != nil })
-        // The moving smoke: a particle emitter rising from the bottom edge.
+        // The moving smoke: emitted INSIDE the bottom band, so it shows at once.
         let fog = view.fogEmitter
         #expect(fog != nil)
         #expect(fog?.emitterCells?.isEmpty == false)
-        #expect((fog?.emitterPosition.y ?? 0) >= view.bounds.height)
+        #expect((fog?.emitterPosition.y ?? 0) >= view.bounds.height * 0.8)
+        #expect((fog?.emitterPosition.y ?? .infinity) <= view.bounds.height)
         view.setEffects([])
         #expect(view.mistLayers.isEmpty)
         #expect(view.fogEmitter == nil)
         _ = window
     }
 
-    @Test("Bats fly once per session")
-    func batsOnce() {
-        AmbianceView.batsFlownThisSession = false
-        let (w1, first) = hosted()
-        first.setEffects([.bats])
-        first.layoutIfNeeded()
-        #expect(first.batLayers.count == 3)
-        #expect(AmbianceView.batsFlownThisSession)
-        let (w2, second) = hosted()
-        second.setEffects([.bats])
-        second.layoutIfNeeded()
-        #expect(second.batLayers.isEmpty)
-        _ = (w1, w2)
+    @Test("Bats keep crossing from the first seconds, never just once")
+    func batsKeepFlying() throws {
+        let (window, view) = hosted()
+        view.setEffects([.bats])
+        view.layoutIfNeeded()
+        #expect(view.batLayers.count >= 8)
+        for bat in view.batLayers {
+            let cycle = try #require(bat.animation(forKey: AmbianceView.batKey) as? CAAnimationGroup)
+            #expect(cycle.repeatCount == .infinity)
+            let fly = try #require(cycle.animations?.first)
+            #expect(fly.beginTime <= 4)             // the first crossing starts at once
+        }
+        // A second screen gets its own bats: no once-per-session latch any more.
+        let (window2, other) = hosted()
+        other.setEffects([.bats])
+        other.layoutIfNeeded()
+        #expect(other.batLayers.count >= 8)
+        view.setEffects([])
+        #expect(view.batLayers.isEmpty)
+        _ = (window, window2)
     }
 
-    @Test("A witch crosses on a long repeating cycle, gone when turned off")
-    func witch() {
+    @Test("Pumpkins fall from the top edge, gone when turned off")
+    func pumpkins() {
         let (window, view) = hosted()
-        view.setEffects([.witches])
+        view.setEffects([.pumpkins])
         view.layoutIfNeeded()
-        let flight = view.witchLayer?.animation(forKey: AmbianceView.witchKey) as? CAAnimationGroup
-        #expect(flight?.repeatCount == .infinity)
-        #expect((flight?.duration ?? 0) >= 60)
+        let fall = view.pumpkinEmitter
+        #expect(fall != nil)
+        #expect(fall?.emitterCells?.first?.contents != nil)
+        #expect(fall?.emitterCells?.first?.emissionLongitude == .pi / 2)   // straight down
+        #expect((fall?.emitterPosition.y ?? 1) <= 0)
         view.setEffects([])
-        #expect(view.witchLayer == nil)
+        #expect(view.pumpkinEmitter == nil)
         _ = window
     }
 

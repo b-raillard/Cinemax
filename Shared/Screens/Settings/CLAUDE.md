@@ -69,7 +69,7 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 | `appearance.seasonalTheme` | `"automatic"` | `SeasonalSetting` — **via `SeasonalThemeController.setSetting`**, which re-evaluates the season |
 | `appearance.seasonalAmbiance` | `true` | Mist / bats / tvOS focus glow; also off with motion effects or Reduce Motion (`AmbiancePolicy`) |
 | `appearance.seasonalRow` | `true` | The season's Home row (« Frissons d'Halloween ») |
-| `debug.forcedSeason` | `""` | Debug: force a catalogue season whatever the date |
+| `debug.forcedSeason` | `""` | Debug: force a catalogue season whatever the date. The switch is a binding PROJECTED from `@AppStorage` (`$debugForcedSeason[isForcedSeason:]`) and the controller follows on the NEXT turn (`onChange` → `Task`): flipping the season in the same update left the pushed Debug page un-redrawn |
 | `home.showContinueWatching` | `true` | Continue Watching row |
 | `home.showNextUp` | `true` | Global "Next Up" rail (next unwatched episode per in-progress series) |
 | `home.showRecentlyAdded` | `true` | Recently Added row |

@@ -165,7 +165,7 @@ struct SeasonalThemePolicyTests {
 
     @Test("Ambiance: season effects only when enabled and motion allowed")
     func ambiance() {
-        #expect(AmbiancePolicy.effects(theme: halloween, ambianceEnabled: true, motionEnabled: true) == [.mist, .bats, .witches, .focusGlow])
+        #expect(AmbiancePolicy.effects(theme: halloween, ambianceEnabled: true, motionEnabled: true) == [.mist, .bats, .pumpkins, .focusGlow])
         #expect(AmbiancePolicy.effects(theme: halloween, ambianceEnabled: false, motionEnabled: true).isEmpty)
         #expect(AmbiancePolicy.effects(theme: nil, ambianceEnabled: true, motionEnabled: true).isEmpty)
     }
