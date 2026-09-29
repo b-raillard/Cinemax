@@ -79,12 +79,6 @@ struct IOSAppearanceDetailView: View {
                                 accentDot(option)
                             }
                         }
-                        if let theme = seasonal.activeTheme {
-                            Text(loc.localized("settings.seasonal.accentNote", loc.localized(theme.nameKey)))
-                                .font(CinemaFont.dynamicLabel(.small))
-                                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
                          }
                     .hoverEffectDisabled()
                 }
@@ -233,10 +227,33 @@ struct IOSAppearanceDetailView: View {
                 )
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+
+            // Below the switch that shows it, and its space ALWAYS kept (hidden,
+            // not removed): under the accent swatches it pushed the switch down
+            // at the tap, and at the page's bottom its removal shortened the
+            // scroll, which moved the switch too (recette 2026-09-29).
+            seasonAccentNote
+                .font(CinemaFont.dynamicLabel(.small))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, CinemaSpacing.spacing2)
+                .padding(.top, CinemaSpacing.spacing2)
         }
     }
 
     // MARK: - Appearance-specific helpers
+
+    /// « Pendant « Nuit d'Halloween », la couleur du thème remplace la vôtre. »
+    /// — visible while a season is on, invisible (space kept) otherwise, so
+    /// the season switch never moves under the finger.
+    var seasonAccentNote: some View {
+        let theme = seasonal.activeTheme ?? SeasonalThemeCatalogue.all.first
+        let name = theme.map { loc.localized($0.nameKey) } ?? ""
+        return Text(loc.localized("settings.seasonal.accentNote", name))
+            .opacity(seasonal.activeTheme == nil ? 0 : 1)
+            .accessibilityHidden(seasonal.activeTheme == nil)
+    }
 
     var selectedAccent: AccentOption {
         AccentOption(rawValue: themeManager.accentColorKey) ?? .green

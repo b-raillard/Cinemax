@@ -328,12 +328,6 @@ extension SettingsScreen {
 
             tvAccentColorPicker
 
-            if let theme = seasonal.activeTheme {
-                Text(loc.localized("settings.seasonal.accentNote", loc.localized(theme.nameKey)))
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-            }
-
             tvLanguagePicker
 
             // The row keeps the app's own preference; when the system's Reduce
@@ -371,6 +365,15 @@ extension SettingsScreen {
                 key: "seasonalRow",
                 value: Binding(get: { seasonal.rowEnabled }, set: { seasonal.setRowEnabled($0) })
             )
+
+            // Below the season's switches, space always kept: appearing over
+            // the focused switch shifted it (same fix as iOS).
+            let noteTheme = seasonal.activeTheme ?? SeasonalThemeCatalogue.all.first
+            Text(loc.localized("settings.seasonal.accentNote", noteTheme.map { loc.localized($0.nameKey) } ?? ""))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .opacity(seasonal.activeTheme == nil ? 0 : 1)
+                .accessibilityHidden(seasonal.activeTheme == nil)
 
             tvFontSizeRow
         }
