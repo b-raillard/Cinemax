@@ -165,7 +165,7 @@ struct MediaDetailScreen: View {
 
     var body: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            SeasonalBackdrop().ignoresSafeArea()
 
             if viewModel.isLoading {
                 LoadingStateView()
@@ -601,8 +601,7 @@ struct MediaDetailScreen: View {
 
     private func titleText(_ item: BaseItemDto) -> some View {
         Text(item.name ?? "")
-            .font(.system(size: detailTitleSize, weight: .black))
-            .tracking(-1.5)
+            .heroTitleStyle(size: detailTitleSize, uppercase: false)
             .foregroundStyle(CinemaColor.onSurface)
             .lineLimit(2)
     }

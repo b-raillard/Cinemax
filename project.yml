@@ -34,7 +34,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "2.2.0"
+    MARKETING_VERSION: "2.3.0"
     CURRENT_PROJECT_VERSION: "2.2.0"
     # Distribution signing: Xcode auto-creates an "iOS App Store" / "tvOS App
     # Store" provisioning profile on first archive once DEVELOPMENT_TEAM is set.
@@ -102,6 +102,9 @@ targets:
         # Nom affiché (écran d'accueil, Réglages). PRODUCT_NAME reste Cinemax/CinemaxTV :
         # il nomme le .app, le module et TEST_HOST — le renommer casserait tout ça pour rien.
         CFBundleDisplayName: JellyGlass
+        # Seasonal title font (SeasonalThemeCatalogue → SeasonFont), OFL.
+        UIAppFonts:
+          - Fraunces-BlackItalic.ttf
         # Team prefix (e.g. "ABCDE12345.") injected at sign time. Read at
         # runtime to build the shared Keychain access group string without
         # hardcoding the team id. Keep in sync across all four targets.
@@ -229,6 +232,9 @@ targets:
         # Nom affiché (écran d'accueil, Réglages). PRODUCT_NAME reste Cinemax/CinemaxTV :
         # il nomme le .app, le module et TEST_HOST — le renommer casserait tout ça pour rien.
         CFBundleDisplayName: JellyGlass
+        # Seasonal title font (SeasonalThemeCatalogue → SeasonFont), OFL.
+        UIAppFonts:
+          - Fraunces-BlackItalic.ttf
         # Team prefix injected at sign time — see iOS note. Used to build the
         # shared Keychain access group at runtime.
         AppIdentifierPrefix: $(AppIdentifierPrefix)

@@ -1238,6 +1238,14 @@
 "whatsNew.newName.body" = "Same app, new name. Your servers, settings and widgets stay right where they were: nothing to set up again.";
 "whatsNew.parentalLock.title" = "Stronger parental controls";
 "whatsNew.parentalLock.body" = "The age limit now applies to everything you play, next episode included; an unrated episode is judged on its series' rating. A new PIN is 6 to 8 digits, and your current PIN still works.";
+"whatsNew.halloweenNight.title" = "Halloween Night";
+"whatsNew.halloweenNight.body" = "For a month, the app goes nocturnal: a pumpkin palette, gothic titles, bats and pumpkins when it opens, and a “Halloween Chills” row of films and series on Home. Once Halloween is over, everything goes back to how it was.";
+"whatsNew.offer.window" = "Limited time · %1$@ → %2$@";
+"whatsNew.offer.enabled" = "On";
+"whatsNew.offer.accept" = "Turn on";
+"whatsNew.offer.decline" = "No thanks";
+"whatsNew.offer.accepted" = "Limited-time theme on";
+"whatsNew.offer.startsOn" = "It starts on %@.";
 "whatsNew.accessibility.title" = "More accessible";
 "whatsNew.accessibility.body" = "VoiceOver tells you whether a title is watched or in progress, and names the series, season and episode on Continue Watching and Next Up cards. Card subtitles are easier to read, and translucent panels follow Reduce Transparency and Increase Contrast.";
 "whatsNew.underTheHood.title" = "Under the hood";
@@ -1272,3 +1280,12 @@
 "library.jumpBar.hint" = "Swipe up or down to move to another letter.";
 "home.hero.a11y" = "Featured";
 "home.hero.position" = "%1$d of %2$d";
+"season.halloween.name" = "Halloween Night";
+"season.halloween.row" = "Halloween Chills";
+"settings.seasonal.section" = "Limited-time theme";
+"settings.seasonal.toggle" = "Limited-time theme";
+"settings.seasonal.window" = "%1$@, %2$@ to %3$@";
+"settings.seasonal.ambiance" = "Ambient animations";
+"settings.seasonal.row" = "Suggestions on Home";
+"settings.seasonal.accentNote" = "During “%@”, the theme's colour replaces yours.";
+"settings.debug.forceSeason" = "Force “%@”";

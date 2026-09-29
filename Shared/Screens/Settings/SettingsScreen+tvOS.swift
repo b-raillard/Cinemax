@@ -341,6 +341,40 @@ extension SettingsScreen {
                 subtitle: systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : nil
             )
 
+            tvGlassToggle(
+                icon: "calendar",
+                label: loc.localized("settings.seasonal.toggle"),
+                key: "seasonalTheme",
+                value: Binding(
+                    get: { seasonal.setting == .automatic },
+                    set: { seasonal.setSetting($0 ? .automatic : .off) }
+                ),
+                subtitle: SeasonalSettingsText.catalogueSummary(loc: loc)
+            )
+
+            tvGlassToggle(
+                icon: "sparkles",
+                label: loc.localized("settings.seasonal.ambiance"),
+                key: "seasonalAmbiance",
+                value: Binding(get: { seasonal.ambianceEnabled }, set: { seasonal.setAmbianceEnabled($0) })
+            )
+
+            tvGlassToggle(
+                icon: "rectangle.stack",
+                label: loc.localized("settings.seasonal.row"),
+                key: "seasonalRow",
+                value: Binding(get: { seasonal.rowEnabled }, set: { seasonal.setRowEnabled($0) })
+            )
+
+            // Below the season's switches, space always kept: appearing over
+            // the focused switch shifted it (same fix as iOS).
+            let noteTheme = seasonal.activeTheme ?? SeasonalThemeCatalogue.all.first
+            Text(loc.localized("settings.seasonal.accentNote", noteTheme.map { loc.localized($0.nameKey) } ?? ""))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .opacity(seasonal.activeTheme == nil ? 0 : 1)
+                .accessibilityHidden(seasonal.activeTheme == nil)
+
             tvFontSizeRow
         }
     }

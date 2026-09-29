@@ -163,4 +163,43 @@ struct WhatsNewCatalogueTests {
         #expect(ids.count == Set(ids).count)
         #expect(!ids.isEmpty)
     }
+
+    /// Une offre nomme une saison du catalogue : une faute de frappe rendrait
+    /// le bouton « Activer » muet.
+    @Test("Chaque offre du catalogue livré nomme une saison qui existe")
+    func shippedOffersNameRealSeasons() {
+        let offers = WhatsNewCatalogue.releases.flatMap(\.pages).compactMap(\.offer)
+        #expect(!offers.isEmpty)
+        for case .seasonalTheme(let id) in offers {
+            #expect(SeasonalThemeCatalogue.theme(id: id) != nil)
+        }
+    }
+}
+
+@Suite("Offre « Activer » d'une saison")
+struct SeasonalOfferTests {
+    private var paris: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Europe/Paris")!
+        return c
+    }
+
+    private func date(_ iso: String) -> Date { ISO8601DateFormatter().date(from: iso)! }
+
+    @Test("Avant la saison, l'activation annonce sa date de début")
+    func beforeSeasonAnnouncesStart() {
+        let start = SeasonalOffer.startsLater(SeasonalThemeCatalogue.halloween, on: date("2026-09-29T10:00:00Z"), calendar: paris)
+        #expect(start == MonthDay(month: 10, day: 1))
+    }
+
+    @Test("En saison, rien à annoncer : l'app change sous les yeux")
+    func inSeasonNothingToAnnounce() {
+        #expect(SeasonalOffer.startsLater(SeasonalThemeCatalogue.halloween, on: date("2026-10-20T10:00:00Z"), calendar: paris) == nil)
+    }
+
+    @Test("Après la saison, l'activation vaut pour la prochaine")
+    func afterSeasonAnnouncesNextStart() {
+        let start = SeasonalOffer.startsLater(SeasonalThemeCatalogue.halloween, on: date("2026-12-10T10:00:00Z"), calendar: paris)
+        #expect(start == MonthDay(month: 10, day: 1))
+    }
 }

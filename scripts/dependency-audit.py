@@ -63,6 +63,7 @@ LICENSE_PINS = {
 # LicensesView entries that legitimately have no SwiftPM pin of their own.
 LICENSE_UNPINNED = {
     "libVLC": "embedded in SwiftVLC's libvlc.xcframework (see the binary artifacts table)",
+    "Fraunces": "font file bundled in Resources/Fonts (OFL), seasonal title face",
 }
 
 ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|(?:\s*<?([^|>]*)>?\s*\|)?\s*$")

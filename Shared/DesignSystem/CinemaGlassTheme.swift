@@ -4,15 +4,18 @@ import UIKit
 // MARK: - Dynamic Color Helper
 
 extension Color {
-    /// Resolves to `dark` hex when the trait collection is dark, otherwise `light` hex.
-    /// Drives Cinemax's dual-mode color tokens. The scheme is set at the root via
-    /// `.preferredColorScheme(themeManager.colorScheme)` in AppNavigation, so the
-    /// UITraitCollection propagates to every UIHostingController automatically.
-    static func dynamic(light: UInt, dark: UInt) -> Color {
+    /// Resolves to `dark` hex when the trait collection is dark, otherwise `light` hex —
+    /// or, for a token a season covers (`season:`), to the active season's value
+    /// (`SeasonTrait`, set on the scene by `SeasonTraitApplier`). The scheme is set at
+    /// the root via `.preferredColorScheme(themeManager.colorScheme)` in AppNavigation,
+    /// so the UITraitCollection propagates to every UIHostingController automatically.
+    static func dynamic(light: UInt, dark: UInt, season token: SeasonToken? = nil) -> Color {
         Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .light
-                ? UIColor(hexInt: light)
-                : UIColor(hexInt: dark)
+            let season = token == nil ? nil : SeasonalThemeCatalogue.theme(id: traits[SeasonTrait.self])
+            return UIColor(hexInt: SeasonalColor.resolve(
+                light: light, dark: dark, token: token,
+                isDark: traits.userInterfaceStyle != .light, season: season
+            ))
         })
     }
 }
@@ -36,21 +39,21 @@ private extension UIColor {
 // so new surfaces don't mint ad-hoc colors.
 enum CinemaColor {
     // Surface hierarchy
-    static let surface                 = Color.dynamic(light: 0xF7F7F8, dark: 0x0E0E0E)
-    static let surfaceContainerLowest  = Color.dynamic(light: 0xFFFFFF, dark: 0x000000)
-    static let surfaceContainerLow     = Color.dynamic(light: 0xF1F1F2, dark: 0x131313)
-    static let surfaceContainer        = Color.dynamic(light: 0xEAEAEC, dark: 0x191A1A)
-    static let surfaceContainerHigh    = Color.dynamic(light: 0xE2E2E5, dark: 0x1F2020)
-    static let surfaceContainerHighest = Color.dynamic(light: 0xD9D9DD, dark: 0x252626)
-    static let surfaceVariant          = Color.dynamic(light: 0xE2E2E5, dark: 0x252626)
+    static let surface                 = Color.dynamic(light: 0xF7F7F8, dark: 0x0E0E0E, season: .surface)
+    static let surfaceContainerLowest  = Color.dynamic(light: 0xFFFFFF, dark: 0x000000, season: .surfaceContainerLowest)
+    static let surfaceContainerLow     = Color.dynamic(light: 0xF1F1F2, dark: 0x131313, season: .surfaceContainerLow)
+    static let surfaceContainer        = Color.dynamic(light: 0xEAEAEC, dark: 0x191A1A, season: .surfaceContainer)
+    static let surfaceContainerHigh    = Color.dynamic(light: 0xE2E2E5, dark: 0x1F2020, season: .surfaceContainerHigh)
+    static let surfaceContainerHighest = Color.dynamic(light: 0xD9D9DD, dark: 0x252626, season: .surfaceContainerHighest)
+    static let surfaceVariant          = Color.dynamic(light: 0xE2E2E5, dark: 0x252626, season: .surfaceVariant)
 
     // Text
-    static let onSurface        = Color.dynamic(light: 0x14161A, dark: 0xE7E5E4)
-    static let onSurfaceVariant = Color.dynamic(light: 0x55585E, dark: 0xACABAA)
+    static let onSurface        = Color.dynamic(light: 0x14161A, dark: 0xE7E5E4, season: .onSurface)
+    static let onSurfaceVariant = Color.dynamic(light: 0x55585E, dark: 0xACABAA, season: .onSurfaceVariant)
     /// Tertiary TEXT — card subtitles and detail lines. `outline` is a stroke
     /// colour and read 2.0:1 as text in light mode (4.2:1 in dark); this one
     /// clears 4.5:1 on `surface` in both (4.8 / 5.8). Audit §5, lot 9.
-    static let onSurfaceMuted = Color.dynamic(light: 0x6B6E74, dark: 0x8E8D8D)
+    static let onSurfaceMuted = Color.dynamic(light: 0x6B6E74, dark: 0x8E8D8D, season: .onSurfaceMuted)
 
     // Primary
     static let primary          = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
@@ -61,8 +64,8 @@ enum CinemaColor {
     static let secondary          = Color.dynamic(light: 0x55585E, dark: 0x9D9E9E)
 
     // Outline
-    static let outline        = Color.dynamic(light: 0xB0B1B5, dark: 0x767575)
-    static let outlineVariant = Color.dynamic(light: 0xCFD0D3, dark: 0x484848)
+    static let outline        = Color.dynamic(light: 0xB0B1B5, dark: 0x767575, season: .outline)
+    static let outlineVariant = Color.dynamic(light: 0xCFD0D3, dark: 0x484848, season: .outlineVariant)
 
     // Error
     static let error            = Color.dynamic(light: 0xC0392B, dark: 0xEE7D77)

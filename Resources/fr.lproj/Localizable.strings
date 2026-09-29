@@ -1240,6 +1240,14 @@
 "whatsNew.newName.body" = "Même application, nouveau nom. Vos serveurs, vos réglages et vos widgets restent en place : rien à refaire.";
 "whatsNew.parentalLock.title" = "Contrôle parental renforcé";
 "whatsNew.parentalLock.body" = "La limite d'âge s'applique désormais à toute lecture, épisode suivant compris ; un épisode sans classification est jugé sur celle de sa série. Un nouveau code compte de 6 à 8 chiffres, et votre code actuel reste valable.";
+"whatsNew.halloweenNight.title" = "Nuit d'Halloween";
+"whatsNew.halloweenNight.body" = "Pendant un mois, l'app passe en mode nuit : palette citrouille, titres gothiques, chauves-souris et citrouilles à l'ouverture, et une rangée « Frissons d'Halloween » à l'accueil, films et séries. Une fois Halloween passé, tout redeviendra comme avant.";
+"whatsNew.offer.window" = "Éphémère · %1$@ → %2$@";
+"whatsNew.offer.enabled" = "Activé";
+"whatsNew.offer.accept" = "Activer";
+"whatsNew.offer.decline" = "Non merci";
+"whatsNew.offer.accepted" = "Thème éphémère activé";
+"whatsNew.offer.startsOn" = "Il arrive le %@.";
 "whatsNew.accessibility.title" = "Plus accessible";
 "whatsNew.accessibility.body" = "VoiceOver annonce si un titre est vu ou en cours, et nomme la série, la saison et l'épisode des cartes « Reprendre » et « À suivre ». Les sous-titres des cartes sont plus lisibles, et les panneaux translucides suivent Réduire la transparence et Augmenter le contraste.";
 "whatsNew.underTheHood.title" = "Sous le capot";
@@ -1274,3 +1282,12 @@
 "library.jumpBar.hint" = "Balayez vers le haut ou le bas pour passer à une autre lettre.";
 "home.hero.a11y" = "À la une";
 "home.hero.position" = "%1$d sur %2$d";
+"season.halloween.name" = "Nuit d'Halloween";
+"season.halloween.row" = "Frissons d'Halloween";
+"settings.seasonal.section" = "Thème éphémère";
+"settings.seasonal.toggle" = "Thème éphémère";
+"settings.seasonal.window" = "%1$@, du %2$@ au %3$@";
+"settings.seasonal.ambiance" = "Animations d'ambiance";
+"settings.seasonal.row" = "Propositions sur l'accueil";
+"settings.seasonal.accentNote" = "Pendant « %@ », la couleur du thème remplace la vôtre.";
+"settings.debug.forceSeason" = "Forcer « %@ »";

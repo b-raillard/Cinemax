@@ -8,7 +8,9 @@ import SwiftUI
 /// — which is precisely how a "what's new" screen ends up showing an interface
 /// the user is not looking at. These follow the user's accent, flip with
 /// dark/light and scale through `CinemaScale`, and nothing here animates, so
-/// there is nothing for Motion Effects or Reduce Motion to switch off.
+/// there is nothing for Motion Effects or Reduce Motion to switch off — the
+/// one exception is `.halloweenNight`, a whole scene with its own view
+/// (`WhatsNewHalloweenScene`), whose motion both of them stop.
 ///
 /// Kept apart from `CinemaIllustration` on purpose: that enum is the vocabulary
 /// of empty and error states, and folding feature art into it would make "which
@@ -28,6 +30,12 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case parentalLock
     /// Accessibility — a card held by the VoiceOver cursor.
     case accessibility
+    /// The ephemeral « Nuit d'Halloween » theme — a full night scene, wide
+    /// rather than square (`isScene`).
+    case halloweenNight
+
+    /// Drawn as a wide scene across the page, not a motif on the halo.
+    var isScene: Bool { self == .halloweenNight }
 }
 
 struct WhatsNewIllustrationView: View {
@@ -38,6 +46,15 @@ struct WhatsNewIllustrationView: View {
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
+        if kind.isScene {
+            WhatsNewHalloweenScene()
+        } else {
+            motif
+        }
+    }
+
+    @ViewBuilder
+    private var motif: some View {
         let side = CinemaScale.pt(baseSize)
         // Every motif is laid out on a 100 × 100 grid centred on the canvas;
         // `u` converts grid units to points — the same convention as
@@ -62,6 +79,7 @@ struct WhatsNewIllustrationView: View {
             case .newName:       newName(u)
             case .parentalLock:  parentalLock(u)
             case .accessibility: accessibility(u)
+            case .halloweenNight: EmptyView()   // drawn by `body` as a scene
             }
         }
         .frame(width: side, height: side)

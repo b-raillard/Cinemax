@@ -11,6 +11,8 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
     let title: String
     var showViewAll: Bool = false
     var onViewAll: (() -> Void)? = nil
+    /// A season row's display face (`SeasonalTypography.titleFont`); `nil` = the headline.
+    var titleFont: Font?
     let data: Data
     let id: KeyPath<Data.Element, ItemID>
     @ViewBuilder let itemView: (Data.Element) -> ItemView
@@ -20,7 +22,10 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
             // Header
             HStack {
                 Text(title)
-                    .font(CinemaFont.headline(.large))
+                    .font(titleFont ?? CinemaFont.headline(.large))
+                    // A season's display face runs wider than the system
+                    // headline: « Frissons d'Halloween » truncated on iPhone.
+                    .minimumScaleFactor(titleFont == nil ? 1 : 0.7)
                     .foregroundStyle(CinemaColor.onSurface)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)

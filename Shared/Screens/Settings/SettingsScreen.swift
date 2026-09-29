@@ -140,6 +140,7 @@ struct SettingsScreen: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) var toasts
+    @Environment(SeasonalThemeController.self) var seasonal
     /// Forwarded into `watchedHistorySheet`, whose cards raise the "add to a
     /// playlist" sheet. Optional so a preview / test host without the root
     /// injection doesn't trap (see `MediaCardContextMenu`).
@@ -235,6 +236,11 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
+    /// READ through `@AppStorage`, written through `seasonal.setForcedSeason`: the
+    /// Debug rows live in a pushed destination, which re-renders on an
+    /// `@AppStorage` change but not on the controller's `@Observable` one
+    /// (root RULE on `navigationDestination`) — the switch stayed « on ».
+    @AppStorage(SettingsKey.debugForcedSeason) var debugForcedSeason: String = SettingsKey.Default.debugForcedSeason
     @AppStorage(SettingsKey.rainbowUnlocked) var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @State var fontScale: Double = UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.Default.uiScale
     @State var showFontSizePicker = false
@@ -353,7 +359,18 @@ struct SettingsScreen: View {
         [
             .init(id: "debugFastSleep", icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"), value: $debugFastSleepTimer, tint: .orange),
             .init(id: "debugSkipToEnd", icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"), value: $debugShowSkipToEnd, tint: .orange)
-        ]
+        ] + SeasonalThemeCatalogue.all.map { theme in
+            .init(
+                id: "debugSeason.\(theme.id)",
+                icon: "calendar.badge.exclamationmark",
+                label: loc.localized("settings.debug.forceSeason", loc.localized(theme.nameKey)),
+                // A binding PROJECTED from the `@AppStorage` (like every other
+                // Debug switch): the only kind a pushed destination re-renders
+                // on. The controller follows through `onChange` in `body`.
+                value: $debugForcedSeason[isForcedSeason: theme.id],
+                tint: .orange
+            )
+        }
     }
 
     // MARK: Body
@@ -390,6 +407,14 @@ struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         #endif
+        // The Debug « Forcer … » switches write `debug.forcedSeason` through
+        // `@AppStorage`; the controller, which re-evaluates the season, follows.
+        .onChange(of: debugForcedSeason) { _, id in
+            // NEXT turn, not this update: flipping the season in the same
+            // update as the switch rebuilt the app root first, and the pushed
+            // Debug page kept its old rendering (switch still « on »).
+            Task { @MainActor in seasonal.setForcedSeason(id) }
+        }
         // tvOS `.sheet` renders a cramped modal (same reason the login Quick
         // Connect sheet uses `.fullScreenCover` there), so split the
         // presentation by platform. Licences and the user switcher used to sit
@@ -457,6 +482,7 @@ struct SettingsScreen: View {
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+            .environment(seasonal)
     }
 
     private var serversSheet: some View {
@@ -566,5 +592,15 @@ struct SettingsScreen: View {
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+    }
+}
+
+private extension String {
+    /// `debug.forcedSeason` seen as one season's switch: on ⇔ it names that
+    /// season. A writable subscript, so `$debugForcedSeason[isForcedSeason:]`
+    /// stays a binding projected from the `@AppStorage`.
+    subscript(isForcedSeason id: String) -> Bool {
+        get { self == id }
+        set { self = newValue ? id : "" }
     }
 }

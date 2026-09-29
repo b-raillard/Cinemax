@@ -124,6 +124,16 @@ extension JellyfinAPIClient {
         }
     }
 
+    public func getTaggedItems(
+        userId: String, tags: [String], includeItemTypes: [BaseItemKind], limit: Int
+    ) async throws -> [BaseItemDto] {
+        try await queryItems(
+            userId: userId, includeItemTypes: includeItemTypes,
+            sortBy: [.dateCreated], sortOrder: [.descending], tags: tags,
+            limit: limit, enableTotalRecordCount: false, fieldSet: .card
+        ).items
+    }
+
     public func getItems(
         userId: String,
         parentId: String? = nil,
@@ -131,6 +141,34 @@ extension JellyfinAPIClient {
         sortBy: [ItemSortBy]? = nil,
         sortOrder: [JellyfinAPI.SortOrder]? = nil,
         genres: [String]? = nil,
+        years: [Int]? = nil,
+        isFavorite: Bool? = nil,
+        filters: [ItemFilter]? = nil,
+        nameStartsWithOrGreater: String? = nil,
+        limit: Int? = nil,
+        startIndex: Int? = nil,
+        enableTotalRecordCount: Bool = true,
+        fieldSet: ItemFieldSet = .detail
+    ) async throws -> (items: [BaseItemDto], totalCount: Int) {
+        try await queryItems(
+            userId: userId, parentId: parentId, includeItemTypes: includeItemTypes,
+            sortBy: sortBy, sortOrder: sortOrder, genres: genres, years: years,
+            isFavorite: isFavorite, filters: filters,
+            nameStartsWithOrGreater: nameStartsWithOrGreater,
+            limit: limit, startIndex: startIndex,
+            enableTotalRecordCount: enableTotalRecordCount, fieldSet: fieldSet
+        )
+    }
+
+    /// The one `/Items` query behind `getItems` and `getTaggedItems`.
+    private func queryItems(
+        userId: String,
+        parentId: String? = nil,
+        includeItemTypes: [BaseItemKind]? = nil,
+        sortBy: [ItemSortBy]? = nil,
+        sortOrder: [JellyfinAPI.SortOrder]? = nil,
+        genres: [String]? = nil,
+        tags: [String]? = nil,
         years: [Int]? = nil,
         isFavorite: Bool? = nil,
         filters: [ItemFilter]? = nil,
@@ -179,6 +217,7 @@ extension JellyfinAPIClient {
                 years: years
             )
             params.isFavorite = isFavorite
+            params.tags = tags
             params.nameStartsWithOrGreater = nameStartsWithOrGreater
             params.fields = fieldSet == .card ? [.childCount] : [.overview, .genres, .childCount]
             params.enableUserData = true

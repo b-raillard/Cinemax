@@ -40,6 +40,17 @@ struct CinemaFocusModifier: ViewModifier {
     @Environment(\.isFocused) private var isFocused
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.motionEffectsEnabled) private var motionEnabled
+    #if os(tvOS)
+    @Environment(\.seasonID) private var seasonID
+    @Environment(\.seasonalAmbianceEnabled) private var ambianceEnabled
+
+    private var seasonGlow: Bool {
+        AmbiancePolicy.effects(
+            theme: SeasonalThemeCatalogue.theme(id: seasonID),
+            ambianceEnabled: ambianceEnabled, motionEnabled: motionEnabled
+        ).contains(.focusGlow)
+    }
+    #endif
 
     func body(content: Content) -> some View {
         content
@@ -67,6 +78,15 @@ struct CinemaFocusModifier: ViewModifier {
                 radius: CinemaTVFocus.ambientRadius,
                 x: 0, y: 16
             )
+            // Seasonal « lueur » behind the FOCUSED card only — one glow view on
+            // screen, not one per card. Outside the two shadows, so they never
+            // re-render an animated layer. The closure keeps the content's
+            // identity when the season or the focus changes.
+            .background {
+                if seasonGlow && isFocused {
+                    SeasonalFocusGlow(active: true, color: themeManager.accent, cornerRadius: CinemaRadius.large)
+                }
+            }
             .animation(motionEnabled ? .easeInOut(duration: CinemaTVFocus.cardDuration) : nil, value: isFocused)
             #else
             // iPad pointer hover. No-op on iPhone (no hover). `.lift` gives a gentle

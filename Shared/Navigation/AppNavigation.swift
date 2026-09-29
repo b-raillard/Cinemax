@@ -39,6 +39,9 @@ struct AppNavigation: View {
     /// either re-open a gate the parent had closed or drop an unlock they are
     /// mid-way through using. See the RULE on `ParentalLockController`.
     private static let sharedParentalLock = ParentalLockController()
+    /// Seasonal themes — a process singleton like the stores above, so a
+    /// scene-struct recreation never re-reads the defaults.
+    private static let sharedSeasonal = SeasonalThemeController()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -47,6 +50,7 @@ struct AppNavigation: View {
     @State private var network = AppNavigation.sharedNetworkMonitor
     @State private var menuConfig = AppNavigation.sharedMenuConfig
     @State private var parentalLock = AppNavigation.sharedParentalLock
+    @State private var seasonal = Self.sharedSeasonal
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
@@ -180,10 +184,21 @@ struct AppNavigation: View {
                     MainTabView()
                 }
             }
+            // The NEAR ambiance plane (big bats, a rare lit pumpkin) over the
+            // whole signed-in app — above the tabs and every pushed screen,
+            // under sheets and the player; away from the calm zones. The far
+            // plane is in each browsing screen's `SeasonalBackdrop`.
+            if appState.isAuthenticated, !seasonal.calmZone {
+                SeasonalAmbianceOverlay()
+                    .ignoresSafeArea()
+            }
         }
         // Toasts live in their OWN window above this one: an overlay here drew
         // underneath every sheet, cover and the player — see `ToastWindowHost`.
-        .background(ToastWindowHost(toasts: toasts, loc: loc, themeManager: themeManager))
+        .background(ToastWindowHost(toasts: toasts, loc: loc, themeManager: themeManager, seasonal: seasonal))
+        // The season rides the SCENE's traits: every window (toasts, the
+        // UIKit player) and — bridged — SwiftUI's `\.seasonID` follow it.
+        .background(SeasonTraitApplier(seasonID: seasonal.activeTheme?.id))
         .environment(appState)
         .environment(themeManager)
         .environment(loc)
@@ -195,6 +210,15 @@ struct AppNavigation: View {
         .environment(menuConfig)
         .environment(settingsNav)
         .environment(parentalLock)
+        .environment(seasonal)
+        .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
+        .onChange(of: seasonal.activeTheme?.id, initial: true) { _, _ in
+            themeManager.setSeasonAccent(seasonal.activeTheme?.accent)
+        }
+        // Midnight: a season can start or end while the app stays open.
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            seasonal.reevaluate()
+        }
         .environment(playlistPresenter)
         // "Add to a playlist" is raised from poster context menus inside lazy
         // grids, where a presentation attached to the cell dies when it scrolls
@@ -268,6 +292,8 @@ struct AppNavigation: View {
             WhatsNewScreen(pages: whatsNewPages) { finishWhatsNew() }
                 .environment(themeManager)
                 .environment(loc)
+                .environment(seasonal)
+                .environment(toasts)
                 .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
                     appToggle: motionEffects,
                     systemReduceMotion: systemReduceMotion
@@ -494,6 +520,7 @@ struct AppNavigation: View {
             remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: enabled)
         }
         .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active { seasonal.reevaluate() }
             if newPhase == .background {
                 lastBackgroundedAt = Date()
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)

@@ -12,6 +12,7 @@ struct MainTabView: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(MenuConfigStore.self) private var menuConfig
     @Environment(SettingsNavCoordinator.self) private var settingsNav
+    @Environment(SeasonalThemeController.self) private var seasonal
     @State private var selectedTabID: String = "home"
     /// Deep-link item to present modally from the tab root when the user's
     /// custom menu has no Home tab to route through (see the deep-link
@@ -90,6 +91,16 @@ struct MainTabView: View {
     #endif
 
     var body: some View {
+        tabs
+            // Search and Settings are calm zones: people read and type there,
+            // so the near ambiance plane stays away (`SeasonalAmbianceOverlay`).
+            .onChange(of: selectedTabID, initial: true) { _, id in
+                seasonal.setCalmZone(id == MenuEntry.searchID || id == MenuEntry.settingsID)
+            }
+    }
+
+    @ViewBuilder
+    private var tabs: some View {
         Group {
             #if os(tvOS)
             tvTabLayout(tabs: displayedTabs)

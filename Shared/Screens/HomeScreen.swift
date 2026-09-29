@@ -6,6 +6,8 @@ struct HomeScreen: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(\.seasonID) private var seasonID
+    @AppStorage(SettingsKey.seasonalRow) private var showSeasonRow: Bool = SettingsKey.Default.seasonalRow
     @Environment(ToastCenter.self) private var toast
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -33,6 +35,8 @@ struct HomeScreen: View {
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
     /// hoisted to the screen root per the lazy-container navigation RULE.
     @State private var favoritesDestination: FavoritesDestination?
+    /// « Tout voir » on the season row — same hoisting as Favorites.
+    @State private var seasonDestination: SeasonDestination?
     @State private var playlistsDestination: PlaylistsDestination?
     /// One playlist, opened from a card on the rail.
     @State private var playlistDestination: PlaylistDestination?
@@ -78,7 +82,7 @@ struct HomeScreen: View {
 
     var body: some View {
         ZStack {
-            CinemaColor.surface.ignoresSafeArea()
+            SeasonalBackdrop().ignoresSafeArea()
 
             if viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded) {
                 // Skeleton during phase-1, and kept up while a phase-1-empty
@@ -103,6 +107,19 @@ struct HomeScreen: View {
         .task {
             await viewModel.loadInitial(using: appState)
             prefetchCardImages()
+        }
+        // `initial` hands the row to the view model before its first load
+        // reads it (that load fetches it); a later change — the season, or
+        // its row switch — re-fetches just that row.
+        .onChange(of: "\(seasonID ?? "")-\(showSeasonRow)", initial: true) { old, new in
+            viewModel.setSeasonRow(seasonRow)
+            // The genre rows too: in season they leave out the season row's genre.
+            if old != new {
+                Task {
+                    await viewModel.refreshSeasonRow(using: appState)
+                    if showGenreRows { await viewModel.reloadGenreRows(using: appState) }
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
             // Tier-1: full reload while visible, otherwise defer to next appear.
@@ -162,6 +179,12 @@ struct HomeScreen: View {
         .navigationDestination(item: $favoritesDestination) { _ in
             FavoritesScreen()
                 .tvPushedScreen()
+        }
+        .navigationDestination(item: $seasonDestination) { _ in
+            if let row = seasonRow {
+                SeasonCollectionScreen(row: row, title: loc.localized(row.titleKey))
+                    .tvPushedScreen()
+            }
         }
         // "View All" on the Playlists row → every playlist, read straight from
         // `getPlaylists` so the screen doesn't depend on the server exposing a
@@ -263,6 +286,10 @@ struct HomeScreen: View {
 
     private struct FavoritesDestination: Identifiable, Hashable {
         let id = "favorites"
+    }
+
+    private struct SeasonDestination: Identifiable, Hashable {
+        let id = "season"
     }
 
     /// The rails currently switched on, among those `HomeViewModel.load()`
@@ -457,6 +484,13 @@ struct HomeScreen: View {
                             .padding(.bottom, CinemaSpacing.spacing6)
                     }
 
+                    // The season's row (« Frissons d'Halloween ») — right under
+                    // Continue Watching, as on the design canvas.
+                    if let row = seasonRow, !viewModel.seasonRowItems.isEmpty {
+                        seasonalRow(title: loc.localized(row.titleKey), items: viewModel.seasonRowItems)
+                            .padding(.bottom, CinemaSpacing.spacing6)
+                    }
+
                     // Next Up (next unwatched episode per in-progress series)
                     if showNextUp, !viewModel.nextUpItems.isEmpty {
                         nextUpRow
@@ -536,6 +570,9 @@ struct HomeScreen: View {
 
     private var scrollTopID: String { "home.top" }
 
+    private var activeSeason: SeasonalTheme? { SeasonalThemeCatalogue.theme(id: seasonID) }
+    private var seasonRow: SeasonRow? { showSeasonRow ? activeSeason?.row : nil }
+
     // MARK: - Genre Rows
 
     @ViewBuilder
@@ -544,6 +581,21 @@ struct HomeScreen: View {
             recentlyAddedCard(item, surface: "home.genre.\(genre)")
                 .frame(width: posterCardWidth)
         }
+    }
+
+    @ViewBuilder
+    private func seasonalRow(title: String, items: [BaseItemDto]) -> some View {
+        ContentRow(
+            title: title,
+            showViewAll: true,
+            onViewAll: { seasonDestination = SeasonDestination() },
+            titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(32)),
+            data: items, id: \.id,
+            itemView: { item in
+                recentlyAddedCard(item, surface: "home.season")
+                    .frame(width: posterCardWidth)
+            }
+        )
     }
 
     /// Failure-state pill shown in place of an unloadable genre row. Tap to
@@ -771,10 +823,9 @@ struct HomeScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
 
                     Text(item.name ?? "")
-                        .font(.system(size: heroTitleSize, weight: .black))
-                        .tracking(-1.5)
+
+                        .heroTitleStyle(size: heroTitleSize, uppercase: true)
                         .foregroundStyle(CinemaColor.onSurface)
-                        .textCase(.uppercase)
                         .lineLimit(2)
 
                     #if os(tvOS)
