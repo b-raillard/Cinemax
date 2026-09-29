@@ -1239,7 +1239,7 @@
 "whatsNew.parentalLock.title" = "Stronger parental controls";
 "whatsNew.parentalLock.body" = "The age limit now applies to everything you play, next episode included; an unrated episode is judged on its series' rating. A new PIN is 6 to 8 digits, and your current PIN still works.";
 "whatsNew.halloweenNight.title" = "Halloween Night";
-"whatsNew.halloweenNight.body" = "For a month, the app goes nocturnal: a pumpkin palette, gothic titles, bats and pumpkins when it opens, and a “Halloween Chills” row of films and series on Home. It all fades away by itself when the season ends.";
+"whatsNew.halloweenNight.body" = "For a month, the app goes nocturnal: a pumpkin palette, gothic titles, bats and pumpkins when it opens, and a “Halloween Chills” row of films and series on Home. Once Halloween is over, everything goes back to how it was.";
 "whatsNew.offer.window" = "Limited time · %1$@ → %2$@";
 "whatsNew.offer.enabled" = "On";
 "whatsNew.offer.accept" = "Turn on";
