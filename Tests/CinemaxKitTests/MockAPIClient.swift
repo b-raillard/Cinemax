@@ -27,6 +27,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedSession = UserSession(userID: "user1", username: "Test User", accessToken: "mock-token", serverID: "mock-id")
     var stubbedResumeItems: [BaseItemDto] = []
     var stubbedLatestItems: [BaseItemDto] = []
+    /// What a `getItems` carrying `tags` answers (the season row's keywords).
+    var stubbedTaggedItems: [BaseItemDto] = []
     var stubbedSearchResults: [BaseItemDto] = []
     var stubbedPersonResults: [BaseItemDto] = []
     var stubbedItems: [BaseItemDto] = []
@@ -415,6 +417,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         /// the library's fan-out issues one per genre and they are otherwise
         /// indistinguishable from the grid's own query.
         genres: [String]?,
+        /// The season row's keyword query.
+        tags: [String]?,
         /// Recorded so Home's « last played » seed query (`[.isPlayed]`) can
         /// be told apart from every other movie/episode query.
         filters: [ItemFilter]?,
@@ -470,7 +474,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
                 includeItemTypes: includeItemTypes, sortBy: sortBy,
                 sortOrder: sortOrder, isFavorite: isFavorite, limit: limit,
                 enableTotalRecordCount: enableTotalRecordCount, genres: genres,
-                filters: filters, fieldSet: fieldSet
+                tags: nil, filters: filters, fieldSet: fieldSet
             ))
         }
         if shouldThrow { throw stubbedError }
@@ -489,6 +493,21 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             return (stubbedLatestItems, stubbedLatestItems.count)
         }
         return (stubbedItems, stubbedTotalCount)
+    }
+
+    func getTaggedItems(
+        userId: String, tags: [String], includeItemTypes: [BaseItemKind], limit: Int
+    ) async throws -> [BaseItemDto] {
+        recordLock.withLock {
+            getItemsQueries.append((
+                includeItemTypes: includeItemTypes, sortBy: [.dateCreated],
+                sortOrder: [.descending], isFavorite: nil, limit: limit,
+                enableTotalRecordCount: false, genres: nil,
+                tags: tags, filters: nil, fieldSet: .card
+            ))
+        }
+        if shouldThrow { throw stubbedError }
+        return stubbedTaggedItems
     }
 
     func getGenres(userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?) async throws -> [String] {

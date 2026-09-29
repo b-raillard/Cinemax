@@ -35,6 +35,8 @@ struct HomeScreen: View {
     /// A token (not a Bool) so it threads through `navigationDestination(item:)`,
     /// hoisted to the screen root per the lazy-container navigation RULE.
     @State private var favoritesDestination: FavoritesDestination?
+    /// « Tout voir » on the season row — same hoisting as Favorites.
+    @State private var seasonDestination: SeasonDestination?
     @State private var playlistsDestination: PlaylistsDestination?
     /// One playlist, opened from a card on the rail.
     @State private var playlistDestination: PlaylistDestination?
@@ -178,6 +180,12 @@ struct HomeScreen: View {
             FavoritesScreen()
                 .tvPushedScreen()
         }
+        .navigationDestination(item: $seasonDestination) { _ in
+            if let row = seasonRow {
+                SeasonCollectionScreen(row: row, title: loc.localized(row.titleKey))
+                    .tvPushedScreen()
+            }
+        }
         // "View All" on the Playlists row → every playlist, read straight from
         // `getPlaylists` so the screen doesn't depend on the server exposing a
         // Playlists view. Same hoisting rule as above.
@@ -278,6 +286,10 @@ struct HomeScreen: View {
 
     private struct FavoritesDestination: Identifiable, Hashable {
         let id = "favorites"
+    }
+
+    private struct SeasonDestination: Identifiable, Hashable {
+        let id = "season"
     }
 
     /// The rails currently switched on, among those `HomeViewModel.load()`
@@ -575,12 +587,15 @@ struct HomeScreen: View {
     private func seasonalRow(title: String, items: [BaseItemDto]) -> some View {
         ContentRow(
             title: title,
+            showViewAll: true,
+            onViewAll: { seasonDestination = SeasonDestination() },
             titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(32)),
-            data: items, id: \.id
-        ) { item in
-            recentlyAddedCard(item, surface: "home.season")
-                .frame(width: posterCardWidth)
-        }
+            data: items, id: \.id,
+            itemView: { item in
+                recentlyAddedCard(item, surface: "home.season")
+                    .frame(width: posterCardWidth)
+            }
+        )
     }
 
     /// Failure-state pill shown in place of an unloadable genre row. Tap to

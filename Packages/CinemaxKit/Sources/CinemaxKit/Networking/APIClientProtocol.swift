@@ -205,6 +205,12 @@ public protocol LibraryAPI: Sendable {
         /// Which optional fields to ask for — see `ItemFieldSet`.
         fieldSet: ItemFieldSet
     ) async throws -> (items: [BaseItemDto], totalCount: Int)
+    /// Newest-first items carrying ANY of `tags` — Jellyfin imports TMDb's
+    /// keywords as tags (« halloween », « vampire »). Same filters as
+    /// `getItems` (parental rating included), card fields, no count.
+    func getTaggedItems(
+        userId: String, tags: [String], includeItemTypes: [BaseItemKind], limit: Int
+    ) async throws -> [BaseItemDto]
     func getGenres(userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?) async throws -> [String]
     func getUserViews(userId: String) async throws -> [BaseItemDto]
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto

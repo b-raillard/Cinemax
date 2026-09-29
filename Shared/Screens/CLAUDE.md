@@ -8,7 +8,7 @@ This folder is flat, so its features cannot each have a `CLAUDE.md`. **Before ed
 | `MovieLibraryScreen.swift` (`MediaLibraryScreen`), `Library*`, `MediaCardContextMenu`, `CardActionPresenter` | `docs/rules/media-library.md` |
 | `MediaDetailScreen`, `MediaDetail*`, `PersonDetailScreen` | `docs/rules/media-detail.md` |
 | `MediaDetailRemotePlay`, `RemoteControlListener` | `docs/rules/remote-control.md` |
-| `HomeScreen`, `FavoritesScreen`, `WatchedHistoryScreen` | `docs/rules/home.md` (+ the Watch History bullet in `Settings/CLAUDE.md`) |
+| `HomeScreen`, `FavoritesScreen`, `WatchedHistoryScreen`, `SeasonCollectionScreen` | `docs/rules/home.md` (+ the Watch History bullet in `Settings/CLAUDE.md`) |
 | `SearchScreen` | `docs/rules/search.md` |
 | `AddToPlaylistSheet`, `PlaylistDetailScreen`, `LibraryFolderBrowseScreen` | `docs/rules/playlists.md` (+ the Collections / Playlists RULE in `Shared/Navigation/CLAUDE.md`) |
 | `WatchTogetherLobby`, `MediaDetailWatchTogether` | `VideoPlayer/CLAUDE.md` → SyncPlay / Watch Together |

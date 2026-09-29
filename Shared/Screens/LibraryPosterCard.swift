@@ -174,7 +174,8 @@ private struct PosterCardContent: View {
                 .mediaCardContextMenu(item: item, artwork: .poster)
 
                 #if os(iOS)
-                if appState.isAdministrator {
+                // No handler, no menu: its destinations need a host screen.
+                if appState.isAdministrator, onAdminAction != nil {
                     AdminItemMenu(
                         item: item,
                         onSelectDestination: { dest in

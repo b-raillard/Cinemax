@@ -1,4 +1,5 @@
 import Foundation
+import JellyfinAPI
 
 enum SeasonalThemePolicy {
     /// A non-empty `forcedID` naming a catalogue season wins (Debug page);
@@ -52,5 +53,26 @@ enum SeasonRowMatcher {
             if let hit = serverGenres.first(where: { fold($0) == key }) { return hit }
         }
         return nil
+    }
+}
+
+enum SeasonRowMix {
+    /// Keyword hits first (the season's own titles), then the genre's newest,
+    /// deduplicated; films and series then alternate so neither kind crowds
+    /// the other out of the row.
+    static func merge(tagged: [BaseItemDto], genre: [BaseItemDto], limit: Int) -> [BaseItemDto] {
+        var seen = Set<String>()
+        let pool = (tagged + genre).filter { item in
+            guard let id = item.id else { return true }
+            return seen.insert(id).inserted
+        }
+        var series = pool.filter { $0.type == .series }[...]
+        var others = pool.filter { $0.type != .series }[...]
+        var mixed: [BaseItemDto] = []
+        while mixed.count < limit, !(series.isEmpty && others.isEmpty) {
+            if let item = others.popFirst() { mixed.append(item) }
+            if mixed.count < limit, let item = series.popFirst() { mixed.append(item) }
+        }
+        return mixed
     }
 }

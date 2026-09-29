@@ -993,13 +993,7 @@ final class HomeViewModel {
             if isCurrent(generation) { seasonRowItems = [] }
             return
         }
-        guard let genres = try? await appState.apiClient.getGenres(userId: userId, includeItemTypes: [.movie, .series]),
-              let genre = SeasonRowMatcher.match(candidates: row.genreCandidates, in: genres),
-              let items = try? await Self.fetchGenreItems(genre: genre, userId: userId, appState: appState)
-        else {
-            if isCurrent(generation), seasonRowConfig == row { seasonRowItems = [] }
-            return
-        }
+        let items = await SeasonRowLoader.items(for: row, limit: SeasonRowLoader.rowLimit, userId: userId, appState: appState)
         // Two season-row fetches share a generation (a switch toggled while
         // the first load's is in flight): the older one landing last must not
         // overwrite the row the newer config asked for.

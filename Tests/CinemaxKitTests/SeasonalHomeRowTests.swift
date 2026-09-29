@@ -10,8 +10,8 @@ struct SeasonalHomeRowTests {
     private let defaults = UserDefaults.isolatedForTesting()
     private let row = SeasonRow(titleKey: "season.halloween.row", genreCandidates: ["Horror", "Horreur"])
 
-    private func item(_ id: String) -> BaseItemDto {
-        var i = BaseItemDto(); i.id = id; i.name = id; return i
+    private func item(_ id: String, _ kind: BaseItemKind = .movie) -> BaseItemDto {
+        var i = BaseItemDto(); i.id = id; i.name = id; i.type = kind; return i
     }
 
     private func appState(_ api: MockAPIClient) -> AppState {
@@ -122,5 +122,39 @@ struct SeasonalHomeRowTests {
         vm.setSeasonRow(nil)
         await vm.load(using: appState(api))
         #expect(vm.genreRows.map(\.genre) == ["Action", "Horror"])
+    }
+
+    @Test("A series tagged with the season's keyword joins the row without the genre")
+    func taggedSeriesJoinsTheRow() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Horror"]
+        api.stubbedLatestItems = [item("nosferatu"), item("scream")]
+        api.stubbedTaggedItems = [item("mercredi", .series)]
+        let vm = HomeViewModel(defaults: defaults)
+        vm.setSeasonRow(SeasonRow(titleKey: "t", genreCandidates: ["Horror"], tagCandidates: ["halloween"]))
+        await vm.refreshSeasonRow(using: appState(api))
+        #expect(vm.seasonRowItems.map(\.id) == ["nosferatu", "mercredi", "scream"])
+        #expect(api.getItemsQueries.contains { $0.tags == ["halloween"] && $0.genres == nil })
+    }
+
+    @Test("Keywords alone fill the row when the library has no season genre")
+    func tagsWithoutGenre() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Comédie"]
+        api.stubbedTaggedItems = [item("hocus-pocus")]
+        let vm = HomeViewModel(defaults: defaults)
+        vm.setSeasonRow(SeasonRow(titleKey: "t", genreCandidates: ["Horror"], tagCandidates: ["halloween"]))
+        await vm.refreshSeasonRow(using: appState(api))
+        #expect(vm.seasonRowItems.map(\.id) == ["hocus-pocus"])
+    }
+
+    @Test("Merge: keyword hits first, deduplicated, films and series alternate, capped")
+    func mixAlternatesKinds() {
+        let merged = SeasonRowMix.merge(
+            tagged: [item("hp"), item("mercredi", .series)],
+            genre: [item("a"), item("b"), item("hp"), item("c"), item("hill-house", .series)],
+            limit: 5
+        )
+        #expect(merged.map(\.id) == ["hp", "mercredi", "a", "hill-house", "b"])
     }
 }

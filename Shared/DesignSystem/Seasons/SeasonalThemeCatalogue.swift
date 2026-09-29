@@ -35,7 +35,8 @@ enum SeasonalThemeCatalogue {
         ambiance: [.bats, .pumpkins, .focusGlow],
         row: SeasonRow(
             titleKey: "season.halloween.row",
-            genreCandidates: ["Horror", "Horreur", "Épouvante-horreur", "Épouvante"]
+            genreCandidates: ["Horror", "Horreur", "Épouvante-horreur", "Épouvante"],
+            tagCandidates: ["halloween", "haunted house", "vampire", "zombie", "gothic"]
         ),
         backdrop: .nightSky
     )

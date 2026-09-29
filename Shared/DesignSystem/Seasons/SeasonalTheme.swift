@@ -92,6 +92,17 @@ struct SeasonRow: Sendable, Equatable {
     /// Compared case- and accent-insensitively with the server's genre names,
     /// which follow the library's metadata language.
     let genreCandidates: [String]
+    /// Keywords matched against the items' tags (Jellyfin imports TMDb's
+    /// keywords as tags, in English whatever the metadata language). TMDb
+    /// files series under no « Horror » genre — « Mercredi » is « Mystère,
+    /// Comédie » — so without them the row was films only.
+    let tagCandidates: [String]
+
+    init(titleKey: String, genreCandidates: [String], tagCandidates: [String] = []) {
+        self.titleKey = titleKey
+        self.genreCandidates = genreCandidates
+        self.tagCandidates = tagCandidates
+    }
 }
 
 struct SeasonalTheme: Sendable, Equatable, Identifiable {
