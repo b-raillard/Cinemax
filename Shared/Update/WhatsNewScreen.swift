@@ -169,17 +169,31 @@ struct WhatsNewScreen: View {
         // In the SEASON's accent, not the user's: the pill belongs to the
         // scene above it, and the theme is not on yet.
         let tint = Color.dynamic(light: season.accent.accentLight, dark: season.accent.accentDark)
-        return HStack(spacing: CinemaSpacing.spacing2) {
-            badge(
-                loc.localized(
-                    "whatsNew.offer.window",
-                    SeasonalSettingsText.dayMonth(season.window.start, locale: loc.locale, abbreviated: true),
-                    SeasonalSettingsText.dayMonth(season.window.end, locale: loc.locale, abbreviated: true)
-                ),
-                systemImage: "hourglass", tint: tint
-            )
-            if !offerPending {
-                badge(loc.localized("whatsNew.offer.enabled"), systemImage: "checkmark", tint: tint)
+        let window = badge(
+            loc.localized(
+                "whatsNew.offer.window",
+                SeasonalSettingsText.dayMonth(season.window.start, locale: loc.locale, abbreviated: true),
+                SeasonalSettingsText.dayMonth(season.window.end, locale: loc.locale, abbreviated: true)
+            ),
+            systemImage: "hourglass", tint: tint
+        )
+        // VoiceOver reads the dates in full, not « oct. → nov. ».
+        .accessibilityLabel(SeasonalSettingsText.windowSummary(
+            for: season, name: loc.localized(season.nameKey),
+            template: loc.localized("settings.seasonal.window"),
+            locale: loc.locale, calendar: .autoupdatingCurrent
+        ))
+        let enabled = badge(loc.localized("whatsNew.offer.enabled"), systemImage: "checkmark", tint: tint)
+        // Side by side when they fit, stacked at large text sizes or on a
+        // narrow phone rather than truncating the dates.
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                window
+                if !offerPending { enabled }
+            }
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                window
+                if !offerPending { enabled }
             }
         }
     }
@@ -187,8 +201,7 @@ struct WhatsNewScreen: View {
     private func badge(_ text: String, systemImage: String, tint: Color) -> some View {
         Label(text, systemImage: systemImage)
             .font(CinemaFont.label(.medium))
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
+            .fixedSize()
             .foregroundStyle(tint)
             .padding(.horizontal, CinemaSpacing.spacing3)
             .padding(.vertical, CinemaSpacing.spacing1)
@@ -217,25 +230,23 @@ struct WhatsNewScreen: View {
                 }
                 #else
                 // The offer's « Non merci » takes the back slot; a swipe still
-                // goes back.
+                // goes back. The only offer today is its reel's FIRST page, so
+                // no « Précédent » is lost — an offer placed later in a reel
+                // would take the back button from VoiceOver / Switch Control.
                 if offerPending {
                     declineButton
                 } else {
                     backButton.slotVisible(index > 0)
                 }
                 #endif
-                if offerPending {
-                    CinemaButton(title: loc.localized("whatsNew.offer.accept"), style: .accent) { acceptOffer() }
-                        .frame(maxWidth: ctaWidth)
-                        .focused($focusedControl, equals: .primary)
-                } else {
-                    CinemaButton(
-                        title: loc.localized(isLast ? "whatsNew.done" : "whatsNew.next"),
-                        style: .accent
-                    ) { advance() }
-                    .frame(maxWidth: ctaWidth)
-                    .focused($focusedControl, equals: .primary)
+                // ONE button whose title and action switch: two views swapped
+                // under focus let tvOS drop focus onto « Précédent » while
+                // `index` moves in the same transaction.
+                CinemaButton(title: primaryTitle, style: .accent) {
+                    if offerPending { acceptOffer() } else { advance() }
                 }
+                .frame(maxWidth: ctaWidth)
+                .focused($focusedControl, equals: .primary)
             }
             #if os(iOS)
             .frame(maxWidth: proseWidth)
@@ -252,6 +263,11 @@ struct WhatsNewScreen: View {
         // « Précédent » is the one going backwards.
         .onAppear { focusedControl = .primary }
         .onChange(of: index) { focusedControl = .primary }
+    }
+
+    private var primaryTitle: String {
+        if offerPending { return loc.localized("whatsNew.offer.accept") }
+        return loc.localized(isLast ? "whatsNew.done" : "whatsNew.next")
     }
 
     private var declineButton: some View {
