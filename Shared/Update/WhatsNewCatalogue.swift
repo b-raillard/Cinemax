@@ -10,6 +10,16 @@ import CinemaxKit
 struct WhatsNewPage: Identifiable, Equatable, Sendable {
     let id: String
     let illustration: WhatsNewIllustration
+    /// Something the page lets the user switch on in one tap (« Activer »).
+    var offer: WhatsNewOffer?
+}
+
+/// A one-tap opt-in carried by a page. Data like the rest of the page, so the
+/// next season's announcement is one more entry.
+enum WhatsNewOffer: Equatable, Sendable {
+    /// Turns the seasonal themes on (`SeasonalSetting.automatic`); `id` names
+    /// the catalogue season the page shows off — its dates and title face.
+    case seasonalTheme(id: String)
 }
 
 /// The pages one released version introduced.
@@ -30,6 +40,9 @@ enum WhatsNewCatalogue {
     static let maxPages = 6
 
     static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(version: ServerVersion(2, 3, 0), pages: [
+            WhatsNewPage(id: "halloweenNight", illustration: .halloweenNight, offer: .seasonalTheme(id: "halloween"))
+        ]),
         WhatsNewRelease(version: ServerVersion(2, 2, 0), pages: [
             WhatsNewPage(id: "newName", illustration: .newName),
             WhatsNewPage(id: "parentalLock", illustration: .parentalLock),

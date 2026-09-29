@@ -31,7 +31,7 @@ final class SeasonalThemeController {
         self.catalogue = catalogue
         self.calendar = calendar
         self.now = now
-        setting = SeasonalSetting(rawValue: defaults.string(forKey: SettingsKey.seasonalTheme) ?? "") ?? .automatic
+        setting = SeasonalSetting(rawValue: defaults.string(forKey: SettingsKey.seasonalTheme) ?? SettingsKey.Default.seasonalTheme) ?? .off
         ambianceEnabled = defaults.object(forKey: SettingsKey.seasonalAmbiance) as? Bool ?? SettingsKey.Default.seasonalAmbiance
         rowEnabled = defaults.object(forKey: SettingsKey.seasonalRow) as? Bool ?? SettingsKey.Default.seasonalRow
         forcedSeasonID = defaults.string(forKey: SettingsKey.debugForcedSeason) ?? SettingsKey.Default.debugForcedSeason

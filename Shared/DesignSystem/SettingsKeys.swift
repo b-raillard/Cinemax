@@ -178,7 +178,8 @@ enum SettingsKey {
         static let accentColor = "green"
         static let uiScale = 1.0
         static let appLanguage = "fr"
-        static let seasonalTheme = SeasonalSetting.automatic.rawValue
+        /// Off until the user accepts it (« Quoi de neuf » « Activer », or Réglages).
+        static let seasonalTheme = SeasonalSetting.off.rawValue
         static let seasonalAmbiance = true
         static let seasonalRow = true
 

@@ -482,6 +482,7 @@ struct SettingsScreen: View {
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+            .environment(seasonal)
     }
 
     private var serversSheet: some View {

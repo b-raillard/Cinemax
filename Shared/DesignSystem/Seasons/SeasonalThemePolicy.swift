@@ -42,6 +42,15 @@ enum AmbiancePolicy {
     }
 }
 
+enum SeasonalOffer {
+    /// What accepting `theme` on `date` changes on screen: nothing yet, until
+    /// the returned day — `nil` in season, where the app turns over at once.
+    /// After the season it is the next one's start.
+    static func startsLater(_ theme: SeasonalTheme, on date: Date, calendar: Calendar) -> MonthDay? {
+        theme.window.contains(date, calendar: calendar) ? nil : theme.window.start
+    }
+}
+
 enum SeasonRowMatcher {
     /// The server's spelling of the first candidate it carries, or `nil`.
     static func match(candidates: [String], in serverGenres: [String]) -> String? {

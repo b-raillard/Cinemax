@@ -127,6 +127,7 @@
 		2FA1FE57761F94C1764861F9 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */; };
 		2FA754E7C1024D2E05A46524 /* ErrorStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929537FA4254CCBD87E276B3 /* ErrorStateView.swift */; };
 		2FE40D74DA7EDE3249D0D17B /* CinemaGlassTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */; };
+		2FE46B13F4BCB62EEB66B345 /* WhatsNewHalloweenScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */; };
 		300942637B6DD7F1430750A3 /* MetadataCastTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADEAE9BB3E538E792AD643F8 /* MetadataCastTab.swift */; };
 		3063AE81691215FA3F5CA882 /* AudioTrackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78A064C067BC85456FB2FE3A /* AudioTrackPolicy.swift */; };
 		3067F37BBC4A112F223D5B39 /* AppShortcuts.strings in Resources */ = {isa = PBXBuildFile; fileRef = E4D43C12622E0B2AACF89D1A /* AppShortcuts.strings */; };
@@ -510,6 +511,7 @@
 		C0BCC4BCE973A289721EACCD /* AdminPlaybackViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31BE49E5CAB346FED9224CE /* AdminPlaybackViewModel.swift */; };
 		C0D6B65C1C636AF7198BBF71 /* EpisodeRefsPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E6386886CB94DB7929168B0 /* EpisodeRefsPayloadTests.swift */; };
 		C0E93495C815097BC0DC1ECC /* SettingsTVProfileSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1720DF5B530CD8E0201442FE /* SettingsTVProfileSection.swift */; };
+		C20E16BB64AFF1A1C12F0D7E /* WhatsNewHalloweenScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */; };
 		C26E055881A898E3B284F62B /* LibraryHeroNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95ACF77EE85DCBFAF2ACC530 /* LibraryHeroNavigationTests.swift */; };
 		C29097B0D079DD881E7EC4E3 /* PlayerTransportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */; };
 		C342655D1C9FD75A639C79F1 /* DiagnosticsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE5214DD9F50345475DB6E05 /* DiagnosticsReport.swift */; };
@@ -1052,6 +1054,7 @@
 		E9B0EBFA7FD313F6CEB0E3A2 /* RemoteImageCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImageCatalogTests.swift; sourceTree = "<group>"; };
 		EA980637A2C18CE127E6C9AD /* MetadataRemoteImagePickerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataRemoteImagePickerTests.swift; sourceTree = "<group>"; };
 		EAEC7B9C5388FF38DAC9FE9A /* boot.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = boot.c; sourceTree = "<group>"; };
+		EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewHalloweenScene.swift; sourceTree = "<group>"; };
 		ECE1137AD2C7968254B35D11 /* AutoSkipPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSkipPolicyTests.swift; sourceTree = "<group>"; };
 		EFF999321A455C6A950736CB /* AdminApiKeysScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminApiKeysScreen.swift; sourceTree = "<group>"; };
 		F2101C4E32EEC83662C75D00 /* AdminScheduledTasksScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminScheduledTasksScreen.swift; sourceTree = "<group>"; };
@@ -1143,6 +1146,7 @@
 				111D7559C3B4164DFE2D5AB3 /* AppUpdateChecker.swift */,
 				9FAFE033C26A9BF1B8CDF937 /* AppUpdatePolicy.swift */,
 				1B57183A10839E3056C3659D /* WhatsNewCatalogue.swift */,
+				EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */,
 				73B67ACF04B1FFE9E01F4782 /* WhatsNewIllustration.swift */,
 				5E19706AD8199FD7B1BDF875 /* WhatsNewPolicy.swift */,
 				2772DBD47739359C36962BA8 /* WhatsNewScreen.swift */,
@@ -2385,6 +2389,7 @@
 				5D88CC33F8334EF5E6CD5475 /* WatchTogetherLobby.swift in Sources */,
 				86526F1D7EA8C308D75CD1FE /* WatchedHistoryScreen.swift in Sources */,
 				3ED7BC82385E90F72DE07604 /* WhatsNewCatalogue.swift in Sources */,
+				2FE46B13F4BCB62EEB66B345 /* WhatsNewHalloweenScene.swift in Sources */,
 				CAA9FDA459FB87E7B3F367AB /* WhatsNewIllustration.swift in Sources */,
 				5387266807C86D4BE2FC1828 /* WhatsNewPolicy.swift in Sources */,
 				CA7C7DD812C297C972615E19 /* WhatsNewScreen.swift in Sources */,
@@ -2727,6 +2732,7 @@
 				415D6E200AACAF80F3B06507 /* WatchTogetherLobby.swift in Sources */,
 				94D50ED24372C2DF858DA620 /* WatchedHistoryScreen.swift in Sources */,
 				CF9B70C7595EA08B2F235061 /* WhatsNewCatalogue.swift in Sources */,
+				C20E16BB64AFF1A1C12F0D7E /* WhatsNewHalloweenScene.swift in Sources */,
 				3C2B94112906A6D51E669730 /* WhatsNewIllustration.swift in Sources */,
 				71448B532787D84CB37C5B41 /* WhatsNewPolicy.swift in Sources */,
 				9ABEEB2E98605AD1D8F6E8FE /* WhatsNewScreen.swift in Sources */,

@@ -292,6 +292,8 @@ struct AppNavigation: View {
             WhatsNewScreen(pages: whatsNewPages) { finishWhatsNew() }
                 .environment(themeManager)
                 .environment(loc)
+                .environment(seasonal)
+                .environment(toasts)
                 .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
                     appToggle: motionEffects,
                     systemReduceMotion: systemReduceMotion

@@ -24,12 +24,12 @@ struct SeasonalThemePolicyTests {
         accent: SeasonalThemeCatalogue.halloween.accent, titleFont: nil, ambiance: [], row: nil, backdrop: nil
     )
 
-    @Test("Halloween starts on 15 October at midnight, local time")
+    @Test("Halloween starts on 1 October at midnight, local time")
     func startBoundary() {
         let paris = calendar("Europe/Paris")
-        // 23:59:59 on the 14th in Paris is 21:59:59Z.
-        #expect(halloween.window.contains(date("2026-10-14T21:59:59Z"), calendar: paris) == false)
-        #expect(halloween.window.contains(date("2026-10-14T22:00:00Z"), calendar: paris) == true)
+        // 23:59:59 on 30 September in Paris is 21:59:59Z.
+        #expect(halloween.window.contains(date("2026-09-30T21:59:59Z"), calendar: paris) == false)
+        #expect(halloween.window.contains(date("2026-09-30T22:00:00Z"), calendar: paris) == true)
     }
 
     @Test("Halloween ends after 2 November, local time")
@@ -42,7 +42,7 @@ struct SeasonalThemePolicyTests {
 
     @Test("The same instant can be in season in Tokyo and not in Paris")
     func timeZoneDecides() {
-        let instant = date("2026-10-14T20:00:00Z")
+        let instant = date("2026-09-30T20:00:00Z")
         #expect(halloween.window.contains(instant, calendar: calendar("Europe/Paris")) == false)
         #expect(halloween.window.contains(instant, calendar: calendar("Asia/Tokyo")) == true)
     }
@@ -197,8 +197,21 @@ struct SeasonalThemePolicyTests {
             for: halloween, name: "Halloween Night", template: "%1$@, %2$@ to %3$@",
             locale: Locale(identifier: "en_US"), calendar: utc
         )
-        #expect(fr == "Nuit d'Halloween, du 15 octobre au 2 novembre")
-        #expect(en == "Halloween Night, October 15 to November 2")
+        #expect(fr == "Nuit d'Halloween, du 1er octobre au 2 novembre")
+        #expect(en == "Halloween Night, October 1 to November 2")
+    }
+
+    @MainActor
+    @Test("The first of the month is an ordinal in French, abbreviated or not")
+    func frenchFirstOfMonth() {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let first = MonthDay(month: 10, day: 1)
+        let fr = Locale(identifier: "fr_FR")
+        #expect(SeasonalSettingsText.dayMonth(first, locale: fr, calendar: utc) == "1er octobre")
+        #expect(SeasonalSettingsText.dayMonth(first, locale: fr, calendar: utc, abbreviated: true) == "1er oct.")
+        #expect(SeasonalSettingsText.dayMonth(MonthDay(month: 11, day: 2), locale: fr, calendar: utc, abbreviated: true) == "2 nov.")
+        #expect(SeasonalSettingsText.dayMonth(first, locale: Locale(identifier: "en_US"), calendar: utc, abbreviated: true) == "Oct 1")
     }
 
     // MARK: Density — an intense opening, then calm

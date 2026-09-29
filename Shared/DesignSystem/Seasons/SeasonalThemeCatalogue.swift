@@ -8,7 +8,7 @@ enum SeasonalThemeCatalogue {
     static let halloween = SeasonalTheme(
         id: "halloween",
         nameKey: "season.halloween.name",
-        window: SeasonWindow(start: MonthDay(month: 10, day: 15), end: MonthDay(month: 11, day: 2)),
+        window: SeasonWindow(start: MonthDay(month: 10, day: 1), end: MonthDay(month: 11, day: 2)),
         dark: SeasonPalette(
             surface: 0x0C0A10,                 // Nuit
             surfaceContainerLowest: 0x07060A,  // derived

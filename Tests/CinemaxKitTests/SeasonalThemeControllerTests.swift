@@ -23,8 +23,23 @@ struct SeasonalThemeControllerTests {
         return c
     }
 
-    private func make(_ clock: TestClock, defaults: UserDefaults = .isolatedForTesting()) -> SeasonalThemeController {
-        SeasonalThemeController(defaults: defaults, calendar: paris, now: { clock.date })
+    /// `setting` is what the user chose, stored before the controller reads
+    /// it; `nil` leaves the key absent (a user who never touched it).
+    private func make(
+        _ clock: TestClock, defaults: UserDefaults = .isolatedForTesting(),
+        setting: SeasonalSetting? = .automatic
+    ) -> SeasonalThemeController {
+        if let setting, defaults.string(forKey: SettingsKey.seasonalTheme) == nil {
+            defaults.set(setting.rawValue, forKey: SettingsKey.seasonalTheme)
+        }
+        return SeasonalThemeController(defaults: defaults, calendar: paris, now: { clock.date })
+    }
+
+    @Test("Off until the user accepts it: nothing stored means no season")
+    func offByDefault() {
+        let c = make(TestClock("2026-10-20T12:00:00Z"), setting: nil)
+        #expect(c.setting == .off)
+        #expect(c.activeTheme == nil)
     }
 
     @Test("Active inside the window on first evaluation")

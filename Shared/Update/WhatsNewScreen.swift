@@ -27,6 +27,8 @@ struct WhatsNewScreen: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    @Environment(SeasonalThemeController.self) private var seasonal
+    @Environment(ToastCenter.self) private var toasts
 
     @State private var index = 0
     @FocusState private var focusedControl: Control?
@@ -36,13 +38,26 @@ struct WhatsNewScreen: View {
     @State private var pageViewportHeight: CGFloat = 0
     #endif
 
-    private enum Control: Hashable { case primary, back, skip }
+    private enum Control: Hashable { case primary, back, skip, decline }
 
     private var page: WhatsNewPage? {
         pages.indices.contains(index) ? pages[index] : pages.first
     }
 
     private var isLast: Bool { index >= pages.count - 1 }
+
+    /// The season this page offers, if it offers one.
+    private var offeredSeason: SeasonalTheme? {
+        guard case .seasonalTheme(let id) = page?.offer else { return nil }
+        return SeasonalThemeCatalogue.theme(id: id)
+    }
+
+    /// The page still has something to switch on: « Activer » / « Non merci »
+    /// replace the navigation button. Once on (or on a replay after
+    /// accepting), the page reads like any other and wears a « ✓ Activé » chip.
+    private var offerPending: Bool {
+        offeredSeason != nil && seasonal.setting != .automatic
+    }
 
     var body: some View {
         ZStack {
@@ -126,8 +141,11 @@ struct WhatsNewScreen: View {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                 WhatsNewIllustrationView(kind: page.illustration, baseSize: illustrationSize)
 
+                if let season = offeredSeason { offerBadges(for: season) }
+
                 Text(loc.localized("whatsNew.\(page.id).title"))
-                    .font(CinemaFont.headline(.large))
+                    .font(offeredSeason.flatMap { SeasonalTypography.titleFont(for: $0, size: CinemaScale.pt(titleFaceSize)) }
+                          ?? CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -144,6 +162,39 @@ struct WhatsNewScreen: View {
         }
     }
 
+    /// « Éphémère · du 1er octobre au 2 novembre » — dates read from the
+    /// catalogue, so the page cannot announce a window the theme does not
+    /// have — and « ✓ Activé » once the user said yes.
+    private func offerBadges(for season: SeasonalTheme) -> some View {
+        // In the SEASON's accent, not the user's: the pill belongs to the
+        // scene above it, and the theme is not on yet.
+        let tint = Color.dynamic(light: season.accent.accentLight, dark: season.accent.accentDark)
+        return HStack(spacing: CinemaSpacing.spacing2) {
+            badge(
+                loc.localized(
+                    "whatsNew.offer.window",
+                    SeasonalSettingsText.dayMonth(season.window.start, locale: loc.locale, abbreviated: true),
+                    SeasonalSettingsText.dayMonth(season.window.end, locale: loc.locale, abbreviated: true)
+                ),
+                systemImage: "hourglass", tint: tint
+            )
+            if !offerPending {
+                badge(loc.localized("whatsNew.offer.enabled"), systemImage: "checkmark", tint: tint)
+            }
+        }
+    }
+
+    private func badge(_ text: String, systemImage: String, tint: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(CinemaFont.label(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .foregroundStyle(tint)
+            .padding(.horizontal, CinemaSpacing.spacing3)
+            .padding(.vertical, CinemaSpacing.spacing1)
+            .background(tint.opacity(0.14), in: Capsule())
+    }
+
     // MARK: - Footer
 
     private var footer: some View {
@@ -157,20 +208,34 @@ struct WhatsNewScreen: View {
                 #if os(tvOS)
                 if index > 0 { backButton }
                 Spacer(minLength: CinemaSpacing.spacing4)
-                if !isLast {
+                if offerPending {
+                    declineButton
+                } else if !isLast {
                     CinemaButton(title: loc.localized("whatsNew.skip"), style: .ghost) { onFinish() }
                         .frame(maxWidth: ctaWidth)
                         .focused($focusedControl, equals: .skip)
                 }
                 #else
-                backButton.slotVisible(index > 0)
+                // The offer's « Non merci » takes the back slot; a swipe still
+                // goes back.
+                if offerPending {
+                    declineButton
+                } else {
+                    backButton.slotVisible(index > 0)
+                }
                 #endif
-                CinemaButton(
-                    title: loc.localized(isLast ? "whatsNew.done" : "whatsNew.next"),
-                    style: .accent
-                ) { advance() }
-                .frame(maxWidth: ctaWidth)
-                .focused($focusedControl, equals: .primary)
+                if offerPending {
+                    CinemaButton(title: loc.localized("whatsNew.offer.accept"), style: .accent) { acceptOffer() }
+                        .frame(maxWidth: ctaWidth)
+                        .focused($focusedControl, equals: .primary)
+                } else {
+                    CinemaButton(
+                        title: loc.localized(isLast ? "whatsNew.done" : "whatsNew.next"),
+                        style: .accent
+                    ) { advance() }
+                    .frame(maxWidth: ctaWidth)
+                    .focused($focusedControl, equals: .primary)
+                }
             }
             #if os(iOS)
             .frame(maxWidth: proseWidth)
@@ -187,6 +252,12 @@ struct WhatsNewScreen: View {
         // « Précédent » is the one going backwards.
         .onAppear { focusedControl = .primary }
         .onChange(of: index) { focusedControl = .primary }
+    }
+
+    private var declineButton: some View {
+        CinemaButton(title: loc.localized("whatsNew.offer.decline"), style: .ghost) { advance() }
+            .frame(maxWidth: ctaWidth)
+            .focused($focusedControl, equals: .decline)
     }
 
     private var backButton: some View {
@@ -211,6 +282,21 @@ struct WhatsNewScreen: View {
 
     // MARK: - Actions
 
+    /// One tap: the theme goes on through its only mutator, then the reel
+    /// moves on. In season the app turns over at once, behind the sheet; out
+    /// of season nothing would show, so a toast names the day it starts.
+    private func acceptOffer() {
+        guard let season = offeredSeason else { advance(); return }
+        seasonal.setSetting(.automatic)
+        if let start = SeasonalOffer.startsLater(season, on: Date(), calendar: .autoupdatingCurrent) {
+            toasts.success(
+                loc.localized("whatsNew.offer.accepted"),
+                message: loc.localized("whatsNew.offer.startsOn", SeasonalSettingsText.dayMonth(start, locale: loc.locale))
+            )
+        }
+        advance()
+    }
+
     private func advance() {
         guard !isLast else { onFinish(); return }
         index += 1
@@ -231,12 +317,14 @@ struct WhatsNewScreen: View {
     private var proseWidth: CGFloat { CinemaTVLayout.readingMaxWidth }
     private var ctaWidth: CGFloat { CinemaTVLayout.ctaWidth }
     private var illustrationSize: CGFloat { 180 }
+    private var titleFaceSize: CGFloat { 52 }
     private var footerBottomPadding: CGFloat { CinemaSpacing.spacing8 }
     #else
     private var pagePadding: CGFloat { CinemaSpacing.spacing6 }
     private var proseWidth: CGFloat { 520 }
     private var ctaWidth: CGFloat { .infinity }
     private var illustrationSize: CGFloat { 132 }
+    private var titleFaceSize: CGFloat { 34 }
     private var footerBottomPadding: CGFloat { CinemaSpacing.spacing5 }
     #endif
 }
