@@ -43,7 +43,7 @@ Va sur https://appstoreconnect.apple.com → My Apps → Cinemax (iOS).
 ### 2.2 Pricing and Availability
 
 - [ ] **Price** : Free (Tier 0)
-- [ ] **Availability** : Edit Countries → décocher tout sauf France, Belgique, Suisse, Luxembourg, Canada
+- [x] **Availability** : tous les pays ou régions (175), iOS et tvOS — fait le 2026-09-30 ; ne plus restreindre
 - [ ] **Pre-Orders** : Off
 
 ### 2.3 App Privacy

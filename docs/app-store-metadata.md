@@ -1339,9 +1339,9 @@ Settings → Playback → enable "Use Native Player".
 
 ## 5. Disponibilité
 
-**Pays sélectionnés** : France, Belgique, Suisse, Luxembourg, Canada.
+**Pays sélectionnés** : **tous** (175 pays ou régions), iOS et tvOS, depuis le 2026-09-30 — avant cette date l'app n'était vendue que dans 4 pays (France, Belgique, Suisse, Luxembourg ; le Canada prévu n'avait jamais été coché), ce qui la rendait invisible à toute la communauté Jellyfin anglophone et germanophone.
 
-ASC → Pricing and Availability → Edit Countries or Regions → cocher uniquement ces 5 pays.
+ASC → Tarifs et disponibilité → Disponibilité de l'app → Gérer la disponibilité → « Tous » → Suivant → Confirmer. La prise d'effet est annoncée sous 24 h. « Disponible sur les Mac à puce Apple » est coché (macOS automatique) ; Apple Vision Pro ne l'est pas.
 
 **Prix** : Gratuit (Tier 0).
 
