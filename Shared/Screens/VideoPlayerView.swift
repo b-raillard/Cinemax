@@ -33,6 +33,9 @@ struct VideoPlayerView: View {
     /// SwiftUI cancels when the cover closes — an unstructured `Task` would
     /// outlive the ✕ and present a player over whatever is on screen by then.
     @State private var attempt = 0
+    /// Optional on purpose: a presentation that re-injects its environment by
+    /// hand and forgets this one must cost a rating request, never a crash.
+    @Environment(ReviewPromptTracker.self) private var reviewPrompt: ReviewPromptTracker?
     #endif
 
     @State private var errorMessage: String?
@@ -134,7 +137,7 @@ struct VideoPlayerView: View {
                     apiClient: appState.apiClient, userId: userId,
                     autoPlayNext: autoPlayNextEpisode, maxBitrate: bitrate,
                     imageBuilder: appState.imageBuilder, loc: loc,
-                    onDismiss: { dismiss() }
+                    onDismiss: { reviewPrompt?.playerDidClose(); dismiss() }
                 )
                 vlcStreamPresenter = v
                 didPresent = true
@@ -159,7 +162,7 @@ struct VideoPlayerView: View {
                 maxBitrate: bitrate, loc: loc,
                 autoPlayNextEpisode: autoPlayNextEpisode,
                 imageBuilder: appState.imageBuilder,
-                onDismiss: { dismiss() }
+                onDismiss: { reviewPrompt?.playerDidClose(); dismiss() }
             )
             presenter = p
             didPresent = true

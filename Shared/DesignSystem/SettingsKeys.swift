@@ -173,6 +173,15 @@ enum SettingsKey {
     /// an instruction to stop mentioning every future one.
     static let updateDeclinedVersion = "update.declinedVersion"
 
+    // App Store review prompt — written only through ReviewPromptTracker.
+    /// Engaged playback sessions (≥ `ReviewPromptPolicy.minimumWatchedSeconds`)
+    /// since the last request. Reset when a request goes out.
+    static let reviewQualifyingPlaybacks = "review.qualifyingPlaybacks"
+    /// The app version the last request was made on (`""` = never).
+    static let reviewLastPromptedVersion = "review.lastPromptedVersion"
+    /// When the last request was made (seconds since 1970, `0` = never).
+    static let reviewLastPromptedAt = "review.lastPromptedAt"
+
     enum Default {
         static let darkMode = true
         static let accentColor = "green"

@@ -468,6 +468,67 @@ struct PlaybackReporterTests {
         #expect(mock.stopCount == 1, "le serveur doit tout de même recevoir le stop")
         #expect(witness.count == 0, "on regarde encore : rafraîchir les rails ici coûterait une salve par épisode")
     }
+
+    // MARK: - Secondes regardées (demande de note)
+
+    /// Le signal dont `ReviewPromptTracker` compte les séances engagées : les
+    /// secondes NON en pause, comptées sur le battement d'1 s existant.
+
+    @Test("watchedSeconds ne compte que les ticks hors pause, et reportStart le remet à zéro")
+    func watchedSecondsCountsUnpausedTicks() {
+        nonisolated(unsafe) var paused = false
+        let reporter = PlaybackReporter(
+            apiClient: CountingPlaybackAPI(),
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: paused) }
+        )
+
+        for _ in 0..<5 { reporter.onTick() }
+        paused = true
+        for _ in 0..<3 { reporter.onTick() }
+        #expect(reporter.watchedSeconds == 5)
+
+        reporter.reportStart(startTime: nil)
+        #expect(reporter.watchedSeconds == 0)
+    }
+
+    @Test("reportStop annonce la fin de séance avec ses secondes, puis les remet à zéro")
+    func stopPostsWatchedSecondsThenResets() {
+        let reporter = PlaybackReporter(
+            apiClient: CountingPlaybackAPI(),
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+        // Posted synchronously on the main actor and observed with
+        // `queue: nil`, so the observer runs inside `post` — and this test
+        // body has no suspension point for another test's post to slip in.
+        let received = WatchedSecondsWitness()
+        let token = NotificationCenter.default.addObserver(
+            forName: .cinemaxPlaybackSessionEnded, object: nil, queue: nil
+        ) { note in
+            received.record(note.userInfo?[PlaybackReporter.watchedSecondsKey] as? Int)
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        for _ in 0..<7 { reporter.onTick() }
+        reporter.reportStop(reason: .episodeSwap)
+
+        #expect(received.values == [7], "chaque épisode d'un enchaînement est sa propre séance")
+        #expect(reporter.watchedSeconds == 0)
+    }
+}
+
+/// Collects the `watchedSeconds` carried by `.cinemaxPlaybackSessionEnded`.
+private final class WatchedSecondsWitness: @unchecked Sendable {
+    private let lock = NSLock()
+    private var received: [Int?] = []
+
+    func record(_ value: Int?) {
+        lock.lock(); defer { lock.unlock() }
+        received.append(value)
+    }
+
+    var values: [Int?] { lock.lock(); defer { lock.unlock() }; return received }
 }
 
 // MARK: - Test helpers

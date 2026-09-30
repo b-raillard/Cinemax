@@ -64,6 +64,11 @@ struct AppNavigation: View {
     /// recreation costs nothing — and the standing offer is re-derived from
     /// the stored release rather than held in memory.
     @State private var updateChecker = AppUpdateChecker()
+    #if os(iOS)
+    /// Not a process singleton either, same reason: three `UserDefaults` reads,
+    /// and the count it keeps lives in storage, not in memory.
+    @State private var reviewPrompt = ReviewPromptTracker()
+    #endif
     /// The « Quoi de neuf » pages this launch owes the user; empty when it owes
     /// none. Filled once by the `.task` below, cleared by `finishWhatsNew()`.
     @State private var whatsNewPages: [WhatsNewPage] = []
@@ -212,6 +217,9 @@ struct AppNavigation: View {
         .environment(parentalLock)
         .environment(seasonal)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
+        #if os(iOS)
+        .environment(reviewPrompt)
+        #endif
         .onChange(of: seasonal.activeTheme?.id, initial: true) { _, _ in
             themeManager.setSeasonAccent(seasonal.activeTheme?.accent)
         }
@@ -242,7 +250,8 @@ struct AppNavigation: View {
             appState: appState,
             themeManager: themeManager,
             loc: loc,
-            toast: toasts
+            toast: toasts,
+            reviewPrompt: reviewPrompt
         ))
         #endif
         // "Play on…" is now also raised from context menus, so the sheet is
@@ -272,6 +281,11 @@ struct AppNavigation: View {
         // screen. It can only ever speak once `AppUpdateChecker.refresh()` has
         // run, which is gated on the session check below.
         .modifier(AppUpdatePresentation(checker: updateChecker, loc: loc))
+        #if os(iOS)
+        // The App Store rating request, raised only once the player has
+        // closed — see `ReviewPromptTracker.playerDidClose`.
+        .modifier(ReviewPromptPresentation(tracker: reviewPrompt))
+        #endif
         // « Quoi de neuf » — the first launch on a new version. A sheet on
         // iOS (closable from its top button or a swipe down, both of which
         // stamp the version like the last page does), a full-screen cover on
@@ -635,6 +649,11 @@ extension Notification.Name {
     /// reflects the toggle) and defer otherwise. Favorite hearts stay on the
     /// separate `.cinemaxFavoritesChanged` fast path (cards carry no heart badge).
     static let cinemaxItemUserDataChanged = Notification.Name("cinemaxItemUserDataChanged")
+    /// A play session ended (`PlaybackReporter.reportStop`, BOTH reasons — an
+    /// episode swap included, so the player may still be on screen). Posted at
+    /// call time; `userInfo[PlaybackReporter.watchedSecondsKey]` carries the
+    /// session's unpaused seconds. Consumed by `ReviewPromptPresentation`.
+    static let cinemaxPlaybackSessionEnded = Notification.Name("cinemaxPlaybackSessionEnded")
     /// Posted after a favorite heart toggle succeeds. Home observes it and
     /// refreshes just its Favorites row (the full-reload notification above
     /// would re-shuffle genre rows and clear caches — overkill for a heart).
