@@ -108,4 +108,7 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 | `update.latestVersion` | — | The newest version string the Store reported, **verbatim** (`"2.1"` stays `"2.1"`; `ServerVersion.description` would print `2.1.0.0` at the user) |
 | `update.latestStoreURL` | — | That release's Store page. Absent ⇒ no « Mettre à jour » button (either platform) rather than a dead one |
 | `update.declinedVersion` | — | The version the user answered « Plus tard » to. Suppresses **that** version only |
+| `review.qualifyingPlaybacks` | `0` | Engaged playback sessions (≥ 10 unpaused minutes) since the last rating request; reset when one goes out. Written only through `ReviewPromptTracker` (iOS) |
+| `review.lastPromptedVersion` | — | The app version the last rating request was made on (`""` = never). Once per version |
+| `review.lastPromptedAt` | `0` | When the last rating request was made (epoch seconds). Never twice within `ReviewPromptPolicy.minimumInterval` (90 days) |
 | `easterEgg.rainbowUnlocked` | `false` | Rainbow accent visibility — flipped by logo-tap easter egg |

@@ -1,4 +1,4 @@
-# Launch version check and « Quoi de neuf »
+# Launch version check, « Quoi de neuf », App Store rating request
 
 > Split out of the root `CLAUDE.md` on 2026-09-22 (audit lot 5), content moved verbatim. Loaded when you work under `Shared/Update/`. The root file's cross-cutting rules (Swift 6, `@Observable` without `didSet`, lazy-container navigation, base-path URLs, xcodegen, tests) still apply. Lines tagged **RULE** override default behavior.
 
@@ -34,3 +34,13 @@ The first launch on a new version shows « Quoi de neuf » — one page per new 
 - **RULE — `.halloweenNight` is a SCENE, not a motif (`WhatsNewHalloweenScene`, one `Canvas` on a 680 × 380 grid, wide across the page), and the only « Quoi de neuf » art that moves** — twinkle, flapping and crossing bats, flickering windows and lanterns, a bobbing spider — through a `TimelineView` paused, with every light on, when `motionEffectsEnabled` is false (app toggle or Reduce Motion). Still drawn, never an image: the illustration RULE holds.
 - **Replay**: Réglages → Serveur → « Nouveautés », beside « Découvrir l'app ». It shows `WhatsNewCatalogue.allPages()` — the WHOLE catalogue, not this user's remaining slice — and **stamps nothing**: somebody who asks for it has not just updated, they are looking something up.
 - Locked by `WhatsNewPolicyTests` (the outcome truth table, incl. downgrade and the silent-stamp cases) + `WhatsNewCatalogueTests` (the unreleased-entry guard, ordering, the cap, the exclusive lower bound, unique ids in the shipped catalogue).
+
+## App Store rating request (`Shared/Update/`, iOS only)
+
+Asks for a rating once the user has a habit, never at a first impression. Two files: `ReviewPromptPolicy` (pure, cross-platform — the numbers: 10 unpaused minutes make a session engaged, 3 engaged sessions, once per version, never twice within 90 days) and `ReviewPromptTracker` (`#if os(iOS)` — storage in the `review.*` keys, plus the root-hosted `ReviewPromptPresentation` modifier). The signal is engine-agnostic: `PlaybackReporter.watchedSeconds` counts unpaused seconds on the existing 1 s `onTick()` heartbeat and `reportStop` posts it in `.cinemaxPlaybackSessionEnded` at call time.
+
+- **RULE — the request is raised ONLY from `VideoPlayerView.onDismiss`, through `ReviewPromptTracker.playerDidClose()`; the reporter's notification only COUNTS.** That notification also fires on `.episodeSwap`, i.e. with the player still full-screen in the middle of an autoplay chain, so raising the sheet from it would put the system prompt over the film. Never at launch either: the user opened the app to watch something. `ReviewPromptPresentation` waits 1 s after `isDue` flips so the player's dismiss animation has finished, calls `requestReview()`, then `didPrompt()` stamps the version and date and resets the count — StoreKit says nothing about whether the sheet actually showed, so the REQUEST is what is stamped. The numbers live in `ReviewPromptPolicy` and nowhere else.
+- **iOS only because StoreKit marks the API `tvOS unavailable`** (`AppStore.requestReview(in:)`, `\.requestReview`). The policy and the reporter change compile on both platforms; the tracker, the modifier and their wiring are `#if os(iOS)`.
+- `VideoPlayerView` reads the tracker as an OPTIONAL environment value: a presentation that re-injects its environment by hand and forgets it must cost a rating request, never a crash. `CardPlaybackPresentation` re-injects it.
+- **Verify on the simulator**: `xcrun simctl spawn booted defaults write com.cinemax.ios review.qualifyingPlaybacks -int 3`, relaunch, play anything a few seconds, close → a development build always shows the sheet (TestFlight never does, the App Store throttles it).
+- Locked by `ReviewPromptTests` (the policy truth table + the tracker's storage and `isDue` lifecycle) and `PlaybackReporterTests` (unpaused ticks only, reset on start, posted then reset on stop).

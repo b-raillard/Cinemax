@@ -78,6 +78,7 @@ struct CardPlaybackPresentation: ViewModifier {
     let themeManager: ThemeManager
     let loc: LocalizationManager
     let toast: ToastCenter
+    let reviewPrompt: ReviewPromptTracker
 
     func body(content: Content) -> some View {
         content.fullScreenCover(item: $request) { request in
@@ -93,6 +94,7 @@ struct CardPlaybackPresentation: ViewModifier {
             .environment(themeManager)
             .environment(loc)
             .environment(toast)
+            .environment(reviewPrompt)
         }
     }
 }

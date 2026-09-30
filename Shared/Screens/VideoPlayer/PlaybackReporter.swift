@@ -79,6 +79,15 @@ final class PlaybackReporter {
     /// NOT sent without sleeping (the decision is taken synchronously in
     /// `onTick`, so once the last one launched has landed, none is left).
     private var lastKeepAlive: Task<Void, Never>?
+    /// Seconds of UNPAUSED playback in the current play session, counted on
+    /// the existing 1 s `onTick()` heartbeat (never a timer of its own).
+    /// Reset by `reportStart`; handed out, then reset, by `reportStop` through
+    /// `.cinemaxPlaybackSessionEnded` — the engine-agnostic signal
+    /// `ReviewPromptTracker` counts engaged sessions from.
+    private(set) var watchedSeconds = 0
+    /// `userInfo` key of `.cinemaxPlaybackSessionEnded`: the session's
+    /// `watchedSeconds`, an `Int`.
+    nonisolated static let watchedSecondsKey = "watchedSeconds"
 
     init(
         apiClient: any PlaybackAPI,
@@ -145,6 +154,7 @@ final class PlaybackReporter {
     }
 
     func reportStart(startTime: Double?) {
+        watchedSeconds = 0
         guard let ctx = context() else { return }
         if let id = ctx.info.playSessionId { endedPlaySessionIds.remove(id) }
         let positionTicks = startTime.map { Self.positionTicks(fromSeconds: $0) } ?? 0
@@ -175,6 +185,14 @@ final class PlaybackReporter {
             guard !endedPlaySessionIds.contains(id) else { return }
             if reason == .sessionEnded { endedPlaySessionIds.insert(id) }
         }
+        // Posted at call time, unlike tier-2 below: how long the user watched
+        // does not depend on the server having recorded anything. Both reasons
+        // post — each episode of an autoplay chain is its own session.
+        NotificationCenter.default.post(
+            name: .cinemaxPlaybackSessionEnded, object: nil,
+            userInfo: [Self.watchedSecondsKey: watchedSeconds]
+        )
+        watchedSeconds = 0
         let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient
         let itemId = ctx.itemId
@@ -258,9 +276,13 @@ final class PlaybackReporter {
     }
 
     /// Call once per second from the presenter's shared time observer.
-    /// Reports progress every 10 ticks (~10 s), and keeps a transcoding session
-    /// alive every 30 ticks while paused.
+    /// Counts unpaused seconds (`watchedSeconds`), reports progress every 10
+    /// ticks (~10 s), and keeps a transcoding session alive every 30 ticks
+    /// while paused.
     func onTick() {
+        if let ctx = context(), let state = currentState(ctx), !state.isPaused {
+            watchedSeconds += 1
+        }
         tickCounter += 1
         if tickCounter >= 10 {
             tickCounter = 0
