@@ -96,6 +96,12 @@ targets:
         # on the App ID; automatic signing adds it.
         com.apple.developer.associated-domains:
           - applinks:b-raillard.github.io
+        # iCloud key-value store SHARED with the tvOS app: the SAME identifier
+        # in both targets is what makes it one store (the bundle ids differ,
+        # so StoreKit cannot share the Pro purchase). Never rename it — see
+        # Shared/Entitlements/CLAUDE.md. Requires the iCloud capability on the
+        # App ID; automatic signing adds it (-allowProvisioningUpdates).
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.cinemax.shared
     info:
       path: iOS/Info.plist
       properties:
@@ -226,6 +232,8 @@ targets:
         keychain-access-groups:
           - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
           - $(AppIdentifierPrefix)com.cinemax.shared
+        # Same identifier as the iOS target — one shared key-value store.
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.cinemax.shared
     info:
       path: tvOS/Info.plist
       properties:

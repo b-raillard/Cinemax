@@ -163,6 +163,12 @@ struct SettingsScreen: View {
     /// Forwarded into `privacySecuritySheet` — that sheet is a separate
     /// presentation context and re-injects its environment by hand.
     @Environment(ParentalLockController.self) var parentalLock
+    #if os(tvOS)
+    /// Settings → Lecture → Débogage (tvOS). iOS reads it inside
+    /// `EntitlementDebugRows` instead — its Playback page is a pushed
+    /// destination, where only a standalone view re-renders.
+    @Environment(EntitlementStore.self) var entitlements
+    #endif
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false

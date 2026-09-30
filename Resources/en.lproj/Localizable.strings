@@ -1289,3 +1289,10 @@
 "settings.seasonal.row" = "Suggestions on Home";
 "settings.seasonal.accentNote" = "During “%@”, the theme's colour replaces yours.";
 "settings.debug.forceSeason" = "Force “%@”";
+"settings.debug.entitlement" = "Entitlements";
+"settings.debug.entitlement.free" = "Free";
+"settings.debug.entitlement.pro" = "Pro — %@";
+"settings.debug.entitlement.source.purchase" = "purchased on this device";
+"settings.debug.entitlement.source.cloudMirror" = "iCloud mirror";
+"settings.debug.entitlement.source.debugOverride" = "simulated";
+"settings.debug.simulatePro" = "Simulate Pro";
