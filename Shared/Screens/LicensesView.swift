@@ -216,6 +216,10 @@ struct LicensesView: View {
         available at https://github.com/b-raillard/Cinemax, permitting \
         relinking against a modified version of the library. libVLC source: \
         https://code.videolan.org/videolan/vlc
+
+        The application itself is free software, released under the GNU \
+        General Public License, version 3 or (at your option) any later \
+        version (GPL-3.0-or-later): https://www.gnu.org/licenses/gpl-3.0.html
         """
 
     private var licenses: [OSSLicense] {
