@@ -1349,10 +1349,10 @@ ASC → Tarifs et disponibilité → Disponibilité de l'app → Gérer la dispo
 
 ## 6. Build à sélectionner
 
-iOS : **2.3.0** build **2.3.0** (sur TestFlight, « Prêt à soumettre », constaté le 2026-09-30)
-tvOS : **2.3.0** build **2.3.0** (sur TestFlight, « Prêt à soumettre », constaté le 2026-09-30)
+iOS : **2.3.0** build **2.3.1** (envoyé sur TestFlight le 2026-09-30 — embarque la demande de note App Store, PR #276 ; le build 2.3.0 du même jour ne l'a pas)
+tvOS : **2.3.0** build **2.3.1** (idem)
 
-**État App Store Connect au 2026-09-30** : la version iOS **2.3.0** est créée (« À finaliser avant soumission ») avec les notes FR 2.3.0, la localisation **Anglais (États-Unis)** ajoutée et remplie depuis la section 3 (sous-titre, texte promo, description, mots-clés, notes 2.3.0 ; captures = celles du français par défaut, jusqu'à la série EN), et les champs FR alignés sur ce document (la fiche 2.2.0 en ligne disait encore « Cinemax » dans sa description, portait d'anciens mots-clés et le sous-titre « Lecteur de serveur multimédia »). Dans « Informations sur l'app » : nom EN `JellyGlass for Jellyfin`, sous-titre EN `Media library, movies and TV`, sous-titre FR `Médiathèque, films et séries` (prise d'effet avec la 2.3.0). La version tvOS 2.3.0 reste à créer dans ASC (l'anglais y existe déjà). **La langue principale ne peut passer à l'anglais qu'une fois l'anglais approuvé par App Review sur une version, avec des captures EN** (aide ASC « Localize App Store information »).
+**État App Store Connect au 2026-09-30** : la version iOS **2.3.0** est créée (« À finaliser avant soumission ») avec les notes FR 2.3.0, la localisation **Anglais (États-Unis)** ajoutée et remplie depuis la section 3 (sous-titre, texte promo, description, mots-clés, notes 2.3.0 ; captures = celles du français par défaut, jusqu'à la série EN), et les champs FR alignés sur ce document (la fiche 2.2.0 en ligne disait encore « Cinemax » dans sa description, portait d'anciens mots-clés et le sous-titre « Lecteur de serveur multimédia »). Dans « Informations sur l'app » : nom EN `JellyGlass for Jellyfin`, sous-titre EN `Media library, movies and TV`, sous-titre FR `Médiathèque, films et séries` (prise d'effet avec la 2.3.0). La version tvOS **2.3.0** est créée elle aussi (notes FR + EN 2.3.0, texte promo et mots-clés alignés sur ce document dans les deux langues). **La langue principale ne peut passer à l'anglais qu'une fois l'anglais approuvé par App Review sur une version, avec des captures EN** (aide ASC « Localize App Store information »).
 
 `MARKETING_VERSION` et `CURRENT_PROJECT_VERSION` sont source unique dans `project.yml` (settings.base) : bumper `MARKETING_VERSION` à chaque version publique, `CURRENT_PROJECT_VERSION` à chaque archive envoyée.
 
