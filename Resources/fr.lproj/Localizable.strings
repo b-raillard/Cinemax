@@ -1291,3 +1291,10 @@
 "settings.seasonal.row" = "Propositions sur l'accueil";
 "settings.seasonal.accentNote" = "Pendant « %@ », la couleur du thème remplace la vôtre.";
 "settings.debug.forceSeason" = "Forcer « %@ »";
+"settings.debug.entitlement" = "Droits";
+"settings.debug.entitlement.free" = "Gratuit";
+"settings.debug.entitlement.pro" = "Pro — %@";
+"settings.debug.entitlement.source.purchase" = "achat sur cet appareil";
+"settings.debug.entitlement.source.cloudMirror" = "miroir iCloud";
+"settings.debug.entitlement.source.debugOverride" = "simulé";
+"settings.debug.simulatePro" = "Simuler Pro";

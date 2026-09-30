@@ -127,6 +127,16 @@ enum SettingsKey {
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
     /// Debug: id of a catalogue season to force regardless of the date ("" = none).
     static let debugForcedSeason = "debug.forcedSeason"
+    /// Debug: resolve the entitlement as Pro without any purchase. Read and
+    /// written ONLY by `EntitlementStore` (`setDebugOverride`), and only in a
+    /// DEBUG build — a Release build never reads it (`EntitlementPolicy`).
+    static let debugSimulatePro = "debug.simulatePro"
+
+    // Entitlements (`Shared/Entitlements/`)
+    /// JSON `CloudEntitlementRecord` of a purchase made on THIS device — the
+    /// local half of the entitlement; its iCloud mirror lives in the shared
+    /// key-value store, not here. Read and written only by `EntitlementStore`.
+    static let entitlementLocalRecord = "entitlement.localRecord"
 
     // Main menu customization — one `MenuProfile` per registered server,
     // keyed by `ServerEntry.id`. See `MenuConfigStore.activate(serverId:…)`.
@@ -222,6 +232,7 @@ enum SettingsKey {
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false
         static let debugForcedSeason = ""
+        static let debugSimulatePro = false
 
         static let rainbowUnlocked = false
 

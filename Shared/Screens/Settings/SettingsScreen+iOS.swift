@@ -558,6 +558,8 @@ extension SettingsScreen {
                 VStack(spacing: 0) {
                     iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
                     iOSSettingsDivider
+                    EntitlementDebugRows()
+                    iOSSettingsDivider
                     DiagnosticsExportRows()
                 }
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)

@@ -42,6 +42,11 @@ struct AppNavigation: View {
     /// Seasonal themes — a process singleton like the stores above, so a
     /// scene-struct recreation never re-reads the defaults.
     private static let sharedSeasonal = SeasonalThemeController()
+    /// Free / Pro — a process singleton like the stores above: its `init`
+    /// reads the defaults AND the iCloud key-value store and starts listening
+    /// for iCloud's external changes, none of which a scene-struct recreation
+    /// may repeat. Nothing gates on it yet (`Shared/Entitlements/CLAUDE.md`).
+    private static let sharedEntitlements = EntitlementStore()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -51,6 +56,7 @@ struct AppNavigation: View {
     @State private var menuConfig = AppNavigation.sharedMenuConfig
     @State private var parentalLock = AppNavigation.sharedParentalLock
     @State private var seasonal = Self.sharedSeasonal
+    @State private var entitlements = Self.sharedEntitlements
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
@@ -211,6 +217,7 @@ struct AppNavigation: View {
         .environment(settingsNav)
         .environment(parentalLock)
         .environment(seasonal)
+        .environment(entitlements)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         .onChange(of: seasonal.activeTheme?.id, initial: true) { _, _ in
             themeManager.setSeasonAccent(seasonal.activeTheme?.accent)
@@ -520,7 +527,12 @@ struct AppNavigation: View {
             remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: enabled)
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active { seasonal.reevaluate() }
+            if newPhase == .active {
+                seasonal.reevaluate()
+                // Synchronize the iCloud key-value store on every return to
+                // the foreground (the launch one is the store's `init`).
+                entitlements.refresh()
+            }
             if newPhase == .background {
                 lastBackgroundedAt = Date()
                 NotificationCenter.default.post(name: .cinemaxDidEnterBackground, object: nil)

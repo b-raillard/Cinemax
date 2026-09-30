@@ -519,6 +519,30 @@ extension SettingsScreen {
             tvSectionLabel(loc.localized("settings.debug"))
                 .padding(.top, CinemaSpacing.spacing4)
             tvToggleList(debugToggleRows)
+            // Read-only: pressing it only re-reads the stores (local + the
+            // iCloud mirror) — a focusable row is the only kind tvOS can reach.
+            tvActionRow(
+                id: "entitlement",
+                icon: "crown",
+                label: loc.localized("settings.debug.entitlement"),
+                subtitle: entitlementStatusText(entitlements.state, loc: loc),
+                action: { entitlements.refresh() }
+            )
+            #if DEBUG
+            // Custom Binding: the write goes through the store's mutator,
+            // never a property setter (`@Observable` RULE).
+            tvToggleList([
+                .init(
+                    id: "debugSimulatePro",
+                    icon: "crown.fill",
+                    label: loc.localized("settings.debug.simulatePro"),
+                    value: Binding(
+                        get: { entitlements.debugOverride },
+                        set: { entitlements.setDebugOverride($0) }
+                    )
+                )
+            ])
+            #endif
             // tvOS has no share sheet and no MetricKit (every MetricKit class
             // is `API_UNAVAILABLE(tvos)`), so the export is iOS-only. The row
             // stays so the limitation is stated rather than silently absent;
