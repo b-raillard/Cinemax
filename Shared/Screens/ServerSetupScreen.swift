@@ -154,12 +154,27 @@ struct ServerSetupScreen: View {
                 }
                 .padding(.bottom, CinemaSpacing.spacing6)
 
+                #if os(tvOS)
+                // The language, before signing in (`PreAuthLanguagePicker`).
+                PreAuthLanguagePicker()
+                    .padding(.bottom, CinemaSpacing.spacing6)
+                #endif
+
                 // Status pill
                 statusPill
                     .padding(.bottom, CinemaSpacing.spacing6)
             }
             .padding(.horizontal, CinemaSpacing.spacing20)
         }
+        #if os(iOS)
+        // iPad (regular width) renders this layout too: same corner control
+        // as the phone's, on the screen's corner rather than the form's inset.
+        .overlay(alignment: .topTrailing) {
+            PreAuthLanguagePicker()
+                .padding(.top, CinemaSpacing.spacing4)
+                .padding(.trailing, CinemaSpacing.spacing6)
+        }
+        #endif
     }
 
     // MARK: - Mobile Layout
@@ -272,6 +287,12 @@ struct ServerSetupScreen: View {
                 }
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.bottom, CinemaSpacing.spacing6)
+            }
+            // The language, before signing in (`PreAuthLanguagePicker`).
+            .overlay(alignment: .topTrailing) {
+                PreAuthLanguagePicker()
+                    .padding(.top, CinemaSpacing.spacing2)
+                    .padding(.trailing, CinemaSpacing.spacing4)
             }
         }
     }

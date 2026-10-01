@@ -31,8 +31,8 @@ import WidgetKit
 /// every other intent in the app — resolved from the APP's catalogue, which is
 /// where they are read (Shortcuts, Siri, the intent's accessibility label).
 /// The CONTROL's own gallery strings below are NOT intent metadata, so they keep
-/// the widget's inline `french ? … : …` form — the extension bundles no
-/// `.lproj`, and a key there would render as the key.
+/// the widget's inline `ExtensionLanguage.current.text(fr:en:de:)` form — the
+/// extension bundles no `.lproj`, and a key there would render as the key.
 struct ResumeControlIntent: AppIntent {
     static let title: LocalizedStringResource = "intent.resumeControl.title"
     static let description = IntentDescription("intent.resumeControl.description")
@@ -58,29 +58,57 @@ struct CinemaxResumeControl: ControlWidget {
         StaticControlConfiguration(kind: "com.cinemax.ios.control.resume") {
             ControlWidgetButton(action: ResumeControlIntent()) {
                 Label(
-                    ResumeControlStrings.isFrench ? "Reprendre" : "Resume",
+                    ExtensionLanguage.current.text(fr: "Reprendre", en: "Resume", de: "Fortsetzen"),
                     systemImage: "play.fill"
                 )
             }
         }
         .displayName(
             LocalizedStringResource(
-                stringLiteral: ResumeControlStrings.isFrench ? "Reprendre la lecture" : "Continue watching"
+                stringLiteral: ExtensionLanguage.current.text(
+                    fr: "Reprendre la lecture", en: "Continue watching", de: "Weiterschauen"
+                )
             )
         )
         .description(
             LocalizedStringResource(
-                stringLiteral: ResumeControlStrings.isFrench
-                    ? "Reprend le dernier titre commencé."
-                    : "Resumes the last thing you were watching."
+                stringLiteral: ExtensionLanguage.current.text(
+                    fr: "Reprend le dernier titre commencé.",
+                    en: "Resumes the last thing you were watching.",
+                    de: "Setzt den zuletzt begonnenen Titel fort."
+                )
             )
         )
     }
 }
 
-/// The language test, once. `static let` rather than a computed property because
-/// Swift 6 rejects a mutable nonisolated static and an intent's statics must be
-/// constants (see the intent-statics RULE).
-enum ResumeControlStrings {
-    static let isFrench = Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
+/// The extensions' language — the DEVICE's first preferred language the app
+/// ships (fr / en / de), English otherwise; same reading as the app's
+/// `AppLanguage`, which an extension cannot link. `static let` rather than a
+/// computed property because Swift 6 rejects a mutable nonisolated static and an
+/// intent's statics must be constants (see the intent-statics RULE).
+enum ExtensionLanguage: Sendable {
+    case french, english, german
+
+    static let current = resolve(Locale.preferredLanguages)
+
+    static func resolve(_ preferredLanguages: [String]) -> Self {
+        for tag in preferredLanguages {
+            switch tag.prefix(2).lowercased() {
+            case "fr": return .french
+            case "en": return .english
+            case "de": return .german
+            default: continue
+            }
+        }
+        return .english
+    }
+
+    func text(fr: String, en: String, de: String) -> String {
+        switch self {
+        case .french: fr
+        case .english: en
+        case .german: de
+        }
+    }
 }

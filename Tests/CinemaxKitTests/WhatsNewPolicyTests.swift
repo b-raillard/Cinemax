@@ -203,3 +203,53 @@ struct SeasonalOfferTests {
         #expect(start == MonthDay(month: 10, day: 1))
     }
 }
+
+/// La page « langue » de la 2.3.1 : proposée seulement à qui a quelque chose à
+/// y gagner, et jamais vide.
+@Suite("Offre de langue dans « Quoi de neuf »")
+struct WhatsNewLanguageOfferTests {
+    private let languagePage = WhatsNewPage(id: "language", illustration: .language, offer: .deviceLanguage)
+    private let plainPage = WhatsNewPage(id: "other", illustration: .playlists)
+
+    @Test("Appareil en allemand, app en français : la page propose l'allemand")
+    func offersDeviceLanguage() {
+        let pages = WhatsNewCatalogue.resolvingOffers(
+            [languagePage, plainPage], appLanguage: "fr", preferredLanguages: ["de-CH", "fr-CH"]
+        )
+        #expect(pages.map(\.id) == ["language", "other"])
+        #expect(pages.first?.offer == .appLanguage(code: "de"))
+    }
+
+    @Test("Rien à proposer : même langue, ou langue que l'app ne parle pas", arguments: [
+        (app: "fr", device: ["fr-FR"]),
+        (app: "de", device: ["de-DE"]),
+        (app: "fr", device: ["it-IT", "es-ES"])
+    ])
+    func dropsPageWhenNothingToOffer(app: String, device: [String]) {
+        let pages = WhatsNewCatalogue.resolvingOffers(
+            [languagePage, plainPage], appLanguage: app, preferredLanguages: device
+        )
+        #expect(pages.map(\.id) == ["other"])
+    }
+
+    @Test("Une version dont la seule page tombe se tamponne en silence")
+    func droppedOnlyPageIsSilentStamp() {
+        let catalogue = [WhatsNewRelease(version: ServerVersion(2, 3, 1), pages: [languagePage])]
+        let outcome = WhatsNewPolicy.decide(
+            lastSeenVersion: "2.3.0", installed: ServerVersion(2, 3, 1), isFirstRun: false, catalogue: catalogue,
+            resolve: { WhatsNewCatalogue.resolvingOffers($0, appLanguage: "fr", preferredLanguages: ["fr-FR"]) }
+        )
+        #expect(outcome == .stampOnly)
+    }
+
+    @Test("La page est livrée en 2.3.1, avec son titre dans chaque langue")
+    func shippedPageExists() throws {
+        let page = try #require(WhatsNewCatalogue.releases.flatMap(\.pages).first { $0.id == "language" })
+        #expect(page.offer == .deviceLanguage)
+        for code in AppLanguage.supported {
+            let title = Bundle.localizedBundle(for: code)
+                .localizedString(forKey: "whatsNew.language.title", value: nil, table: nil)
+            #expect(title != "whatsNew.language.title", "\(code)")
+        }
+    }
+}

@@ -24,21 +24,21 @@ enum CinemaxRailKind: String {
         }
     }
 
-    func headerTitle(french: Bool) -> String {
+    func headerTitle(_ language: ExtensionLanguage) -> String {
         switch self {
-        case .continueWatching: return french ? "En cours" : "Continue Watching"
-        case .favorites: return french ? "Favoris" : "Favorites"
-        case .nextUp: return french ? "À suivre" : "Next Up"
-        case .recentlyAdded: return french ? "Récemment ajoutés" : "Recently Added"
+        case .continueWatching: language.text(fr: "En cours", en: "Continue Watching", de: "Weiterschauen")
+        case .favorites: language.text(fr: "Favoris", en: "Favorites", de: "Favoriten")
+        case .nextUp: language.text(fr: "À suivre", en: "Next Up", de: "Als Nächstes")
+        case .recentlyAdded: language.text(fr: "Récemment ajoutés", en: "Recently Added", de: "Neu hinzugefügt")
         }
     }
 
-    func emptyMessage(french: Bool) -> String {
+    func emptyMessage(_ language: ExtensionLanguage) -> String {
         switch self {
-        case .continueWatching: return french ? "Rien à reprendre" : "Nothing to resume"
-        case .favorites: return french ? "Aucun favori" : "No favorites yet"
-        case .nextUp: return french ? "Rien à suivre" : "Nothing up next"
-        case .recentlyAdded: return french ? "Rien de récent" : "Nothing new"
+        case .continueWatching: language.text(fr: "Rien à reprendre", en: "Nothing to resume", de: "Nichts fortzusetzen")
+        case .favorites: language.text(fr: "Aucun favori", en: "No favorites yet", de: "Noch keine Favoriten")
+        case .nextUp: language.text(fr: "Rien à suivre", en: "Nothing up next", de: "Nichts als Nächstes")
+        case .recentlyAdded: language.text(fr: "Rien de récent", en: "Nothing new", de: "Nichts Neues")
         }
     }
 }
@@ -199,9 +199,7 @@ struct PosterRailWidgetView: View {
     var entry: PosterRailEntry
     @Environment(\.widgetFamily) private var family
 
-    private var isFrench: Bool {
-        Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
-    }
+    private var language: ExtensionLanguage { .current }
 
     private let columns = 4
 
@@ -243,7 +241,7 @@ struct PosterRailWidgetView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.kind.headerTitle(french: isFrench).uppercased())
+                    Text(entry.kind.headerTitle(language).uppercased())
                         .font(.system(size: 9, weight: .bold))
                         .tracking(0.5)
                     if let poster {
@@ -274,11 +272,11 @@ struct PosterRailWidgetView: View {
     private var stateMessage: String? {
         switch entry.state {
         case .notConnected:
-            isFrench ? "Connectez-vous dans JellyGlass" : "Sign in to JellyGlass"
+            language.text(fr: "Connectez-vous dans JellyGlass", en: "Sign in to JellyGlass", de: "Melde dich in JellyGlass an")
         case .unreachable:
-            isFrench ? "Serveur Jellyfin inaccessible" : "Jellyfin server unreachable"
+            language.text(fr: "Serveur Jellyfin inaccessible", en: "Jellyfin server unreachable", de: "Jellyfin-Server nicht erreichbar")
         case .ok:
-            entry.posters.isEmpty ? entry.kind.emptyMessage(french: isFrench) : nil
+            entry.posters.isEmpty ? entry.kind.emptyMessage(language) : nil
         }
     }
 
@@ -286,7 +284,7 @@ struct PosterRailWidgetView: View {
         HStack(spacing: 5) {
             Image(systemName: entry.kind.headerIcon)
                 .font(.system(size: 10, weight: .bold))
-            Text(entry.kind.headerTitle(french: isFrench).uppercased())
+            Text(entry.kind.headerTitle(language).uppercased())
                 .font(.system(size: 10, weight: .bold))
                 .tracking(0.6)
             Spacer()
@@ -369,7 +367,7 @@ struct PosterRailWidgetView: View {
                     Image(systemName: "arrow.up.forward.app.fill")
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.85))
-                    Text(isFrench ? "Voir tout" : "See all")
+                    Text(language.text(fr: "Voir tout", en: "See all", de: "Alle anzeigen"))
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .multilineTextAlignment(.center)
@@ -392,12 +390,14 @@ struct CinemaxContinueWatchingWidget: Widget {
             PosterRailWidgetView(entry: entry)
         }
         .configurationDisplayName(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true ? "Reprendre la lecture" : "Continue Watching"
+            ExtensionLanguage.current.text(fr: "Reprendre la lecture", en: "Continue Watching", de: "Weiterschauen")
         )
         .description(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
-                ? "Reprenez vos films et séries en cours."
-                : "Jump back into what you were watching."
+            ExtensionLanguage.current.text(
+                fr: "Reprenez vos films et séries en cours.",
+                en: "Jump back into what you were watching.",
+                de: "Mach dort weiter, wo du aufgehört hast."
+            )
         )
         // Continue Watching is the ONLY rail that earns the Lock Screen: one
         // item is all an accessory fits, and "the thing I was watching" is the
@@ -414,12 +414,14 @@ struct CinemaxFavoritesWidget: Widget {
             PosterRailWidgetView(entry: entry)
         }
         .configurationDisplayName(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true ? "Favoris" : "Favorites"
+            ExtensionLanguage.current.text(fr: "Favoris", en: "Favorites", de: "Favoriten")
         )
         .description(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
-                ? "Vos films et séries favoris."
-                : "Your favorite movies and shows."
+            ExtensionLanguage.current.text(
+                fr: "Vos films et séries favoris.",
+                en: "Your favorite movies and shows.",
+                de: "Deine Lieblingsfilme und -serien."
+            )
         )
         .supportedFamilies([.systemMedium, .systemLarge])
     }
@@ -431,12 +433,14 @@ struct CinemaxNextUpWidget: Widget {
             PosterRailWidgetView(entry: entry)
         }
         .configurationDisplayName(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true ? "À suivre" : "Next Up"
+            ExtensionLanguage.current.text(fr: "À suivre", en: "Next Up", de: "Als Nächstes")
         )
         .description(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
-                ? "Le prochain épisode à regarder de vos séries en cours."
-                : "The next episode to watch from your shows."
+            ExtensionLanguage.current.text(
+                fr: "Le prochain épisode à regarder de vos séries en cours.",
+                en: "The next episode to watch from your shows.",
+                de: "Die nächste Folge deiner laufenden Serien."
+            )
         )
         .supportedFamilies([.systemMedium, .systemLarge])
     }
@@ -448,12 +452,14 @@ struct CinemaxRecentlyAddedWidget: Widget {
             PosterRailWidgetView(entry: entry)
         }
         .configurationDisplayName(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true ? "Récemment ajoutés" : "Recently Added"
+            ExtensionLanguage.current.text(fr: "Récemment ajoutés", en: "Recently Added", de: "Neu hinzugefügt")
         )
         .description(
-            Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
-                ? "Les derniers films et séries ajoutés à votre serveur."
-                : "The latest movies and shows added to your server."
+            ExtensionLanguage.current.text(
+                fr: "Les derniers films et séries ajoutés à votre serveur.",
+                en: "The latest movies and shows added to your server.",
+                de: "Die neuesten Filme und Serien auf deinem Server."
+            )
         )
         .supportedFamilies([.systemMedium, .systemLarge])
     }

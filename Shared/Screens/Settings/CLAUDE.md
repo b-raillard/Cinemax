@@ -57,6 +57,7 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 
 | Key | Default | Effect |
 |-----|---------|--------|
+| `appLanguage` | *settled once* (`AppLanguage.settleStoredLanguage`, from `AppNavigation.init`) | `fr` / `en` / `de`. **Written at the first launch of 2.3.1+**: a fresh install gets the device's first shipped language (English otherwise — every install started in French before); an install that ran an earlier version (« Quoi de neuf » stamp or `onboarding.seen`) keeps `fr`, the language it was reading, and is OFFERED its device's language in « Quoi de neuf » (`Shared/Update/CLAUDE.md`). Written rather than re-read so a fresh install's SECOND launch, already stamped, is not taken for an upgrade. Also pickable before sign-in (`PreAuthLanguagePicker`). Read through `LocalizationManager`, and by `IntentSessionProvider.preferredLanguage` for the headless intent client. A new language = a `.lproj` + `AppLanguage.supported` + `acceptLanguageHeader` + the extensions' `ExtensionLanguage` / Top Shelf `localized` + `LANGS` in the parity script |
 | `motionEffects` | `true` | Combined with the system's Reduce Motion into the `motionEffectsEnabled` env — disables all animations when either is off |
 | `render4K` | `true` | `maxBitrate` 120/20 Mbps |
 | `autoPlayNextEpisode` | `true` | Auto-nav via `didPlayToEndTime` |

@@ -10,8 +10,8 @@ extension SettingsScreen {
         let isFocused = focusedItem == .language("row")
 
         return Button {
-            // Toggle between languages on press
-            loc.languageCode = loc.languageCode == "fr" ? "en" : "fr"
+            // Each press moves to the next language, wrapping.
+            loc.languageCode = AppLanguage.next(after: loc.languageCode)
         } label: {
             HStack(spacing: CinemaSpacing.spacing3) {
                 Image(systemName: "globe")
@@ -26,8 +26,9 @@ extension SettingsScreen {
                 Spacer()
 
                 HStack(spacing: CinemaSpacing.spacing2) {
-                    tvLanguageChip("fr", label: loc.localized("settings.language.french"))
-                    tvLanguageChip("en", label: loc.localized("settings.language.english"))
+                    ForEach(AppLanguage.supported, id: \.self) { code in
+                        tvLanguageChip(code, label: loc.localized(AppLanguage.nameKey(code)))
+                    }
                 }
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
@@ -41,13 +42,15 @@ extension SettingsScreen {
         // one is on: the row reads as « Langue, Français ».
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(loc.localized("settings.language"))
-        .accessibilityValue(loc.localized(loc.languageCode == "fr" ? "settings.language.french" : "settings.language.english"))
+        .accessibilityValue(loc.localized(AppLanguage.nameKey(loc.languageCode)))
         .focused($focusedItem, equals: .language("row"))
         .onMoveCommand { direction in
             guard isFocused else { return }
             switch direction {
-            case .left, .right:
-                loc.languageCode = loc.languageCode == "fr" ? "en" : "fr"
+            case .left:
+                loc.languageCode = AppLanguage.next(after: loc.languageCode, step: -1)
+            case .right:
+                loc.languageCode = AppLanguage.next(after: loc.languageCode)
             default:
                 break
             }

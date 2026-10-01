@@ -33,6 +33,9 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     /// The ephemeral « Nuit d'Halloween » theme — a full night scene, wide
     /// rather than square (`isScene`).
     case halloweenNight
+    /// The app in the device's language — two speech bubbles, the old one
+    /// faded, the new one in the accent.
+    case language
 
     /// Drawn as a wide scene across the page, not a motif on the halo.
     var isScene: Bool { self == .halloweenNight }
@@ -79,6 +82,7 @@ struct WhatsNewIllustrationView: View {
             case .newName:       newName(u)
             case .parentalLock:  parentalLock(u)
             case .accessibility: accessibility(u)
+            case .language:      language(u)
             case .halloweenNight: EmptyView()   // drawn by `body` as a scene
             }
         }
@@ -211,6 +215,41 @@ struct WhatsNewIllustrationView: View {
             }
             bar(u, width: 34, fill: AnyShapeStyle(CinemaColor.surfaceContainerHigh))
         }
+    }
+
+    /// Two speech bubbles: a neutral one behind, faded, and the accent one in
+    /// front carrying two lines — the app answering in another language.
+    private func language(_ u: CGFloat) -> some View {
+        ZStack {
+            bubble(u, width: 44, height: 30, fill: AnyShapeStyle(CinemaColor.surfaceContainerHighest))
+                .opacity(0.6)
+                .offset(x: -14 * u, y: -12 * u)
+            bubble(u, width: 50, height: 34, fill: AnyShapeStyle(accentGradient))
+                .overlay {
+                    VStack(alignment: .leading, spacing: 5 * u) {
+                        bar(u, width: 30, fill: AnyShapeStyle(CinemaColor.surfaceContainerHighest))
+                        bar(u, width: 20, fill: AnyShapeStyle(CinemaColor.surfaceContainerHighest))
+                    }
+                    .scaleEffect(0.7)
+                    .offset(y: -2 * u)
+                }
+                .offset(x: 12 * u, y: 12 * u)
+        }
+    }
+
+    /// A rounded slab with a small tail at its bottom-leading corner.
+    private func bubble(_ u: CGFloat, width: CGFloat, height: CGFloat, fill: AnyShapeStyle) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 9 * u)
+                .fill(fill)
+                .frame(width: width * u, height: height * u)
+            Triangle()
+                .fill(fill)
+                .frame(width: 9 * u, height: 9 * u)
+                .rotationEffect(.degrees(90))
+                .offset(x: 7 * u, y: 7 * u)
+        }
+        .frame(width: width * u, height: (height + 7) * u, alignment: .top)
     }
 
     private func bar(_ u: CGFloat, width: CGFloat, fill: AnyShapeStyle) -> some View {

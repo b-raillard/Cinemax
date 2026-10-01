@@ -14,7 +14,7 @@ struct CardLabelLocalizationTests {
         Bundle.localizedBundle(for: language).localizedString(forKey: key, value: nil, table: nil)
     }
 
-    @Test("common kinds have a translated label in both languages", arguments: ["fr", "en"])
+    @Test("common kinds have a translated label in every language", arguments: AppLanguage.supported)
     func kindsResolve(language: String) {
         for kind in [BaseItemKind.movie, .series, .episode, .season, .boxSet, .playlist, .video] {
             let key = LocalizationManager.itemKindKey(kind)
@@ -43,4 +43,96 @@ struct CardLabelLocalizationTests {
         #expect(LocalizationManager.decimal(6.8, languageCode: "en") == "6.8")
         #expect(LocalizationManager.decimal(7, languageCode: "fr") == "7,0")
     }
+}
+
+// MARK: - App languages (2.3.1, German)
+
+/// Until 2.3.1 every install started in French whatever the phone spoke; the
+/// default now follows the device until the user picks a language.
+@Suite("App language")
+struct AppLanguageTests {
+
+    @Test("the device's first language the app ships wins, whatever its region")
+    func resolvesFromDevice() {
+        #expect(AppLanguage.resolve(preferredLanguages: ["de-CH", "fr-CH"]) == "de")
+        #expect(AppLanguage.resolve(preferredLanguages: ["fr-FR"]) == "fr")
+        #expect(AppLanguage.resolve(preferredLanguages: ["en-GB"]) == "en")
+        #expect(AppLanguage.resolve(preferredLanguages: ["it-CH", "de-CH"]) == "de")
+        #expect(AppLanguage.resolve(preferredLanguages: ["zh-Hans-CN"]) == "en")
+        #expect(AppLanguage.resolve(preferredLanguages: []) == "en")
+    }
+
+    @Test("every shipped language has its own name in every table", arguments: AppLanguage.supported)
+    func namesResolve(language: String) {
+        let bundle = Bundle.localizedBundle(for: language)
+        for code in AppLanguage.supported {
+            let key = AppLanguage.nameKey(code)
+            #expect(bundle.localizedString(forKey: key, value: nil, table: nil) != key, "\(language): \(key)")
+        }
+        // A real `.lproj`, not the main-bundle fallback.
+        #expect(bundle != Bundle.main, "\(language).lproj missing")
+    }
+
+    @Test("a fresh install takes the device's language, an upgrade keeps French")
+    func settlesOnce() {
+        // Fresh install: the device decides, English when it speaks none of ours.
+        #expect(AppLanguage.languageToSettle(stored: nil, isExistingInstall: false, preferredLanguages: ["de-CH"]) == "de")
+        #expect(AppLanguage.languageToSettle(stored: nil, isExistingInstall: false, preferredLanguages: ["it-IT"]) == "en")
+        // An upgrade had been reading French (the old default) — it keeps it
+        // and is OFFERED its device's language in « Quoi de neuf ».
+        #expect(AppLanguage.languageToSettle(stored: nil, isExistingInstall: true, preferredLanguages: ["de-CH"]) == "fr")
+        // A stored choice is never touched.
+        #expect(AppLanguage.languageToSettle(stored: "en", isExistingInstall: true, preferredLanguages: ["de-CH"]) == nil)
+    }
+
+    @Test("settling writes once, then a stamped second launch keeps the first answer")
+    func settlingIsStable() {
+        let defaults = UserDefaults.isolatedForTesting()
+        AppLanguage.settleStoredLanguage(defaults: defaults)
+        let first = defaults.string(forKey: SettingsKey.appLanguage)
+        #expect(first != nil)
+        // The first launch stamps « Quoi de neuf »; the second must not take
+        // the install for an upgrade and pin it to French.
+        defaults.set("2.3.1", forKey: SettingsKey.whatsNewLastSeenVersion)
+        AppLanguage.settleStoredLanguage(defaults: defaults)
+        #expect(defaults.string(forKey: SettingsKey.appLanguage) == first)
+    }
+
+    @Test("an upgraded install with no stored language is pinned to French")
+    func upgradePinnedToFrench() {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set("2.3.0", forKey: SettingsKey.whatsNewLastSeenVersion)
+        AppLanguage.settleStoredLanguage(defaults: defaults)
+        #expect(defaults.string(forKey: SettingsKey.appLanguage) == "fr")
+    }
+
+    @Test("only a shipped device language that differs from the app's is offered")
+    func offers() {
+        #expect(AppLanguage.offer(current: "fr", preferredLanguages: ["de-CH"]) == "de")
+        #expect(AppLanguage.offer(current: "fr", preferredLanguages: ["en-GB"]) == "en")
+        #expect(AppLanguage.offer(current: "de", preferredLanguages: ["de-AT"]) == nil)
+        #expect(AppLanguage.offer(current: "fr", preferredLanguages: ["it-IT"]) == nil)
+        #expect(AppLanguage.offer(current: "fr", preferredLanguages: ["it-IT", "de-CH"]) == "de")
+    }
+
+    @Test("the tvOS row walks the languages in order and wraps both ways")
+    func cycles() {
+        #expect(AppLanguage.next(after: "fr") == "en")
+        #expect(AppLanguage.next(after: "en") == "de")
+        #expect(AppLanguage.next(after: "de") == "fr")
+        #expect(AppLanguage.next(after: "fr", step: -1) == "de")
+    }
+
+    #if os(iOS)
+    /// `ExtensionLanguage` is the widget's copy (shared by source with the iOS
+    /// app only), which cannot link the app's `AppLanguage`.
+    @Test("the extensions read the device the same way")
+    func extensionsAgree() {
+        for tags in [["de-AT"], ["fr-BE"], ["en-US"], ["it-IT", "fr-CH"], ["es-ES"]] {
+            let expected = AppLanguage.resolve(preferredLanguages: tags)
+            let language = ExtensionLanguage.resolve(tags)
+            #expect(language.text(fr: "fr", en: "en", de: "de") == expected, "\(tags)")
+        }
+    }
+    #endif
 }

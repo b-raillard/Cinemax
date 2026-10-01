@@ -166,7 +166,7 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     /// `Accept-Language` value for an app language code, or `nil` for a blank
-    /// one. The app's two languages get a region-qualified primary with the
+    /// one. The app's languages get a region-qualified primary with the
     /// bare code as fallback — Jellyfin matches cultures by name and falls
     /// back to the parent, so either spelling lands on the right resources.
     public static func acceptLanguageHeader(for languageCode: String) -> String? {
@@ -175,6 +175,7 @@ public final class JellyfinAPIClient: Sendable {
         switch code {
         case "fr": return "fr-FR, fr;q=0.9"
         case "en": return "en-US, en;q=0.9"
+        case "de": return "de-DE, de;q=0.9"
         default: return code
         }
     }

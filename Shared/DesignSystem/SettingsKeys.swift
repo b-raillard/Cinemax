@@ -196,7 +196,9 @@ enum SettingsKey {
         static let darkMode = true
         static let accentColor = "green"
         static let uiScale = 1.0
-        static let appLanguage = "fr"
+        /// Not a constant: the device's language. Only a fallback — the key is
+        /// written once at launch (`AppLanguage.settleStoredLanguage`).
+        static var appLanguage: String { AppLanguage.deviceDefault }
         /// Off until the user accepts it (« Quoi de neuf » « Activer », or Réglages).
         static let seasonalTheme = SeasonalSetting.off.rawValue
         static let seasonalAmbiance = true

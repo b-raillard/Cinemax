@@ -86,7 +86,8 @@ final class ContentProvider: TVTopShelfContentProvider {
             // silent static image.
             handler.call(diagnosticContent(
                 fr: "Ouvrez JellyGlass pour activer cette rangée",
-                en: "Open JellyGlass to enable this row"
+                en: "Open JellyGlass to enable this row",
+                de: "Öffne JellyGlass, um diese Reihe zu aktivieren"
             ))
             return
         }
@@ -103,7 +104,8 @@ final class ContentProvider: TVTopShelfContentProvider {
             // Session OK but the server didn't answer (network / auth / TLS).
             handler.call(diagnosticContent(
                 fr: "Serveur Jellyfin inaccessible",
-                en: "Jellyfin server unreachable"
+                en: "Jellyfin server unreachable",
+                de: "Jellyfin-Server nicht erreichbar"
             ))
             return
         }
@@ -117,10 +119,9 @@ final class ContentProvider: TVTopShelfContentProvider {
 
     /// Single text-only tile naming the failing branch — selecting it opens
     /// the app. Visible only while the shelf is broken/un-activated.
-    private static func diagnosticContent(fr: String, en: String) -> any TVTopShelfContent {
-        let isFrench = Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
+    private static func diagnosticContent(fr: String, en: String, de: String) -> any TVTopShelfContent {
         let item = TVTopShelfSectionedItem(identifier: "cinemax.diagnostic")
-        item.title = isFrench ? fr : en
+        item.title = localized(fr: fr, en: en, de: de)
         item.imageShape = .square
         if let url = URL(string: "cinemax://home") {
             item.displayAction = TVTopShelfAction(url: url)
@@ -131,7 +132,6 @@ final class ContentProvider: TVTopShelfContentProvider {
     }
 
     private static func makeContent(items: [Item], session: Session) -> any TVTopShelfContent {
-        let isFrench = Locale.preferredLanguages.first?.hasPrefix("fr") ?? true
         let shelfItems = items.map { item -> TVTopShelfSectionedItem in
             let shelf = TVTopShelfSectionedItem(identifier: item.id)
             shelf.title = item.seriesName ?? item.name ?? ""
@@ -148,8 +148,23 @@ final class ContentProvider: TVTopShelfContentProvider {
         }
 
         let section = TVTopShelfItemCollection(items: shelfItems)
-        section.title = isFrench ? "Reprendre la lecture" : "Continue Watching"
+        section.title = localized(fr: "Reprendre la lecture", en: "Continue Watching", de: "Weiterschauen")
         return TVTopShelfSectionedContent(sections: [section])
+    }
+
+    /// The device's first preferred language the app ships (fr / en / de),
+    /// English otherwise — the app's `AppLanguage` reading, which the
+    /// extension cannot link.
+    private static func localized(fr: String, en: String, de: String) -> String {
+        for tag in Locale.preferredLanguages {
+            switch tag.prefix(2).lowercased() {
+            case "fr": return fr
+            case "en": return en
+            case "de": return de
+            default: continue
+            }
+        }
+        return en
     }
 
     /// Sole store: the shared, device-only Keychain group the app publishes

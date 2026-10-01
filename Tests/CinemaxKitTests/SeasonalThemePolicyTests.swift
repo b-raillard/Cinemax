@@ -112,9 +112,9 @@ struct SeasonalThemePolicyTests {
         }
     }
 
-    @Test("Every season's keys exist in French and English")
+    @Test("Every season's keys exist in every language")
     func keysExist() throws {
-        for lang in ["fr", "en"] {
+        for lang in AppLanguage.supported {
             let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
             let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
             for theme in SeasonalThemeCatalogue.all {

@@ -11,15 +11,16 @@ import Testing
 @Suite("Accept-Language")
 struct AcceptLanguageTests {
 
-    @Test("the app's two languages map to a region-qualified header with a bare fallback")
+    @Test("the app's languages map to a region-qualified header with a bare fallback")
     func mapping() {
         #expect(JellyfinAPIClient.acceptLanguageHeader(for: "fr") == "fr-FR, fr;q=0.9")
         #expect(JellyfinAPIClient.acceptLanguageHeader(for: "en") == "en-US, en;q=0.9")
+        #expect(JellyfinAPIClient.acceptLanguageHeader(for: "de") == "de-DE, de;q=0.9")
     }
 
     @Test("an unknown code travels as-is rather than being dropped")
     func unknownCode() {
-        #expect(JellyfinAPIClient.acceptLanguageHeader(for: "de") == "de")
+        #expect(JellyfinAPIClient.acceptLanguageHeader(for: "it") == "it")
     }
 
     @Test("an empty or blank code yields no header")

@@ -139,8 +139,15 @@ struct AppNavigation: View {
     }()
     #endif
 
+    /// Once per process — see `AppLanguage.settleStoredLanguage`.
+    private static let settleLanguage: Void = AppLanguage.settleStoredLanguage()
+
     init() {
         _ = Self.configurePipeline
+        // Before anything renders: a fresh install takes the device's
+        // language, an upgraded one keeps the French it has been reading
+        // (offered its device's language in « Quoi de neuf » instead).
+        _ = Self.settleLanguage
         #if os(iOS)
         _ = Self.registerMetricKit
         #endif
@@ -404,7 +411,12 @@ struct AppNavigation: View {
             switch WhatsNewPolicy.decide(
                 lastSeenVersion: whatsNewLastSeen.isEmpty ? nil : whatsNewLastSeen,
                 installed: installedVersion,
-                isFirstRun: isFirstRun
+                isFirstRun: isFirstRun,
+                resolve: { [loc] in
+                    WhatsNewCatalogue.resolvingOffers(
+                        $0, appLanguage: loc.languageCode, preferredLanguages: Locale.preferredLanguages
+                    )
+                }
             ) {
             case .nothing:
                 break

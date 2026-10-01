@@ -1,0 +1,1301 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   JellyGlass — Deutsche Lokalisierung
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+// MARK: - Tabs & Navigation
+
+"tab.home" = "Start";
+"tab.movies" = "Filme";
+"tab.tvShows" = "Serien";
+"tab.search" = "Suche";
+"tab.settings" = "Einstellungen";
+
+// MARK: - Common Actions
+
+"action.play" = "Abspielen";
+"action.moreInfo" = "Mehr Infos";
+"action.retry" = "Erneut versuchen";
+"action.cancel" = "Abbrechen";
+"action.apply" = "Anwenden";
+"action.reset" = "Zurücksetzen";
+
+"error.network" = "Server nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.";
+"error.sessionExpired" = "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.";
+"error.generic" = "Ein Fehler ist aufgetreten. Bitte versuche es erneut.";
+"login.usernameRequired" = "Bitte gib deinen Benutzernamen ein.";
+"server.addressRequired" = "Bitte gib eine Serveradresse ein.";
+"server.invalidURL" = "Diese Serveradresse scheint ungültig zu sein.";
+"server.connectFailed" = "Verbindung zum Server nicht möglich. Prüfe die Adresse und ob der Server erreichbar ist.";
+"action.clear" = "Leeren";
+"action.done" = "Fertig";
+"player.previousEpisode" = "Vorherige Folge";
+"player.nextEpisode" = "Nächste Folge";
+"player.chapters" = "Kapitel";
+"player.chapter" = "Kapitel";
+"player.scrubBar" = "Fortschrittsbalken";
+"action.logOut" = "Abmelden";
+"action.viewAll" = "Alle anzeigen";
+"action.refresh" = "Aktualisieren";
+"action.ok" = "OK";
+"action.back" = "Zurück";
+
+// MARK: - Home Screen
+
+"home.continueWatching" = "Weiterschauen";
+"home.nextUp" = "Als Nächstes";
+"favorites.empty.title" = "Keine Favoriten";
+"favorites.empty.subtitle" = "Tippe bei einem Film oder einer Serie auf das Herz, um den Titel hier hinzuzufügen.";
+"favorites.empty.subtitle.tv" = "Wähle auf der Seite eines Films oder einer Serie das Herz aus, um den Titel hier hinzuzufügen.";
+"watchedHistory.empty.title" = "Kein Verlauf";
+"watchedHistory.empty.subtitle" = "Filme und Serien, die du schaust, erscheinen hier.";
+"home.liveSession" = "LIVE";
+"home.watchingNow" = "Live";
+"home.watchingNow.playing" = "%@ schaut";
+"settings.homePage.watchingNow" = "Live";
+"home.recentlyAdded" = "Neu hinzugefügt";
+"home.becauseYouWatched" = "Weil du %@ gesehen hast";
+"home.remainingTime.hours" = "Noch %d Std. %d Min.";
+"home.remainingTime.minutes" = "Noch %d Min.";
+"home.remainingTime.minutes.one" = "Noch %d Min.";
+"home.genreRow.failed" = "Laden fehlgeschlagen";
+
+// MARK: - Movie Library
+
+"movies.title" = "Filme";
+"movies.sortFilter" = "Sortieren und filtern";
+"library.filter.button" = "Filter";
+"movies.count" = "%d Filme";
+"movies.count.one" = "%d Film";
+"movies.titles" = "%d Titel";
+"movies.titles.one" = "%d Titel";
+"sort.ascending" = "Aufsteigend";
+"sort.descending" = "Absteigend";
+"sort.by" = "Sortieren nach";
+"sort.order" = "Reihenfolge";
+"sort.name" = "Name";
+"sort.dateAdded" = "Hinzugefügt am";
+"sort.releaseYear" = "Erscheinungsjahr";
+"sort.rating" = "Bewertung";
+"sort.runtime" = "Laufzeit";
+"filter.byGenre" = "Genre";
+"filter.watchStatus" = "Wiedergabestatus";
+"filter.unwatchedOnly" = "Nur ungesehene";
+"filter.byDecade" = "Jahrzehnt";
+"filter.decade" = "%der";
+
+// MARK: - TV Series
+
+"tvShows.title" = "Serien";
+"tvShows.browseGenres" = "Genres durchsuchen";
+"tvShows.count" = "%d Serien";
+"tvShows.count.one" = "%d Serie";
+"tvShows.season" = "%d Staffel";
+"tvShows.seasonsPlural" = "%d Staffeln";
+
+// MARK: - Search
+
+"search.title" = "Suche";
+"search.placeholder" = "Filme, Serien suchen …";
+"search.listening" = "Hört zu …";
+"search.noResults" = "Keine Ergebnisse";
+"search.error.network" = "Server nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.";
+"search.filter.all" = "Alle";
+"search.filter.movies" = "Filme";
+"search.filter.series" = "Serien";
+"empty.library.filtered.title" = "Keine Ergebnisse";
+"empty.library.filtered.subtitle" = "Passe deine Filter an oder setze sie zurück.";
+"empty.library.filtered.action" = "Filter zurücksetzen";
+"library.loading.movies" = "Filme werden geladen …";
+"library.loading.series" = "Serien werden geladen …";
+"library.itemCount" = "%d Elemente";
+"library.itemCount.one" = "%d Element";
+"library.collections" = "Sammlungen";
+"library.collections.empty" = "Noch keine Sammlungen";
+"library.playlists.empty" = "Noch keine Playlists";
+"empty.home.title" = "Deine Mediathek ist leer";
+"empty.home.subtitle" = "Füge deinem Jellyfin-Server Filme oder Serien hinzu und ziehe nach unten, um zu aktualisieren.";
+"empty.home.subtitle.tv" = "Füge deinem Jellyfin-Server Filme oder Serien hinzu – sie erscheinen dann hier.";
+
+// MARK: - Sleep Timer
+
+"settings.sleepTimer" = "Schlaftimer";
+"sleep.disabled" = "Aus";
+"sleep.15" = "15 Minuten";
+"sleep.30" = "30 Minuten";
+"sleep.45" = "45 Minuten";
+"sleep.60" = "1 Stunde";
+"sleep.90" = "1 Stunde 30 Minuten";
+"sleep.indicator" = "Schlaftimer: %@";
+"sleep.prompt.title" = "Schaust du noch?";
+"sleep.prompt.subtitle" = "Dein Schlaftimer ist abgelaufen.";
+"sleep.prompt.keepWatching" = "Weiterschauen";
+"sleep.prompt.stop" = "Wiedergabe beenden";
+
+// MARK: - Playback Errors
+
+"playback.error.title" = "Wiedergabe nicht möglich";
+"playback.error.generic" = "Beim Laden des Streams ist ein Fehler aufgetreten. Versuche es erneut oder prüfe deinen Jellyfin-Server.";
+"playback.error.network" = "Die Verbindung zum Server wurde unterbrochen. Prüfe dein Netzwerk und versuche es erneut.";
+"playback.error.transcode" = "Der Server konnte diese Datei nicht transkodieren. Prüfe die Transkodierungseinstellungen.";
+"playback.error.close" = "Schließen";
+"player.episodeNav.failed" = "Folge nicht verfügbar";
+"player.episodeNav.failed.message" = "Diese Folge konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.";
+
+// MARK: - End of Series
+
+"player.finishedSeries.title" = "Du hast %@ zu Ende geschaut";
+"player.finishedSeries.subtitle" = "Keine weiteren Folgen.";
+"player.finishedSeries.done" = "Fertig";
+
+// MARK: - Toasts
+
+"toast.surprise.failed" = "Kein Titel gefunden";
+"toast.surprise.emptyLibrary" = "Deine Mediathek ist leer.";
+"toast.dismiss" = "Schließen";
+"search.searchLibrary" = "Deine Mediathek durchsuchen";
+"search.topMatches" = "Top-Treffer";
+"search.people" = "Personen";
+"search.permissionRequired" = "Berechtigung erforderlich";
+"search.openSettings" = "Einstellungen öffnen";
+"search.voice.microphoneDenied" = "Für die Sprachsuche ist Zugriff auf das Mikrofon erforderlich. Aktiviere ihn unter Einstellungen > Datenschutz & Sicherheit > Mikrofon.";
+"search.voice.speechDenied" = "Für die Sprachsuche ist Zugriff auf die Spracherkennung erforderlich. Aktiviere ihn unter Einstellungen > Datenschutz & Sicherheit > Spracherkennung.";
+"search.voice.unavailable" = "Die Spracherkennung ist auf diesem Gerät nicht verfügbar.";
+"search.surpriseMePrompt" = "Keine Idee, was du schauen sollst?";
+"search.surprise.movie" = "Überraschungsfilm";
+"search.surprise.series" = "Überraschungsserie";
+"search.recent" = "Letzte Suchen";
+"search.recent.clear" = "Leeren";
+
+// MARK: - Settings
+
+"settings.appearance" = "Darstellung";
+"settings.darkMode" = "Dunkelmodus";
+"settings.lightMode" = "Hellmodus";
+"settings.accentColor" = "Akzentfarbe";
+"accent.name.red" = "Rot";
+"accent.name.orange" = "Orange";
+"accent.name.yellow" = "Gelb";
+"accent.name.green" = "Grün";
+"accent.name.cyan" = "Cyan";
+"accent.name.blue" = "Blau";
+"accent.name.indigo" = "Indigo";
+"accent.name.purple" = "Violett";
+"accent.name.pink" = "Rosa";
+"accent.name.rainbow" = "Regenbogen";
+"settings.language" = "Sprache";
+"settings.language.french" = "Français";
+"settings.language.english" = "English";
+"settings.language.german" = "Deutsch";
+"settings.personalization" = "Personalisierung";
+"settings.infrastructure" = "Infrastruktur";
+"settings.live" = "ONLINE";
+"settings.account" = "Konto";
+"settings.privacySecurity" = "Datenschutz & Sicherheit";
+"settings.premiumMember" = "Premium-Mitglied \U2022 Verwaltetes Profil";
+"settings.logOutConfirm" = "Du wirst von diesem Server abgemeldet.";
+
+// MARK: - Settings (tvOS)
+
+"settings.profiles" = "Profile";
+"settings.active" = "Aktiv";
+"settings.admin" = "Admin";
+"settings.user" = "Benutzer";
+"settings.switchAccount" = "Konto wechseln";
+"settings.watchedHistory" = "Wiedergabeverlauf";
+"switchAccount.enterPasswordFor" = "Passwort für %@";
+"switchAccount.signIn" = "Anmelden";
+"switchAccount.authFailed" = "Anmeldung fehlgeschlagen";
+"switchAccount.success" = "Angemeldet als %@";
+"switchAccount.noPublicUsers.title" = "Keine Benutzer verfügbar";
+"switchAccount.noPublicUsers.subtitle" = "Keine Konten zur Auswahl. Melde dich mit deinem Benutzernamen und Passwort an.";
+"switchAccount.signInManually" = "Manuell anmelden";
+"switchAccount.username" = "Benutzername";
+"switchAccount.useDifferentAccount" = "Anderes Konto verwenden";
+"settings.server" = "Server";
+"settings.connected" = "Verbunden";
+"settings.refreshConnection" = "Verbindung aktualisieren";
+"settings.refreshCatalogue" = "Katalog aktualisieren";
+"settings.refreshCatalogue.subtitle" = "Cache leeren, Start und Mediathek neu laden.";
+"toast.catalogueRefreshed" = "Katalog aktualisiert";
+
+// MARK: - Privacy & Security
+
+"privacy.parentalControls" = "Kindersicherung";
+"privacy.parentalControls.footer" = "Blendet in der gesamten App Inhalte aus, deren Altersfreigabe über dem gewählten Alter liegt. Titel ohne Altersfreigabe bleiben sichtbar.";
+"privacy.age.all" = "Uneingeschränkt";
+"privacy.age.over10" = "Bis 10+";
+"privacy.age.over12" = "Bis 12+";
+"privacy.age.over14" = "Bis 14+";
+"privacy.age.over16" = "Bis 16+";
+"privacy.age.over18" = "Bis 18+";
+"privacy.activeSessions" = "Verbundene Geräte";
+"privacy.activeSessions.subtitle" = "Andere Geräte ansehen und abmelden.";
+"privacy.sessions.current" = "Dieses Gerät";
+"privacy.sessions.signOut" = "Abmelden";
+"privacy.sessions.signOutConfirm" = "Dieses Gerät wird vom Server abgemeldet.";
+"privacy.sessions.empty" = "Keine anderen Geräte verbunden";
+"privacy.maintenance" = "Wartung";
+"privacy.search" = "Suche";
+"privacy.saveSearchHistory" = "Letzte Suchen speichern";
+"privacy.saveSearchHistory.subtitle" = "Werden als Vorschläge in der Suche angezeigt. Beim Deaktivieren wird der Verlauf gelöscht.";
+"privacy.clearContinueWatching" = "„Weiterschauen“ leeren";
+"privacy.clearContinueWatching.subtitle" = "Den in „Weiterschauen“ angezeigten Fortschritt entfernen.";
+"privacy.clearContinueWatching.confirm" = "Der Wiedergabefortschritt wird auf dem Server gelöscht.";
+"privacy.clearImageCache" = "Bildcache leeren";
+"privacy.clearImageCache.subtitle" = "Gibt den Bildcache auf dem Gerät frei (~500 MB).";
+"privacy.clearImageCache.confirm" = "Bilder werden bei Bedarf erneut geladen.";
+"server.certificate.title" = "Unbekanntes Zertifikat";
+"server.certificate.explain" = "Dieser Server verwendet ein Zertifikat, das von keiner bekannten Zertifizierungsstelle signiert ist. Prüfe den Fingerabdruck auf deinem Server, bevor du es akzeptierst – genau dieser wird fest hinterlegt.";
+"server.certificate.untrusted" = "Das Zertifikat dieses Servers ist nicht bekannt.";
+"server.certificate.changed" = "Das Zertifikat dieses Servers hat sich seit deiner Bestätigung GEÄNDERT.";
+"server.certificate.host" = "Host";
+"server.certificate.subject" = "Inhaber";
+"server.certificate.fingerprint" = "SHA-256-Fingerabdruck";
+"server.certificate.trust" = "Diesem Zertifikat vertrauen";
+"privacy.lock" = "Sperre";
+"privacy.lock.enable" = "Mit PIN schützen";
+"privacy.lock.enable.subtitle" = "Fragt beim Öffnen dieses Bildschirms nach der PIN – inklusive Altersgrenze.";
+"privacy.lock.biometrics" = "Face ID / Touch ID verwenden";
+"privacy.lock.biometrics.subtitle" = "Eine Abkürzung statt der PIN. Die PIN bleibt immer gültig.";
+"privacy.lock.biometrics.reset" = "Die gespeicherten Gesichter oder Fingerabdrücke haben sich geändert, daher wurde Face ID deaktiviert. Aktiviere es wieder, wenn die Änderung von dir stammt.";
+"privacy.lock.change" = "PIN ändern";
+"privacy.lock.change.tooShort" = "Diese PIN ist zu kurz. Wähle eine mit mindestens 6 Ziffern.";
+"privacy.lock.disable" = "Sperre deaktivieren";
+"privacy.lock.footer" = "Diese PIN schützt die Einstellungen auf diesem Gerät. Für eine Grenze, die sich nicht durch eine Neuinstallation aufheben lässt, erstelle ein eigenes Jellyfin-Konto und lege seine Altersgrenze auf dem Server fest.";
+"privacy.lock.unlock.title" = "Geschützte Einstellungen";
+"privacy.lock.unlock.subtitle" = "Gib die Eltern-PIN ein, um diese Einstellungen zu ändern.";
+"privacy.lock.unlock.biometrics" = "Mit Face ID entsperren";
+"privacy.lock.unlock.reason" = "Kindersicherung entsperren";
+"privacy.lock.wrong" = "Falsche PIN.";
+"privacy.lock.wrong.remainingOne" = "Falsche PIN – noch 1 Versuch vor einer Wartezeit.";
+"privacy.lock.wrong.remainingMany" = "Falsche PIN – noch %d Versuche vor einer Wartezeit.";
+"privacy.lock.throttled.seconds" = "Zu viele Versuche. Versuche es in %d s erneut.";
+"privacy.lock.throttled.minutes" = "Zu viele Versuche. Versuche es in %d min erneut.";
+"privacy.lock.enroll.title" = "Wähle eine PIN";
+"privacy.lock.enroll.confirm" = "Bestätige die PIN";
+"privacy.lock.enroll.hint" = "6 bis 8 Ziffern.";
+"privacy.lock.enroll.invalid" = "Die PIN muss 6 bis 8 Ziffern haben.";
+"privacy.lock.enroll.mismatch" = "Die beiden PINs stimmen nicht überein. Beginne von vorn.";
+"privacy.lock.enroll.failed" = "Die PIN konnte nicht gespeichert werden.";
+"privacy.lock.enabled" = "Sperre aktiviert.";
+"privacy.lock.disabled" = "Sperre deaktiviert.";
+"privacy.lock.pad.delete" = "Letzte Ziffer löschen";
+"privacy.lock.pad.submit" = "PIN bestätigen";
+"toast.continueWatchingCleared" = "„Weiterschauen“ geleert";
+"toast.continueWatchingClearFailed" = "„Weiterschauen“-Liste konnte nicht geladen werden";
+"toast.continueWatchingClearPartial" = "Einige Einträge konnten nicht entfernt werden";
+"toast.imageCacheCleared" = "Bildcache geleert";
+"toast.deviceSignedOut" = "Gerät abgemeldet";
+"toast.deviceSignOutFailed" = "Gerät konnte nicht abgemeldet werden";
+"toast.deviceListFailed" = "Geräteliste konnte nicht geladen werden";
+
+// MARK: - Admin — Shared
+
+"action.save" = "Sichern";
+"admin.form.discardChanges.title" = "Änderungen verwerfen?";
+"admin.form.discardChanges.message" = "Nicht gesicherte Änderungen gehen verloren.";
+"admin.form.discard" = "Verwerfen";
+"admin.destructive.typeToConfirm" = "Gib zur Bestätigung unten „%@“ ein:";
+"admin.destructive.mismatch" = "Die Eingabe stimmt nicht überein.";
+
+// MARK: - Admin — Landings
+
+"admin.landing.title" = "Verwaltung";
+"admin.advanced.title" = "Erweiterte Verwaltung";
+"admin.landing.section.server" = "Server";
+"admin.landing.section.metadata" = "Metadaten";
+"admin.landing.section.users" = "Benutzer & Geräte";
+"admin.landing.section.extensions" = "Plugins & Aufgaben";
+"admin.landing.section.advanced" = "Erweitert";
+"admin.dashboard.subtitle" = "Aktive Sitzungen und Serverstatus.";
+"admin.metadata.title" = "Metadaten-Manager";
+"admin.metadata.subtitle" = "Titel, Besetzung und Bilder bearbeiten und Metadaten aktualisieren.";
+"admin.users.subtitle" = "Konten und Berechtigungen verwalten.";
+"admin.devices.subtitle" = "Verbundene Geräte ansehen und ihren Zugriff widerrufen.";
+"admin.activity.subtitle" = "Serverereignisse durchsehen.";
+"admin.playback.subtitle" = "Hardwarebeschleunigung und Transkodierung.";
+"admin.plugins.subtitle" = "Installierte Plugins aktivieren oder deinstallieren.";
+"admin.catalog.subtitle" = "Neue Plugins durchsuchen und installieren.";
+"admin.tasks.subtitle" = "Serveraufgaben starten oder stoppen.";
+"admin.network.subtitle" = "Ports, Adressen und Fernzugriff.";
+"admin.logs.subtitle" = "Serverprotokolle lesen.";
+"admin.apiKeys.subtitle" = "App-Zugänge erstellen und widerrufen.";
+"admin.playback.title" = "Wiedergabe";
+"admin.plugins.title" = "Meine Plugins";
+"admin.catalog.title" = "Plugin-Katalog";
+"admin.tasks.title" = "Geplante Aufgaben";
+"admin.network.title" = "Netzwerk";
+"admin.logs.title" = "Protokolle";
+"admin.apiKeys.title" = "API-Schlüssel";
+
+// MARK: - Admin — Dashboard
+
+"admin.dashboard.title" = "Dashboard";
+"admin.dashboard.activeSessions" = "Aktive Sitzungen";
+"admin.dashboard.noActiveSessions" = "Keine aktive Wiedergabe.";
+"admin.dashboard.unknownUser" = "Unbekannter Benutzer";
+"admin.dashboard.serverInfo" = "Serverinfos";
+"admin.dashboard.serverName" = "Name";
+"admin.dashboard.serverVersion" = "Version";
+"admin.dashboard.localAddress" = "Lokale Adresse";
+"admin.dashboard.restartPending" = "Neustart ausstehend";
+"admin.dashboard.serverInfoUnavailable" = "Serverinfos nicht verfügbar.";
+
+// MARK: - Admin — Users
+
+"admin.users.title" = "Benutzer";
+"admin.users.empty.title" = "Keine Benutzer";
+"admin.users.empty.subtitle" = "Erstelle einen Benutzer, um deine Mediathek zu teilen.";
+"admin.users.add" = "Benutzer hinzufügen";
+"admin.users.neverActive" = "Nie angemeldet";
+"admin.users.create.title" = "Neuer Benutzer";
+"admin.users.create.name" = "Benutzername";
+"admin.users.create.namePlaceholder" = "Namen eingeben";
+"admin.users.create.password" = "Passwort";
+"admin.users.create.passwordPlaceholder" = "Optional";
+"admin.users.create.passwordHint" = "Leer lassen, um ein Konto ohne Passwort zu erstellen; der Benutzer kann bei der ersten Anmeldung eines festlegen.";
+"admin.users.create.submit" = "Erstellen";
+"admin.users.create.success" = "Benutzer erstellt";
+
+// MARK: - Admin — User Detail
+
+"admin.user.tab.profile" = "Profil";
+"admin.user.tab.access" = "Zugriff";
+"admin.user.tab.parental" = "Kindersicherung";
+"admin.user.tab.password" = "Passwort";
+"admin.user.delete" = "Benutzer löschen";
+"admin.user.delete.title" = "Benutzer löschen";
+"admin.user.delete.message" = "Dies kann nicht rückgängig gemacht werden. Alle Wiedergabedaten von „%@“ werden gelöscht.";
+"admin.user.delete.confirm" = "Löschen";
+"admin.user.delete.success" = "Benutzer gelöscht";
+"admin.user.save.success" = "Änderungen gesichert";
+
+"admin.user.profile.identity" = "Identität";
+"admin.user.profile.name" = "Anzeigename";
+"admin.user.profile.permissions" = "Berechtigungen";
+"admin.user.profile.isAdministrator" = "Administrator";
+"admin.user.profile.cantDemoteSelf" = "Du kannst dir deine eigenen Administratorrechte nicht entziehen.";
+"admin.user.profile.isHidden" = "Auf dem Anmeldebildschirm ausblenden";
+"admin.user.profile.isDisabled" = "Konto deaktivieren";
+"admin.user.profile.cantDisableSelf" = "Du kannst dein eigenes Konto nicht deaktivieren.";
+
+"admin.user.access.libraryAccess" = "Zugriff auf Mediatheken";
+"admin.user.access.libraryAccess.footer" = "Wenn deaktiviert, wähle aus, welche Mediatheken mit diesem Benutzer geteilt werden.";
+"admin.user.access.enableAllLibraries" = "Zugriff auf alle Mediatheken erlauben";
+"admin.user.access.libraries" = "Mediatheken";
+"admin.user.access.libraries.empty" = "Keine Mediatheken auf dem Server gefunden.";
+"admin.user.access.devices" = "Gerätezugriff";
+"admin.user.access.enableAllDevices" = "Zugriff von allen Geräten erlauben";
+"admin.user.access.syncPlay.title" = "Gemeinsam schauen";
+"admin.user.access.syncPlay.label" = "Berechtigung";
+"admin.user.access.syncPlay.footer" = "Eine Serverberechtigung, die für alle Jellyfin-Clients dieses Kontos gilt. Ohne Berechtigung verschwindet für diesen Benutzer auch die Reihe „Live“, sodass er gar keine Sitzungen mehr sieht.";
+"admin.user.access.syncPlay.none" = "Keine";
+"admin.user.access.syncPlay.join" = "Nur beitreten";
+"admin.user.access.syncPlay.createAndJoin" = "Erstellen und beitreten";
+"admin.user.access.liveSessions.title" = "„Live“ sehen";
+"admin.user.access.liveSessions.label" = "Aktivität anderer sehen";
+"admin.user.access.liveSessions.footer" = "Zeigt diesem Benutzer, wer gerade was schaut, und lässt ihn aus einem Warteraum heraus jemanden benachrichtigen. Ohne diese Berechtigung sieht er nur „Gemeinsam schauen“-Sitzungen. Sichtbar sind für ihn nur Geräte, die Fernsteuerung zulassen („Abspielen auf …“ in JellyGlass aktiviert). Achtung: Jellyfin trennt Sehen und Steuern nicht – diese Berechtigung erlaubt dem Konto auch, die Wiedergabe auf den Geräten anderer zu steuern.";
+
+"admin.user.parental.rating.title" = "Maximale Altersfreigabe";
+"admin.user.parental.rating.footer" = "Blendet für diesen Benutzer alle Inhalte aus, deren Altersfreigabe über der gewählten Grenze liegt. Inhalte ohne Altersfreigabe bleiben sichtbar.";
+"admin.user.parental.rating.label" = "Maximal erlaubtes Alter";
+
+"admin.user.password.changeTitle" = "Neues Passwort festlegen";
+"admin.user.password.changeFooter" = "Der Benutzer kann sich anschließend mit diesem Passwort anmelden.";
+"admin.user.password.new" = "Neues Passwort";
+"admin.user.password.confirm" = "Bestätigung";
+"admin.user.password.mismatch" = "Die Passwörter stimmen nicht überein.";
+"admin.user.password.submit" = "Passwort aktualisieren";
+"admin.user.password.success" = "Passwort aktualisiert";
+"admin.user.password.resetTitle" = "Passwort zurücksetzen";
+"admin.user.password.resetFooter" = "Löscht das aktuelle Passwort. Der Benutzer muss bei der nächsten Anmeldung ein neues festlegen.";
+"admin.user.password.resetAction" = "Zurücksetzen";
+"admin.user.password.resetConfirm.title" = "Passwort zurücksetzen?";
+"admin.user.password.resetConfirm.message" = "Der Benutzer kann sich ohne Passwort anmelden, bis er ein neues festlegt.";
+"admin.user.password.resetSuccess" = "Passwort zurückgesetzt";
+
+// MARK: - Admin — Devices
+
+"admin.devices.title" = "Geräte";
+"admin.devices.empty.title" = "Keine Geräte";
+"admin.devices.empty.subtitle" = "Mit deinem Server verbundene Geräte werden hier angezeigt.";
+"admin.devices.thisDevice" = "DIESES GERÄT";
+"admin.devices.revoke" = "Widerrufen";
+"admin.devices.revoke.title" = "Zugriff dieses Geräts widerrufen?";
+"admin.devices.revoke.message" = "„%@“ wird sofort abgemeldet und muss sich erneut anmelden, um auf den Server zuzugreifen.";
+"admin.devices.revoke.success" = "Gerätezugriff widerrufen";
+
+// MARK: - Admin — Activity
+
+"admin.activity.title" = "Aktivität";
+"admin.activity.empty.title" = "Keine Aktivität";
+"admin.activity.empty.subtitle" = "Das Ereignisprotokoll des Servers wird hier angezeigt.";
+
+// MARK: - Admin — Scheduled Tasks
+
+"admin.tasks.empty.title" = "Keine Aufgaben";
+"admin.tasks.empty.subtitle" = "Die geplanten Aufgaben des Servers werden hier angezeigt.";
+"admin.tasks.state.running" = "LÄUFT";
+"admin.tasks.state.cancelling" = "WIRD ABGEBROCHEN";
+"admin.tasks.state.idle" = "INAKTIV";
+"admin.tasks.started" = "Aufgabe gestartet";
+"admin.tasks.stopped" = "Abbruch angefordert";
+
+// MARK: - Admin — Plugins
+
+"admin.plugins.empty.title" = "Keine Plugins installiert";
+"admin.plugins.empty.subtitle" = "Durchsuche den Katalog, um welche hinzuzufügen.";
+"admin.plugins.uninstall" = "Deinstallieren";
+"admin.plugins.uninstall.title" = "Plugin deinstallieren?";
+"admin.plugins.uninstall.message" = "„%@“ wird entfernt. Möglicherweise ist ein Neustart des Servers nötig.";
+"admin.plugins.uninstall.confirm" = "Deinstallieren";
+"admin.plugins.uninstall.success" = "Plugin deinstalliert";
+"admin.plugins.enabled" = "Plugin aktiviert";
+"admin.plugins.disabled" = "Plugin deaktiviert";
+"admin.plugins.status.active" = "AKTIV";
+"admin.plugins.status.disabled" = "DEAKTIVIERT";
+"admin.plugins.status.restart" = "NEUSTART NÖTIG";
+"admin.plugins.status.error" = "FEHLER";
+"admin.plugins.status.superseded" = "ERSETZT";
+"admin.plugins.status.deleted" = "GELÖSCHT";
+
+// MARK: - Admin — Plugin Catalog
+
+"admin.catalog.empty.title" = "Katalog leer";
+"admin.catalog.empty.subtitle" = "Keine Repositorys konfiguriert oder keine Pakete veröffentlicht.";
+"admin.catalog.searchPrompt" = "Plugins suchen";
+"admin.catalog.detailTitle" = "Plugin-Details";
+"admin.catalog.latestVersion" = "Neueste Version: %@";
+"admin.catalog.install" = "Installieren";
+"admin.catalog.install.success" = "Installation gestartet";
+"admin.catalog.install.restartHint" = "Möglicherweise ist ein Neustart des Servers nötig, um das Plugin zu aktivieren.";
+"admin.catalog.category.administration" = "Verwaltung";
+"admin.catalog.category.anime" = "Anime";
+"admin.catalog.category.books" = "Bücher";
+"admin.catalog.category.general" = "Allgemein";
+"admin.catalog.category.livetv" = "Live-TV";
+"admin.catalog.category.metadata" = "Metadaten";
+"admin.catalog.category.moviesandshows" = "Filme & Serien";
+"admin.catalog.category.music" = "Musik";
+"admin.catalog.category.subtitles" = "Untertitel";
+
+// MARK: - Admin — Playback (Encoding)
+
+"admin.playback.save.success" = "Einstellungen gesichert";
+"admin.playback.hardware.title" = "Hardware";
+"admin.playback.hardware.footer" = "Wähle die Hardwarebeschleunigung, die dein Server unterstützt. Eine falsche Wahl kann das Transkodieren verhindern.";
+"admin.playback.hardwareAcceleration" = "Hardwarebeschleunigung";
+"admin.playback.enableHardwareEncoding" = "Hardwarecodierung";
+"admin.playback.encoding.title" = "Erlaubte Codecs";
+"admin.playback.allowHevc" = "HEVC-Codierung";
+"admin.playback.allowAv1" = "AV1-Codierung";
+"admin.playback.processing.title" = "Verarbeitung";
+"admin.playback.enableThrottling" = "Transkodierung drosseln";
+"admin.playback.enableTonemapping" = "Tone-Mapping HDR → SDR";
+"admin.playback.enableSubtitleExtraction" = "Untertitelextraktion";
+"admin.playback.paths.title" = "Pfade";
+"admin.playback.paths.footer" = "In der App schreibgeschützt – bearbeite sie in der Web-Verwaltung oder in der Konfigurationsdatei des Servers.";
+"admin.playback.encoderPath" = "Encoder-Pfad";
+"admin.playback.transcodingTempPath" = "Temporärer Transkodierungsordner";
+"admin.playback.hwAccel.none" = "Keine";
+
+// MARK: - Admin — API Keys
+
+"admin.apiKeys.empty.title" = "Keine API-Schlüssel";
+"admin.apiKeys.empty.subtitle" = "Erstelle einen Schlüssel, damit sich ein externer Client mit dem Server verbinden kann.";
+"admin.apiKeys.list" = "Aktive Schlüssel";
+"admin.apiKeys.create" = "Schlüssel erstellen";
+"admin.apiKeys.warning.title" = "Diese Schlüssel sind so mächtig wie ein Administratorpasswort.";
+"admin.apiKeys.warning.message" = "Wer einen dieser Schlüssel besitzt, hat vollen Administratorzugriff auf den Server. Teile sie nicht und widerrufe jeden Schlüssel, der kompromittiert sein könnte.";
+"admin.apiKeys.thisSession" = "AKTUELLE SITZUNG";
+"admin.apiKeys.createdOn" = "Erstellt am %@";
+"admin.apiKeys.hide" = "Schlüssel ausblenden";
+"admin.apiKeys.reveal" = "Schlüssel einblenden";
+"admin.apiKeys.copy" = "Schlüssel kopieren";
+"admin.apiKeys.copied" = "Schlüssel kopiert";
+"admin.apiKeys.revoke" = "Widerrufen";
+"admin.apiKeys.revoke.title" = "Diesen Schlüssel widerrufen?";
+"admin.apiKeys.revoke.message" = "Clients, die „%@“ verwenden, verlieren sofort den Zugriff auf den Server. Dies kann nicht rückgängig gemacht werden.";
+"admin.apiKeys.revoke.confirm" = "Widerrufen";
+"admin.apiKeys.revoke.success" = "Schlüssel widerrufen";
+"admin.apiKeys.create.title" = "Neuer API-Schlüssel";
+"admin.apiKeys.create.appName" = "App-Name";
+"admin.apiKeys.create.appNamePlaceholder" = "z. B. mein-backup-skript";
+"admin.apiKeys.create.hint" = "Wähle einen aussagekräftigen Namen, damit du den Schlüssel später zuordnen kannst.";
+"admin.apiKeys.create.submit" = "Schlüssel erstellen";
+"admin.apiKeys.created.title" = "Schlüssel erstellt";
+"admin.apiKeys.created.message" = "Kopiere diesen Schlüssel jetzt und bewahre ihn in einem Passwortmanager auf. Er bleibt in der Liste sichtbar, es ist aber bewährte Praxis, ihn als Geheimnis zu behandeln.";
+"admin.apiKeys.created.tokenLabel" = "Schlüsselwert";
+"admin.apiKeys.created.copy" = "Schlüssel kopieren";
+"admin.apiKeys.created.reminder" = "Versende ihn niemals per unverschlüsselter E-Mail oder SMS.";
+
+// MARK: - Admin — Network
+
+"admin.network.warning" = "Eine falsche Konfiguration kann den Server für diese App unerreichbar machen. Stelle vor dem Sichern sicher, dass du noch einen anderen Verwaltungszugang hast.";
+"admin.network.ports.title" = "Ports";
+"admin.network.ports.footer" = "Ist der Server aus dem Internet erreichbar, sollten die öffentlichen Ports dem externen Port entsprechen, der auf deinem Router weitergeleitet wird.";
+"admin.network.internalHTTP" = "Internes HTTP";
+"admin.network.internalHTTPS" = "Internes HTTPS";
+"admin.network.publicHTTP" = "Öffentliches HTTP";
+"admin.network.publicHTTPS" = "Öffentliches HTTPS";
+"admin.network.urls.title" = "Basis-URL";
+"admin.network.urls.footer" = "Wird verwendet, wenn der Server hinter einem Reverse-Proxy unter einem Unterpfad liegt.";
+"admin.network.baseURL" = "Basispfad";
+"admin.network.lan.title" = "Lokales Netzwerk";
+"admin.network.lan.footer" = "CIDR-Blöcke, durch Kommas getrennt. Clients in diesen Subnetzen gelten als lokal.";
+"admin.network.lanSubnets" = "Lokale Subnetze";
+"admin.network.features.title" = "Optionen";
+"admin.network.autoDiscovery" = "Automatische Erkennung";
+"admin.network.upnp" = "UPnP";
+"admin.network.remoteAccess" = "Fernzugriff";
+"admin.network.requireHTTPS" = "HTTPS erzwingen";
+"admin.network.advanced.title" = "Erweitert (schreibgeschützt)";
+"admin.network.advanced.footer" = "Bearbeite diese Werte in der Web-Verwaltung oder in der Konfigurationsdatei des Servers.";
+"admin.network.certPath" = "Zertifikatspfad";
+"admin.network.knownProxies" = "Bekannte Proxys";
+"admin.network.remoteIPFilter" = "Filter für Remote-IPs";
+"admin.network.virtualInterfaces" = "Ignorierte virtuelle Schnittstellen";
+"admin.network.saveWarning.title" = "Netzwerkänderungen anwenden?";
+"admin.network.saveWarning.message" = "Falsche Einstellungen können den Server für dieses Gerät unerreichbar machen. Bestätige, dass du eine andere Möglichkeit hast, den Server zu verwalten, bevor du fortfährst.";
+"admin.network.saveWarning.confirm" = "Sichern";
+"admin.network.save.success" = "Netzwerkkonfiguration gesichert";
+
+// MARK: - Admin — Logs
+
+"admin.logs.empty.title" = "Keine Protokolle";
+"admin.logs.empty.subtitle" = "Die Protokolldateien des Servers werden hier angezeigt.";
+"admin.logs.truncated" = "Angezeigt werden die letzten %@ von %@. Vollständige Protokolle findest du in der Web-Verwaltung.";
+
+// MARK: - Admin — Metadata (shared)
+
+"admin.metadata.browser.pickLibrary" = "Mediathek wählen";
+"admin.metadata.browser.empty.title" = "Keine Mediatheken";
+"admin.metadata.browser.empty.subtitle" = "Erstelle in der Web-Verwaltung eine Mediathek, um loszulegen.";
+"admin.metadata.browser.items.empty.title" = "Keine Einträge";
+"admin.metadata.browser.items.searchPrompt" = "Titel suchen";
+
+"admin.metadata.tab.general" = "Allgemein";
+"admin.metadata.tab.images" = "Bilder";
+"admin.metadata.tab.cast" = "Besetzung";
+"admin.metadata.tab.identify" = "Identifizieren";
+"admin.metadata.tab.actions" = "Aktionen";
+"admin.metadata.save.success" = "Metadaten gesichert";
+
+"admin.metadata.chip.remove" = "Entfernen";
+"admin.metadata.kv.remove" = "Eintrag entfernen";
+
+// MARK: - Admin — Metadata / General
+
+"admin.metadata.general.titles" = "Titel";
+"admin.metadata.general.name" = "Name";
+"admin.metadata.general.originalTitle" = "Originaltitel";
+"admin.metadata.general.sortName" = "Sortiername";
+"admin.metadata.general.forcedSortName" = "Erzwungener Sortiername";
+"admin.metadata.general.overview" = "Handlung";
+"admin.metadata.general.taglines" = "Taglines";
+"admin.metadata.general.addTagline" = "Tagline hinzufügen";
+"admin.metadata.general.releaseInfo" = "Veröffentlichung";
+"admin.metadata.general.year" = "Jahr";
+"admin.metadata.general.premiereDate" = "Premiere";
+"admin.metadata.general.endDate" = "Enddatum";
+"admin.metadata.general.setDate" = "Festlegen";
+"admin.metadata.general.ratings" = "Einstufungen";
+"admin.metadata.general.officialRating" = "Offiziell";
+"admin.metadata.general.customRating" = "Eigene";
+"admin.metadata.general.communityRating" = "Community-Bewertung";
+"admin.metadata.general.genresTags" = "Genres & Tags";
+"admin.metadata.general.chipHint" = "Tippe auf ×, um einen Eintrag zu entfernen, und auf +, um einen neuen hinzuzufügen.";
+"admin.metadata.general.genres" = "Genres";
+"admin.metadata.general.addGenre" = "Genre hinzufügen";
+"admin.metadata.general.tags" = "Tags";
+"admin.metadata.general.addTag" = "Tag hinzufügen";
+"admin.metadata.general.studios" = "Studios";
+"admin.metadata.general.addStudio" = "Studio hinzufügen";
+"admin.metadata.general.providerIds" = "Externe IDs";
+"admin.metadata.general.providerIds.footer" = "Typische Schlüssel: Imdb, Tmdb, Tvdb, MusicBrainzAlbum.";
+
+// MARK: - Admin — Metadata / Images
+
+"admin.metadata.images.primary" = "Hauptbild (Poster)";
+"admin.metadata.images.backdrop" = "Hintergrundbilder";
+"admin.metadata.images.logo" = "Logo";
+"admin.metadata.images.thumb" = "Miniatur";
+"admin.metadata.images.banner" = "Banner";
+"admin.metadata.images.disc" = "Disc-Cover";
+"admin.metadata.images.art" = "Artwork";
+"admin.metadata.images.backdrop.footer" = "Jellyfin unterstützt mehrere Hintergrundbilder. Der Player wählt eines zur Anzeige aus.";
+"admin.metadata.images.backdrop.empty" = "Keine Hintergrundbilder";
+"admin.metadata.images.add" = "Hinzufügen";
+"admin.metadata.images.replace" = "Ersetzen";
+"admin.metadata.images.delete" = "Löschen";
+"admin.metadata.images.delete.title" = "Dieses Bild löschen?";
+"admin.metadata.images.delete.confirm" = "Löschen";
+"admin.metadata.images.delete.success" = "Bild gelöscht";
+"admin.metadata.images.add.title" = "Bild hinzufügen";
+"admin.metadata.images.add.description" = "Der Server lädt das Bild von dieser URL herunter und fügt es als „%@“ hinzu.";
+"admin.metadata.images.add.urlLabel" = "Bild-URL";
+"admin.metadata.images.invalidURL" = "Das scheint keine gültige Bild-URL zu sein.";
+"admin.metadata.images.add.submit" = "Bild herunterladen";
+"admin.metadata.images.add.success" = "Bild heruntergeladen";
+
+// MARK: - Admin — Metadata / Cast
+
+"admin.metadata.cast.title" = "Besetzung & Crew";
+"admin.metadata.cast.footer" = "Wische auf einer Zeile nach links, um eine Person zu entfernen.";
+"admin.metadata.cast.empty" = "Keine Besetzung erfasst.";
+"admin.metadata.cast.addPerson" = "Person hinzufügen";
+"admin.metadata.cast.editPerson" = "Person bearbeiten";
+"admin.metadata.cast.remove" = "Entfernen";
+"admin.metadata.cast.name" = "Name";
+"admin.metadata.cast.namePlaceholder" = "Vollständiger Name";
+"admin.metadata.cast.role" = "Rolle";
+"admin.metadata.cast.rolePlaceholder" = "Figur oder Funktion";
+"admin.metadata.cast.kind" = "Funktion";
+"admin.metadata.cast.kind.actor" = "Darsteller";
+"admin.metadata.cast.kind.director" = "Regie";
+"admin.metadata.cast.kind.writer" = "Drehbuch";
+"admin.metadata.cast.kind.producer" = "Produktion";
+"admin.metadata.cast.kind.composer" = "Musik";
+"admin.metadata.cast.kind.guestStar" = "Gaststar";
+"admin.metadata.cast.save" = "Sichern";
+
+// MARK: - Admin — Identify (standalone + tab)
+
+"admin.identify.title" = "Identifizieren";
+"admin.identify.prompt" = "Gib ein oder mehrere Suchkriterien ein. Entferne Kriterien, um die Suchergebnisse zu erweitern.";
+"admin.identify.path" = "Pfad";
+"admin.identify.criteriaHeader" = "Suchkriterien";
+"admin.identify.name" = "Name";
+"admin.identify.year" = "Jahr";
+"admin.identify.imdbId" = "IMDb-ID";
+"admin.identify.tmdbFilmId" = "TheMovieDb-Film-ID";
+"admin.identify.tmdbCollectionId" = "TheMovieDb-Sammlungs-ID";
+"admin.identify.tmdbSeriesId" = "TheMovieDb-ID";
+"admin.identify.tvdbId" = "TheTVDb-ID";
+"admin.identify.search" = "Suchen";
+"admin.identify.results" = "Suchergebnisse";
+"admin.identify.noResults.title" = "Keine Ergebnisse";
+"admin.identify.noResults.subtitle" = "Versuche andere Kriterien oder eine Anbieter-ID.";
+"admin.identify.applyConfirm.title" = "Bestätigen";
+"admin.identify.replaceImages" = "Vorhandene Bilder ersetzen";
+"admin.identify.replaceImages.hint" = "Deaktiviere diese Option, um deine eigenen Bilder zu behalten. Die Textmetadaten werden trotzdem überschrieben.";
+"admin.identify.apply.success" = "Metadaten angewendet";
+"admin.identify.unsupported" = "Die automatische Identifizierung ist für diesen Elementtyp nicht verfügbar.";
+
+// MARK: - Admin — Item Menu (3-dot on detail + poster cards)
+
+"admin.item.menu" = "Verwaltung";
+"admin.item.identify" = "Identifizieren";
+"admin.item.editMetadata" = "Metadaten bearbeiten";
+"admin.item.refreshMetadata" = "Metadaten aktualisieren";
+"admin.item.delete" = "Medium löschen";
+
+// MARK: - Admin — Metadata / Actions
+
+"admin.metadata.actions.refresh.title" = "Von Anbietern aktualisieren";
+"admin.metadata.actions.refresh.footer" = "Startet eine Aktualisierung von Metadaten und Bildern über die serverseitig konfigurierten Anbieter.";
+"admin.metadata.actions.refresh.metadataMode" = "Metadatenmodus";
+"admin.metadata.actions.refresh.imageMode" = "Bildmodus";
+"admin.metadata.actions.refresh.replaceMetadata" = "Alle Metadaten ersetzen";
+"admin.metadata.actions.refresh.replaceImages" = "Alle Bilder ersetzen";
+"admin.metadata.actions.refresh.submit" = "Aktualisierung starten";
+"admin.metadata.actions.refresh.success" = "Aktualisierung gestartet";
+"admin.metadata.actions.refresh.mode.none" = "Keiner";
+"admin.metadata.actions.refresh.mode.validation" = "Nur Prüfung";
+"admin.metadata.actions.refresh.mode.default" = "Standard";
+"admin.metadata.actions.refresh.mode.full" = "Vollständig";
+"admin.metadata.actions.delete.title" = "Gefahrenzone";
+"admin.metadata.actions.delete.footer" = "Beim Löschen wird das Element aus der Mediathek entfernt. Je nach Serverrichtlinie können auch die zugrunde liegenden Dateien gelöscht werden.";
+"admin.metadata.delete.title" = "Element löschen";
+"admin.metadata.delete.message" = "„%@“ wird aus der Mediathek entfernt. Dies kann nicht rückgängig gemacht werden.";
+"admin.metadata.delete.confirm" = "Endgültig löschen";
+"admin.metadata.delete.success" = "Element gelöscht";
+
+// MARK: - Debug
+
+"settings.debug" = "Debugging";
+"settings.debug.fastSleepTimer" = "Schneller Schlaftimer (15 s)";
+"settings.debug.skipToEnd" = "Taste „Zum Ende springen“";
+"settings.debug.exportDiagnostics" = "Diagnose exportieren";
+"settings.debug.exportDiagnostics.subtitle" = "Protokoll der letzten 30 Minuten dieser Sitzung, ohne Tokens";
+"settings.debug.exportDiagnostics.preparing" = "Bericht wird vorbereitet …";
+"settings.debug.exportDiagnostics.failed" = "Vorbereitung fehlgeschlagen – zum Wiederholen tippen";
+"settings.debug.exportDiagnostics.share" = "Bericht teilen";
+"settings.debug.exportDiagnostics.ready" = "Protokollzeilen: %d · bereit zum Teilen";
+"settings.debug.exportDiagnostics.tvUnavailable" = "Auf Apple TV nicht verfügbar: weder Teilen-Menü noch MetricKit";
+"settings.debug.metricKit" = "MetricKit-Berichte";
+"settings.debug.metricKit.summary" = "Abstürze: %d · Hänger: %d · Metriken: %d";
+"settings.debug.metricKit.none" = "Noch kein Bericht erhalten";
+"settings.debug.diagnostics.footer" = "Der Bericht enthält das Protokoll der aktuellen Sitzung und die MetricKit-Berichte, bereinigt um Zugriffstokens. Nichts verlässt das Gerät, ohne dass du es teilst. MetricKit liefert seine Berichte nur an TestFlight- und App-Store-Versionen, höchstens einmal alle 24 Stunden.";
+"debug.skipToEnd" = "⏭ Zum Ende springen (Debug)";
+"settings.interface" = "Oberfläche";
+"settings.playback" = "Wiedergabe";
+"settings.interface.menu" = "Hauptmenü";
+"settings.interface.library" = "Mediathek";
+
+// MARK: - Menu customization
+
+"menu.mode" = "Menümodus";
+"menu.mode.default" = "Standard";
+"menu.mode.custom" = "Angepasst";
+"menu.mode.footer" = "Im angepassten Modus kannst du auswählen, welche Tabs in der Hauptleiste erscheinen, und ihre Reihenfolge ändern.";
+"menu.kind" = "Tab-Quelle";
+"menu.kind.contentType" = "Nach Inhaltstyp";
+"menu.kind.library" = "Nach Mediathek";
+"menu.entries.title" = "Tabs";
+"menu.entries.footer.contentType" = "Start, Suche und Einstellungen sind immer vorhanden. Filme und Serien können ein- oder ausgeblendet werden.";
+"menu.entries.footer.library" = "Start, Suche und Einstellungen sind immer vorhanden. Wähle aus, welche Mediatheken als Tabs erscheinen.";
+"menu.entry.required" = "Erforderlich";
+"menu.entry.reorder.up" = "Nach oben";
+"menu.entry.reorder.down" = "Nach unten";
+"menu.refreshViews" = "Mediatheken aktualisieren";
+"menu.refresh.confirm" = "Menü aktualisiert";
+"menu.reset" = "Menü zurücksetzen";
+"menu.reset.confirm" = "Menü zurückgesetzt";
+"menu.maxReached" = "Maximal %d aktive Tabs.";
+"menu.library.empty" = "Keine Videomediatheken verfügbar";
+"menu.library.empty.subtitle" = "Prüfe deine Verbindung oder bitte deinen Administrator, eine Mediathek freizugeben.";
+"settings.motionEffects" = "Bewegungseffekte";
+"settings.motionEffects.systemOverride" = "„Bewegung reduzieren“ ist in den Geräteeinstellungen aktiviert, daher bleiben die Effekte ausgeschaltet.";
+"settings.fontSize" = "Textgröße";
+"settings.4kRendering" = "4K-Darstellung";
+"settings.autoPlayNextEpisode" = "Nächste Folge automatisch abspielen";
+"settings.autoSkipIntro" = "Intro automatisch überspringen";
+"settings.autoSkipCredits" = "Abspann automatisch überspringen";
+"settings.forceNativeAVPlayer" = "Nativer Player";
+"settings.systemSettings" = "Systemeinstellungen";
+"settings.version" = "Version %@";
+"settings.deviceName" = "Gerätename";
+"settings.network" = "Netzwerk";
+"settings.authenticatedDevice" = "Authentifiziertes Gerät";
+"settings.homePage" = "Startseite";
+"settings.homePage.continueWatching" = "Weiterschauen";
+"settings.homePage.nextUp" = "Als Nächstes";
+"settings.homePage.recentlyAdded" = "Neu hinzugefügt";
+"settings.homePage.becauseYouWatched" = "Weil du … gesehen hast";
+"settings.homePage.genreRows" = "Genrereihen";
+"settings.homePage.genreRows.choose" = "Genres auswählen";
+"settings.homePage.genreRows.hint" = "Genres, die als Reihen auf der Startseite erscheinen";
+"settings.homePage.genreRows.empty" = "Keine Genres verfügbar";
+"settings.homePage.genreRows.selectAll" = "Alle auswählen";
+"settings.homePage.genreRows.deselectAll" = "Alle abwählen";
+"settings.homePage.favorites" = "Favoriten";
+"settings.detailPage" = "Detailseite";
+"settings.detailPage.qualityBadges" = "Qualitätsbadges";
+"settings.detailPage.trailerButton" = "Trailer-Taste";
+"settings.libraryLayout" = "Layout";
+"settings.libraryLayout.browse" = "Nach Genre";
+"settings.libraryLayout.grid" = "Alle anzeigen";
+"settings.dimUnfocusedPosters" = "Nicht ausgewählte Poster abdunkeln";
+
+// MARK: - Media Detail
+
+"detail.play" = "Abspielen";
+"detail.playFromBeginning" = "Von Anfang an abspielen";
+"detail.playFromBeginning.short" = "Von Anfang an";
+"detail.castCrew" = "Besetzung & Crew";
+"detail.moreLikeThis" = "Ähnliche Titel";
+"detail.episode" = "Folge %d";
+"detail.runtime.hours" = "%d Std. %d Min.";
+"detail.runtime.minutes" = "%d Min.";
+"detail.runtime.min" = "%d Min.";
+"detail.season" = "Staffel";
+"detail.seeMore" = "Mehr anzeigen";
+"detail.studio" = "Studio";
+"detail.network" = "Sender";
+"detail.audienceRating" = "Publikumsbewertung";
+
+// MARK: - Login
+
+"login.header" = "JELLYGLASS";
+"login.title" = "ANMELDEN";
+"login.subtitle" = "Gib deine Anmeldedaten ein, um auf deine Mediathek zuzugreifen";
+"login.mobileTitle" = "Anmelden";
+"login.mobileSubtitle" = "Melde dich mit deinem Jellyfin-Konto an, um loszulegen.";
+"login.changeServer" = "Server wechseln";
+"quickConnect.button" = "Quick Connect verwenden";
+"quickConnect.title" = "Quick Connect";
+"quickConnect.instructions" = "Öffne auf einem bereits angemeldeten Gerät dein Profil → Quick Connect und gib diesen Code ein.";
+"quickConnect.waiting" = "Warten auf Bestätigung …";
+"settings.quickConnect" = "Quick Connect";
+"quickConnect.authorize.title" = "Quick Connect";
+"quickConnect.authorize.instructions" = "Gib den 6-stelligen Code ein, der auf dem Anmeldebildschirm des anderen Geräts angezeigt wird, um es zuzulassen.";
+"quickConnect.authorize.codePlaceholder" = "6-stelliger Code";
+"quickConnect.authorize.submit" = "Zulassen";
+"quickConnect.authorize.success" = "Gerät zugelassen";
+"quickConnect.authorize.invalidCode" = "Ungültiger oder abgelaufener Code. Prüfe den Code und versuche es erneut.";
+"login.username" = "Benutzername";
+"login.usernamePlaceholder" = "Dein Benutzername";
+"login.password" = "Passwort";
+"login.passwordPlaceholder" = "\U2022\U2022\U2022\U2022\U2022\U2022\U2022\U2022";
+"login.button" = "ANMELDEN";
+"login.buttonMobile" = "Anmelden";
+"login.serverConnected" = "Server verbunden!";
+"login.authenticated" = "Authentifiziert!";
+"login.server" = "Server: %@";
+"login.version" = "Version %@";
+
+// MARK: - Server Setup
+
+"server.header" = "JELLYGLASS";
+"server.title" = "Mit Server verbinden";
+"server.subtitle" = "Gib die Adresse deines Jellyfin-Servers ein, um deine Sammlung zu streamen.";
+"server.mobileTitle" = "Server einrichten";
+"server.mobileSubtitle" = "Gib die Adresse deines Jellyfin-Servers ein, um loszulegen.";
+"server.urlLabel" = "Server-URL";
+"server.addressLabel" = "Serveradresse";
+"server.placeholder" = "http://192.168.1.100:8096";
+"server.connect" = "Verbinden";
+"server.howToFind" = "Wie finde ich meinen Server?";
+"server.findOnNetwork" = "In meinem Netzwerk suchen";
+"server.connecting" = "Verbinden …";
+"server.offline" = "Offline";
+"server.httpWarning.title" = "Unverschlüsselte Verbindung";
+"server.httpWarning.message" = "Diese Adresse verwendet HTTP. Deine Anmeldedaten und Wiedergabe-Tokens werden unverschlüsselt über das Netzwerk übertragen. Verwende nach Möglichkeit HTTPS – nutze HTTP nur für einen Server in deinem vertrauenswürdigen lokalen Netzwerk.";
+
+"server.discovery.title" = "Server in diesem Netzwerk";
+"server.discovery.scanning" = "Dein Netzwerk wird durchsucht …";
+"server.discovery.noResults.title" = "Keine Server gefunden";
+"server.discovery.noResults.message" = "Stelle sicher, dass dein Jellyfin-Server läuft und mit demselben WLAN wie dieses Gerät verbunden ist. Du kannst die Adresse auch manuell eingeben.";
+"server.discovery.scanAgain" = "Erneut suchen";
+
+"server.help.title" = "Deinen Server finden";
+"server.help.intro" = "Jellyfin läuft auf einem Computer, einem NAS oder einem Server in deinem Netzwerk. Zum Verbinden brauchst du seine Webadresse.";
+"server.help.format.title" = "So sieht die URL aus";
+"server.help.format.body" = "Sie beginnt mit http:// oder https://, gefolgt von einer IP-Adresse oder einem Hostnamen. Jellyfin verwendet standardmäßig den Port 8096.";
+"server.help.local.title" = "In deinem Heimnetzwerk";
+"server.help.local.body" = "Öffne das Jellyfin-Dashboard auf dem Computer, auf dem der Server läuft – die Adresse in der Adressleiste deines Browsers ist genau die, die du hier eingeben musst. Oder tippe auf „In meinem Netzwerk suchen“, dann suchen wir für dich.";
+"server.help.remote.title" = "Zugriff von unterwegs";
+"server.help.remote.body" = "Wenn dein Server über das Internet erreichbar ist, hat dein Administrator einen öffentlichen Domainnamen. Frag ihn nach der Adresse.";
+"server.help.tip" = "Die automatische Erkennung funktioniert nur, wenn sich dieses Gerät im selben WLAN wie der Server befindet. Wenn nichts erscheint, gib die URL manuell ein.";
+
+// MARK: - Video Player
+
+"player.preparing" = "Stream wird vorbereitet …";
+"player.audio" = "Audio";
+// VoiceOver — icon-only player controls (see PlayerHUDAccessibility)
+"player.a11y.skipBack" = "%d Sekunden zurück";
+// MARK: - First-run onboarding
+"onboarding.skip" = "Überspringen";
+"onboarding.next" = "Weiter";
+"onboarding.back" = "Zurück";
+"onboarding.start" = "Los geht’s";
+"onboarding.page" = "Seite %d von %d";
+"onboarding.server.title" = "Dein eigener Server";
+"onboarding.server.body" = "JellyGlass spielt die Mediathek eines Jellyfin-Servers ab – deines eigenen. Im selben Netzwerk findet die App ihn von selbst, ansonsten genügt seine Adresse.";
+"onboarding.quickConnect.title" = "Anmelden ohne Tippen";
+"onboarding.quickConnect.body" = "Quick Connect zeigt einen Code an, den du auf einem bereits angemeldeten Gerät bestätigst. Das lohnt sich vor allem auf dem Apple TV, wo die Passworteingabe mit der Fernbedienung mühsam ist.";
+"onboarding.personalize.title" = "Ganz nach deinem Geschmack";
+"onboarding.personalize.body" = "Das Hauptmenü lässt sich umsortieren, verkleinern oder direkt auf deine Mediatheken ausrichten; Akzentfarbe und Textgröße bestimmst du selbst. Alles lässt sich in den Einstellungen anpassen.";
+"settings.discoverApp" = "App entdecken";
+
+"player.a11y.skipForward" = "%d Sekunden vor";
+"player.a11y.play" = "Abspielen";
+"player.a11y.pause" = "Pause";
+"player.a11y.loading" = "Wird geladen";
+"player.a11y.position" = "%@ von %@";
+
+"player.subtitles" = "Untertitel";
+"player.subtitles.off" = "Aus";
+"player.pip" = "Bild-in-Bild";
+"player.skipIntro" = "Intro überspringen";
+"player.skipCredits" = "Abspann überspringen";
+"player.autoSkipped.intro" = "Intro übersprungen";
+"player.autoSkipped.credits" = "Abspann übersprungen";
+"player.speed" = "Geschwindigkeit";
+"player.audioDelay" = "Audioverzögerung";
+"player.audio.silentSuffix" = "(auf Apple-Geräten stumm)";
+"player.audio.silent.title" = "Auf Apple-Geräten stumm";
+"player.audio.silent.suggestion" = "Apple bietet keine Dolby-TrueHD-Ausgabe, daher bleibt diese Tonspur stumm. Versuche „%@“.";
+"player.audio.silent.noAlternative" = "Apple bietet keine Dolby-TrueHD-Ausgabe, daher bleibt diese Tonspur stumm.";
+"player.subtitleDelay" = "Untertitelverzögerung";
+"player.delay.reset" = "Zurücksetzen (0 ms)";
+"player.stats" = "Statistiken";
+"player.stats.video" = "Video";
+"player.stats.audio" = "Audio";
+"player.stats.bitrate" = "Bitrate";
+"player.stats.dropped" = "Verlorene Frames";
+"player.stats.direct" = "Direkte Wiedergabe";
+"player.stats.proxy" = "Über Proxy";
+"player.stats.modules" = "Module";
+"player.stats.demux" = "Demux";
+"player.nextUp.countdown" = "Nächste Folge in %d s";
+"player.nextUp.countdown.title" = "Nächster Titel in %d s";
+"player.nextUp.play" = "Jetzt abspielen";
+
+// MARK: - Licenses
+
+"settings.licenses" = "Open-Source-Lizenzen";
+"settings.licenses.description" = "JellyGlass verwendet die folgenden Open-Source-Bibliotheken:";
+
+// MARK: - Accessibility
+
+"accessibility.clearSearch" = "Suche löschen";
+"accessibility.voiceSearch" = "Sprachsuche";
+"accessibility.clearRecentSearches" = "Letzte Suchen löschen";
+"accessibility.searchAgainFor" = "Erneut nach %@ suchen";
+"accessibility.stopVoiceSearch" = "Sprachsuche beenden";
+"accessibility.previousEpisode" = "Vorherige Folge";
+"accessibility.nextEpisode" = "Nächste Folge";
+
+// MARK: - Easter eggs
+
+"easterEgg.rainbow.title" = "Regenbogen freigeschaltet!";
+"easterEgg.rainbow.message" = "In den Einstellungen wartet eine neue Akzentfarbe auf dich.";
+
+// MARK: - Session expiry (lazy 401 recovery)
+
+"session.expired" = "Sitzung abgelaufen – bitte melde dich erneut an.";
+
+// MARK: - Player (tvOS dismiss hint)
+
+"player.tvOS.dismissHint" = "Drücke „Zurück“, um zu beenden.";
+
+// MARK: - Accessibility (added in v1.0 audit)
+
+"accessibility.playItem" = "%@ abspielen";
+"accessibility.moreInfoAbout" = "Mehr Infos zu %@";
+"accessibility.resumeProgress" = "%d %% gesehen";
+"accessibility.episodeCard" = "%1$@, Staffel %2$d, Folge %3$d, %4$@";
+"accessibility.criticRating" = "Kritiken: %d Prozent";
+"detail.restricted.title" = "Eingeschränkter Inhalt";
+"detail.restricted.subtitle" = "Dieser Titel überschreitet die unter „Datenschutz & Sicherheit“ festgelegte Altersgrenze.";
+
+// MARK: - Admin — formatting glyphs
+
+"admin.plugins.versionLabel" = "v%@";
+"admin.dashboard.sessionClient" = "• %@";
+"admin.metadata.ratingDenominator" = "/ 10";
+
+"home.favorites" = "Favoriten";
+"detail.partOf" = "Teil von: %@";
+"library.anchoredAt" = "ab %@";
+"detail.collection" = "Sammlung";
+"detail.collection.count" = "%d Titel";
+"detail.collection.count.one" = "%d Titel";
+"detail.collection.contents" = "In dieser Sammlung";
+"detail.collection.playAll" = "Alle abspielen";
+"detail.favorite.add" = "Zu Favoriten hinzufügen";
+"detail.trailer" = "Trailer";
+"detail.favorite.remove" = "Aus Favoriten entfernen";
+"detail.watched.add" = "Als gesehen markieren";
+"detail.watched.remove" = "Als ungesehen markieren";
+
+// MARK: - Detail (version picker, multi-source items)
+"detail.version" = "Version";
+"detail.version.fallback" = "Version %d";
+"detail.version.hint" = "Andere Version dieses Titels wählen";
+"card.markedWatched" = "Als gesehen markiert";
+"card.markedUnwatched" = "Als ungesehen markiert";
+"card.favorited" = "Zu Favoriten hinzugefügt";
+"card.unfavorited" = "Aus Favoriten entfernt";
+"card.resume" = "Fortsetzen";
+"card.goToSeries" = "Zur Serie";
+"card.status.watched" = "Gesehen";
+"card.status.progress" = "%d %% gesehen";
+"detail.season.markWatched" = "Staffel als gesehen markieren";
+"detail.season.markWatched.message" = "Alle Folgen dieser Staffel werden als gesehen markiert.";
+"detail.season.markedWatched" = "Staffel als gesehen markiert";
+"person.movies" = "Filme";
+"person.series" = "Serien";
+"person.born" = "Geboren am %@";
+"person.titleCount" = "%d Titel";
+"person.titleCount.one" = "%d Titel";
+"person.empty" = "Keine Titel in deiner Mediathek";
+
+// MARK: - UI polish
+"a11y.toggle.on" = "Ein";
+"a11y.toggle.off" = "Aus";
+
+// MARK: - SyncPlay
+"syncplay.title" = "Gemeinsam schauen";
+"syncplay.groupName" = "Gruppenname";
+"syncplay.create" = "Gruppe erstellen";
+"syncplay.join" = "Beitreten";
+"syncplay.existingGroups" = "Bestehende Gruppen";
+"syncplay.noGroups.title" = "Keine aktiven Gruppen";
+"syncplay.noGroups.subtitle" = "Erstelle eine Gruppe, um diesen Titel gleichzeitig mit anderen zu schauen.";
+"syncplay.unnamedGroup" = "Unbenannte Gruppe";
+"syncplay.defaultName" = "Gruppe von %@";
+"syncplay.participants" = "%d Teilnehmer";
+"syncplay.participants.one" = "%d Teilnehmer";
+"syncplay.joined" = "Gruppe beigetreten";
+"syncplay.left" = "Gruppe verlassen";
+"syncplay.groupEnded" = "Die Gruppe wurde beendet";
+"syncplay.error" = "Synchronisierung fehlgeschlagen";
+"syncplay.you" = "Du";
+"syncplay.event.joined" = "%@ ist beigetreten";
+"syncplay.event.left" = "%@ ist gegangen";
+"syncplay.waiting.title" = "Warten auf Teilnehmer";
+"syncplay.waiting.subtitle" = "Bei einem Teilnehmer lädt der Stream noch. Alle machen gemeinsam weiter.";
+"syncplay.libraryAccessDenied" = "Dein Konto hat keinen Zugriff auf diesen Titel";
+"syncplay.restricted.left" = "Dieser Titel überschreitet die Altersgrenze dieses Geräts. Du hast die Sitzung verlassen.";
+"syncplay.session.badge" = "GEMEINSAM";
+"syncplay.session.with" = "Mit %@";
+"syncplay.session.two" = "%@ und %@";
+"syncplay.session.more" = "%@, %@ und %d weitere Personen";
+"syncplay.session.more.one" = "%@, %@ und %d weitere Person";
+"syncplay.session.unknownTitle" = "Laufende Sitzung";
+"syncplay.session.a11y" = "Sitzung: %@, mit %@. Beitreten.";
+"syncplay.session.mine" = "Du bist dabei · mit %@";
+"syncplay.session.mine.alone" = "Du bist dabei · noch niemand sonst";
+"syncplay.session.a11y.mine" = "Laufende Sitzung: %@, mit %@. Verlassen.";
+"syncplay.session.a11y.mine.alone" = "Laufende Sitzung: %@, noch niemand sonst. Verlassen.";
+"syncplay.session.state.playing" = "läuft";
+"syncplay.session.state.paused" = "pausiert";
+"syncplay.session.state.waiting" = "wartet";
+"syncplay.session.age.now" = "gerade geöffnet";
+"syncplay.session.age.minutes" = "vor %d Min. geöffnet";
+"syncplay.session.age.hours" = "vor %d Std. geöffnet";
+"syncplay.lobby.eyebrow" = "Sitzung geöffnet";
+"syncplay.lobby.participants" = "Dabei";
+"syncplay.lobby.alone" = "Du bist bisher allein.";
+"syncplay.lobby.invite" = "Einladen";
+"syncplay.lobby.invite.how" = "Die anderen treten über die Reihe „Live“ auf ihrer Startseite bei: Dort erscheint die Sitzung, solange sie geöffnet ist.";
+"syncplay.lobby.invite.nobody" = "Gerade ist niemand sonst verbunden.";
+"syncplay.lobby.invite.send" = "Benachrichtigen";
+"syncplay.lobby.invite.sent" = "Benachrichtigt";
+"syncplay.lobby.invite.message" = "%@ hat eine Sitzung geöffnet: %@. Öffne „Live“ auf deiner Startseite, um beizutreten.";
+"syncplay.lobby.invite.sentToast" = "%@ wurde benachrichtigt";
+"syncplay.lobby.start" = "Wiedergabe starten";
+"syncplay.lobby.leave" = "Sitzung verlassen";
+"syncplay.leaveConfirm.title" = "Sitzung verlassen?";
+"syncplay.leaveConfirm.message" = "Wenn du den Player schließt, verlässt du die Sitzung. Die anderen schauen ohne dich weiter.";
+"syncplay.leaveConfirm.leave" = "Sitzung verlassen";
+"syncplay.lobby.leaveConfirm.message" = "Wenn du zurückgehst, verlässt du die Sitzung. Die anderen schauen ohne dich weiter.";
+"syncplay.needsVLC" = "Gemeinsam schauen funktioniert nur mit dem VLC-Player. Deaktiviere „Nativer Player“ unter Einstellungen → Wiedergabe.";
+"syncplay.needsVLC.footnote" = "„Nativer Player“ ist aktiviert: Um einer Sitzung beizutreten, deaktiviere ihn unter Einstellungen → Wiedergabe.";
+
+// MARK: - Continue Watching & detail UX
+"home.continueWatching.remove" = "Aus „Weiterschauen“ entfernen";
+"home.continueWatching.removed" = "Aus „Weiterschauen“ entfernt";
+"accessibility.episode.watched" = "Gesehen";
+
+// MARK: - Multi-server (registered servers list)
+"settings.servers" = "Server";
+"servers.title" = "Meine Server";
+"servers.current" = "Aktuell";
+"servers.add" = "Server hinzufügen";
+"servers.switch.confirm" = "Zu „%@“ wechseln? Deine Ansichten werden von diesem Server neu geladen.";
+"servers.switch.action" = "Server wechseln";
+"servers.switchedTo" = "Verbunden mit %@";
+"servers.offline" = "Du bist offline. Der Server kann gerade nicht gewechselt werden.";
+"servers.unreachable" = "Dieser Server ist nicht erreichbar. Du bleibst mit dem aktuellen Server verbunden.";
+"servers.delete" = "Entfernen";
+"servers.delete.confirm" = "„%@“ aus deinen Servern entfernen? Die Sitzung dieses Geräts wird dort widerrufen.";
+"servers.deleted" = "%@ entfernt";
+"servers.online" = "Online";
+"servers.offlineBadge" = "Offline";
+"servers.empty.title" = "Keine Server gespeichert";
+"servers.empty.subtitle" = "Füge einen Jellyfin-Server hinzu, um loszulegen.";
+"servers.signedOut" = "Abgemeldet";
+"server.alreadyAdded" = "Dieser Server ist bereits in deiner Liste.";
+"server.cancelAdd" = "Abbrechen";
+"login.myServers" = "Meine Server";
+"servers.checking" = "Wird geprüft …";
+"servers.alreadyCurrent" = "Du bist bereits mit %@ verbunden";
+"servers.rename" = "Umbenennen";
+"servers.rename.title" = "Server umbenennen";
+"servers.rename.message" = "Dieser Name wird nur auf diesem Gerät angezeigt. Lass das Feld leer, um den Namen des Servers („%@“) zu verwenden.";
+"servers.renamed" = "Server umbenannt in „%@“";
+"servers.renameReset" = "Servername wiederhergestellt: %@";
+"servers.reorder" = "Anordnen";
+"servers.moveUp" = "Nach oben";
+"servers.moveDown" = "Nach unten";
+
+/* MARK: - App Intents (Siri & Shortcuts)
+   Read by the system through LocalizedStringResource, outside
+   LocalizationManager — same class of exception as InfoPlist.strings. Siri
+   PHRASES are not here: they live in AppShortcuts.strings. */
+"intent.entity.mediaItem" = "Medium";
+"intent.param.item" = "Titel";
+"intent.param.series" = "Serie";
+"intent.param.query" = "Suche";
+
+"intent.resume.title" = "Wiedergabe fortsetzen";
+"intent.resume.description" = "Setzt den zuletzt begonnenen Titel fort.";
+"intent.resumeControl.title" = "Weiterschauen";
+"intent.resumeControl.description" = "Öffnet JellyGlass beim zuletzt begonnenen Titel.";
+"intent.resume.shortTitle" = "Fortsetzen";
+
+"intent.play.title" = "Titel abspielen";
+"intent.play.description" = "Startet die Wiedergabe eines Films oder einer Serie aus deiner Mediathek.";
+"intent.play.shortTitle" = "Abspielen";
+
+"intent.nextEpisode.title" = "Nächste Folge abspielen";
+"intent.nextEpisode.description" = "Startet die nächste ungesehene Folge einer Serie.";
+"intent.nextEpisode.shortTitle" = "Nächste Folge";
+
+"intent.open.title" = "Titel öffnen";
+"intent.open.description" = "Zeigt die Seite eines Titels, ohne die Wiedergabe zu starten.";
+"intent.open.shortTitle" = "Öffnen";
+
+"intent.search.title" = "In der Mediathek suchen";
+"intent.search.description" = "Öffnet die Suche nach einem Begriff.";
+"intent.search.shortTitle" = "Suchen";
+
+"intent.error.notSignedIn" = "Melde dich zuerst in JellyGlass bei deinem Server an.";
+"intent.error.nothingToResume" = "Nichts zum Fortsetzen vorhanden.";
+"intent.error.itemUnavailable" = "Dieser Titel ist auf dem aktiven Server nicht verfügbar.";
+"intent.error.notEpisodic" = "Dieser Titel ist keine Serie.";
+
+// MARK: - Remote control ("Play on…")
+
+"remote.message.title" = "Nachricht von einem anderen Gerät";
+"remote.title" = "Abspielen auf …";
+"remote.sent" = "Wiedergabe gestartet auf %@";
+"remote.unknownDevice" = "Unbekanntes Gerät";
+"settings.server.unknownAddress" = "Unbekannte Adresse";
+"remote.idle" = "Bereit";
+"remote.nowPlaying" = "spielt %@ ab";
+"remote.noTargets.title" = "Kein Gerät verfügbar";
+"remote.noTargets.subtitle" = "Öffne Jellyfin auf dem Zielgerät: Es muss eingeschaltet und mit dem Server verbunden sein, um hier zu erscheinen.";
+
+/* Remote control — receiving side (this device as a "Play on…" target) */
+"settings.playback.remoteControl" = "Fernsteuerung";
+
+/* Playlists — write surface */
+"home.playlists" = "Deine Playlists";
+"settings.homePage.playlists" = "Playlists";
+"playlist.contents.empty" = "Diese Playlist ist leer";
+"playlist.reorder" = "Anordnen";
+"playlist.moveUp" = "Nach oben";
+"playlist.moveDown" = "Nach unten";
+"playlist.add.action" = "Zu Playlist hinzufügen";
+"playlist.add.title" = "Zu Playlist hinzufügen";
+"playlist.new.label" = "Neue Playlist";
+"playlist.new.placeholder" = "Name der Playlist";
+"playlist.new.create" = "Erstellen und hinzufügen";
+"playlist.added" = "Zu %@ hinzugefügt";
+"playlist.untitled" = "Unbenannte Playlist";
+"playlist.empty.title" = "Keine Playlists";
+"playlist.empty.subtitle" = "Erstelle oben eine: Dieser Titel wird direkt hinzugefügt.";
+
+/* Remote artwork picker (admin) */
+"admin.metadata.images.browse.title" = "Bild wählen";
+"admin.metadata.images.browse.byURL" = "Per URL …";
+"admin.metadata.images.browse.applied" = "Bild angewendet";
+"admin.metadata.images.browse.textless" = "Ohne Text";
+"admin.metadata.images.browse.unknownProvider" = "Unbekannter Anbieter";
+"admin.metadata.images.browse.empty.title" = "Keine Bilder verfügbar";
+"admin.metadata.images.browse.empty.subtitle" = "Die Metadatenanbieter haben nichts für diesen Bildtyp. Verwende „Per URL …“, um eines hinzuzufügen.";
+
+/* Short labels under the tvOS secondary action row icons. Distinct from the
+   accessibility labels, which spell the whole action out. */
+"detail.action.favorite" = "Favorit";
+"detail.action.watched" = "Gesehen";
+"detail.action.playlist" = "Playlist";
+"detail.action.watchTogether" = "Gemeinsam";
+"detail.action.remotePlay" = "Abspielen auf …";
+
+/* Search result count, beside the scope chips. */
+"search.resultCount.one" = "%d Ergebnis";
+"search.resultCount" = "%d Ergebnisse";
+
+/* Removing an entry from a playlist. */
+"playlist.removeItem" = "Aus Playlist entfernen";
+"playlist.removeItem.done" = "Aus Playlist entfernt";
+
+/* Home "Upcoming" and "Collections" rows. */
+"settings.homePage.upcoming" = "Demnächst";
+"settings.homePage.collections" = "Sammlungen";
+"home.upcoming" = "Demnächst";
+"home.collections" = "Sammlungen";
+"home.upcoming.airs" = "Am %@";
+"detail.action.trailer" = "Trailer";
+
+/* Profile screen. */
+"profile.title" = "Profil";
+"profile.password.section" = "Passwort";
+"profile.password.change" = "Passwort ändern";
+"profile.password.current" = "Aktuelles Passwort";
+"profile.password.new" = "Neues Passwort";
+"profile.password.confirm" = "Neues Passwort bestätigen";
+"profile.password.mismatch" = "Die beiden neuen Passwörter stimmen nicht überein.";
+"profile.password.changed" = "Passwort geändert";
+"profile.password.rejected" = "Der Server hat die Änderung abgelehnt. Prüfe das aktuelle Passwort.";
+"profile.preferences.section" = "Wiedergabeeinstellungen";
+"profile.preferences.hint" = "Der Server wendet diese Einstellungen auf alle deine Jellyfin-Apps an.";
+"profile.audioLanguage" = "Bevorzugte Audiosprache";
+"profile.subtitleLanguage" = "Bevorzugte Untertitelsprache";
+"profile.subtitleMode" = "Untertitelanzeige";
+"profile.language.none" = "Keine Vorgabe";
+"profile.subtitleMode.Default" = "Standard";
+"profile.subtitleMode.Smart" = "Intelligent";
+"profile.subtitleMode.OnlyForced" = "Nur erzwungene";
+"profile.subtitleMode.Always" = "Immer";
+"profile.subtitleMode.None" = "Nie";
+"profile.preferences.saved" = "Einstellungen gesichert";
+"profile.preferences.unavailable" = "Einstellungen können gerade nicht gelesen werden. Öffne diese Ansicht erneut, um es noch mal zu versuchen.";
+
+/* What's new — the feature reel */
+"settings.whatsNew" = "Neuigkeiten";
+"whatsNew.next" = "Weiter";
+"whatsNew.back" = "Zurück";
+"whatsNew.skip" = "Überspringen";
+"whatsNew.done" = "Fertig";
+"whatsNew.page" = "Seite %d von %d";
+"whatsNew.newName.title" = "Aus Cinemax wird JellyGlass";
+"whatsNew.newName.body" = "Gleiche App, neuer Name. Deine Server, Einstellungen und Widgets bleiben, wo sie sind: Du musst nichts neu einrichten.";
+"whatsNew.parentalLock.title" = "Verbesserte Kindersicherung";
+"whatsNew.parentalLock.body" = "Die Altersgrenze gilt jetzt für alles, was du abspielst, einschließlich der nächsten Folge; eine Folge ohne Altersfreigabe wird nach der Freigabe ihrer Serie beurteilt. Eine neue PIN hat 6 bis 8 Ziffern, und deine aktuelle PIN bleibt gültig.";
+"whatsNew.halloweenNight.title" = "Halloween-Nacht";
+"whatsNew.halloweenNight.body" = "Einen Monat lang geht die App in den Nachtmodus: Kürbis-Farbpalette, Titel in gotischer Schrift, Fledermäuse und Kürbisse beim Öffnen und eine Reihe „Halloween-Grusel“ unter Start, Filme und Serien. Nach Halloween ist alles wieder wie vorher.";
+"whatsNew.offer.window" = "Befristet · %1$@ → %2$@";
+"whatsNew.offer.enabled" = "Aktiviert";
+"whatsNew.offer.accept" = "Aktivieren";
+"whatsNew.language.title" = "JellyGlass auf Deutsch";
+"whatsNew.language.body" = "Dein Gerät ist auf %@ eingestellt. JellyGlass kann auch in dieser Sprache erscheinen; ändern kannst du sie jederzeit unter Einstellungen → Darstellung.";
+"whatsNew.offer.decline" = "Nein danke";
+"whatsNew.offer.accepted" = "Saisonales Design aktiviert";
+"whatsNew.offer.startsOn" = "Es beginnt am %@.";
+"whatsNew.accessibility.title" = "Barrierefreier";
+"whatsNew.accessibility.body" = "VoiceOver sagt an, ob ein Titel gesehen oder angefangen ist, und nennt Serie, Staffel und Folge auf den Karten „Weiterschauen“ und „Als Nächstes“. Die Beschriftungen der Karten sind besser lesbar, und durchscheinende Bereiche berücksichtigen „Transparenz reduzieren“ und „Kontrast erhöhen“.";
+"whatsNew.underTheHood.title" = "Unter der Haube";
+"whatsNew.underTheHood.body" = "Diese Version behebt Fehler und macht die App schlanker. Vor allem die Wiedergabe: Sie fängt sich jetzt von selbst, wenn der Server sie kurz nicht mehr versorgt, statt auf einem eingefrorenen Bild stehen zu bleiben.";
+"whatsNew.watchTogether.title" = "Gemeinsam schauen";
+"whatsNew.watchTogether.body" = "Schau denselben Film mit anderen: Pause, Fortsetzen und Spulen sind sekundengenau synchron. Die anderen treten der Sitzung über die Reihe „Live“ auf ihrer Startseite bei.";
+"whatsNew.playOn.title" = "Abspielen auf …";
+"whatsNew.playOn.body" = "Sende einen Film an dein Apple TV, ein Tablet oder ein Smartphone, sofern die App auf beiden Geräten mit demselben Konto geöffnet ist.";
+"whatsNew.playlists.title" = "Deine Playlists";
+"whatsNew.playlists.body" = "Erstelle eine Liste aus jedem beliebigen Poster, ordne sie per Ziehen neu und finde sie auf deiner Startseite wieder.";
+
+/* Launch version check */
+"update.available.title" = "Eine neue Version ist verfügbar";
+"update.available.message" = "JellyGlass %@ ist im App Store verfügbar. Du verwendest Version %@.";
+"update.required.title" = "Update erforderlich";
+"update.required.message" = "Diese Version von JellyGlass wird nicht mehr unterstützt. Installiere Version %@, um fortzufahren.";
+"update.tvos.hint" = "Öffne den App Store auf dem Apple TV, um das Update zu installieren.";
+"update.action.update" = "Aktualisieren";
+"update.action.later" = "Später";
+"update.action.retry" = "Erneut versuchen";
+
+/* Card subtitles — item kind */
+"item.kind.movie" = "Film";
+"item.kind.series" = "Serie";
+"item.kind.episode" = "Folge";
+"item.kind.season" = "Staffel";
+"item.kind.collection" = "Sammlung";
+"item.kind.playlist" = "Playlist";
+"item.kind.video" = "Video";
+"library.jumpBar.a11y" = "Alphabetischer Index";
+"library.jumpBar.digits" = "Ziffern und Symbole";
+"library.jumpBar.hint" = "Streiche nach oben oder unten, um zu einem anderen Buchstaben zu wechseln.";
+"home.hero.a11y" = "Im Fokus";
+"home.hero.position" = "%1$d von %2$d";
+"season.halloween.name" = "Halloween-Nacht";
+"season.halloween.row" = "Halloween-Grusel";
+"settings.seasonal.section" = "Saisonales Design";
+"settings.seasonal.toggle" = "Saisonales Design";
+"settings.seasonal.window" = "%1$@, vom %2$@ bis %3$@";
+"settings.seasonal.ambiance" = "Ambiente-Animationen";
+"settings.seasonal.row" = "Vorschläge auf der Startseite";
+"settings.seasonal.accentNote" = "Während „%@“ ersetzt die Farbe des Designs deine eigene.";
+"settings.debug.forceSeason" = "„%@“ erzwingen";
+"settings.debug.entitlement" = "Berechtigungen";
+"settings.debug.entitlement.free" = "Gratis";
+"settings.debug.entitlement.pro" = "Pro — %@";
+"settings.debug.entitlement.source.purchase" = "auf diesem Gerät gekauft";
+"settings.debug.entitlement.source.cloudMirror" = "iCloud-Spiegelung";
+"settings.debug.entitlement.source.debugOverride" = "simuliert";
+"settings.debug.simulatePro" = "Pro simulieren";
