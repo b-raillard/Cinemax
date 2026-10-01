@@ -238,6 +238,22 @@ public struct KeychainService: Sendable {
         delete(for: Self.parentalLockAccount)
     }
 
+    // MARK: - Early adopter cache
+
+    /// Account holding the last verified `AppTransaction` facts (JSON, owned by
+    /// the app's `EarlyAdopterCacheRecord`), so the early-adopter status holds
+    /// offline. App-private; `clearAll()` leaves it alone — it belongs to the
+    /// install, not to a server session.
+    static let earlyAdopterAccount = "early_adopter"
+
+    public func getEarlyAdopterRecord() -> Data? {
+        getData(for: Self.earlyAdopterAccount)
+    }
+
+    public func saveEarlyAdopterRecord(_ data: Data) throws {
+        try save(data: data, for: Self.earlyAdopterAccount)
+    }
+
     // MARK: - Shared extension session (Keychain access group)
 
     /// Account name of the single shared item the extensions read. Mirrors the
@@ -341,6 +357,7 @@ public struct KeychainService: Sendable {
     static let privateAccounts = [
         "access_token", "server_url", "user_session", "device_id",
         serversAccount, activeServerIdAccount, trustedCertificatesAccount,
+        earlyAdopterAccount,
         parentalLockAccount,
     ]
 

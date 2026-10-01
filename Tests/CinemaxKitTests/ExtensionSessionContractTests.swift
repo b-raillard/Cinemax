@@ -291,6 +291,7 @@ struct KeychainPrivateAccountsTests {
             "access_token", "server_url", "user_session", "device_id",
             KeychainService.serversAccount, KeychainService.activeServerIdAccount,
             KeychainService.trustedCertificatesAccount, KeychainService.parentalLockAccount,
+            KeychainService.earlyAdopterAccount,
         ] {
             #expect(accounts.contains(account), "\(account) must leave the shared group")
         }

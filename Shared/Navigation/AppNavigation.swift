@@ -47,6 +47,9 @@ struct AppNavigation: View {
     /// for iCloud's external changes, none of which a scene-struct recreation
     /// may repeat. Nothing gates on it yet (`Shared/Entitlements/CLAUDE.md`).
     private static let sharedEntitlements = EntitlementStore()
+    /// Early adopters (installed before the Pro): a process singleton — its
+    /// `init` reads the Keychain cache. Nothing grants on it yet.
+    private static let sharedEarlyAdopter = EarlyAdopterService()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -57,6 +60,7 @@ struct AppNavigation: View {
     @State private var parentalLock = AppNavigation.sharedParentalLock
     @State private var seasonal = Self.sharedSeasonal
     @State private var entitlements = Self.sharedEntitlements
+    @State private var earlyAdopter = Self.sharedEarlyAdopter
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
@@ -230,6 +234,7 @@ struct AppNavigation: View {
         .environment(parentalLock)
         .environment(seasonal)
         .environment(entitlements)
+        .environment(earlyAdopter)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
         .environment(reviewPrompt)
@@ -621,6 +626,16 @@ struct AppNavigation: View {
                 StreamTransportPolicy.shared.refresh()
             }
         }
+        #if !DEBUG
+        // Early adopter: ask the App Store once per launch, as soon as the
+        // network allows (`initial: true` = the launch itself); offline, the
+        // Keychain cache stands. Release only — in a Debug build
+        // `AppTransaction` raises a sandbox account prompt nobody asked for
+        // (`Shared/Entitlements/CLAUDE.md`). No-op once StoreKit has answered.
+        .onChange(of: network.isOnline, initial: true) { _, online in
+            Task { await earlyAdopter.refreshIfNeeded(isOnline: online) }
+        }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in
             // Lazy 401 recovery — fired by any API call that surfaces an HTTP
             // 401. We do NOT log out immediately: a single ambiguous 401 (cold
