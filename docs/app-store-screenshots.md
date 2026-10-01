@@ -48,6 +48,19 @@ reconstitution dessinée au milieu de vraies captures détonne.
 
 ---
 
+## 2 bis. La série anglaise (2026-10-01)
+
+Mêmes 13 planches, mêmes cadrages, titres traduits, dans `~/Desktop/JellyGlass App Store/EN/` (iPhone 6.9″ et 6.5″, iPad 13″, Apple TV), exportées comme la série FR (Chrome headless sur les planches du canvas, captures EN substituées aux `/_blob/`). Les deux lecteurs (iPhone et Apple TV) reprennent la capture FR : ils ne portent aucun texte de l'app. Le synopsis et les genres (« Fantastique », « Comédie ») restent en français sur les fiches : ce sont des métadonnées du SERVEUR, pas de l'app.
+
+**Pièges de cette série :**
+
+- **Langue du simulateur** : `defaults write -g AppleLanguages` ne prend qu'après un redémarrage du simulateur (`simctl shutdown` + `boot`), et les préférences de l'app écrites de l'extérieur sont masquées par le cache `cfprefsd` tant qu'elle tourne. Le plus fiable : la page « langue » de « Quoi de neuf » (« Activer »), ou l'argument de lancement `-appLanguage en`.
+- **Widgets** : l'écran d'accueil était en style « Teinté » (affiches blanches) ; repasser en « Sombre » (appui long → Modifier → Personnaliser).
+- **iPad en paysage** : la rotation se fait à la main ; ensuite les coordonnées de toucher restent celles du PORTRAIT (`x_portrait = y_paysage`, `y_portrait = 1376 − x_paysage`).
+- **Apple TV** : Xcode 27 n'a plus de quoi simuler la télécommande. Une cible `bundle.ui-testing` TEMPORAIRE (jamais commitée, dans un worktree jetable) pilote `XCUIRemote` et enregistre `XCUIScreen.main.screenshot()` ; le même procédé côté iOS a approuvé le code Quick Connect de l'Apple TV. Arguments utiles : `-appLanguage en`, `-appearance.seasonalTheme off`.
+- **Le simulateur Apple TV `35C18366` porte le compte PERSONNEL de l'utilisateur** (bibliothèque réelle) : ne jamais y capturer. Le compte de démonstration est sur `D8FA6F76`.
+- **Adresse du serveur** : `nas-raillard.local` n'est joignable que depuis le réseau local ; les simulateurs ont été rebranchés sur `https://movies.nivadax.net`.
+
 ## 3. Méthode A — Simulator + Cmd+S (rapide, recommandée)
 
 ```bash

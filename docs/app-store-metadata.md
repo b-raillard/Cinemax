@@ -1496,8 +1496,14 @@ ASC → Tarifs et disponibilité → Disponibilité de l'app → Gérer la dispo
 
 ## 6. Build à sélectionner
 
-iOS : **2.3.1** build **2.3.2** (allemand + rangée de boutons du lecteur sur écrans étroits, PR #281 — à archiver et envoyer après fusion de #280 et #281)
-tvOS : **2.3.1** build **2.3.2** (allemand)
+iOS : **2.3.1** build **2.3.2** (allemand, langue au choix sur l'écran serveur, offre de langue dans « Quoi de neuf », rangée de boutons du lecteur sur écrans étroits — PR #280 et #281), envoyé sur TestFlight le 2026-10-01
+tvOS : **2.3.1** build **2.3.2** (idem, sans le lecteur iOS), envoyé le même jour
+
+**État App Store Connect au 2026-10-01** : versions iOS et tvOS **2.3.1** créées. Notes 2.3.1 en français, anglais et **allemand** (section 3 bis). Localisation **Allemand** ajoutée aux deux apps : description, mots-clés, texte promotionnel ; captures = celles du français. Dans « Informations sur l'app » : iOS `JellyGlass für Jellyfin` / `Mediathek, Filme und Serien`, tvOS `JellyGlass TV für Jellyfin` / `Filme und Serien in 4K HDR` (le nom tvOS porte « TV » dans toutes les langues). Le texte promotionnel FR + EN de la version tvOS 2.3.1 était vide à la création et a été rempli. Builds 2.3.2 attachés aux deux versions le même jour ; reste à soumettre (utilisateur).
+
+**Captures anglaises (2026-10-01)** : téléversées dans la localisation **Anglais (États-Unis)** des deux versions 2.3.1 — iPhone 6,5″ (6), iPad 13″ (3), Apple TV (4) ; sources dans `~/Desktop/JellyGlass App Store/EN/`. L'allemand garde celles du français.
+
+**Langue principale → anglais : REFUSÉE par App Store Connect tant que la 2.3.0 en ligne existe** — « Impossible d'enregistrer la langue principale car vous devez d'abord fournir toutes les captures d'écran requises pour chaque version dans cette langue ». La 2.3.0 publiée n'a pas de captures anglaises propres et n'est plus modifiable. **À refaire dès que la 2.3.1 est en ligne** (« Informations sur l'app » → Langue principale → Anglais (États-Unis) → Enregistrer, sur les deux apps).
 
 Versions précédentes : 2.3.0 build 2.3.1 (iOS + tvOS), en ligne depuis le 2026-10-01 00 h 11 UTC.
 
