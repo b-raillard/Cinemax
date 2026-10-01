@@ -54,9 +54,9 @@
 "settings.homePage.watchingNow" = "Live";
 "home.recentlyAdded" = "Neu hinzugefügt";
 "home.becauseYouWatched" = "Weil du %@ gesehen hast";
-"home.remainingTime.hours" = "Noch %d h %d min";
-"home.remainingTime.minutes" = "Noch %d min";
-"home.remainingTime.minutes.one" = "Noch %d min";
+"home.remainingTime.hours" = "Noch %d Std. %d Min.";
+"home.remainingTime.minutes" = "Noch %d Min.";
+"home.remainingTime.minutes.one" = "Noch %d Min.";
 "home.genreRow.failed" = "Laden fehlgeschlagen";
 
 // MARK: - Movie Library
@@ -143,7 +143,7 @@
 
 // MARK: - End of Series
 
-"player.finishedSeries.title" = "Du hast %@ beendet";
+"player.finishedSeries.title" = "Du hast %@ zu Ende geschaut";
 "player.finishedSeries.subtitle" = "Keine weiteren Folgen.";
 "player.finishedSeries.done" = "Fertig";
 
@@ -215,7 +215,7 @@
 "settings.connected" = "Verbunden";
 "settings.refreshConnection" = "Verbindung aktualisieren";
 "settings.refreshCatalogue" = "Katalog aktualisieren";
-"settings.refreshCatalogue.subtitle" = "Cache leeren und Start und Mediathek neu laden.";
+"settings.refreshCatalogue.subtitle" = "Cache leeren, Start und Mediathek neu laden.";
 "toast.catalogueRefreshed" = "Katalog aktualisiert";
 
 // MARK: - Privacy & Security
@@ -242,11 +242,11 @@
 "privacy.clearContinueWatching.subtitle" = "Den in „Weiterschauen“ angezeigten Fortschritt entfernen.";
 "privacy.clearContinueWatching.confirm" = "Der Wiedergabefortschritt wird auf dem Server gelöscht.";
 "privacy.clearImageCache" = "Bildcache leeren";
-"privacy.clearImageCache.subtitle" = "Gibt den Festplattencache frei (~500 MB).";
+"privacy.clearImageCache.subtitle" = "Gibt den Bildcache auf dem Gerät frei (~500 MB).";
 "privacy.clearImageCache.confirm" = "Bilder werden bei Bedarf erneut geladen.";
 "server.certificate.title" = "Unbekanntes Zertifikat";
 "server.certificate.explain" = "Dieser Server verwendet ein Zertifikat, das von keiner bekannten Zertifizierungsstelle signiert ist. Prüfe den Fingerabdruck auf deinem Server, bevor du es akzeptierst – genau dieser wird fest hinterlegt.";
-"server.certificate.untrusted" = "Das Zertifikat dieses Servers wird nicht erkannt.";
+"server.certificate.untrusted" = "Das Zertifikat dieses Servers ist nicht bekannt.";
 "server.certificate.changed" = "Das Zertifikat dieses Servers hat sich seit deiner Bestätigung GEÄNDERT.";
 "server.certificate.host" = "Host";
 "server.certificate.subject" = "Inhaber";
@@ -311,7 +311,7 @@
 "admin.metadata.title" = "Metadaten-Manager";
 "admin.metadata.subtitle" = "Titel, Besetzung und Bilder bearbeiten und Metadaten aktualisieren.";
 "admin.users.subtitle" = "Konten und Berechtigungen verwalten.";
-"admin.devices.subtitle" = "Verbundene Geräte ansehen und widerrufen.";
+"admin.devices.subtitle" = "Verbundene Geräte ansehen und ihren Zugriff widerrufen.";
 "admin.activity.subtitle" = "Serverereignisse durchsehen.";
 "admin.playback.subtitle" = "Hardwarebeschleunigung und Transkodierung.";
 "admin.plugins.subtitle" = "Installierte Plugins aktivieren oder deinstallieren.";
@@ -379,7 +379,7 @@
 "admin.user.profile.isDisabled" = "Konto deaktivieren";
 "admin.user.profile.cantDisableSelf" = "Du kannst dein eigenes Konto nicht deaktivieren.";
 
-"admin.user.access.libraryAccess" = "Mediathekzugriff";
+"admin.user.access.libraryAccess" = "Zugriff auf Mediatheken";
 "admin.user.access.libraryAccess.footer" = "Wenn deaktiviert, wähle aus, welche Mediatheken mit diesem Benutzer geteilt werden.";
 "admin.user.access.enableAllLibraries" = "Zugriff auf alle Mediatheken erlauben";
 "admin.user.access.libraries" = "Mediatheken";
@@ -421,9 +421,9 @@
 "admin.devices.empty.subtitle" = "Mit deinem Server verbundene Geräte werden hier angezeigt.";
 "admin.devices.thisDevice" = "DIESES GERÄT";
 "admin.devices.revoke" = "Widerrufen";
-"admin.devices.revoke.title" = "Dieses Gerät widerrufen?";
+"admin.devices.revoke.title" = "Zugriff dieses Geräts widerrufen?";
 "admin.devices.revoke.message" = "„%@“ wird sofort abgemeldet und muss sich erneut anmelden, um auf den Server zuzugreifen.";
-"admin.devices.revoke.success" = "Gerät widerrufen";
+"admin.devices.revoke.success" = "Gerätezugriff widerrufen";
 
 // MARK: - Admin — Activity
 
@@ -527,7 +527,7 @@
 "admin.apiKeys.created.message" = "Kopiere diesen Schlüssel jetzt und bewahre ihn in einem Passwortmanager auf. Er bleibt in der Liste sichtbar, es ist aber bewährte Praxis, ihn als Geheimnis zu behandeln.";
 "admin.apiKeys.created.tokenLabel" = "Schlüsselwert";
 "admin.apiKeys.created.copy" = "Schlüssel kopieren";
-"admin.apiKeys.created.reminder" = "Versende ihn niemals über einen unverschlüsselten Messenger oder per SMS.";
+"admin.apiKeys.created.reminder" = "Versende ihn niemals per unverschlüsselter E-Mail oder SMS.";
 
 // MARK: - Admin — Network
 
@@ -594,7 +594,7 @@
 "admin.metadata.general.overview" = "Handlung";
 "admin.metadata.general.taglines" = "Taglines";
 "admin.metadata.general.addTagline" = "Tagline hinzufügen";
-"admin.metadata.general.releaseInfo" = "Daten";
+"admin.metadata.general.releaseInfo" = "Veröffentlichung";
 "admin.metadata.general.year" = "Jahr";
 "admin.metadata.general.premiereDate" = "Premiere";
 "admin.metadata.general.endDate" = "Enddatum";
@@ -759,7 +759,7 @@
 "settings.motionEffects.systemOverride" = "„Bewegung reduzieren“ ist in den Geräteeinstellungen aktiviert, daher bleiben die Effekte ausgeschaltet.";
 "settings.fontSize" = "Textgröße";
 "settings.4kRendering" = "4K-Darstellung";
-"settings.autoPlayNextEpisode" = "Nächste Folge automatisch";
+"settings.autoPlayNextEpisode" = "Nächste Folge automatisch abspielen";
 "settings.autoSkipIntro" = "Intro automatisch überspringen";
 "settings.autoSkipCredits" = "Abspann automatisch überspringen";
 "settings.forceNativeAVPlayer" = "Nativer Player";
@@ -803,7 +803,7 @@
 "detail.seeMore" = "Mehr anzeigen";
 "detail.studio" = "Studio";
 "detail.network" = "Sender";
-"detail.audienceRating" = "Publikum";
+"detail.audienceRating" = "Publikumsbewertung";
 
 // MARK: - Login
 
@@ -904,8 +904,8 @@
 "player.autoSkipped.credits" = "Abspann übersprungen";
 "player.speed" = "Geschwindigkeit";
 "player.audioDelay" = "Audioverzögerung";
-"player.audio.silentSuffix" = "(stumm auf Apple)";
-"player.audio.silent.title" = "Stumm auf Apple";
+"player.audio.silentSuffix" = "(auf Apple-Geräten stumm)";
+"player.audio.silent.title" = "Auf Apple-Geräten stumm";
 "player.audio.silent.suggestion" = "Apple bietet keine Dolby-TrueHD-Ausgabe, daher bleibt diese Tonspur stumm. Versuche „%@“.";
 "player.audio.silent.noAlternative" = "Apple bietet keine Dolby-TrueHD-Ausgabe, daher bleibt diese Tonspur stumm.";
 "player.subtitleDelay" = "Untertitelverzögerung";
@@ -1027,7 +1027,7 @@
 "syncplay.event.joined" = "%@ ist beigetreten";
 "syncplay.event.left" = "%@ ist gegangen";
 "syncplay.waiting.title" = "Warten auf Teilnehmer";
-"syncplay.waiting.subtitle" = "Jemand puffert gerade. Alle machen gemeinsam weiter.";
+"syncplay.waiting.subtitle" = "Bei einem Teilnehmer lädt der Stream noch. Alle machen gemeinsam weiter.";
 "syncplay.libraryAccessDenied" = "Dein Konto hat keinen Zugriff auf diesen Titel";
 "syncplay.restricted.left" = "Dieser Titel überschreitet die Altersgrenze dieses Geräts. Du hast die Sitzung verlassen.";
 "syncplay.session.badge" = "GEMEINSAM";
@@ -1051,11 +1051,11 @@
 "syncplay.lobby.participants" = "Dabei";
 "syncplay.lobby.alone" = "Du bist bisher allein.";
 "syncplay.lobby.invite" = "Einladen";
-"syncplay.lobby.invite.how" = "Die anderen treten über die Reihe „Live“ auf ihrem Startbildschirm bei: Dort erscheint die Sitzung, solange sie geöffnet ist.";
+"syncplay.lobby.invite.how" = "Die anderen treten über die Reihe „Live“ auf ihrer Startseite bei: Dort erscheint die Sitzung, solange sie geöffnet ist.";
 "syncplay.lobby.invite.nobody" = "Gerade ist niemand sonst verbunden.";
 "syncplay.lobby.invite.send" = "Benachrichtigen";
 "syncplay.lobby.invite.sent" = "Benachrichtigt";
-"syncplay.lobby.invite.message" = "%@ hat eine Sitzung geöffnet: %@. Öffne „Live“ auf deinem Startbildschirm, um beizutreten.";
+"syncplay.lobby.invite.message" = "%@ hat eine Sitzung geöffnet: %@. Öffne „Live“ auf deiner Startseite, um beizutreten.";
 "syncplay.lobby.invite.sentToast" = "%@ wurde benachrichtigt";
 "syncplay.lobby.start" = "Wiedergabe starten";
 "syncplay.lobby.leave" = "Sitzung verlassen";
@@ -1240,7 +1240,7 @@
 "whatsNew.parentalLock.title" = "Verbesserte Kindersicherung";
 "whatsNew.parentalLock.body" = "Die Altersgrenze gilt jetzt für alles, was du abspielst, einschließlich der nächsten Folge; eine Folge ohne Altersfreigabe wird nach der Freigabe ihrer Serie beurteilt. Eine neue PIN hat 6 bis 8 Ziffern, und deine aktuelle PIN bleibt gültig.";
 "whatsNew.halloweenNight.title" = "Halloween-Nacht";
-"whatsNew.halloweenNight.body" = "Einen Monat lang geht die App in den Nachtmodus: Kürbis-Farbpalette, gotische Titel, Fledermäuse und Kürbisse beim Öffnen und eine Reihe „Halloween-Grusel“ unter Start, Filme und Serien. Nach Halloween ist alles wieder wie vorher.";
+"whatsNew.halloweenNight.body" = "Einen Monat lang geht die App in den Nachtmodus: Kürbis-Farbpalette, Titel in gotischer Schrift, Fledermäuse und Kürbisse beim Öffnen und eine Reihe „Halloween-Grusel“ unter Start, Filme und Serien. Nach Halloween ist alles wieder wie vorher.";
 "whatsNew.offer.window" = "Befristet · %1$@ → %2$@";
 "whatsNew.offer.enabled" = "Aktiviert";
 "whatsNew.offer.accept" = "Aktivieren";
@@ -1254,11 +1254,11 @@
 "whatsNew.underTheHood.title" = "Unter der Haube";
 "whatsNew.underTheHood.body" = "Diese Version behebt Fehler und macht die App schlanker. Vor allem die Wiedergabe: Sie fängt sich jetzt von selbst, wenn der Server sie kurz nicht mehr versorgt, statt auf einem eingefrorenen Bild stehen zu bleiben.";
 "whatsNew.watchTogether.title" = "Gemeinsam schauen";
-"whatsNew.watchTogether.body" = "Schau denselben Film mit anderen: Pause, Fortsetzen und Spulen sind sekundengenau synchron. Die anderen treten der Sitzung über die Reihe „Live“ auf ihrem Startbildschirm bei.";
+"whatsNew.watchTogether.body" = "Schau denselben Film mit anderen: Pause, Fortsetzen und Spulen sind sekundengenau synchron. Die anderen treten der Sitzung über die Reihe „Live“ auf ihrer Startseite bei.";
 "whatsNew.playOn.title" = "Abspielen auf …";
 "whatsNew.playOn.body" = "Sende einen Film an dein Apple TV, ein Tablet oder ein Smartphone, sofern die App auf beiden Geräten mit demselben Konto geöffnet ist.";
 "whatsNew.playlists.title" = "Deine Playlists";
-"whatsNew.playlists.body" = "Erstelle eine Liste aus jedem beliebigen Poster, ordne sie per Ziehen neu und finde sie auf deinem Startbildschirm wieder.";
+"whatsNew.playlists.body" = "Erstelle eine Liste aus jedem beliebigen Poster, ordne sie per Ziehen neu und finde sie auf deiner Startseite wieder.";
 
 /* Launch version check */
 "update.available.title" = "Eine neue Version ist verfügbar";
@@ -1289,7 +1289,7 @@
 "settings.seasonal.toggle" = "Saisonales Design";
 "settings.seasonal.window" = "%1$@, vom %2$@ bis %3$@";
 "settings.seasonal.ambiance" = "Ambiente-Animationen";
-"settings.seasonal.row" = "Vorschläge auf dem Startbildschirm";
+"settings.seasonal.row" = "Vorschläge auf der Startseite";
 "settings.seasonal.accentNote" = "Während „%@“ ersetzt die Farbe des Designs deine eigene.";
 "settings.debug.forceSeason" = "„%@“ erzwingen";
 "settings.debug.entitlement" = "Berechtigungen";

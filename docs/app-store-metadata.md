@@ -1360,7 +1360,7 @@ Mediathek, Filme und Serien
 
 ### Werbetext (170 Zeichen max.)
 ```
-Der Jellyfin-Client, der deinen Server nie transcodieren lässt: MKV, Dolby Vision, HDR10+ und Atmos laufen unverändert auf iPhone, iPad und Apple TV.
+Der Jellyfin-Client, der deinen Server nie transkodieren lässt: MKV, Dolby Vision, HDR10+ und Atmos laufen unverändert auf iPhone, iPad und Apple TV.
 ```
 *(149 caractères)*
 
@@ -1380,14 +1380,14 @@ JellyGlass ist ein moderner Client für deine Jellyfin-Medienserver, gemacht fü
 • Auswahl von Tonspur und Untertiteln mit den echten Spurnamen deines Servers
 • „Intro überspringen“ und „Abspann überspringen“, kompatibel mit dem Intro-Skipper-Plugin
 • Kapitel mit Vorschaubildern, automatische Wiedergabe der nächsten Folge
-• Sende deine Inhalte an jedes andere verbundene Gerät mit demselben Konto
+• „Abspielen auf …“: sende deine Inhalte an jedes andere Gerät, das mit demselben Konto verbunden ist
 • Schlaftimer mit „Schaust du noch?“-Abfrage
 
 — SUCHEN UND STÖBERN
 • Suche per Text oder Sprache
-• Filter nach Genre, Jahrzehnt oder nur ungesehene Titel
-• Alphabetische Sortierung mit Schnellsprungleiste
-• Wähle, welche Genre-Reihen auf dem Startbildschirm erscheinen
+• Filter nach Genre und Jahrzehnt, Option „Nur ungesehene“
+• Alphabetische Sortierung mit Schnellnavigation
+• Wähle, welche Genre-Reihen auf der Startseite erscheinen
 
 — OPTIMIERT FÜR APPLE TV
 • Navigation, gemacht für die Siri Remote
@@ -1402,11 +1402,11 @@ JellyGlass ist ein moderner Client für deine Jellyfin-Medienserver, gemacht fü
 
 — RESPEKTIERT DEINE PRIVATSPHÄRE
 • Keine Datenerhebung
-• Keine Analyse, keine Werbung
+• Keine Analysedienste, keine Werbung
 • Die gesamte Kommunikation läuft direkt zwischen deinem Gerät und deinem Jellyfin-Server
 • Open Source: https://github.com/b-raillard/Cinemax
 
-JellyGlass benötigt einen bereits laufenden Jellyfin-Server (jellyfin.org). JellyGlass streamt ausschließlich die Videos deines eigenen Servers: Die App enthält keine eigenen Inhalte, hat keine Download-Funktion und speichert oder lädt keinerlei Medien herunter, aus keiner Quelle. JellyGlass wird weder vom offiziellen Jellyfin-Team entwickelt noch unterstützt.
+JellyGlass benötigt einen bereits laufenden Jellyfin-Server (jellyfin.org). JellyGlass streamt ausschließlich die Videos deines eigenen Servers: Die App enthält keine eigenen Inhalte, hat keine Download-Funktion und speichert keinerlei Medien, gleich aus welcher Quelle. JellyGlass wird weder vom offiziellen Jellyfin-Team entwickelt noch unterstützt.
 ```
 
 ### Schlüsselwörter (100 Zeichen max., durch Kommas getrennt, ohne Leerzeichen)
@@ -1422,12 +1422,12 @@ mediathek,server,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,filme,serien,hei
 JellyGlass 2.3.1: JellyGlass spricht Deutsch.
 
 • Die App gibt es jetzt auch auf Deutsch, neben Französisch und Englisch
-• Eine Neuinstallation startet in der Sprache deines Geräts, die du direkt auf dem Server-Bildschirm ändern kannst; hast du JellyGlass bisher in einer anderen Sprache genutzt, bietet dir die Seite „Neuigkeiten“ den Wechsel an
+• Eine Neuinstallation startet in der Sprache deines Geräts, die du direkt auf dem Server-Bildschirm ändern kannst; hast du JellyGlass bisher in einer anderen Sprache als der deines Geräts genutzt, bietet dir die Seite „Neuigkeiten“ den Wechsel an
 • Auch die Widgets und die Steuerung „Weiterschauen“ sprechen Deutsch
 • Player: Auf schmalen Bildschirmen (iPhone SE, Display-Zoom, iPad in Slide Over) passen die Wiedergabetasten jetzt vollständig auf den Bildschirm
 • Die Halloween-Nacht geht noch bis zum 2. November
 
-Danke, dass du JellyGlass nutzt. Fehlermeldungen und Vorschläge: https://github.com/b-raillard/Cinemax/issues
+Danke, dass du JellyGlass nutzt. Fehlerberichte und Vorschläge: https://github.com/b-raillard/Cinemax/issues
 ```
 
 #### tvOS — 2.3.1
@@ -1435,11 +1435,11 @@ Danke, dass du JellyGlass nutzt. Fehlermeldungen und Vorschläge: https://github
 JellyGlass 2.3.1: JellyGlass spricht Deutsch.
 
 • Die App gibt es jetzt auch auf Deutsch, neben Französisch und Englisch
-• Eine Neuinstallation startet in der Sprache deines Apple TV, die du direkt auf dem Server-Bildschirm ändern kannst; hast du JellyGlass bisher in einer anderen Sprache genutzt, bietet dir die Seite „Neuigkeiten“ den Wechsel an
+• Eine Neuinstallation startet in der Sprache deines Apple TV, die du direkt auf dem Server-Bildschirm ändern kannst; hast du JellyGlass bisher in einer anderen Sprache als der deines Apple TV genutzt, bietet dir die Seite „Neuigkeiten“ den Wechsel an
 • Auch die Top-Shelf-Reihe spricht Deutsch
 • Die Halloween-Nacht geht noch bis zum 2. November
 
-Danke, dass du JellyGlass nutzt. Fehlermeldungen und Vorschläge: https://github.com/b-raillard/Cinemax/issues
+Danke, dass du JellyGlass nutzt. Fehlerberichte und Vorschläge: https://github.com/b-raillard/Cinemax/issues
 ```
 
 ---
