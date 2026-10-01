@@ -1499,7 +1499,7 @@ ASC → Tarifs et disponibilité → Disponibilité de l'app → Gérer la dispo
 iOS : **2.3.1** build **2.3.2** (allemand, langue au choix sur l'écran serveur, offre de langue dans « Quoi de neuf », rangée de boutons du lecteur sur écrans étroits — PR #280 et #281), envoyé sur TestFlight le 2026-10-01
 tvOS : **2.3.1** build **2.3.2** (idem, sans le lecteur iOS), envoyé le même jour
 
-**État App Store Connect au 2026-10-01** : versions iOS et tvOS **2.3.1** créées. Notes 2.3.1 en français, anglais et **allemand** (section 3 bis). Localisation **Allemand** ajoutée aux deux apps : description, mots-clés, texte promotionnel ; captures = celles du français. Dans « Informations sur l'app » : iOS `JellyGlass für Jellyfin` / `Mediathek, Filme und Serien`, tvOS `JellyGlass TV für Jellyfin` / `Filme und Serien in 4K HDR` (le nom tvOS porte « TV » dans toutes les langues). Le texte promotionnel FR + EN de la version tvOS 2.3.1 était vide à la création et a été rempli.
+**État App Store Connect au 2026-10-01** : versions iOS et tvOS **2.3.1** créées. Notes 2.3.1 en français, anglais et **allemand** (section 3 bis). Localisation **Allemand** ajoutée aux deux apps : description, mots-clés, texte promotionnel ; captures = celles du français. Dans « Informations sur l'app » : iOS `JellyGlass für Jellyfin` / `Mediathek, Filme und Serien`, tvOS `JellyGlass TV für Jellyfin` / `Filme und Serien in 4K HDR` (le nom tvOS porte « TV » dans toutes les langues). Le texte promotionnel FR + EN de la version tvOS 2.3.1 était vide à la création et a été rempli. Builds 2.3.2 attachés aux deux versions le même jour ; reste à soumettre (utilisateur).
 
 Versions précédentes : 2.3.0 build 2.3.1 (iOS + tvOS), en ligne depuis le 2026-10-01 00 h 11 UTC.
 
