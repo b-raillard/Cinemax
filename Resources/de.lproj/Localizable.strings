@@ -1244,6 +1244,8 @@
 "whatsNew.offer.window" = "Befristet · %1$@ → %2$@";
 "whatsNew.offer.enabled" = "Aktiviert";
 "whatsNew.offer.accept" = "Aktivieren";
+"whatsNew.language.title" = "JellyGlass auf Deutsch";
+"whatsNew.language.body" = "Dein Gerät ist auf %@ eingestellt. JellyGlass kann auch in dieser Sprache erscheinen; ändern kannst du sie jederzeit unter Einstellungen → Darstellung.";
 "whatsNew.offer.decline" = "Nein danke";
 "whatsNew.offer.accepted" = "Saisonales Design aktiviert";
 "whatsNew.offer.startsOn" = "Es beginnt am %@.";

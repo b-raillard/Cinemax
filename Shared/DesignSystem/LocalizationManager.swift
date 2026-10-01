@@ -234,28 +234,71 @@ final class LocalizationManager {
 
 // MARK: - App languages
 
-/// The languages the app ships, in picker order, and the one a first launch
-/// starts in. **The default follows the DEVICE** (its first preferred language
-/// the app speaks, English when it speaks none of them) for as long as the user
-/// has not picked one in Réglages: until 2.3.1 every install started in French,
-/// so a German- or English-speaking phone met a French app and had to find the
-/// switch. An explicit choice is stored in `SettingsKey.appLanguage` and wins.
+/// The languages the app ships, in picker order, and the one an install
+/// speaks. **Settled once, at the first launch of 2.3.1 or later**
+/// (`settleStoredLanguage`), then always read from `SettingsKey.appLanguage`:
+/// - a FRESH install starts in the device's first preferred language the app
+///   ships, English when it ships none of them — until 2.3.1 every install
+///   started in French, so a German- or English-speaking phone met a French
+///   app and had to find the switch;
+/// - an install UPGRADING from an earlier version keeps the French it has been
+///   reading (it never stored a choice, French was the default) — it is
+///   offered its device's language once, in « Quoi de neuf », rather than
+///   switched under its feet.
 enum AppLanguage {
     nonisolated static let supported = ["fr", "en", "de"]
 
     /// The first of `preferredLanguages` (BCP-47 tags, `"de-CH"`, `"en-US"`…)
-    /// whose language the app ships, else `"en"`.
-    nonisolated static func resolve(preferredLanguages: [String]) -> String {
+    /// whose language the app ships, or `nil` when it ships none of them.
+    nonisolated static func devicePreferred(preferredLanguages: [String]) -> String? {
         for tag in preferredLanguages {
             let code = tag.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map { $0.lowercased() } ?? ""
             if supported.contains(code) { return code }
         }
-        return "en"
+        return nil
     }
 
-    /// The device's default, read now (the user can change it in iOS Settings).
+    /// `devicePreferred`, English when the device speaks none of ours.
+    nonisolated static func resolve(preferredLanguages: [String]) -> String {
+        devicePreferred(preferredLanguages: preferredLanguages) ?? "en"
+    }
+
+    /// The device's default, read now — the fallback for an unset key.
     nonisolated static var deviceDefault: String {
         resolve(preferredLanguages: Locale.preferredLanguages)
+    }
+
+    /// What to write into an UNSET `appLanguage`, or `nil` to leave it alone.
+    /// `isExistingInstall`: the install ran an earlier version (it has a
+    /// « Quoi de neuf » stamp or finished the onboarding) — it has been reading
+    /// French, the old default, and keeps it.
+    nonisolated static func languageToSettle(
+        stored: String?, isExistingInstall: Bool, preferredLanguages: [String]
+    ) -> String? {
+        guard stored == nil else { return nil }
+        return isExistingInstall ? "fr" : resolve(preferredLanguages: preferredLanguages)
+    }
+
+    /// Writes the install's language once, BEFORE anything renders — called
+    /// from `AppNavigation.init`. Writing it (rather than reading the device
+    /// at every launch) is what makes the second launch of a fresh install
+    /// indistinguishable from the first: by then it carries a « Quoi de neuf »
+    /// stamp and would otherwise be taken for an upgrade.
+    nonisolated static func settleStoredLanguage(defaults: UserDefaults = .standard) {
+        let lastSeen = defaults.string(forKey: SettingsKey.whatsNewLastSeenVersion) ?? ""
+        let settled = languageToSettle(
+            stored: defaults.string(forKey: SettingsKey.appLanguage),
+            isExistingInstall: !lastSeen.isEmpty || defaults.bool(forKey: SettingsKey.onboardingSeen),
+            preferredLanguages: Locale.preferredLanguages
+        )
+        if let settled { defaults.set(settled, forKey: SettingsKey.appLanguage) }
+    }
+
+    /// The device language worth OFFERING: shipped, and not the one the app
+    /// already speaks. `nil` = nothing to offer.
+    nonisolated static func offer(current: String, preferredLanguages: [String]) -> String? {
+        guard let device = devicePreferred(preferredLanguages: preferredLanguages), device != current else { return nil }
+        return device
     }
 
     /// The language's own name, as the pickers print it (« Deutsch »).

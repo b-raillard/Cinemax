@@ -1246,6 +1246,8 @@
 "whatsNew.offer.window" = "Éphémère · %1$@ → %2$@";
 "whatsNew.offer.enabled" = "Activé";
 "whatsNew.offer.accept" = "Activer";
+"whatsNew.language.title" = "JellyGlass en français";
+"whatsNew.language.body" = "Votre appareil est réglé en %@. JellyGlass peut s'afficher dans cette langue ; vous pourrez toujours la changer dans Réglages → Apparence.";
 "whatsNew.offer.decline" = "Non merci";
 "whatsNew.offer.accepted" = "Thème éphémère activé";
 "whatsNew.offer.startsOn" = "Il arrive le %@.";

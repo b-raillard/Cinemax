@@ -40,11 +40,15 @@ enum WhatsNewPolicy {
     ///     the app for the first time. They get the welcome and nothing else:
     ///     the news of a version they have never known is not news, it is
     ///     noise in front of somebody still trying to reach their server.
+    ///   - resolve: adapts the pages to this install BEFORE the empty test
+    ///     (`WhatsNewCatalogue.resolvingOffers`) — a version whose only page
+    ///     does not apply here is a silent stamp.
     static func decide(
         lastSeenVersion: String?,
         installed: ServerVersion?,
         isFirstRun: Bool,
-        catalogue: [WhatsNewRelease] = WhatsNewCatalogue.releases
+        catalogue: [WhatsNewRelease] = WhatsNewCatalogue.releases,
+        resolve: ([WhatsNewPage]) -> [WhatsNewPage] = { $0 }
     ) -> Outcome {
         guard let installed else { return .nothing }
         if isFirstRun { return .stampOnly }
@@ -54,7 +58,7 @@ enum WhatsNewPolicy {
         // downgrade and must not replay anything.
         if let lastSeen, lastSeen >= installed { return .nothing }
 
-        let pages = WhatsNewCatalogue.pages(since: lastSeen, upTo: installed, in: catalogue)
+        let pages = resolve(WhatsNewCatalogue.pages(since: lastSeen, upTo: installed, in: catalogue))
         return pages.isEmpty ? .stampOnly : .show(pages)
     }
 

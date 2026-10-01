@@ -18,11 +18,20 @@ import SwiftUI
 /// the footer's already-tight row). A tvOS `.sheet` renders cramped, and Menu is
 /// its close.
 struct WhatsNewScreen: View {
-    let pages: [WhatsNewPage]
+    /// The pages as they were when the reel opened. FROZEN on purpose: the
+    /// language offer resolves against the app's language, so the Réglages
+    /// replay — which recomputes its pages on every render — would drop the
+    /// page from under the user the moment they accept it.
+    @State private var pages: [WhatsNewPage]
     /// Called by the close button / « Passer » and by the last page's CTA. The
     /// host owns what that means: stamping the installed version at launch,
     /// dismissing on a replay.
     let onFinish: () -> Void
+
+    init(pages: [WhatsNewPage], onFinish: @escaping () -> Void) {
+        _pages = State(initialValue: pages)
+        self.onFinish = onFinish
+    }
 
     @Environment(LocalizationManager.self) private var loc
     @Environment(ThemeManager.self) private var themeManager
@@ -52,11 +61,40 @@ struct WhatsNewScreen: View {
         return SeasonalThemeCatalogue.theme(id: id)
     }
 
+    /// The language this page offers (`WhatsNewOffer.appLanguage`), if any.
+    private var offeredLanguage: String? {
+        guard case .appLanguage(let code) = page?.offer else { return nil }
+        return code
+    }
+
+    /// The offered language named in the app's CURRENT language (« allemand »),
+    /// for the body. The button stays « Activer »: « Passer en allemand »
+    /// truncated in the iPhone's half-width slot, and the chip and the title
+    /// above it already say which language.
+    private func languageName(_ code: String) -> String {
+        loc.locale.localizedString(forLanguageCode: code) ?? loc.localized(AppLanguage.nameKey(code))
+    }
+
     /// The page still has something to switch on: « Activer » / « Non merci »
     /// replace the navigation button. Once on (or on a replay after
     /// accepting), the page reads like any other and wears a « ✓ Activé » chip.
     private var offerPending: Bool {
-        offeredSeason != nil && seasonal.setting != .automatic
+        if offeredSeason != nil { return seasonal.setting != .automatic }
+        if let code = offeredLanguage { return loc.languageCode != code }
+        return false
+    }
+
+    /// Title and body of a page. The language offer is the exception to the
+    /// `whatsNew.<id>.*` rule on two counts: its TITLE is read in the offered
+    /// language (« JellyGlass auf Deutsch » — the line meant for the person
+    /// whose phone speaks it), and its body names that language.
+    private func texts(for page: WhatsNewPage) -> (title: String, body: String) {
+        if let code = offeredLanguage {
+            let title = Bundle.localizedBundle(for: code)
+                .localizedString(forKey: "whatsNew.\(page.id).title", value: nil, table: nil)
+            return (title, loc.localized("whatsNew.\(page.id).body", languageName(code)))
+        }
+        return (loc.localized("whatsNew.\(page.id).title"), loc.localized("whatsNew.\(page.id).body"))
     }
 
     var body: some View {
@@ -142,14 +180,15 @@ struct WhatsNewScreen: View {
                 WhatsNewIllustrationView(kind: page.illustration, baseSize: illustrationSize)
 
                 if let season = offeredSeason { offerBadges(for: season) }
+                if let code = offeredLanguage { languageBadges(for: code) }
 
-                Text(loc.localized("whatsNew.\(page.id).title"))
+                Text(texts(for: page).title)
                     .font(offeredSeason.flatMap { SeasonalTypography.titleFont(for: $0, size: CinemaScale.pt(titleFaceSize)) }
                           ?? CinemaFont.headline(.large))
                     .foregroundStyle(CinemaColor.onSurface)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(loc.localized("whatsNew.\(page.id).body"))
+                Text(texts(for: page).body)
                     .font(CinemaFont.dynamicBody)
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .fixedSize(horizontal: false, vertical: true)
@@ -198,6 +237,18 @@ struct WhatsNewScreen: View {
         }
     }
 
+    /// « 🌐 Deutsch » — the language in its own name — and « ✓ Activé » once
+    /// the app speaks it.
+    private func languageBadges(for code: String) -> some View {
+        let tint = themeManager.accent
+        return HStack(spacing: CinemaSpacing.spacing2) {
+            badge(loc.localized(AppLanguage.nameKey(code)), systemImage: "globe", tint: tint)
+            if !offerPending {
+                badge(loc.localized("whatsNew.offer.enabled"), systemImage: "checkmark", tint: tint)
+            }
+        }
+    }
+
     private func badge(_ text: String, systemImage: String, tint: Color) -> some View {
         Label(text, systemImage: systemImage)
             .font(CinemaFont.label(.medium))
@@ -230,9 +281,12 @@ struct WhatsNewScreen: View {
                 }
                 #else
                 // The offer's « Non merci » takes the back slot; a swipe still
-                // goes back. The only offer today is its reel's FIRST page, so
-                // no « Précédent » is lost — an offer placed later in a reel
-                // would take the back button from VoiceOver / Switch Control.
+                // goes back. An offer is normally its reel's FIRST page (the
+                // newest release leads), so no « Précédent » is lost — but an
+                // install skipping from 2.2 to 2.3.1 gets the language offer
+                // THEN the Halloween one, whose page then has no « Précédent »
+                // button (the swipe still goes back) — accepted: going back to
+                // a language already chosen has nothing left to do.
                 if offerPending {
                     declineButton
                 } else {
@@ -302,6 +356,13 @@ struct WhatsNewScreen: View {
     /// moves on. In season the app turns over at once, behind the sheet; out
     /// of season nothing would show, so a toast names the day it starts.
     private func acceptOffer() {
+        if let code = offeredLanguage {
+            // The whole reel turns over at once, this page included — which
+            // is how the user sees that it worked.
+            loc.languageCode = code
+            advance()
+            return
+        }
         guard let season = offeredSeason else { advance(); return }
         seasonal.setSetting(.automatic)
         if let start = SeasonalOffer.startsLater(season, on: Date(), calendar: .autoupdatingCurrent) {

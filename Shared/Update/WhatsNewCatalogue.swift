@@ -20,6 +20,13 @@ enum WhatsNewOffer: Equatable, Sendable {
     /// Turns the seasonal themes on (`SeasonalSetting.automatic`); `id` names
     /// the catalogue season the page shows off — its dates and title face.
     case seasonalTheme(id: String)
+    /// Switches the app to its device's language. The CATALOGUE carries this
+    /// placeholder; `resolvingOffers` turns it into `.appLanguage(code:)` for
+    /// an install whose device speaks a shipped language the app does not
+    /// already use, and drops the page for everybody else.
+    case deviceLanguage
+    /// The resolved form — what the pager acts on.
+    case appLanguage(code: String)
 }
 
 /// The pages one released version introduced.
@@ -40,6 +47,9 @@ enum WhatsNewCatalogue {
     static let maxPages = 6
 
     static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(version: ServerVersion(2, 3, 1), pages: [
+            WhatsNewPage(id: "language", illustration: .language, offer: .deviceLanguage)
+        ]),
         WhatsNewRelease(version: ServerVersion(2, 3, 0), pages: [
             WhatsNewPage(id: "halloweenNight", illustration: .halloweenNight, offer: .seasonalTheme(id: "halloween"))
         ]),
@@ -85,6 +95,27 @@ enum WhatsNewCatalogue {
             }
             .sorted { $0.version > $1.version }
         return Array(relevant.flatMap(\.pages).prefix(maxPages))
+    }
+
+    /// Resolves the pages whose content depends on this install: a
+    /// `.deviceLanguage` page becomes an offer of the device's language when
+    /// that language is shipped and not the one in use (`AppLanguage.offer`),
+    /// and disappears otherwise — a page offering the language the app
+    /// already speaks would be a button that does nothing. Applied BEFORE
+    /// `WhatsNewPolicy` decides, so a version whose only page drops out is a
+    /// silent stamp, not an empty reel.
+    static func resolvingOffers(
+        _ pages: [WhatsNewPage], appLanguage: String, preferredLanguages: [String]
+    ) -> [WhatsNewPage] {
+        pages.compactMap { page in
+            guard page.offer == .deviceLanguage else { return page }
+            guard let code = AppLanguage.offer(current: appLanguage, preferredLanguages: preferredLanguages) else {
+                return nil
+            }
+            var resolved = page
+            resolved.offer = .appLanguage(code: code)
+            return resolved
+        }
     }
 
     /// Every page the app can show, newest first — what Réglages → Nouveautés

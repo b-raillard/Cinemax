@@ -483,7 +483,9 @@ struct SettingsScreen: View {
     /// presentation is its own context and does not carry the injected
     /// `@Observable` objects down with it.
     private var whatsNewSheet: some View {
-        WhatsNewScreen(pages: WhatsNewCatalogue.allPages()) { showWhatsNew = false }
+        WhatsNewScreen(pages: WhatsNewCatalogue.resolvingOffers(
+            WhatsNewCatalogue.allPages(), appLanguage: loc.languageCode, preferredLanguages: Locale.preferredLanguages
+        )) { showWhatsNew = false }
             .environment(appState)
             .environment(themeManager)
             .environment(loc)
