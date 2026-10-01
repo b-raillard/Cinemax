@@ -266,7 +266,7 @@ final class ChapterChip: UIButton {
 /// pure, so the arithmetic is unit-tested without a live player.
 ///
 /// The row is a `UIStackView` held only by its centre-X and bottom, so it takes
-/// its intrinsic width. With five buttons that is ~416 pt at the ideal 24 pt
+/// its intrinsic width. With five buttons that is 434 pt at the ideal 24 pt
 /// spacing, wider than an iPhone 17's 402 pt: the episode buttons ran off the
 /// screen. Spacing yields first, down to 0 (each button already carries 12 pt
 /// of inset on both sides, so glyphs never touch); only if the bare buttons
