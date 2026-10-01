@@ -103,7 +103,7 @@ JellyGlass 2.3.1 : JellyGlass parle allemand.
 • L'app est désormais disponible en allemand, en plus du français et de l'anglais
 • Tant que vous n'avez pas choisi de langue, JellyGlass suit celle de votre appareil ; vous la changez à tout moment dans Réglages → Apparence
 • Les widgets et le contrôle « Reprendre la lecture » parlent allemand eux aussi
-• Lecteur : les boutons « épisode précédent » et « épisode suivant » ne débordent plus de l'écran et répondent sur toute leur surface
+• Lecteur : sur les écrans étroits (iPhone SE, Zoom d'affichage, iPad en Slide Over), la rangée de boutons tient entièrement dans l'écran
 • La nuit d'Halloween continue jusqu'au 2 novembre
 
 Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
@@ -764,7 +764,7 @@ JellyGlass 2.3.1: JellyGlass speaks German.
 • The app is now available in German, alongside French and English
 • Until you pick a language, JellyGlass follows your device's; change it any time in Settings → Appearance
 • Widgets and the "Continue watching" control speak German too
-• Player: the "previous episode" and "next episode" buttons no longer run off the screen and respond across their whole area
+• Player: on narrow screens (iPhone SE, Display Zoom, iPad in Slide Over), the playback buttons now fit entirely on screen
 • Halloween Night carries on until November 2
 
 Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
@@ -1424,7 +1424,7 @@ JellyGlass 2.3.1: JellyGlass spricht Deutsch.
 • Die App gibt es jetzt auch auf Deutsch, neben Französisch und Englisch
 • Solange du keine Sprache gewählt hast, folgt JellyGlass der Sprache deines Geräts; ändern kannst du sie jederzeit unter Einstellungen → Darstellung
 • Auch die Widgets und die Steuerung „Weiterschauen“ sprechen Deutsch
-• Player: Die Tasten „Vorherige Folge“ und „Nächste Folge“ ragen nicht mehr über den Bildschirmrand und reagieren auf ihrer ganzen Fläche
+• Player: Auf schmalen Bildschirmen (iPhone SE, Display-Zoom, iPad in Slide Over) passen die Wiedergabetasten jetzt vollständig auf den Bildschirm
 • Die Halloween-Nacht geht noch bis zum 2. November
 
 Danke, dass du JellyGlass nutzt. Fehlermeldungen und Vorschläge: https://github.com/b-raillard/Cinemax/issues
@@ -1496,7 +1496,7 @@ ASC → Tarifs et disponibilité → Disponibilité de l'app → Gérer la dispo
 
 ## 6. Build à sélectionner
 
-iOS : **2.3.1** build **2.3.2** (allemand + correctif des boutons épisode précédent / suivant — à archiver et envoyer après fusion)
+iOS : **2.3.1** build **2.3.2** (allemand + rangée de boutons du lecteur sur écrans étroits, PR #281 — à archiver et envoyer après fusion de #280 et #281)
 tvOS : **2.3.1** build **2.3.2** (allemand)
 
 Versions précédentes : 2.3.0 build 2.3.1 (iOS + tvOS), en ligne depuis le 2026-10-01 00 h 11 UTC.
