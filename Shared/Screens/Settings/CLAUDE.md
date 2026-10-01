@@ -57,6 +57,7 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 
 | Key | Default | Effect |
 |-----|---------|--------|
+| `appLanguage` | *device* (`AppLanguage.deviceDefault`) | `fr` / `en` / `de`. **Unset = the device's first shipped language, English otherwise** (2.3.1; every install started in French before). Read through `LocalizationManager`, and by `IntentSessionProvider.preferredLanguage` for the headless intent client. A new language = a `.lproj` + `AppLanguage.supported` + `acceptLanguageHeader` + the extensions' `ExtensionLanguage` / Top Shelf `localized` + `LANGS` in the parity script |
 | `motionEffects` | `true` | Combined with the system's Reduce Motion into the `motionEffectsEnabled` env — disables all animations when either is off |
 | `render4K` | `true` | `maxBitrate` 120/20 Mbps |
 | `autoPlayNextEpisode` | `true` | Auto-nav via `didPlayToEndTime` |
