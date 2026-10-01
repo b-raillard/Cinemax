@@ -364,3 +364,98 @@ struct AlphabeticalJumpStepTests {
         #expect(AlphabeticalJump.stepped(from: "?", by: 1) == "#")
     }
 }
+
+/// The iOS transport row (⏮ −10 ⏯ +10 ⏭) must fit the safe area. Widths are
+/// the buttons' intrinsic sizes measured on iOS 26.5: 61.3 / 70 / 75 / 70 /
+/// 61.3 pt — 434 pt at the ideal 24 pt spacing, past an iPhone 17's 402.
+@Suite("Transport row fits the safe area")
+struct TransportRowFitTests {
+    static let fiveButtons: [CGFloat] = [61.33, 70, 75, 70, 61.33]
+    static let fourButtons: [CGFloat] = [70, 75, 70, 61.33]
+
+    /// Safe width minus the margin on each side, as `layoutTransportRow` passes it.
+    static func available(_ width: CGFloat) -> CGFloat { width - 2 * TransportRowFit.edgeMargin }
+
+    static func rowWidth(_ widths: [CGFloat], _ fit: TransportRowFit) -> CGFloat {
+        (widths.reduce(0, +) + fit.spacing * CGFloat(widths.count - 1)) * fit.scale
+    }
+
+    @Test("A row that fits keeps the ideal spacing, unscaled — 4 buttons, landscape, iPad")
+    func roomyRowIsUnchanged() {
+        let iPhone4 = TransportRowFit.fit(buttonWidths: Self.fourButtons, availableWidth: Self.available(402))
+        #expect(iPhone4 == TransportRowFit(spacing: TransportRowFit.idealSpacing, scale: 1))
+        // iPhone 17 landscape: 874 pt wide, 62 pt safe inset on each side.
+        let landscape = TransportRowFit.fit(buttonWidths: Self.fiveButtons, availableWidth: Self.available(874 - 124))
+        #expect(landscape == TransportRowFit(spacing: TransportRowFit.idealSpacing, scale: 1))
+        let iPad = TransportRowFit.fit(buttonWidths: Self.fiveButtons, availableWidth: Self.available(820))
+        #expect(iPad == TransportRowFit(spacing: TransportRowFit.idealSpacing, scale: 1))
+    }
+
+    @Test("Five buttons on a phone fit by spacing alone", arguments: [CGFloat(402), 393, 375])
+    func phoneFitsBySpacing(width: CGFloat) {
+        let fit = TransportRowFit.fit(buttonWidths: Self.fiveButtons, availableWidth: Self.available(width))
+        #expect(fit.scale == 1)
+        #expect(fit.spacing < TransportRowFit.idealSpacing)
+        #expect(fit.spacing >= 0)
+        #expect(abs(Self.rowWidth(Self.fiveButtons, fit) - Self.available(width)) < 0.01)
+    }
+
+    @Test("Narrower than the bare buttons, the row scales to exactly the space it has")
+    func narrowWindowScales() {
+        let fit = TransportRowFit.fit(buttonWidths: Self.fiveButtons, availableWidth: Self.available(320))
+        #expect(fit.spacing == 0)
+        #expect(fit.scale < 1)
+        #expect(abs(Self.rowWidth(Self.fiveButtons, fit) - Self.available(320)) < 0.01)
+    }
+
+    @Test("Before the first layout pass the row is left at its ideal")
+    func preLayoutIsIdeal() {
+        let ideal = TransportRowFit(spacing: TransportRowFit.idealSpacing, scale: 1)
+        #expect(TransportRowFit.fit(buttonWidths: Self.fiveButtons, availableWidth: 0) == ideal)
+        #expect(TransportRowFit.fit(buttonWidths: [], availableWidth: 370) == ideal)
+    }
+
+    #if os(iOS)
+    /// The real UIKit path: a centred `UIStackView` in a `PassthroughView`,
+    /// fitted, then hit-tested. Every button lies wholly on screen, and a tap
+    /// at the centre of each — scaled or not — lands on that button.
+    @MainActor
+    @Test("Every fitted button is on screen and hit at its own centre", arguments: [CGFloat(402), 375, 320])
+    func fittedButtonsAreHittable(width: CGFloat) {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 874))
+        window.isHidden = false // a hidden view never hit-tests
+        defer { window.isHidden = true }
+        let container = PassthroughView(frame: window.bounds)
+        window.addSubview(container)
+        let buttons = Self.fiveButtons.map { w -> UIButton in
+            let b = UIButton(configuration: .plain())
+            b.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                b.widthAnchor.constraint(equalToConstant: w),
+                b.heightAnchor.constraint(equalToConstant: 56)
+            ])
+            return b
+        }
+        let row = UIStackView(arrangedSubviews: buttons)
+        row.alignment = .center
+        row.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            row.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -120)
+        ])
+        let fit = TransportRowFit.fit(buttonWidths: Self.fiveButtons, availableWidth: Self.available(width))
+        row.spacing = fit.spacing
+        row.transform = CGAffineTransform(scaleX: fit.scale, y: fit.scale)
+        window.layoutIfNeeded()
+
+        // Half a point of slack: Auto Layout snaps each button to the pixel grid.
+        for button in buttons {
+            let frame = button.convert(button.bounds, to: window)
+            #expect(frame.minX >= TransportRowFit.edgeMargin - 0.5)
+            #expect(frame.maxX <= width - TransportRowFit.edgeMargin + 0.5)
+            #expect(window.hitTest(CGPoint(x: frame.midX, y: frame.midY), with: nil) === button)
+        }
+    }
+    #endif
+}
