@@ -93,6 +93,23 @@ final class AppUpdateChecker {
 
     #if os(tvOS)
     @ObservationIgnored private var tvStoreURLCache: (page: URL, url: URL?)?
+
+    /// This app's own Apple TV App Store page, for Réglages → « Noter
+    /// JellyGlass ». tvOS has no `requestReview` (StoreKit marks it
+    /// unavailable) and the tvOS app is its own Store record, so the only way
+    /// to rate it is from that page, on the Apple TV itself.
+    ///
+    /// Read from the page the launch lookup stores whatever its decision,
+    /// never from a hardcoded id. `nil` before a lookup has ever succeeded, or
+    /// where the App Store app does not answer (the simulator): the row is
+    /// then left out rather than rendered dead.
+    static func rateAppURL(defaults: UserDefaults = .standard) -> URL? {
+        guard let link = defaults.string(forKey: SettingsKey.updateLatestStoreURL),
+              let page = URL(string: link),
+              let url = AppStoreLookup.tvAppStoreURL(for: page),
+              UIApplication.shared.canOpenURL(url) else { return nil }
+        return url
+    }
     #endif
 
     /// Opens the Store page. Leaving the app for the Store is what the user

@@ -188,6 +188,11 @@ struct SettingsScreen: View {
     /// left to see, and stamps nothing — somebody asking for it has not just
     /// updated, they are looking something up.
     @State var showWhatsNew = false
+    #if os(tvOS)
+    /// « Noter JellyGlass » — the App Store page `AppUpdateChecker.rateAppURL`
+    /// resolved when the Server page appeared; `nil` hides the row.
+    @State var tvRateAppURL: URL?
+    #endif
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
     /// "Quick Connect" (authorize) row so we never surface a flow the server

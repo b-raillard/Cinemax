@@ -504,7 +504,20 @@ extension SettingsScreen {
                 showsChevron: true,
                 action: { showWhatsNew = true }
             )
+
+            if let url = tvRateAppURL {
+                tvActionRow(
+                    id: "rateApp",
+                    icon: "star",
+                    label: loc.localized("settings.rateApp"),
+                    subtitle: loc.localized("settings.rateApp.subtitle"),
+                    showsChevron: true,
+                    action: { UIApplication.shared.open(url) }
+                )
+            }
         }
+        // `canOpenURL` is an IPC; resolved once per appearance, not per render.
+        .onAppear { tvRateAppURL = AppUpdateChecker.rateAppURL() }
     }
 
     // MARK: Playback Detail (tvOS)

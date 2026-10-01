@@ -1230,6 +1230,8 @@
 
 /* What's new — the feature reel */
 "settings.whatsNew" = "What's new";
+"settings.rateApp" = "Rate JellyGlass";
+"settings.rateApp.subtitle" = "A rating on the Apple TV App Store helps others discover the app";
 "whatsNew.next" = "Next";
 "whatsNew.back" = "Back";
 "whatsNew.skip" = "Skip";
