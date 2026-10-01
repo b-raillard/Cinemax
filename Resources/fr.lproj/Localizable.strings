@@ -1233,7 +1233,7 @@
 /* Quoi de neuf — la pellicule des nouveautés */
 "settings.whatsNew" = "Nouveautés";
 "settings.rateApp" = "Noter JellyGlass";
-"settings.rateApp.subtitle" = "Une note sur l'App Store aide d'autres à découvrir l'app";
+"settings.rateApp.subtitle" = "Une note sur l'App Store aide les autres à découvrir l'app";
 "whatsNew.next" = "Suivant";
 "whatsNew.back" = "Précédent";
 "whatsNew.skip" = "Passer";

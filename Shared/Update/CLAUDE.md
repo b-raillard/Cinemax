@@ -36,7 +36,7 @@ The first launch on a new version shows « Quoi de neuf » — one page per new 
 - **Replay**: Réglages → Serveur → « Nouveautés », beside « Découvrir l'app ». It shows `WhatsNewCatalogue.allPages()` — the WHOLE catalogue, not this user's remaining slice — and **stamps nothing**: somebody who asks for it has not just updated, they are looking something up.
 - Locked by `WhatsNewPolicyTests` (the outcome truth table, incl. downgrade and the silent-stamp cases) + `WhatsNewCatalogueTests` (the unreleased-entry guard, ordering, the cap, the exclusive lower bound, unique ids in the shipped catalogue).
 
-## App Store rating request (`Shared/Update/`, iOS only)
+## App Store rating request (`Shared/Update/` — automatic prompt iOS only, « Noter » row both platforms)
 
 Asks for a rating once the user has a habit, never at a first impression. Two files: `ReviewPromptPolicy` (pure, cross-platform — the numbers: 10 unpaused minutes make a session engaged, 3 engaged sessions, once per version, never twice within 90 days) and `ReviewPromptTracker` (`#if os(iOS)` — storage in the `review.*` keys, plus the root-hosted `ReviewPromptPresentation` modifier). The signal is engine-agnostic: `PlaybackReporter.watchedSeconds` counts unpaused seconds on the existing 1 s `onTick()` heartbeat and `reportStop` posts it in `.cinemaxPlaybackSessionEnded` at call time.
 

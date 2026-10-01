@@ -140,8 +140,8 @@ extension SettingsScreen {
 
     // MARK: iOS Rate App
 
-    /// « Noter JellyGlass » — its own block under the category pills, in the
-    /// glass chrome of the non-hero pills, with the reason spelled out under
+    /// « Noter JellyGlass » — its own block under the category pills, on
+    /// `glassPanel` (which yields to Reduce Transparency / Increase Contrast), with the reason spelled out under
     /// the label. Opens the App Store's « write a review » sheet; the
     /// automatic request after a few films stays `ReviewPromptTracker`'s.
     /// Absent while `rateAppURL` is `nil`: see `AppUpdateChecker.rateAppURL`.
@@ -181,14 +181,7 @@ extension SettingsScreen {
                 }
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.vertical, CinemaSpacing.spacing3)
-                .background {
-                    RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                                .fill(CinemaColor.surfaceContainerHigh.opacity(0.6))
-                        )
-                }
+                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

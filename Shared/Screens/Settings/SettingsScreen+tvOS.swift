@@ -95,7 +95,8 @@ extension SettingsScreen {
             tvNavigationPanel
                 .frame(maxWidth: .infinity)
         }
-        // `canOpenURL` is an IPC: resolved per appearance, never per render.
+        // `canOpenURL` is an IPC: re-resolved each time the landing appears
+        // (including a pop back from a category), never per render.
         .onAppear { rateAppURL = AppUpdateChecker.rateAppURL() }
     }
 
