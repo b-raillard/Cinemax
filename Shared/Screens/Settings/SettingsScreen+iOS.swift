@@ -22,12 +22,14 @@ extension SettingsScreen {
             VStack(spacing: 0) {
                 iOSHeader
                 iOSNavigationList
+                iOSRateAppButton
                 iOSDeviceInfo
                 iOSLicensesFooter
             }
         }
         .background(CinemaColor.surfaceContainerLowest)
         .task { await probeQuickConnect() }
+        .onAppear { rateAppURL = AppUpdateChecker.rateAppURL() }
         .navigationDestination(item: $nav.selectedCategory) { category in
             settingsDetailView(for: category)
         }
@@ -134,6 +136,65 @@ extension SettingsScreen {
             .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: iOS Rate App
+
+    /// « Noter JellyGlass » — its own block under the category pills, in the
+    /// glass chrome of the non-hero pills, with the reason spelled out under
+    /// the label. Opens the App Store's « write a review » sheet; the
+    /// automatic request after a few films stays `ReviewPromptTracker`'s.
+    /// Absent while `rateAppURL` is `nil`: see `AppUpdateChecker.rateAppURL`.
+    @ViewBuilder
+    var iOSRateAppButton: some View {
+        if let url = rateAppURL {
+            Button {
+                UIApplication.shared.open(url)
+            } label: {
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    ZStack {
+                        Circle()
+                            .fill(CinemaColor.surfaceContainerHighest)
+                            .frame(width: 40, height: 40)
+                        Image(systemName: "star.fill")
+                            .font(.system(size: CinemaScale.pt(18), weight: .semibold))
+                            .foregroundStyle(themeManager.accent)
+                    }
+                    .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(loc.localized("settings.rateApp"))
+                            .font(CinemaFont.dynamicSystem(18, weight: .semibold, relativeTo: .headline))
+                            .tracking(-0.3)
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Text(loc.localized("settings.rateApp.subtitle"))
+                            .font(CinemaFont.dynamicLabel(.medium))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "arrow.up.forward")
+                        .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.6))
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, CinemaSpacing.spacing4)
+                .padding(.vertical, CinemaSpacing.spacing3)
+                .background {
+                    RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                                .fill(CinemaColor.surfaceContainerHigh.opacity(0.6))
+                        )
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.top, CinemaSpacing.spacing5)
+        }
     }
 
     // MARK: iOS Device Info

@@ -95,6 +95,8 @@ extension SettingsScreen {
             tvNavigationPanel
                 .frame(maxWidth: .infinity)
         }
+        // `canOpenURL` is an IPC: resolved per appearance, never per render.
+        .onAppear { rateAppURL = AppUpdateChecker.rateAppURL() }
     }
 
     var tvBrandPanel: some View {
@@ -136,6 +138,9 @@ extension SettingsScreen {
                 ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true)) { category in
                     tvCategoryButton(category)
                 }
+
+                tvRateAppButton
+                    .padding(.top, CinemaSpacing.spacing5)
             }
             .padding(.horizontal, CinemaTVLayout.pagePadding)
 
@@ -193,33 +198,60 @@ extension SettingsScreen {
                         .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
                 }
             }
-            .padding(.horizontal, CinemaSpacing.spacing5)
-            .padding(.vertical, CinemaSpacing.spacing4)
-            .background(
-                RoundedRectangle(cornerRadius: CinemaRadius.full)
-                    .fill(isFocused ? themeManager.accentContainer : .clear)
-            )
-            // The `accentContainer` fill above IS this tile's focus signal, so
-            // it carries no ring — but its motion and elevation now match the
-            // card level rather than a bespoke 4 pt border and a radius-40
-            // shadow found nowhere else.
-            .shadow(
-                color: themeManager.accentContainer.opacity(isFocused ? CinemaTVFocus.haloOpacity : 0),
-                radius: CinemaTVFocus.haloRadius,
-                x: 0, y: 8
-            )
-            .shadow(
-                color: Color.black.opacity(isFocused ? CinemaTVFocus.ambientOpacity : 0),
-                radius: CinemaTVFocus.ambientRadius,
-                x: 0, y: 16
-            )
-            .scaleEffect(isFocused ? CinemaTVFocus.cardScale : 1.0)
-            .animation(motionEffects ? .easeOut(duration: CinemaTVFocus.cardDuration) : nil, value: isFocused)
+            .modifier(TVLandingPillChrome(isFocused: isFocused, accentContainer: themeManager.accentContainer, animated: motionEffects))
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .category(category.rawValue))
+    }
+
+    /// « Noter JellyGlass » — its own block under the category pills, wearing
+    /// their chrome and focus level, with the reason always spelled out under
+    /// the label (it opens the App Store, which a category never does). Absent
+    /// while `rateAppURL` is `nil`: see `AppUpdateChecker.rateAppURL`.
+    @ViewBuilder
+    var tvRateAppButton: some View {
+        if let url = rateAppURL {
+            let isFocused = focusedItem == .rateApp
+            Button {
+                UIApplication.shared.open(url)
+            } label: {
+                HStack(spacing: CinemaSpacing.spacing4) {
+                    ZStack {
+                        Circle()
+                            .fill(isFocused ? themeManager.accent.opacity(0.18) : CinemaColor.surfaceContainerHighest)
+                            .frame(width: 56, height: 56)
+                        Image(systemName: "star.fill")
+                            .font(CinemaFont.headline(.small))
+                            .foregroundStyle(isFocused ? themeManager.onAccentContainer : themeManager.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                        Text(loc.localized("settings.rateApp"))
+                            .font(.system(size: CinemaScale.pt(28), weight: .semibold))
+                            .tracking(-0.3)
+                            .foregroundStyle(isFocused ? themeManager.onAccentContainer : CinemaColor.onSurface)
+                        Text(loc.localized("settings.rateApp.subtitle"))
+                            .font(.system(size: CinemaScale.pt(18), weight: .regular))
+                            .foregroundStyle(isFocused ? themeManager.onAccentContainer.opacity(0.8) : CinemaColor.onSurfaceVariant)
+                    }
+
+                    Spacer()
+
+                    if isFocused {
+                        Image(systemName: "arrow.up.forward")
+                            .font(.system(size: CinemaScale.pt(20), weight: .semibold))
+                            .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
+                    }
+                }
+                .modifier(TVLandingPillChrome(isFocused: isFocused, accentContainer: themeManager.accentContainer, animated: motionEffects))
+            }
+            .buttonStyle(.plain)
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+            .focused($focusedItem, equals: .rateApp)
+        }
     }
 
     var tvSystemInfoBar: some View {
@@ -504,20 +536,7 @@ extension SettingsScreen {
                 showsChevron: true,
                 action: { showWhatsNew = true }
             )
-
-            if let url = tvRateAppURL {
-                tvActionRow(
-                    id: "rateApp",
-                    icon: "star",
-                    label: loc.localized("settings.rateApp"),
-                    subtitle: loc.localized("settings.rateApp.subtitle"),
-                    showsChevron: true,
-                    action: { UIApplication.shared.open(url) }
-                )
-            }
         }
-        // `canOpenURL` is an IPC; resolved once per appearance, not per render.
-        .onAppear { tvRateAppURL = AppUpdateChecker.rateAppURL() }
     }
 
     // MARK: Playback Detail (tvOS)
@@ -1103,4 +1122,38 @@ struct TVHomeGenrePickerView: View {
         availableGenres = genres.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 }
+
+/// The landing pill's surface on tvOS — shared by the category pills and
+/// « Noter JellyGlass » so the two can never drift apart. The `accentContainer`
+/// fill IS the focus signal, so it carries no ring — but its motion and
+/// elevation match the card level (`CinemaTVFocus`) rather than a bespoke 4 pt
+/// border and a radius-40 shadow found nowhere else.
+private struct TVLandingPillChrome: ViewModifier {
+    let isFocused: Bool
+    let accentContainer: Color
+    let animated: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, CinemaSpacing.spacing5)
+            .padding(.vertical, CinemaSpacing.spacing4)
+            .background(
+                RoundedRectangle(cornerRadius: CinemaRadius.full)
+                    .fill(isFocused ? accentContainer : .clear)
+            )
+            .shadow(
+                color: accentContainer.opacity(isFocused ? CinemaTVFocus.haloOpacity : 0),
+                radius: CinemaTVFocus.haloRadius,
+                x: 0, y: 8
+            )
+            .shadow(
+                color: Color.black.opacity(isFocused ? CinemaTVFocus.ambientOpacity : 0),
+                radius: CinemaTVFocus.ambientRadius,
+                x: 0, y: 16
+            )
+            .scaleEffect(isFocused ? CinemaTVFocus.cardScale : 1.0)
+            .animation(animated ? .easeOut(duration: CinemaTVFocus.cardDuration) : nil, value: isFocused)
+    }
+}
+
 #endif

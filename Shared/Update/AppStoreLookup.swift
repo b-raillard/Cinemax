@@ -107,12 +107,27 @@ enum AppStoreLookup {
     /// `nil` when the link carries no numeric `id…` component — the caller then
     /// renders no button rather than one that goes nowhere.
     nonisolated static func tvAppStoreURL(for storeURL: URL) -> URL? {
+        guard let id = appID(in: storeURL) else { return nil }
+        return URL(string: "com.apple.TVAppStore://itunes.apple.com/app/id\(id)")
+    }
+
+    /// iOS: the App Store's « write a review » sheet for the app the lookup
+    /// described — Apple's documented link for a rating BUTTON the user
+    /// pressed (`requestReview` is for a moment the app picks, and may show
+    /// nothing at all). Same id extraction as `tvAppStoreURL`, same `nil`.
+    nonisolated static func writeReviewURL(for storeURL: URL) -> URL? {
+        guard let id = appID(in: storeURL) else { return nil }
+        return URL(string: "https://apps.apple.com/app/id\(id)?action=write-review")
+    }
+
+    /// The numeric id of `…/app/<slug>/id1234567890`, or `nil`.
+    nonisolated private static func appID(in storeURL: URL) -> Substring? {
         guard let component = storeURL.pathComponents.last(where: { $0.hasPrefix("id") }) else {
             return nil
         }
         let digits = component.dropFirst(2)
         guard !digits.isEmpty, digits.allSatisfy(\.isASCIIDigit) else { return nil }
-        return URL(string: "com.apple.TVAppStore://itunes.apple.com/app/id\(digits)")
+        return digits
     }
 
     private static func makeSession() -> URLSession {

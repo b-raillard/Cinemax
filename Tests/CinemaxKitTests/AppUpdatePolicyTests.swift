@@ -259,6 +259,15 @@ struct AppStoreLookupParsingTests {
             #expect(AppStoreLookup.tvAppStoreURL(for: page) == nil)
         }
     }
+
+    @Test("iOS : « Noter » ouvre la feuille d'avis de l'App Store")
+    func writeReviewURLFromPage() throws {
+        let page = try #require(URL(string: "https://apps.apple.com/ch/app/cinemax/id6747012345?uo=4"))
+        #expect(AppStoreLookup.writeReviewURL(for: page)?.absoluteString
+                == "https://apps.apple.com/app/id6747012345?action=write-review")
+        let malformed = try #require(URL(string: "https://apps.apple.com/app/idabc"))
+        #expect(AppStoreLookup.writeReviewURL(for: malformed) == nil)
+    }
 }
 
 /// Audit 2026-09-22 (T5) : `AppUpdateChecker` porte deux RULES — la décision

@@ -93,24 +93,31 @@ final class AppUpdateChecker {
 
     #if os(tvOS)
     @ObservationIgnored private var tvStoreURLCache: (page: URL, url: URL?)?
+    #endif
 
-    /// This app's own Apple TV App Store page, for Réglages → « Noter
-    /// JellyGlass ». tvOS has no `requestReview` (StoreKit marks it
-    /// unavailable) and the tvOS app is its own Store record, so the only way
-    /// to rate it is from that page, on the Apple TV itself.
+    /// Where the root Réglages row « Noter JellyGlass » goes, or `nil` to
+    /// leave the row out. Read from the page the launch lookup stores whatever
+    /// its decision, never from a hardcoded id — `nil` until a lookup has
+    /// succeeded once.
     ///
-    /// Read from the page the launch lookup stores whatever its decision,
-    /// never from a hardcoded id. `nil` before a lookup has ever succeeded, or
-    /// where the App Store app does not answer (the simulator): the row is
-    /// then left out rather than rendered dead.
+    /// - iOS: the App Store's « write a review » sheet
+    ///   (`AppStoreLookup.writeReviewURL`), Apple's link for a button the user
+    ///   pressed; the automatic `requestReview` stays `ReviewPromptTracker`'s.
+    /// - tvOS: no `requestReview` (StoreKit marks it unavailable) and the tvOS
+    ///   app is its own Store record, rated only from the Apple TV's App Store
+    ///   — so the app's page there, gated on `canOpenURL` (the simulator has
+    ///   no App Store app: no row rather than a dead one).
     static func rateAppURL(defaults: UserDefaults = .standard) -> URL? {
         guard let link = defaults.string(forKey: SettingsKey.updateLatestStoreURL),
-              let page = URL(string: link),
-              let url = AppStoreLookup.tvAppStoreURL(for: page),
+              let page = URL(string: link) else { return nil }
+        #if os(tvOS)
+        guard let url = AppStoreLookup.tvAppStoreURL(for: page),
               UIApplication.shared.canOpenURL(url) else { return nil }
         return url
+        #else
+        return AppStoreLookup.writeReviewURL(for: page)
+        #endif
     }
-    #endif
 
     /// Opens the Store page. Leaving the app for the Store is what the user
     /// just asked for, so there is no "you are leaving" confirmation.
