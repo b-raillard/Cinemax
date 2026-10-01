@@ -22,7 +22,7 @@ struct PlayerAccessibilityTests {
         Bundle.localizedBundle(for: language).localizedString(forKey: key, value: nil, table: nil)
     }
 
-    @Test("every HUD label is non-empty and resolved", arguments: ["fr", "en"])
+    @Test("every HUD label is non-empty and resolved", arguments: AppLanguage.supported)
     func labelsAreLocalized(language: String) {
         for label in Self.hud(language).controlLabels {
             #expect(!label.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -35,7 +35,7 @@ struct PlayerAccessibilityTests {
     @Test("±10 s buttons name the interval, never the skip-segment control")
     func skipLabelsCarryTheInterval() {
         let interval = String(PlayerSkipConfig.intervalSeconds)
-        for language in ["fr", "en"] {
+        for language in AppLanguage.supported {
             let hud = Self.hud(language)
             #expect(hud.skipBack.contains(interval))
             #expect(hud.skipForward.contains(interval))
@@ -46,7 +46,7 @@ struct PlayerAccessibilityTests {
 
     @Test("opposite controls never share a label")
     func oppositesAreDistinct() {
-        for language in ["fr", "en"] {
+        for language in AppLanguage.supported {
             let hud = Self.hud(language)
             #expect(hud.play != hud.pause)
             #expect(hud.skipBack != hud.skipForward)
@@ -167,7 +167,7 @@ struct AccentLabelContrastTests {
 
     @Test("every visible accent has a localized name, in both languages")
     func everyAccentIsNamed() {
-        for language in ["fr", "en"] {
+        for language in AppLanguage.supported {
             let bundle = Bundle.localizedBundle(for: language)
             for option in AccentOption.allCases {
                 let name = bundle.localizedString(forKey: option.nameKey, value: nil, table: nil)
@@ -208,10 +208,10 @@ struct PluralRuleTests {
 
     /// Apple TV has no touch: « tirez pour actualiser » and « touchez le cœur »
     /// were shown there verbatim (audit §5, lot 9).
-    @Test("tvOS variants exist in both languages and never speak of touch")
+    @Test("tvOS variants exist in every language and never speak of touch")
     func tvVariantsAvoidTouch() {
-        let touchWords = ["tirez", "touchez", "pull down", "tap "]
-        for language in ["fr", "en"] {
+        let touchWords = ["tirez", "touchez", "pull down", "tap ", "tippe", "zieh"]
+        for language in AppLanguage.supported {
             let bundle = Bundle.localizedBundle(for: language)
             for key in ["favorites.empty.subtitle", "empty.home.subtitle"] {
                 let tv = bundle.localizedString(forKey: key + ".tv", value: nil, table: nil)
@@ -228,7 +228,7 @@ struct PluralRuleTests {
         #endif
     }
 
-    @Test("French puts 0 and 1 in the singular, English only 1")
+    @Test("French puts 0 and 1 in the singular, English and German only 1")
     func singularRule() {
         #expect(LocalizationManager.usesSingular(0, languageCode: "fr"))
         #expect(LocalizationManager.usesSingular(1, languageCode: "fr"))
@@ -236,14 +236,18 @@ struct PluralRuleTests {
         #expect(!LocalizationManager.usesSingular(0, languageCode: "en"))
         #expect(LocalizationManager.usesSingular(1, languageCode: "en"))
         #expect(!LocalizationManager.usesSingular(2, languageCode: "en"))
+        // German follows the English rule: « 0 Filme », « 1 Film ».
+        #expect(!LocalizationManager.usesSingular(0, languageCode: "de"))
+        #expect(LocalizationManager.usesSingular(1, languageCode: "de"))
+        #expect(!LocalizationManager.usesSingular(2, languageCode: "de"))
     }
 
-    @Test("every plural key used through `counted` has its `.one` sibling in both languages")
+    @Test("every plural key used through `counted` has its `.one` sibling in every language")
     func singularSiblingsExist() {
         let keys = ["library.itemCount", "detail.collection.count", "search.resultCount",
                     "home.remainingTime.minutes", "movies.count", "movies.titles", "tvShows.count",
                     "person.titleCount", "syncplay.participants", "syncplay.session.more"]
-        for language in ["fr", "en"] {
+        for language in AppLanguage.supported {
             let bundle = Bundle.localizedBundle(for: language)
             for key in keys {
                 let one = key + ".one"

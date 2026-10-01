@@ -185,6 +185,7 @@
 "settings.language" = "Langue";
 "settings.language.french" = "Français";
 "settings.language.english" = "English";
+"settings.language.german" = "Deutsch";
 "settings.personalization" = "Personnalisation";
 "settings.infrastructure" = "Infrastructure";
 "settings.live" = "EN LIGNE";
@@ -795,7 +796,7 @@
 
 "admin.logs.empty.title" = "Aucun journal";
 "admin.logs.empty.subtitle" = "Les fichiers de journal du serveur apparaîtront ici.";
-"admin.logs.truncated" = "Affichage des %@ derniers octets sur %@. Les journaux complets sont disponibles dans l'admin web.";
+"admin.logs.truncated" = "Affichage des %@ derniers sur %@. Les journaux complets sont disponibles dans l'admin web.";
 
 // MARK: - Admin — Metadata (shared)
 

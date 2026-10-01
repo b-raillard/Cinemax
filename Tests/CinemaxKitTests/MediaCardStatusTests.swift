@@ -77,7 +77,7 @@ struct MediaCardStatusAccessibilityTests {
         return status.accessibilityValue { bundle.localizedString(forKey: $0, value: nil, table: nil) }
     }
 
-    @Test("an untouched card announces nothing beyond its label", arguments: ["fr", "en"])
+    @Test("an untouched card announces nothing beyond its label", arguments: AppLanguage.supported)
     func noneHasNoValue(language: String) {
         #expect(Self.value(.none, language) == nil)
     }
@@ -111,7 +111,7 @@ struct MediaCardStatusAccessibilityTests {
         #expect(MediaCardStatus.spokenPercent(-1) == 1)
     }
 
-    @Test("every language resolves both keys", arguments: ["fr", "en"])
+    @Test("every language resolves both keys", arguments: AppLanguage.supported)
     func keysResolve(language: String) {
         for status in [MediaCardStatus.watched, .inProgress(0.5)] {
             let spoken = Self.value(status, language) ?? ""

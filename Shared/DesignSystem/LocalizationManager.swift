@@ -6,7 +6,7 @@ import CinemaxKit
 final class LocalizationManager {
 
     @ObservationIgnored
-    @AppStorage(SettingsKey.appLanguage) private var _languageCode: String = SettingsKey.Default.appLanguage
+    @AppStorage(SettingsKey.appLanguage) private var _languageCode: String = AppLanguage.deviceDefault
 
     private var _revision: Int = 0
 
@@ -229,6 +229,49 @@ final class LocalizationManager {
             return localized("privacy.lock.throttled.minutes", (seconds + 59) / 60)
         }
         return localized("privacy.lock.throttled.seconds", max(1, seconds))
+    }
+}
+
+// MARK: - App languages
+
+/// The languages the app ships, in picker order, and the one a first launch
+/// starts in. **The default follows the DEVICE** (its first preferred language
+/// the app speaks, English when it speaks none of them) for as long as the user
+/// has not picked one in Réglages: until 2.3.1 every install started in French,
+/// so a German- or English-speaking phone met a French app and had to find the
+/// switch. An explicit choice is stored in `SettingsKey.appLanguage` and wins.
+enum AppLanguage {
+    nonisolated static let supported = ["fr", "en", "de"]
+
+    /// The first of `preferredLanguages` (BCP-47 tags, `"de-CH"`, `"en-US"`…)
+    /// whose language the app ships, else `"en"`.
+    nonisolated static func resolve(preferredLanguages: [String]) -> String {
+        for tag in preferredLanguages {
+            let code = tag.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map { $0.lowercased() } ?? ""
+            if supported.contains(code) { return code }
+        }
+        return "en"
+    }
+
+    /// The device's default, read now (the user can change it in iOS Settings).
+    nonisolated static var deviceDefault: String {
+        resolve(preferredLanguages: Locale.preferredLanguages)
+    }
+
+    /// The language's own name, as the pickers print it (« Deutsch »).
+    nonisolated static func nameKey(_ code: String) -> String {
+        switch code {
+        case "fr": "settings.language.french"
+        case "de": "settings.language.german"
+        default: "settings.language.english"
+        }
+    }
+
+    /// The next language in picker order, wrapping — the tvOS row's press.
+    nonisolated static func next(after code: String, step: Int = 1) -> String {
+        let index = supported.firstIndex(of: code) ?? 0
+        let count = supported.count
+        return supported[((index + step) % count + count) % count]
     }
 }
 

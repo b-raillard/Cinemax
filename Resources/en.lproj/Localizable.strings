@@ -185,6 +185,7 @@
 "settings.language" = "Language";
 "settings.language.french" = "Français";
 "settings.language.english" = "English";
+"settings.language.german" = "Deutsch";
 "settings.personalization" = "Personalization";
 "settings.infrastructure" = "Infrastructure";
 "settings.live" = "LIVE";

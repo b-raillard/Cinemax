@@ -10,6 +10,7 @@ Document non public, sert de copy-paste source pour App Store Connect. Identique
 |---|---|
 | **Nom de l'app FR** (30 char) | `JellyGlass pour Jellyfin` *(24)* |
 | **Nom de l'app EN** (30 char) | `JellyGlass for Jellyfin` *(23)* |
+| **Nom de l'app DE** (30 char) | `JellyGlass für Jellyfin` *(23)* |
 | **Ancien nom** | `Cinemax` — abandonné : marque de Warner Bros. Discovery, même catégorie |
 | **Bundle ID iOS** | `com.cinemax.ios` |
 | **Bundle ID tvOS** | `com.cinemax.tvos` |
@@ -94,6 +95,19 @@ mediatheque,serveur,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,videotheque,c
 > Deux textes distincts : le contrôle « Reprendre la lecture », les widgets, l'export de diagnostics et l'administration n'existent que sur iOS.
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
+
+#### iOS — 2.3.1
+```
+JellyGlass 2.3.1 : JellyGlass parle allemand.
+
+• L'app est désormais disponible en allemand, en plus du français et de l'anglais
+• Tant que vous n'avez pas choisi de langue, JellyGlass suit celle de votre appareil ; vous la changez à tout moment dans Réglages → Apparence
+• Les widgets et le contrôle « Reprendre la lecture » parlent allemand eux aussi
+• Lecteur : les boutons « épisode précédent » et « épisode suivant » ne débordent plus de l'écran et répondent sur toute leur surface
+• La nuit d'Halloween continue jusqu'au 2 novembre
+
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
 
 #### iOS — 2.3.0
 ```
@@ -340,6 +354,18 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 • La rangée ne peut plus être monopolisée par une seule série : l'import massif d'une saison la remplissait entièrement
 • Les séries qui viennent de recevoir des épisodes y remontent, aux côtés des nouveaux films et séries
 • Même correction dans le widget
+
+Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 2.3.1
+```
+JellyGlass 2.3.1 : JellyGlass parle allemand.
+
+• L'app est désormais disponible en allemand, en plus du français et de l'anglais
+• Tant que vous n'avez pas choisi de langue, JellyGlass suit celle de votre Apple TV ; vous la changez à tout moment dans Réglages → Apparence
+• La rangée Top Shelf parle allemand elle aussi
+• La nuit d'Halloween continue jusqu'au 2 novembre
 
 Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
@@ -731,6 +757,19 @@ media,server,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,library,cinema,movie
 > Two separate texts: the "Continue watching" control, widgets, diagnostics export and administration are iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
 
+#### iOS — 2.3.1
+```
+JellyGlass 2.3.1: JellyGlass speaks German.
+
+• The app is now available in German, alongside French and English
+• Until you pick a language, JellyGlass follows your device's; change it any time in Settings → Appearance
+• Widgets and the "Continue watching" control speak German too
+• Player: the "previous episode" and "next episode" buttons no longer run off the screen and respond across their whole area
+• Halloween Night carries on until November 2
+
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
 #### iOS — 2.3.0
 ```
 JellyGlass 2.3: a limited-time theme for Halloween.
@@ -976,6 +1015,18 @@ Long-press a title and it now does everything, without opening its page.
 • One show can no longer take over the row: importing a full season used to fill it entirely
 • Series that just received episodes now surface there, alongside new movies and shows
 • Same fix in the widget
+
+Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 2.3.1
+```
+JellyGlass 2.3.1: JellyGlass speaks German.
+
+• The app is now available in German, alongside French and English
+• Until you pick a language, JellyGlass follows your Apple TV's; change it any time in Settings → Appearance
+• The Top Shelf row speaks German too
+• Halloween Night carries on until November 2
 
 Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
@@ -1297,6 +1348,102 @@ Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-r
 
 ---
 
+## 3 bis. Métadonnées DEUTSCH (depuis la 2.3.1)
+
+> Localisation « Allemand » à ajouter dans App Store Connect (iOS et tvOS). Les captures retombent sur celles de la langue principale (français) tant qu'aucune série allemande n'est fournie. Tutoiement (« du »), comme dans l'app.
+
+### Untertitel (30 Zeichen max.)
+```
+Mediathek, Filme und Serien
+```
+*(27 caractères)*
+
+### Werbetext (170 Zeichen max.)
+```
+Der Jellyfin-Client, der deinen Server nie transcodieren lässt: MKV, Dolby Vision, HDR10+ und Atmos laufen unverändert auf iPhone, iPad und Apple TV.
+```
+*(149 caractères)*
+
+### Beschreibung (4000 Zeichen max.)
+```
+JellyGlass ist ein moderner Client für deine Jellyfin-Medienserver, gemacht für iPhone, iPad und Apple TV. Genieße deine persönliche Mediathek mit einer eleganten, flüssigen Oberfläche, abgestimmt auf jedes Apple-Gerät.
+
+— DESIGN FÜR APPLE
+• „Cinema Glass“-Design: dunkle Oberfläche, feine Transparenzen, redaktionelle Layouts
+• Keine überflüssigen Rahmen – alles dreht sich um deine Poster und Hintergrundbilder
+• Heller und dunkler Modus, anpassbare Akzentfarben
+• Einstellbare Schrift- und Anzeigegröße (80 % bis 130 %)
+
+— PROFESSIONELLE VIDEOWIEDERGABE
+• Integrierte VLC-Engine als Standard: native Wiedergabe von MKV, Dolby Vision, HDR10+, HDR10
+• Bild-in-Bild auf iPhone und iPad, auch für MKV
+• Auswahl von Tonspur und Untertiteln mit den echten Spurnamen deines Servers
+• „Intro überspringen“ und „Abspann überspringen“, kompatibel mit dem Intro-Skipper-Plugin
+• Kapitel mit Vorschaubildern, automatische Wiedergabe der nächsten Folge
+• Sende deine Inhalte an jedes andere verbundene Gerät mit demselben Konto
+• Schlaftimer mit „Schaust du noch?“-Abfrage
+
+— SUCHEN UND STÖBERN
+• Suche per Text oder Sprache
+• Filter nach Genre, Jahrzehnt oder nur ungesehene Titel
+• Alphabetische Sortierung mit Schnellsprungleiste
+• Wähle, welche Genre-Reihen auf dem Startbildschirm erscheinen
+
+— OPTIMIERT FÜR APPLE TV
+• Navigation, gemacht für die Siri Remote
+• Variables Spulen über das Touchpad
+• Fokussierbare Kapitelleiste
+• Natives Vollbild, ohne Rahmen
+
+— SERVERVERWALTUNG (iPhone / iPad)
+• Dashboard, Benutzerverwaltung, Geräte, Sitzungen
+• Aktivitätsprotokoll, geplante Aufgaben, Plugins
+• Metadaten bearbeiten, Titel identifizieren, API-Schlüssel verwalten
+
+— RESPEKTIERT DEINE PRIVATSPHÄRE
+• Keine Datenerhebung
+• Keine Analyse, keine Werbung
+• Die gesamte Kommunikation läuft direkt zwischen deinem Gerät und deinem Jellyfin-Server
+• Open Source: https://github.com/b-raillard/Cinemax
+
+JellyGlass benötigt einen bereits laufenden Jellyfin-Server (jellyfin.org). JellyGlass streamt ausschließlich die Videos deines eigenen Servers: Die App enthält keine eigenen Inhalte, hat keine Download-Funktion und speichert oder lädt keinerlei Medien herunter, aus keiner Quelle. JellyGlass wird weder vom offiziellen Jellyfin-Team entwickelt noch unterstützt.
+```
+
+### Schlüsselwörter (100 Zeichen max., durch Kommas getrennt, ohne Leerzeichen)
+```
+mediathek,server,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,filme,serien,heimkino,homelab,kino
+```
+*(98 caractères)*
+
+### Neuerungen (4000 Zeichen max.)
+
+#### iOS — 2.3.1
+```
+JellyGlass 2.3.1: JellyGlass spricht Deutsch.
+
+• Die App gibt es jetzt auch auf Deutsch, neben Französisch und Englisch
+• Solange du keine Sprache gewählt hast, folgt JellyGlass der Sprache deines Geräts; ändern kannst du sie jederzeit unter Einstellungen → Darstellung
+• Auch die Widgets und die Steuerung „Weiterschauen“ sprechen Deutsch
+• Player: Die Tasten „Vorherige Folge“ und „Nächste Folge“ ragen nicht mehr über den Bildschirmrand und reagieren auf ihrer ganzen Fläche
+• Die Halloween-Nacht geht noch bis zum 2. November
+
+Danke, dass du JellyGlass nutzt. Fehlermeldungen und Vorschläge: https://github.com/b-raillard/Cinemax/issues
+```
+
+#### tvOS — 2.3.1
+```
+JellyGlass 2.3.1: JellyGlass spricht Deutsch.
+
+• Die App gibt es jetzt auch auf Deutsch, neben Französisch und Englisch
+• Solange du keine Sprache gewählt hast, folgt JellyGlass der Sprache deines Apple TV; ändern kannst du sie jederzeit unter Einstellungen → Darstellung
+• Auch die Top-Shelf-Reihe spricht Deutsch
+• Die Halloween-Nacht geht noch bis zum 2. November
+
+Danke, dass du JellyGlass nutzt. Fehlermeldungen und Vorschläge: https://github.com/b-raillard/Cinemax/issues
+```
+
+---
+
 ## 4. App Review — Informations à fournir
 
 ### Sign-In Required ?
@@ -1349,8 +1496,10 @@ ASC → Tarifs et disponibilité → Disponibilité de l'app → Gérer la dispo
 
 ## 6. Build à sélectionner
 
-iOS : **2.3.0** build **2.3.1** (envoyé sur TestFlight le 2026-09-30 — embarque la demande de note App Store, PR #276 ; le build 2.3.0 du même jour ne l'a pas)
-tvOS : **2.3.0** build **2.3.1** (idem)
+iOS : **2.3.1** build **2.3.2** (allemand + correctif des boutons épisode précédent / suivant — à archiver et envoyer après fusion)
+tvOS : **2.3.1** build **2.3.2** (allemand)
+
+Versions précédentes : 2.3.0 build 2.3.1 (iOS + tvOS), en ligne depuis le 2026-10-01 00 h 11 UTC.
 
 **État App Store Connect au 2026-09-30** : la version iOS **2.3.0** est créée (« À finaliser avant soumission ») avec les notes FR 2.3.0, la localisation **Anglais (États-Unis)** ajoutée et remplie depuis la section 3 (sous-titre, texte promo, description, mots-clés, notes 2.3.0 ; captures = celles du français par défaut, jusqu'à la série EN), et les champs FR alignés sur ce document (la fiche 2.2.0 en ligne disait encore « Cinemax » dans sa description, portait d'anciens mots-clés et le sous-titre « Lecteur de serveur multimédia »). Dans « Informations sur l'app » : nom EN `JellyGlass for Jellyfin`, sous-titre EN `Media library, movies and TV`, sous-titre FR `Médiathèque, films et séries` (prise d'effet avec la 2.3.0). La version tvOS **2.3.0** est créée elle aussi (notes FR + EN 2.3.0, texte promo et mots-clés alignés sur ce document dans les deux langues). **La langue principale ne peut passer à l'anglais qu'une fois l'anglais approuvé par App Review sur une version, avec des captures EN** (aide ASC « Localize App Store information »).
 

@@ -261,8 +261,9 @@ struct IOSAppearanceDetailView: View {
 
     var languagePicker: some View {
         HStack(spacing: CinemaSpacing.spacing2) {
-            languageButton("fr", label: "FR")
-            languageButton("en", label: "EN")
+            ForEach(AppLanguage.supported, id: \.self) { code in
+                languageButton(code, label: code.uppercased())
+            }
         }
     }
 
@@ -285,7 +286,7 @@ struct IOSAppearanceDetailView: View {
         }
         .buttonStyle(.plain)
         // « FR » read aloud is two letters, not a language.
-        .accessibilityLabel(loc.localized(code == "fr" ? "settings.language.french" : "settings.language.english"))
+        .accessibilityLabel(loc.localized(AppLanguage.nameKey(code)))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""FR/EN parity of every .strings table, for CI (plain Python, no toolchain).
+"""FR/EN/DE parity of every .strings table, for CI (plain Python, no toolchain).
 
 Fails when a key exists in one language only, when a `<key>.one` plural has no
 base `<key>` (see the plural RULE in CLAUDE.md), or when a key's format
-specifiers (%@, %d, %1$@…) differ between the two languages — a French string
-with one `%@` against an English one with two crashes at runtime.
+specifiers (%@, %d, %1$@…) differ from the French source — a French string
+with one `%@` against a translation with two crashes at runtime. Every other
+language is compared with French, the base language.
 """
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LANGS = ("fr", "en")
+LANGS = ("fr", "en", "de")
 TABLES = ("Localizable.strings", "InfoPlist.strings", "AppShortcuts.strings")
 ENTRY = re.compile(r'^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;', re.M)
 SPEC = re.compile(r"%(?:\d+\$)?[-+ #0]*\d*(?:\.\d+)?(?:ll|l|h|z|q)?[@dDiuUxXoOfFeEgGcCsSp]")
@@ -49,14 +50,16 @@ def main() -> int:
             tables[lang] = parse(path)
         if len(tables) != len(LANGS):
             continue
-        fr, en = tables["fr"], tables["en"]
-        for key in sorted(fr.keys() - en.keys()):
-            problems.append(f"{table}: '{key}' only in fr")
-        for key in sorted(en.keys() - fr.keys()):
-            problems.append(f"{table}: '{key}' only in en")
-        for key in sorted(fr.keys() & en.keys()):
-            if specifiers(fr[key]) != specifiers(en[key]):
-                problems.append(f"{table}: '{key}' format specifiers differ (fr {specifiers(fr[key])} / en {specifiers(en[key])})")
+        fr = tables["fr"]
+        for lang in LANGS[1:]:
+            other = tables[lang]
+            for key in sorted(fr.keys() - other.keys()):
+                problems.append(f"{table}: '{key}' missing in {lang}")
+            for key in sorted(other.keys() - fr.keys()):
+                problems.append(f"{table}: '{key}' only in {lang}")
+            for key in sorted(fr.keys() & other.keys()):
+                if specifiers(fr[key]) != specifiers(other[key]):
+                    problems.append(f"{table}: '{key}' format specifiers differ (fr {specifiers(fr[key])} / {lang} {specifiers(other[key])})")
         if table == "Localizable.strings":
             for key in sorted(k for k in fr if k.endswith(".one")):
                 if key[:-4] not in fr:

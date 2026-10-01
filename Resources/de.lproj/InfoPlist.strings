@@ -1,0 +1,11 @@
+/* Zugriff auf das lokale Netzwerk (Erkennung von Jellyfin-Servern) */
+"NSLocalNetworkUsageDescription" = "JellyGlass nutzt dein lokales Netzwerk, um Jellyfin-Server in deinem WLAN automatisch zu finden.";
+
+/* Mikrofon (Sprachsuche) */
+"NSMicrophoneUsageDescription" = "JellyGlass nutzt das Mikrofon für die Sprachsuche.";
+
+/* Spracherkennung (Sprachsuche) */
+"NSSpeechRecognitionUsageDescription" = "JellyGlass nutzt die Spracherkennung, um per Sprache nach Filmen und Serien zu suchen.";
+
+/* Face ID: optionale Abkürzung an der PIN der Kindersicherung vorbei */
+"NSFaceIDUsageDescription" = "JellyGlass kann Face ID verwenden, um die Kindersicherung zu entsperren, ohne deine PIN einzugeben.";

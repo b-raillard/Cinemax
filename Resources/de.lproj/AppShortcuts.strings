@@ -1,0 +1,25 @@
+/* Siri phrases for App Shortcuts — German.
+
+   See the header in fr.lproj/AppShortcuts.strings: keys are the base-language
+   (fr) phrase literals from `CinemaxShortcuts`, and ${applicationName} must
+   appear in every phrase.
+
+   Phrasings a German speaker would actually say to Siri, not word-for-word
+   translations. */
+
+"Reprendre ma lecture dans ${applicationName}" = "Wiedergabe in ${applicationName} fortsetzen";
+"Reprendre ${applicationName}" = "${applicationName} fortsetzen";
+"Continuer à regarder dans ${applicationName}" = "In ${applicationName} weiterschauen";
+
+"Lire ${item} dans ${applicationName}" = "${item} in ${applicationName} abspielen";
+"Regarder ${item} dans ${applicationName}" = "${item} in ${applicationName} ansehen";
+"Lance ${item} sur ${applicationName}" = "Starte ${item} in ${applicationName}";
+
+"Lire le prochain épisode de ${series} dans ${applicationName}" = "Nächste Folge von ${series} in ${applicationName} abspielen";
+"Épisode suivant de ${series} dans ${applicationName}" = "Nächste Folge von ${series} in ${applicationName}";
+
+"Ouvrir ${item} dans ${applicationName}" = "${item} in ${applicationName} öffnen";
+"Afficher ${item} dans ${applicationName}" = "${item} in ${applicationName} anzeigen";
+
+"Rechercher dans ${applicationName}" = "In ${applicationName} suchen";
+"Chercher dans ${applicationName}" = "${applicationName} durchsuchen";
