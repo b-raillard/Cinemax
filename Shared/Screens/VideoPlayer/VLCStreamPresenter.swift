@@ -2881,39 +2881,29 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     #if os(iOS)
-    /// Widest gap the transport row uses when it has room to breathe.
-    private static let transportSpacingIdeal: CGFloat = 24
-    /// Tightest gap it may fall back to before the glyphs read as one blob.
-    private static let transportSpacingMinimum: CGFloat = 8
-    /// Kept clear of the safe-area edges on both sides.
-    private static let transportRowMargin: CGFloat = 16
-
-    /// Shrinks the row's spacing so it always fits inside the safe area.
+    /// Fits the transport row inside the safe area, minus a 16 pt margin on
+    /// each side — the arithmetic is `TransportRowFit`.
     ///
-    /// `transportRow` carries only a centre-X and a bottom constraint, so a
-    /// `UIStackView` with no width takes its intrinsic size — and as soon as an
-    /// episode has a neighbour on BOTH sides the row grows to five buttons:
-    /// measured at ~416 pt on an iPhone 17's 402 pt (centres at
-    /// 16/104/201/297/387), i.e. ⏮ and ⏭ clipped by the screen edges, with the
-    /// leading one refusing a tap at its own visible centre while responding
-    /// 14 pt further in. Four buttons fit, which is why a film never showed it.
+    /// `transportRow` carries only a centre-X and a bottom constraint, so the
+    /// `UIStackView` takes its intrinsic width — and as soon as an episode has
+    /// a neighbour on BOTH sides it holds five buttons (61 + 70 + 75 + 70 + 61
+    /// pt, measured): 434 pt at the 24 pt spacing, on an iPhone 17's 402, i.e.
+    /// ⏮ framed at [-16, 46] and ⏭ at [357, 418], both cut by the screen edges.
+    /// Four buttons fit, which is why a film never showed it.
     ///
-    /// Fitting by SPACING rather than by an inequality constraint is deliberate:
-    /// a required width limit would have to be satisfied by compressing buttons
-    /// whose intrinsic size comes from a glyph, i.e. by breaking a constraint on
-    /// a narrow device. Here the arithmetic is exact and there is nothing to
-    /// break — and it re-runs on rotation, where the available width doubles.
+    /// Spacing yields first, then a uniform scale — never a width constraint,
+    /// which could only be met by compressing buttons sized by their glyph,
+    /// i.e. by breaking on a narrow window. A transform is honoured by
+    /// hit-testing, so a scaled button is tappable exactly where it is drawn.
+    /// Re-run on every layout pass: rotation and iPad resizing change the width.
     private func layoutTransportRow() {
-        let visible = transportRow.arrangedSubviews.filter { !$0.isHidden }
-        guard visible.count > 1 else { return }
+        let widths = transportRow.arrangedSubviews.filter { !$0.isHidden }.map(\.intrinsicContentSize.width)
         let insets = view.safeAreaInsets
-        let available = view.bounds.width - insets.left - insets.right
-            - 2 * Self.transportRowMargin
-        guard available > 0 else { return } // pre-layout call from setup
-        let glyphs = visible.reduce(CGFloat.zero) { $0 + $1.intrinsicContentSize.width }
-        let fitted = (available - glyphs) / CGFloat(visible.count - 1)
-        let spacing = min(Self.transportSpacingIdeal, max(Self.transportSpacingMinimum, fitted))
-        if transportRow.spacing != spacing { transportRow.spacing = spacing }
+        let available = view.bounds.width - insets.left - insets.right - 2 * TransportRowFit.edgeMargin
+        let fit = TransportRowFit.fit(buttonWidths: widths, availableWidth: available)
+        if transportRow.spacing != fit.spacing { transportRow.spacing = fit.spacing }
+        let scale = CGAffineTransform(scaleX: fit.scale, y: fit.scale)
+        if transportRow.transform != scale { transportRow.transform = scale }
     }
 
     override func viewDidLayoutSubviews() {
