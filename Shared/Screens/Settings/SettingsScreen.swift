@@ -169,6 +169,7 @@ struct SettingsScreen: View {
     /// `EntitlementDebugRows` instead — its Playback page is a pushed
     /// destination, where only a standalone view re-renders.
     @Environment(EntitlementStore.self) var entitlements
+    @Environment(EarlyAdopterService.self) var earlyAdopter
     #endif
     @State var showLogOutAlert = false
     @State var showLicenses = false
