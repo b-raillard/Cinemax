@@ -1299,3 +1299,15 @@
 "settings.debug.entitlement.source.cloudMirror" = "iCloud mirror";
 "settings.debug.entitlement.source.debugOverride" = "simulated";
 "settings.debug.simulatePro" = "Simulate Pro";
+"settings.debug.earlyAdopter" = "Early adopter";
+"settings.debug.earlyAdopter.yes" = "Yes";
+"settings.debug.earlyAdopter.no" = "No";
+"settings.debug.earlyAdopter.unknown" = "Unknown";
+"settings.debug.earlyAdopter.nonProduction" = "Test environment";
+"settings.debug.earlyAdopter.simulated" = "%@ (simulated)";
+"settings.debug.earlyAdopter.otherPlatform" = "Yes (via the other app)";
+"settings.debug.earlyAdopter.facts" = "build %1$@ · %2$@ · %3$@";
+"settings.debug.earlyAdopter.otherApp" = "Other app: %@";
+"settings.debug.earlyAdopter.env.production" = "production";
+"settings.debug.earlyAdopter.env.sandbox" = "sandbox / TestFlight";
+"settings.debug.earlyAdopter.env.xcode" = "Xcode";

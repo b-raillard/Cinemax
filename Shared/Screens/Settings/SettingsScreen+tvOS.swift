@@ -543,6 +543,16 @@ extension SettingsScreen {
                 )
             ])
             #endif
+            // DEBUG: cycles the override; Release: asks the App Store again.
+            tvActionRow(
+                id: "earlyAdopter",
+                icon: "star.circle",
+                label: loc.localized("settings.debug.earlyAdopter"),
+                subtitle: [earlyAdopterStatusText(earlyAdopter, loc: loc), earlyAdopterFactsText(earlyAdopter, loc: loc)]
+                    .compactMap { $0 }
+                    .joined(separator: "\n"),
+                action: { earlyAdopterRowAction(earlyAdopter) }
+            )
             // tvOS has no share sheet and no MetricKit (every MetricKit class
             // is `API_UNAVAILABLE(tvos)`), so the export is iOS-only. The row
             // stays so the limitation is stated rather than silently absent;

@@ -131,6 +131,10 @@ enum SettingsKey {
     /// written ONLY by `EntitlementStore` (`setDebugOverride`), and only in a
     /// DEBUG build — a Release build never reads it (`EntitlementPolicy`).
     static let debugSimulatePro = "debug.simulatePro"
+    /// Debug: force the early-adopter status (`EarlyAdopterDebugOverride`
+    /// raw value; absent = automatic). Read and written ONLY by
+    /// `EarlyAdopterService`, and only in a DEBUG build.
+    static let debugEarlyAdopterOverride = "debug.earlyAdopterOverride"
 
     // Entitlements (`Shared/Entitlements/`)
     /// JSON `CloudEntitlementRecord` of a purchase made on THIS device — the
