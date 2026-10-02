@@ -106,6 +106,47 @@ struct AppLanguageTests {
         #expect(defaults.string(forKey: SettingsKey.appLanguage) == "fr")
     }
 
+    @Test("a language the system changed since the last launch is adopted, nothing else is")
+    func adoptsSystemChange() {
+        // Réglages → JellyGlass → Langue moved from English to German.
+        #expect(AppLanguage.languageToAdopt(stored: "fr", systemSeen: "en", systemNow: "de") == "de")
+        // From a language we don't ship to one we do.
+        #expect(AppLanguage.languageToAdopt(stored: "en", systemSeen: "", systemNow: "fr") == "fr")
+        // No change since the last launch: the in-app choice stands.
+        #expect(AppLanguage.languageToAdopt(stored: "fr", systemSeen: "en", systemNow: "en") == nil)
+        // Never recorded (first launch of 2.3.2+): record only — « Quoi de neuf » offers it.
+        #expect(AppLanguage.languageToAdopt(stored: "fr", systemSeen: nil, systemNow: "de") == nil)
+        // Moved to a language we don't ship: keep ours.
+        #expect(AppLanguage.languageToAdopt(stored: "fr", systemSeen: "en", systemNow: nil) == nil)
+    }
+
+    @Test("an upgrade records the system language, then follows its next change")
+    func settleFollowsSystem() {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set("2.3.1", forKey: SettingsKey.whatsNewLastSeenVersion)
+        defaults.set("fr", forKey: SettingsKey.appLanguage)
+        AppLanguage.settleStoredLanguage(defaults: defaults, preferredLanguages: ["en-GB"])
+        #expect(defaults.string(forKey: SettingsKey.appLanguage) == "fr")
+        AppLanguage.settleStoredLanguage(defaults: defaults, preferredLanguages: ["en-GB"])
+        #expect(defaults.string(forKey: SettingsKey.appLanguage) == "fr")
+        AppLanguage.settleStoredLanguage(defaults: defaults, preferredLanguages: ["de-CH", "en-GB"])
+        #expect(defaults.string(forKey: SettingsKey.appLanguage) == "de")
+    }
+
+    @Test("an in-app choice is mirrored to the system and not read back as a change")
+    func inAppChoiceIsMirrored() {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set("2.3.1", forKey: SettingsKey.whatsNewLastSeenVersion)
+        defaults.set("en", forKey: SettingsKey.appLanguage)
+        AppLanguage.settleStoredLanguage(defaults: defaults, preferredLanguages: ["en-US"])
+        // The user picks German in the app; iOS then reports it as the app's language.
+        defaults.set("de", forKey: SettingsKey.appLanguage)
+        AppLanguage.recordUserChoice("de", defaults: defaults)
+        #expect(defaults.stringArray(forKey: AppLanguage.appleLanguagesKey) == ["de"])
+        AppLanguage.settleStoredLanguage(defaults: defaults, preferredLanguages: ["de"])
+        #expect(defaults.string(forKey: SettingsKey.appLanguage) == "de")
+    }
+
     @Test("only a shipped device language that differs from the app's is offered")
     func offers() {
         #expect(AppLanguage.offer(current: "fr", preferredLanguages: ["de-CH"]) == "de")

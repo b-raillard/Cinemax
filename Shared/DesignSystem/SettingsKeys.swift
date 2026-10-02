@@ -14,6 +14,8 @@ enum SettingsKey {
     static let accentColor = "accentColor"
     static let uiScale = "uiScale"
     static let appLanguage = "appLanguage"
+    /// What the system asked for at the last launch — `AppLanguage.languageToAdopt`.
+    static let appLanguageSystemSeen = "appLanguage.systemSeen"
     /// Seasonal themes (`SeasonalThemeController`): `SeasonalSetting` raw value.
     static let seasonalTheme = "appearance.seasonalTheme"
     static let seasonalAmbiance = "appearance.seasonalAmbiance"

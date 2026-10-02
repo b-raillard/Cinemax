@@ -17,6 +17,7 @@ final class LocalizationManager {
         }
         set {
             _languageCode = newValue
+            AppLanguage.recordUserChoice(newValue)
             _bundle = nil
             _revision += 1
         }
@@ -283,16 +284,53 @@ enum AppLanguage {
     /// from `AppNavigation.init`. Writing it (rather than reading the device
     /// at every launch) is what makes the second launch of a fresh install
     /// indistinguishable from the first: by then it carries a « Quoi de neuf »
-    /// stamp and would otherwise be taken for an upgrade.
-    nonisolated static func settleStoredLanguage(defaults: UserDefaults = .standard) {
+    /// stamp and would otherwise be taken for an upgrade. Then follows a
+    /// language the SYSTEM changed since the last launch (`languageToAdopt`).
+    nonisolated static func settleStoredLanguage(
+        defaults: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages
+    ) {
         let lastSeen = defaults.string(forKey: SettingsKey.whatsNewLastSeenVersion) ?? ""
         let settled = languageToSettle(
             stored: defaults.string(forKey: SettingsKey.appLanguage),
             isExistingInstall: !lastSeen.isEmpty || defaults.bool(forKey: SettingsKey.onboardingSeen),
-            preferredLanguages: Locale.preferredLanguages
+            preferredLanguages: preferredLanguages
         )
         if let settled { defaults.set(settled, forKey: SettingsKey.appLanguage) }
+
+        let systemNow = devicePreferred(preferredLanguages: preferredLanguages)
+        if let adopted = languageToAdopt(
+            stored: defaults.string(forKey: SettingsKey.appLanguage),
+            systemSeen: defaults.string(forKey: SettingsKey.appLanguageSystemSeen),
+            systemNow: systemNow
+        ) {
+            defaults.set(adopted, forKey: SettingsKey.appLanguage)
+        }
+        defaults.set(systemNow ?? "", forKey: SettingsKey.appLanguageSystemSeen)
     }
+
+    /// The language the system started asking for since the last launch — the
+    /// app's own page in the iOS Settings (Réglages → JellyGlass → Langue,
+    /// which iOS stores as this app's `AppleLanguages`) or the device's
+    /// language — or `nil` to keep the stored one. `systemSeen` is what the
+    /// system asked for at the previous launch (`""` = none of ours); `nil`
+    /// (never recorded: the first launch of 2.3.2+) only records, so an
+    /// upgrade is never switched behind its back — « Quoi de neuf » offers it.
+    nonisolated static func languageToAdopt(stored: String?, systemSeen: String?, systemNow: String?) -> String? {
+        guard let systemSeen, let systemNow, systemNow != systemSeen, systemNow != stored else { return nil }
+        return systemNow
+    }
+
+    /// A language picked IN the app is mirrored into the system's per-app
+    /// language, so Réglages → JellyGlass → Langue shows it (and the system's
+    /// own prompts follow from the next launch), and recorded as seen, so the
+    /// next launch does not read it as a system change.
+    nonisolated static func recordUserChoice(_ code: String, defaults: UserDefaults = .standard) {
+        defaults.set([code], forKey: appleLanguagesKey)
+        defaults.set(code, forKey: SettingsKey.appLanguageSystemSeen)
+    }
+
+    /// The system's own key for an app's language list.
+    nonisolated static let appleLanguagesKey = "AppleLanguages"
 
     /// The device language worth OFFERING: shipped, and not the one the app
     /// already speaks. `nil` = nothing to offer.
