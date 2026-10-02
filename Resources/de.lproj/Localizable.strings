@@ -755,7 +755,7 @@
 "menu.maxReached" = "Maximal %d aktive Tabs.";
 "menu.library.empty" = "Keine Videomediatheken verfügbar";
 "menu.library.empty.subtitle" = "Prüfe deine Verbindung oder bitte deinen Administrator, eine Mediathek freizugeben.";
-"settings.motionEffects" = "Bewegungseffekte";
+"settings.motionEffects" = "Bewegungs\U00ADeffekte";
 "settings.motionEffects.systemOverride" = "„Bewegung reduzieren“ ist in den Geräteeinstellungen aktiviert, daher bleiben die Effekte ausgeschaltet.";
 "settings.fontSize" = "Textgröße";
 "settings.4kRendering" = "4K-Darstellung";
@@ -1242,7 +1242,7 @@
 "whatsNew.parentalLock.title" = "Verbesserte Kindersicherung";
 "whatsNew.parentalLock.body" = "Die Altersgrenze gilt jetzt für alles, was du abspielst, einschließlich der nächsten Folge; eine Folge ohne Altersfreigabe wird nach der Freigabe ihrer Serie beurteilt. Eine neue PIN hat 6 bis 8 Ziffern, und deine aktuelle PIN bleibt gültig.";
 "whatsNew.halloweenNight.title" = "Halloween-Nacht";
-"whatsNew.halloweenNight.body" = "Einen Monat lang geht die App in den Nachtmodus: Kürbis-Farbpalette, Titel in gotischer Schrift, Fledermäuse und Kürbisse beim Öffnen und eine Reihe „Halloween-Grusel“ unter Start, Filme und Serien. Nach Halloween ist alles wieder wie vorher.";
+"whatsNew.halloweenNight.body" = "Einen Monat lang geht die App in den Nachtmodus: Kürbis-Farbpalette, Titel in gotischer Schrift, Fledermäuse und Kürbisse beim Öffnen und auf der Startseite eine Reihe „Halloween-Grusel“ mit Filmen und Serien. Nach Halloween ist alles wieder wie vorher.";
 "whatsNew.offer.window" = "Befristet · %1$@ → %2$@";
 "whatsNew.offer.enabled" = "Aktiviert";
 "whatsNew.offer.accept" = "Aktivieren";

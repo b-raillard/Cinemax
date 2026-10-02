@@ -44,6 +44,15 @@ final class ReviewPromptTracker {
         )
     }
 
+    /// From `VideoPlayerView.onAppear`: a player opening withdraws a request
+    /// still waiting out `ReviewPromptPresentation`'s 1 s delay. `isDue` flips
+    /// at the START of the close, so « Lire » tapped within that second used to
+    /// put the system sheet over the new player's loading screen (recette
+    /// 2026-10-02). Nothing is stamped: the next close asks the policy again.
+    func playerDidOpen() {
+        isDue = false
+    }
+
     /// After `requestReview()` was called: stamp version + date, reset the
     /// count, clear `isDue`. StoreKit gives no feedback on whether the sheet
     /// showed, so the request itself is what is stamped.

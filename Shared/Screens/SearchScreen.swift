@@ -490,24 +490,34 @@ struct SearchScreen: View {
                 .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
 
-            HStack(spacing: CinemaSpacing.spacing3) {
-                surprisePill(
-                    label: loc.localized("search.surprise.movie"),
-                    icon: "film.fill",
-                    isLoading: isPickingSurpriseMovie
-                ) {
-                    await performSurprise(type: .movie)
-                }
-                surprisePill(
-                    label: loc.localized("search.surprise.series"),
-                    icon: "tv.fill",
-                    isLoading: isPickingSurpriseSeries
-                ) {
-                    await performSurprise(type: .series)
-                }
+            // Side by side when both fit, stacked otherwise: the German labels
+            // are single words (« Überraschungsfilm ») and the pair needs ≈ 440 pt,
+            // wider than any iPhone — squeezed, each broke mid-word over two
+            // lines (recette 2026-10-02).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: CinemaSpacing.spacing3) { surprisePillPair }
+                VStack(spacing: CinemaSpacing.spacing3) { surprisePillPair }
             }
         }
         .padding(.top, CinemaSpacing.spacing4)
+    }
+
+    @ViewBuilder
+    private var surprisePillPair: some View {
+        surprisePill(
+            label: loc.localized("search.surprise.movie"),
+            icon: "film.fill",
+            isLoading: isPickingSurpriseMovie
+        ) {
+            await performSurprise(type: .movie)
+        }
+        surprisePill(
+            label: loc.localized("search.surprise.series"),
+            icon: "tv.fill",
+            isLoading: isPickingSurpriseSeries
+        ) {
+            await performSurprise(type: .series)
+        }
     }
 
     @ViewBuilder

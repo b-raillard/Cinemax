@@ -185,6 +185,16 @@ final class LocalizationManager {
     /// "1 saison" / "3 saisons" — the fiche's metadata line printed
     /// « 1 saisons » while the library hero, two taps away, already said
     /// « 1 saison » through the `tvShows.season` key this reuses.
+    /// A work's running time: « 1h 33m » / « 1 Std. 33 Min. », « 30m » / « 30 Min. ».
+    /// One source for the heroes AND the fiche — the heroes built « 1h 33m »
+    /// by hand, so a German fiche read « 1 Std. 33 Min. » under a hero saying
+    /// « 1h 33m » for the same film (recette 2026-10-02).
+    func runtime(minutes: Int) -> String {
+        minutes > 60
+            ? localized("detail.runtime.hours", minutes / 60, minutes % 60)
+            : localized("detail.runtime.minutes", minutes)
+    }
+
     func seasonCount(_ count: Int) -> String {
         Self.usesSingular(count, languageCode: languageCode)
             ? localized("tvShows.season", count)
@@ -286,8 +296,18 @@ enum AppLanguage {
     /// indistinguishable from the first: by then it carries a « Quoi de neuf »
     /// stamp and would otherwise be taken for an upgrade. Then follows a
     /// language the SYSTEM changed since the last launch (`languageToAdopt`).
+    ///
+    /// Last, an app speaking another language than the system asks for gets
+    /// that language written as its OWN (`ownLanguages == nil`: an upgrade
+    /// kept French on an English device). Without it Réglages › JellyGlass ›
+    /// Langue showed « English » checked while the app spoke French, and
+    /// picking English there changed nothing (recette 2026-10-02). From then
+    /// on iOS's per-app language prevails over the device's, as it does for
+    /// any app with one: a device-language change no longer moves the app.
     nonisolated static func settleStoredLanguage(
-        defaults: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages
+        defaults: UserDefaults = .standard,
+        preferredLanguages: [String] = Locale.preferredLanguages,
+        ownLanguages: [String]? = Self.ownLanguages()
     ) {
         let lastSeen = defaults.string(forKey: SettingsKey.whatsNewLastSeenVersion) ?? ""
         let settled = languageToSettle(
@@ -306,6 +326,33 @@ enum AppLanguage {
             defaults.set(adopted, forKey: SettingsKey.appLanguage)
         }
         defaults.set(systemNow ?? "", forKey: SettingsKey.appLanguageSystemSeen)
+
+        if ownLanguages == nil, let stored = defaults.string(forKey: SettingsKey.appLanguage), stored != systemNow {
+            recordUserChoice(stored, defaults: defaults)
+        }
+    }
+
+    /// This app's OWN language list — Réglages › JellyGlass › Langue, which
+    /// iOS stores as `AppleLanguages` in the app's domain — or `nil` when it
+    /// has none and follows the device. Read from the app's persistent domain
+    /// alone: `UserDefaults.object(forKey:)` would fall through to the
+    /// device's global list and never answer `nil`.
+    nonisolated static func ownLanguages(defaults: UserDefaults = .standard) -> [String]? {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return nil }
+        return defaults.persistentDomain(forName: bundleID)?[appleLanguagesKey] as? [String]
+    }
+
+    /// The DEVICE's language list, without this app's own — what « Quoi de
+    /// neuf » offers. `Locale.preferredLanguages` starts with the app's own
+    /// language once one is set (`settleStoredLanguage` mirrors it), which
+    /// would hide the device's language from the offer. Measured in the
+    /// simulator with an own `["fr"]`: `CopyAppValue(AnyApplication)` answers
+    /// the device's `["en-US", "fr-US", "it-CH"]`; `CFPreferencesCopyValue`
+    /// (any host), the global `persistentDomain` and a global-domain suite
+    /// all answer `nil` from the sandbox.
+    nonisolated static func deviceLanguages() -> [String] {
+        CFPreferencesCopyAppValue(appleLanguagesKey as CFString, kCFPreferencesAnyApplication) as? [String]
+            ?? Locale.preferredLanguages
     }
 
     /// The language the system started asking for since the last launch — the

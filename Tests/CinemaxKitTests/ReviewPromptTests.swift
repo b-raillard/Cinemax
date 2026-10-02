@@ -109,6 +109,24 @@ struct ReviewPromptTrackerTests {
         #expect(!sut.isDue)
     }
 
+    @Test("Un lecteur rouvert avant la demande la retire, sans rien estampiller")
+    func reopeningThePlayerWithdrawsTheRequest() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let sut = tracker(defaults)
+        for _ in 0..<3 { sut.recordSession(watchedSeconds: watched) }
+        sut.playerDidClose()
+        #expect(sut.isDue)
+
+        sut.playerDidOpen()
+        #expect(!sut.isDue)
+        #expect(defaults.integer(forKey: SettingsKey.reviewQualifyingPlaybacks) == 3)
+        #expect((defaults.string(forKey: SettingsKey.reviewLastPromptedVersion) ?? "").isEmpty)
+
+        // The next close asks again.
+        sut.playerDidClose()
+        #expect(sut.isDue)
+    }
+
     @Test("didPrompt estampille, remet le compte à zéro et éteint isDue")
     func didPromptStampsAndResets() {
         let defaults = UserDefaults.isolatedForTesting()

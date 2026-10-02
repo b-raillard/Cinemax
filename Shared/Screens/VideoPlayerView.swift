@@ -102,6 +102,9 @@ struct VideoPlayerView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+        // A player opening cancels a rating request still waiting out its
+        // 1 s delay — see `ReviewPromptTracker.playerDidOpen`.
+        .onAppear { reviewPrompt?.playerDidOpen() }
         .task(id: attempt) { await startIOSPlayback() }
         #endif
     }
