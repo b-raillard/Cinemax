@@ -130,6 +130,7 @@ enum SettingsFocus: Hashable {
     case toggle(String)
     case accentColor(String)
     case language(String)
+    case rateApp
 }
 #endif
 
@@ -189,6 +190,10 @@ struct SettingsScreen: View {
     /// left to see, and stamps nothing — somebody asking for it has not just
     /// updated, they are looking something up.
     @State var showWhatsNew = false
+    /// « Noter JellyGlass », on the landing of both platforms — what
+    /// `AppUpdateChecker.rateAppURL` resolved when the landing appeared; `nil`
+    /// hides the row.
+    @State var rateAppURL: URL?
 
     /// Whether the server has Quick Connect enabled — gates the account-screen
     /// "Quick Connect" (authorize) row so we never surface a flow the server

@@ -1230,6 +1230,8 @@
 
 /* What's new — the feature reel */
 "settings.whatsNew" = "Neuigkeiten";
+"settings.rateApp" = "JellyGlass bewerten";
+"settings.rateApp.subtitle" = "Eine Bewertung im App Store hilft anderen, die App zu entdecken";
 "whatsNew.next" = "Weiter";
 "whatsNew.back" = "Zurück";
 "whatsNew.skip" = "Überspringen";

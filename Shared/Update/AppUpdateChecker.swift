@@ -95,6 +95,30 @@ final class AppUpdateChecker {
     @ObservationIgnored private var tvStoreURLCache: (page: URL, url: URL?)?
     #endif
 
+    /// Where the root Réglages row « Noter JellyGlass » goes, or `nil` to
+    /// leave the row out. Read from the page the launch lookup stores whatever
+    /// its decision, never from a hardcoded id — `nil` until a lookup has
+    /// succeeded once.
+    ///
+    /// - iOS: the App Store's « write a review » sheet
+    ///   (`AppStoreLookup.writeReviewURL`), Apple's link for a button the user
+    ///   pressed; the automatic `requestReview` stays `ReviewPromptTracker`'s.
+    /// - tvOS: no `requestReview` (StoreKit marks it unavailable) and the tvOS
+    ///   app is its own Store record, rated only from the Apple TV's App Store
+    ///   — so the app's page there, gated on `canOpenURL` (the simulator has
+    ///   no App Store app: no row rather than a dead one).
+    static func rateAppURL(defaults: UserDefaults = .standard) -> URL? {
+        guard let link = defaults.string(forKey: SettingsKey.updateLatestStoreURL),
+              let page = URL(string: link) else { return nil }
+        #if os(tvOS)
+        guard let url = AppStoreLookup.tvAppStoreURL(for: page),
+              UIApplication.shared.canOpenURL(url) else { return nil }
+        return url
+        #else
+        return AppStoreLookup.writeReviewURL(for: page)
+        #endif
+    }
+
     /// Opens the Store page. Leaving the app for the Store is what the user
     /// just asked for, so there is no "you are leaving" confirmation.
     func openStore() {
