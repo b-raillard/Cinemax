@@ -103,9 +103,7 @@ JellyGlass 2.3.4 : la langue suit vos réglages.
 • La langue choisie pour JellyGlass dans les Réglages de l'iPhone (Réglages › Apps › JellyGlass › Langue) est désormais respectée, et la langue de l'app s'y affiche toujours, y compris après une mise à jour
 • Si vous changez la langue de votre appareil, JellyGlass la suit, quand elle est disponible et que vous n'avez pas choisi une autre langue pour l'app
 • Nouveau : « Noter JellyGlass » dans les Réglages de l'app, pour laisser un avis sur l'App Store
-• Allemand : les boutons « Surprise » de la Recherche et les réglages en grande taille de texte s'affichent en entier, et la durée des films sur l'Accueil et dans les bibliothèques est traduite
-• Accueil : couper le thème d'Halloween pendant que « Tout voir » est ouvert ne laisse plus une page vide
-• La demande d'avis ne s'affiche plus jamais par-dessus une lecture qui démarre
+• Corrections de bugs et améliorations de l'affichage, notamment en allemand
 • La nuit d'Halloween continue jusqu'au 2 novembre
 
 Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
@@ -379,8 +377,7 @@ JellyGlass 2.3.4 : la langue suit vos réglages.
 
 • Si vous changez la langue de votre Apple TV, JellyGlass la suit, quand elle est disponible et que vous n'avez pas choisi une autre langue pour l'app
 • Nouveau : « Noter JellyGlass » dans les Réglages de l'app, pour laisser un avis sur l'App Store
-• Allemand : la durée des films sur l'Accueil et dans les bibliothèques est traduite
-• Accueil : couper le thème d'Halloween pendant que « Tout voir » est ouvert ne laisse plus une page vide
+• Corrections de bugs et améliorations de l'affichage, notamment en allemand
 • La nuit d'Halloween continue jusqu'au 2 novembre
 
 Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
@@ -792,9 +789,7 @@ JellyGlass 2.3.4: the language follows your settings.
 • The language chosen for JellyGlass in the iPhone's Settings (Settings › Apps › JellyGlass › Language) is now honored, and the app's language always shows there, including after an update
 • When you change your device's language, JellyGlass follows it, if available and unless you picked another language for the app
 • New: "Rate JellyGlass" in the app's Settings, to leave a review on the App Store
-• German: the Search "Surprise" buttons and the settings at large text sizes now show in full, and movie running times on Home and in the libraries are translated
-• Home: turning the Halloween theme off while "View All" is open no longer leaves a blank page
-• The review request never shows over a playback that is starting
+• Bug fixes and display improvements, especially in German
 • Halloween Night carries on until November 2
 
 Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
@@ -1068,8 +1063,7 @@ JellyGlass 2.3.4: the language follows your settings.
 
 • When you change your Apple TV's language, JellyGlass follows it, if available and unless you picked another language for the app
 • New: "Rate JellyGlass" in the app's Settings, to leave a review on the App Store
-• German: movie running times on Home and in the libraries are translated
-• Home: turning the Halloween theme off while "View All" is open no longer leaves a blank page
+• Bug fixes and display improvements, especially in German
 • Halloween Night carries on until November 2
 
 Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
@@ -1480,9 +1474,7 @@ JellyGlass 2.3.4: Die Sprache folgt deinen Einstellungen.
 • Die in den iPhone-Einstellungen für JellyGlass gewählte Sprache (Einstellungen › Apps › JellyGlass › Sprache) wird jetzt übernommen, und die Sprache der App wird dort immer angezeigt, auch nach einem Update
 • Änderst du die Sprache deines Geräts, folgt JellyGlass ihr, sofern verfügbar und sofern du für die App keine andere Sprache gewählt hast
 • Neu: „JellyGlass bewerten“ in den Einstellungen der App, um eine Bewertung im App Store zu hinterlassen
-• Deutsch: Die „Überraschungs“-Tasten der Suche und die Einstellungen in großer Schrift werden vollständig angezeigt, und die Laufzeit der Filme auf der Startseite und in den Mediatheken ist übersetzt
-• Startseite: Wird das Halloween-Design ausgeschaltet, während „Alle anzeigen“ geöffnet ist, bleibt keine leere Seite mehr zurück
-• Die Bitte um eine Bewertung erscheint nie mehr über einer startenden Wiedergabe
+• Fehlerbehebungen und Verbesserungen der Darstellung, besonders auf Deutsch
 • Die Halloween-Nacht geht noch bis zum 2. November
 
 Danke, dass du JellyGlass nutzt. Fehlerberichte und Vorschläge: https://github.com/b-raillard/Cinemax/issues
@@ -1507,8 +1499,7 @@ JellyGlass 2.3.4: Die Sprache folgt deinen Einstellungen.
 
 • Änderst du die Sprache deines Apple TV, folgt JellyGlass ihr, sofern verfügbar und sofern du für die App keine andere Sprache gewählt hast
 • Neu: „JellyGlass bewerten“ in den Einstellungen der App, um eine Bewertung im App Store zu hinterlassen
-• Deutsch: Die Laufzeit der Filme auf der Startseite und in den Mediatheken ist übersetzt
-• Startseite: Wird das Halloween-Design ausgeschaltet, während „Alle anzeigen“ geöffnet ist, bleibt keine leere Seite mehr zurück
+• Fehlerbehebungen und Verbesserungen der Darstellung, besonders auf Deutsch
 • Die Halloween-Nacht geht noch bis zum 2. November
 
 Danke, dass du JellyGlass nutzt. Fehlerberichte und Vorschläge: https://github.com/b-raillard/Cinemax/issues
