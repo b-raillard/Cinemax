@@ -360,7 +360,7 @@ enum AppLanguage {
     /// which iOS stores as this app's `AppleLanguages`) or the device's
     /// language — or `nil` to keep the stored one. `systemSeen` is what the
     /// system asked for at the previous launch (`""` = none of ours); `nil`
-    /// (never recorded: the first launch of 2.3.2+) only records, so an
+    /// (never recorded: the first launch of 2.3.4+, the first public version to carry it) only records, so an
     /// upgrade is never switched behind its back — « Quoi de neuf » offers it.
     nonisolated static func languageToAdopt(stored: String?, systemSeen: String?, systemNow: String?) -> String? {
         guard let systemSeen, let systemNow, systemNow != systemSeen, systemNow != stored else { return nil }

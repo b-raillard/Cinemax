@@ -114,7 +114,7 @@ struct AppLanguageTests {
         #expect(AppLanguage.languageToAdopt(stored: "en", systemSeen: "", systemNow: "fr") == "fr")
         // No change since the last launch: the in-app choice stands.
         #expect(AppLanguage.languageToAdopt(stored: "fr", systemSeen: "en", systemNow: "en") == nil)
-        // Never recorded (first launch of 2.3.2+): record only — « Quoi de neuf » offers it.
+        // Never recorded (first launch of 2.3.4+): record only — « Quoi de neuf » offers it.
         #expect(AppLanguage.languageToAdopt(stored: "fr", systemSeen: nil, systemNow: "de") == nil)
         // Moved to a language we don't ship: keep ours.
         #expect(AppLanguage.languageToAdopt(stored: "fr", systemSeen: "en", systemNow: nil) == nil)
@@ -125,7 +125,7 @@ struct AppLanguageTests {
         let defaults = UserDefaults.isolatedForTesting()
         defaults.set("2.3.1", forKey: SettingsKey.whatsNewLastSeenVersion)
         defaults.set("fr", forKey: SettingsKey.appLanguage)
-        // First 2.3.2+ launch on an English device, no language of its own yet.
+        // First 2.3.4+ launch on an English device, no language of its own yet.
         AppLanguage.settleStoredLanguage(defaults: defaults, preferredLanguages: ["en-GB"], ownLanguages: nil)
         #expect(defaults.string(forKey: SettingsKey.appLanguage) == "fr")
         // Mirrored, so Réglages › JellyGlass › Langue shows « Français ».
