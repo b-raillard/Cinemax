@@ -419,7 +419,7 @@ struct AppNavigation: View {
                 isFirstRun: isFirstRun,
                 resolve: { [loc] in
                     WhatsNewCatalogue.resolvingOffers(
-                        $0, appLanguage: loc.languageCode, preferredLanguages: Locale.preferredLanguages
+                        $0, appLanguage: loc.languageCode, preferredLanguages: AppLanguage.deviceLanguages()
                     )
                 }
             ) {

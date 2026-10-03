@@ -783,10 +783,7 @@ struct MediaDetailScreen: View {
     private func workMetadataParts(_ item: BaseItemDto) -> [String] {
         [
             item.productionYear.map(String.init),
-            item.runTimeTicks.map { ticks in
-                let minutes = ticks.jellyfinMinutes
-                return minutes > 60 ? loc.localized("detail.runtime.hours", minutes / 60, minutes % 60) : loc.localized("detail.runtime.minutes", minutes)
-            },
+            item.runTimeTicks.map { loc.runtime(minutes: $0.jellyfinMinutes) },
             viewModel.resolvedType == .series ? item.childCount.map { loc.seasonCount($0) } : nil
         ].compactMap { $0 }
     }

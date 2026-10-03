@@ -92,6 +92,7 @@ struct EntitlementDebugRows: View {
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(EarlyAdopterService.self) private var earlyAdopter
     @Environment(LocalizationManager.self) private var loc
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #if DEBUG
     @Environment(\.motionEffectsEnabled) private var motionEffects
     #endif
@@ -125,23 +126,28 @@ struct EntitlementDebugRows: View {
             earlyAdopterRowAction(earlyAdopter)
         } label: {
             iOSSettingsRow {
-                HStack {
-                    iOSRowIcon(systemName: "star.circle", color: .orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(loc.localized("settings.debug.earlyAdopter"))
-                            .font(CinemaFont.dynamicLabel(.large))
-                            .foregroundStyle(CinemaColor.onSurface)
-                        if let facts = earlyAdopterFactsText(earlyAdopter, loc: loc) {
-                            Text(facts)
-                                .font(CinemaFont.dynamicLabel(.small))
-                                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                // Adaptive like every other settings row: side by side, the
+                // value took half the row and German words broke mid-word at
+                // the accessibility sizes (« Berechtigun/gen », recette 2026-10-02).
+                SettingsRowAdaptiveLayout {
+                    HStack {
+                        iOSRowIcon(systemName: "star.circle", color: .orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(loc.localized("settings.debug.earlyAdopter"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                            if let facts = earlyAdopterFactsText(earlyAdopter, loc: loc) {
+                                Text(facts)
+                                    .font(CinemaFont.dynamicLabel(.small))
+                                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            }
                         }
                     }
-                    Spacer()
+                } control: {
                     Text(earlyAdopterStatusText(earlyAdopter, loc: loc))
                         .font(CinemaFont.dynamicLabel(.medium))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .multilineTextAlignment(.trailing)
+                        .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
                 }
             }
         }
@@ -151,16 +157,18 @@ struct EntitlementDebugRows: View {
 
     private var statusRow: some View {
         iOSSettingsRow {
-            HStack {
-                iOSRowIcon(systemName: "crown", color: .orange)
-                Text(loc.localized("settings.debug.entitlement"))
-                    .font(CinemaFont.dynamicLabel(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
+            SettingsRowAdaptiveLayout {
+                HStack {
+                    iOSRowIcon(systemName: "crown", color: .orange)
+                    Text(loc.localized("settings.debug.entitlement"))
+                        .font(CinemaFont.dynamicLabel(.large))
+                        .foregroundStyle(CinemaColor.onSurface)
+                }
+            } control: {
                 Text(entitlementStatusText(entitlements.state, loc: loc))
                     .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
             }
         }
         .accessibilityElement(children: .combine)

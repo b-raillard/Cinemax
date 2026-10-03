@@ -113,6 +113,10 @@ struct HomeScreen: View {
         // its row switch — re-fetches just that row.
         .onChange(of: "\(seasonID ?? "")-\(showSeasonRow)", initial: true) { old, new in
             viewModel.setSeasonRow(seasonRow)
+            // Its « Tout voir » goes with the row: the destination below draws
+            // nothing without a row, so switching the theme or the row off in
+            // Settings left a black page with only a back button (recette 2026-10-02).
+            if seasonRow == nil { seasonDestination = nil }
             // The genre rows too: in season they leave out the season row's genre.
             if old != new {
                 Task {
@@ -1654,7 +1658,7 @@ struct HomeScreen: View {
     private func metadataText(for item: BaseItemDto) -> some View {
         let parts: [String] = [
             item.productionYear.map(String.init),
-            item.formattedRuntime,
+            item.runTimeTicks.map { loc.runtime(minutes: $0.jellyfinMinutes) },
             item.genres?.first
         ].compactMap { $0 }
 

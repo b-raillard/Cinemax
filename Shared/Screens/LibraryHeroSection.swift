@@ -179,7 +179,7 @@ struct LibraryHeroSection: View {
             item.productionYear.map(String.init),
             itemType == .series
                 ? item.childCount.map { loc.seasonCount($0) }
-                : item.formattedRuntime,
+                : item.runTimeTicks.map { loc.runtime(minutes: $0.jellyfinMinutes) },
             item.genres?.first
         ].compactMap { $0 }
 

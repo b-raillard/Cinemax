@@ -490,7 +490,7 @@ struct SettingsScreen: View {
     /// `@Observable` objects down with it.
     private var whatsNewSheet: some View {
         WhatsNewScreen(pages: WhatsNewCatalogue.resolvingOffers(
-            WhatsNewCatalogue.allPages(), appLanguage: loc.languageCode, preferredLanguages: Locale.preferredLanguages
+            WhatsNewCatalogue.allPages(), appLanguage: loc.languageCode, preferredLanguages: AppLanguage.deviceLanguages()
         )) { showWhatsNew = false }
             .environment(appState)
             .environment(themeManager)

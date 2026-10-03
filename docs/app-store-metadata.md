@@ -96,13 +96,14 @@ mediatheque,serveur,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,videotheque,c
 > Siri / Raccourcis est volontairement passé sous silence (pas assez abouti pour être annoncé).
 > Les notes des versions précédentes restent consultables dans l'historique git de ce fichier.
 
-#### iOS — 2.3.2
+#### iOS — 2.3.4
 ```
-JellyGlass 2.3.2 : la langue suit vos réglages.
+JellyGlass 2.3.4 : la langue suit vos réglages.
 
-• La langue choisie pour JellyGlass dans les Réglages de l'iPhone (Réglages › Apps › JellyGlass › Langue) est désormais respectée, et un choix fait dans l'app s'y reflète
-• Si vous changez la langue de votre appareil, JellyGlass la suit, quand elle est disponible
+• La langue choisie pour JellyGlass dans les Réglages de l'iPhone (Réglages › Apps › JellyGlass › Langue) est désormais respectée, et la langue de l'app s'y affiche toujours, y compris après une mise à jour
+• Si vous changez la langue de votre appareil, JellyGlass la suit, quand elle est disponible et que vous n'avez pas choisi une autre langue pour l'app
 • Nouveau : « Noter JellyGlass » dans les Réglages de l'app, pour laisser un avis sur l'App Store
+• Corrections de bugs et améliorations de l'affichage, notamment en allemand
 • La nuit d'Halloween continue jusqu'au 2 novembre
 
 Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
@@ -370,12 +371,13 @@ Un appui long sur un titre fait désormais tout, sans ouvrir sa page.
 Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
 ```
 
-#### tvOS — 2.3.2
+#### tvOS — 2.3.4
 ```
-JellyGlass 2.3.2 : la langue suit vos réglages.
+JellyGlass 2.3.4 : la langue suit vos réglages.
 
-• Si vous changez la langue de votre Apple TV, JellyGlass la suit, quand elle est disponible
+• Si vous changez la langue de votre Apple TV, JellyGlass la suit, quand elle est disponible et que vous n'avez pas choisi une autre langue pour l'app
 • Nouveau : « Noter JellyGlass » dans les Réglages de l'app, pour laisser un avis sur l'App Store
+• Corrections de bugs et améliorations de l'affichage, notamment en allemand
 • La nuit d'Halloween continue jusqu'au 2 novembre
 
 Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.com/b-raillard/Cinemax/issues
@@ -780,13 +782,14 @@ media,server,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,library,cinema,movie
 > Two separate texts: the "Continue watching" control, widgets, diagnostics export and administration are iOS-only.
 > Siri / Shortcuts is deliberately left unmentioned (not polished enough to announce).
 
-#### iOS — 2.3.2
+#### iOS — 2.3.4
 ```
-JellyGlass 2.3.2: the language follows your settings.
+JellyGlass 2.3.4: the language follows your settings.
 
-• The language chosen for JellyGlass in the iPhone's Settings (Settings › Apps › JellyGlass › Language) is now honored, and a choice made in the app shows up there
-• When you change your device's language, JellyGlass follows it, if available
+• The language chosen for JellyGlass in the iPhone's Settings (Settings › Apps › JellyGlass › Language) is now honored, and the app's language always shows there, including after an update
+• When you change your device's language, JellyGlass follows it, if available and unless you picked another language for the app
 • New: "Rate JellyGlass" in the app's Settings, to leave a review on the App Store
+• Bug fixes and display improvements, especially in German
 • Halloween Night carries on until November 2
 
 Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
@@ -1054,12 +1057,13 @@ Long-press a title and it now does everything, without opening its page.
 Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
 ```
 
-#### tvOS — 2.3.2
+#### tvOS — 2.3.4
 ```
-JellyGlass 2.3.2: the language follows your settings.
+JellyGlass 2.3.4: the language follows your settings.
 
-• When you change your Apple TV's language, JellyGlass follows it, if available
+• When you change your Apple TV's language, JellyGlass follows it, if available and unless you picked another language for the app
 • New: "Rate JellyGlass" in the app's Settings, to leave a review on the App Store
+• Bug fixes and display improvements, especially in German
 • Halloween Night carries on until November 2
 
 Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-raillard/Cinemax/issues
@@ -1463,13 +1467,14 @@ mediathek,server,nas,mkv,4k,dolby,hdr,atmos,plex,emby,streaming,filme,serien,hei
 
 ### Neuerungen (4000 Zeichen max.)
 
-#### iOS — 2.3.2
+#### iOS — 2.3.4
 ```
-JellyGlass 2.3.2: Die Sprache folgt deinen Einstellungen.
+JellyGlass 2.3.4: Die Sprache folgt deinen Einstellungen.
 
-• Die in den iPhone-Einstellungen für JellyGlass gewählte Sprache (Einstellungen › Apps › JellyGlass › Sprache) wird jetzt übernommen, und eine Auswahl in der App erscheint auch dort
-• Änderst du die Sprache deines Geräts, folgt JellyGlass ihr, sofern verfügbar
+• Die in den iPhone-Einstellungen für JellyGlass gewählte Sprache (Einstellungen › Apps › JellyGlass › Sprache) wird jetzt übernommen, und die Sprache der App wird dort immer angezeigt, auch nach einem Update
+• Änderst du die Sprache deines Geräts, folgt JellyGlass ihr, sofern verfügbar und sofern du für die App keine andere Sprache gewählt hast
 • Neu: „JellyGlass bewerten“ in den Einstellungen der App, um eine Bewertung im App Store zu hinterlassen
+• Fehlerbehebungen und Verbesserungen der Darstellung, besonders auf Deutsch
 • Die Halloween-Nacht geht noch bis zum 2. November
 
 Danke, dass du JellyGlass nutzt. Fehlerberichte und Vorschläge: https://github.com/b-raillard/Cinemax/issues
@@ -1488,12 +1493,13 @@ JellyGlass 2.3.1: JellyGlass spricht Deutsch.
 Danke, dass du JellyGlass nutzt. Fehlerberichte und Vorschläge: https://github.com/b-raillard/Cinemax/issues
 ```
 
-#### tvOS — 2.3.2
+#### tvOS — 2.3.4
 ```
-JellyGlass 2.3.2: Die Sprache folgt deinen Einstellungen.
+JellyGlass 2.3.4: Die Sprache folgt deinen Einstellungen.
 
-• Änderst du die Sprache deines Apple TV, folgt JellyGlass ihr, sofern verfügbar
+• Änderst du die Sprache deines Apple TV, folgt JellyGlass ihr, sofern verfügbar und sofern du für die App keine andere Sprache gewählt hast
 • Neu: „JellyGlass bewerten“ in den Einstellungen der App, um eine Bewertung im App Store zu hinterlassen
+• Fehlerbehebungen und Verbesserungen der Darstellung, besonders auf Deutsch
 • Die Halloween-Nacht geht noch bis zum 2. November
 
 Danke, dass du JellyGlass nutzt. Fehlerberichte und Vorschläge: https://github.com/b-raillard/Cinemax/issues
@@ -1574,7 +1580,7 @@ tvOS : **2.3.1** build **2.3.2** (idem, sans le lecteur iOS), envoyé le même j
 
 **Langue principale → anglais : REFUSÉE par App Store Connect tant que la 2.3.0 en ligne existe** — « Impossible d'enregistrer la langue principale car vous devez d'abord fournir toutes les captures d'écran requises pour chaque version dans cette langue ». La 2.3.0 publiée n'a pas de captures anglaises propres et n'est plus modifiable. **À refaire dès que la 2.3.1 est en ligne** (« Informations sur l'app » → Langue principale → Anglais (États-Unis) → Enregistrer, sur les deux apps).
 
-**2.3.2** build **2.3.3** (iOS + tvOS) : la langue suit le système — langue propre à l'app dans les Réglages iOS, changement de langue de l'appareil — et un choix fait dans l'app est reflété dans les Réglages iOS ; « Noter JellyGlass » (PR #284). Préparée le 2026-10-02, à envoyer après validation de la 2.3.1.
+**2.3.4** build **2.3.4** (iOS + tvOS) : la langue suit le système — langue propre à l'app dans les Réglages iOS, changement de langue de l'appareil — et la langue de l'app est reflétée dans les Réglages iOS ; « Noter JellyGlass » (PR #284) ; les 8 correctifs de la recette du 2026-10-02 (PR #287). Remplace la 2.3.2 (build 2.3.3), préparée le 2026-10-02 et jamais envoyée ; numéro de version aligné sur le build. À envoyer après validation de la 2.3.1.
 
 Versions précédentes : 2.3.0 build 2.3.1 (iOS + tvOS), en ligne depuis le 2026-10-01 00 h 11 UTC.
 
