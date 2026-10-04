@@ -1446,14 +1446,77 @@ struct HomeScreen: View {
     /// Titles similar to the last movie (or series) the user played. Same card
     /// as Recently Added — poster, status overlay and the shared context menu.
     private func becauseYouWatchedRow(_ rail: BecauseYouWatchedRail) -> some View {
-        ContentRow(
-            title: loc.localized("home.becauseYouWatched", rail.seedTitle),
-            data: rail.items,
-            id: \.id
-        ) { item in
+        ContentRow(data: rail.items, id: \.id) {
+            becauseYouWatchedHeader(rail.seed)
+        } itemView: { item in
             recentlyAddedCard(item, surface: "home.becauseYouWatched")
                 .frame(width: posterCardWidth)
         }
+    }
+
+    /// The seed's poster, « PARCE QUE VOUS AVEZ VU » as an eyebrow and the
+    /// seed's name on a line of its own, opening the seed's fiche. A single
+    /// « Parce que vous avez vu {titre} » headline left no room for the title
+    /// on an iPhone — the one word that says where the row comes from.
+    /// A `NavigationLink` with its destination inline, like the cards: it
+    /// sits inside Home's `LazyVStack`, where `navigationDestination(item:)`
+    /// would be ignored.
+    private func becauseYouWatchedHeader(_ seed: BecauseYouWatchedSeed) -> some View {
+        NavigationLink {
+            DeferredView {
+                MediaDetailScreen(itemId: seed.id, itemType: seed.kind)
+            }
+        } label: {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                // 300 + tag: byte-identical to every poster card, so the
+                // seed's artwork comes out of Nuke's cache when the user has
+                // just seen it on Home.
+                Color.clear
+                    .frame(width: CinemaScale.pt(32), height: CinemaScale.pt(48))
+                    .overlay {
+                        CinemaLazyImage(
+                            url: appState.imageBuilder.imageURL(itemId: seed.id, imageType: .primary, maxWidth: 300, tag: seed.imageTag),
+                            fallbackIcon: "film"
+                        )
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.small))
+                    .contentShape(Rectangle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(loc.localized("home.becauseYouWatched.eyebrow"))
+                        .font(CinemaFont.label(.small))
+                        .textCase(.uppercase)
+                        .tracking(1)
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .lineLimit(1)
+                    Text(seed.title)
+                        .font(CinemaFont.headline(.small))
+                        .foregroundStyle(CinemaColor.onSurface)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: CinemaSpacing.spacing2)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+            }
+            #if os(tvOS)
+            // Room for the row-level focus stroke around the whole header.
+            .padding(CinemaSpacing.spacing2)
+            #endif
+            .contentShape(Rectangle())
+        }
+        #if os(tvOS)
+        .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("home.becauseYouWatched", seed.title))
+        .accessibilityAddTraits(.isHeader)
     }
 
     // MARK: - Playlists

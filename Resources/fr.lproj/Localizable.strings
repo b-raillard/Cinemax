@@ -54,6 +54,7 @@
 "settings.homePage.watchingNow" = "En direct";
 "home.recentlyAdded" = "Ajouts récents";
 "home.becauseYouWatched" = "Parce que vous avez vu %@";
+"home.becauseYouWatched.eyebrow" = "Parce que vous avez vu";
 "home.remainingTime.hours" = "%d h %d min restantes";
 "home.remainingTime.minutes" = "%d min restantes";
 "home.remainingTime.minutes.one" = "%d min restante";

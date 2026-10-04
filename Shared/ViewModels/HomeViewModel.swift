@@ -20,12 +20,21 @@ struct GenreRow: Identifiable, Equatable {
     var id: String { genre }
 }
 
-/// The « Parce que vous avez vu … » rail: the title that seeded it (the
-/// series' name when the last played item was an episode) and what the
-/// server finds similar to it, minus what the user has already watched or is
-/// in the middle of. `nil` on the view model means "hide the rail".
+/// What seeded the « Parce que vous avez vu … » rail — the movie, or the
+/// SERIES of an episode. The header draws its poster and opens its fiche, so
+/// it carries the kind and the primary-image tag along with the id and name.
+struct BecauseYouWatchedSeed: Equatable {
+    let id: String
+    let title: String
+    let kind: BaseItemKind
+    let imageTag: String?
+}
+
+/// The « Parce que vous avez vu … » rail: the title that seeded it and what
+/// the server finds similar to it, minus what the user has already watched or
+/// is in the middle of. `nil` on the view model means "hide the rail".
 struct BecauseYouWatchedRail: Equatable {
-    let seedTitle: String
+    let seed: BecauseYouWatchedSeed
     let items: [BaseItemDto]
 }
 
@@ -709,18 +718,24 @@ final class HomeViewModel {
     ///
     /// `nonisolated` + pure, like `mergeRecentlyAdded`, so the rule is
     /// unit-testable without an API.
-    nonisolated static func becauseYouWatchedSeed(from lastPlayed: BaseItemDto) -> (id: String, title: String)? {
+    nonisolated static func becauseYouWatchedSeed(from lastPlayed: BaseItemDto) -> BecauseYouWatchedSeed? {
         let id: String?
         let title: String?
+        let kind: BaseItemKind
+        let imageTag: String?
         if lastPlayed.type == .episode {
             id = lastPlayed.seriesID
             title = lastPlayed.seriesName
+            kind = .series
+            imageTag = lastPlayed.seriesPrimaryImageTag
         } else {
             id = lastPlayed.id
             title = lastPlayed.name
+            kind = lastPlayed.type ?? .movie
+            imageTag = lastPlayed.primaryImageTagValue
         }
         guard let id, !id.isEmpty, let title, !title.isEmpty else { return nil }
-        return (id, title)
+        return BecauseYouWatchedSeed(id: id, title: title, kind: kind, imageTag: imageTag)
     }
 
     /// The rail's cards: `similar` minus the seed itself, anything already
@@ -785,7 +800,7 @@ final class HomeViewModel {
         }
         guard isCurrent(generation) else { return }
         let items = Self.becauseYouWatchedItems(similar: similar, seedId: seed.id, resumeItems: resumeItems)
-        setBecauseYouWatched(items.isEmpty ? nil : BecauseYouWatchedRail(seedTitle: seed.title, items: items))
+        setBecauseYouWatched(items.isEmpty ? nil : BecauseYouWatchedRail(seed: seed, items: items))
     }
 
     /// Equality-guarded: the tier-2 refresh re-runs this after every watched

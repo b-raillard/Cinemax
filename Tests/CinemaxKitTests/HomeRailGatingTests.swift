@@ -178,7 +178,7 @@ struct HomeRailGatingTests {
 
         #expect(api.similarItemsRequests.map { $0.itemId } == ["arrow"])
         #expect(api.similarItemsRequests.first?.limit == HomeViewModel.becauseYouWatchedLimit)
-        #expect(vm.becauseYouWatched?.seedTitle == "Arrow")
+        #expect(vm.becauseYouWatched?.seed.title == "Arrow")
         #expect(vm.becauseYouWatched?.items.map(\.id) == ["Flash", "Legends"])
 
         let seed = api.getItemsQueries.first { isSeedQuery($0.filters) }
@@ -280,13 +280,13 @@ struct HomeRailGatingTests {
         let vm = HomeViewModel(defaults: defaults)
 
         await vm.load(using: appState)
-        #expect(vm.becauseYouWatched?.seedTitle == "First")
+        #expect(vm.becauseYouWatched?.seed.title == "First")
 
         api.stubbedLastPlayedItems = [makeItem(name: "Second")]
         api.stubbedSimilarItems = [makeItem(name: "Like second")]
         await vm.refreshUserDataRails(using: appState)
 
-        #expect(vm.becauseYouWatched?.seedTitle == "Second")
+        #expect(vm.becauseYouWatched?.seed.title == "Second")
         #expect(vm.becauseYouWatched?.items.map(\.id) == ["Like second"])
         #expect(api.similarItemsRequests.map { $0.itemId } == ["First", "Second"])
     }
@@ -329,6 +329,30 @@ struct HomeRailGatingTests {
         var orphan = makeItem(name: "ep")
         orphan.type = .episode
         #expect(HomeViewModel.becauseYouWatchedSeed(from: orphan) == nil)
+    }
+
+    /// The header draws the seed's poster and opens its fiche: an episode
+    /// must hand over its SERIES' kind and poster tag, never its own.
+    @Test("an episode seeds its series' kind and poster tag")
+    func seedCarriesKindAndTag() {
+        var movie = BaseItemDto()
+        movie.id = "m1"
+        movie.name = "Dune"
+        movie.type = .movie
+        movie.imageTags = ["Primary": "movieTag"]
+        #expect(HomeViewModel.becauseYouWatchedSeed(from: movie)
+            == BecauseYouWatchedSeed(id: "m1", title: "Dune", kind: .movie, imageTag: "movieTag"))
+
+        var episode = BaseItemDto()
+        episode.id = "e1"
+        episode.name = "Chapter One"
+        episode.type = .episode
+        episode.imageTags = ["Primary": "episodeTag"]
+        episode.seriesID = "s1"
+        episode.seriesName = "Stranger Things"
+        episode.seriesPrimaryImageTag = "seriesTag"
+        #expect(HomeViewModel.becauseYouWatchedSeed(from: episode)
+            == BecauseYouWatchedSeed(id: "s1", title: "Stranger Things", kind: .series, imageTag: "seriesTag"))
     }
 
     // MARK: - P2 / P5 — who asks the server to COUNT

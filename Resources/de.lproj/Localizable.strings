@@ -54,6 +54,7 @@
 "settings.homePage.watchingNow" = "Live";
 "home.recentlyAdded" = "Neu hinzugefügt";
 "home.becauseYouWatched" = "Weil du %@ gesehen hast";
+"home.becauseYouWatched.eyebrow" = "Ähnlich wie";
 "home.remainingTime.hours" = "Noch %d Std. %d Min.";
 "home.remainingTime.minutes" = "Noch %d Min.";
 "home.remainingTime.minutes.one" = "Noch %d Min.";
