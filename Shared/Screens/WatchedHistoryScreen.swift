@@ -281,21 +281,20 @@ struct WatchedHistoryScreen: View {
 
     @ViewBuilder
     private func historyCard(_ item: BaseItemDto) -> some View {
+        // Same text as Home: an episode is « Série » over « S01:E02 - Titre »
+        // (the Reprendre / À suivre rails, through the shared `episodeLabel`),
+        // anything else « 2026 · Film » (Home's poster rails). The series' name
+        // used to lead the subtitle too, under a title that already said it,
+        // and pushed the episode number out of the line.
+        let isEpisode = item.type == .episode
         let subtitle: String = {
+            if isEpisode { return item.episodeLabel ?? "" }
             var parts: [String] = []
-            if item.type == .episode {
-                if let series = item.seriesName { parts.append(series) }
-                if let season = item.parentIndexNumber, let ep = item.indexNumber {
-                    parts.append(String(format: "S%02d:E%02d", season, ep))
-                }
-            } else if let year = item.productionYear {
-                parts.append(String(year))
-            }
+            if let year = item.productionYear { parts.append(String(year)) }
+            if let type = item.type, let kind = loc.itemKind(type) { parts.append(kind) }
             return parts.joined(separator: " · ")
         }()
-
-        // Episodes carry a series-name; use their own title. Movies show name.
-        let cardTitle = item.type == .episode
+        let cardTitle = isEpisode
             ? (item.seriesName ?? item.name ?? "")
             : (item.name ?? "")
         let zoom = CardZoom(zoomNamespace, surface: "watchedHistory", itemId: item.id)
@@ -310,7 +309,7 @@ struct WatchedHistoryScreen: View {
         } label: {
             PosterCard(
                 title: cardTitle,
-                imageURL: item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) },
+                imageURL: posterURL(for: item),
                 subtitle: subtitle,
                 zoomSource: zoom
             )
@@ -320,7 +319,9 @@ struct WatchedHistoryScreen: View {
         #else
         .buttonStyle(.plain)
         #endif
-        .accessibilityLabel([cardTitle, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel(isEpisode
+            ? item.spokenCardLabel(localize: { loc.localized($0) })
+            : [cardTitle, subtitle.isEmpty ? nil : subtitle].compactMap { $0 }.joined(separator: ", "))
         // Long-press / long-press-select: un-watch removes the item here (the
         // screen reloads off `.cinemaxShouldRefreshCatalogue`), favorite too.
         .mediaCardContextMenu(
@@ -331,10 +332,17 @@ struct WatchedHistoryScreen: View {
     }
 
     private func prefetchPosters() {
-        let builder = appState.imageBuilder
-        prefetcher.prefetch(viewModel.loader.items.map { item in
-            item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
-        })
+        prefetcher.prefetch(viewModel.loader.items.map(posterURL(for:)))
+    }
+
+    /// An episode shows its SERIES' poster: its own primary image is a 16:9
+    /// still, cropped into the 2:3 slot. One builder for the card and the
+    /// prefetch, so both ask for the byte-identical URL.
+    private func posterURL(for item: BaseItemDto) -> URL? {
+        if item.type == .episode, let seriesId = item.seriesID, let tag = item.seriesPrimaryImageTag {
+            return appState.imageBuilder.imageURL(itemId: seriesId, imageType: .primary, maxWidth: 300, tag: tag)
+        }
+        return item.id.map { appState.imageBuilder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
     }
 
     private var columns: [GridItem] {
