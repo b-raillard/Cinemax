@@ -54,6 +54,7 @@
 "settings.homePage.watchingNow" = "Watching Now";
 "home.recentlyAdded" = "Recently Added";
 "home.becauseYouWatched" = "Because you watched %@";
+"home.becauseYouWatched.eyebrow" = "Because you watched";
 "home.remainingTime.hours" = "%dh %dm remaining";
 "home.remainingTime.minutes" = "%dm remaining";
 "home.remainingTime.minutes.one" = "%dm remaining";
