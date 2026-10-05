@@ -292,7 +292,7 @@ ASC → Tarifs et disponibilité → Disponibilité de l'app → Gérer la dispo
 
 ## 6. Build à sélectionner
 
-**2.3.5** build **2.3.5** (iOS + tvOS) : PR #289, #290, #291 ; notes dans `docs/release-notes/2.3.5/`. Préparée le 2026-10-05, pas encore envoyée.
+**2.3.5** build **2.3.5** (iOS + tvOS) : PR #289, #290, #291, #293 ; notes dans `docs/release-notes/2.3.5/`. Préparée le 2026-10-05, pas encore envoyée.
 
 iOS : **2.3.1** build **2.3.2** (allemand, langue au choix sur l'écran serveur, offre de langue dans « Quoi de neuf », rangée de boutons du lecteur sur écrans étroits — PR #280 et #281), envoyé sur TestFlight le 2026-10-01
 tvOS : **2.3.1** build **2.3.2** (idem, sans le lecteur iOS), envoyé le même jour
