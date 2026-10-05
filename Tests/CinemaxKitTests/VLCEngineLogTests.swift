@@ -167,3 +167,23 @@ struct VLCEngineModuleParsingTests {
         #expect(VLCEngineLog.parseModuleSelection("using spu decoder module \"subsdec\"")?.capability == "spu decoder")
     }
 }
+
+/// La fin d'entrée annoncée par libVLC — le seul signal exact que le flux n'a
+/// plus rien à lire (voir `FeedStallPolicy`). Mesuré au simulateur le
+/// 2026-10-05 : la libVLC statique signe tout du module `"libvlc"`, d'où une
+/// reconnaissance sur le texte exact seul.
+@Suite("VLCEngineLog — fin de flux")
+struct VLCEngineLogEndOfStreamTests {
+
+    @Test("la fin de flux du filtre prefetch est reconnue")
+    func prefetchEndOfStream() {
+        #expect(VLCEngineLog.isInputEndOfStream(message: "end of stream"))
+    }
+
+    @Test("un texte voisin ne compte pas")
+    func otherMessagesIgnored() {
+        #expect(!VLCEngineLog.isInputEndOfStream(message: "end of stream reached"))
+        #expect(!VLCEngineLog.isInputEndOfStream(message: "unexpected end of stream"))
+        #expect(!VLCEngineLog.isInputEndOfStream(message: "using 16777216 bytes buffer"))
+    }
+}

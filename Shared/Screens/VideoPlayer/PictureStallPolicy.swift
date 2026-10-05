@@ -225,13 +225,34 @@ struct PictureStallPolicy {
 /// feed, the picture stops a few seconds later and `PictureStallPolicy` rebuilds
 /// the player exactly as before — the escalation costs no state of its own.
 ///
-/// **Four refusals, and each one answers a way the input legitimately goes
+/// **Five refusals, and each one answers a way the input legitimately goes
 /// quiet**: an adaptive (HLS) stream fetches in per-segment bursts, so silence
-/// between two segments is normal; a source whose every byte has been read has
+/// between two segments is normal; an input that has reached its end has
 /// nothing left to fetch (a short trailer buffers whole, and any file does near
-/// its end); a settling seek owns its own wait; and before `mediaConfirmedOpen`
-/// the open watchdog owns every failure. `readBytes == nil` (no statistics) is
+/// its end — see the RULE below for how that is known); a settling seek owns
+/// its own wait; and before `mediaConfirmedOpen` the open watchdog owns every
+/// failure. `readBytes == nil` (no statistics) is
 /// "cannot tell", never a stall — same discipline as the picture counter.
+///
+/// **RULE — "nothing left to fetch" comes from libVLC's own end of input, not
+/// from comparing `readBytes` to the file size.** libVLC's `prefetch` filter
+/// reads up to 16 MiB ahead of the demuxer, so near the end of ANY file it has
+/// read the last byte and goes quiet. `readBytes` is cumulative since the open,
+/// so it only reaches the size when the read started at byte 0: a playback
+/// RESUMED mid-file (or moved by a forward seek) never gets there, and the
+/// size test let this watchdog fire on a perfectly healthy end of file — a
+/// visible jump back, twice per playback, in the last minute. Measured on
+/// 2026-10-05 on all three `feed-stall` documents uploaded since 2.3.1, every
+/// one a false positive: Arrow S02E11 (816 MB, resumed ~19 min in, 424 MB read)
+/// re-anchored at 2459 s, exactly where ffprobe puts the demuxer 16 MiB from
+/// the end; Avatar 3 (24 GB) at 11816 s on two different nights. The input's
+/// end is therefore taken from libVLC's `prefetch` « end of stream » line
+/// (`VLCEngineLog.isInputEndOfStream`, counted in `VLCEngineFacts`), and holds
+/// until `readBytes` grows again — a seek that reopened the input, or the MKV
+/// demuxer's index read at the end of the file during the open. A PREMATURE
+/// end — libVLC's own reconnect failing — logs the same line, but then the
+/// demuxer runs dry far from the end and `PlaybackEndPolicy.unexpectedStop`
+/// owns it; the hang this watchdog exists for never logs it.
 struct FeedStallPolicy {
     /// Consecutive seconds without a single new byte before re-anchoring. A
     /// playing stream reads roughly a second of media per second, so five
@@ -269,6 +290,12 @@ struct FeedStallPolicy {
     private var stalledSeconds = 0
     private var healthySeconds = 0
     private(set) var reanchorsLeft: Int
+    /// The `reports` value last seen by `noteInputEnd` — a new report is a
+    /// change in it.
+    private var lastEndReports = 0
+    /// `readBytes` when libVLC last said its input had ended; nil once the
+    /// input reads again (or a fresh open replaced it).
+    private var inputEndedAtBytes: UInt64?
 
     init() {
         reanchorsLeft = Self.reanchorBudget
@@ -282,6 +309,9 @@ struct FeedStallPolicy {
         lastBytes = nil
         stalledSeconds = 0
         healthySeconds = 0
+        // A fresh input restarts `readBytes` at zero: the old end must not
+        // cover the new stream's silence.
+        inputEndedAtBytes = nil
     }
 
     /// One sample per second, from the player's existing 1 s heartbeat.
@@ -294,6 +324,8 @@ struct FeedStallPolicy {
     ///   - isAdaptiveStream: an HLS stream — its input is bursty by design.
     ///   - seekSettling: a seek window is open; `updateSeekLoading` owns it.
     ///   - mediaConfirmedOpen: a demuxer exists.
+    ///
+    /// Call `noteInputEnd(reports:readBytes:)` first, on the same heartbeat.
     mutating func sample(
         readBytes: UInt64?,
         sourceSizeBytes: Int64?,
@@ -303,6 +335,7 @@ struct FeedStallPolicy {
         mediaConfirmedOpen: Bool
     ) -> Outcome {
         guard isPlaying, mediaConfirmedOpen, !seekSettling, !isAdaptiveStream,
+              inputEndedAtBytes == nil,
               let bytes = readBytes, !Self.isFullyRead(bytes, sourceSizeBytes) else {
             lastBytes = nil
             stalledSeconds = 0
@@ -333,6 +366,23 @@ struct FeedStallPolicy {
             return .reanchor
         }
         return .stalling(seconds: stalledSeconds)
+    }
+
+    /// Tracks libVLC's end of input; called before `sample` on every heartbeat,
+    /// whatever `sample` then decides.
+    ///
+    /// - Parameters:
+    ///   - reports: how many times libVLC has reported the end of its input
+    ///     (`VLCEngineFacts.inputEndReports`, monotonic). See the RULE.
+    ///   - readBytes: the same counter `sample` reads.
+    mutating func noteInputEnd(reports: Int, readBytes: UInt64?) {
+        guard let bytes = readBytes else { return }
+        if reports != lastEndReports {
+            lastEndReports = reports
+            inputEndedAtBytes = bytes
+        } else if let endedAt = inputEndedAtBytes, bytes > endedAt {
+            inputEndedAtBytes = nil   // reading again: the end no longer holds
+        }
     }
 
     /// Whether the whole source has been read, i.e. the input has nothing left

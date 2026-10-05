@@ -1147,8 +1147,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// cancelling a direct stream kills the feed ~20 s before the buffer runs
     /// dry and anything shows on screen. See `FeedStallPolicy`.
     private func checkFeedStall() {
+        let readBytes = player.statistics?.readBytes
+        feedStall.noteInputEnd(reports: VLCEngineFacts.shared.inputEndReports, readBytes: readBytes)
         switch feedStall.sample(
-            readBytes: player.statistics?.readBytes,
+            readBytes: readBytes,
             sourceSizeBytes: info.sourceSizeBytes,
             isPlaying: enginePlaying,
             isAdaptiveStream: isAdaptiveStream,

@@ -29,9 +29,12 @@ struct FeedStallPolicyTests {
         isPlaying: Bool = true,
         adaptive: Bool = false,
         seeking: Bool = false,
-        open: Bool = true
+        open: Bool = true,
+        endReports: Int = 0
     ) -> FeedStallPolicy.Outcome {
-        policy.sample(
+        // Même ordre que `VLCStreamPresenter.checkFeedStall`.
+        policy.noteInputEnd(reports: endReports, readBytes: bytes)
+        return policy.sample(
             readBytes: bytes, sourceSizeBytes: size, isPlaying: isPlaying,
             isAdaptiveStream: adaptive, seekSettling: seeking, mediaConfirmedOpen: open
         )
@@ -169,5 +172,77 @@ struct FeedStallPolicyTests {
         // Soit bien avant les 18 s de tampon : le réancrage se fait sur une
         // image qui tourne encore, pas sur un écran figé.
         #expect(FeedStallPolicy.stallSeconds < 18)
+    }
+
+    // MARK: - La fin de fichier signalée par libVLC
+
+    // Mesuré le 2026-10-05 sur les trois rapports `feed-stall` remontés au
+    // serveur : TOUS étaient des faux positifs de fin de fichier. Le filtre
+    // `prefetch` de libVLC lit 16 Mio d'avance ; près de la fin il a tout lu
+    // et se tait — et le refus « fichier entièrement lu » compare un compteur
+    // CUMULÉ à la taille, ce qui ne tient que pour une lecture partie de
+    // l'octet 0. Arrow S02E11 (816 Mo) repris vers 19 min sur iPad : réancré à
+    // 2459 s, exactement là où ffprobe place la fin de lecture d'avance ;
+    // Avatar 3 (24 Go) : réancré à 11816 s deux nuits de suite.
+
+    @Test("Le scénario mesuré : une reprise lue jusqu'au bout ne réancre plus")
+    func resumedPlaybackReachingTheEndIsExempt() {
+        // Les chiffres du rapport de l'iPad : 424 Mo lus d'un fichier de
+        // 816 Mo, parce que la lecture avait repris à mi-parcours.
+        let size: Int64 = 816_316_027
+        let bytes: UInt64 = 424_149_669
+        #expect(!FeedStallPolicy.isFullyRead(bytes, size)) // l'ancien refus ne tient pas
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: bytes - 1_000_000, size: size)
+        // libVLC annonce sa fin de flux, puis plus un octet jusqu'au générique.
+        for _ in 0..<30 {
+            #expect(feed(&policy, bytes: bytes, size: size, endReports: 1) == .healthy)
+        }
+        #expect(policy.reanchorsLeft == FeedStallPolicy.reanchorBudget)
+    }
+
+    @Test("Sans fin annoncée, le même silence reste une coupure")
+    func sameSilenceWithoutEndIsStillACut() {
+        let size: Int64 = 816_316_027
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 424_149_669, size: size)
+        var outcomes: [FeedStallPolicy.Outcome] = []
+        for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 424_149_669, size: size)) }
+        #expect(outcomes.last == .reanchor)
+    }
+
+    @Test("Des octets qui repartent après la fin rendent la main au garde-fou")
+    func bytesAfterTheEndReArmTheWatchdog() {
+        // Un saut en arrière rouvre l'entrée : la fin annoncée ne vaut plus,
+        // et une coupure sur cette nouvelle connexion doit être vue.
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 1_000, endReports: 1)
+        for _ in 0..<10 { #expect(feed(&policy, bytes: 1_000, endReports: 1) == .healthy) }
+        _ = feed(&policy, bytes: 2_000, endReports: 1)
+        var outcomes: [FeedStallPolicy.Outcome] = []
+        for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 2_000, endReports: 1)) }
+        #expect(outcomes.last == .reanchor)
+    }
+
+    @Test("Une nouvelle fin annoncée vaut de nouveau exemption")
+    func aLaterEndReportExemptsAgain() {
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 1_000, endReports: 1)
+        _ = feed(&policy, bytes: 2_000, endReports: 1)   // relue : plus exemptée
+        // Elle atteint de nouveau la fin dans la même seconde où elle relit.
+        for _ in 0..<20 { #expect(feed(&policy, bytes: 3_000, endReports: 2) == .healthy) }
+    }
+
+    @Test("Une réouverture oublie la fin de l'ancien flux")
+    func reopenForgetsThePreviousEnd() {
+        // Le compteur d'octets repart de zéro avec la nouvelle entrée : une fin
+        // mémorisée à 800 Mo ne doit pas couvrir le silence d'un flux neuf.
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 800_000_000, endReports: 1)
+        policy.resetWindow()
+        _ = feed(&policy, bytes: 5_000, endReports: 1)
+        var outcomes: [FeedStallPolicy.Outcome] = []
+        for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 5_000, endReports: 1)) }
+        #expect(outcomes.last == .reanchor)
     }
 }

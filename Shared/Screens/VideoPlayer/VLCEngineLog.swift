@@ -51,7 +51,12 @@ enum VLCEngineLog {
                     }
                     continue
                 }
-                // Debug/notice tier: only the module-selection lines matter.
+                // Debug/notice tier: the input's end, then module selection.
+                if isInputEndOfStream(message: entry.message) {
+                    logger.notice("libVLC input ▸ end of stream")
+                    Task { @MainActor in VLCEngineFacts.shared.recordInputEnd() }
+                    continue
+                }
                 guard let selection = parseModuleSelection(entry.message) else { continue }
                 // Mirror to OSLog so a Console.app capture answers "which
                 // decoder ran" without the on-screen HUD. Module names are
@@ -87,6 +92,21 @@ enum VLCEngineLog {
             return (capability, "∅")
         }
         return nil
+    }
+
+    /// libVLC's `prefetch` stream filter — the only reader of the network
+    /// access, so the only one whose silence explains `readBytes` — logs this
+    /// debug line once it has read the input's last byte. The ground truth
+    /// `FeedStallPolicy` needs (see its RULE). Matched on the exact text
+    /// ALONE: this static libVLC 4.0 build reports every message under the
+    /// umbrella module `"libvlc"` (run on the simulator 2026-10-05, same
+    /// finding as SwiftVLC's `LogNoiseFilter`), so a `"prefetch"` test never
+    /// matched; and `msg_Dbg(stream, "end of stream")` in `prefetch.c` is the
+    /// only emitter of that exact text in the libVLC tree. It also fires at
+    /// OPEN when the MKV demuxer reads its index at the end of the file — the
+    /// policy's "until `readBytes` grows again" absorbs that. Pure + static.
+    static func isInputEndOfStream(message: String) -> Bool {
+        message == "end of stream"
     }
 
     /// Which capabilities are worth surfacing. Video-side selections plus the
@@ -137,6 +157,15 @@ final class VLCEngineFacts {
 
     func reset() {
         modules = [:]
+    }
+
+    /// How many times libVLC has reported reaching the end of its input.
+    /// Monotonic and never reset — `FeedStallPolicy` reads a CHANGE in it, so
+    /// a reset racing a late report could otherwise swallow the next one.
+    private(set) var inputEndReports = 0
+
+    func recordInputEnd() {
+        inputEndReports += 1
     }
 
     /// Fixed presentation order — decode chain first, render chain last —
