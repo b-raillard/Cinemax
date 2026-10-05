@@ -7,7 +7,7 @@ import Foundation
 /// The card's chrome is the only place a user sees this rule applied at a
 /// glance, and it must agree with the play menu on the same card — hence the
 /// shared `CardPlayTargetResolver.isResumable` underneath, and hence the
-/// "played wins over a residual position" cases below.
+/// "a position wins over the watched flag" case below.
 @Suite("MediaCardStatus")
 struct MediaCardStatusTests {
 
@@ -34,12 +34,12 @@ struct MediaCardStatusTests {
         #expect(status == .inProgress(0.25))
     }
 
-    /// The rule `CardPlayTargetResolver.isResumable` owns: a residual position
-    /// on an item already marked played is not a resume. The card must not
-    /// contradict the menu on the very same poster.
-    @Test("a residual position on a played item is the check, never a bar")
-    func residualPositionOnPlayedItem() {
-        #expect(MediaCardStatus.make(positionTicks: hour / 2, runtimeTicks: hour, isPlayed: true) == .watched)
+    /// The rule `CardPlayTargetResolver.isResumable` owns: a position on a
+    /// played item is a rewatch stopped part-way, and it resumes — so the card
+    /// draws the bar, matching the menu on the very same poster.
+    @Test("a position on a played item is a bar, not the check")
+    func positionOnPlayedItemIsABar() {
+        #expect(MediaCardStatus.make(positionTicks: hour / 2, runtimeTicks: hour, isPlayed: true) == .inProgress(0.5))
     }
 
     @Test("a sliver below one percent reads as untouched, not as a rendering artefact")
@@ -98,7 +98,7 @@ struct MediaCardStatusAccessibilityTests {
     func followsMake() {
         let status = MediaCardStatus.make(positionTicks: hour / 4, runtimeTicks: hour, isPlayed: false)
         #expect(Self.value(status, "en") == "25% watched")
-        let played = MediaCardStatus.make(positionTicks: hour / 2, runtimeTicks: hour, isPlayed: true)
+        let played = MediaCardStatus.make(positionTicks: 0, runtimeTicks: hour, isPlayed: true)
         #expect(Self.value(played, "en") == "Watched")
     }
 

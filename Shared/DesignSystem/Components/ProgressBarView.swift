@@ -32,8 +32,9 @@ struct ProgressBarView: View {
 /// What a poster card says about the user's own history with the item.
 ///
 /// A card either shows nothing, a watched check, or a progress bar — never two
-/// at once, because a residual position on an item already marked played is not
-/// a resume (the rule `CardPlayTargetResolver.isResumable` owns).
+/// at once. A position wins over the watched flag: on a played item it is a
+/// rewatch stopped part-way, which resumes (the rule
+/// `CardPlayTargetResolver.isResumable` owns), so the bar says what tapping does.
 ///
 /// Library and search posters carried neither, while the very same title's
 /// Continue Watching card and its episode row both did: the user could see a
@@ -53,7 +54,7 @@ enum MediaCardStatus: Equatable {
     static func make(positionTicks: Int?, runtimeTicks: Int?, isPlayed: Bool?) -> MediaCardStatus {
         let played = isPlayed ?? false
         let position = positionTicks ?? 0
-        guard CardPlayTargetResolver.isResumable(positionTicks: position, isPlayed: played) else {
+        guard CardPlayTargetResolver.isResumable(positionTicks: position) else {
             return played ? .watched : .none
         }
         guard let runtime = runtimeTicks, runtime > 0 else { return .none }

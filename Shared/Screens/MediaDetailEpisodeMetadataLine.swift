@@ -13,13 +13,12 @@ struct MediaDetailEpisodeMetadataLine: View {
     @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
-        let isPlayed = episode.userData?.isPlayed ?? false
         let runtimeText: String? = {
-            // Prefer "X remaining" while in-progress, otherwise show total runtime.
-            if !isPlayed,
-               let position = episode.userData?.playbackPositionTicks,
+            // Prefer "X remaining" while in-progress (a rewatch included — see
+            // `CardPlayTargetResolver.isResumable`), otherwise total runtime.
+            if let position = episode.userData?.playbackPositionTicks,
                let total = episode.runTimeTicks,
-               position > 0, total > position {
+               CardPlayTargetResolver.isResumable(positionTicks: position), total > position {
                 let remainingMinutes = (total - position).jellyfinMinutes
                 if remainingMinutes <= 0 { return nil }
                 return loc.remainingTime(minutes: remainingMinutes)

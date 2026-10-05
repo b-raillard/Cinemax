@@ -164,6 +164,25 @@ struct MediaDetailViewModelTests {
         #expect(vm.item?.userData?.playbackPositionTicks == 0)
     }
 
+    /// Une position suffit désormais à faire une reprise (`isResumable`) :
+    /// marquer non vu doit donc aussi remettre la position à zéro, comme le
+    /// fait Jellyfin (`MarkUnplayed`), sinon « Reprendre » survivrait.
+    @Test("togglePlayed to unwatched also clears the resume position")
+    func togglePlayedUnwatchedClearsResume() async {
+        let api = MockAPIClient()
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "movie-1", itemType: .movie)
+        var movie = makeMovie(id: "movie-1", played: true)
+        movie.userData?.playbackPositionTicks = 30_000_000_000   // un revisionnage entamé
+        vm.item = movie
+        vm.isPlayed = true
+
+        await vm.togglePlayed(using: appState)
+        #expect(vm.item?.userData?.isPlayed == false)
+        #expect(vm.item?.userData?.playbackPositionTicks == 0)
+        #expect(api.markUnplayedCalls == ["movie-1"])
+    }
+
     // MARK: - « Titres similaires » hors du chemin critique (audit 2026-09-22, P1)
 
     @Test("A failing /Similar never replaces the fiche with the error screen")
@@ -272,6 +291,21 @@ struct MediaDetailViewModelTests {
         #expect(vm.episodes.first?.userData?.isPlayed == true)
         #expect(vm.episodes.first?.userData?.playbackPositionTicks == 0)
         #expect(api.markPlayedCalls == ["ep-1"])
+    }
+
+    @Test("toggleEpisodeWatched to unwatched also clears resume")
+    func toggleEpisodeUnwatchedClearsResume() async {
+        let api = MockAPIClient()
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        var episode = makeWatchableEpisode(id: "ep-1", name: "Pilot", played: true)
+        episode.userData?.playbackPositionTicks = 500
+        vm.episodes = [episode]
+
+        await vm.toggleEpisodeWatched(episode, using: appState)
+        #expect(vm.episodes.first?.userData?.isPlayed == false)
+        #expect(vm.episodes.first?.userData?.playbackPositionTicks == 0)
+        #expect(api.markUnplayedCalls == ["ep-1"])
     }
 
     // MARK: - refreshAfterPlayback (targeted post-playback refresh)

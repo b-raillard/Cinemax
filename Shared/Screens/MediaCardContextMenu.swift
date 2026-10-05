@@ -450,10 +450,12 @@ private struct CardMenuContent: View {
         // override still in force outranks the snapshot, so a "Resume" the
         // user has just invalidated can't hand a mid-film offset to the
         // player — nor to `startRemotePlay`, which routes through here too.
-        let effectiveIsPlayed = playedOverride?.resolved(against: item.isPlayed) ?? item.isPlayed
+        let positionTicks = CardPlayTargetResolver.effectivePositionTicks(
+            item.positionTicks, isPlayed: item.isPlayed, playedOverride: playedOverride
+        )
         return await CardPlayTargetResolver.resolve(
             itemId: id, type: item.type, title: item.name ?? "",
-            positionTicks: item.positionTicks, isPlayed: effectiveIsPlayed,
+            positionTicks: positionTicks,
             api: appState.apiClient, userId: userId
         )
     }

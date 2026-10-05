@@ -365,10 +365,11 @@ final class MediaDetailViewModel {
             // marked watched — and it really did reopen the film mid-way (the
             // defect `OptimisticFlag` fixed for card menus). Splice the change in
             // at once, then re-read server truth: Jellyfin resets the position
-            // on a played mark, and a series' next-up pointer moves with it.
+            // on BOTH marks (`MarkPlayed(resetPosition: true)`, `MarkUnplayed`),
+            // and a series' next-up pointer moves with it.
             if item?.userData != nil {
                 item?.userData?.isPlayed = target
-                if target { item?.userData?.playbackPositionTicks = 0 }
+                item?.userData?.playbackPositionTicks = 0
             }
             // `object: self` identifies the sender so this screen's own tier-2
             // observer can skip it: the refresh below already re-reads exactly
@@ -431,15 +432,16 @@ final class MediaDetailViewModel {
     }
 
     /// Reflects a played-state change in the local episode arrays so the
-    /// `Equatable` episode cards re-render. Marking played also clears the
-    /// resume position so the in-progress bar disappears. Only mutates the
+    /// `Equatable` episode cards re-render. Either mark also clears the
+    /// resume position, as Jellyfin does on both, so no « Reprendre » survives
+    /// a toggle (a position alone makes a resume — `isResumable`). Only mutates the
     /// existing `userData` (episodes always carry it — fetched with
     /// `enableUserData: true`).
     private func setEpisodePlayed(id: String, played: Bool) {
         func apply(to ep: inout BaseItemDto) {
             guard var userData = ep.userData else { return }
             userData.isPlayed = played
-            if played { userData.playbackPositionTicks = 0 }
+            userData.playbackPositionTicks = 0
             ep.userData = userData
         }
         if let idx = episodes.firstIndex(where: { $0.id == id }) { apply(to: &episodes[idx]) }
