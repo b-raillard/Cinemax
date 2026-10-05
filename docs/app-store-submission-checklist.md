@@ -63,7 +63,7 @@ Tab "Distribution" → iOS App → 1.0 Prepare for Submission :
 - [ ] **Marketing URL** *(optionnel)* : `https://github.com/b-raillard/Cinemax`
 - [ ] **Screenshots** : upload des sets iPhone 6.9" + iPad 13" (voir `app-store-screenshots.md`)
 - [ ] **Build** : "+" → sélectionner le dernier build TestFlight
-- [ ] **What's New in This Version** : copier depuis `app-store-metadata.md`
+- [ ] **What's New in This Version** : copier depuis `docs/release-notes/<version>/ios.md` (app iOS) et `tvos.md` (app Apple TV), un bloc par langue
 - [ ] **Copyright** : `2026 Bastien Raillard`
 - [ ] **Contact Information** (pour App Review) :
   - First Name / Last Name : `Bastien Raillard`
