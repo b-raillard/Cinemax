@@ -69,7 +69,7 @@ struct MediaDetailEpisodeCard: View, Equatable {
             let epProgress: Double? = {
                 guard let ticks = episode.userData?.playbackPositionTicks,
                       let total = episode.runTimeTicks,
-                      ticks > 0, total > 0, !isPlayed
+                      CardPlayTargetResolver.isResumable(positionTicks: ticks), total > 0
                 else { return nil }
                 return min(1.0, Double(ticks) / Double(total))
             }()

@@ -24,7 +24,7 @@ struct CardMenuOptimisticStateTests {
 
     @Test("Marquer comme vu dans le menu retire la reprise")
     func playedOverrideSuppressesResume() {
-        // L'instantané dit : position résiduelle, non lu → reprise légitime.
+        // L'instantané dit : une position, non lu → reprise légitime.
         // L'utilisateur vient de taper « Marquer comme vu » dans ce menu.
         let override = OptimisticFlag(base: false, value: true, setAt: t0)
 
@@ -38,10 +38,12 @@ struct CardMenuOptimisticStateTests {
         #expect(resumable == false)
     }
 
-    @Test("Marquer comme non vu dans le menu rétablit la reprise")
-    func unplayedOverrideRestoresResume() {
-        // L'instantané dit : lu (donc pas de reprise). L'utilisateur vient de
-        // taper « Marquer comme non vu ».
+    @Test("Marquer comme non vu dans le menu retire aussi la reprise")
+    func unplayedOverrideAlsoSuppressesResume() {
+        // L'instantané dit : lu, avec une position (un revisionnage entamé).
+        // L'utilisateur vient de taper « Marquer comme non vu » : Jellyfin
+        // (`MarkUnplayed`) vient de remettre la position à zéro, l'instantané
+        // ne le sait pas encore.
         let override = OptimisticFlag(base: true, value: false, setAt: t0)
 
         let resumable = CardPlayTargetResolver.isResumable(
@@ -51,7 +53,7 @@ struct CardMenuOptimisticStateTests {
             now: t0.addingTimeInterval(1)
         )
 
-        #expect(resumable == true)
+        #expect(resumable == false)
     }
 
     @Test("Sans override, la règle d'origine est inchangée")
@@ -61,12 +63,13 @@ struct CardMenuOptimisticStateTests {
             playedOverride: nil, now: t0
         ) == true)
 
-        // Le cœur de la règle SSOT : une position résiduelle sur un item lu
-        // n'est pas une reprise.
+        // Le cœur de la règle SSOT : une position suffit, même sur un item lu
+        // (Jellyfin la remet à zéro quand il marque vu, donc c'est un
+        // revisionnage entamé).
         #expect(CardPlayTargetResolver.isResumable(
             positionTicks: 6_000_000_000, isPlayed: true,
             playedOverride: nil, now: t0
-        ) == false)
+        ) == true)
 
         #expect(CardPlayTargetResolver.isResumable(
             positionTicks: 0, isPlayed: false,
