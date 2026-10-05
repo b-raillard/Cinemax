@@ -846,12 +846,11 @@ struct HomeScreen: View {
                         if let id = item.id {
                             let heroNav = viewModel.resumeNavigation[id]
                             // Through the resolver, not a local expression: it is
-                            // the SSOT of "a residual position on a played item
-                            // isn't a resume", and this card's context menu reads
-                            // the same rule for its Resume / Play label.
+                            // the SSOT of what counts as a resume, and this card's
+                            // context menu reads the same rule for its Resume /
+                            // Play label.
                             let heroStart = CardPlayTargetResolver.resumeSeconds(
-                                positionTicks: item.userData?.playbackPositionTicks ?? 0,
-                                isPlayed: item.userData?.isPlayed ?? false
+                                positionTicks: item.userData?.playbackPositionTicks ?? 0
                             )
                             PlayLink(
                                 itemId: id, title: item.name ?? "",
@@ -1279,8 +1278,7 @@ struct HomeScreen: View {
             let nav = viewModel.resumeNavigation[id]
             // Same SSOT as the hero above and as this card's own context menu.
             let startSeconds = CardPlayTargetResolver.resumeSeconds(
-                positionTicks: item.userData?.playbackPositionTicks ?? 0,
-                isPlayed: item.userData?.isPlayed ?? false
+                positionTicks: item.userData?.playbackPositionTicks ?? 0
             )
             let resumePercent: Int? = {
                 guard let position = item.userData?.playbackPositionTicks,

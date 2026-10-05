@@ -89,7 +89,6 @@ enum CardPlayTargetResolver {
         type: BaseItemKind?,
         title: String,
         positionTicks: Int,
-        isPlayed: Bool,
         api: any LibraryAPI,
         userId: String,
         probeDeadline: Duration = seriesProbeDeadline
@@ -98,7 +97,7 @@ enum CardPlayTargetResolver {
             return CardPlayTarget(
                 itemId: itemId,
                 title: title,
-                startSeconds: resumeSeconds(positionTicks: positionTicks, isPlayed: isPlayed)
+                startSeconds: resumeSeconds(positionTicks: positionTicks)
             )
         }
 
@@ -138,7 +137,7 @@ enum CardPlayTargetResolver {
             return CardPlayTarget(
                 itemId: result.episodeId,
                 title: result.title ?? title,
-                startSeconds: resumeSeconds(positionTicks: result.positionTicks, isPlayed: result.isPlayed)
+                startSeconds: resumeSeconds(positionTicks: result.positionTicks)
             )
         case .noNextUp, .failed:
             return CardPlayTarget(itemId: itemId, title: title, startSeconds: nil)
@@ -148,44 +147,57 @@ enum CardPlayTargetResolver {
         }
     }
 
-    /// Whether a stored position counts as a resume point.
+    /// Whether a stored position counts as a resume point: any position at all.
     ///
-    /// Same rule as `MediaDetailScreen.resolvedPlayTarget`: a residual position
-    /// on a media already marked played does not count. Exposed rather than
-    /// kept private because the context menu needs the *predicate* — to decide
-    /// whether to label its entry "Resume" and offer "Play from beginning" —
-    /// while the resolver needs the *offset*. Two expressions of one business
-    /// rule would drift the first time it gains a condition.
-    static func isResumable(positionTicks: Int, isPlayed: Bool) -> Bool {
-        positionTicks > 0 && !isPlayed
+    /// **`isPlayed` is deliberately NOT an input.** Jellyfin never leaves a
+    /// position on an item it marks played: a playback that reaches the end
+    /// (`UpdatePlayState`, past `MaxResumePct`) and both watched toggles
+    /// (`POST` / `DELETE /UserPlayedItems`, i.e. `MarkPlayed(resetPosition:
+    /// true)` and `MarkUnplayed`) all write 0 — read in the 10.9 and 12.0
+    /// sources. So a position on a played item is a REWATCH stopped part-way,
+    /// which the server lists in its resume rail. The app used to add
+    /// `&& !isPlayed`, and measured on 2026-10-05 that started such a card — Arrow
+    /// S02E11, played, stopped again at 36:33, drawn with its progress bar in
+    /// « Reprendre » — from 0:00. Exposed rather than private because the
+    /// context menu needs the *predicate* (its "Resume" label, "Play from
+    /// beginning") while the resolver needs the *offset*.
+    static func isResumable(positionTicks: Int) -> Bool {
+        positionTicks > 0
     }
 
-    /// The same rule, as the card menu must apply it: an optimistic watched
-    /// override still in force outranks the snapshot's `isPlayed`.
+    /// The position a card menu must reason about: the snapshot's, unless a
+    /// watched toggle made in that menu is still in force — the server has then
+    /// reset the position to 0, in EITHER direction (see `isResumable`), while
+    /// the snapshot still carries the old one.
     ///
     /// The menu used to derive its watched *label* from the override and its
     /// *play group* from the raw snapshot, so marking an item watched left
     /// "Resume" on offer — and it really did open the film mid-way, on an item
     /// the app had just marked fully played. One rule, one input.
+    static func effectivePositionTicks(
+        _ positionTicks: Int, isPlayed: Bool,
+        playedOverride: OptimisticFlag?, now: Date = Date()
+    ) -> Int {
+        playedOverride?.resolved(against: isPlayed, now: now) == nil ? positionTicks : 0
+    }
+
+    /// `isResumable` as the card menu must apply it, through
+    /// `effectivePositionTicks`.
     static func isResumable(
         positionTicks: Int, isPlayed: Bool,
         playedOverride: OptimisticFlag?, now: Date = Date()
     ) -> Bool {
-        let resolvedIsPlayed = playedOverride?.resolved(against: isPlayed, now: now) ?? isPlayed
-        return isResumable(positionTicks: positionTicks, isPlayed: resolvedIsPlayed)
+        isResumable(positionTicks: effectivePositionTicks(
+            positionTicks, isPlayed: isPlayed, playedOverride: playedOverride, now: now))
     }
 
     /// The resume offset in seconds, or `nil` to play from the beginning.
     ///
-    /// Exposed for the same reason as `isResumable`: Home's hero and its
-    /// Continue Watching rail each hand a `startTime` to `PlayLink`, and both
-    /// used to compute it inline — re-deriving the tick conversion **and dropping
-    /// the `!isPlayed` half of the rule**. Harmless while the resume rail only
-    /// returns unplayed items, but it meant one card's `PlayLink` and that same
-    /// card's menu entry derived the offset from two different expressions of one
-    /// rule, which is exactly the drift this type exists to prevent.
-    static func resumeSeconds(positionTicks: Int, isPlayed: Bool) -> Double? {
-        guard isResumable(positionTicks: positionTicks, isPlayed: isPlayed) else { return nil }
+    /// Exposed for the same reason as `isResumable`: Home's hero, its Continue
+    /// Watching rail and the library hero each hand a `startTime` to
+    /// `PlayLink`, and one rule must decide all of them and the menus.
+    static func resumeSeconds(positionTicks: Int) -> Double? {
+        guard isResumable(positionTicks: positionTicks) else { return nil }
         return positionTicks.jellyfinSeconds
     }
 
@@ -202,8 +214,7 @@ enum CardPlayTargetResolver {
             return .episode(NextUpProbeResult(
                 episodeId: episodeId,
                 title: episode.name,
-                positionTicks: episode.userData?.playbackPositionTicks ?? 0,
-                isPlayed: episode.userData?.isPlayed ?? false
+                positionTicks: episode.userData?.playbackPositionTicks ?? 0
             ))
         } catch {
             // No `Task.isCancelled` special-case any more: nothing cancels this
@@ -221,7 +232,6 @@ enum CardPlayTargetResolver {
         let episodeId: String
         let title: String?
         let positionTicks: Int
-        let isPlayed: Bool
     }
 
     private enum ProbeOutcome: Sendable {

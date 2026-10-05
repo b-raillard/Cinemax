@@ -533,11 +533,10 @@ final class MediaLibraryViewModel {
             heroPlay = HeroPlay(
                 itemId: episodeId,
                 title: episode?.name ?? hero.name ?? "",
-                // Same SSOT as every other resume site: a residual position on
-                // a played item is not a resume.
+                // Same SSOT as every other resume site
+                // (`CardPlayTargetResolver.isResumable`).
                 startSeconds: CardPlayTargetResolver.resumeSeconds(
-                    positionTicks: episode?.userData?.playbackPositionTicks ?? 0,
-                    isPlayed: episode?.userData?.isPlayed ?? false
+                    positionTicks: episode?.userData?.playbackPositionTicks ?? 0
                 ),
                 previous: nav.previous, next: nav.next, navigator: nav.navigator
             )

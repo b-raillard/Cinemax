@@ -365,8 +365,8 @@ struct MediaDetailScreen: View {
     /// `startTime` used to be a hardcoded `nil`, so opening a session on a
     /// half-watched film restarted it from zero — and, two minutes later,
     /// overwrote the host's resume point server-side. It now reads the same
-    /// resolution the Play button one row above uses, which already applies the
-    /// "a residual position on a played item isn't a resume" rule.
+    /// resolution the Play button one row above uses, i.e. the one resume rule
+    /// (`CardPlayTargetResolver.isResumable`).
     private func watchTogetherIntent(for item: BaseItemDto, nextEp: BaseItemDto?) -> WatchTogetherIntent {
         let target = nextEp ?? item
         let resolved = resolvedPlayTarget(for: item)
@@ -1048,9 +1048,9 @@ struct MediaDetailScreen: View {
         let source = nextEp ?? item
         let posTicks = source.userData?.playbackPositionTicks ?? 0
         let totalTicks = source.runTimeTicks ?? 0
-        let isPlayed = source.userData?.isPlayed ?? false
-
-        let showResume = posTicks > 0 && !isPlayed && totalTicks > 0
+        // `isResumable`, the one rule: a position on a played item is a
+        // rewatch stopped part-way, and resumes (see its doc).
+        let showResume = CardPlayTargetResolver.isResumable(positionTicks: posTicks) && totalTicks > 0
 
         return ResolvedPlayTarget(
             itemId: nextEp?.id ?? item.id ?? "",
@@ -1131,9 +1131,8 @@ struct MediaDetailScreen: View {
         // resolved the screen up to the parent series, so the Play button's
         // next-up target would be the wrong one here.
         if let episode = requestedEpisode {
-            let ticks = episode.userData?.playbackPositionTicks ?? 0
-            let played = episode.userData?.isPlayed ?? false
-            let localResume = (ticks > 0 && !played) ? ticks.jellyfinSeconds : nil
+            let localResume = CardPlayTargetResolver.resumeSeconds(
+                positionTicks: episode.userData?.playbackPositionTicks ?? 0)
             startIntentPlayback(SiriPlaybackRoute(
                 itemId: viewModel.itemId,
                 title: episode.name ?? item.name ?? "",
