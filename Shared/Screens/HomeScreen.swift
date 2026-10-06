@@ -808,14 +808,17 @@ struct HomeScreen: View {
             }
             #endif
             .overlay {
-                if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                    HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
-                    .accessibilityHidden(true)
-                } else {
-                    BackdropFallbackView()
+                Group {
+                    if item.hasBackdropImage, let backdropId = item.backdropItemID {
+                        HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
+                        .accessibilityHidden(true)
+                    } else {
+                        BackdropFallbackView()
+                    }
                 }
+                .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+                .heroBackdropBleed()
             }
-            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
                     HStack(spacing: 8) {
@@ -920,9 +923,11 @@ struct HomeScreen: View {
                 }
                 .padding(.horizontal, heroPadding)
                 .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Filled and clipped to the hero: the driver no longer clips —
+                // the backdrop clips itself, wider than it (`heroBackdropBleed`).
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .clipped()
             }
-            .clipped()
     }
 
     // MARK: - Continue Watching

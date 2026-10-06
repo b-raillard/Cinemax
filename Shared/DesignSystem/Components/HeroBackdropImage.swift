@@ -27,6 +27,24 @@ struct HeroBackdropImage: View {
     }
 }
 
+extension View {
+    /// The backdrop layer of a full-bleed hero (image or fallback, with its
+    /// gradient): on iOS it runs under the HORIZONTAL safe area, then clips to
+    /// that wider box. The hero's text stays in the page column. Without it the
+    /// image stopped dead at the safe-area edge while the rails below slid
+    /// under it: the iPhone Duo's right-hand column (status + vertical tab bar)
+    /// and the notch side of any iPhone in landscape. tvOS keeps its overscan
+    /// margins and only clips (the drift scales the image past its frame).
+    /// The hero's sizing driver must then NOT clip, or it cuts the bleed back.
+    func heroBackdropBleed() -> some View {
+        #if os(iOS)
+        ignoresSafeArea(edges: .horizontal).clipped()
+        #else
+        clipped()
+        #endif
+    }
+}
+
 #if os(tvOS)
 /// The drift's shape: 1.08 over 24 s, autoreversing — about 0.3 % of the frame
 /// per second.

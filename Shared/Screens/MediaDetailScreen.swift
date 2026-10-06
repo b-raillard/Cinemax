@@ -643,18 +643,21 @@ struct MediaDetailScreen: View {
             }
             #endif
             .overlay {
-                if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                    CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
-                        fallbackIcon: nil,
-                        fallbackBackground: CinemaColor.surfaceContainerLow
-                    )
-                    .accessibilityHidden(true)
-                } else {
-                    BackdropFallbackView()
+                Group {
+                    if item.hasBackdropImage, let backdropId = item.backdropItemID {
+                        CinemaLazyImage(
+                            url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
+                            fallbackIcon: nil,
+                            fallbackBackground: CinemaColor.surfaceContainerLow
+                        )
+                        .accessibilityHidden(true)
+                    } else {
+                        BackdropFallbackView()
+                    }
                 }
+                .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+                .heroBackdropBleed()
             }
-            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: detailHeroSpacing) {
                     // Badges
@@ -686,9 +689,13 @@ struct MediaDetailScreen: View {
                 .padding(.horizontal, contentPadding)
                 .padding(.top, contentPadding)
                 .padding(.bottom, contentPadding + CinemaSpacing.spacing4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Filled and clipped to the hero itself: in a short hero (iPhone
+                // landscape) the title block can outgrow it, and the driver no
+                // longer clips — the backdrop clips itself, wider than the
+                // driver (`heroBackdropBleed`).
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .clipped()
             }
-            .clipped()
     }
 
     // MARK: - Ratings Row (backdrop)
