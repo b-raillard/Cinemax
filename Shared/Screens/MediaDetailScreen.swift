@@ -1329,8 +1329,8 @@ struct MediaDetailScreen: View {
         // iOS: Play stays the primary CTA; the secondary actions drop to a
         // labeled icon row beneath it. The old single line crammed Play plus
         // four icon accessories together and cropped the last one off narrow
-        // phones once the watched toggle was added — an evenly-distributed
-        // labeled row can't overflow and names each action.
+        // phones once the watched toggle was added. The icon row tightens its
+        // spacing rather than overflow (`secondaryActionsRow`).
         return VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
             if isPlayableType { playSection }
             secondaryActionsRow(for: item, nextEp: nextEp)
@@ -1440,14 +1440,25 @@ struct MediaDetailScreen: View {
     // MARK: - Secondary actions row (iOS)
 
     #if os(iOS)
-    /// Icon actions beneath the Play CTA: favorite, watched, trailer
-    /// (when available). Each is a circular glass chip (44pt), left-aligned.
-    /// The icons are self-explanatory, so there are no captions; the row sits
-    /// on its own line beneath the play buttons and can't crop the way the old
-    /// inline accessory row did.
-    @ViewBuilder
+    /// Icon actions beneath the Play CTA: favorite, watched, trailer, Watch
+    /// Together, « Lire sur… », add to playlist — each when available. Each
+    /// is a circular glass chip (44pt), left-aligned, without captions.
+    ///
+    /// Six chips at `spacing4` need 374 pt, wider than the page column of
+    /// every iPhone (SE 343, 17 370, Duo closed 350): the last chip ran past
+    /// the right margin. The tighter `spacing2` row (319 pt) is the fallback;
+    /// the usual two or three chips keep the airier spacing.
     private func secondaryActionsRow(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
-        HStack(spacing: CinemaSpacing.spacing4) {
+        ViewThatFits(in: .horizontal) {
+            secondaryActionsHStack(for: item, nextEp: nextEp, spacing: CinemaSpacing.spacing4)
+            secondaryActionsHStack(for: item, nextEp: nextEp, spacing: CinemaSpacing.spacing2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func secondaryActionsHStack(for item: BaseItemDto, nextEp: BaseItemDto?, spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
             secondaryActionCell(
                 systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
                 active: viewModel.isFavorite,
@@ -1517,8 +1528,6 @@ struct MediaDetailScreen: View {
                     playlists.present(itemId: item.id, title: item.name)
                 }
             }
-
-            Spacer(minLength: 0)
         }
     }
 
