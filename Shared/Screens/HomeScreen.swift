@@ -369,11 +369,12 @@ struct HomeScreen: View {
         )
     }
 
+    /// `ContentRow`'s gutter, so a placeholder sits where its row will.
     private var skeletonPadding: CGFloat {
         #if os(tvOS)
         CinemaTVLayout.pagePadding
         #else
-        CinemaSpacing.spacing6
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -975,11 +976,7 @@ struct HomeScreen: View {
         .foregroundStyle(CinemaColor.onSurfaceVariant)
         .fixedSize(horizontal: false, vertical: true)
         // The row's own gutter, so the note sits under its first card.
-        #if os(tvOS)
-        .padding(.horizontal, CinemaTVLayout.pagePadding)
-        #else
-        .padding(.horizontal, CinemaSpacing.spacing6)
-        #endif
+        .padding(.horizontal, skeletonPadding)
     }
 
     @ViewBuilder
@@ -1757,10 +1754,10 @@ struct HomeScreen: View {
         #if os(tvOS)
         CinemaTVLayout.pagePadding
         #else
-        // Under 60 intentionally — the hero's "big-button" branch triggers above 60 (tvOS only).
-        AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular
-            ? CinemaSpacing.spacing6
-            : CinemaSpacing.spacing4
+        // The page column the rails and grids share, so the hero title lines up
+        // with the rail headers under it (it was 22 pt over 32 pt rails on
+        // iPhone). Under 60 — the "big-button" branch above 60 is tvOS only.
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 

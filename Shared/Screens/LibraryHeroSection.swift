@@ -217,7 +217,8 @@ struct LibraryHeroSection: View {
         #if os(tvOS)
         CinemaTVLayout.pagePadding
         #else
-        CinemaSpacing.spacing4
+        // The page column of the rails and grid below (`ContentRow`).
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
