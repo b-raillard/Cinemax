@@ -65,6 +65,7 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 | `motionEffects` | `true` | Combined with the system's Reduce Motion into the `motionEffectsEnabled` env — disables all animations when either is off |
 | `render4K` | `true` | `maxBitrate` 120/20 Mbps |
 | `autoPlayNextEpisode` | `true` | Auto-nav via `didPlayToEndTime` |
+| `player.tabletopHUDLocked` | `false` | Lock of the player's deck in table posture (iPhone Duo half-folded, portrait): `true` = the deck never hides by itself or on a tap. Written by the lock block, no entry in Settings. See the table-mode RULE in `VideoPlayer/CLAUDE.md` |
 | `playback.autoSkipIntro` | `false` | **Opt-in** — the Skip Intro button presses itself, once per segment (`AutoSkipPolicy`) |
 | `playback.autoSkipCredits` | `false` | **Opt-in** — same for the outro; hands off to the next episode when autoplay is armed (VLC), else seeks to the segment's end |
 | `forceNativeAVPlayer` | `false` | `false` ⇒ VLC online engine; `true` ⇒ native `AVPlayer` |
