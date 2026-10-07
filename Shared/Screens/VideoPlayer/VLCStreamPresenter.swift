@@ -379,6 +379,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Table mode: the deck's tint, INSIDE `controlsContainer`, so it fades with
     /// the HUD and leaves the pure black of `tabletopBackdrop`.
     private let deckTint = UIView()
+    /// A mode switch deferred while the slider was held (`scrubberDone` applies it).
+    private var layoutModePending = false
     /// The deck's lock (table mode): locked, the deck never hides. Remembered.
     private var hudLocked = UserDefaults.standard.bool(forKey: SettingsKey.playerTabletopHUDLocked)
     /// Deck-only controls (hidden in regular).
@@ -699,6 +701,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         setupControls()
         #if os(iOS)
         setupDeckTint()
+        defer { installHingeObserver() }
         #endif
         setupSkipButton()
         setupGestures()
@@ -1939,7 +1942,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hug2.priority = .defaultLow
         NSLayoutConstraint.activate([
             statsContainer.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
             // Without a trailing bound the multi-line label never wraps and the
             // Modules line runs off-screen.
             statsContainer.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor),
@@ -1953,10 +1955,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             statsLabel2.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14)
         ])
         statsOneColumn = [
+            statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
             statsLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14),
             statsLabel2.widthAnchor.constraint(equalToConstant: 0)
         ]
         statsTwoColumns = [
+            // Table mode: in the black band BELOW the picture, just above the
+            // fold — the band above it carries the status bar (measured on the
+            // Duo simulator: the panel hanging from the title covered the image).
+            statsContainer.bottomAnchor.constraint(equalTo: videoArea.bottomAnchor, constant: -8),
             statsContainer.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -14),
             statsLabel.trailingAnchor.constraint(equalTo: statsLabel2.leadingAnchor, constant: -18),
             statsLabel2.widthAnchor.constraint(equalTo: statsLabel.widthAnchor)
@@ -2714,6 +2721,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chapterStartTicks = []
         #if os(iOS)
         chapterTitles = []
+        // A new media (episode navigation) may have no chapters: drop the block now.
+        if layoutMode == .tabletop { applyLayoutMode(force: true) }
         #endif
         selectedChapterIndex = nil
         #if os(tvOS)
@@ -3122,6 +3131,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             haloVeil.topAnchor.constraint(equalTo: view.centerYAnchor),
             haloVeil.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+    }
+
+    /// Added LAST in `viewDidLoad`: a first callback carrying a real status
+    /// builds the deck's constraints, which need every HUD view in place.
+    private func installHingeObserver() {
         #if !NO_HINGE_API
         if #available(iOS 27.1, *) {
             view.addInteraction(UIHingeInteraction { [weak self] _, update in
@@ -3156,6 +3170,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func applyLayoutMode(size: CGSize? = nil, force: Bool = false) {
         let mode = PlayerPostureLayout.mode(hinge: hingeReading, viewSize: size ?? view.bounds.size)
         guard force || mode != layoutMode else { return }
+        // Never under a finger on the slider: the swap moves and resizes it,
+        // and re-arming the auto-hide would fade the HUD mid-drag.
+        // `scrubberDone` applies it.
+        if isScrubbing {
+            layoutModePending = true
+            return
+        }
+        layoutModePending = false
         layoutMode = mode
         let tabletop = mode == .tabletop
         NSLayoutConstraint.deactivate(regularHUDConstraints + tabletopHUDConstraints)
@@ -3172,6 +3194,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         tabletopBackdrop.isHidden = !tabletop
         deckTint.isHidden = !tabletop
+        // Hardware-keyboard shortcuts only outside table mode (see
+        // `canBecomeFirstResponder`).
+        if tabletop { resignFirstResponder() } else if view.window != nil { becomeFirstResponder() }
         // No 45 % veil over the upper screen's picture: the deck has its own ground.
         controlsContainer.backgroundColor = tabletop ? .clear : .black.withAlphaComponent(0.45)
         applyHUDStyle()
@@ -3298,6 +3323,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         statsButton.isHidden = tabletop          // moves into the film bar's menu
         chapterScroll.alpha = tabletop ? 0 : 1   // replaced by the Chapters block
         titleLabel.alpha = tabletop ? 0 : 1      // replaced by the film bar; keeps its place
+        // Alpha 0 is not hidden for VoiceOver.
+        chapterScroll.accessibilityElementsHidden = tabletop
+        titleLabel.accessibilityElementsHidden = tabletop
         transportRow.alignment = tabletop ? .fill : .center
         transportRow.spacing = tabletop ? 10 : 24
         let resizable: [UIButton] = [subtitleButton, audioButton, speedButton, chaptersButton, pipButton,
@@ -3384,7 +3412,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let width = (player.videoTracks.first(where: { $0.isSelected }) ?? player.videoTracks.first)?.width
         let detail = (tabletopItemBase + [width.map(TabletopHalo.qualityLabel(width:))].compactMap { $0 })
             .joined(separator: " · ")
-        titleBlockButton.configuration = TabletopHUDStyle.titleBlock(title: titleText,
+        // `titleLabel` follows episode navigation; `titleText` is the opening title.
+        let currentTitle = titleLabel.text ?? titleText
+        titleBlockButton.accessibilityLabel = currentTitle
+        titleBlockButton.configuration = TabletopHUDStyle.titleBlock(title: currentTitle,
                                                                      subtitle: detail.isEmpty ? nil : detail,
                                                                      thumbnail: tabletopThumbnail)
         titleBlockButton.menu = UIMenu(children: [
@@ -3397,6 +3428,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hudLocked.toggle()
         UserDefaults.standard.set(hudLocked, forKey: SettingsKey.playerTabletopHUDLocked)
         refreshTabletopValues()
+        // VoiceOver does not re-read a focused element whose label changed.
+        UIAccessibility.post(notification: .announcement, argument: lockButton.accessibilityLabel)
         if hudLocked { hideControlsWorkItem?.cancel() } else { scheduleHideControls() }
     }
 
@@ -4837,7 +4870,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // documented coalesced path (`SeekMachine.skip(bySeconds:)`) via the
     // existing iOS skip handlers — never a direct engine seek. Wired as UIKit key
     // commands so they coexist with the gesture/HUD stack without touching it.
-    override var canBecomeFirstResponder: Bool { true }
+    /// Not in table mode: on the iPhone Duo half-folded, a first responder that
+    /// takes key commands makes the system treat touches on the lower screen as
+    /// a request for its keyboard — the deck's blocks stopped responding and
+    /// the software keyboard rose over them (simulator, 2026-10-07).
+    override var canBecomeFirstResponder: Bool { layoutMode == .regular }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -4901,10 +4938,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func scrubberDone() {
         scrubPreview.isHidden = true
         let length = lengthMs
-        guard length > 0 else { isScrubbing = false; return }
+        guard length > 0 else {
+            isScrubbing = false
+            #if os(iOS)
+            if layoutModePending { applyLayoutMode(force: true) }
+            #endif
+            return
+        }
         userEngineSeek(ms: Int32(Float(length) * slider.value))
         isScrubbing = false
         scheduleHideControls()
+        #if os(iOS)
+        if layoutModePending { applyLayoutMode(force: true) }
+        #endif
     }
 
     /// Positions + populates the trickplay bubble for the slider's value.
