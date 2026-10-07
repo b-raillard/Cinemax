@@ -40,6 +40,12 @@ extension SettingsScreen {
 
     // MARK: iOS Header
 
+    /// A landscape iPhone (compact height) gets a smaller logo and less air
+    /// above it: at full size the header took ~300 of the 466 pt of an iPhone
+    /// Duo closed in landscape, and the first category sat at two-thirds of
+    /// the screen.
+    private var isShortHeader: Bool { verticalSizeClass == .compact }
+
     var iOSHeader: some View {
         VStack(spacing: CinemaSpacing.spacing3) {
             // Logo with ambient glow
@@ -47,13 +53,13 @@ extension SettingsScreen {
                 // Glow
                 Circle()
                     .fill(themeManager.accent.opacity(0.2))
-                    .frame(width: 160, height: 160)
+                    .frame(width: isShortHeader ? 96 : 160, height: isShortHeader ? 96 : 160)
                     .blur(radius: 40)
 
                 Image("AppLogo")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 112, height: 112)
+                    .frame(width: isShortHeader ? 64 : 112, height: isShortHeader ? 64 : 112)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
                     .shadow(color: themeManager.accent.opacity(0.4), radius: 15)
                     .accessibilityHidden(true)
@@ -71,8 +77,8 @@ extension SettingsScreen {
                     .tracking(0.5)
             }
         }
-        .padding(.top, CinemaSpacing.spacing8)
-        .padding(.bottom, CinemaSpacing.spacing6)
+        .padding(.top, isShortHeader ? CinemaSpacing.spacing3 : CinemaSpacing.spacing8)
+        .padding(.bottom, isShortHeader ? CinemaSpacing.spacing4 : CinemaSpacing.spacing6)
     }
 
     // MARK: iOS Navigation List

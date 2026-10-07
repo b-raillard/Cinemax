@@ -36,11 +36,50 @@ extension View {
     /// and the notch side of any iPhone in landscape. tvOS keeps its overscan
     /// margins and only clips (the drift scales the image past its frame).
     /// The hero's sizing driver must then NOT clip, or it cuts the bleed back.
+    ///
+    /// The layer is hosted in a `Color.clear` — the hero RULE's sizing driver
+    /// pattern — because a `.fill` image reports its FILLED size, not the size
+    /// it was offered: clipped to its own frame it was taller than a clamped
+    /// hero (iPhone Duo closed in landscape: 590 × 9/16 = 332 pt of image in a
+    /// 289 pt hero), spilled under the nav title and the first rail, and,
+    /// centred instead of touching the edge, never reached the safe area.
     func heroBackdropBleed() -> some View {
+        modifier(HeroBackdropBleed())
+    }
+}
+
+/// See `heroBackdropBleed()`. Two mechanisms, because the inset reaches the
+/// hero in two forms (measured on the iPhone Duo closed, 2026-10-07):
+/// - in portrait the right-hand column is a true safe area OUTSIDE the hero's
+///   frame, and `.ignoresSafeArea` extends into it;
+/// - in landscape the tab content is laid out 594 pt wide on a 678 pt window
+///   and STILL reports an 84 pt trailing inset inside that frame, so there is
+///   nothing for `.ignoresSafeArea` to extend into — the layer is widened by
+///   the reported inset instead (negative padding) and draws past the frame.
+/// Whichever applies, the layer ends at the window edge, never past it: the
+/// reported inset is read on the UN-extended frame, and in the portrait case
+/// it is zero there.
+private struct HeroBackdropBleed: ViewModifier {
+    #if os(iOS)
+    @State private var reportedInsets = EdgeInsets()
+    #endif
+
+    func body(content: Content) -> some View {
         #if os(iOS)
-        ignoresSafeArea(edges: .horizontal).clipped()
+        Color.clear
+            .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { reportedInsets = $0 }
+            .overlay {
+                Color.clear
+                    .overlay { content }
+                    .ignoresSafeArea(edges: .horizontal)
+                    .clipped()
+                    .padding(.leading, -reportedInsets.leading)
+                    .padding(.trailing, -reportedInsets.trailing)
+            }
         #else
-        clipped()
+        Color.clear
+            .overlay { content }
+            .clipped()
         #endif
     }
 }

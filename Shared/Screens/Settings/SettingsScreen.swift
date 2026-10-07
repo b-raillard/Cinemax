@@ -225,6 +225,10 @@ struct SettingsScreen: View {
     @Environment(\.motionEffectsEnabled) var motionEffects
     /// Drives the Motion Effects row's "the system setting overrides this" line.
     @Environment(\.accessibilityReduceMotion) var systemReduceMotion
+    #if os(iOS)
+    /// A landscape iPhone shrinks the landing header (`iOSHeader`).
+    @Environment(\.verticalSizeClass) var verticalSizeClass
+    #endif
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.autoSkipIntro) var autoSkipIntro: Bool = SettingsKey.Default.autoSkipIntro

@@ -369,6 +369,14 @@ struct HomeScreen: View {
         )
     }
 
+    private var seasonalRowTitleSize: CGFloat {
+        #if os(tvOS)
+        32
+        #else
+        AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular ? 32 : 24
+        #endif
+    }
+
     /// `ContentRow`'s gutter, so a placeholder sits where its row will.
     private var skeletonPadding: CGFloat {
         #if os(tvOS)
@@ -594,7 +602,9 @@ struct HomeScreen: View {
             title: title,
             showViewAll: true,
             onViewAll: { seasonDestination = SeasonDestination() },
-            titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(32)),
+            // The season's face at the size of every other rail title
+            // (`AdaptiveLayout.sectionTitleFont`: 24 on iPhone, 32 elsewhere).
+            titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(seasonalRowTitleSize)),
             data: items, id: \.id,
             itemView: { item in
                 recentlyAddedCard(item, surface: "home.season")
