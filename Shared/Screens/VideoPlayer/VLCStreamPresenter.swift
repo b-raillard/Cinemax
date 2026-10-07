@@ -367,8 +367,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Table mode: the deck's tint, INSIDE `controlsContainer`, so it fades with
     /// the HUD and leaves the pure black of `tabletopBackdrop`.
     private let deckTint = UIView()
-    /// The deck's lock (table mode): locked, the deck never hides.
-    private var hudLocked = false
+    /// The deck's lock (table mode): locked, the deck never hides. Remembered.
+    private var hudLocked = UserDefaults.standard.bool(forKey: SettingsKey.playerTabletopHUDLocked)
+    /// Deck-only controls (hidden in regular).
+    private let lockButton = UIButton(type: .system)
+    private let titleBlockButton = UIButton(type: .system)
+    private let chaptersButton = UIButton(type: .system)
+    /// The scrub block's ground (the slider and both times sit on it).
+    private let scrubBlock = UIView()
+    private var chapterTitles: [String] = []
+    /// « 2010 », « 15 min » — from the `getItem` `fetchChapters` already makes.
+    private var tabletopItemBase: [String] = []
+    /// The film bar's thumbnail, taken when the deck appears.
+    private var tabletopThumbnail: UIImage?
     /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
     private struct SideReachEdges {
         let closeTrailing: NSLayoutConstraint
@@ -2044,6 +2055,23 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
             chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor)
         ])
+        for deckOnly in [lockButton, titleBlockButton, chaptersButton] {
+            deckOnly.translatesAutoresizingMaskIntoConstraints = false
+            deckOnly.isHidden = true
+            controlsContainer.addSubview(deckOnly)
+        }
+        lockButton.addTarget(self, action: #selector(toggleHUDLock), for: .touchUpInside)
+        chaptersButton.addTarget(self, action: #selector(openChapterMenu), for: .touchUpInside)
+        chaptersButton.accessibilityLabel = loc.localized("player.chapters")
+        titleBlockButton.showsMenuAsPrimaryAction = true
+        titleBlockButton.accessibilityLabel = titleText
+        scrubBlock.translatesAutoresizingMaskIntoConstraints = false
+        scrubBlock.backgroundColor = TabletopHUDStyle.blockFill
+        scrubBlock.layer.cornerRadius = TabletopHUDStyle.cornerRadius
+        scrubBlock.isUserInteractionEnabled = false
+        scrubBlock.isHidden = true
+        controlsContainer.insertSubview(scrubBlock, belowSubview: slider)
+
         regularHUDConstraints = makeRegularHUDConstraints()
         NSLayoutConstraint.activate(regularHUDConstraints)
 
@@ -2641,6 +2669,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingChapterThumbnails = nil
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
+        #if os(iOS)
+        chapterTitles = []
+        #endif
         selectedChapterIndex = nil
         #if os(tvOS)
         tvScrub.setChapterMarks([])
@@ -2672,9 +2703,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.resolvedIsEpisode = item.type == .episode
             #if os(tvOS)
             self.applyHUDContext(item: item, builder: builder, token: token)
+            #else
+            self.tabletopItemBase = [item.productionYear.map(String.init),
+                                     item.runTimeTicks.map { self.loc.runtime(minutes: $0.jellyfinMinutes) }]
+                .compactMap { $0 }
+            self.refreshTabletopValues()
             #endif
             guard let chapters = item.chapters, chapters.count > 1 else { return }
             self.chapterStartTicks = chapters.map { $0.startPositionTicks ?? 0 }
+            #if os(iOS)
+            self.chapterTitles = chapters.enumerated().map { index, chapter in
+                (chapter.name?.isEmpty == false ? chapter.name : nil)
+                    ?? "\(self.loc.localized("player.chapter")) \(index + 1)"
+            }
+            #endif
             for (i, ch) in chapters.enumerated() {
                 let startSec = Double(ch.startPositionTicks ?? 0) / 10_000_000
                 let title = (ch.name?.isEmpty == false ? ch.name : nil)
@@ -2685,6 +2727,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #if os(tvOS)
             self.chapterHeightConstraint?.constant = self.chapterPeekHeight
             #else
+            // Table mode: the Chapters block appears now.
+            if self.layoutMode == .tabletop { self.applyLayoutMode(force: true) }
             self.chapterHeightConstraint?.constant = 150
             #endif
             self.chapterScroll.isHidden = false
@@ -3084,10 +3128,206 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if controlsVisible { scheduleHideControls() }
     }
 
-    /// Provisional (Task 4 replaces it): the regular HUD, in table mode too.
-    private func makeTabletopHUDConstraints() -> [NSLayoutConstraint] { makeRegularHUDConstraints() }
-    /// Provisional (Task 4 replaces it).
-    private func applyHUDStyle() {}
+    /// The deck: lower half, 18 pt margins, rows 10 pt apart — film bar (66) ·
+    /// playback (the rest) · scrub (58) · settings (86).
+    private func makeTabletopHUDConstraints() -> [NSLayoutConstraint] {
+        let safe = view.safeAreaLayoutGuide
+        let top = controlsContainer.centerYAnchor
+        let lead = safe.leadingAnchor, trail = safe.trailingAnchor
+        // A hidden episode button is collapsed by the stack view itself; its
+        // width ratio must yield to that, hence below required.
+        let prevWidth = prevButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor, multiplier: 0.55)
+        let nextWidth = nextButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor, multiplier: 0.55)
+        prevWidth.priority = .defaultHigh
+        nextWidth.priority = .defaultHigh
+        var constraints: [NSLayoutConstraint] = [
+            // Film bar
+            lockButton.topAnchor.constraint(equalTo: top, constant: 18),
+            lockButton.leadingAnchor.constraint(equalTo: lead, constant: 18),
+            lockButton.widthAnchor.constraint(equalToConstant: 66),
+            lockButton.heightAnchor.constraint(equalToConstant: 66),
+            closeButton.topAnchor.constraint(equalTo: lockButton.topAnchor),
+            closeButton.trailingAnchor.constraint(equalTo: trail, constant: -18),
+            closeButton.widthAnchor.constraint(equalToConstant: 66),
+            closeButton.heightAnchor.constraint(equalToConstant: 66),
+            titleBlockButton.topAnchor.constraint(equalTo: lockButton.topAnchor),
+            titleBlockButton.heightAnchor.constraint(equalToConstant: 66),
+            titleBlockButton.leadingAnchor.constraint(equalTo: lockButton.trailingAnchor, constant: 10),
+            titleBlockButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -10),
+            // Playback: −10 / +10 equal, play 1.45×, episodes 0.55× (hidden when absent)
+            transportRow.topAnchor.constraint(equalTo: lockButton.bottomAnchor, constant: 10),
+            transportRow.leadingAnchor.constraint(equalTo: lead, constant: 18),
+            transportRow.trailingAnchor.constraint(equalTo: trail, constant: -18),
+            transportRow.bottomAnchor.constraint(equalTo: scrubBlock.topAnchor, constant: -10),
+            skipFwdButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor),
+            playPauseButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor, multiplier: 1.45),
+            prevWidth,
+            nextWidth,
+            // Scrub
+            scrubBlock.leadingAnchor.constraint(equalTo: lead, constant: 18),
+            scrubBlock.trailingAnchor.constraint(equalTo: trail, constant: -18),
+            scrubBlock.heightAnchor.constraint(equalToConstant: 58),
+            scrubBlock.bottomAnchor.constraint(equalTo: subtitleButton.topAnchor, constant: -10),
+            timeLabel.leadingAnchor.constraint(equalTo: scrubBlock.leadingAnchor, constant: 20),
+            timeLabel.centerYAnchor.constraint(equalTo: scrubBlock.centerYAnchor),
+            timeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            durationLabel.trailingAnchor.constraint(equalTo: scrubBlock.trailingAnchor, constant: -20),
+            durationLabel.centerYAnchor.constraint(equalTo: scrubBlock.centerYAnchor),
+            durationLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 52),
+            slider.leadingAnchor.constraint(equalTo: timeLabel.trailingAnchor, constant: 16),
+            slider.trailingAnchor.constraint(equalTo: durationLabel.leadingAnchor, constant: -16),
+            slider.centerYAnchor.constraint(equalTo: scrubBlock.centerYAnchor),
+            // The hidden title keeps its usual place: the « Regarder ensemble »
+            // strip and the stats panel hang from it, on the upper screen.
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trail, constant: -24),
+            // The chapter strip is replaced by the Chapters block (alpha 0).
+            chapterScroll.leadingAnchor.constraint(equalTo: lead, constant: 16),
+            chapterScroll.trailingAnchor.constraint(equalTo: trail, constant: -16),
+            chapterScroll.bottomAnchor.constraint(equalTo: transportRow.topAnchor, constant: -16)
+        ]
+        // Settings: equal-width blocks; Chapters only when there are chapters.
+        let settings: [UIButton] = [subtitleButton, audioButton, speedButton]
+            + (chapterStartTicks.count > 1 ? [chaptersButton] : [])
+            + [pipButton]
+        var previous: UIButton?
+        for block in settings {
+            constraints.append(block.heightAnchor.constraint(equalToConstant: 86))
+            constraints.append(block.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -22))
+            if let previous {
+                constraints.append(block.leadingAnchor.constraint(equalTo: previous.trailingAnchor, constant: 10))
+                constraints.append(block.widthAnchor.constraint(equalTo: subtitleButton.widthAnchor))
+            } else {
+                constraints.append(block.leadingAnchor.constraint(equalTo: lead, constant: 18))
+            }
+            previous = block
+        }
+        constraints.append(pipButton.trailingAnchor.constraint(equalTo: trail, constant: -18))
+        return constraints
+    }
+
+    /// Dresses the SAME buttons for the current mode. Regular = the settings
+    /// `buildIOSTransport` applies, replayed as they were.
+    private func applyHUDStyle() {
+        let tabletop = layoutMode == .tabletop
+        lockButton.isHidden = !tabletop
+        titleBlockButton.isHidden = !tabletop
+        chaptersButton.isHidden = !tabletop || chapterStartTicks.count <= 1
+        scrubBlock.isHidden = !tabletop
+        statsButton.isHidden = tabletop          // moves into the film bar's menu
+        chapterScroll.alpha = tabletop ? 0 : 1   // replaced by the Chapters block
+        titleLabel.alpha = tabletop ? 0 : 1      // replaced by the film bar; keeps its place
+        transportRow.alignment = tabletop ? .fill : .center
+        transportRow.spacing = tabletop ? 10 : 24
+        let resizable: [UIButton] = [subtitleButton, audioButton, speedButton, chaptersButton, pipButton,
+                                     prevButton, skipBackButton, playPauseButton, skipFwdButton, nextButton,
+                                     closeButton]
+        if tabletop {
+            // `configureIOS` pins intrinsic widths (`.required`); the deck sets
+            // equal widths, so they must yield. Regular re-pins them below.
+            for button in resizable {
+                button.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            }
+            closeButton.configuration = TabletopHUDStyle.block(symbol: "xmark", pointSize: 18)
+            prevButton.configuration = TabletopHUDStyle.block(symbol: "backward.end.fill", pointSize: 26)
+            nextButton.configuration = TabletopHUDStyle.block(symbol: "forward.end.fill", pointSize: 26)
+            skipBackButton.configuration = TabletopHUDStyle.block(symbol: PlayerSkipConfig.backwardSymbol, pointSize: 38)
+            skipFwdButton.configuration = TabletopHUDStyle.block(symbol: PlayerSkipConfig.forwardSymbol, pointSize: 38)
+            pipButton.configuration = TabletopHUDStyle.block(symbol: "pip.enter", pointSize: 22,
+                                                             title: loc.localized("player.pip"))
+        } else {
+            var closeConfig = UIButton.Configuration.plain()
+            closeConfig.image = UIImage(systemName: "xmark",
+                                        withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold))
+            closeConfig.baseForegroundColor = .white
+            closeConfig.background.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+            closeConfig.cornerStyle = .capsule
+            closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15)
+            closeButton.configuration = closeConfig
+            closeButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            closeButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+            configureIOS(prevButton, "backward.end.fill", pt: 24, loc.localized("player.previousEpisode"))
+            configureIOS(nextButton, "forward.end.fill", pt: 24, loc.localized("player.nextEpisode"))
+            configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, hudA11y.skipBack)
+            configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, hudA11y.skipForward)
+            configureIOS(pipButton, "pip.enter", pt: 17, loc.localized("player.pip"), compact: true)
+            configureIOS(audioButton, "waveform", pt: 17, loc.localized("player.audio"), compact: true)
+            configureIOS(subtitleButton, "captions.bubble", pt: 17, loc.localized("player.subtitles"), compact: true)
+            configureIOS(speedButton, "gauge.with.needle", pt: 17, loc.localized("player.speed"), compact: true)
+            playPauseButton.configuration = {
+                var cfg = UIButton.Configuration.plain()
+                cfg.baseForegroundColor = .white
+                return cfg
+            }()
+            playPauseButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            playPauseButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+            for button in [subtitleButton, audioButton, speedButton] { button.accessibilityValue = nil }
+        }
+        setPlayPauseIcon(playing: player.isPlaying)
+        refreshTabletopValues()
+    }
+
+    /// What the blocks display (tracks, speed, lock, film bar). Called by each
+    /// writer of those values; does nothing in regular.
+    private func refreshTabletopValues() {
+        guard layoutMode == .tabletop else { return }
+        let subtitleValue: String = {
+            guard let track = player.selectedSubtitleTrack,
+                  let index = player.subtitleTracks.firstIndex(of: track) else {
+                return loc.localized("player.subtitles.off")
+            }
+            return displayLabel(forSubtitleOrdinal: index, track: track)
+        }()
+        let audioValue: String? = {
+            guard let track = player.selectedAudioTrack,
+                  let index = player.audioTracks.firstIndex(of: track) else { return nil }
+            return displayLabel(forAudioOrdinal: index, track: track)
+        }()
+        let speedValue = String(format: "%g×", playbackRate)
+        subtitleButton.configuration = TabletopHUDStyle.block(symbol: "captions.bubble", pointSize: 22,
+                                                              title: loc.localized("player.subtitles"),
+                                                              subtitle: subtitleValue)
+        subtitleButton.accessibilityValue = subtitleValue
+        audioButton.configuration = TabletopHUDStyle.block(symbol: "waveform", pointSize: 22,
+                                                           title: loc.localized("player.audio"), subtitle: audioValue)
+        audioButton.accessibilityValue = audioValue
+        speedButton.configuration = TabletopHUDStyle.block(symbol: "gauge.with.needle", pointSize: 22,
+                                                           title: loc.localized("player.speed"), subtitle: speedValue)
+        speedButton.accessibilityValue = speedValue
+        chaptersButton.configuration = TabletopHUDStyle.block(symbol: "list.bullet", pointSize: 22,
+                                                              title: loc.localized("player.chapters"))
+        lockButton.configuration = TabletopHUDStyle.lock(locked: hudLocked, accent: Self.accentColor())
+        lockButton.accessibilityLabel = loc.localized(hudLocked ? "player.tabletop.lock.locked"
+                                                                : "player.tabletop.lock.unlocked")
+        let detail = tabletopItemBase.joined(separator: " · ")
+        titleBlockButton.configuration = TabletopHUDStyle.titleBlock(title: titleText,
+                                                                     subtitle: detail.isEmpty ? nil : detail,
+                                                                     thumbnail: tabletopThumbnail)
+        titleBlockButton.menu = UIMenu(children: [
+            UIAction(title: loc.localized("player.stats"), image: UIImage(systemName: "chart.xyaxis.line"),
+                     state: statsVisible ? .on : .off) { [weak self] _ in self?.toggleStats() }
+        ])
+    }
+
+    @objc private func toggleHUDLock() {
+        hudLocked.toggle()
+        UserDefaults.standard.set(hudLocked, forKey: SettingsKey.playerTabletopHUDLocked)
+        refreshTabletopValues()
+        if hudLocked { hideControlsWorkItem?.cancel() } else { scheduleHideControls() }
+    }
+
+    @objc private func openChapterMenu() {
+        let current = PlayerChapterSelection.currentIndex(
+            startTicks: chapterStartTicks, positionTicks: Int(currentMs) * 10_000)
+        let options: [PickerOption] = chapterTitles.enumerated().compactMap { index, title in
+            guard index < chapterStartTicks.count else { return nil }
+            let ms = Int32(clamping: chapterStartTicks[index] / 10_000)
+            return PickerOption(title: "\(title) — \(PlayerTimeFormat.ms(ms))", selected: index == current) { [weak self] in
+                self?.seeks.accumulate(toAbsoluteMs: ms)
+            }
+        }
+        presentPicker(loc.localized("player.chapters"), sourceView: chaptersButton, options: options)
+    }
 
     @objc private func handleDeckTap() {
         if controlsVisible {
@@ -3378,6 +3618,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// open watchdog for nothing.
     private func selectAudioTrack(_ track: Track) {
         guard player.selectedAudioTrack != track else { return }
+        #if os(iOS)
+        defer { refreshTabletopValues() }
+        #endif
         let anchor = currentMs
         player.selectedAudioTrack = track
         guard mediaConfirmedOpen, lengthMs > 0 else { return }
@@ -3394,6 +3637,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// the way out would be a cost with no benefit.
     private func selectSubtitleTrack(_ track: Track?) {
         guard player.selectedSubtitleTrack != track else { return }
+        #if os(iOS)
+        defer { refreshTabletopValues() }
+        #endif
         let anchor = currentMs
         player.selectedSubtitleTrack = track
         guard track != nil, mediaConfirmedOpen, lengthMs > 0 else { return }
@@ -3438,6 +3684,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         try? player.setPlaybackRate(PlaybackRate(rate))
+        #if os(iOS)
+        refreshTabletopValues()
+        #endif
     }
 
     @objc private func openAudioDelayMenu() { presentDelayPicker(isAudio: true) }
@@ -3490,6 +3739,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     @objc private func toggleStats() {
         setStatsVisible(!statsVisible)
+        #if os(iOS)
+        refreshTabletopValues()
+        #endif
         scheduleHideControls()
     }
 
@@ -3561,6 +3813,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func applyServerTrackDefaultsIfNeeded() {
         guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
         didApplyServerTrackDefaults = true
+        #if os(iOS)
+        defer { refreshTabletopValues() }
+        #endif
 
         if let kept = trackRestore {
             trackRestore = nil
@@ -4575,6 +4830,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         var config = playPauseButton.configuration ?? UIButton.Configuration.plain()
         config.image = UIImage(systemName: playing ? "pause.fill" : "play.fill",
                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .bold))
+        if layoutMode == .tabletop {
+            config = TabletopHUDStyle.block(symbol: playing ? "pause.fill" : "play.fill", pointSize: 54, emphasized: true)
+        }
         playPauseButton.configuration = config
         // The glyph shows what the press WILL do, and so must the label: a
         // button drawn as ⏸ is the one that pauses.
@@ -4592,6 +4850,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func scheduleHideControls() {
         hideControlsWorkItem?.cancel()
+        #if os(iOS)
+        // Table mode, deck locked: it never hides by itself.
+        if !PlayerPostureLayout.autoHides(mode: layoutMode, locked: hudLocked) { return }
+        #endif
         // Never auto-hide while a track/chapter picker is up — the controls must
         // stay put behind it so focus returns somewhere sensible.
         if pickerPresented { return }

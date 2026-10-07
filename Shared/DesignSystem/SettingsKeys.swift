@@ -25,6 +25,9 @@ enum SettingsKey {
     static let motionEffects = "motionEffects"
     static let render4K = "render4K"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
+    /// The lock of the player's deck in table posture (iPhone Duo): `true` = the
+    /// deck never hides by itself. Remembered from one video to the next.
+    static let playerTabletopHUDLocked = "player.tabletopHUDLocked"
     /// Opt-in: the player skips a detected intro / outro segment on its own,
     /// once per segment (`AutoSkipPolicy`). Off by default so the skip button
     /// stays the behaviour an untouched install gets.
@@ -213,6 +216,7 @@ enum SettingsKey {
         static let motionEffects = true
         static let render4K = true
         static let autoPlayNextEpisode = true
+        static let playerTabletopHUDLocked = false
         static let autoSkipIntro = false
         static let autoSkipCredits = false
         static let sleepTimerDefaultMinutes = 0

@@ -912,6 +912,8 @@
 "player.subtitleDelay" = "Untertitelverzögerung";
 "player.delay.reset" = "Zurücksetzen (0 ms)";
 "player.stats" = "Statistiken";
+"player.tabletop.lock.locked" = "Steuerelemente gesperrt, immer sichtbar";
+"player.tabletop.lock.unlocked" = "Steuerelemente werden automatisch ausgeblendet";
 "player.stats.video" = "Video";
 "player.stats.audio" = "Audio";
 "player.stats.bitrate" = "Bitrate";

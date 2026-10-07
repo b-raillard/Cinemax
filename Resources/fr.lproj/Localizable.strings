@@ -490,6 +490,8 @@
 "player.subtitleDelay" = "Délai des sous-titres";
 "player.delay.reset" = "Réinitialiser (0 ms)";
 "player.stats" = "Statistiques";
+"player.tabletop.lock.locked" = "Commandes verrouillées, toujours affichées";
+"player.tabletop.lock.unlocked" = "Commandes masquées automatiquement";
 "player.stats.video" = "Vidéo";
 "player.stats.audio" = "Audio";
 "player.stats.bitrate" = "Débit";

@@ -58,3 +58,38 @@ struct PlayerPostureLayoutTests {
         #expect(PlayerPostureLayout.autoHides(mode: .regular, locked: false) == true)
     }
 }
+
+#if os(iOS)
+import UIKit
+
+/// The deck's blocks (table mode). The lock never lights its block: open, only
+/// its icon takes the accent; locked, the icon stays white — a deck kept on
+/// screen for good must not glow (user decision, 2026-10-07).
+@Suite("TabletopHUDStyle")
+@MainActor
+struct TabletopHUDStyleTests {
+    private let accent = UIColor.systemGreen
+
+    @Test("open lock: accent icon, ordinary block")
+    func openLock() {
+        let cfg = TabletopHUDStyle.lock(locked: false, accent: accent)
+        #expect(cfg.baseForegroundColor == accent)
+        #expect(cfg.background.backgroundColor == TabletopHUDStyle.blockFill)
+    }
+
+    @Test("closed lock: white icon, ordinary block")
+    func closedLock() {
+        let cfg = TabletopHUDStyle.lock(locked: true, accent: accent)
+        #expect(cfg.baseForegroundColor == .white)
+        #expect(cfg.background.backgroundColor == TabletopHUDStyle.blockFill)
+    }
+
+    @Test("play block is the emphasised one")
+    func emphasis() {
+        #expect(TabletopHUDStyle.block(symbol: "play.fill", pointSize: 54, emphasized: true).background.backgroundColor
+                == TabletopHUDStyle.emphasizedFill)
+        #expect(TabletopHUDStyle.block(symbol: "xmark", pointSize: 18).background.backgroundColor
+                == TabletopHUDStyle.blockFill)
+    }
+}
+#endif
