@@ -153,6 +153,12 @@ struct MediaDetailScreen: View {
     /// Card → fiche zoom (iOS) for the carousels below, one surface per
     /// section since a title can sit in two of them — see `CardZoom`.
     @Namespace private var zoomNamespace
+    /// Height of the status + navigation bars over the fiche, measured on the
+    /// screen (the hero, inside the scroll view, reports none): the backdrop
+    /// runs up under them instead of leaving a dark band above the image.
+    @State private var topBarInset: CGFloat = 0
+    /// The screen's width, for `useTwoColumnLayout` — 0 until measured.
+    @State private var screenWidth: CGFloat = 0
 
     init(
         itemId: String,
@@ -187,6 +193,8 @@ struct MediaDetailScreen: View {
             }
         }
         #if os(iOS)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topBarInset = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { screenWidth = $0 }
         .navigationBarTitleDisplayMode(.inline)
         // Hosted on the body's outer ZStack — eager — so the destination
         // doesn't get swallowed by the `LazyVStack` inside `detailContent`.
@@ -542,10 +550,16 @@ struct MediaDetailScreen: View {
     #if os(iOS)
     /// iPad (regular horizontal size class) shows the two-column detail layout.
     /// iPhone (compact) keeps the stacked layout. Follows the codebase-wide
-    /// convention of treating regular width as iPad (see `AdaptiveLayout`).
+    /// convention of treating regular width as iPad (see `AdaptiveLayout`) —
+    /// with a width floor: the 40 % metadata column needs ~300 pt, and below
+    /// `twoColumnMinWidth` (iPhone Duo open in portrait, 669 pt; iPad mini in
+    /// portrait) it squeezed Play and « From the start » to « P… » and an
+    /// icon. Unmeasured (first frame), the size class alone decides.
     private var useTwoColumnLayout: Bool {
-        sizeClass == .regular
+        sizeClass == .regular && (screenWidth == 0 || screenWidth >= Self.twoColumnMinWidth)
     }
+
+    private static let twoColumnMinWidth: CGFloat = 800
     #endif
 
     // MARK: - Backdrop
@@ -643,18 +657,20 @@ struct MediaDetailScreen: View {
             }
             #endif
             .overlay {
-                if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                    CinemaLazyImage(
-                        url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
-                        fallbackIcon: nil,
-                        fallbackBackground: CinemaColor.surfaceContainerLow
-                    )
-                    .accessibilityHidden(true)
-                } else {
-                    BackdropFallbackView()
+                Group {
+                    if item.hasBackdropImage, let backdropId = item.backdropItemID {
+                        CinemaLazyImage(
+                            url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
+                            fallbackIcon: nil,
+                            fallbackBackground: CinemaColor.surfaceContainerLow
+                        )
+                        .accessibilityHidden(true)
+                    } else {
+                        BackdropFallbackView()
+                    }
                 }
+                .heroBackdropBleed(topExtension: topBarInset)
             }
-            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: detailHeroSpacing) {
                     // Badges
@@ -686,9 +702,13 @@ struct MediaDetailScreen: View {
                 .padding(.horizontal, contentPadding)
                 .padding(.top, contentPadding)
                 .padding(.bottom, contentPadding + CinemaSpacing.spacing4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Filled and clipped to the hero itself: in a short hero (iPhone
+                // landscape) the title block can outgrow it, and the driver no
+                // longer clips — the backdrop clips itself, wider than the
+                // driver (`heroBackdropBleed`).
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .clipped()
             }
-            .clipped()
     }
 
     // MARK: - Ratings Row (backdrop)
@@ -1329,8 +1349,8 @@ struct MediaDetailScreen: View {
         // iOS: Play stays the primary CTA; the secondary actions drop to a
         // labeled icon row beneath it. The old single line crammed Play plus
         // four icon accessories together and cropped the last one off narrow
-        // phones once the watched toggle was added — an evenly-distributed
-        // labeled row can't overflow and names each action.
+        // phones once the watched toggle was added. The icon row tightens its
+        // spacing rather than overflow (`secondaryActionsRow`).
         return VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
             if isPlayableType { playSection }
             secondaryActionsRow(for: item, nextEp: nextEp)
@@ -1440,14 +1460,25 @@ struct MediaDetailScreen: View {
     // MARK: - Secondary actions row (iOS)
 
     #if os(iOS)
-    /// Icon actions beneath the Play CTA: favorite, watched, trailer
-    /// (when available). Each is a circular glass chip (44pt), left-aligned.
-    /// The icons are self-explanatory, so there are no captions; the row sits
-    /// on its own line beneath the play buttons and can't crop the way the old
-    /// inline accessory row did.
-    @ViewBuilder
+    /// Icon actions beneath the Play CTA: favorite, watched, trailer, Watch
+    /// Together, « Lire sur… », add to playlist — each when available. Each
+    /// is a circular glass chip (44pt), left-aligned, without captions.
+    ///
+    /// Six chips at `spacing4` need 374 pt, wider than the page column of
+    /// every iPhone (SE 343, 17 370, Duo closed 350): the last chip ran past
+    /// the right margin. The tighter `spacing2` row (319 pt) is the fallback;
+    /// the usual two or three chips keep the airier spacing.
     private func secondaryActionsRow(for item: BaseItemDto, nextEp: BaseItemDto?) -> some View {
-        HStack(spacing: CinemaSpacing.spacing4) {
+        ViewThatFits(in: .horizontal) {
+            secondaryActionsHStack(for: item, nextEp: nextEp, spacing: CinemaSpacing.spacing4)
+            secondaryActionsHStack(for: item, nextEp: nextEp, spacing: CinemaSpacing.spacing2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func secondaryActionsHStack(for item: BaseItemDto, nextEp: BaseItemDto?, spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
             secondaryActionCell(
                 systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
                 active: viewModel.isFavorite,
@@ -1517,8 +1548,6 @@ struct MediaDetailScreen: View {
                     playlists.present(itemId: item.id, title: item.name)
                 }
             }
-
-            Spacer(minLength: 0)
         }
     }
 
@@ -2030,9 +2059,17 @@ private struct PlayActionButtonsSection: View, Equatable {
                 // secondary label gets more room than a fixed 160pt pill.
                 // Without resume there's only Play — keep it pill-sized.
                 if showResume {
-                    HStack(spacing: CinemaSpacing.spacing3) {
-                        lectureButton.frame(maxWidth: .infinity)
-                        playFromBeginningButton.frame(maxWidth: .infinity)
+                    // Side by side when both labels fit, stacked otherwise —
+                    // a narrow column truncated « From the start » to « From t… ».
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: CinemaSpacing.spacing3) {
+                            lectureButton.frame(maxWidth: .infinity)
+                            playFromBeginningButton.frame(maxWidth: .infinity)
+                        }
+                        VStack(spacing: CinemaSpacing.spacing3) {
+                            lectureButton.frame(maxWidth: .infinity)
+                            playFromBeginningButton.frame(maxWidth: .infinity)
+                        }
                     }
                 } else {
                     lectureButton.frame(width: playButtonWidth)

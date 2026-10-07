@@ -184,3 +184,23 @@ struct PreAuthLanguagePicker: View {
     }
     #endif
 }
+
+extension View {
+    /// The mobile column of a pre-auth screen, made scrollable on a landscape
+    /// phone (`isShort`, compact height). The column is sized for a portrait
+    /// screen; in ~430 pt of height it overflowed — the header cut at the top,
+    /// the subtitle squeezed onto one truncated line — and an error banner or
+    /// the keyboard made it worse. Portrait phones and iPad keep the
+    /// Spacer-centred column untouched.
+    @ViewBuilder
+    func preAuthShortScroll(_ isShort: Bool) -> some View {
+        if isShort {
+            ScrollView {
+                self.padding(.top, CinemaSpacing.spacing3)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        } else {
+            self
+        }
+    }
+}

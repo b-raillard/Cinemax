@@ -13,6 +13,21 @@ struct ServerSetupScreen: View {
     @State private var easterEggTaps: Int = 0
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
+
+    /// A landscape phone (compact height): the column below is taller than the
+    /// screen, so the Spacers collapse, the subtitle is squeezed onto one line
+    /// and the icon is cut off at the top. It drops the icon and tightens its
+    /// gaps instead. iPad and portrait phones are never compact-height.
+    private var isShortLayout: Bool {
+        #if os(iOS)
+        verticalSizeClass == .compact
+        #else
+        false
+        #endif
+    }
 
     var body: some View {
         Group {
@@ -190,21 +205,23 @@ struct ServerSetupScreen: View {
                 // Header
                 VStack(spacing: CinemaSpacing.spacing3) {
                     // Icon — secretly doubles as the accent-cycling easter egg.
-                    Button {
-                        triggerEasterEgg()
-                    } label: {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                                .fill(CinemaColor.surfaceContainerHigh)
-                                .frame(width: 80, height: 80)
-                            Image(systemName: "server.rack")
-                                .font(.system(size: CinemaScale.pt(36)))
-                                .foregroundStyle(themeManager.accent)
+                    if !isShortLayout {
+                        Button {
+                            triggerEasterEgg()
+                        } label: {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                                    .fill(CinemaColor.surfaceContainerHigh)
+                                    .frame(width: 80, height: 80)
+                                Image(systemName: "server.rack")
+                                    .font(.system(size: CinemaScale.pt(36)))
+                                    .foregroundStyle(themeManager.accent)
+                            }
+                            .shadow(color: .black.opacity(0.3), radius: 20)
                         }
-                        .shadow(color: .black.opacity(0.3), radius: 20)
+                        .buttonStyle(.plain)
+                        .accessibilityHidden(true)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityHidden(true)
 
                     Text(loc.localized("server.header"))
                         .font(CinemaFont.label(.small))
@@ -222,7 +239,7 @@ struct ServerSetupScreen: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 280)
                 }
-                .padding(.bottom, CinemaSpacing.spacing8)
+                .padding(.bottom, isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing8)
 
                 // Input card
                 VStack(spacing: CinemaSpacing.spacing4) {
@@ -286,8 +303,9 @@ struct ServerSetupScreen: View {
                     }
                 }
                 .padding(.horizontal, CinemaSpacing.spacing4)
-                .padding(.bottom, CinemaSpacing.spacing6)
+                .padding(.bottom, isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing6)
             }
+            .preAuthShortScroll(isShortLayout)
             // The language, before signing in (`PreAuthLanguagePicker`).
             .overlay(alignment: .topTrailing) {
                 PreAuthLanguagePicker()

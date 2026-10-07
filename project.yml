@@ -188,6 +188,11 @@ targets:
         # symbols in the APP's copy while still compiling in the extension's —
         # see `ResumeControl.swift`. `$(inherited)` keeps DEBUG.
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) CINEMAX_APP
+        # UIHingeInteraction (iPhone Duo) only exists from the iOS 27.1 SDK on;
+        # CI still builds with Xcode 27.0. Hinge code sits under
+        # `#if !NO_HINGE_API`. Drop these two lines once CI moves to 27.1.
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator27.0]": $(inherited) NO_HINGE_API
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos27.0]": $(inherited) NO_HINGE_API
         SWIFT_EMIT_LOC_STRINGS: YES
         SUPPORTS_MACCATALYST: NO
         SWIFT_STRICT_CONCURRENCY: complete

@@ -27,6 +27,74 @@ struct HeroBackdropImage: View {
     }
 }
 
+extension View {
+    /// The backdrop layer of a full-bleed hero (image or fallback): hosted in a
+    /// `Color.clear` the size of the hero, drawn with the hero gradient over
+    /// it, and on iOS run under the HORIZONTAL safe area — and `topExtension`
+    /// points up, under the status and navigation bars (the fiche, which has no
+    /// title of its own up there; the screen measures its own top inset, since
+    /// inside the scroll view the hero reports none).
+    /// The hero's text stays in the page column; the hero's sizing driver must
+    /// NOT clip, or it cuts the bleed back.
+    ///
+    /// - The `Color.clear` host is the hero RULE's sizing-driver pattern: a
+    ///   `.fill` image reports its FILLED size, so clipped to its own frame it
+    ///   outgrew a clamped hero (iPhone Duo closed in landscape: 332 pt of image
+    ///   in a 289 pt hero) and spilled under the nav title and the first rail.
+    /// - The GRADIENT is drawn on that host, never on the image: on the image
+    ///   it ended where the image ended, below a clamped hero, and the hero met
+    ///   the page with a hard edge instead of fading into it.
+    /// - On iOS the image is anchored to the TOP of the box when it must be
+    ///   cropped vertically (a landscape phone, an iPad): centred, a short hero
+    ///   cut the heads off. A portrait phone crops sideways and is unchanged.
+    ///   tvOS keeps the centred crop and its overscan margins.
+    ///
+    /// Without the bleed the image stopped dead at the safe-area edge while the
+    /// rails below slid under it: the iPhone Duo's right-hand column (status +
+    /// vertical tab bar) and the notch side of any iPhone in landscape.
+    func heroBackdropBleed(topExtension: CGFloat = 0) -> some View {
+        modifier(HeroBackdropBleed(topExtension: topExtension))
+    }
+}
+
+/// See `heroBackdropBleed(topExtension:)`. Two mechanisms, because the inset
+/// reaches the hero in two forms (measured on the iPhone Duo closed,
+/// 2026-10-07):
+/// - in portrait the right-hand column is a true safe area OUTSIDE the hero's
+///   frame, and `.ignoresSafeArea` extends into it;
+/// - in landscape the tab content is laid out 594 pt wide on a 678 pt window
+///   and STILL reports an 84 pt trailing inset inside that frame, so there is
+///   nothing for `.ignoresSafeArea` to extend into — the layer is widened by
+///   the reported inset instead (negative padding) and draws past the frame.
+private struct HeroBackdropBleed: ViewModifier {
+    let topExtension: CGFloat
+    #if os(iOS)
+    @State private var reportedInsets = EdgeInsets()
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        Color.clear
+            .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { reportedInsets = $0 }
+            .overlay {
+                Color.clear
+                    .overlay(alignment: .top) { content }
+                    .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+                    .ignoresSafeArea(edges: .horizontal)
+                    .clipped()
+                    .padding(.leading, -reportedInsets.leading)
+                    .padding(.trailing, -reportedInsets.trailing)
+                    .padding(.top, -topExtension)
+            }
+        #else
+        Color.clear
+            .overlay { content }
+            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+            .clipped()
+        #endif
+    }
+}
+
 #if os(tvOS)
 /// The drift's shape: 1.08 over 24 s, autoreversing — about 0.3 % of the frame
 /// per second.

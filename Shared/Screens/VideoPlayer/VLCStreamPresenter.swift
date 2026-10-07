@@ -207,7 +207,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // existing gesture / HUD layout is untouched; the SwiftVLC rendering
     // surface is embedded into it via a child UIHostingController.
     private let player = Player()
+    #if os(iOS)
+    /// A `CAReplicatorLayer`-backed view: in table mode it mirrors the picture
+    /// below the fold (the halo). One instance otherwise — no cost.
+    private let videoView = MirroringVideoView()
+    #else
     private let videoView = UIView()
+    #endif
+    /// Where the picture lives: the whole view, except in the iOS table mode
+    /// (iPhone Duo half-folded, portrait), where it is the upper half. The
+    /// overlays that sit "on the picture" (spinner, skip HUD, notices, glyphs,
+    /// « Passer », the next-up card) follow it rather than `view`.
+    private let videoArea = UILayoutGuide()
+    /// The one constraint the layout mode flips: `view.bottom` or `view.centerY`.
+    private var videoAreaBottom: NSLayoutConstraint?
     private var videoHost: UIViewController?
     private var eventsTask: Task<Void, Never>?
     /// Latest known media length in ms. SwiftVLC's `player.duration` can lag a
@@ -319,6 +332,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // Stats overlay ("nerd stats") — repainted by the 1s tick while visible.
     private let statsLabel = UILabel()
     private var statsVisible = false
+    /// The stats panel: outside `controlsContainer` so it outlives the HUD fade.
+    private let statsContainer = UIView()
+    /// Second stats column, used in the iOS table mode only (empty otherwise).
+    private let statsLabel2 = UILabel()
+    /// Regular: `statsLabel` spans the panel. Table mode: two columns, panel
+    /// pinned to the full width so they split it evenly.
+    private var statsOneColumn: [NSLayoutConstraint] = []
+    private var statsTwoColumns: [NSLayoutConstraint] = []
 
     // Next-episode countdown card (outro + autoPlayNext + nextEpisode).
     private var nextUpCard: NextUpCountdownView?
@@ -345,6 +366,49 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let prevButton = UIButton(type: .system)
     private let nextButton = UIButton(type: .system)
     private let transportRow = UIStackView()
+    /// The HUD's movable constraints, one set per layout mode (see
+    /// `PlayerPostureLayout`); exactly one set is active at a time.
+    private var regularHUDConstraints: [NSLayoutConstraint] = []
+    private var tabletopHUDConstraints: [NSLayoutConstraint] = []
+    /// Last known iPhone Duo hinge reading (`unknown` everywhere else).
+    private var hingeReading: HingeReading = .unknown
+    private var layoutMode: PlayerLayoutMode = .regular
+    /// Table mode: the black lower half, BELOW `videoView` (the live mirror of
+    /// the picture is drawn over it). Also receives the "show the deck" tap.
+    private let tabletopBackdrop = UIView()
+    /// Table mode: the deck's tint, INSIDE `controlsContainer`, so it fades with
+    /// the HUD and leaves the pure black of `tabletopBackdrop`.
+    private let deckTint = UIView()
+    /// A mode switch deferred while the slider was held (`scrubberDone` applies it).
+    private var layoutModePending = false
+    /// The deck's lock (table mode): locked, the deck never hides. Remembered.
+    private var hudLocked = UserDefaults.standard.bool(forKey: SettingsKey.playerTabletopHUDLocked)
+    /// Deck-only controls (hidden in regular).
+    private let lockButton = UIButton(type: .system)
+    private let titleBlockButton = UIButton(type: .system)
+    private let chaptersButton = UIButton(type: .system)
+    /// The scrub block's ground (the slider and both times sit on it).
+    private let scrubBlock = UIView()
+    private var chapterTitles: [String] = []
+    /// « 2010 », « 15 min » — from the `getItem` `fetchChapters` already makes.
+    private var tabletopItemBase: [String] = []
+    /// The film bar's thumbnail, taken when the deck appears.
+    private var tabletopThumbnail: UIImage?
+    private var tabletopThumbnailTicks = 0
+    /// Blur + fade over the mirrored picture (table mode), under the HUD.
+    private let haloVeil = TabletopHaloVeil()
+    /// Above `videoView`, same frame: holds libVLC's subtitle view once lifted
+    /// out of the mirror (see `liftSubtitlesOutOfMirror`).
+    private let subtitleOverlay = UIView()
+    /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
+    private struct SideReachEdges {
+        let closeTrailing: NSLayoutConstraint
+        let sliderLeading: NSLayoutConstraint
+        let timeLeading: NSLayoutConstraint
+        let chapterLeading: NSLayoutConstraint
+        let chapterTrailing: NSLayoutConstraint
+    }
+    private var sideReachConstraints: SideReachEdges?
     /// `PlayerScrubSlider`, not a plain `UISlider` — see its own doc comment:
     /// VoiceOver's adjust gesture has to become a SEEK, and on a stock slider
     /// nothing here would make it one (`scrubberChanged` bails unless the slider
@@ -635,7 +699,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         VLCEngineLog.installOnce()
         view.backgroundColor = .black
         setupVideoView()
+        #if os(iOS)
+        setupTabletopBackdrop()
+        #endif
         setupControls()
+        #if os(iOS)
+        setupDeckTint()
+        defer { installHingeObserver() }
+        #endif
         setupSkipButton()
         setupGestures()
         setupReporter()
@@ -956,6 +1027,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.onEngineStateChanged(state)
                 case .tracksChanged:
                     self.applyServerTrackDefaultsIfNeeded()
+                    #if os(iOS)
+                    self.updateMirror()   // the aspect is known now
+                    #endif
                 case .encounteredError:
                     self.handleEngineFailure("encountered-error")
                 default:
@@ -1030,6 +1104,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         refreshTimeUI()
         checkFeedStall()
         checkPictureStall()
+        #if os(iOS)
+        // The film bar's thumbnail, retaken every 10 s while the deck shows:
+        // the one taken on entry predates the first picture (black), and a
+        // locked deck never re-shows to retake it (~4 ms per take).
+        tabletopThumbnailTicks += 1
+        if layoutMode == .tabletop, TabletopHalo.subtitleView(in: videoView) != nil { updateMirror() }
+        if layoutMode == .tabletop, controlsVisible, tabletopThumbnailTicks % 10 == 0 { refreshTabletopThumbnail() }
+        #endif
         if statsVisible { refreshStats() }
         if sleepActive {
             sleepRemaining -= 1
@@ -1250,9 +1332,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         skipButton.isHidden = true
         skipButton.addTarget(self, action: #selector(skipSegmentTapped), for: .primaryActionTriggered)
         view.addSubview(skipButton)
+        let skipBottom = skipButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+        skipBottom.priority = .defaultHigh
         NSLayoutConstraint.activate([
             skipButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -32),
-            skipButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+            skipBottom,
+            // Table mode: stays on the upper screen. Elsewhere the video area
+            // reaches the bottom of the view, so this ceiling never bites.
+            skipButton.bottomAnchor.constraint(lessThanOrEqualTo: videoArea.bottomAnchor, constant: -24)
         ])
     }
 
@@ -1389,9 +1476,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 #endif
             }
             view.addSubview(card)
+            let cardBottom = card.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+            cardBottom.priority = .defaultHigh
             NSLayoutConstraint.activate([
                 card.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -32),
-                card.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+                cardBottom,
+                // Same ceiling as the skip button (table mode).
+                card.bottomAnchor.constraint(lessThanOrEqualTo: videoArea.bottomAnchor, constant: -24)
             ])
             nextUpCard = card
         }
@@ -1465,11 +1556,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         videoView.translatesAutoresizingMaskIntoConstraints = false
         videoView.backgroundColor = .black
         view.addSubview(videoView)
+        view.addLayoutGuide(videoArea)
+        let areaBottom = videoArea.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        videoAreaBottom = areaBottom
         NSLayoutConstraint.activate([
-            videoView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            videoView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            videoView.topAnchor.constraint(equalTo: view.topAnchor),
-            videoView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            videoArea.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            videoArea.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            videoArea.topAnchor.constraint(equalTo: view.topAnchor),
+            areaBottom,
+            videoView.leadingAnchor.constraint(equalTo: videoArea.leadingAnchor),
+            videoView.trailingAnchor.constraint(equalTo: videoArea.trailingAnchor),
+            videoView.topAnchor.constraint(equalTo: videoArea.topAnchor),
+            videoView.bottomAnchor.constraint(equalTo: videoArea.bottomAnchor)
         ])
 
         // SwiftVLC renders through a SwiftUI representable. Host it in a child
@@ -1675,11 +1773,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             noticeRow.bottomAnchor.constraint(equalTo: noticeView.bottomAnchor, constant: -noticePad * 0.75),
             noticeRow.leadingAnchor.constraint(equalTo: noticeView.leadingAnchor, constant: noticePad),
             noticeRow.trailingAnchor.constraint(equalTo: noticeView.trailingAnchor, constant: -noticePad),
-            noticeView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            noticeView.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
             // Above the centre, where `skipHUD` and the seek-settle spinner sit:
             // the re-anchoring seek a track switch fires raises that spinner at
             // exactly the moment this notice appears.
-            noticeView.bottomAnchor.constraint(equalTo: view.centerYAnchor, constant: -(hudH / 2 + 16)),
+            noticeView.bottomAnchor.constraint(equalTo: videoArea.centerYAnchor, constant: -(hudH / 2 + 16)),
             noticeView.widthAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.widthAnchor, constant: -48),
             noticeView.widthAnchor.constraint(lessThanOrEqualToConstant: noticeMaxW)
         ])
@@ -1722,8 +1820,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         NSLayoutConstraint.activate([
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor, constant: -24),
 
-            skipHUD.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            skipHUD.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            skipHUD.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            skipHUD.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
             skipHUD.widthAnchor.constraint(greaterThanOrEqualToConstant: hudMinW),
             // The HUD also carries localized sentences now (episode-nav failure),
             // and it's a single-line label pinned only by its centre — without a
@@ -1763,8 +1861,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         loadingIndicator.accessibilityTraits = .updatesFrequently
         view.addSubview(loadingIndicator)
         NSLayoutConstraint.activate([
-            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            loadingIndicator.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            loadingIndicator.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor)
         ])
 
         skipGlyph.translatesAutoresizingMaskIntoConstraints = false
@@ -1781,24 +1879,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         centerGlyph.layer.cornerRadius = 60
         skipGlyph.layer.cornerRadius = 0
         NSLayoutConstraint.activate([
-            centerGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            centerGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            centerGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            centerGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
             centerGlyph.widthAnchor.constraint(equalToConstant: 120),
             centerGlyph.heightAnchor.constraint(equalToConstant: 120),
-            skipGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            skipGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            skipGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
+            skipGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
             skipGlyph.widthAnchor.constraint(equalToConstant: 110),
             skipGlyph.heightAnchor.constraint(equalToConstant: 110)
         ])
         #else
         centerGlyph.layer.cornerRadius = 50
         NSLayoutConstraint.activate([
-            centerGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            centerGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            centerGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            centerGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
             centerGlyph.widthAnchor.constraint(equalToConstant: 100),
             centerGlyph.heightAnchor.constraint(equalToConstant: 100),
-            skipGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            skipGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            skipGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
+            skipGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
             skipGlyph.widthAnchor.constraint(equalToConstant: 100),
             skipGlyph.heightAnchor.constraint(equalToConstant: 100)
         ])
@@ -1819,7 +1917,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         // Stats overlay — anchored under the title, outside the HUD container
         // so it stays readable while the controls are hidden.
-        let statsContainer = UIView()
         statsContainer.translatesAutoresizingMaskIntoConstraints = false
         statsContainer.backgroundColor = UIColor.black.withAlphaComponent(0.6)
         statsContainer.layer.cornerRadius = 10
@@ -1841,19 +1938,49 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #else
         statsLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         #endif
+        statsLabel2.translatesAutoresizingMaskIntoConstraints = false
+        statsLabel2.numberOfLines = 0
+        statsLabel2.textColor = .white
+        statsLabel2.font = statsLabel.font
         statsContainer.addSubview(statsLabel)
+        statsContainer.addSubview(statsLabel2)
         view.addSubview(statsContainer)
+        // Each column's bottom stays inside the panel; the panel hugs the
+        // taller one (low-priority equalities). With the second column empty
+        // this is exactly the single-label panel it always was.
+        let hug1 = statsLabel.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10)
+        let hug2 = statsLabel2.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10)
+        hug1.priority = .defaultLow
+        hug2.priority = .defaultLow
         NSLayoutConstraint.activate([
             statsContainer.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
             // Without a trailing bound the multi-line label never wraps and the
             // Modules line runs off-screen.
             statsContainer.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor),
             statsLabel.topAnchor.constraint(equalTo: statsContainer.topAnchor, constant: 10),
-            statsLabel.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10),
+            statsLabel.bottomAnchor.constraint(lessThanOrEqualTo: statsContainer.bottomAnchor, constant: -10),
+            hug1,
             statsLabel.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 14),
-            statsLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14)
+            statsLabel2.topAnchor.constraint(equalTo: statsLabel.topAnchor),
+            statsLabel2.bottomAnchor.constraint(lessThanOrEqualTo: statsContainer.bottomAnchor, constant: -10),
+            hug2,
+            statsLabel2.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14)
         ])
+        statsOneColumn = [
+            statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            statsLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14),
+            statsLabel2.widthAnchor.constraint(equalToConstant: 0)
+        ]
+        statsTwoColumns = [
+            // Table mode: in the black band BELOW the picture, just above the
+            // fold — the band above it carries the status bar (measured on the
+            // Duo simulator: the panel hanging from the title covered the image).
+            statsContainer.bottomAnchor.constraint(equalTo: videoArea.bottomAnchor, constant: -8),
+            statsContainer.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -14),
+            statsLabel.trailingAnchor.constraint(equalTo: statsLabel2.leadingAnchor, constant: -18),
+            statsLabel2.widthAnchor.constraint(equalTo: statsLabel.widthAnchor)
+        ]
+        NSLayoutConstraint.activate(statsOneColumn)
 
         #if os(tvOS)
         buildTVTransport(safe: safe)
@@ -1864,7 +1991,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func setStatsVisible(_ visible: Bool) {
         statsVisible = visible
-        statsLabel.superview?.isHidden = !visible
+        statsContainer.isHidden = !visible
         if visible { refreshStats() }
     }
 
@@ -1983,12 +2110,64 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chH.isActive = true
         chapterHeightConstraint = chH
 
+        NSLayoutConstraint.activate([
+            chapterStack.topAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.topAnchor),
+            chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
+            chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
+            chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
+            chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor)
+        ])
+        for deckOnly in [lockButton, titleBlockButton, chaptersButton] {
+            deckOnly.translatesAutoresizingMaskIntoConstraints = false
+            deckOnly.isHidden = true
+            controlsContainer.addSubview(deckOnly)
+        }
+        lockButton.addTarget(self, action: #selector(toggleHUDLock), for: .touchUpInside)
+        chaptersButton.addTarget(self, action: #selector(openChapterMenu), for: .touchUpInside)
+        chaptersButton.accessibilityLabel = loc.localized("player.chapters")
+        titleBlockButton.showsMenuAsPrimaryAction = true
+        titleBlockButton.accessibilityLabel = titleText
+        scrubBlock.translatesAutoresizingMaskIntoConstraints = false
+        scrubBlock.backgroundColor = TabletopHUDStyle.blockFill
+        scrubBlock.layer.cornerRadius = TabletopHUDStyle.cornerRadius
+        scrubBlock.isUserInteractionEnabled = false
+        scrubBlock.isHidden = true
+        controlsContainer.insertSubview(scrubBlock, belowSubview: slider)
+
+        regularHUDConstraints = makeRegularHUDConstraints()
+        NSLayoutConstraint.activate(regularHUDConstraints)
+
+        // Trickplay preview floats above the slider, tracking the thumb.
+        let previewCenterX = scrubPreview.centerXAnchor.constraint(equalTo: slider.leadingAnchor)
+        scrubPreviewCenterX = previewCenterX
+        NSLayoutConstraint.activate([
+            scrubPreview.widthAnchor.constraint(equalToConstant: 160),
+            scrubPreview.heightAnchor.constraint(equalToConstant: 90),
+            scrubPreview.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -10),
+            previewCenterX
+        ])
+    }
+
+    /// The HUD as it always was. Rebuilt on every switch back to regular: the
+    /// table mode moves the very same views. Re-creates the five edges
+    /// `applySideColumnReach()` adjusts, so it never mutates dead constraints.
+    private func makeRegularHUDConstraints() -> [NSLayoutConstraint] {
+        let safe = view.safeAreaLayoutGuide
         // Anchor the top-right cluster to the container's OWN safe area (it's
         // pinned to the screen edges, so this equals the screen safe area) —
         // removes any cross-hierarchy ambiguity vs `view.safeAreaLayoutGuide`.
         let cSafe = controlsContainer.safeAreaLayoutGuide
-        NSLayoutConstraint.activate([
-            closeButton.trailingAnchor.constraint(equalTo: cSafe.trailingAnchor, constant: -12),
+        // Constants adjusted per layout pass by `applySideColumnReach()`.
+        let closeTrailing = closeButton.trailingAnchor.constraint(equalTo: cSafe.trailingAnchor, constant: -12)
+        let sliderLeading = slider.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24)
+        let timeLeading = timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24)
+        let chapterLeading = chapterScroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16)
+        let chapterTrailing = chapterScroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16)
+        sideReachConstraints = SideReachEdges(closeTrailing: closeTrailing, sliderLeading: sliderLeading,
+                                              timeLeading: timeLeading, chapterLeading: chapterLeading,
+                                              chapterTrailing: chapterTrailing)
+        return [
+            closeTrailing,
             closeButton.topAnchor.constraint(equalTo: cSafe.topAnchor, constant: 8),
             // Title can never run under the top-right cluster.
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: statsButton.leadingAnchor, constant: -12),
@@ -2003,11 +2182,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             statsButton.trailingAnchor.constraint(equalTo: speedButton.leadingAnchor, constant: -4),
             statsButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
 
-            slider.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
+            sliderLeading,
             slider.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
             slider.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -22),
 
-            timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
+            timeLeading,
             timeLabel.bottomAnchor.constraint(equalTo: slider.topAnchor, constant: -8),
             durationLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
             durationLabel.bottomAnchor.constraint(equalTo: slider.topAnchor, constant: -8),
@@ -2015,25 +2194,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             transportRow.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
             transportRow.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -16),
 
-            chapterScroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16),
-            chapterScroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16),
-            chapterScroll.bottomAnchor.constraint(equalTo: transportRow.topAnchor, constant: -16),
-            chapterStack.topAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.topAnchor),
-            chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
-            chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
-            chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
-            chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor)
-        ])
-
-        // Trickplay preview floats above the slider, tracking the thumb.
-        let previewCenterX = scrubPreview.centerXAnchor.constraint(equalTo: slider.leadingAnchor)
-        scrubPreviewCenterX = previewCenterX
-        NSLayoutConstraint.activate([
-            scrubPreview.widthAnchor.constraint(equalToConstant: 160),
-            scrubPreview.heightAnchor.constraint(equalToConstant: 90),
-            scrubPreview.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -10),
-            previewCenterX
-        ])
+            chapterLeading,
+            chapterTrailing,
+            chapterScroll.bottomAnchor.constraint(equalTo: transportRow.topAnchor, constant: -16)
+        ]
     }
 
     private func configureIOS(_ b: UIButton, _ symbol: String, pt: CGFloat, _ a11y: String, compact: Bool = false) {
@@ -2083,6 +2247,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tap.numberOfTapsRequired = 1
         videoView.addGestureRecognizer(tap)
+        // Table mode: a tap on the lower screen toggles the deck (no double-tap
+        // seek there — it is not the picture).
+        tabletopBackdrop.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleDeckTap)))
 
         // Swipe-down-to-dismiss. Lives on `videoView` like the tap (touches on
         // HUD controls / the chapter strip never reach it) and only begins on a
@@ -2564,6 +2731,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingChapterThumbnails = nil
         chapterStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         chapterStartTicks = []
+        #if os(iOS)
+        chapterTitles = []
+        // A new media (episode navigation) may have no chapters: drop the block now.
+        if layoutMode == .tabletop { applyLayoutMode(force: true) }
+        #endif
         selectedChapterIndex = nil
         #if os(tvOS)
         tvScrub.setChapterMarks([])
@@ -2595,9 +2767,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.resolvedIsEpisode = item.type == .episode
             #if os(tvOS)
             self.applyHUDContext(item: item, builder: builder, token: token)
+            #else
+            self.tabletopItemBase = [item.productionYear.map(String.init),
+                                     item.runTimeTicks.map { self.loc.runtime(minutes: $0.jellyfinMinutes) }]
+                .compactMap { $0 }
+            self.refreshTabletopValues()
             #endif
             guard let chapters = item.chapters, chapters.count > 1 else { return }
             self.chapterStartTicks = chapters.map { $0.startPositionTicks ?? 0 }
+            #if os(iOS)
+            self.chapterTitles = chapters.enumerated().map { index, chapter in
+                (chapter.name?.isEmpty == false ? chapter.name : nil)
+                    ?? "\(self.loc.localized("player.chapter")) \(index + 1)"
+            }
+            #endif
             for (i, ch) in chapters.enumerated() {
                 let startSec = Double(ch.startPositionTicks ?? 0) / 10_000_000
                 let title = (ch.name?.isEmpty == false ? ch.name : nil)
@@ -2608,6 +2791,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #if os(tvOS)
             self.chapterHeightConstraint?.constant = self.chapterPeekHeight
             #else
+            // Table mode: the Chapters block appears now.
+            if self.layoutMode == .tabletop { self.applyLayoutMode(force: true) }
             self.chapterHeightConstraint?.constant = 150
             #endif
             self.chapterScroll.isHidden = false
@@ -2899,6 +3084,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// hit-testing, so a scaled button is tappable exactly where it is drawn.
     /// Re-run on every layout pass: rotation and iPad resizing change the width.
     private func layoutTransportRow() {
+        // Table mode: the blocks fix their own widths; PR #281's refit (spacing,
+        // then scale) would fight them.
+        guard layoutMode == .regular else {
+            if transportRow.transform != .identity { transportRow.transform = .identity }
+            return
+        }
         let widths = transportRow.arrangedSubviews.filter { !$0.isHidden }.map(\.intrinsicContentSize.width)
         let insets = view.safeAreaInsets
         let available = view.bounds.width - insets.left - insets.right - 2 * TransportRowFit.edgeMargin
@@ -2910,7 +3101,407 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        applySideColumnReach()
         layoutTransportRow()
+        if layoutMode == .tabletop { updateMirror() }
+    }
+
+    /// See `SideColumnReach`: on the iPhone Duo closed in landscape, the HUD row
+    /// away from the camera runs into the one-sided status column.
+    private func applySideColumnReach() {
+        guard layoutMode == .regular, let c = sideReachConstraints else { return }
+        let insets = view.safeAreaInsets
+        let reach = SideColumnReach.reach(leftInset: insets.left, rightInset: insets.right,
+                                          isLandscape: view.bounds.width > view.bounds.height)
+        let values: [(NSLayoutConstraint, CGFloat)] = [
+            (c.closeTrailing, -12 + reach.topTrailing),
+            (c.sliderLeading, 24 - reach.bottomLeading),
+            (c.timeLeading, 24 - reach.bottomLeading),
+            (c.chapterLeading, 16 - reach.bottomLeading),
+            (c.chapterTrailing, -16 + reach.topTrailing)
+        ]
+        for (constraint, value) in values where constraint.constant != value { constraint.constant = value }
+    }
+
+    // MARK: - Table mode (iPhone Duo half-folded, portrait)
+
+    private func setupTabletopBackdrop() {
+        tabletopBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        tabletopBackdrop.backgroundColor = .black
+        tabletopBackdrop.isHidden = true
+        view.insertSubview(tabletopBackdrop, belowSubview: videoView)
+        haloVeil.translatesAutoresizingMaskIntoConstraints = false
+        haloVeil.isHidden = true
+        view.insertSubview(haloVeil, aboveSubview: videoView)   // below the HUD, added later
+        subtitleOverlay.translatesAutoresizingMaskIntoConstraints = false
+        subtitleOverlay.isUserInteractionEnabled = false
+        view.insertSubview(subtitleOverlay, aboveSubview: videoView)
+        NSLayoutConstraint.activate([
+            subtitleOverlay.leadingAnchor.constraint(equalTo: videoView.leadingAnchor),
+            subtitleOverlay.trailingAnchor.constraint(equalTo: videoView.trailingAnchor),
+            subtitleOverlay.topAnchor.constraint(equalTo: videoView.topAnchor),
+            subtitleOverlay.bottomAnchor.constraint(equalTo: videoView.bottomAnchor),
+            tabletopBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabletopBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabletopBackdrop.topAnchor.constraint(equalTo: view.centerYAnchor),
+            tabletopBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            haloVeil.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            haloVeil.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            haloVeil.topAnchor.constraint(equalTo: view.centerYAnchor),
+            haloVeil.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+    }
+
+    /// Added LAST in `viewDidLoad`: a first callback carrying a real status
+    /// builds the deck's constraints, which need every HUD view in place.
+    private func installHingeObserver() {
+        #if !NO_HINGE_API
+        if #available(iOS 27.1, *) {
+            view.addInteraction(UIHingeInteraction { [weak self] _, update in
+                self?.hingeChanged(update.hinge.map { HingeReading($0.status) })
+            })
+        }
+        #endif
+    }
+
+    private func setupDeckTint() {
+        deckTint.translatesAutoresizingMaskIntoConstraints = false
+        deckTint.backgroundColor = UIColor.white.withAlphaComponent(0.04)
+        deckTint.isUserInteractionEnabled = false
+        deckTint.isHidden = true
+        controlsContainer.insertSubview(deckTint, at: 0)
+        NSLayoutConstraint.activate([
+            deckTint.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor),
+            deckTint.trailingAnchor.constraint(equalTo: controlsContainer.trailingAnchor),
+            deckTint.topAnchor.constraint(equalTo: controlsContainer.centerYAnchor),
+            deckTint.bottomAnchor.constraint(equalTo: controlsContainer.bottomAnchor)
+        ])
+    }
+
+    private func hingeChanged(_ update: HingeReading?) {
+        hingeReading = PlayerPostureLayout.reading(previous: hingeReading, update: update)
+        applyLayoutMode()
+    }
+
+    /// The single entry into the two layouts. Idempotent: called by the hinge,
+    /// by size transitions (rotation, window resize) with the TARGET size, on
+    /// appearance, and with `force` when the deck's contents change.
+    private func applyLayoutMode(size: CGSize? = nil, force: Bool = false) {
+        let hinge = PlayerPostureLayout.effectiveHinge(
+            hingeReading, simulateTabletop: UserDefaults.standard.bool(forKey: SettingsKey.debugSimulateTabletop))
+        let mode = PlayerPostureLayout.mode(hinge: hinge, viewSize: size ?? view.bounds.size)
+        guard force || mode != layoutMode else { return }
+        // Never under a finger on the slider: the swap moves and resizes it,
+        // and re-arming the auto-hide would fade the HUD mid-drag.
+        // `scrubberDone` applies it.
+        if isScrubbing {
+            layoutModePending = true
+            return
+        }
+        layoutModePending = false
+        layoutMode = mode
+        let tabletop = mode == .tabletop
+        NSLayoutConstraint.deactivate(regularHUDConstraints + tabletopHUDConstraints)
+        videoAreaBottom?.isActive = false
+        let areaBottom = videoArea.bottomAnchor.constraint(equalTo: tabletop ? view.centerYAnchor : view.bottomAnchor)
+        areaBottom.isActive = true
+        videoAreaBottom = areaBottom
+        if tabletop {
+            tabletopHUDConstraints = makeTabletopHUDConstraints()
+            NSLayoutConstraint.activate(tabletopHUDConstraints)
+        } else {
+            regularHUDConstraints = makeRegularHUDConstraints()
+            NSLayoutConstraint.activate(regularHUDConstraints)
+        }
+        tabletopBackdrop.isHidden = !tabletop
+        deckTint.isHidden = !tabletop
+        // Hardware-keyboard shortcuts only outside table mode (see
+        // `canBecomeFirstResponder`).
+        if tabletop { resignFirstResponder() } else if view.window != nil { becomeFirstResponder() }
+        // No 45 % veil over the upper screen's picture: the deck has its own ground.
+        controlsContainer.backgroundColor = tabletop ? .clear : .black.withAlphaComponent(0.45)
+        applyHUDStyle()
+        NSLayoutConstraint.deactivate(tabletop ? statsOneColumn : statsTwoColumns)
+        NSLayoutConstraint.activate(tabletop ? statsTwoColumns : statsOneColumn)
+        if statsVisible { refreshStats() }
+        if size == nil { UIView.animate(withDuration: 0.3) { self.view.layoutIfNeeded() } }
+        updateMirror()
+        if tabletop {
+            // First thumbnail once the picture sits in its new frame.
+            DispatchQueue.main.async { [weak self] in self?.refreshTabletopThumbnail() }
+        }
+        if PlayerPostureLayout.revealsOnModeChange(mode: mode, locked: hudLocked, visible: controlsVisible) {
+            showControls()
+        } else if controlsVisible {
+            scheduleHideControls()
+        }
+    }
+
+    /// The picture's aspect, from the playing video track (nil before it is known).
+    private var videoAspect: CGFloat? {
+        guard let track = player.videoTracks.first(where: { $0.isSelected }) ?? player.videoTracks.first,
+              let width = track.width, let height = track.height, width > 0, height > 0 else { return nil }
+        return CGFloat(width) / CGFloat(height)
+    }
+
+    /// The halo follows the upper half's size and the track's aspect.
+    private func updateMirror() {
+        let tabletop = layoutMode == .tabletop
+        haloVeil.isHidden = !tabletop
+        // Subtitles must never be mirrored (illegible). Lifted out when found;
+        // one left inside the mirror (not lifted) switches the mirror off.
+        let subtitlesClear = !tabletop || liftSubtitlesOutOfMirror()
+        videoView.setMirror(enabled: tabletop && subtitlesClear,
+                            pictureHeight: TabletopHalo.pictureHeight(viewSize: videoView.bounds.size,
+                                                                      videoAspect: videoAspect),
+                            gapBelowFold: 24)
+    }
+
+    /// Moves libVLC's subtitle view from inside the mirrored `videoView` to
+    /// `subtitleOverlay` (same frame, so its regions land where they did).
+    /// Returns false only when one is still inside the mirror. libVLC builds
+    /// the view with the video output, after the mode switch: the second tick
+    /// retries while in table mode.
+    private func liftSubtitlesOutOfMirror() -> Bool {
+        guard let subtitles = TabletopHalo.subtitleView(in: videoView) else { return true }
+        subtitles.removeFromSuperview()
+        subtitles.frame = subtitleOverlay.bounds
+        subtitles.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        subtitleOverlay.addSubview(subtitles)
+        return TabletopHalo.subtitleView(in: videoView) == nil
+    }
+
+    private func refreshTabletopThumbnail() {
+        guard layoutMode == .tabletop else { return }
+        tabletopThumbnail = TabletopHalo.thumbnail(of: videoView, videoAspect: videoAspect)
+        refreshTabletopValues()
+    }
+
+    /// The deck: lower half, 18 pt margins, rows 10 pt apart — film bar (66) ·
+    /// playback (the rest) · scrub (58) · settings (86).
+    private func makeTabletopHUDConstraints() -> [NSLayoutConstraint] {
+        let safe = view.safeAreaLayoutGuide
+        let top = controlsContainer.centerYAnchor
+        let lead = safe.leadingAnchor, trail = safe.trailingAnchor
+        // A hidden episode button is collapsed by the stack view itself; its
+        // width ratio must yield to that, hence below required.
+        let prevWidth = prevButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor, multiplier: 0.55)
+        let nextWidth = nextButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor, multiplier: 0.55)
+        prevWidth.priority = .defaultHigh
+        nextWidth.priority = .defaultHigh
+        var constraints: [NSLayoutConstraint] = [
+            // Film bar
+            lockButton.topAnchor.constraint(equalTo: top, constant: 18),
+            lockButton.leadingAnchor.constraint(equalTo: lead, constant: 18),
+            lockButton.widthAnchor.constraint(equalToConstant: 66),
+            lockButton.heightAnchor.constraint(equalToConstant: 66),
+            closeButton.topAnchor.constraint(equalTo: lockButton.topAnchor),
+            closeButton.trailingAnchor.constraint(equalTo: trail, constant: -18),
+            closeButton.widthAnchor.constraint(equalToConstant: 66),
+            closeButton.heightAnchor.constraint(equalToConstant: 66),
+            titleBlockButton.topAnchor.constraint(equalTo: lockButton.topAnchor),
+            titleBlockButton.heightAnchor.constraint(equalToConstant: 66),
+            titleBlockButton.leadingAnchor.constraint(equalTo: lockButton.trailingAnchor, constant: 10),
+            titleBlockButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -10),
+            // Playback: −10 / +10 equal, play 1.45×, episodes 0.55× (hidden when absent)
+            transportRow.topAnchor.constraint(equalTo: lockButton.bottomAnchor, constant: 10),
+            transportRow.leadingAnchor.constraint(equalTo: lead, constant: 18),
+            transportRow.trailingAnchor.constraint(equalTo: trail, constant: -18),
+            transportRow.bottomAnchor.constraint(equalTo: scrubBlock.topAnchor, constant: -10),
+            skipFwdButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor),
+            playPauseButton.widthAnchor.constraint(equalTo: skipBackButton.widthAnchor, multiplier: 1.45),
+            prevWidth,
+            nextWidth,
+            // Scrub
+            scrubBlock.leadingAnchor.constraint(equalTo: lead, constant: 18),
+            scrubBlock.trailingAnchor.constraint(equalTo: trail, constant: -18),
+            scrubBlock.heightAnchor.constraint(equalToConstant: 58),
+            scrubBlock.bottomAnchor.constraint(equalTo: subtitleButton.topAnchor, constant: -10),
+            timeLabel.leadingAnchor.constraint(equalTo: scrubBlock.leadingAnchor, constant: 20),
+            timeLabel.centerYAnchor.constraint(equalTo: scrubBlock.centerYAnchor),
+            timeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            durationLabel.trailingAnchor.constraint(equalTo: scrubBlock.trailingAnchor, constant: -20),
+            durationLabel.centerYAnchor.constraint(equalTo: scrubBlock.centerYAnchor),
+            durationLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 52),
+            slider.leadingAnchor.constraint(equalTo: timeLabel.trailingAnchor, constant: 16),
+            slider.trailingAnchor.constraint(equalTo: durationLabel.leadingAnchor, constant: -16),
+            slider.centerYAnchor.constraint(equalTo: scrubBlock.centerYAnchor),
+            // The hidden title keeps its usual place: the « Regarder ensemble »
+            // strip and the stats panel hang from it, on the upper screen.
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trail, constant: -24),
+            // The chapter strip is replaced by the Chapters block (alpha 0).
+            chapterScroll.leadingAnchor.constraint(equalTo: lead, constant: 16),
+            chapterScroll.trailingAnchor.constraint(equalTo: trail, constant: -16),
+            chapterScroll.bottomAnchor.constraint(equalTo: transportRow.topAnchor, constant: -16)
+        ]
+        // Settings: equal-width blocks; Chapters only when there are chapters.
+        let settings: [UIButton] = [subtitleButton, audioButton, speedButton]
+            + (chapterStartTicks.count > 1 ? [chaptersButton] : [])
+            + [pipButton]
+        var previous: UIButton?
+        for block in settings {
+            constraints.append(block.heightAnchor.constraint(equalToConstant: 86))
+            // 6 pt above the home indicator's inset: the lower screen's spare
+            // height goes to the transport row (recette 2026-10-07).
+            constraints.append(block.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -6))
+            if let previous {
+                constraints.append(block.leadingAnchor.constraint(equalTo: previous.trailingAnchor, constant: 10))
+                constraints.append(block.widthAnchor.constraint(equalTo: subtitleButton.widthAnchor))
+            } else {
+                constraints.append(block.leadingAnchor.constraint(equalTo: lead, constant: 18))
+            }
+            previous = block
+        }
+        constraints.append(pipButton.trailingAnchor.constraint(equalTo: trail, constant: -18))
+        return constraints
+    }
+
+    /// Dresses the SAME buttons for the current mode. Regular = the settings
+    /// `buildIOSTransport` applies, replayed as they were.
+    private func applyHUDStyle() {
+        let tabletop = layoutMode == .tabletop
+        lockButton.isHidden = !tabletop
+        titleBlockButton.isHidden = !tabletop
+        chaptersButton.isHidden = !tabletop || chapterStartTicks.count <= 1
+        scrubBlock.isHidden = !tabletop
+        statsButton.isHidden = tabletop          // moves into the film bar's menu
+        chapterScroll.alpha = tabletop ? 0 : 1   // replaced by the Chapters block
+        titleLabel.alpha = tabletop ? 0 : 1      // replaced by the film bar; keeps its place
+        // Alpha 0 is not hidden for VoiceOver.
+        chapterScroll.accessibilityElementsHidden = tabletop
+        titleLabel.accessibilityElementsHidden = tabletop
+        transportRow.alignment = tabletop ? .fill : .center
+        transportRow.spacing = tabletop ? 10 : 24
+        let resizable: [UIButton] = [subtitleButton, audioButton, speedButton, chaptersButton, pipButton,
+                                     prevButton, skipBackButton, playPauseButton, skipFwdButton, nextButton,
+                                     closeButton]
+        if tabletop {
+            // `configureIOS` pins intrinsic widths (`.required`); the deck sets
+            // equal widths, so they must yield. Regular re-pins them below.
+            for button in resizable {
+                button.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            }
+            closeButton.configuration = TabletopHUDStyle.block(symbol: "xmark", pointSize: 18)
+            prevButton.configuration = TabletopHUDStyle.block(symbol: "backward.end.fill", pointSize: 26)
+            nextButton.configuration = TabletopHUDStyle.block(symbol: "forward.end.fill", pointSize: 26)
+            skipBackButton.configuration = TabletopHUDStyle.block(symbol: PlayerSkipConfig.backwardSymbol, pointSize: 38)
+            skipFwdButton.configuration = TabletopHUDStyle.block(symbol: PlayerSkipConfig.forwardSymbol, pointSize: 38)
+            pipButton.configuration = TabletopHUDStyle.block(symbol: "pip.enter", pointSize: 22,
+                                                             title: loc.localized("player.pip"))
+        } else {
+            var closeConfig = UIButton.Configuration.plain()
+            closeConfig.image = UIImage(systemName: "xmark",
+                                        withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold))
+            closeConfig.baseForegroundColor = .white
+            closeConfig.background.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+            closeConfig.cornerStyle = .capsule
+            closeConfig.contentInsets = NSDirectionalEdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15)
+            closeButton.configuration = closeConfig
+            closeButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            closeButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+            configureIOS(prevButton, "backward.end.fill", pt: 24, loc.localized("player.previousEpisode"))
+            configureIOS(nextButton, "forward.end.fill", pt: 24, loc.localized("player.nextEpisode"))
+            configureIOS(skipBackButton, PlayerSkipConfig.backwardSymbol, pt: 30, hudA11y.skipBack)
+            configureIOS(skipFwdButton, PlayerSkipConfig.forwardSymbol, pt: 30, hudA11y.skipForward)
+            configureIOS(pipButton, "pip.enter", pt: 17, loc.localized("player.pip"), compact: true)
+            configureIOS(audioButton, "waveform", pt: 17, loc.localized("player.audio"), compact: true)
+            configureIOS(subtitleButton, "captions.bubble", pt: 17, loc.localized("player.subtitles"), compact: true)
+            configureIOS(speedButton, "gauge.with.needle", pt: 17, loc.localized("player.speed"), compact: true)
+            playPauseButton.configuration = {
+                var cfg = UIButton.Configuration.plain()
+                cfg.baseForegroundColor = .white
+                return cfg
+            }()
+            playPauseButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            playPauseButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+            for button in [subtitleButton, audioButton, speedButton] { button.accessibilityValue = nil }
+        }
+        setPlayPauseIcon(playing: player.isPlaying)
+        refreshTabletopValues()
+    }
+
+    /// What the blocks display (tracks, speed, lock, film bar). Called by each
+    /// writer of those values; does nothing in regular.
+    private func refreshTabletopValues() {
+        guard layoutMode == .tabletop else { return }
+        let subtitleValue: String = {
+            guard let track = player.selectedSubtitleTrack,
+                  let index = player.subtitleTracks.firstIndex(of: track) else {
+                return loc.localized("player.subtitles.off")
+            }
+            return displayLabel(forSubtitleOrdinal: index, track: track)
+        }()
+        let audioValue: String? = {
+            guard let track = player.selectedAudioTrack,
+                  let index = player.audioTracks.firstIndex(of: track) else { return nil }
+            return displayLabel(forAudioOrdinal: index, track: track)
+        }()
+        let speedValue = String(format: "%g×", playbackRate)
+        subtitleButton.configuration = TabletopHUDStyle.block(symbol: "captions.bubble", pointSize: 22,
+                                                              title: loc.localized("player.subtitles"),
+                                                              subtitle: subtitleValue)
+        subtitleButton.accessibilityValue = subtitleValue
+        audioButton.configuration = TabletopHUDStyle.block(symbol: "waveform", pointSize: 22,
+                                                           title: loc.localized("player.audio"), subtitle: audioValue)
+        audioButton.accessibilityValue = audioValue
+        speedButton.configuration = TabletopHUDStyle.block(symbol: "gauge.with.needle", pointSize: 22,
+                                                           title: loc.localized("player.speed"), subtitle: speedValue)
+        speedButton.accessibilityValue = speedValue
+        chaptersButton.configuration = TabletopHUDStyle.block(symbol: "list.bullet", pointSize: 22,
+                                                              title: loc.localized("player.chapters"))
+        lockButton.configuration = TabletopHUDStyle.lock(locked: hudLocked, accent: Self.accentColor())
+        lockButton.accessibilityLabel = loc.localized(hudLocked ? "player.tabletop.lock.locked"
+                                                                : "player.tabletop.lock.unlocked")
+        let width = (player.videoTracks.first(where: { $0.isSelected }) ?? player.videoTracks.first)?.width
+        let detail = (tabletopItemBase + [width.map(TabletopHalo.qualityLabel(width:))].compactMap { $0 })
+            .joined(separator: " · ")
+        // `titleLabel` follows episode navigation; `titleText` is the opening title.
+        let currentTitle = titleLabel.text ?? titleText
+        titleBlockButton.accessibilityLabel = currentTitle
+        titleBlockButton.configuration = TabletopHUDStyle.titleBlock(title: currentTitle,
+                                                                     subtitle: detail.isEmpty ? nil : detail,
+                                                                     thumbnail: tabletopThumbnail)
+        titleBlockButton.menu = UIMenu(children: [
+            UIAction(title: loc.localized("player.stats"), image: UIImage(systemName: "chart.xyaxis.line"),
+                     state: statsVisible ? .on : .off) { [weak self] _ in self?.toggleStats() }
+        ])
+    }
+
+    @objc private func toggleHUDLock() {
+        hudLocked.toggle()
+        UserDefaults.standard.set(hudLocked, forKey: SettingsKey.playerTabletopHUDLocked)
+        refreshTabletopValues()
+        // VoiceOver does not re-read a focused element whose label changed.
+        UIAccessibility.post(notification: .announcement, argument: lockButton.accessibilityLabel)
+        if hudLocked { hideControlsWorkItem?.cancel() } else { scheduleHideControls() }
+    }
+
+    @objc private func openChapterMenu() {
+        let current = PlayerChapterSelection.currentIndex(
+            startTicks: chapterStartTicks, positionTicks: Int(currentMs) * 10_000)
+        let options: [PickerOption] = chapterTitles.enumerated().compactMap { index, title in
+            guard index < chapterStartTicks.count else { return nil }
+            let ms = Int32(clamping: chapterStartTicks[index] / 10_000)
+            return PickerOption(title: "\(title) — \(PlayerTimeFormat.ms(ms))", selected: index == current) { [weak self] in
+                self?.seeks.accumulate(toAbsoluteMs: ms)
+            }
+        }
+        presentPicker(loc.localized("player.chapters"), sourceView: chaptersButton, options: options)
+    }
+
+    @objc private func handleDeckTap() {
+        if controlsVisible {
+            if PlayerPostureLayout.tapHides(mode: layoutMode, locked: hudLocked) { hideControlsImmediately() }
+        } else {
+            showControls()
+            scheduleHideControls()
+        }
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: any UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: { _ in self.applyLayoutMode(size: size) })
     }
     #endif
 
@@ -3188,6 +3779,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// open watchdog for nothing.
     private func selectAudioTrack(_ track: Track) {
         guard player.selectedAudioTrack != track else { return }
+        #if os(iOS)
+        defer { refreshTabletopValues() }
+        #endif
         let anchor = currentMs
         player.selectedAudioTrack = track
         guard mediaConfirmedOpen, lengthMs > 0 else { return }
@@ -3204,6 +3798,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// the way out would be a cost with no benefit.
     private func selectSubtitleTrack(_ track: Track?) {
         guard player.selectedSubtitleTrack != track else { return }
+        #if os(iOS)
+        defer { refreshTabletopValues() }
+        #endif
         let anchor = currentMs
         player.selectedSubtitleTrack = track
         guard track != nil, mediaConfirmedOpen, lengthMs > 0 else { return }
@@ -3255,6 +3852,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         try? player.setPlaybackRate(PlaybackRate(rate))
+        #if os(iOS)
+        refreshTabletopValues()
+        #endif
         guard mediaConfirmedOpen, lengthMs > 0 else { return }
         let anchor = currentMs
         logger.notice("CINEMAX-RATE ▸ vitesse \(rate, privacy: .public), réancrage à \(anchor, privacy: .public) ms")
@@ -3311,6 +3911,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     @objc private func toggleStats() {
         setStatsVisible(!statsVisible)
+        #if os(iOS)
+        refreshTabletopValues()
+        #endif
         scheduleHideControls()
     }
 
@@ -3353,6 +3956,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if let engineModules = VLCEngineFacts.shared.summary {
             lines.append("\(loc.localized("player.stats.modules")) : \(engineModules)")
         }
+        #if os(iOS)
+        if layoutMode == .tabletop {
+            // Two columns: the panel fits in the black band above the picture
+            // instead of covering it.
+            let half = (lines.count + 1) / 2
+            statsLabel.text = lines.prefix(half).joined(separator: "\n")
+            statsLabel2.text = lines.dropFirst(half).joined(separator: "\n")
+            return
+        }
+        statsLabel2.text = nil
+        #endif
         statsLabel.text = lines.joined(separator: "\n")
     }
 
@@ -3382,6 +3996,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func applyServerTrackDefaultsIfNeeded() {
         guard !didApplyServerTrackDefaults, !player.audioTracks.isEmpty else { return }
         didApplyServerTrackDefaults = true
+        #if os(iOS)
+        defer { refreshTabletopValues() }
+        #endif
 
         if let kept = trackRestore {
             trackRestore = nil
@@ -4176,8 +4793,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             guard let self else { return }
             self.lastTapTime = 0
             self.pendingTapWork = nil
-            if self.controlsVisible { self.hideControlsImmediately() }
-            else { self.showControls(); self.scheduleHideControls() }
+            if self.controlsVisible {
+                // Table mode, deck locked: a tap never hides it (only the lock decides).
+                if PlayerPostureLayout.tapHides(mode: self.layoutMode, locked: self.hudLocked) {
+                    self.hideControlsImmediately()
+                }
+            } else { self.showControls(); self.scheduleHideControls() }
         }
         pendingTapWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
@@ -4304,11 +4925,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // documented coalesced path (`SeekMachine.skip(bySeconds:)`) via the
     // existing iOS skip handlers — never a direct engine seek. Wired as UIKit key
     // commands so they coexist with the gesture/HUD stack without touching it.
-    override var canBecomeFirstResponder: Bool { true }
+    /// Not in table mode: on the iPhone Duo half-folded, a first responder that
+    /// takes key commands makes the system treat touches on the lower screen as
+    /// a request for its keyboard — the deck's blocks stopped responding and
+    /// the software keyboard rose over them (simulator, 2026-10-07).
+    override var canBecomeFirstResponder: Bool { layoutMode == .regular }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         becomeFirstResponder()
+        // The hinge's first reading can land before the view has its size.
+        applyLayoutMode()
     }
 
     override var keyCommands: [UIKeyCommand]? {
@@ -4366,10 +4993,19 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func scrubberDone() {
         scrubPreview.isHidden = true
         let length = lengthMs
-        guard length > 0 else { isScrubbing = false; return }
+        guard length > 0 else {
+            isScrubbing = false
+            #if os(iOS)
+            if layoutModePending { applyLayoutMode(force: true) }
+            #endif
+            return
+        }
         userEngineSeek(ms: Int32(Float(length) * slider.value))
         isScrubbing = false
         scheduleHideControls()
+        #if os(iOS)
+        if layoutModePending { applyLayoutMode(force: true) }
+        #endif
     }
 
     /// Positions + populates the trickplay bubble for the slider's value.
@@ -4390,6 +5026,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         var config = playPauseButton.configuration ?? UIButton.Configuration.plain()
         config.image = UIImage(systemName: playing ? "pause.fill" : "play.fill",
                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .bold))
+        if layoutMode == .tabletop {
+            config = TabletopHUDStyle.block(symbol: playing ? "pause.fill" : "play.fill", pointSize: 54, emphasized: true)
+        }
         playPauseButton.configuration = config
         // The glyph shows what the press WILL do, and so must the label: a
         // button drawn as ⏸ is the one that pauses.
@@ -4407,6 +5046,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func scheduleHideControls() {
         hideControlsWorkItem?.cancel()
+        #if os(iOS)
+        // Table mode, deck locked: it never hides by itself.
+        if !PlayerPostureLayout.autoHides(mode: layoutMode, locked: hudLocked) { return }
+        #endif
         // Never auto-hide while a track/chapter picker is up — the controls must
         // stay put behind it so focus returns somewhere sensible.
         if pickerPresented { return }
@@ -4422,6 +5065,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func hideControlsImmediately() {
+        // A hidden HUD has nothing left to hide: a timer armed before a manual
+        // hide (tap) would otherwise fire on the NEXT showing — the locked deck
+        // re-revealed on entering table mode vanished 4 s later.
+        hideControlsWorkItem?.cancel()
         controlsVisible = false
         UIView.animate(withDuration: 0.25) { self.controlsContainer.alpha = 0 }
         controlsContainer.isUserInteractionEnabled = false
@@ -4433,6 +5080,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func showControls() {
         controlsVisible = true
+        #if os(iOS)
+        refreshTabletopThumbnail()
+        #endif
         // Paints of the hidden HUD were skipped, so catch the labels up before
         // they fade in — otherwise they show the position as of the last time
         // the HUD was visible until the next engine tick lands.
@@ -5245,3 +5895,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
 }
+
+#if os(iOS) && !NO_HINGE_API
+@available(iOS 27.1, *)
+extension HingeReading {
+    init(_ status: UIHinge.Status) {
+        switch status {
+        case .closed: self = .closed
+        case .partiallyOpen: self = .partiallyOpen
+        case .fullyOpen: self = .fullyOpen
+        default: self = .unknown
+        }
+    }
+}
+#endif

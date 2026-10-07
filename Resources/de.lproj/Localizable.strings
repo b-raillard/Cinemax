@@ -717,6 +717,7 @@
 "settings.debug" = "Debugging";
 "settings.debug.fastSleepTimer" = "Schneller Schlaftimer (15 s)";
 "settings.debug.skipToEnd" = "Taste „Zum Ende springen“";
+"settings.debug.simulateTabletop" = "Tischmodus simulieren (iPhone Duo)";
 "settings.debug.exportDiagnostics" = "Diagnose exportieren";
 "settings.debug.exportDiagnostics.subtitle" = "Protokoll der letzten 30 Minuten dieser Sitzung, ohne Tokens";
 "settings.debug.exportDiagnostics.preparing" = "Bericht wird vorbereitet …";
@@ -912,6 +913,8 @@
 "player.subtitleDelay" = "Untertitelverzögerung";
 "player.delay.reset" = "Zurücksetzen (0 ms)";
 "player.stats" = "Statistiken";
+"player.tabletop.lock.locked" = "Steuerelemente gesperrt, immer sichtbar";
+"player.tabletop.lock.unlocked" = "Steuerelemente werden automatisch ausgeblendet";
 "player.stats.video" = "Video";
 "player.stats.audio" = "Audio";
 "player.stats.bitrate" = "Bitrate";

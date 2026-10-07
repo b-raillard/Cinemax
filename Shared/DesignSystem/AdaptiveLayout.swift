@@ -78,6 +78,18 @@ enum AdaptiveLayout {
         form == .regular ? 900 : nil
     }
 
+    // MARK: - Section titles
+
+    /// Title of a rail or a page section (« Continue Watching », « Cast & Crew »,
+    /// « Browse by genre »). Compact takes the smaller face: at 32 pt a section
+    /// title outsized the hero and fiche titles above it, and on a 382 pt-wide
+    /// screen (iPhone Duo closed) « Action & Adventure » truncated beside
+    /// « View All ». 24 pt is the size Home's « Because you watched » header
+    /// already used. tvOS does not consult this (`headline(.large)` there).
+    static func sectionTitleFont(for form: Form) -> Font {
+        form == .regular ? CinemaFont.headline(.large) : CinemaFont.headline(.small)
+    }
+
     // MARK: - Hero / backdrop heights
 
     /// HomeScreen hero backdrop.

@@ -683,7 +683,12 @@ struct MediaLibraryScreen: View {
     private var browseGenresSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             Text(loc.localized("tvShows.browseGenres"))
+                #if os(tvOS)
                 .font(CinemaFont.headline(.large))
+                #else
+                // The rails' section title (`ContentRow`), which sits above it.
+                .font(AdaptiveLayout.sectionTitleFont(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass)))
+                #endif
                 .foregroundStyle(CinemaColor.onSurface)
                 .padding(.horizontal, browseGenresPadding)
                 .accessibilityAddTraits(.isHeader)

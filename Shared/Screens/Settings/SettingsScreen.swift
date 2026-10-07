@@ -225,6 +225,10 @@ struct SettingsScreen: View {
     @Environment(\.motionEffectsEnabled) var motionEffects
     /// Drives the Motion Effects row's "the system setting overrides this" line.
     @Environment(\.accessibilityReduceMotion) var systemReduceMotion
+    #if os(iOS)
+    /// A landscape iPhone shrinks the landing header (`iOSHeader`).
+    @Environment(\.verticalSizeClass) var verticalSizeClass
+    #endif
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
     @AppStorage(SettingsKey.autoSkipIntro) var autoSkipIntro: Bool = SettingsKey.Default.autoSkipIntro
@@ -248,6 +252,7 @@ struct SettingsScreen: View {
     @AppStorage(SettingsKey.sleepTimerDefaultMinutes) var sleepTimerMinutes: Int = SettingsKey.Default.sleepTimerDefaultMinutes
     @AppStorage(SettingsKey.debugFastSleepTimer) var debugFastSleepTimer: Bool = SettingsKey.Default.debugFastSleepTimer
     @AppStorage(SettingsKey.debugShowSkipToEnd) var debugShowSkipToEnd: Bool = SettingsKey.Default.debugShowSkipToEnd
+    @AppStorage(SettingsKey.debugSimulateTabletop) var debugSimulateTabletop: Bool = SettingsKey.Default.debugSimulateTabletop
     /// READ through `@AppStorage`, written through `seasonal.setForcedSeason`: the
     /// Debug rows live in a pushed destination, which re-renders on an
     /// `@AppStorage` change but not on the controller's `@Observable` one
@@ -367,11 +372,21 @@ struct SettingsScreen: View {
     /// iOS marks debug icons orange to signal developer territory. tvOS
     /// currently ignores `tint` and uses `themeManager.accent` — preserving
     /// the existing platform difference.
+    /// iOS only: table mode does not exist on tvOS.
+    private var debugTabletopRows: [SettingsToggleRow] {
+        #if os(iOS)
+        [.init(id: "debugSimulateTabletop", icon: "laptopcomputer", label: loc.localized("settings.debug.simulateTabletop"),
+               value: $debugSimulateTabletop, tint: .orange)]
+        #else
+        []
+        #endif
+    }
+
     var debugToggleRows: [SettingsToggleRow] {
         [
             .init(id: "debugFastSleep", icon: "moon.zzz.fill", label: loc.localized("settings.debug.fastSleepTimer"), value: $debugFastSleepTimer, tint: .orange),
             .init(id: "debugSkipToEnd", icon: "forward.end.fill", label: loc.localized("settings.debug.skipToEnd"), value: $debugShowSkipToEnd, tint: .orange)
-        ] + SeasonalThemeCatalogue.all.map { theme in
+        ] + debugTabletopRows + SeasonalThemeCatalogue.all.map { theme in
             .init(
                 id: "debugSeason.\(theme.id)",
                 icon: "calendar.badge.exclamationmark",

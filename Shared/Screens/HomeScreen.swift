@@ -369,11 +369,20 @@ struct HomeScreen: View {
         )
     }
 
+    private var seasonalRowTitleSize: CGFloat {
+        #if os(tvOS)
+        32
+        #else
+        AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular ? 32 : 24
+        #endif
+    }
+
+    /// `ContentRow`'s gutter, so a placeholder sits where its row will.
     private var skeletonPadding: CGFloat {
         #if os(tvOS)
         CinemaTVLayout.pagePadding
         #else
-        CinemaSpacing.spacing6
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 
@@ -593,7 +602,9 @@ struct HomeScreen: View {
             title: title,
             showViewAll: true,
             onViewAll: { seasonDestination = SeasonDestination() },
-            titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(32)),
+            // The season's face at the size of every other rail title
+            // (`AdaptiveLayout.sectionTitleFont`: 24 on iPhone, 32 elsewhere).
+            titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(seasonalRowTitleSize)),
             data: items, id: \.id,
             itemView: { item in
                 recentlyAddedCard(item, surface: "home.season")
@@ -807,14 +818,16 @@ struct HomeScreen: View {
             }
             #endif
             .overlay {
-                if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                    HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
-                    .accessibilityHidden(true)
-                } else {
-                    BackdropFallbackView()
+                Group {
+                    if item.hasBackdropImage, let backdropId = item.backdropItemID {
+                        HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
+                        .accessibilityHidden(true)
+                    } else {
+                        BackdropFallbackView()
+                    }
                 }
+                .heroBackdropBleed()
             }
-            .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
                     HStack(spacing: 8) {
@@ -919,9 +932,11 @@ struct HomeScreen: View {
                 }
                 .padding(.horizontal, heroPadding)
                 .padding(.bottom, heroPadding + CinemaSpacing.spacing6)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Filled and clipped to the hero: the driver no longer clips —
+                // the backdrop clips itself, wider than it (`heroBackdropBleed`).
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .clipped()
             }
-            .clipped()
     }
 
     // MARK: - Continue Watching
@@ -975,11 +990,7 @@ struct HomeScreen: View {
         .foregroundStyle(CinemaColor.onSurfaceVariant)
         .fixedSize(horizontal: false, vertical: true)
         // The row's own gutter, so the note sits under its first card.
-        #if os(tvOS)
-        .padding(.horizontal, CinemaTVLayout.pagePadding)
-        #else
-        .padding(.horizontal, CinemaSpacing.spacing6)
-        #endif
+        .padding(.horizontal, skeletonPadding)
     }
 
     @ViewBuilder
@@ -1757,10 +1768,10 @@ struct HomeScreen: View {
         #if os(tvOS)
         CinemaTVLayout.pagePadding
         #else
-        // Under 60 intentionally — the hero's "big-button" branch triggers above 60 (tvOS only).
-        AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular
-            ? CinemaSpacing.spacing6
-            : CinemaSpacing.spacing4
+        // The page column the rails and grids share, so the hero title lines up
+        // with the rail headers under it (it was 22 pt over 32 pt rails on
+        // iPhone). Under 60 — the "big-button" branch above 60 is tvOS only.
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 

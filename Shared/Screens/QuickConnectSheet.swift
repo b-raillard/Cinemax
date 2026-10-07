@@ -14,6 +14,12 @@ struct QuickConnectSheet: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
+    /// A landscape phone: at full spacing the column overflowed the sheet and
+    /// pushed the close button off its top edge. Drops the glyph and tightens.
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    private var isShortLayout: Bool { verticalSizeClass == .compact }
+    #endif
 
     var body: some View {
         #if os(tvOS)
@@ -25,7 +31,7 @@ struct QuickConnectSheet: View {
 
     #if !os(tvOS)
     private var iOSBody: some View {
-        VStack(spacing: CinemaSpacing.spacing6) {
+        VStack(spacing: isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing6) {
             HStack {
                 Spacer()
                 Button { dismiss() } label: {
@@ -43,9 +49,11 @@ struct QuickConnectSheet: View {
                 .accessibilityLabel(loc.localized("action.cancel"))
             }
 
-            Image(systemName: "qrcode")
-                .font(.system(size: CinemaScale.pt(40)))
-                .foregroundStyle(themeManager.accent)
+            if !isShortLayout {
+                Image(systemName: "qrcode")
+                    .font(.system(size: CinemaScale.pt(40)))
+                    .foregroundStyle(themeManager.accent)
+            }
 
             Text(loc.localized("quickConnect.title"))
                 .font(.system(size: CinemaScale.pt(24), weight: .black))
@@ -55,7 +63,7 @@ struct QuickConnectSheet: View {
 
             Spacer(minLength: 0)
         }
-        .padding(CinemaSpacing.spacing6)
+        .padding(isShortLayout ? CinemaSpacing.spacing4 : CinemaSpacing.spacing6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(CinemaColor.surface.ignoresSafeArea())
     }
