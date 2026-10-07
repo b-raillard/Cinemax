@@ -358,6 +358,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `PlayerPostureLayout`); exactly one set is active at a time.
     private var regularHUDConstraints: [NSLayoutConstraint] = []
     private var tabletopHUDConstraints: [NSLayoutConstraint] = []
+    /// Last known iPhone Duo hinge reading (`unknown` everywhere else).
+    private var hingeReading: HingeReading = .unknown
+    private var layoutMode: PlayerLayoutMode = .regular
+    /// Table mode: the black lower half, BELOW `videoView` (the live mirror of
+    /// the picture is drawn over it). Also receives the "show the deck" tap.
+    private let tabletopBackdrop = UIView()
+    /// Table mode: the deck's tint, INSIDE `controlsContainer`, so it fades with
+    /// the HUD and leaves the pure black of `tabletopBackdrop`.
+    private let deckTint = UIView()
+    /// The deck's lock (table mode): locked, the deck never hides.
+    private var hudLocked = false
     /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
     private struct SideReachEdges {
         let closeTrailing: NSLayoutConstraint
@@ -657,7 +668,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         VLCEngineLog.installOnce()
         view.backgroundColor = .black
         setupVideoView()
+        #if os(iOS)
+        setupTabletopBackdrop()
+        #endif
         setupControls()
+        #if os(iOS)
+        setupDeckTint()
+        #endif
         setupSkipButton()
         setupGestures()
         setupReporter()
@@ -2140,6 +2157,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tap.numberOfTapsRequired = 1
         videoView.addGestureRecognizer(tap)
+        // Table mode: a tap on the lower screen toggles the deck (no double-tap
+        // seek there — it is not the picture).
+        tabletopBackdrop.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleDeckTap)))
 
         // Swipe-down-to-dismiss. Lives on `videoView` like the tap (touches on
         // HUD controls / the chapter strip never reach it) and only begins on a
@@ -2956,6 +2976,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// hit-testing, so a scaled button is tappable exactly where it is drawn.
     /// Re-run on every layout pass: rotation and iPad resizing change the width.
     private func layoutTransportRow() {
+        // Table mode: the blocks fix their own widths; PR #281's refit (spacing,
+        // then scale) would fight them.
+        guard layoutMode == .regular else {
+            if transportRow.transform != .identity { transportRow.transform = .identity }
+            return
+        }
         let widths = transportRow.arrangedSubviews.filter { !$0.isHidden }.map(\.intrinsicContentSize.width)
         let insets = view.safeAreaInsets
         let available = view.bounds.width - insets.left - insets.right - 2 * TransportRowFit.edgeMargin
@@ -2974,7 +3000,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// See `SideColumnReach`: on the iPhone Duo closed in landscape, the HUD row
     /// away from the camera runs into the one-sided status column.
     private func applySideColumnReach() {
-        guard let c = sideReachConstraints else { return }
+        guard layoutMode == .regular, let c = sideReachConstraints else { return }
         let insets = view.safeAreaInsets
         let reach = SideColumnReach.reach(leftInset: insets.left, rightInset: insets.right,
                                           isLandscape: view.bounds.width > view.bounds.height)
@@ -2986,6 +3012,95 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             (c.chapterTrailing, -16 + reach.topTrailing)
         ]
         for (constraint, value) in values where constraint.constant != value { constraint.constant = value }
+    }
+
+    // MARK: - Table mode (iPhone Duo half-folded, portrait)
+
+    private func setupTabletopBackdrop() {
+        tabletopBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        tabletopBackdrop.backgroundColor = .black
+        tabletopBackdrop.isHidden = true
+        view.insertSubview(tabletopBackdrop, belowSubview: videoView)
+        NSLayoutConstraint.activate([
+            tabletopBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabletopBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabletopBackdrop.topAnchor.constraint(equalTo: view.centerYAnchor),
+            tabletopBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        #if !NO_HINGE_API
+        if #available(iOS 27.1, *) {
+            view.addInteraction(UIHingeInteraction { [weak self] _, update in
+                self?.hingeChanged(update.hinge.map { HingeReading($0.status) })
+            })
+        }
+        #endif
+    }
+
+    private func setupDeckTint() {
+        deckTint.translatesAutoresizingMaskIntoConstraints = false
+        deckTint.backgroundColor = UIColor.white.withAlphaComponent(0.04)
+        deckTint.isUserInteractionEnabled = false
+        deckTint.isHidden = true
+        controlsContainer.insertSubview(deckTint, at: 0)
+        NSLayoutConstraint.activate([
+            deckTint.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor),
+            deckTint.trailingAnchor.constraint(equalTo: controlsContainer.trailingAnchor),
+            deckTint.topAnchor.constraint(equalTo: controlsContainer.centerYAnchor),
+            deckTint.bottomAnchor.constraint(equalTo: controlsContainer.bottomAnchor)
+        ])
+    }
+
+    private func hingeChanged(_ update: HingeReading?) {
+        hingeReading = PlayerPostureLayout.reading(previous: hingeReading, update: update)
+        applyLayoutMode()
+    }
+
+    /// The single entry into the two layouts. Idempotent: called by the hinge,
+    /// by size transitions (rotation, window resize) with the TARGET size, on
+    /// appearance, and with `force` when the deck's contents change.
+    private func applyLayoutMode(size: CGSize? = nil, force: Bool = false) {
+        let mode = PlayerPostureLayout.mode(hinge: hingeReading, viewSize: size ?? view.bounds.size)
+        guard force || mode != layoutMode else { return }
+        layoutMode = mode
+        let tabletop = mode == .tabletop
+        NSLayoutConstraint.deactivate(regularHUDConstraints + tabletopHUDConstraints)
+        videoAreaBottom?.isActive = false
+        let areaBottom = videoArea.bottomAnchor.constraint(equalTo: tabletop ? view.centerYAnchor : view.bottomAnchor)
+        areaBottom.isActive = true
+        videoAreaBottom = areaBottom
+        if tabletop {
+            tabletopHUDConstraints = makeTabletopHUDConstraints()
+            NSLayoutConstraint.activate(tabletopHUDConstraints)
+        } else {
+            regularHUDConstraints = makeRegularHUDConstraints()
+            NSLayoutConstraint.activate(regularHUDConstraints)
+        }
+        tabletopBackdrop.isHidden = !tabletop
+        deckTint.isHidden = !tabletop
+        // No 45 % veil over the upper screen's picture: the deck has its own ground.
+        controlsContainer.backgroundColor = tabletop ? .clear : .black.withAlphaComponent(0.45)
+        applyHUDStyle()
+        if size == nil { UIView.animate(withDuration: 0.3) { self.view.layoutIfNeeded() } }
+        if controlsVisible { scheduleHideControls() }
+    }
+
+    /// Provisional (Task 4 replaces it): the regular HUD, in table mode too.
+    private func makeTabletopHUDConstraints() -> [NSLayoutConstraint] { makeRegularHUDConstraints() }
+    /// Provisional (Task 4 replaces it).
+    private func applyHUDStyle() {}
+
+    @objc private func handleDeckTap() {
+        if controlsVisible {
+            if PlayerPostureLayout.tapHides(mode: layoutMode, locked: hudLocked) { hideControlsImmediately() }
+        } else {
+            showControls()
+            scheduleHideControls()
+        }
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: any UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: { _ in self.applyLayoutMode(size: size) })
     }
     #endif
 
@@ -4240,8 +4355,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             guard let self else { return }
             self.lastTapTime = 0
             self.pendingTapWork = nil
-            if self.controlsVisible { self.hideControlsImmediately() }
-            else { self.showControls(); self.scheduleHideControls() }
+            if self.controlsVisible {
+                // Table mode, deck locked: a tap never hides it (only the lock decides).
+                if PlayerPostureLayout.tapHides(mode: self.layoutMode, locked: self.hudLocked) {
+                    self.hideControlsImmediately()
+                }
+            } else { self.showControls(); self.scheduleHideControls() }
         }
         pendingTapWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
@@ -4373,6 +4492,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         becomeFirstResponder()
+        // The hinge's first reading can land before the view has its size.
+        applyLayoutMode()
     }
 
     override var keyCommands: [UIKeyCommand]? {
@@ -5309,3 +5430,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
 }
+
+#if os(iOS) && !NO_HINGE_API
+@available(iOS 27.1, *)
+extension HingeReading {
+    init(_ status: UIHinge.Status) {
+        switch status {
+        case .closed: self = .closed
+        case .partiallyOpen: self = .partiallyOpen
+        case .fullyOpen: self = .fullyOpen
+        default: self = .unknown
+        }
+    }
+}
+#endif
