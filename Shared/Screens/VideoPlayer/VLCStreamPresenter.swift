@@ -345,6 +345,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let prevButton = UIButton(type: .system)
     private let nextButton = UIButton(type: .system)
     private let transportRow = UIStackView()
+    /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
+    private var sideReachConstraints: (closeTrailing: NSLayoutConstraint, sliderLeading: NSLayoutConstraint,
+                                       timeLeading: NSLayoutConstraint, chapterLeading: NSLayoutConstraint,
+                                       chapterTrailing: NSLayoutConstraint)?
     /// `PlayerScrubSlider`, not a plain `UISlider` — see its own doc comment:
     /// VoiceOver's adjust gesture has to become a SEEK, and on a stock slider
     /// nothing here would make it one (`scrubberChanged` bails unless the slider
@@ -1987,8 +1991,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // pinned to the screen edges, so this equals the screen safe area) —
         // removes any cross-hierarchy ambiguity vs `view.safeAreaLayoutGuide`.
         let cSafe = controlsContainer.safeAreaLayoutGuide
+        // Constants adjusted per layout pass by `applySideColumnReach()`.
+        let closeTrailing = closeButton.trailingAnchor.constraint(equalTo: cSafe.trailingAnchor, constant: -12)
+        let sliderLeading = slider.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24)
+        let timeLeading = timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24)
+        let chapterLeading = chapterScroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16)
+        let chapterTrailing = chapterScroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16)
+        sideReachConstraints = (closeTrailing, sliderLeading, timeLeading, chapterLeading, chapterTrailing)
         NSLayoutConstraint.activate([
-            closeButton.trailingAnchor.constraint(equalTo: cSafe.trailingAnchor, constant: -12),
+            closeTrailing,
             closeButton.topAnchor.constraint(equalTo: cSafe.topAnchor, constant: 8),
             // Title can never run under the top-right cluster.
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: statsButton.leadingAnchor, constant: -12),
@@ -2003,11 +2014,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             statsButton.trailingAnchor.constraint(equalTo: speedButton.leadingAnchor, constant: -4),
             statsButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
 
-            slider.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
+            sliderLeading,
             slider.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
             slider.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -22),
 
-            timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
+            timeLeading,
             timeLabel.bottomAnchor.constraint(equalTo: slider.topAnchor, constant: -8),
             durationLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -24),
             durationLabel.bottomAnchor.constraint(equalTo: slider.topAnchor, constant: -8),
@@ -2015,8 +2026,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             transportRow.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
             transportRow.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -16),
 
-            chapterScroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16),
-            chapterScroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16),
+            chapterLeading,
+            chapterTrailing,
             chapterScroll.bottomAnchor.constraint(equalTo: transportRow.topAnchor, constant: -16),
             chapterStack.topAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.topAnchor),
             chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
@@ -2910,7 +2921,25 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        applySideColumnReach()
         layoutTransportRow()
+    }
+
+    /// See `SideColumnReach`: on the iPhone Duo closed in landscape, the HUD row
+    /// away from the camera runs into the one-sided status column.
+    private func applySideColumnReach() {
+        guard let c = sideReachConstraints else { return }
+        let insets = view.safeAreaInsets
+        let reach = SideColumnReach.reach(leftInset: insets.left, rightInset: insets.right,
+                                          isLandscape: view.bounds.width > view.bounds.height)
+        let values: [(NSLayoutConstraint, CGFloat)] = [
+            (c.closeTrailing, -12 + reach.topTrailing),
+            (c.sliderLeading, 24 - reach.bottomLeading),
+            (c.timeLeading, 24 - reach.bottomLeading),
+            (c.chapterLeading, 16 - reach.bottomLeading),
+            (c.chapterTrailing, -16 + reach.topTrailing)
+        ]
+        for (constraint, value) in values where constraint.constant != value { constraint.constant = value }
     }
     #endif
 

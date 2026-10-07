@@ -368,6 +368,31 @@ struct AlphabeticalJumpStepTests {
 /// The iOS transport row (⏮ −10 ⏯ +10 ⏭) must fit the safe area. Widths are
 /// the buttons' intrinsic sizes measured on iOS 26.5: 61.3 / 70 / 75 / 70 /
 /// 61.3 pt — 434 pt at the ideal 24 pt spacing, past an iPhone 17's 402.
+/// iPhone Duo closed in landscape: the HUD row away from the camera runs to
+/// the edge of the one-sided status column instead of stopping 84 pt short.
+@Suite("Side column reach")
+struct SideColumnReachTests {
+    @Test("column on the right (camera bottom-right): the top row reaches the edge")
+    func columnRight() {
+        #expect(SideColumnReach.reach(leftInset: 0, rightInset: 84, isLandscape: true)
+                == SideColumnReach(topTrailing: 84, bottomLeading: 0))
+    }
+
+    @Test("column on the left (camera top-left): the bottom row reaches the edge")
+    func columnLeft() {
+        #expect(SideColumnReach.reach(leftInset: 84, rightInset: 0, isLandscape: true)
+                == SideColumnReach(topTrailing: 0, bottomLeading: 84))
+    }
+
+    @Test("symmetric insets, no inset, or portrait: nothing moves")
+    func untouched() {
+        // Notched iPhone in landscape: 62 pt on both sides.
+        #expect(SideColumnReach.reach(leftInset: 62, rightInset: 62, isLandscape: true) == .none)
+        #expect(SideColumnReach.reach(leftInset: 0, rightInset: 0, isLandscape: true) == .none)
+        #expect(SideColumnReach.reach(leftInset: 0, rightInset: 84, isLandscape: false) == .none)
+    }
+}
+
 @Suite("Transport row fits the safe area")
 struct TransportRowFitTests {
     static let fiveButtons: [CGFloat] = [61.33, 70, 75, 70, 61.33]
