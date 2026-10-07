@@ -13,6 +13,9 @@ import SwiftUI
 struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View, Header: View>: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
     let title: String
     var showViewAll: Bool = false
     var onViewAll: (() -> Void)? = nil
@@ -54,10 +57,12 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
     private var titleRow: some View {
         HStack {
             Text(title)
-                .font(titleFont ?? CinemaFont.headline(.large))
+                .font(titleFont ?? defaultTitleFont)
                 // A season's display face runs wider than the system
-                // headline: « Frissons d'Halloween » truncated on iPhone.
-                .minimumScaleFactor(titleFont == nil ? 1 : 0.7)
+                // headline: « Frissons d'Halloween » truncated on iPhone. A
+                // long genre beside « View All » (« Science Fiction & Fantasy »
+                // on a 382 pt-wide screen) shrinks a little before it truncates.
+                .minimumScaleFactor(titleFont == nil ? 0.85 : 0.7)
                 .foregroundStyle(CinemaColor.onSurface)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
@@ -99,12 +104,21 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
     /// card must line up with the hero title, the grid and the top bar above
     /// them. tvOS pages sit at `pagePadding` (112 pt) while this row was fixed
     /// at 32 pt, which is why every rail on Home and the detail fiche read as
-    /// visibly indented out of the page's own column.
+    /// visibly indented out of the page's own column. iOS had the same fault
+    /// on iPhone: the page column is 16 pt there, the rail stayed at 32.
     private var horizontalPadding: CGFloat {
         #if os(tvOS)
         CinemaTVLayout.pagePadding
         #else
-        CinemaSpacing.spacing6
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
+        #endif
+    }
+
+    private var defaultTitleFont: Font {
+        #if os(tvOS)
+        CinemaFont.headline(.large)
+        #else
+        AdaptiveLayout.sectionTitleFont(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
         #endif
     }
 }

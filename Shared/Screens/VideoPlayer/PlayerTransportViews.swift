@@ -296,6 +296,36 @@ struct TransportRowFit: Equatable {
     }
 }
 
+/// How far the HUD rows may reach into a ONE-SIDED landscape safe-area inset.
+///
+/// The iPhone Duo closed, in landscape, reports a ~84 pt inset on ONE side
+/// only: the column holding the (hidden, in the player) status bar and, at one
+/// end of it, the camera. The camera sits at the corner opposite the column's
+/// start (measured on the simulator, 2026-10-07): column on the RIGHT → camera
+/// bottom-right; column on the LEFT → camera top-left. Respecting the whole
+/// column left the HUD stopping ~84 pt short of the edge. So the row at the far
+/// end from the camera may run to the edge, the row near it keeps the margin:
+/// - column right: the top row (close + cluster) reaches the edge;
+/// - column left: the bottom row (scrub bar + elapsed time) reaches the edge;
+/// - the chapter strip, mid-height, reaches it either way.
+/// Symmetric insets (notched iPhones), no inset (iPad), and portrait: nothing
+/// moves.
+struct SideColumnReach: Equatable {
+    /// Added to the top row's trailing reach (column on the right).
+    let topTrailing: CGFloat
+    /// Added to the bottom row's leading reach (column on the left).
+    let bottomLeading: CGFloat
+
+    static let none = Self(topTrailing: 0, bottomLeading: 0)
+
+    static func reach(leftInset: CGFloat, rightInset: CGFloat, isLandscape: Bool) -> Self {
+        guard isLandscape else { return .none }
+        if rightInset > 0, leftInset == 0 { return Self(topTrailing: rightInset, bottomLeading: 0) }
+        if leftInset > 0, rightInset == 0 { return Self(topTrailing: 0, bottomLeading: leftInset) }
+        return .none
+    }
+}
+
 /// HUD container that lets taps on its own (scrim/empty) area fall through to
 /// the video view beneath — which hosts the tap recognizer. Taps that land on
 /// an actual control (button / slider / chapter strip) are returned normally,

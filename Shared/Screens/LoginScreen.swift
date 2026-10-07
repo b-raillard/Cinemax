@@ -15,6 +15,21 @@ struct LoginScreen: View {
     @State private var passwordFocusRequested = false
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
+
+    /// A landscape phone (compact height): the column below is taller than the
+    /// screen, so the Spacers collapse, the subtitle is squeezed onto one line
+    /// and the icon is cut off at the top. It drops the icon and tightens its
+    /// gaps instead. iPad and portrait phones are never compact-height.
+    private var isShortLayout: Bool {
+        #if os(iOS)
+        verticalSizeClass == .compact
+        #else
+        false
+        #endif
+    }
 
     var body: some View {
         Group {
@@ -244,21 +259,23 @@ struct LoginScreen: View {
                 // Header
                 VStack(spacing: CinemaSpacing.spacing3) {
                     // Icon — secretly doubles as the accent-cycling easter egg.
-                    Button {
-                        triggerEasterEgg()
-                    } label: {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                                .fill(CinemaColor.surfaceContainerHigh)
-                                .frame(width: 80, height: 80)
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: CinemaScale.pt(36)))
-                                .foregroundStyle(themeManager.accent)
+                    if !isShortLayout {
+                        Button {
+                            triggerEasterEgg()
+                        } label: {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                                    .fill(CinemaColor.surfaceContainerHigh)
+                                    .frame(width: 80, height: 80)
+                                Image(systemName: "person.crop.circle.fill")
+                                    .font(.system(size: CinemaScale.pt(36)))
+                                    .foregroundStyle(themeManager.accent)
+                            }
+                            .shadow(color: .black.opacity(0.3), radius: 20)
                         }
-                        .shadow(color: .black.opacity(0.3), radius: 20)
+                        .buttonStyle(.plain)
+                        .accessibilityHidden(true)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityHidden(true)
 
                     Text(loc.localized("login.header"))
                         .font(CinemaFont.label(.small))
@@ -276,7 +293,7 @@ struct LoginScreen: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 280)
                 }
-                .padding(.bottom, CinemaSpacing.spacing8)
+                .padding(.bottom, isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing8)
 
                 // Input card — `.frame(maxWidth:)` caps the form width explicitly, since the
                 // `.padding(.horizontal, spacing4)` pattern used by `ServerSetupScreen` gets
@@ -333,8 +350,9 @@ struct LoginScreen: View {
                         .padding(.top, CinemaSpacing.spacing2)
                 }
                 .frame(maxWidth: formMaxWidth)
-                .padding(.bottom, CinemaSpacing.spacing6)
+                .padding(.bottom, isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing6)
             }
+            .preAuthShortScroll(isShortLayout)
 
             // Success toast
             if viewModel.showSuccess {
