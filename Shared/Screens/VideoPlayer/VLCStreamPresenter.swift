@@ -3245,9 +3245,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         presentPicker(loc.localized("player.speed"), sourceView: speedPickerSource, opts)
     }
 
+    /// Changes the speed, then re-anchors at the current position — the same
+    /// cure as an audio-track switch. libVLC applies the new rate to its clock
+    /// at once, but what was already decoded and queued plays out at the old
+    /// one: sound and picture drifted apart for many seconds after every change
+    /// (measured on iPhone, 2026-10-07: clock at 2.0× within the second, A/V
+    /// out of sync until a while back at 1×). Flushing re-syncs both at the
+    /// new rate, at the cost of a brief rebuffer.
     private func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         try? player.setPlaybackRate(PlaybackRate(rate))
+        guard mediaConfirmedOpen, lengthMs > 0 else { return }
+        let anchor = currentMs
+        logger.notice("CINEMAX-RATE ▸ vitesse \(rate, privacy: .public), réancrage à \(anchor, privacy: .public) ms")
+        seeks.engineSeek(anchor)
     }
 
     @objc private func openAudioDelayMenu() { presentDelayPicker(isAudio: true) }
