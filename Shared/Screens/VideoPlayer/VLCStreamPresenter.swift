@@ -208,6 +208,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // surface is embedded into it via a child UIHostingController.
     private let player = Player()
     private let videoView = UIView()
+    /// Where the picture lives: the whole view, except in the iOS table mode
+    /// (iPhone Duo half-folded, portrait), where it is the upper half. The
+    /// overlays that sit "on the picture" (spinner, skip HUD, notices, glyphs,
+    /// « Passer », the next-up card) follow it rather than `view`.
+    private let videoArea = UILayoutGuide()
+    /// The one constraint the layout mode flips: `view.bottom` or `view.centerY`.
+    private var videoAreaBottom: NSLayoutConstraint?
     private var videoHost: UIViewController?
     private var eventsTask: Task<Void, Never>?
     /// Latest known media length in ms. SwiftVLC's `player.duration` can lag a
@@ -319,6 +326,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // Stats overlay ("nerd stats") — repainted by the 1s tick while visible.
     private let statsLabel = UILabel()
     private var statsVisible = false
+    /// The stats panel: outside `controlsContainer` so it outlives the HUD fade.
+    private let statsContainer = UIView()
 
     // Next-episode countdown card (outro + autoPlayNext + nextEpisode).
     private var nextUpCard: NextUpCountdownView?
@@ -345,6 +354,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let prevButton = UIButton(type: .system)
     private let nextButton = UIButton(type: .system)
     private let transportRow = UIStackView()
+    /// The HUD's movable constraints, one set per layout mode (see
+    /// `PlayerPostureLayout`); exactly one set is active at a time.
+    private var regularHUDConstraints: [NSLayoutConstraint] = []
+    private var tabletopHUDConstraints: [NSLayoutConstraint] = []
     /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
     private struct SideReachEdges {
         let closeTrailing: NSLayoutConstraint
@@ -1259,9 +1272,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         skipButton.isHidden = true
         skipButton.addTarget(self, action: #selector(skipSegmentTapped), for: .primaryActionTriggered)
         view.addSubview(skipButton)
+        let skipBottom = skipButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+        skipBottom.priority = .defaultHigh
         NSLayoutConstraint.activate([
             skipButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -32),
-            skipButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+            skipBottom,
+            // Table mode: stays on the upper screen. Elsewhere the video area
+            // reaches the bottom of the view, so this ceiling never bites.
+            skipButton.bottomAnchor.constraint(lessThanOrEqualTo: videoArea.bottomAnchor, constant: -24)
         ])
     }
 
@@ -1398,9 +1416,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 #endif
             }
             view.addSubview(card)
+            let cardBottom = card.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+            cardBottom.priority = .defaultHigh
             NSLayoutConstraint.activate([
                 card.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -32),
-                card.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
+                cardBottom,
+                // Same ceiling as the skip button (table mode).
+                card.bottomAnchor.constraint(lessThanOrEqualTo: videoArea.bottomAnchor, constant: -24)
             ])
             nextUpCard = card
         }
@@ -1474,11 +1496,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         videoView.translatesAutoresizingMaskIntoConstraints = false
         videoView.backgroundColor = .black
         view.addSubview(videoView)
+        view.addLayoutGuide(videoArea)
+        let areaBottom = videoArea.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        videoAreaBottom = areaBottom
         NSLayoutConstraint.activate([
-            videoView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            videoView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            videoView.topAnchor.constraint(equalTo: view.topAnchor),
-            videoView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            videoArea.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            videoArea.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            videoArea.topAnchor.constraint(equalTo: view.topAnchor),
+            areaBottom,
+            videoView.leadingAnchor.constraint(equalTo: videoArea.leadingAnchor),
+            videoView.trailingAnchor.constraint(equalTo: videoArea.trailingAnchor),
+            videoView.topAnchor.constraint(equalTo: videoArea.topAnchor),
+            videoView.bottomAnchor.constraint(equalTo: videoArea.bottomAnchor)
         ])
 
         // SwiftVLC renders through a SwiftUI representable. Host it in a child
@@ -1684,11 +1713,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             noticeRow.bottomAnchor.constraint(equalTo: noticeView.bottomAnchor, constant: -noticePad * 0.75),
             noticeRow.leadingAnchor.constraint(equalTo: noticeView.leadingAnchor, constant: noticePad),
             noticeRow.trailingAnchor.constraint(equalTo: noticeView.trailingAnchor, constant: -noticePad),
-            noticeView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            noticeView.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
             // Above the centre, where `skipHUD` and the seek-settle spinner sit:
             // the re-anchoring seek a track switch fires raises that spinner at
             // exactly the moment this notice appears.
-            noticeView.bottomAnchor.constraint(equalTo: view.centerYAnchor, constant: -(hudH / 2 + 16)),
+            noticeView.bottomAnchor.constraint(equalTo: videoArea.centerYAnchor, constant: -(hudH / 2 + 16)),
             noticeView.widthAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.widthAnchor, constant: -48),
             noticeView.widthAnchor.constraint(lessThanOrEqualToConstant: noticeMaxW)
         ])
@@ -1731,8 +1760,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         NSLayoutConstraint.activate([
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor, constant: -24),
 
-            skipHUD.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            skipHUD.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            skipHUD.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            skipHUD.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
             skipHUD.widthAnchor.constraint(greaterThanOrEqualToConstant: hudMinW),
             // The HUD also carries localized sentences now (episode-nav failure),
             // and it's a single-line label pinned only by its centre — without a
@@ -1772,8 +1801,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         loadingIndicator.accessibilityTraits = .updatesFrequently
         view.addSubview(loadingIndicator)
         NSLayoutConstraint.activate([
-            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            loadingIndicator.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            loadingIndicator.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor)
         ])
 
         skipGlyph.translatesAutoresizingMaskIntoConstraints = false
@@ -1790,24 +1819,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         centerGlyph.layer.cornerRadius = 60
         skipGlyph.layer.cornerRadius = 0
         NSLayoutConstraint.activate([
-            centerGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            centerGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            centerGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            centerGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
             centerGlyph.widthAnchor.constraint(equalToConstant: 120),
             centerGlyph.heightAnchor.constraint(equalToConstant: 120),
-            skipGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            skipGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            skipGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
+            skipGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
             skipGlyph.widthAnchor.constraint(equalToConstant: 110),
             skipGlyph.heightAnchor.constraint(equalToConstant: 110)
         ])
         #else
         centerGlyph.layer.cornerRadius = 50
         NSLayoutConstraint.activate([
-            centerGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            centerGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            centerGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
+            centerGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
             centerGlyph.widthAnchor.constraint(equalToConstant: 100),
             centerGlyph.heightAnchor.constraint(equalToConstant: 100),
-            skipGlyph.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            skipGlyph.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            skipGlyph.centerYAnchor.constraint(equalTo: videoArea.centerYAnchor),
+            skipGlyph.centerXAnchor.constraint(equalTo: videoArea.centerXAnchor),
             skipGlyph.widthAnchor.constraint(equalToConstant: 100),
             skipGlyph.heightAnchor.constraint(equalToConstant: 100)
         ])
@@ -1828,7 +1857,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
         // Stats overlay — anchored under the title, outside the HUD container
         // so it stays readable while the controls are hidden.
-        let statsContainer = UIView()
         statsContainer.translatesAutoresizingMaskIntoConstraints = false
         statsContainer.backgroundColor = UIColor.black.withAlphaComponent(0.6)
         statsContainer.layer.cornerRadius = 10
@@ -1873,7 +1901,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func setStatsVisible(_ visible: Bool) {
         statsVisible = visible
-        statsLabel.superview?.isHidden = !visible
+        statsContainer.isHidden = !visible
         if visible { refreshStats() }
     }
 
@@ -1992,6 +2020,32 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chH.isActive = true
         chapterHeightConstraint = chH
 
+        NSLayoutConstraint.activate([
+            chapterStack.topAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.topAnchor),
+            chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
+            chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
+            chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
+            chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor)
+        ])
+        regularHUDConstraints = makeRegularHUDConstraints()
+        NSLayoutConstraint.activate(regularHUDConstraints)
+
+        // Trickplay preview floats above the slider, tracking the thumb.
+        let previewCenterX = scrubPreview.centerXAnchor.constraint(equalTo: slider.leadingAnchor)
+        scrubPreviewCenterX = previewCenterX
+        NSLayoutConstraint.activate([
+            scrubPreview.widthAnchor.constraint(equalToConstant: 160),
+            scrubPreview.heightAnchor.constraint(equalToConstant: 90),
+            scrubPreview.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -10),
+            previewCenterX
+        ])
+    }
+
+    /// The HUD as it always was. Rebuilt on every switch back to regular: the
+    /// table mode moves the very same views. Re-creates the five edges
+    /// `applySideColumnReach()` adjusts, so it never mutates dead constraints.
+    private func makeRegularHUDConstraints() -> [NSLayoutConstraint] {
+        let safe = view.safeAreaLayoutGuide
         // Anchor the top-right cluster to the container's OWN safe area (it's
         // pinned to the screen edges, so this equals the screen safe area) —
         // removes any cross-hierarchy ambiguity vs `view.safeAreaLayoutGuide`.
@@ -2005,7 +2059,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         sideReachConstraints = SideReachEdges(closeTrailing: closeTrailing, sliderLeading: sliderLeading,
                                               timeLeading: timeLeading, chapterLeading: chapterLeading,
                                               chapterTrailing: chapterTrailing)
-        NSLayoutConstraint.activate([
+        return [
             closeTrailing,
             closeButton.topAnchor.constraint(equalTo: cSafe.topAnchor, constant: 8),
             // Title can never run under the top-right cluster.
@@ -2035,23 +2089,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
             chapterLeading,
             chapterTrailing,
-            chapterScroll.bottomAnchor.constraint(equalTo: transportRow.topAnchor, constant: -16),
-            chapterStack.topAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.topAnchor),
-            chapterStack.bottomAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.bottomAnchor),
-            chapterStack.leadingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.leadingAnchor),
-            chapterStack.trailingAnchor.constraint(equalTo: chapterScroll.contentLayoutGuide.trailingAnchor),
-            chapterStack.heightAnchor.constraint(equalTo: chapterScroll.frameLayoutGuide.heightAnchor)
-        ])
-
-        // Trickplay preview floats above the slider, tracking the thumb.
-        let previewCenterX = scrubPreview.centerXAnchor.constraint(equalTo: slider.leadingAnchor)
-        scrubPreviewCenterX = previewCenterX
-        NSLayoutConstraint.activate([
-            scrubPreview.widthAnchor.constraint(equalToConstant: 160),
-            scrubPreview.heightAnchor.constraint(equalToConstant: 90),
-            scrubPreview.bottomAnchor.constraint(equalTo: timeLabel.topAnchor, constant: -10),
-            previewCenterX
-        ])
+            chapterScroll.bottomAnchor.constraint(equalTo: transportRow.topAnchor, constant: -16)
+        ]
     }
 
     private func configureIOS(_ b: UIButton, _ symbol: String, pt: CGFloat, _ a11y: String, compact: Bool = false) {
