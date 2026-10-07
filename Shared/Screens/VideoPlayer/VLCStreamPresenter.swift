@@ -5014,6 +5014,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func hideControlsImmediately() {
+        // A hidden HUD has nothing left to hide: a timer armed before a manual
+        // hide (tap) would otherwise fire on the NEXT showing — the locked deck
+        // re-revealed on entering table mode vanished 4 s later.
+        hideControlsWorkItem?.cancel()
         controlsVisible = false
         UIView.animate(withDuration: 0.25) { self.controlsContainer.alpha = 0 }
         controlsContainer.isUserInteractionEnabled = false
