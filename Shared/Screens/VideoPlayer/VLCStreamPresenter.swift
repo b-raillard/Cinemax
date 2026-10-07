@@ -346,9 +346,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let nextButton = UIButton(type: .system)
     private let transportRow = UIStackView()
     /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
-    private var sideReachConstraints: (closeTrailing: NSLayoutConstraint, sliderLeading: NSLayoutConstraint,
-                                       timeLeading: NSLayoutConstraint, chapterLeading: NSLayoutConstraint,
-                                       chapterTrailing: NSLayoutConstraint)?
+    private struct SideReachEdges {
+        let closeTrailing: NSLayoutConstraint
+        let sliderLeading: NSLayoutConstraint
+        let timeLeading: NSLayoutConstraint
+        let chapterLeading: NSLayoutConstraint
+        let chapterTrailing: NSLayoutConstraint
+    }
+    private var sideReachConstraints: SideReachEdges?
     /// `PlayerScrubSlider`, not a plain `UISlider` — see its own doc comment:
     /// VoiceOver's adjust gesture has to become a SEEK, and on a stock slider
     /// nothing here would make it one (`scrubberChanged` bails unless the slider
@@ -1997,7 +2002,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let timeLeading = timeLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24)
         let chapterLeading = chapterScroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16)
         let chapterTrailing = chapterScroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16)
-        sideReachConstraints = (closeTrailing, sliderLeading, timeLeading, chapterLeading, chapterTrailing)
+        sideReachConstraints = SideReachEdges(closeTrailing: closeTrailing, sliderLeading: sliderLeading,
+                                              timeLeading: timeLeading, chapterLeading: chapterLeading,
+                                              chapterTrailing: chapterTrailing)
         NSLayoutConstraint.activate([
             closeTrailing,
             closeButton.topAnchor.constraint(equalTo: cSafe.topAnchor, constant: 8),
