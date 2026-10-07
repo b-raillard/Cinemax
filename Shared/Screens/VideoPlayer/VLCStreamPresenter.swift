@@ -207,7 +207,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // existing gesture / HUD layout is untouched; the SwiftVLC rendering
     // surface is embedded into it via a child UIHostingController.
     private let player = Player()
+    #if os(iOS)
+    /// A `CAReplicatorLayer`-backed view: in table mode it mirrors the picture
+    /// below the fold (the halo). One instance otherwise — no cost.
+    private let videoView = MirroringVideoView()
+    #else
     private let videoView = UIView()
+    #endif
     /// Where the picture lives: the whole view, except in the iOS table mode
     /// (iPhone Duo half-folded, portrait), where it is the upper half. The
     /// overlays that sit "on the picture" (spinner, skip HUD, notices, glyphs,
@@ -380,6 +386,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var tabletopItemBase: [String] = []
     /// The film bar's thumbnail, taken when the deck appears.
     private var tabletopThumbnail: UIImage?
+    /// Blur + fade over the mirrored picture (table mode), under the HUD.
+    private let haloVeil = TabletopHaloVeil()
     /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
     private struct SideReachEdges {
         let closeTrailing: NSLayoutConstraint
@@ -1006,6 +1014,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.onEngineStateChanged(state)
                 case .tracksChanged:
                     self.applyServerTrackDefaultsIfNeeded()
+                    #if os(iOS)
+                    self.updateMirror()   // the aspect is known now
+                    #endif
                 case .encounteredError:
                     self.handleEngineFailure("encountered-error")
                 default:
@@ -3039,6 +3050,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         super.viewDidLayoutSubviews()
         applySideColumnReach()
         layoutTransportRow()
+        if layoutMode == .tabletop { updateMirror() }
     }
 
     /// See `SideColumnReach`: on the iPhone Duo closed in landscape, the HUD row
@@ -3065,11 +3077,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         tabletopBackdrop.backgroundColor = .black
         tabletopBackdrop.isHidden = true
         view.insertSubview(tabletopBackdrop, belowSubview: videoView)
+        haloVeil.translatesAutoresizingMaskIntoConstraints = false
+        haloVeil.isHidden = true
+        view.insertSubview(haloVeil, aboveSubview: videoView)   // below the HUD, added later
         NSLayoutConstraint.activate([
             tabletopBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabletopBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabletopBackdrop.topAnchor.constraint(equalTo: view.centerYAnchor),
-            tabletopBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            tabletopBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            haloVeil.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            haloVeil.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            haloVeil.topAnchor.constraint(equalTo: view.centerYAnchor),
+            haloVeil.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         #if !NO_HINGE_API
         if #available(iOS 27.1, *) {
@@ -3125,7 +3144,35 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         controlsContainer.backgroundColor = tabletop ? .clear : .black.withAlphaComponent(0.45)
         applyHUDStyle()
         if size == nil { UIView.animate(withDuration: 0.3) { self.view.layoutIfNeeded() } }
+        updateMirror()
+        if tabletop {
+            // First thumbnail once the picture sits in its new frame.
+            DispatchQueue.main.async { [weak self] in self?.refreshTabletopThumbnail() }
+        }
         if controlsVisible { scheduleHideControls() }
+    }
+
+    /// The picture's aspect, from the playing video track (nil before it is known).
+    private var videoAspect: CGFloat? {
+        guard let track = player.videoTracks.first(where: { $0.isSelected }) ?? player.videoTracks.first,
+              let width = track.width, let height = track.height, width > 0, height > 0 else { return nil }
+        return CGFloat(width) / CGFloat(height)
+    }
+
+    /// The halo follows the upper half's size and the track's aspect.
+    private func updateMirror() {
+        let tabletop = layoutMode == .tabletop
+        haloVeil.isHidden = !tabletop
+        videoView.setMirror(enabled: tabletop,
+                            pictureHeight: TabletopHalo.pictureHeight(viewSize: videoView.bounds.size,
+                                                                      videoAspect: videoAspect),
+                            gapBelowFold: 24)
+    }
+
+    private func refreshTabletopThumbnail() {
+        guard layoutMode == .tabletop else { return }
+        tabletopThumbnail = TabletopHalo.thumbnail(of: videoView, videoAspect: videoAspect)
+        refreshTabletopValues()
     }
 
     /// The deck: lower half, 18 pt margins, rows 10 pt apart — film bar (66) ·
@@ -3299,7 +3346,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         lockButton.configuration = TabletopHUDStyle.lock(locked: hudLocked, accent: Self.accentColor())
         lockButton.accessibilityLabel = loc.localized(hudLocked ? "player.tabletop.lock.locked"
                                                                 : "player.tabletop.lock.unlocked")
-        let detail = tabletopItemBase.joined(separator: " · ")
+        let width = (player.videoTracks.first(where: { $0.isSelected }) ?? player.videoTracks.first)?.width
+        let detail = (tabletopItemBase + [width.map(TabletopHalo.qualityLabel(width:))].compactMap { $0 })
+            .joined(separator: " · ")
         titleBlockButton.configuration = TabletopHUDStyle.titleBlock(title: titleText,
                                                                      subtitle: detail.isEmpty ? nil : detail,
                                                                      thumbnail: tabletopThumbnail)
@@ -4880,6 +4929,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func showControls() {
         controlsVisible = true
+        #if os(iOS)
+        refreshTabletopThumbnail()
+        #endif
         // Paints of the hidden HUD were skipped, so catch the labels up before
         // they fade in — otherwise they show the position as of the last time
         // the HUD was visible until the next engine tick lands.

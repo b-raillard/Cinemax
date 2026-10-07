@@ -93,3 +93,36 @@ struct TabletopHUDStyleTests {
     }
 }
 #endif
+
+#if os(iOS)
+/// The halo's geometry and the film bar's definition label (table mode).
+@Suite("TabletopHalo")
+struct TabletopHaloTests {
+    @Test("definition shown from the playing video track's width")
+    func quality() {
+        #expect(TabletopHalo.qualityLabel(width: 4096) == "4K")
+        #expect(TabletopHalo.qualityLabel(width: 3840) == "4K")
+        #expect(TabletopHalo.qualityLabel(width: 1920) == "1080p")
+        #expect(TabletopHalo.qualityLabel(width: 1280) == "720p")
+        #expect(TabletopHalo.qualityLabel(width: 720) == "SD")
+    }
+
+    @Test("picture height, aspect-fit in the upper half")
+    func pictureHeight() {
+        let half = CGSize(width: 700, height: 500)
+        #expect(TabletopHalo.pictureHeight(viewSize: half, videoAspect: 2.35) == (700 / 2.35).rounded())
+        #expect(TabletopHalo.pictureHeight(viewSize: half, videoAspect: 1.0) == 500)
+        let fallback = TabletopHalo.pictureHeight(viewSize: half, videoAspect: nil)
+        let expected: CGFloat = (CGFloat(700) / (16.0 / 9.0)).rounded()
+        #expect(fallback == expected, "\(fallback) vs \(expected)")
+    }
+
+    @Test("mirror offset puts the reflected picture `gap` below the fold")
+    func mirrorOffset() {
+        // Centre-relative mirror y′ = −y + k: the picture's bottom edge
+        // (y = picH / 2) must land at h / 2 + gap.
+        let k = TabletopHalo.mirrorOffset(viewHeight: 500, pictureHeight: 298, gapBelowFold: 24)
+        #expect(-(298.0 / 2) + k == 500.0 / 2 + 24)
+    }
+}
+#endif
