@@ -40,4 +40,10 @@ enum PlayerPostureLayout {
     static func tapHides(mode: PlayerLayoutMode, locked: Bool) -> Bool {
         !(mode == .tabletop && locked)
     }
+
+    /// A locked deck must be on screen in table mode: a HUD that faded in the
+    /// other mode (landscape, unfolded) comes back on entry, no tap needed.
+    static func revealsOnModeChange(mode: PlayerLayoutMode, locked: Bool, visible: Bool) -> Bool {
+        !visible && !autoHides(mode: mode, locked: locked)
+    }
 }

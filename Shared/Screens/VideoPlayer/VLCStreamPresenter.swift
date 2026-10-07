@@ -3209,7 +3209,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // First thumbnail once the picture sits in its new frame.
             DispatchQueue.main.async { [weak self] in self?.refreshTabletopThumbnail() }
         }
-        if controlsVisible { scheduleHideControls() }
+        if PlayerPostureLayout.revealsOnModeChange(mode: mode, locked: hudLocked, visible: controlsVisible) {
+            showControls()
+        } else if controlsVisible {
+            scheduleHideControls()
+        }
     }
 
     /// The picture's aspect, from the playing video track (nil before it is known).

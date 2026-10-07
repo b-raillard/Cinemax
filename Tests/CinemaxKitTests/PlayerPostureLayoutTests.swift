@@ -57,6 +57,14 @@ struct PlayerPostureLayoutTests {
         #expect(PlayerPostureLayout.autoHides(mode: .regular, locked: true) == true)
         #expect(PlayerPostureLayout.autoHides(mode: .regular, locked: false) == true)
     }
+
+    @Test("entering table mode with the deck locked reveals a HUD hidden in the other mode")
+    func lockedDeckRevealedOnEntry() {
+        #expect(PlayerPostureLayout.revealsOnModeChange(mode: .tabletop, locked: true, visible: false) == true)
+        #expect(PlayerPostureLayout.revealsOnModeChange(mode: .tabletop, locked: true, visible: true) == false)
+        #expect(PlayerPostureLayout.revealsOnModeChange(mode: .tabletop, locked: false, visible: false) == false)
+        #expect(PlayerPostureLayout.revealsOnModeChange(mode: .regular, locked: true, visible: false) == false)
+    }
 }
 
 #if os(iOS)
