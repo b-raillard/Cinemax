@@ -334,6 +334,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var statsVisible = false
     /// The stats panel: outside `controlsContainer` so it outlives the HUD fade.
     private let statsContainer = UIView()
+    /// Second stats column, used in the iOS table mode only (empty otherwise).
+    private let statsLabel2 = UILabel()
+    /// Regular: `statsLabel` spans the panel. Table mode: two columns, panel
+    /// pinned to the full width so they split it evenly.
+    private var statsOneColumn: [NSLayoutConstraint] = []
+    private var statsTwoColumns: [NSLayoutConstraint] = []
 
     // Next-episode countdown card (outro + autoPlayNext + nextEpisode).
     private var nextUpCard: NextUpCountdownView?
@@ -1917,8 +1923,20 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #else
         statsLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         #endif
+        statsLabel2.translatesAutoresizingMaskIntoConstraints = false
+        statsLabel2.numberOfLines = 0
+        statsLabel2.textColor = .white
+        statsLabel2.font = statsLabel.font
         statsContainer.addSubview(statsLabel)
+        statsContainer.addSubview(statsLabel2)
         view.addSubview(statsContainer)
+        // Each column's bottom stays inside the panel; the panel hugs the
+        // taller one (low-priority equalities). With the second column empty
+        // this is exactly the single-label panel it always was.
+        let hug1 = statsLabel.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10)
+        let hug2 = statsLabel2.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10)
+        hug1.priority = .defaultLow
+        hug2.priority = .defaultLow
         NSLayoutConstraint.activate([
             statsContainer.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             statsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
@@ -1926,10 +1944,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Modules line runs off-screen.
             statsContainer.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor),
             statsLabel.topAnchor.constraint(equalTo: statsContainer.topAnchor, constant: 10),
-            statsLabel.bottomAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: -10),
+            statsLabel.bottomAnchor.constraint(lessThanOrEqualTo: statsContainer.bottomAnchor, constant: -10),
+            hug1,
             statsLabel.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 14),
-            statsLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14)
+            statsLabel2.topAnchor.constraint(equalTo: statsLabel.topAnchor),
+            statsLabel2.bottomAnchor.constraint(lessThanOrEqualTo: statsContainer.bottomAnchor, constant: -10),
+            hug2,
+            statsLabel2.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14)
         ])
+        statsOneColumn = [
+            statsLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -14),
+            statsLabel2.widthAnchor.constraint(equalToConstant: 0)
+        ]
+        statsTwoColumns = [
+            statsContainer.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -14),
+            statsLabel.trailingAnchor.constraint(equalTo: statsLabel2.leadingAnchor, constant: -18),
+            statsLabel2.widthAnchor.constraint(equalTo: statsLabel.widthAnchor)
+        ]
+        NSLayoutConstraint.activate(statsOneColumn)
 
         #if os(tvOS)
         buildTVTransport(safe: safe)
@@ -3143,6 +3175,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // No 45 % veil over the upper screen's picture: the deck has its own ground.
         controlsContainer.backgroundColor = tabletop ? .clear : .black.withAlphaComponent(0.45)
         applyHUDStyle()
+        NSLayoutConstraint.deactivate(tabletop ? statsOneColumn : statsTwoColumns)
+        NSLayoutConstraint.activate(tabletop ? statsTwoColumns : statsOneColumn)
+        if statsVisible { refreshStats() }
         if size == nil { UIView.animate(withDuration: 0.3) { self.view.layoutIfNeeded() } }
         updateMirror()
         if tabletop {
@@ -3833,6 +3868,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if let engineModules = VLCEngineFacts.shared.summary {
             lines.append("\(loc.localized("player.stats.modules")) : \(engineModules)")
         }
+        #if os(iOS)
+        if layoutMode == .tabletop {
+            // Two columns: the panel fits in the black band above the picture
+            // instead of covering it.
+            let half = (lines.count + 1) / 2
+            statsLabel.text = lines.prefix(half).joined(separator: "\n")
+            statsLabel2.text = lines.dropFirst(half).joined(separator: "\n")
+            return
+        }
+        statsLabel2.text = nil
+        #endif
         statsLabel.text = lines.joined(separator: "\n")
     }
 
