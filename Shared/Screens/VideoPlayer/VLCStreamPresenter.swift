@@ -394,6 +394,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var tabletopItemBase: [String] = []
     /// The film bar's thumbnail, taken when the deck appears.
     private var tabletopThumbnail: UIImage?
+    private var tabletopThumbnailTicks = 0
     /// Blur + fade over the mirrored picture (table mode), under the HUD.
     private let haloVeil = TabletopHaloVeil()
     /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
@@ -1100,6 +1101,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         refreshTimeUI()
         checkFeedStall()
         checkPictureStall()
+        #if os(iOS)
+        // The film bar's thumbnail, retaken every 10 s while the deck shows:
+        // the one taken on entry predates the first picture (black), and a
+        // locked deck never re-shows to retake it (~4 ms per take).
+        tabletopThumbnailTicks += 1
+        if layoutMode == .tabletop, controlsVisible, tabletopThumbnailTicks % 10 == 0 { refreshTabletopThumbnail() }
+        #endif
         if statsVisible { refreshStats() }
         if sleepActive {
             sleepRemaining -= 1
@@ -3303,7 +3311,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         var previous: UIButton?
         for block in settings {
             constraints.append(block.heightAnchor.constraint(equalToConstant: 86))
-            constraints.append(block.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -22))
+            // 6 pt above the home indicator's inset: the lower screen's spare
+            // height goes to the transport row (recette 2026-10-07).
+            constraints.append(block.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -6))
             if let previous {
                 constraints.append(block.leadingAnchor.constraint(equalTo: previous.trailingAnchor, constant: 10))
                 constraints.append(block.widthAnchor.constraint(equalTo: subtitleButton.widthAnchor))
