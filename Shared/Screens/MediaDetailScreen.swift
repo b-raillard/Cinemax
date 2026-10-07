@@ -157,6 +157,8 @@ struct MediaDetailScreen: View {
     /// screen (the hero, inside the scroll view, reports none): the backdrop
     /// runs up under them instead of leaving a dark band above the image.
     @State private var topBarInset: CGFloat = 0
+    /// The screen's width, for `useTwoColumnLayout` — 0 until measured.
+    @State private var screenWidth: CGFloat = 0
 
     init(
         itemId: String,
@@ -192,6 +194,7 @@ struct MediaDetailScreen: View {
         }
         #if os(iOS)
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topBarInset = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { screenWidth = $0 }
         .navigationBarTitleDisplayMode(.inline)
         // Hosted on the body's outer ZStack — eager — so the destination
         // doesn't get swallowed by the `LazyVStack` inside `detailContent`.
@@ -547,10 +550,16 @@ struct MediaDetailScreen: View {
     #if os(iOS)
     /// iPad (regular horizontal size class) shows the two-column detail layout.
     /// iPhone (compact) keeps the stacked layout. Follows the codebase-wide
-    /// convention of treating regular width as iPad (see `AdaptiveLayout`).
+    /// convention of treating regular width as iPad (see `AdaptiveLayout`) —
+    /// with a width floor: the 40 % metadata column needs ~300 pt, and below
+    /// `twoColumnMinWidth` (iPhone Duo open in portrait, 669 pt; iPad mini in
+    /// portrait) it squeezed Play and « From the start » to « P… » and an
+    /// icon. Unmeasured (first frame), the size class alone decides.
     private var useTwoColumnLayout: Bool {
-        sizeClass == .regular
+        sizeClass == .regular && (screenWidth == 0 || screenWidth >= Self.twoColumnMinWidth)
     }
+
+    private static let twoColumnMinWidth: CGFloat = 800
     #endif
 
     // MARK: - Backdrop
@@ -2050,9 +2059,17 @@ private struct PlayActionButtonsSection: View, Equatable {
                 // secondary label gets more room than a fixed 160pt pill.
                 // Without resume there's only Play — keep it pill-sized.
                 if showResume {
-                    HStack(spacing: CinemaSpacing.spacing3) {
-                        lectureButton.frame(maxWidth: .infinity)
-                        playFromBeginningButton.frame(maxWidth: .infinity)
+                    // Side by side when both labels fit, stacked otherwise —
+                    // a narrow column truncated « From the start » to « From t… ».
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: CinemaSpacing.spacing3) {
+                            lectureButton.frame(maxWidth: .infinity)
+                            playFromBeginningButton.frame(maxWidth: .infinity)
+                        }
+                        VStack(spacing: CinemaSpacing.spacing3) {
+                            lectureButton.frame(maxWidth: .infinity)
+                            playFromBeginningButton.frame(maxWidth: .infinity)
+                        }
                     }
                 } else {
                     lectureButton.frame(width: playButtonWidth)
