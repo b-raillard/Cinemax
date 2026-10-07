@@ -397,6 +397,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var tabletopThumbnailTicks = 0
     /// Blur + fade over the mirrored picture (table mode), under the HUD.
     private let haloVeil = TabletopHaloVeil()
+    /// Above `videoView`, same frame: holds libVLC's subtitle view once lifted
+    /// out of the mirror (see `liftSubtitlesOutOfMirror`).
+    private let subtitleOverlay = UIView()
     /// The HUD edges `applySideColumnReach()` moves (iPhone Duo closed, landscape).
     private struct SideReachEdges {
         let closeTrailing: NSLayoutConstraint
@@ -1106,6 +1109,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // the one taken on entry predates the first picture (black), and a
         // locked deck never re-shows to retake it (~4 ms per take).
         tabletopThumbnailTicks += 1
+        if layoutMode == .tabletop, TabletopHalo.subtitleView(in: videoView) != nil { updateMirror() }
         if layoutMode == .tabletop, controlsVisible, tabletopThumbnailTicks % 10 == 0 { refreshTabletopThumbnail() }
         #endif
         if statsVisible { refreshStats() }
@@ -3129,7 +3133,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         haloVeil.translatesAutoresizingMaskIntoConstraints = false
         haloVeil.isHidden = true
         view.insertSubview(haloVeil, aboveSubview: videoView)   // below the HUD, added later
+        subtitleOverlay.translatesAutoresizingMaskIntoConstraints = false
+        subtitleOverlay.isUserInteractionEnabled = false
+        view.insertSubview(subtitleOverlay, aboveSubview: videoView)
         NSLayoutConstraint.activate([
+            subtitleOverlay.leadingAnchor.constraint(equalTo: videoView.leadingAnchor),
+            subtitleOverlay.trailingAnchor.constraint(equalTo: videoView.trailingAnchor),
+            subtitleOverlay.topAnchor.constraint(equalTo: videoView.topAnchor),
+            subtitleOverlay.bottomAnchor.constraint(equalTo: videoView.bottomAnchor),
             tabletopBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabletopBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabletopBackdrop.topAnchor.constraint(equalTo: view.centerYAnchor),
@@ -3237,10 +3248,27 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func updateMirror() {
         let tabletop = layoutMode == .tabletop
         haloVeil.isHidden = !tabletop
-        videoView.setMirror(enabled: tabletop,
+        // Subtitles must never be mirrored (illegible). Lifted out when found;
+        // one left inside the mirror (not lifted) switches the mirror off.
+        let subtitlesClear = !tabletop || liftSubtitlesOutOfMirror()
+        videoView.setMirror(enabled: tabletop && subtitlesClear,
                             pictureHeight: TabletopHalo.pictureHeight(viewSize: videoView.bounds.size,
                                                                       videoAspect: videoAspect),
                             gapBelowFold: 24)
+    }
+
+    /// Moves libVLC's subtitle view from inside the mirrored `videoView` to
+    /// `subtitleOverlay` (same frame, so its regions land where they did).
+    /// Returns false only when one is still inside the mirror. libVLC builds
+    /// the view with the video output, after the mode switch: the second tick
+    /// retries while in table mode.
+    private func liftSubtitlesOutOfMirror() -> Bool {
+        guard let subtitles = TabletopHalo.subtitleView(in: videoView) else { return true }
+        subtitles.removeFromSuperview()
+        subtitles.frame = subtitleOverlay.bounds
+        subtitles.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        subtitleOverlay.addSubview(subtitles)
+        return TabletopHalo.subtitleView(in: videoView) == nil
     }
 
     private func refreshTabletopThumbnail() {

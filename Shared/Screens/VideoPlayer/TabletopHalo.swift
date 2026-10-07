@@ -32,6 +32,21 @@ enum TabletopHalo {
         }
     }
 
+    /// libVLC draws subtitles into their own view (`VLCSampleBufferSubpictureView`,
+    /// a sibling of the picture's sample-buffer view, measured 2026-10-07), at
+    /// the bottom of the WHOLE drawable — in the black band under the picture
+    /// in table mode, which the mirror folds back onto itself: reversed text
+    /// over the real one. Found by class name so it can be lifted out of the
+    /// mirror (`VLCStreamPresenter.liftSubtitlesOutOfMirror`).
+    @MainActor
+    static func subtitleView(in root: UIView) -> UIView? {
+        for subview in root.subviews {
+            if NSStringFromClass(type(of: subview)).hasSuffix("SubpictureView") { return subview }
+            if let found = subtitleView(in: subview) { return found }
+        }
+        return nil
+    }
+
     /// The film bar's thumbnail, rendered by UIKit when the deck appears
     /// (~4 ms measured) — never continuously.
     @MainActor

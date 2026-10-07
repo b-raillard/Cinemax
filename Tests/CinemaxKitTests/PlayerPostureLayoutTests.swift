@@ -143,5 +143,20 @@ struct TabletopHaloTests {
         let k = TabletopHalo.mirrorOffset(viewHeight: 500, pictureHeight: 298, gapBelowFold: 24)
         #expect(-(298.0 / 2) + k == 500.0 / 2 + 24)
     }
+
+    @Test("finds VLC's subtitle view, however deep, by its class name")
+    @MainActor
+    func findsSubtitleView() {
+        let root = UIView(), host = UIView(), video = UIView(), subtitles = VLCSampleBufferSubpictureView()
+        root.addSubview(host)
+        host.addSubview(video)
+        host.addSubview(subtitles)
+        #expect(TabletopHalo.subtitleView(in: root) === subtitles)
+        subtitles.removeFromSuperview()
+        #expect(TabletopHalo.subtitleView(in: root) == nil)
+    }
 }
+
+/// Stands in for libVLC's Objective-C class of the same name.
+private final class VLCSampleBufferSubpictureView: UIView {}
 #endif
