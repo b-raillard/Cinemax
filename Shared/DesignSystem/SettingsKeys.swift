@@ -130,6 +130,8 @@ enum SettingsKey {
     // Debug
     static let debugFastSleepTimer = "debug.fastSleepTimer"
     static let debugShowSkipToEnd = "debug.showSkipToEnd"
+    /// Debug (iOS): the iPhone Duo table layout on any iPhone held in portrait.
+    static let debugSimulateTabletop = "debug.simulateTabletop"
     /// Debug: id of a catalogue season to force regardless of the date ("" = none).
     static let debugForcedSeason = "debug.forcedSeason"
     /// Debug: resolve the entitlement as Pro without any purchase. Read and
@@ -252,6 +254,7 @@ enum SettingsKey {
 
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false
+        static let debugSimulateTabletop = false
         static let debugForcedSeason = ""
         static let debugSimulatePro = false
 

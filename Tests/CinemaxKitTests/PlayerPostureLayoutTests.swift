@@ -58,6 +58,17 @@ struct PlayerPostureLayoutTests {
         #expect(PlayerPostureLayout.autoHides(mode: .regular, locked: false) == true)
     }
 
+    @Test("the Debug simulation reads as a half-open hinge, on any device")
+    func debugSimulationIsHalfOpen() {
+        #expect(PlayerPostureLayout.effectiveHinge(.unknown, simulateTabletop: true) == .partiallyOpen)
+        #expect(PlayerPostureLayout.effectiveHinge(.fullyOpen, simulateTabletop: true) == .partiallyOpen)
+        #expect(PlayerPostureLayout.effectiveHinge(.unknown, simulateTabletop: false) == .unknown)
+        #expect(PlayerPostureLayout.effectiveHinge(.fullyOpen, simulateTabletop: false) == .fullyOpen)
+        // Landscape stays the regular player, simulated or not.
+        #expect(PlayerPostureLayout.mode(hinge: PlayerPostureLayout.effectiveHinge(.unknown, simulateTabletop: true),
+                                         viewSize: CGSize(width: 874, height: 402)) == .regular)
+    }
+
     @Test("entering table mode with the deck locked reveals a HUD hidden in the other mode")
     func lockedDeckRevealedOnEntry() {
         #expect(PlayerPostureLayout.revealsOnModeChange(mode: .tabletop, locked: true, visible: false) == true)

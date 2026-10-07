@@ -3176,7 +3176,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// by size transitions (rotation, window resize) with the TARGET size, on
     /// appearance, and with `force` when the deck's contents change.
     private func applyLayoutMode(size: CGSize? = nil, force: Bool = false) {
-        let mode = PlayerPostureLayout.mode(hinge: hingeReading, viewSize: size ?? view.bounds.size)
+        let hinge = PlayerPostureLayout.effectiveHinge(
+            hingeReading, simulateTabletop: UserDefaults.standard.bool(forKey: SettingsKey.debugSimulateTabletop))
+        let mode = PlayerPostureLayout.mode(hinge: hinge, viewSize: size ?? view.bounds.size)
         guard force || mode != layoutMode else { return }
         // Never under a finger on the slider: the swap moves and resizes it,
         // and re-arming the auto-hide would fade the HUD mid-drag.

@@ -109,6 +109,7 @@ Three-level navigation. Landing — tvOS: split (left brand, right nav pills, pe
 | `menu.cachedViews` | — | **Migration + fallback.** JSON `[LibraryView]`, last `getUserViews` snapshot |
 | `debug.fastSleepTimer` | `false` | Overrides sleep to 15s |
 | `debug.showSkipToEnd` | `false` | "End" button seeking to `duration−15s` |
+| `debug.simulateTabletop` | `false` | Debug (iOS only — the row is compiled out of tvOS): the player takes the iPhone Duo TABLE layout on any iPhone held in portrait (`PlayerPostureLayout.effectiveHinge` reads it as a half-open hinge), to see and test the deck without a Duo. Read when the layout mode is recomputed (appearance, rotation), so a change applies on the next playback or rotation. |
 | `onboarding.seen` | `false` | `true` once the first-run onboarding is finished or skipped — or once a launch found a server already known (an upgrade from a version without it). Read ONLY through `OnboardingPolicy`; re-opening the pager from Réglages never clears it |
 | `whatsNew.lastSeenVersion` | — | The version whose « Quoi de neuf » pages have already been shown. **Absent is NOT "first run"** — it is also every install upgrading from a build that predates the reel, which is exactly its audience; the two are told apart by `OnboardingPolicy.shouldShow`. Read/written only through `WhatsNewPolicy` |
 | `update.lastCheckedAt` | `0` | When the App Store was last asked (epoch seconds). Throttles the **request** only — the decision is re-derived from `update.latestVersion` on every launch, so a standing offer survives the throttle |
