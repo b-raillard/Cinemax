@@ -153,6 +153,10 @@ struct MediaDetailScreen: View {
     /// Card → fiche zoom (iOS) for the carousels below, one surface per
     /// section since a title can sit in two of them — see `CardZoom`.
     @Namespace private var zoomNamespace
+    /// Height of the status + navigation bars over the fiche, measured on the
+    /// screen (the hero, inside the scroll view, reports none): the backdrop
+    /// runs up under them instead of leaving a dark band above the image.
+    @State private var topBarInset: CGFloat = 0
 
     init(
         itemId: String,
@@ -187,6 +191,7 @@ struct MediaDetailScreen: View {
             }
         }
         #if os(iOS)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topBarInset = $0 }
         .navigationBarTitleDisplayMode(.inline)
         // Hosted on the body's outer ZStack — eager — so the destination
         // doesn't get swallowed by the `LazyVStack` inside `detailContent`.
@@ -655,8 +660,7 @@ struct MediaDetailScreen: View {
                         BackdropFallbackView()
                     }
                 }
-                .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
-                .heroBackdropBleed()
+                .heroBackdropBleed(topExtension: topBarInset)
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: detailHeroSpacing) {

@@ -826,7 +826,6 @@ struct HomeScreen: View {
                         BackdropFallbackView()
                     }
                 }
-                .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
                 .heroBackdropBleed()
             }
             .overlay(alignment: .bottomLeading) {
