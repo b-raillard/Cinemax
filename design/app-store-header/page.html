@@ -1,0 +1,144 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- App Store creative assets for JellyGlass. Laid out at HALF size and
+     rendered at device scale 2 (render.sh): 1920 × 823 → 3840 × 1646 (header),
+     1920 × 1280 → 3840 × 2560 (search results). -->
+<style>
+  html, body { margin: 0; background: #0E0E0E; overflow: hidden;
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; color: #F2F2F2; }
+  #stage { position: relative; overflow: hidden; }
+  .abs { position: absolute; }
+  .bg { inset: 0; background-size: cover; }
+  .eyebrow { font-size: 22px; font-weight: 600; letter-spacing: .42em; color: rgba(242,242,242,.72); }
+  h1 { margin: 0; font-weight: 800; letter-spacing: -.025em; line-height: 1.02; }
+  h1 em { font-style: normal; color: #4CAF82; }
+  .sub { font-weight: 500; color: rgba(242,242,242,.78); line-height: 1.25; }
+  .pills { display: flex; flex-wrap: wrap; gap: 14px; }
+  .pill { font-weight: 650; letter-spacing: .01em; padding: 12px 22px; border-radius: 14px;
+    background: rgba(38,38,38,.78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .device { position: absolute; overflow: hidden; background: #000; }
+  .device img { width: 100%; height: 100%; object-fit: cover; display: block; }
+</style></head>
+<body><div id="stage"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const v = q.get('v') || 'tel', fmt = q.get('fmt') || 'search', lang = q.get('lang') || 'en';
+const W = 1920, H = fmt === 'header' ? 823 : 1280;
+const stage = document.getElementById('stage');
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+const src = (name) => q.get('dir') + '/' + name;
+
+const TXT = {
+  tel: {
+    en: { h: 'Your films,<br><em>played as-is.</em>', s: 'Your Jellyfin server never has to transcode.' },
+    fr: { h: 'Vos films,<br><em>lus tels quels.</em>', s: 'Votre serveur Jellyfin n’a jamais à transcoder.' },
+    de: { h: 'Deine Filme,<br><em>unverändert.</em>', s: 'Dein Jellyfin-Server muss nie transkodieren.' },
+  },
+  devices: {
+    en: { h: 'Your Jellyfin, on every screen', s: 'iPhone · iPad · Apple TV' },
+    fr: { h: 'Votre Jellyfin, sur tous vos écrans', s: 'iPhone · iPad · Apple TV' },
+    de: { h: 'Dein Jellyfin, auf jedem Bildschirm', s: 'iPhone · iPad · Apple TV' },
+  },
+};
+const PILLS = ['MKV', 'Dolby Vision', 'HDR10+', 'Dolby Atmos', '4K'];
+
+if (v === 'tel') {
+  // « Tel quel »: one film, full bleed, the promise on the left.
+  const t = TXT.tel[lang], hdr = fmt === 'header';
+  stage.innerHTML = `
+    <div class="abs bg" style="background-image:url('${src('sintel-backdrop.jpg')}');
+         background-position:${hdr ? '70% 30%' : '72% 40%'};filter:saturate(1.05)"></div>
+    <div class="abs bg" style="background:
+         linear-gradient(90deg, #0E0E0E 0%, rgba(14,14,14,.94) 30%, rgba(14,14,14,.55) 52%, rgba(14,14,14,0) 72%),
+         linear-gradient(0deg, rgba(14,14,14,.85) 0%, rgba(14,14,14,0) 38%)"></div>
+    <div class="abs" style="left:${hdr ? 150 : 130}px;top:${hdr ? 170 : 300}px;width:${hdr ? 860 : 900}px">
+      <div class="eyebrow">JELLYGLASS</div>
+      <h1 style="font-size:${hdr ? 96 : 118}px;margin-top:${hdr ? 22 : 30}px">${t.h}</h1>
+      <div class="sub" style="font-size:${hdr ? 30 : 38}px;margin-top:${hdr ? 22 : 34}px">${t.s}</div>
+      <div class="pills" style="margin-top:${hdr ? 34 : 56}px">
+        ${PILLS.map(p => `<span class="pill" style="font-size:${hdr ? 24 : 30}px">${p}</span>`).join('')}
+      </div>
+    </div>`;
+}
+
+if (v === 'devices') {
+  // « Sur tous vos écrans »: the same Home on the three devices. Key art is
+  // kept in the centre third so a narrow crop still shows all three.
+  const t = TXT.devices[lang], hdr = fmt === 'header';
+  const y0 = hdr ? 0 : 230;
+  stage.innerHTML = `
+    <div class="abs bg" style="background:
+         radial-gradient(ellipse 55% 70% at 50% ${hdr ? 70 : 62}%, rgba(76,175,130,.30), rgba(14,14,14,0) 70%),
+         radial-gradient(ellipse 80% 60% at 50% 100%, rgba(46,138,94,.18), rgba(14,14,14,0) 70%), #0E0E0E"></div>
+    <div class="abs" style="left:0;right:0;top:${hdr ? 56 : 120}px;text-align:center">
+      <h1 style="font-size:${hdr ? 60 : 84}px">${t.h}</h1>
+      <div class="sub" style="font-size:${hdr ? 26 : 34}px;margin-top:14px;letter-spacing:.06em">${t.s}</div>
+    </div>
+    <!-- Apple TV: a thin-bezel screen, centre -->
+    <div class="device" style="left:500px;top:${y0 + 220}px;width:920px;height:518px;border-radius:14px;
+         box-shadow:0 0 0 10px #1a1a1a,0 0 0 11px #2c2c2c,0 40px 120px rgba(0,0,0,.7)">
+      <img src="${src(q.get('tv') || 'tv-home.png')}"></div>
+    <!-- iPad (landscape), left, in front -->
+    <div class="device" style="left:250px;top:${y0 + 420}px;width:560px;height:420px;border-radius:30px;
+         box-shadow:0 0 0 12px #111,0 0 0 13px #333,0 40px 100px rgba(0,0,0,.75)">
+      <img src="${src(q.get('ipad') || 'ipad-home.png')}"></div>
+    <!-- iPhone (portrait), right, in front -->
+    <div class="device" style="left:1290px;top:${y0 + 330}px;width:250px;height:543px;border-radius:44px;
+         box-shadow:0 0 0 9px #111,0 0 0 10px #333,0 40px 100px rgba(0,0,0,.75)">
+      <img src="${src(q.get('iphone') || 'iphone-home.png')}"></div>`;
+}
+
+if (v === 'duo') {
+  // « Table mode »: an iPhone Duo half-folded on a table, the film on the upper
+  // screen, the control deck on the lower one. ONE inner-display capture
+  // (2007 × 2853, Simulator Cmd+S) is split at its midline across both panels.
+  // Punchlines chosen 2026-10-08. `k` scales the headline for the longer ones.
+  const DUO = {
+    en: { h: 'Put your films<br><em>on the table.</em>', s: 'Table mode for iPhone Duo.<br>Popcorn not included.',
+          badge: 'NEW · MADE FOR IPHONE DUO', k: 1 },
+    fr: { h: 'JellyGlass se plie<br>en quatre.<br><em>L’iPhone Duo, en deux.</em>', s: 'Le mode table de l’iPhone Duo.<br>Pop-corn non fourni.',
+          badge: 'NOUVEAU · CONÇU POUR L’IPHONE DUO', k: .78, ks: .68 },
+    de: { h: 'Klappt wie<br><em>im Kino.</em>', s: 'Der Tischmodus fürs iPhone Duo.<br>Popcorn nicht inbegriffen.',
+          badge: 'NEU · GEMACHT FÜRS IPHONE DUO', k: 1 },
+  };
+  const t = DUO[lang], hdr = fmt === 'header';
+  const w = hdr ? 480 : 700;                 // device width (layout px)
+  const yaw = +(q.get('yaw') || -14), tilt = +(q.get('tilt') || 60);
+  const ph = Math.round(w * 1426 / 2007);    // one panel's height
+  const left = hdr ? 1170 : 1060, top = hdr ? 50 : 130;
+  const img = src(q.get('duo') || 'duo-table.png');
+  const panel = (half) => `background:#000 url('${img}') 0 ${half === 'up' ? '0' : '100%'} / 100% 200% no-repeat;`;
+  stage.innerHTML = `
+    <div class="abs bg" style="background:
+         radial-gradient(ellipse 38% 62% at ${hdr ? 70 : 68}% ${hdr ? 46 : 44}%, rgba(76,175,130,.32), rgba(14,14,14,0) 70%),
+         radial-gradient(ellipse 70% 40% at 66% 104%, rgba(46,138,94,.16), rgba(14,14,14,0) 70%), #0E0E0E"></div>
+    <div class="abs" style="left:${hdr ? 150 : 130}px;top:0;bottom:0;width:${hdr ? 900 : 920}px;
+         display:flex;flex-direction:column;justify-content:center">
+      <div class="eyebrow">JELLYGLASS</div>
+      <h1 style="font-size:${hdr ? 100 * t.k : 108 * (t.ks || t.k)}px;margin-top:${hdr ? 22 : 30}px;white-space:nowrap">${t.h}</h1>
+      <div class="sub" style="font-size:${hdr ? 30 : 38}px;margin-top:${hdr ? 24 : 34}px;max-width:${hdr ? 820 : 860}px">${t.s}</div>
+      <div class="pills" style="margin-top:${hdr ? 34 : 52}px">
+        <span class="pill" style="font-size:${hdr ? 22 : 28}px;color:#4CAF82;letter-spacing:.08em">${t.badge}</span>
+      </div>
+    </div>
+    <!-- soft shadow where the lower half rests on the table -->
+    <div class="abs" style="left:${left - w * 0.2}px;top:${top + ph * 1.45}px;width:${w * 1.4}px;height:${ph * 0.55}px;
+         border-radius:50%;background:rgba(0,0,0,.9);filter:blur(36px)"></div>
+    <div class="abs" style="left:${left}px;top:${top}px;width:${w}px;perspective:${w * 4.5}px;perspective-origin:50% -20%">
+     <div style="transform-style:preserve-3d;transform:rotateY(${yaw}deg)">
+      <div style="position:relative;height:${ph}px;transform-origin:50% 100%;transform:rotateX(-9deg);border-radius:${w * .085}px ${w * .085}px 3px 3px;
+           padding:${w * .02}px ${w * .02}px 0;background:#0a0a0a;box-shadow:0 0 0 2px #46464a,0 0 0 3px #1c1c1e">
+        <div style="height:100%;border-radius:${w * .07}px ${w * .07}px 0 0;${panel('up')}"></div></div>
+      <div style="position:relative;height:${ph}px;transform-origin:50% 0;transform:rotateX(${tilt}deg);border-radius:3px 3px ${w * .085}px ${w * .085}px;
+           padding:0 ${w * .02}px ${w * .02}px;background:#0a0a0a;box-shadow:0 0 0 2px #46464a,0 0 0 3px #1c1c1e">
+        <div style="height:100%;border-radius:0 0 ${w * .07}px ${w * .07}px;${panel('down')}"></div>
+        <!-- the fold: a darker crease and a lit hinge edge -->
+        <div style="position:absolute;left:0;right:0;top:0;height:${ph * .16}px;
+             background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0))"></div>
+        <div style="position:absolute;left:-3px;right:-3px;top:-3px;height:5px;border-radius:3px;
+             background:linear-gradient(90deg,#2a2a2d,#8a8a90 30%,#5a5a60 70%,#2a2a2d)"></div></div>
+     </div>
+    </div>`;
+}
+</script></body></html>

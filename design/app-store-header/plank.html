@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- iPhone screenshot plank (7th of the series): same template as the App Store
+     redesign canvas (440 × 956 board, Instrument Sans, bloom + grain), rendered
+     at device scale 3 by render.sh → 1320 × 2868. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+html,body{margin:0;background:#07070A;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+.panel{position:relative;overflow:hidden;background:#07070A;width:440px;height:956px}
+.bloom{position:absolute;inset:0;background:
+ radial-gradient(115% 65% at 16% -6%,rgba(76,175,130,.26),rgba(76,175,130,0) 58%),
+ radial-gradient(85% 55% at 102% 8%,rgba(91,200,232,.14),rgba(91,200,232,0) 60%),
+ radial-gradient(120% 90% at 50% 120%,rgba(0,0,0,.65),rgba(0,0,0,0) 55%)}
+.grain{position:absolute;inset:0;opacity:.05;pointer-events:none;
+ background-image:radial-gradient(rgba(255,255,255,.7) .5px,transparent .6px);background-size:3px 3px}
+.eyebrow{font-weight:700;text-transform:uppercase;color:#4CAF82}
+.head{margin:0;font-weight:700;color:#F5F4F1;letter-spacing:-.028em}
+.sub{margin:0;color:#8C8C8A;font-weight:400}
+.head em{font-style:normal;color:#4CAF82}
+.badge{display:inline-block;font-weight:700;letter-spacing:.08em;color:#4CAF82;border-radius:8px;
+ background:rgba(38,38,38,.78);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.half{position:relative;background:#000;box-shadow:0 0 0 1px rgba(255,255,255,.16),0 0 0 2px #111}
+</style></head>
+<body><div id="stage"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const lang = q.get('lang') || 'en';
+// Same punchlines as the header (page.html, v=duo): accent second line + the
+// « made for iPhone Duo » badge — the point of this plank (user, 2026-10-08).
+const TXT = {
+  en: { e: 'Table mode', h: 'Put your films<br><em>on the table.</em>', s: 'Table mode for iPhone Duo.<br>Popcorn not included.',
+        badge: 'NEW · MADE FOR IPHONE DUO', k: 1 },
+  fr: { e: 'Mode table', h: 'JellyGlass se plie<br>en quatre.<br><em>L’iPhone Duo, en deux.</em>', s: 'Le mode table de l’iPhone Duo.<br>Pop-corn non fourni.',
+        badge: 'NOUVEAU · CONÇU POUR L’IPHONE DUO', k: .84 },
+  de: { e: 'Tischmodus', h: 'Klappt wie<br><em>im Kino.</em>', s: 'Der Tischmodus fürs iPhone Duo.<br>Popcorn nicht inbegriffen.',
+        badge: 'NEU · GEMACHT FÜRS IPHONE DUO', k: 1 },
+};
+const t = TXT[lang];
+const img = q.get('dir') + '/' + (q.get('duo') || 'duo-table.png');
+// One inner-display capture (2007 × 2853) split at its midline across both halves.
+const w = 372, ph = Math.round(w * 1426 / 2007), r = 30, b = 7;
+const face = (half) => `position:absolute;inset:${half === 'up' ? `${b}px ${b}px 0` : `0 ${b}px ${b}px`};
+  border-radius:${half === 'up' ? `${r - b}px ${r - b}px 0 0` : `0 0 ${r - b}px ${r - b}px`};
+  background:#000 url('${img}') 0 ${half === 'up' ? '0' : '100%'} / 100% 200% no-repeat`;
+document.getElementById('stage').innerHTML = `
+<div class="panel">
+ <div class="bloom"></div>
+ <div style="position:absolute;left:36px;right:36px;top:52px;z-index:4">
+   <div class="eyebrow" style="font-size:11px;letter-spacing:.22em">${t.e}</div>
+   <h2 class="head" style="font-size:${40 * t.k}px;line-height:1.02;margin-top:14px">${t.h}</h2>
+   <p class="sub" style="font-size:14.5px;line-height:1.42;margin-top:14px;max-width:330px">${t.s}</p>
+   <div class="badge" style="font-size:10.5px;padding:7px 11px;margin-top:16px">${t.badge}</div>
+ </div>
+ <!-- shadow on the table under the lower half -->
+ <div style="position:absolute;left:${(440 - w * 1.15) / 2}px;top:${318 + ph * 1.45}px;width:${w * 1.15}px;height:${ph * .5}px;border-radius:50%;
+      background:rgba(0,0,0,.9);filter:blur(26px)"></div>
+ <div style="position:absolute;left:${(440 - w) / 2 + 8}px;top:318px;width:${w}px;perspective:${w * 4.5}px;perspective-origin:50% -20%">
+  <div style="transform-style:preserve-3d;transform:rotateY(-12deg)">
+   <div class="half" style="height:${ph}px;border-radius:${r}px ${r}px 3px 3px;transform-origin:50% 100%;transform:rotateX(-9deg)">
+     <div style="${face('up')}"></div></div>
+   <div class="half" style="height:${ph}px;border-radius:3px 3px ${r}px ${r}px;transform-origin:50% 0;transform:rotateX(58deg)">
+     <div style="${face('down')}"></div>
+     <div style="position:absolute;left:0;right:0;top:0;height:${ph * .16}px;background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0))"></div>
+     <div style="position:absolute;left:-2px;right:-2px;top:-2px;height:4px;border-radius:2px;
+          background:linear-gradient(90deg,#2a2a2d,#8a8a90 30%,#5a5a60 70%,#2a2a2d)"></div></div>
+  </div>
+ </div>
+ <div class="grain"></div>
+</div>`;
+</script></body></html>

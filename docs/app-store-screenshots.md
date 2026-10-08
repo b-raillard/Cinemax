@@ -61,6 +61,16 @@ Mêmes 13 planches, mêmes cadrages, titres traduits, dans `~/Desktop/JellyGlass
 - **Le simulateur Apple TV `35C18366` porte le compte PERSONNEL de l'utilisateur** (bibliothèque réelle) : ne jamais y capturer. Le compte de démonstration est sur `D8FA6F76`.
 - **Adresse du serveur** : `nas-raillard.local` n'est joignable que depuis le réseau local ; les simulateurs ont été rebranchés sur `https://movies.nivadax.net`.
 
+## 2 ter. La série iPhone Duo (2026-10-08)
+
+En-tête (3840 × 1646), résultats de recherche (3840 × 2560) et une 7e image iPhone (1320 × 2868, réduite en 1284 × 2778), en EN / FR / DE : l'iPhone Duo à moitié plié sur une table, le film en haut, le pupitre en bas. Générateurs versionnés dans `design/app-store-header/` : `page.html` (variante `v=duo`), `plank.html` (gabarit du canvas de refonte : Instrument Sans, halo, grain), `render.sh` (`fmt=header|search|plank`, `lang=en|fr|de`, `duo=<capture>`). Accroches : « Put your films on the table. » / « JellyGlass se plie en quatre. L'iPhone Duo, en deux. » / « Klappt wie im Kino. », sous-titre « …Popcorn not included. », badge vert « NEW · MADE FOR IPHONE DUO » — le badge et la 2e ligne verte SONT le message, ne pas les retirer sur la 7e image.
+
+**Pièges de cette série :**
+
+- **La capture doit être celle de l'écran INTÉRIEUR, 2007 × 2853, par Cmd+S dans le simulateur.** `simctl io screenshot` ne voit que l'écran extérieur (même avec `--display`), et une capture de la fenêtre du simulateur est ~40 % moins nette. Une seule capture est coupée à mi-hauteur sur les deux moitiés.
+- **Mode table au simulateur** : réglage Débogage « Simuler le mode table », pupitre verrouillé (cadenas) pour qu'il ne se masque pas, sous-titres coupés.
+- **La vignette du pupitre peut être encore noire** (rafraîchie toutes les 10 s) : attendre, ou reprendre la vignette d'une autre langue (même film, même image). La barre d'état est noircie si elle s'affiche.
+
 ## 3. Méthode A — Simulator + Cmd+S (rapide, recommandée)
 
 ```bash
