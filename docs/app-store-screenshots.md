@@ -153,3 +153,11 @@ ASC accepte jusqu'à **3 vidéos de prévisualisation** (15-30s) par taille. Si 
 - Convertir au format `.mov` H.264, 1080p, 30fps via ffmpeg si Apple rejette
 
 Optionnel pour la v1.0 — peut être ajouté plus tard sans nouvelle review.
+
+## 2 quater. Série allemande, planches Duo et écosystème (2026-10-08, après la 2.4.0)
+
+- **`shots.html`** (`fmt=shot&n=1..6&lang=fr|en|de&shot=<capture>`) : portage littéral des planches iPhone 1–6 du canvas de refonte (artifact `S5cJ7tWFU3f3zX3HaCtCHG`, `iPhone-N.dc.html`). Vérifié : rendu EN identique AU PIXEL près à la planche livrée hors de l'écran. Les captures d'origine (`/_blob/…`) ne sont pas récupérables depuis l'artifact : chaque nouvelle langue repasse par le simulateur. Le lecteur (04) ne porte aucun texte de l'app : sa partie basse est reprise telle quelle de la planche anglaise.
+- **Dérivé 6,5″** : redimensionner en 1284 × 2790 puis rogner 6 px en haut et en bas (recadrage CENTRÉ, vérifié sur la série EN).
+- **`duo.html`** (`fmt=duo&v=table|open|land`) : emplacement « iPhone Duo » d'App Store Connect, écran intérieur 2007 × 2853 (le 2034 × 1398 listé à côté est l'écran EXTÉRIEUR). Les captures doivent être prises à la main (Cmd+S) : l'outil de capture du simulateur ne voit que l'écran extérieur.
+- **`eco.html`** (`fmt=eco&f=ios|tv`) : planche « écosystème » (iPhone, iPad, Duo plié, Apple TV), 1320 × 2868 pour l'app iOS et 3840 × 2160 pour l'app Apple TV.
+- **Widgets en allemand** : ils suivent la langue de l'APPAREIL, et un simulateur garde l'instantané de l'ancienne langue même après redémarrage et purge de `Caches/com.apple.chrono*` ; il se renouvelle à la prochaine échéance de la timeline (30 min).
