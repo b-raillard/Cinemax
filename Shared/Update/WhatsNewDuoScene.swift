@@ -19,7 +19,7 @@ struct WhatsNewDuoScene: View {
     @Environment(\.motionEffectsEnabled) private var motionEffects
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !motionEffects)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motionEffects)) { context in
             let phase: Double? = motionEffects
                 ? DuoFoldTimeline.phase(at: context.date.timeIntervalSinceReferenceDate) : nil
             scene(DuoFoldTimeline.pose(at: phase))
