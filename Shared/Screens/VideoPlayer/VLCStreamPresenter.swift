@@ -493,11 +493,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Watches the INPUT, which dies ~20 s before the picture does when the
     /// origin cancels a direct stream. See `FeedStallPolicy`.
     private var feedStall = FeedStallPolicy()
-    /// Byte count captured when a re-anchor was issued, and the follow-up that
-    /// escalates to a full rebuild if it has not moved since. Without it a
-    /// re-anchor onto a genuinely dead link would hold its own seek-settle
-    /// window (30 s backstop) with both watchdogs standing down behind it.
-    private var feedReanchorBytes: UInt64?
+    /// The follow-up that escalates a re-anchor to a full rebuild if the byte
+    /// count has not moved since. Without it a re-anchor onto a genuinely dead
+    /// link would hold its own seek-settle window (30 s backstop) with both
+    /// watchdogs standing down behind it.
     private var feedReanchorWatchdog: DispatchWorkItem?
     private var progressTimer: Timer?
     private var hideControlsWorkItem: DispatchWorkItem?
@@ -1280,22 +1279,26 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // this line is otherwise written where nobody can read it, and the
         // re-anchor is what resets the counters it describes.
         DiagnosticsUploader.send(reason: "feed-stall", engine: "vlc")
-        feedReanchorBytes = stats?.readBytes
         seeks.engineSeek(max(0, currentMs - 1000))
-        scheduleFeedReanchorWatchdog()
+        scheduleFeedReanchorWatchdog(readBytesAtReanchor: stats?.readBytes)
     }
 
     /// Escalates to the full rebuild when a re-anchor did not bring the feed
     /// back. Needed because the re-anchor opens a seek-settle window, and both
     /// watchdogs stand down behind one — on a genuinely dead link that window
     /// would otherwise hold for its own 30 s backstop with nothing watching.
-    private func scheduleFeedReanchorWatchdog() {
+    ///
+    /// The baseline is captured by the closure, never stored on the
+    /// controller: a stored copy was cleared by the very cancel below, before
+    /// the work item existed, so the escalation never fired (Apple TV,
+    /// 2026-10-08 — two re-anchors held to the 30 s backstop, ~80 s of spinner).
+    private func scheduleFeedReanchorWatchdog(readBytesAtReanchor before: UInt64?) {
         cancelFeedReanchorWatchdog()
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.isTearingDown else { return }
             self.feedReanchorWatchdog = nil
             let now = self.player.statistics?.readBytes
-            guard let before = self.feedReanchorBytes, let now, now <= before else { return }
+            guard let before, let now, now <= before else { return }
             logger.error("""
                 feed-stall re-anchor did not restore the feed \
                 (read=\(now, privacy: .public)) — rebuilding
@@ -1309,7 +1312,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func cancelFeedReanchorWatchdog() {
         feedReanchorWatchdog?.cancel()
         feedReanchorWatchdog = nil
-        feedReanchorBytes = nil
     }
 
     /// How long a re-anchor is given to bring bytes back before the player is
