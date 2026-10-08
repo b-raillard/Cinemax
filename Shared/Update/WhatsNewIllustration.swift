@@ -7,10 +7,11 @@ import SwiftUI
 /// the next UI change and has to be re-shot per platform, per theme, per accent
 /// — which is precisely how a "what's new" screen ends up showing an interface
 /// the user is not looking at. These follow the user's accent, flip with
-/// dark/light and scale through `CinemaScale`, and nothing here animates, so
-/// there is nothing for Motion Effects or Reduce Motion to switch off — the
-/// one exception is `.halloweenNight`, a whole scene with its own view
-/// (`WhatsNewHalloweenScene`), whose motion both of them stop.
+/// dark/light and scale through `CinemaScale`, and the motifs do not animate,
+/// so there is nothing for Motion Effects or Reduce Motion to switch off — the
+/// two exceptions have their own views, whose motion both of them stop:
+/// `.halloweenNight` (`WhatsNewHalloweenScene`) and `.duoTable`
+/// (`WhatsNewDuoScene`). The onboarding draws its pages with this enum too.
 ///
 /// Kept apart from `CinemaIllustration` on purpose: that enum is the vocabulary
 /// of empty and error states, and folding feature art into it would make "which
@@ -36,6 +37,19 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     /// The app in the device's language — two speech bubbles, the old one
     /// faded, the new one in the accent.
     case language
+    /// iPhone Duo's table mode — a Duo folding onto the table, the film above,
+    /// the controls arriving below (`WhatsNewDuoScene`, animated).
+    case duoTable
+    /// The layout pass for the Duo, folded and open — two screens, one hero.
+    case everyScreen
+    /// Playback speed that keeps sound and picture together.
+    case smoothSpeed
+    /// Onboarding — your own server.
+    case server
+    /// Onboarding — Quick Connect's code.
+    case quickConnect
+    /// Onboarding — the accent colour and the menu are yours.
+    case personalize
 
     /// Drawn as a wide scene across the page, not a motif on the halo.
     var isScene: Bool { self == .halloweenNight }
@@ -49,10 +63,10 @@ struct WhatsNewIllustrationView: View {
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
-        if kind.isScene {
-            WhatsNewHalloweenScene()
-        } else {
-            motif
+        switch kind {
+        case .halloweenNight: WhatsNewHalloweenScene()
+        case .duoTable: WhatsNewDuoScene(side: CinemaScale.pt(baseSize))
+        default: motif
         }
     }
 
@@ -83,7 +97,12 @@ struct WhatsNewIllustrationView: View {
             case .parentalLock:  parentalLock(u)
             case .accessibility: accessibility(u)
             case .language:      language(u)
-            case .halloweenNight: EmptyView()   // drawn by `body` as a scene
+            case .everyScreen:   everyScreen(u)
+            case .smoothSpeed:   smoothSpeed(u)
+            case .server:        server(u)
+            case .quickConnect:  quickConnect(u)
+            case .personalize:   personalize(u)
+            case .halloweenNight, .duoTable: EmptyView()   // drawn by `body` as scenes
             }
         }
         .frame(width: side, height: side)
@@ -234,6 +253,113 @@ struct WhatsNewIllustrationView: View {
                     .offset(y: -2 * u)
                 }
                 .offset(x: 12 * u, y: 12 * u)
+        }
+    }
+
+    /// Two screens side by side, the closed Duo's narrow one and the open
+    /// one, each topped by the same accent hero: one layout, every screen.
+    private func everyScreen(_ u: CGFloat) -> some View {
+        HStack(alignment: .bottom, spacing: 8 * u) {
+            screen(u, width: 26, columns: 2)
+            screen(u, width: 40, columns: 3)
+        }
+    }
+
+    private func screen(_ u: CGFloat, width: CGFloat, columns: Int) -> some View {
+        VStack(spacing: 5 * u) {
+            Rectangle()
+                .fill(accentGradient)
+                .frame(height: 20 * u)
+            HStack(spacing: 3 * u) {
+                ForEach(0..<columns, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 2 * u)
+                        .fill(CinemaColor.surfaceContainerHigh)
+                        .frame(height: 13 * u)
+                }
+            }
+            .padding(.horizontal, 4 * u)
+            Spacer(minLength: 0)
+        }
+        .frame(width: width * u, height: 54 * u)
+        .background(CinemaColor.surfaceContainerHighest)
+        .clipShape(RoundedRectangle(cornerRadius: 6 * u))
+    }
+
+    /// A double chevron over a progress bar: faster, and still in step.
+    private func smoothSpeed(_ u: CGFloat) -> some View {
+        VStack(spacing: 8 * u) {
+            HStack(spacing: 0) {
+                Triangle().fill(accentGradient).frame(width: 13 * u, height: 16 * u)
+                Triangle().fill(themeManager.accentDim).frame(width: 13 * u, height: 16 * u)
+            }
+            .frame(width: 56 * u, height: 30 * u)
+            .background(CinemaColor.surfaceContainerHighest, in: RoundedRectangle(cornerRadius: 9 * u))
+            ZStack(alignment: .leading) {
+                Capsule().fill(CinemaColor.surfaceContainerHigh).frame(width: 56 * u, height: 5 * u)
+                Capsule().fill(accentGradient).frame(width: 36 * u, height: 5 * u)
+            }
+        }
+    }
+
+    /// Three stacked units, the top one lit in the accent: a server of your
+    /// own, switched on.
+    private func server(_ u: CGFloat) -> some View {
+        VStack(spacing: 6 * u) {
+            ForEach(0..<3, id: \.self) { unit in
+                RoundedRectangle(cornerRadius: 5 * u)
+                    .fill(unit == 2 ? CinemaColor.surfaceContainerHigh : CinemaColor.surfaceContainerHighest)
+                    .frame(width: 50 * u, height: 16 * u)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(CinemaColor.onSurfaceVariant.opacity(0.35))
+                            .frame(width: 18 * u, height: 3 * u)
+                            .padding(.leading, 7 * u)
+                    }
+                    .overlay(alignment: .trailing) {
+                        Circle()
+                            .fill(unit == 0 ? AnyShapeStyle(accentGradient)
+                                            : AnyShapeStyle(CinemaColor.onSurfaceVariant.opacity(0.35)))
+                            .frame(width: 6 * u, height: 6 * u)
+                            .padding(.trailing, 7 * u)
+                    }
+            }
+        }
+    }
+
+    /// Four code tiles, the third one being typed in the accent.
+    private func quickConnect(_ u: CGFloat) -> some View {
+        HStack(spacing: 4 * u) {
+            ForEach(0..<4, id: \.self) { digit in
+                RoundedRectangle(cornerRadius: 5 * u)
+                    .fill(digit == 2 ? AnyShapeStyle(accentGradient)
+                                     : AnyShapeStyle(digit == 3 ? CinemaColor.surfaceContainerHigh
+                                                                : CinemaColor.surfaceContainerHighest))
+                    .frame(width: 16 * u, height: 22 * u)
+                    .overlay {
+                        if digit < 2 {
+                            Circle()
+                                .fill(CinemaColor.onSurfaceVariant.opacity(0.6))
+                                .frame(width: 4 * u, height: 4 * u)
+                        }
+                    }
+            }
+        }
+    }
+
+    /// Three swatches, the accent one picked, over a slider: the colour and
+    /// the text size are yours.
+    private func personalize(_ u: CGFloat) -> some View {
+        VStack(spacing: 10 * u) {
+            HStack(spacing: 5 * u) {
+                head(u, size: 20, fill: AnyShapeStyle(CinemaColor.surfaceContainerHighest))
+                head(u, size: 24, fill: AnyShapeStyle(accentGradient))
+                head(u, size: 20, fill: AnyShapeStyle(CinemaColor.surfaceContainerHigh))
+            }
+            ZStack(alignment: .leading) {
+                Capsule().fill(CinemaColor.surfaceContainerHigh).frame(width: 60 * u, height: 7 * u)
+                Capsule().fill(accentGradient).frame(width: 38 * u, height: 7 * u)
+                Circle().fill(CinemaColor.onSurface).frame(width: 13 * u, height: 13 * u).offset(x: 31 * u)
+            }
         }
     }
 

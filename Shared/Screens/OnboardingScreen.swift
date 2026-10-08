@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The first-run introduction: three pages, shown once in place of
-/// `ServerSetupScreen`, and re-openable from Réglages → Serveur.
+/// The first-run introduction: four pages on iOS, three on tvOS (the iPhone Duo
+/// page is iOS-only), shown once in place of `ServerSetupScreen`, and
+/// re-openable from Réglages → Serveur.
 ///
 /// Every decision about WHO sees it, how the pages chain and what the tvOS Menu
 /// button does lives in `OnboardingPolicy` — this file is the rendering only, so
@@ -23,8 +24,13 @@ struct OnboardingScreen: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     @State private var page: OnboardingPage = .server
+    /// The Duo page speaks to an iPhone Duo's owner (`detectsIPhoneDuo`).
+    @State private var isDuo = false
     @State private var showServerHelp = false
     @FocusState private var focusedControl: Control?
 
@@ -47,6 +53,7 @@ struct OnboardingScreen: View {
         // tvOS Menu-button RULE.
         .tvExitCommand(exitAction)
         .serverHelpPresentation(isPresented: $showServerHelp)
+        .detectsIPhoneDuo($isDuo)
     }
 
     // MARK: - Pages
@@ -54,16 +61,18 @@ struct OnboardingScreen: View {
     @ViewBuilder
     private var pageBody: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-            Image(systemName: symbol(for: page))
-                .font(.system(size: CinemaScale.pt(iconSize), weight: .semibold))
-                .foregroundStyle(themeManager.accent)
-                .accessibilityHidden(true)
+            // Drawn like « Quoi de neuf »'s, the Duo one animated; left out on
+            // a landscape phone, where the page has no height to spare — the
+            // same call the pre-auth screens make in compact height.
+            if showsIllustration {
+                WhatsNewIllustrationView(kind: illustration(for: page), baseSize: illustrationSize)
+            }
 
-            Text(loc.localized("onboarding.\(key(for: page)).title"))
+            Text(loc.localized("onboarding.\(page.textKey(onDuo: isDuo)).title"))
                 .font(CinemaFont.headline(.large))
                 .foregroundStyle(CinemaColor.onSurface)
 
-            Text(loc.localized("onboarding.\(key(for: page)).body"))
+            Text(loc.localized("onboarding.\(page.textKey(onDuo: isDuo)).body"))
                 .font(CinemaFont.dynamicBody)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .fixedSize(horizontal: false, vertical: true)
@@ -179,14 +188,14 @@ struct OnboardingScreen: View {
     /// VoiceOver says « Page 2 sur 3 » once instead of reading three circles.
     private var dots: some View {
         HStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(OnboardingPage.allCases) { candidate in
+            ForEach(OnboardingPage.pages) { candidate in
                 Circle()
                     .fill(candidate == page ? themeManager.accent : CinemaColor.onSurfaceVariant.opacity(0.3))
                     .frame(width: CinemaScale.pt(8), height: CinemaScale.pt(8))
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(loc.localized("onboarding.page", page.rawValue + 1, OnboardingPage.allCases.count))
+        .accessibilityLabel(loc.localized("onboarding.page", page.number, OnboardingPage.pages.count))
     }
 
     // MARK: - Actions
@@ -213,20 +222,21 @@ struct OnboardingScreen: View {
 
     // MARK: - Page content
 
-    private func key(for page: OnboardingPage) -> String {
+    private func illustration(for page: OnboardingPage) -> WhatsNewIllustration {
         switch page {
-        case .server: "server"
-        case .quickConnect: "quickConnect"
-        case .personalize: "personalize"
+        case .server: .server
+        case .quickConnect: .quickConnect
+        case .duo: .duoTable
+        case .personalize: .personalize
         }
     }
 
-    private func symbol(for page: OnboardingPage) -> String {
-        switch page {
-        case .server: "server.rack"
-        case .quickConnect: "person.badge.key"
-        case .personalize: "paintbrush"
-        }
+    private var showsIllustration: Bool {
+        #if os(iOS)
+        verticalSizeClass != .compact
+        #else
+        true
+        #endif
     }
 
     // MARK: - Metrics
@@ -235,12 +245,12 @@ struct OnboardingScreen: View {
     private var pagePadding: CGFloat { CinemaTVLayout.pagePadding }
     private var proseWidth: CGFloat { CinemaTVLayout.readingMaxWidth }
     private var ctaWidth: CGFloat { CinemaTVLayout.ctaWidth }
-    private var iconSize: CGFloat { 64 }
+    private var illustrationSize: CGFloat { 180 }
     #else
     private var pagePadding: CGFloat { CinemaSpacing.spacing6 }
     private var proseWidth: CGFloat { 520 }
     private var ctaWidth: CGFloat { .infinity }
-    private var iconSize: CGFloat { 44 }
+    private var illustrationSize: CGFloat { 132 }
     #endif
 }
 

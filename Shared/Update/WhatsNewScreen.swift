@@ -40,6 +40,8 @@ struct WhatsNewScreen: View {
     @Environment(ToastCenter.self) private var toasts
 
     @State private var index = 0
+    /// A page with a Duo variant speaks to an iPhone Duo's owner (`detectsIPhoneDuo`).
+    @State private var isDuo = false
     @FocusState private var focusedControl: Control?
     #if os(iOS)
     /// Height of the scrolling page area, so a short page can be centred in it
@@ -94,7 +96,8 @@ struct WhatsNewScreen: View {
                 .localizedString(forKey: "whatsNew.\(page.id).title", value: nil, table: nil)
             return (title, loc.localized("whatsNew.\(page.id).body", languageName(code)))
         }
-        return (loc.localized("whatsNew.\(page.id).title"), loc.localized("whatsNew.\(page.id).body"))
+        let key = page.textKey(onDuo: isDuo)
+        return (loc.localized("whatsNew.\(key).title"), loc.localized("whatsNew.\(key).body"))
     }
 
     var body: some View {
@@ -116,6 +119,7 @@ struct WhatsNewScreen: View {
         #else
         .presentationDragIndicator(.visible)
         #endif
+        .detectsIPhoneDuo($isDuo)
     }
 
     // MARK: - Header (iOS)

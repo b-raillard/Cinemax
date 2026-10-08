@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Cinemax
 
@@ -53,15 +54,49 @@ struct OnboardingPolicyTests {
         #expect(!OnboardingPolicy.shouldStampSeen(hasRegisteredServer: false, hasServer: false))
     }
 
-    @Test("pages chain server → Quick Connect → personalize, bounded at both ends")
+    @Test("iOS chains server → Quick Connect → iPhone Duo → personalize; tvOS skips the Duo page")
     func pageChain() {
-        #expect(OnboardingPage.allCases == [.server, .quickConnect, .personalize])
-        #expect(OnboardingPage.server.previous == nil)
-        #expect(OnboardingPage.server.next == .quickConnect)
-        #expect(OnboardingPage.quickConnect.next == .personalize)
-        #expect(OnboardingPage.personalize.next == nil)
+        let ios = OnboardingPage.sequence(includesDuo: true)
+        let tv = OnboardingPage.sequence(includesDuo: false)
+        #expect(ios == [.server, .quickConnect, .duo, .personalize])
+        #expect(tv == [.server, .quickConnect, .personalize])
+        #expect(OnboardingPage.server.previous(in: ios) == nil)
+        #expect(OnboardingPage.quickConnect.next(in: ios) == .duo)
+        #expect(OnboardingPage.duo.next(in: ios) == .personalize)
+        #expect(OnboardingPage.personalize.previous(in: ios) == .duo)
+        #expect(OnboardingPage.quickConnect.next(in: tv) == .personalize)
+        #expect(OnboardingPage.personalize.previous(in: tv) == .quickConnect)
+        #expect(OnboardingPage.personalize.next(in: ios) == nil)
+        #expect(OnboardingPage.personalize.next(in: tv) == nil)
+    }
+
+    @Test("the platform's own sequence: the Duo page exists on iOS only")
+    func platformSequence() {
+        #if os(tvOS)
+        #expect(OnboardingPage.pages == [.server, .quickConnect, .personalize])
+        #else
+        #expect(OnboardingPage.pages == [.server, .quickConnect, .duo, .personalize])
+        #endif
         #expect(OnboardingPage.personalize.isLast)
         #expect(!OnboardingPage.server.isLast)
+    }
+
+    @Test("the Duo page speaks to an iPhone Duo's owner; elsewhere it announces the support")
+    func duoTextKey() {
+        #expect(OnboardingPage.duo.textKey(onDuo: true) == "duo.onDuo")
+        #expect(OnboardingPage.duo.textKey(onDuo: false) == "duo")
+        #expect(OnboardingPage.server.textKey(onDuo: true) == "server")
+        #expect(OnboardingPage.personalize.textKey(onDuo: false) == "personalize")
+    }
+
+    @Test("both Duo texts exist in every language")
+    func duoStringsLocalized() {
+        for code in AppLanguage.supported {
+            let bundle = Bundle.localizedBundle(for: code)
+            for key in ["onboarding.duo.title", "onboarding.duo.body", "onboarding.duo.onDuo.title", "onboarding.duo.onDuo.body"] {
+                #expect(bundle.localizedString(forKey: key, value: nil, table: nil) != key, "\(code) \(key)")
+            }
+        }
     }
 
     @Test("tvOS Menu: back a page past the first; on the first, suspend at first run and dismiss the replay")

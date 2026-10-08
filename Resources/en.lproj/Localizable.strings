@@ -889,6 +889,10 @@
 "onboarding.quickConnect.body" = "Quick Connect shows a code you approve from a device already signed in. It earns its keep on the Apple TV, where typing a password with the remote is a chore.";
 "onboarding.personalize.title" = "Customisable to your liking";
 "onboarding.personalize.body" = "The main menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
+"onboarding.duo.title" = "Ready for iPhone Duo";
+"onboarding.duo.body" = "Moving to iPhone Duo? Half-fold it and set it down: the film stays on top and the controls rest on the table. Popcorn not included.";
+"onboarding.duo.onDuo.title" = "Put your films on the table";
+"onboarding.duo.onDuo.body" = "Half-fold your iPhone Duo and set it down: the film stays on the top screen and the controls move to the bottom one. A padlock keeps them on screen.";
 "settings.discoverApp" = "Discover the app";
 
 "player.a11y.skipForward" = "Forward %d seconds";
@@ -1252,6 +1256,16 @@
 "whatsNew.offer.accept" = "Turn on";
 "whatsNew.language.title" = "JellyGlass in English";
 "whatsNew.language.body" = "Your device is set to %@. JellyGlass can speak it too; you can always change it in Settings → Appearance.";
+"whatsNew.tableMode.title" = "Put your films on the table";
+"whatsNew.tableMode.body" = "Half-fold your iPhone Duo and set it down: the film stays on the top screen and the controls move to the bottom one, as big blocks that are easy to hit. A padlock keeps them on screen for the whole film.";
+"whatsNew.tableMode.other.title" = "Ready for iPhone Duo";
+"whatsNew.tableMode.other.body" = "Moving to iPhone Duo? Half-fold it and set it down: the film stays on the top screen and the controls move to the bottom one, as big blocks that are easy to hit. A padlock keeps them on screen.";
+"whatsNew.everyScreen.title" = "At home on every screen";
+"whatsNew.everyScreen.body" = "Folded or open, portrait or landscape: Home, detail pages and rows fit the iPhone Duo. Cover art now runs right to the edges on iPhone and iPad too.";
+"whatsNew.duoOnTV.title" = "Now on iPhone Duo too";
+"whatsNew.duoOnTV.body" = "On iPhone, JellyGlass now supports iPhone Duo: half-folded, the film stays on top and the controls rest on the table. To finish it on the big screen, “Play on…” sends it to this Apple TV.";
+"whatsNew.smoothSpeed.title" = "Speed, perfectly in sync";
+"whatsNew.smoothSpeed.body" = "Speeding up to 1.5× or slowing to 0.5× no longer pulls sound and picture apart: playback realigns straight away.";
 "whatsNew.offer.decline" = "No thanks";
 "whatsNew.offer.accepted" = "Limited-time theme on";
 "whatsNew.offer.startsOn" = "It starts on %@.";

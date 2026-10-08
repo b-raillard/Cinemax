@@ -12,6 +12,33 @@ struct WhatsNewPage: Identifiable, Equatable, Sendable {
     let illustration: WhatsNewIllustration
     /// Something the page lets the user switch on in one tap (« Activer »).
     var offer: WhatsNewOffer?
+    /// Where the page is shown. Most features exist on both apps; an iPhone
+    /// Duo page has nothing to say on an Apple TV, and the Apple TV says it
+    /// differently (`duoOnTV`).
+    var platforms: Set<WhatsNewPlatform> = WhatsNewPlatform.all
+    /// The page reads `whatsNew.<id>.other.*` on a device that is not an
+    /// iPhone Duo: the same feature, announced to somebody about to switch.
+    var hasDuoVariant = false
+
+    /// The localization key's middle part: `whatsNew.<textKey>.title`.
+    func textKey(onDuo: Bool) -> String {
+        hasDuoVariant && !onDuo ? "\(id).other" : id
+    }
+}
+
+/// The two apps the catalogue speaks for.
+enum WhatsNewPlatform: Hashable, Sendable {
+    case iOS, tvOS
+
+    static let all: Set<Self> = [.iOS, .tvOS]
+
+    static var current: Self {
+        #if os(tvOS)
+        .tvOS
+        #else
+        .iOS
+        #endif
+    }
 }
 
 /// A one-tap opt-in carried by a page. Data like the rest of the page, so the
@@ -47,6 +74,12 @@ enum WhatsNewCatalogue {
     static let maxPages = 6
 
     static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(version: ServerVersion(2, 4, 0), pages: [
+            WhatsNewPage(id: "tableMode", illustration: .duoTable, platforms: [.iOS], hasDuoVariant: true),
+            WhatsNewPage(id: "everyScreen", illustration: .everyScreen, platforms: [.iOS]),
+            WhatsNewPage(id: "duoOnTV", illustration: .duoTable, platforms: [.tvOS]),
+            WhatsNewPage(id: "smoothSpeed", illustration: .smoothSpeed)
+        ]),
         WhatsNewRelease(version: ServerVersion(2, 3, 1), pages: [
             WhatsNewPage(id: "language", illustration: .language, offer: .deviceLanguage)
         ]),
@@ -69,7 +102,7 @@ enum WhatsNewCatalogue {
     ]
 
     /// Every page introduced after `lastSeen` and no later than `installed`,
-    /// **newest release first**, capped at `maxPages`.
+    /// shown on `platform`, **newest release first**, capped at `maxPages`.
     ///
     /// Three properties worth stating:
     ///
@@ -85,7 +118,8 @@ enum WhatsNewCatalogue {
     static func pages(
         since lastSeen: ServerVersion?,
         upTo installed: ServerVersion,
-        in catalogue: [WhatsNewRelease] = releases
+        in catalogue: [WhatsNewRelease] = releases,
+        platform: WhatsNewPlatform = .current
     ) -> [WhatsNewPage] {
         let relevant = catalogue
             .filter { release in
@@ -94,7 +128,7 @@ enum WhatsNewCatalogue {
                 return release.version > lastSeen
             }
             .sorted { $0.version > $1.version }
-        return Array(relevant.flatMap(\.pages).prefix(maxPages))
+        return Array(relevant.flatMap(\.pages).filter { $0.platforms.contains(platform) }.prefix(maxPages))
     }
 
     /// Resolves the pages whose content depends on this install: a
@@ -120,7 +154,10 @@ enum WhatsNewCatalogue {
 
     /// Every page the app can show, newest first — what Réglages → Nouveautés
     /// replays, independently of what this user has already seen.
-    static func allPages(in catalogue: [WhatsNewRelease] = releases) -> [WhatsNewPage] {
-        Array(catalogue.sorted { $0.version > $1.version }.flatMap(\.pages).prefix(maxPages))
+    static func allPages(
+        in catalogue: [WhatsNewRelease] = releases, platform: WhatsNewPlatform = .current
+    ) -> [WhatsNewPage] {
+        Array(catalogue.sorted { $0.version > $1.version }.flatMap(\.pages)
+            .filter { $0.platforms.contains(platform) }.prefix(maxPages))
     }
 }

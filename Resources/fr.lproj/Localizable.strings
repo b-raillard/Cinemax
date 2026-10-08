@@ -466,6 +466,10 @@
 "onboarding.quickConnect.body" = "Quick Connect affiche un code à valider depuis un appareil déjà connecté. C'est surtout utile sur l'Apple TV, où saisir un mot de passe à la télécommande est pénible.";
 "onboarding.personalize.title" = "Personnalisable selon vos envies";
 "onboarding.personalize.body" = "Le menu principal se réorganise, se réduit, ou s'ouvre directement sur vos bibliothèques ; la couleur d'accent et la taille du texte sont à vous. Tout se règle dans Réglages.";
+"onboarding.duo.title" = "Prêt pour l’iPhone Duo";
+"onboarding.duo.body" = "Vous passez à l’iPhone Duo ? Pliez-le à moitié et posez-le : le film reste en haut, les commandes se posent sur la table. Pop-corn non fourni.";
+"onboarding.duo.onDuo.title" = "Films sur table";
+"onboarding.duo.onDuo.body" = "Pliez votre iPhone Duo à moitié et posez-le : le film reste sur l’écran du haut, les commandes descendent sur celui du bas. Un cadenas les garde affichées.";
 "settings.discoverApp" = "Découvrir l'app";
 
 "player.a11y.skipForward" = "Avancer de %d secondes";
@@ -1254,6 +1258,16 @@
 "whatsNew.offer.accept" = "Activer";
 "whatsNew.language.title" = "JellyGlass en français";
 "whatsNew.language.body" = "Votre appareil est réglé en %@. JellyGlass peut s'afficher dans cette langue ; vous pourrez toujours la changer dans Réglages → Apparence.";
+"whatsNew.tableMode.title" = "Films sur table";
+"whatsNew.tableMode.body" = "Pliez votre iPhone Duo à moitié et posez-le : le film reste sur l’écran du haut, les commandes descendent sur celui du bas, en grands blocs faciles à toucher. Un cadenas les garde affichées pendant tout le film.";
+"whatsNew.tableMode.other.title" = "Prêt pour l’iPhone Duo";
+"whatsNew.tableMode.other.body" = "Vous passez à l’iPhone Duo ? Pliez-le à moitié et posez-le : le film reste sur l’écran du haut, les commandes descendent sur celui du bas, en grands blocs faciles à toucher. Un cadenas les garde affichées.";
+"whatsNew.everyScreen.title" = "À l’aise sur tous les écrans";
+"whatsNew.everyScreen.body" = "Plié, déplié, en portrait ou en paysage : l’accueil, les fiches et les rangées s’ajustent à l’iPhone Duo. Les images de couverture vont désormais jusqu’aux bords, sur iPhone et iPad aussi.";
+"whatsNew.duoOnTV.title" = "JellyGlass se plie en quatre";
+"whatsNew.duoOnTV.body" = "Sur iPhone, JellyGlass prend désormais en charge l’iPhone Duo : à moitié plié, le film reste en haut et les commandes se posent sur la table. Pour finir le film en grand, « Lire sur… » l’envoie sur cette Apple TV.";
+"whatsNew.smoothSpeed.title" = "La vitesse sans décalage";
+"whatsNew.smoothSpeed.body" = "Accélérer à ×1,5 ou ralentir à ×0,5 ne décale plus le son de l’image : la lecture se recale aussitôt au bon endroit.";
 "whatsNew.offer.decline" = "Non merci";
 "whatsNew.offer.accepted" = "Thème éphémère activé";
 "whatsNew.offer.startsOn" = "Il arrive le %@.";

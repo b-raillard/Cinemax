@@ -242,6 +242,64 @@ struct WhatsNewLanguageOfferTests {
         #expect(outcome == .stampOnly)
     }
 
+    @Test("Une page réservée à l'autre plateforme n'apparaît pas")
+    func otherPlatformPageExcluded() {
+        let catalogue = [WhatsNewRelease(version: ServerVersion(2, 4, 0), pages: [
+            WhatsNewPage(id: "both", illustration: .playOn),
+            WhatsNewPage(id: "tvOnly", illustration: .playOn, platforms: [.tvOS]),
+            WhatsNewPage(id: "iosOnly", illustration: .playOn, platforms: [.iOS])
+        ])]
+        #expect(WhatsNewCatalogue.pages(since: nil, upTo: ServerVersion(2, 4, 0), in: catalogue, platform: .iOS).map(\.id)
+                == ["both", "iosOnly"])
+        #expect(WhatsNewCatalogue.pages(since: nil, upTo: ServerVersion(2, 4, 0), in: catalogue, platform: .tvOS).map(\.id)
+                == ["both", "tvOnly"])
+        #expect(WhatsNewCatalogue.allPages(in: catalogue, platform: .tvOS).map(\.id) == ["both", "tvOnly"])
+    }
+
+    @Test("Une version dont les seules pages sont pour l'autre plateforme se tamponne en silence")
+    func otherPlatformOnlyIsSilentStamp() {
+        let other: WhatsNewPlatform = WhatsNewPlatform.current == .iOS ? .tvOS : .iOS
+        let catalogue = [WhatsNewRelease(version: ServerVersion(2, 4, 0), pages: [
+            WhatsNewPage(id: "elsewhere", illustration: .playOn, platforms: [other])
+        ])]
+        let outcome = WhatsNewPolicy.decide(
+            lastSeenVersion: "2.3.5", installed: ServerVersion(2, 4, 0), isFirstRun: false, catalogue: catalogue)
+        #expect(outcome == .stampOnly)
+    }
+
+    @Test("Une page à variante Duo lit sa variante « other » hors de l'iPhone Duo")
+    func duoVariantKey() {
+        let page = WhatsNewPage(id: "tableMode", illustration: .playOn, hasDuoVariant: true)
+        #expect(page.textKey(onDuo: true) == "tableMode")
+        #expect(page.textKey(onDuo: false) == "tableMode.other")
+        #expect(WhatsNewPage(id: "plain", illustration: .playOn).textKey(onDuo: false) == "plain")
+    }
+
+    @Test("La 2.4.0 : le Duo et la vitesse sur iOS, la compatibilité Duo et la vitesse sur Apple TV")
+    func shipped240() {
+        let since = ServerVersion(2, 3, 5), installed = ServerVersion(2, 4, 0)
+        #expect(WhatsNewCatalogue.pages(since: since, upTo: installed, platform: .iOS).map(\.id)
+                == ["tableMode", "everyScreen", "smoothSpeed"])
+        #expect(WhatsNewCatalogue.pages(since: since, upTo: installed, platform: .tvOS).map(\.id)
+                == ["duoOnTV", "smoothSpeed"])
+    }
+
+    @Test("Chaque page livrée a son titre et son texte dans chaque langue, variante Duo comprise")
+    func shippedPagesLocalized() {
+        let keys = WhatsNewCatalogue.releases.flatMap(\.pages).flatMap { page in
+            page.hasDuoVariant ? [page.textKey(onDuo: true), page.textKey(onDuo: false)] : [page.id]
+        }
+        for code in AppLanguage.supported {
+            let bundle = Bundle.localizedBundle(for: code)
+            for key in keys {
+                for part in ["title", "body"] {
+                    let full = "whatsNew.\(key).\(part)"
+                    #expect(bundle.localizedString(forKey: full, value: nil, table: nil) != full, "\(code) \(full)")
+                }
+            }
+        }
+    }
+
     @Test("La page est livrée en 2.3.1, avec son titre dans chaque langue")
     func shippedPageExists() throws {
         let page = try #require(WhatsNewCatalogue.releases.flatMap(\.pages).first { $0.id == "language" })

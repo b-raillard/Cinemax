@@ -36,24 +36,70 @@ enum OnboardingPolicy {
     }
 }
 
-/// The three pages, in order. `rawValue` is the page's position.
-enum OnboardingPage: Int, CaseIterable, Identifiable, Hashable, Sendable {
+/// The onboarding's pages. Their ORDER is `sequence(includesDuo:)` — the
+/// iPhone Duo page exists on iOS only, so a page's neighbours depend on the
+/// platform and are read from the platform's sequence, `pages`.
+enum OnboardingPage: CaseIterable, Identifiable, Hashable, Sendable {
     /// What Jellyfin is, LAN discovery, the link to `ServerHelpSheet`.
     case server
     /// Quick Connect — signing in without typing a password on a remote.
     case quickConnect
+    /// iPhone Duo's table mode (2.4.0) — iOS only: an Apple TV is not a Duo.
+    case duo
     /// The custom menu and the accent colour.
     case personalize
 
-    var id: Int { rawValue }
+    var id: Self { self }
+
+    static func sequence(includesDuo: Bool) -> [Self] {
+        includesDuo ? [.server, .quickConnect, .duo, .personalize] : [.server, .quickConnect, .personalize]
+    }
+
+    /// This platform's pages, in order.
+    static var pages: [Self] {
+        #if os(tvOS)
+        sequence(includesDuo: false)
+        #else
+        sequence(includesDuo: true)
+        #endif
+    }
+
+    func next(in sequence: [Self]) -> Self? {
+        guard let index = sequence.firstIndex(of: self), index + 1 < sequence.count else { return nil }
+        return sequence[index + 1]
+    }
+
+    func previous(in sequence: [Self]) -> Self? {
+        guard let index = sequence.firstIndex(of: self), index > 0 else { return nil }
+        return sequence[index - 1]
+    }
 
     /// `nil` on the last page — the CTA finishes instead of advancing.
-    var next: OnboardingPage? { OnboardingPage(rawValue: rawValue + 1) }
+    var next: Self? { next(in: Self.pages) }
 
     /// `nil` on the first page — Menu / swipe-back has nowhere to go.
-    var previous: OnboardingPage? { OnboardingPage(rawValue: rawValue - 1) }
+    var previous: Self? { previous(in: Self.pages) }
 
     var isLast: Bool { next == nil }
+
+    /// 1-based position in this platform's sequence (« Page 3 sur 4 »).
+    var number: Int { (Self.pages.firstIndex(of: self) ?? 0) + 1 }
+
+    /// The `onboarding.<key>.title` / `.body` key. The Duo page speaks to an
+    /// iPhone Duo's owner (« Films sur table ») and, on every other iPhone,
+    /// announces the support to somebody about to switch.
+    func textKey(onDuo: Bool) -> String {
+        self == .duo && onDuo ? "duo.onDuo" : key
+    }
+
+    private var key: String {
+        switch self {
+        case .server: "server"
+        case .quickConnect: "quickConnect"
+        case .duo: "duo"
+        case .personalize: "personalize"
+        }
+    }
 }
 
 /// What the tvOS Menu button does on an onboarding page.
