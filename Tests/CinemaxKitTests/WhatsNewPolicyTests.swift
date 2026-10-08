@@ -311,3 +311,71 @@ struct WhatsNewLanguageOfferTests {
         }
     }
 }
+
+#if canImport(QuartzCore)
+import QuartzCore
+
+/// The drawn iPhone Duo of « Quoi de neuf » and the onboarding: the timings and
+/// the 3-D projection are the approved mockup's (2026-10-08), so they are
+/// locked here rather than trusted to a reading of the animation.
+@Suite("Animation du Duo plié")
+struct DuoFoldTimelineTests {
+    @Test("Au départ le Duo est à plat, pupitre vide, table éteinte")
+    func startsFlat() {
+        let pose = DuoFoldTimeline.pose(at: 0)
+        #expect(pose.upper == 0)
+        #expect(pose.lower == 0)
+        #expect(pose.glow == 0)
+        #expect(pose.tiles.allSatisfy { $0.opacity == 0 })
+        #expect(pose.play.opacity == 0)
+    }
+
+    @Test("À mi-boucle il est plié sur la table, chaque bloc en place")
+    func foldedMidLoop() {
+        let pose = DuoFoldTimeline.pose(at: DuoFoldTimeline.period * 0.55)
+        #expect(pose.upper == -9)
+        #expect(pose.lower == 62)
+        #expect(pose.glow == 1)
+        #expect(pose.tiles.allSatisfy { $0.opacity == 1 && $0.lift == 0 })
+        #expect(pose.play.opacity == 1 && pose.play.scale == 1)
+        #expect(abs(pose.progress - (0.20 + 0.32 * 0.15 / 0.44)) < 0.0001)
+    }
+
+    @Test("Sans animations : plié, tout en place, barre au repos")
+    func still() {
+        let pose = DuoFoldTimeline.pose(at: nil)
+        #expect(pose.upper == -9 && pose.lower == 62 && pose.glow == 1)
+        #expect(pose.tiles.allSatisfy { $0.opacity == 1 && $0.lift == 0 })
+        #expect(pose.progress == 0.38)
+    }
+
+    @Test("Les blocs arrivent l'un après l'autre, 0,07 s d'écart")
+    func staggered() {
+        let pose = DuoFoldTimeline.pose(at: DuoFoldTimeline.period * 0.38)
+        #expect(pose.tiles[0].opacity > pose.tiles[5].opacity)
+        #expect(pose.tiles[5].opacity > pose.tiles[10].opacity)
+    }
+
+    @Test("La charnière ne se disjoint jamais : les deux moitiés s'y rejoignent", arguments: [0.0, 0.2, 0.3, 0.5, 0.9])
+    func hingeStaysJoined(_ fraction: Double) {
+        let pose = DuoFoldTimeline.pose(at: DuoFoldTimeline.period * fraction)
+        let w: CGFloat = 100, h = w * DuoFoldProjection.halfRatio
+        for x in [CGFloat(0), w / 2, w] {
+            let top = DuoFoldProjection.project(CGPoint(x: x, y: h), half: .upper, angle: pose.upper, width: w)
+            let bottom = DuoFoldProjection.project(CGPoint(x: x, y: 0), half: .lower, angle: pose.lower, width: w)
+            #expect(abs(top.x - bottom.x) < 0.01 && abs(top.y - (bottom.y + h)) < 0.01, "x=\(x)")
+        }
+    }
+
+    @Test("Plié, la moitié basse se couche : plus courte, plus large au bord proche")
+    func lowerHalfLiesDown() {
+        let w: CGFloat = 100, h = w * DuoFoldProjection.halfRatio
+        let nearLeft = DuoFoldProjection.project(CGPoint(x: 0, y: h), half: .lower, angle: 62, width: w)
+        let nearRight = DuoFoldProjection.project(CGPoint(x: w, y: h), half: .lower, angle: 62, width: w)
+        let farLeft = DuoFoldProjection.project(CGPoint(x: 0, y: 0), half: .lower, angle: 62, width: w)
+        let farRight = DuoFoldProjection.project(CGPoint(x: w, y: 0), half: .lower, angle: 62, width: w)
+        #expect(nearLeft.y - farLeft.y < h * 0.9)
+        #expect(nearRight.x - nearLeft.x > farRight.x - farLeft.x)
+    }
+}
+#endif

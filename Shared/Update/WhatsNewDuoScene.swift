@@ -1,266 +1,397 @@
 import SwiftUI
+import QuartzCore
 
 /// iPhone Duo's table mode (2.4.0), drawn: a Duo lying open folds onto the
 /// table — the film stays on the upper half, the control deck arrives on the
-/// lower one — holds, then opens again, on a `DuoFoldTimeline.period` loop.
+/// lower one — holds, then opens again, on a `DuoFoldTimeline.period` loop
+/// that starts flat each time the page appears.
 ///
-/// Drawn, never a capture, per the illustration RULE: the film is a letterboxed
-/// dusk in the user's accent, the deck the player's real block layout (lock /
-/// title / close, −10 / play / +10, the scrub bar, four tracks) in neutral tiles
-/// with the play block in the accent. With Motion Effects off or Reduce Motion
-/// (`motionEffectsEnabled`) it rests folded, every block in place. Shared by
-/// « Quoi de neuf » (iOS `tableMode`, tvOS `duoOnTV`) and the onboarding's
-/// Duo page.
+/// **A port of the approved mockup (2026-10-08), not an interpretation of it**:
+/// the device's proportions, colours and radii, the deck's grid, the 3-D
+/// projection (`DuoFoldProjection` — CSS `perspective` + `rotateY` + `rotateX`)
+/// and every keyframe and easing (`DuoFoldTimeline`) are the mockup's numbers.
+/// Drawn, never a capture, per the illustration RULE. With Motion Effects off
+/// or Reduce Motion (`motionEffectsEnabled`) it rests folded, every block in
+/// place. Shared by « Quoi de neuf » (iOS `tableMode`, tvOS `duoOnTV`) and the
+/// onboarding's Duo page.
 struct WhatsNewDuoScene: View {
     /// The edge of the square the other motifs live in, in points.
     let side: CGFloat
 
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    @Environment(\.self) private var environment
+    @State private var start = Date()
+
+    /// The device's width — the mockup's 78 % of the motif square (72 % on
+    /// the television).
+    private var w: CGFloat {
+        #if os(tvOS)
+        side * 0.72
+        #else
+        side * 0.78
+        #endif
+    }
+    private var h: CGFloat { w * DuoFoldProjection.halfRatio }
+    private var bezel: CGFloat { w * 0.035 }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motionEffects)) { context in
-            let phase: Double? = motionEffects
-                ? DuoFoldTimeline.phase(at: context.date.timeIntervalSinceReferenceDate) : nil
-            scene(DuoFoldTimeline.pose(at: phase))
+            let elapsed: Double? = motionEffects ? context.date.timeIntervalSince(start) : nil
+            scene(DuoFoldTimeline.pose(at: elapsed))
         }
-        .frame(width: side, height: side * 1.12)
+        .frame(width: w, height: w * DuoFoldProjection.boxRatio, alignment: .topLeading)
+        .onAppear { start = Date() }
         .accessibilityHidden(true)
     }
 
-    // MARK: - Geometry
+    // MARK: - Colours (the mockup's)
 
-    private var deviceWidth: CGFloat { side * 0.66 }
-    /// One half of the 2007 × 2853 inner display.
-    private var halfHeight: CGFloat { deviceWidth * 1426 / 2007 }
-    private var bezel: CGFloat { deviceWidth * 0.035 }
-    private var outerRadius: CGFloat { deviceWidth * 0.12 }
+    /// The device's screens always show the DARK accent, whatever the app's mode.
+    private var screenAccent: Color.Resolved {
+        var dark = environment
+        dark.colorScheme = .dark
+        return themeManager.accent.resolve(in: dark)
+    }
 
-    private static let chassis = Color(white: 0.17)
-    private static let tile = Color(white: 0.16)
-    private static let deckGround = Color(white: 0.07)
+    private static func rgb(_ hex: UInt32) -> Color {
+        Color(.sRGB, red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255,
+              blue: Double(hex & 0xFF) / 255)
+    }
+
+    private static let chassis = rgb(0x050505)
+    private static let outline = Color(.sRGB, red: 150 / 255, green: 150 / 255, blue: 150 / 255, opacity: 0.35)
+    private static let deckGround = rgb(0x121313)
+    private static let tile = rgb(0x262727)
+
+    /// `color-mix(in srgb, accent p, other)`.
+    private func mix(_ accent: Color.Resolved, _ p: Float, _ other: SIMD3<Float>) -> Color {
+        Color(.sRGB, red: Double(accent.red * p + other.x * (1 - p)),
+              green: Double(accent.green * p + other.y * (1 - p)),
+              blue: Double(accent.blue * p + other.z * (1 - p)))
+    }
+
+    // MARK: - Scene
 
     private func scene(_ pose: DuoFoldTimeline.Pose) -> some View {
-        ZStack(alignment: .top) {
-            Circle()
-                .fill(RadialGradient(colors: [themeManager.accent.opacity(0.20), themeManager.accent.opacity(0)],
-                                     center: .center, startRadius: 0, endRadius: side / 2))
-                .frame(width: side, height: side)
-            // The table under the folded half catches the screen's light.
+        let box = w * DuoFoldProjection.boxRatio
+        return ZStack(alignment: .topLeading) {
+            // Halo: 30 % wider each side, 10 % taller, accent 22 % at its heart.
             Ellipse()
-                .fill(RadialGradient(colors: [themeManager.accent.opacity(0.30), themeManager.accent.opacity(0)],
-                                     center: .center, startRadius: 0, endRadius: side * 0.45))
-                .frame(width: side * 1.1, height: side * 0.32)
-                .offset(y: halfHeight * 1.05)
+                .fill(EllipticalGradient(colors: [themeManager.accent.opacity(0.22), themeManager.accent.opacity(0)],
+                                         center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
+                .frame(width: w * 1.6, height: box * 1.1)
+                .offset(x: -w * 0.3)
+            // The light the folded screen throws on the table.
+            Ellipse()
+                .fill(EllipticalGradient(colors: [themeManager.accent.opacity(0.30), themeManager.accent.opacity(0)],
+                                         center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
+                .frame(width: w * 1.2, height: box * 0.30)
+                .offset(x: -w * 0.1, y: box * 0.68)
                 .opacity(pose.glow)
 
-            VStack(spacing: 0) {
-                upperHalf
-                    .rotation3DEffect(.degrees(-9 * pose.fold), axis: (x: 1, y: 0, z: 0),
-                                      anchor: .bottom, perspective: 0.45)
-                lowerHalf(pose)
-                    .rotation3DEffect(.degrees(62 * pose.fold), axis: (x: 1, y: 0, z: 0),
-                                      anchor: .top, perspective: 0.45)
-            }
-            .frame(width: deviceWidth)
-            .rotation3DEffect(.degrees(-14), axis: (x: 0, y: 1, z: 0), perspective: 0.45)
-            .padding(.top, side * 0.04)
+            upperHalf
+                .projectionEffect(ProjectionTransform(
+                    DuoFoldProjection.transform(half: .upper, angle: pose.upper, width: w)))
+            lowerHalf(pose)
+                .projectionEffect(ProjectionTransform(
+                    DuoFoldProjection.transform(half: .lower, angle: pose.lower, width: w)))
+                .offset(y: h)
         }
-        .frame(width: side, height: side * 1.12, alignment: .top)
+        .frame(width: w, height: box, alignment: .topLeading)
+    }
+
+    private var upperShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: w * 0.12, bottomLeadingRadius: 2,
+                               bottomTrailingRadius: 2, topTrailingRadius: w * 0.12)
+    }
+
+    private var lowerShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: 2, bottomLeadingRadius: w * 0.12,
+                               bottomTrailingRadius: w * 0.12, topTrailingRadius: 2)
     }
 
     private var upperHalf: some View {
         film
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: outerRadius - bezel,
-                                              topTrailingRadius: outerRadius - bezel))
-            .padding([.horizontal, .top], bezel)
-            .frame(width: deviceWidth, height: halfHeight)
-            .background(Self.chassis, in: UnevenRoundedRectangle(topLeadingRadius: outerRadius,
-                                                              bottomLeadingRadius: 2,
-                                                              bottomTrailingRadius: 2,
-                                                              topTrailingRadius: outerRadius))
+            .frame(width: w - 2 * bezel, height: h - bezel)
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: w * 0.09, topTrailingRadius: w * 0.09))
+            .padding(.top, bezel)
+            .frame(width: w, height: h, alignment: .top)
+            .background(Self.chassis, in: upperShape)
+            .overlay(upperShape.stroke(Self.outline, lineWidth: 1).padding(-0.5))
     }
 
     private func lowerHalf(_ pose: DuoFoldTimeline.Pose) -> some View {
-        deck(pose)
+        deck(pose, width: w - 2 * bezel, height: h - bezel)
             .background(Self.deckGround)
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: outerRadius - bezel,
-                                              bottomTrailingRadius: outerRadius - bezel))
-            .padding([.horizontal, .bottom], bezel)
-            .frame(width: deviceWidth, height: halfHeight)
-            .background(Self.chassis, in: UnevenRoundedRectangle(topLeadingRadius: 2,
-                                                              bottomLeadingRadius: outerRadius,
-                                                              bottomTrailingRadius: outerRadius,
-                                                              topTrailingRadius: 2))
+            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: w * 0.09, bottomTrailingRadius: w * 0.09))
+            .frame(width: w, height: h, alignment: .top)
+            .background(Self.chassis, in: lowerShape)
+            .overlay(lowerShape.stroke(Self.outline, lineWidth: 1).padding(-0.5))
     }
 
-    // MARK: - The film (upper half)
+    // MARK: - The film (upper half) — the mockup's 200 × 142 SVG, sliced to fill
 
     private var film: some View {
-        Canvas { ctx, size in
-            let w = size.width, h = size.height
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-            let frame = CGRect(x: 0, y: h * 0.17, width: w, height: h * 0.66)
-            ctx.fill(Path(frame), with: .linearGradient(
-                Gradient(colors: [Color(red: 0.05, green: 0.10, blue: 0.17), themeManager.accent.opacity(0.55)]),
-                startPoint: CGPoint(x: 0, y: frame.minY), endPoint: CGPoint(x: 0, y: frame.maxY)))
-            let sun = CGRect(x: w * 0.56, y: frame.minY + frame.height * 0.22, width: w * 0.2, height: w * 0.2)
-            ctx.fill(Path(ellipseIn: sun), with: .color(themeManager.accent.opacity(0.9)))
+        let accent = screenAccent
+        let skyBottom = mix(accent, 0.45, SIMD3(0x12, 0x23, 0x3A) / 255)
+        return Canvas { ctx, size in
+            let s = max(size.width / 200, size.height / 142)
+            ctx.translateBy(x: (size.width - 200 * s) / 2, y: (size.height - 142 * s) / 2)
+            ctx.scaleBy(x: s, y: s)
+            ctx.fill(Path(CGRect(x: 0, y: 0, width: 200, height: 142)), with: .color(.black))
+            ctx.fill(Path(CGRect(x: 0, y: 24, width: 200, height: 94)),
+                     with: .linearGradient(Gradient(colors: [Self.rgb(0x0D1A2B), skyBottom]),
+                                           startPoint: CGPoint(x: 0, y: 24), endPoint: CGPoint(x: 0, y: 118)))
+            ctx.fill(Path(ellipseIn: CGRect(x: 108, y: 50, width: 40, height: 40)),
+                     with: .color(Color(accent).opacity(0.85)))
+            // M0 96 Q40 72 82 92 T160 86 T200 90 V118 H0Z
             var far = Path()
-            far.move(to: CGPoint(x: 0, y: frame.minY + frame.height * 0.76))
-            far.addQuadCurve(to: CGPoint(x: w * 0.42, y: frame.minY + frame.height * 0.72),
-                             control: CGPoint(x: w * 0.2, y: frame.minY + frame.height * 0.5))
-            far.addQuadCurve(to: CGPoint(x: w, y: frame.minY + frame.height * 0.66),
-                             control: CGPoint(x: w * 0.75, y: frame.minY + frame.height * 0.86))
-            far.addLine(to: CGPoint(x: w, y: frame.maxY))
-            far.addLine(to: CGPoint(x: 0, y: frame.maxY))
-            ctx.fill(far, with: .color(Color(red: 0.04, green: 0.08, blue: 0.13)))
+            far.move(to: CGPoint(x: 0, y: 96))
+            far.addQuadCurve(to: CGPoint(x: 82, y: 92), control: CGPoint(x: 40, y: 72))
+            far.addQuadCurve(to: CGPoint(x: 160, y: 86), control: CGPoint(x: 124, y: 112))
+            far.addQuadCurve(to: CGPoint(x: 200, y: 90), control: CGPoint(x: 196, y: 60))
+            far.addLine(to: CGPoint(x: 200, y: 118))
+            far.addLine(to: CGPoint(x: 0, y: 118))
+            far.closeSubpath()
+            ctx.fill(far, with: .color(Self.rgb(0x0B1420)))
+            // M0 106 Q60 90 120 104 T200 100 V118 H0Z
             var near = Path()
-            near.move(to: CGPoint(x: 0, y: frame.minY + frame.height * 0.88))
-            near.addQuadCurve(to: CGPoint(x: w, y: frame.minY + frame.height * 0.84),
-                              control: CGPoint(x: w * 0.6, y: frame.minY + frame.height * 0.7))
-            near.addLine(to: CGPoint(x: w, y: frame.maxY))
-            near.addLine(to: CGPoint(x: 0, y: frame.maxY))
-            ctx.fill(near, with: .color(Color(red: 0.02, green: 0.04, blue: 0.06)))
+            near.move(to: CGPoint(x: 0, y: 106))
+            near.addQuadCurve(to: CGPoint(x: 120, y: 104), control: CGPoint(x: 60, y: 90))
+            near.addQuadCurve(to: CGPoint(x: 200, y: 100), control: CGPoint(x: 180, y: 118))
+            near.addLine(to: CGPoint(x: 200, y: 118))
+            near.addLine(to: CGPoint(x: 0, y: 118))
+            near.closeSubpath()
+            ctx.fill(near, with: .color(Self.rgb(0x050A10)))
         }
     }
 
-    // MARK: - The deck (lower half)
+    // MARK: - The deck (lower half) — the mockup's grid
 
-    private func deck(_ pose: DuoFoldTimeline.Pose) -> some View {
-        let gap = deviceWidth * 0.03
-        let radius = deviceWidth * 0.035
-        let padH = deviceWidth * 0.06, padV = deviceWidth * 0.05
-        // Fixed shares of the deck's height, as on the player: the title row,
-        // the big transport blocks, the scrub bar, the four track blocks.
-        let inner = max(0, halfHeight - bezel - 2 * padV - 3 * gap)
-        return VStack(spacing: gap) {
-            HStack(spacing: gap) {
-                block(0, pose, radius: radius, glyph: true).frame(width: deviceWidth * 0.12)
-                block(1, pose, radius: radius, glyph: false)
-                block(2, pose, radius: radius, glyph: true).frame(width: deviceWidth * 0.12)
+    private func deck(_ pose: DuoFoldTimeline.Pose, width sw: CGFloat, height sh: CGFloat) -> some View {
+        // inset 7 % 6 % 9 %; rows 1fr 2.3fr .8fr 1.3fr, gap 6 %; columns gap 4 %.
+        let dw = sw * 0.88, dh = sh * 0.84
+        let rowGap = dh * 0.06, unit = (dh - 3 * rowGap) / 5.4, colGap = dw * 0.04
+        let side3 = (dw - 2 * colGap) / 7
+        let block = (dw - 2 * colGap) / 3.5
+        let track = (dw - 3 * colGap) / 4
+        return VStack(spacing: rowGap) {
+            HStack(spacing: colGap) {
+                tile(0, pose, width: side3, height: unit, glyph: true)
+                tile(1, pose, width: side3 * 5, height: unit, glyph: false)
+                tile(2, pose, width: side3, height: unit, glyph: true)
             }
-            .frame(height: inner * 0.17)
-            HStack(spacing: gap) {
-                block(3, pose, radius: radius, glyph: true)
-                playBlock(pose, radius: radius).frame(width: deviceWidth * 0.34)
-                block(5, pose, radius: radius, glyph: true)
+            HStack(spacing: colGap) {
+                tile(3, pose, width: block, height: unit * 2.3, glyph: true)
+                playTile(pose, width: block * 1.5, height: unit * 2.3)
+                tile(5, pose, width: block, height: unit * 2.3, glyph: true)
             }
-            .frame(height: inner * 0.42)
-            scrubBar(pose, radius: radius)
-                .frame(height: inner * 0.13)
-            HStack(spacing: gap) {
-                ForEach(7..<11, id: \.self) { index in block(index, pose, radius: radius, glyph: true) }
+            scrubBar(pose, width: dw, height: unit * 0.8)
+            HStack(spacing: colGap) {
+                ForEach(7..<11, id: \.self) { index in
+                    tile(index, pose, width: track, height: unit * 1.3, glyph: true)
+                }
             }
-            .frame(height: inner * 0.28)
         }
-        .padding(.horizontal, padH)
-        .padding(.vertical, padV)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(width: dw, height: dh, alignment: .top)
+        .padding(.top, sh * 0.07)
+        .frame(width: sw, height: sh, alignment: .top)
     }
 
-    private func block(_ index: Int, _ pose: DuoFoldTimeline.Pose, radius: CGFloat, glyph: Bool) -> some View {
-        RoundedRectangle(cornerRadius: radius)
+    private func tile(_ index: Int, _ pose: DuoFoldTimeline.Pose, width: CGFloat, height: CGFloat,
+                      glyph: Bool) -> some View {
+        RoundedRectangle(cornerRadius: w * 0.035)
             .fill(Self.tile)
             .overlay {
                 if glyph {
-                    Circle().fill(Color.white.opacity(0.75)).frame(width: deviceWidth * 0.045)
+                    Circle().fill(Color.white.opacity(0.75)).frame(width: width * 0.32, height: width * 0.32)
                 }
             }
-            .arriving(pose.tile(index), lift: deviceWidth * 0.03)
+            .frame(width: width, height: height)
+            .opacity(pose.tiles[index].opacity)
+            .offset(y: pose.tiles[index].lift * height)
     }
 
-    private func playBlock(_ pose: DuoFoldTimeline.Pose, radius: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: radius)
-            .fill(themeManager.accentContainer)
+    private func playTile(_ pose: DuoFoldTimeline.Pose, width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: w * 0.035)
+            .fill(mix(screenAccent, 0.85, .zero))
             .overlay {
                 PlayTriangle()
                     .fill(Color.white)
-                    .frame(width: deviceWidth * 0.07, height: deviceWidth * 0.09)
-                    .offset(x: deviceWidth * 0.008)
+                    .frame(width: w * 0.07, height: w * 0.09)
+                    .offset(x: w * 0.0105)
             }
-            .arriving(pose.tile(4), lift: deviceWidth * 0.03)
+            .frame(width: width, height: height)
+            .scaleEffect(pose.play.scale)
+            .opacity(pose.play.opacity)
     }
 
-    private func scrubBar(_ pose: DuoFoldTimeline.Pose, radius: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: radius)
+    private func scrubBar(_ pose: DuoFoldTimeline.Pose, width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: w * 0.035)
             .fill(Self.tile)
-            .overlay(alignment: .leading) {
-                GeometryReader { proxy in
-                    let track = proxy.size.width * 0.84
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.22)).frame(width: track)
-                        Capsule().fill(Color.white).frame(width: track * pose.progress)
-                    }
-                    .frame(height: proxy.size.height * 0.14)
-                    .frame(maxHeight: .infinity)
-                    .padding(.leading, proxy.size.width * 0.08)
+            .overlay(alignment: .topLeading) {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.22)).frame(width: width * 0.84)
+                    Capsule().fill(Color.white).frame(width: width * pose.progress)
                 }
+                .frame(height: height * 0.10)
+                .offset(x: width * 0.08, y: height * 0.45)
             }
-            .arriving(pose.tile(6), lift: deviceWidth * 0.03)
+            .frame(width: width, height: height)
+            .opacity(pose.tiles[6].opacity)
+            .offset(y: pose.tiles[6].lift * height)
     }
 }
 
-/// The loop's pure timing, so the choreography is testable without a clock.
+// MARK: - Timing
+
+/// The loop's keyframes, the mockup's CSS animations: `up` / `down`
+/// (cubic-bezier(.45,0,.2,1)), `pop` / `popPlay` (ease-out, each block 0.07 s
+/// after the previous one), `prog` (linear), `glow` (ease-in-out). Pure, so
+/// the choreography is tested without a clock.
 enum DuoFoldTimeline {
     static let period: Double = 7
+    static let tileCount = 11
+    static let stagger: Double = 0.07
 
-    struct Pose: Equatable {
-        /// 0 lying open, 1 folded onto the table.
-        var fold: Double
-        /// The light the folded screen throws on the table.
-        var glow: Double
-        /// How far the film has played on the deck's scrub bar.
-        var progress: Double
-        /// Each deck block's arrival, 0…1, in reading order.
-        var tiles: [Double]
-
-        func tile(_ index: Int) -> Double { tiles.indices.contains(index) ? tiles[index] : 1 }
+    struct Tile: Equatable {
+        var opacity: Double
+        /// translateY, as a fraction of the block's own height.
+        var lift: Double
     }
 
-    static let tileCount = 11
+    struct Play: Equatable {
+        var opacity: Double
+        var scale: Double
+    }
 
-    /// Where `time` falls in the loop, 0…1.
-    static func phase(at time: Double) -> Double {
+    struct Pose: Equatable {
+        /// rotateX of the upper half, degrees (0 → −9).
+        var upper: Double
+        /// rotateX of the lower half, degrees (0 → 62).
+        var lower: Double
+        var glow: Double
+        /// The scrub bar's played part, as a fraction of the bar.
+        var progress: Double
+        /// Reading order: title row 0–2, transport 3–5 (4 = play), scrub bar 6, tracks 7–10.
+        var tiles: [Tile]
+        var play: Play
+    }
+
+    /// `elapsed` seconds since the page appeared; `nil` = still (Motion
+    /// Effects off): folded, every block in place.
+    static func pose(at elapsed: Double?) -> Pose {
+        guard let elapsed else {
+            return Pose(upper: -9, lower: 62, glow: 1, progress: 0.38,
+                        tiles: Array(repeating: Tile(opacity: 1, lift: 0), count: tileCount),
+                        play: Play(opacity: 1, scale: 1))
+        }
+        let p = phase(elapsed)
+        let shown: [(Double, Double)] = [(0, 0), (0.30, 0), (0.40, 1), (0.84, 1), (0.92, 0), (1, 0)]
+        let tiles = (0..<tileCount).map { index -> Tile in
+            let q = due(elapsed, delay: Double(index) * stagger)
+            return Tile(opacity: value(q, shown, easeOut),
+                        lift: value(q, [(0, 0.14), (0.30, 0.14), (0.40, 0), (1, 0)], easeOut))
+        }
+        let q = due(elapsed, delay: 4 * stagger)
+        let play = Play(opacity: value(q, shown, easeOut),
+                        scale: value(q, [(0, 0.7), (0.30, 0.7), (0.40, 1.08), (0.46, 1), (1, 1)], easeOut))
+        return Pose(
+            upper: value(p, [(0, 0), (0.14, 0), (0.36, -9), (0.82, -9), (0.96, 0), (1, 0)], fold),
+            lower: value(p, [(0, 0), (0.14, 0), (0.36, 62), (0.82, 62), (0.96, 0), (1, 0)], fold),
+            glow: value(p, [(0, 0), (0.20, 0), (0.40, 1), (0.82, 1), (0.95, 0), (1, 0)], easeInOut),
+            progress: value(p, [(0, 0.20), (0.40, 0.20), (0.84, 0.52), (1, 0.52)], { $0 }),
+            tiles: tiles,
+            play: play)
+    }
+
+    /// A staggered block's phase: before its first delay has elapsed it has
+    /// not started (phase 0, hidden), not wrapped into the end of a loop.
+    private static func due(_ elapsed: Double, delay: Double) -> Double {
+        elapsed < delay ? 0 : phase(elapsed - delay)
+    }
+
+    /// Where `time` falls in the loop, 0 ..< 1.
+    static func phase(_ time: Double) -> Double {
         let t = time.truncatingRemainder(dividingBy: period) / period
         return t < 0 ? t + 1 : t
     }
 
-    /// `nil` = still: folded, everything in place — Motion Effects off.
-    static func pose(at phase: Double?) -> Pose {
-        guard let p = phase else {
-            return Pose(fold: 1, glow: 1, progress: 0.38, tiles: Array(repeating: 1, count: tileCount))
+    /// Piecewise keyframes, each segment eased like a CSS keyframe.
+    private static func value(_ p: Double, _ frames: [(Double, Double)], _ ease: (Double) -> Double) -> Double {
+        for (a, b) in zip(frames, frames.dropFirst()) where p >= a.0 && p <= b.0 {
+            if a.1 == b.1 || b.0 == a.0 { return a.1 }
+            return a.1 + (b.1 - a.1) * ease((p - a.0) / (b.0 - a.0))
         }
-        let fold = ramp(p, up: 0.14...0.36, down: 0.82...0.96)
-        let tiles = (0..<tileCount).map { index in
-            let start = 0.30 + Double(index) * 0.01
-            return ramp(p, up: start...(start + 0.08), down: 0.84...0.92)
-        }
-        let progress = 0.2 + 0.32 * eased(clamp((p - 0.40) / 0.44))
-        return Pose(fold: fold, glow: ramp(p, up: 0.20...0.40, down: 0.82...0.95), progress: progress, tiles: tiles)
+        return frames.last?.1 ?? 0
     }
 
-    /// 0 before `up`, rising through it, 1 until `down`, falling back to 0.
-    private static func ramp(_ p: Double, up: ClosedRange<Double>, down: ClosedRange<Double>) -> Double {
-        if p < up.lowerBound || p >= down.upperBound { return 0 }
-        if p < up.upperBound { return eased((p - up.lowerBound) / (up.upperBound - up.lowerBound)) }
-        if p < down.lowerBound { return 1 }
-        return 1 - eased((p - down.lowerBound) / (down.upperBound - down.lowerBound))
-    }
+    private static let fold = bezier(0.45, 0, 0.2, 1)
+    private static let easeOut = bezier(0, 0, 0.58, 1)
+    private static let easeInOut = bezier(0.42, 0, 0.58, 1)
 
-    private static func eased(_ x: Double) -> Double { x * x * (3 - 2 * x) }
-    private static func clamp(_ x: Double) -> Double { min(max(x, 0), 1) }
-}
-
-private extension View {
-    /// A deck block fading in while it rises into place.
-    func arriving(_ amount: Double, lift: CGFloat) -> some View {
-        opacity(amount).offset(y: (1 - amount) * lift)
+    /// CSS `cubic-bezier(x1, y1, x2, y2)`.
+    private static func bezier(_ x1: Double, _ y1: Double, _ x2: Double, _ y2: Double) -> @Sendable (Double) -> Double {
+        { x in
+            func curve(_ t: Double, _ a: Double, _ b: Double) -> Double {
+                3 * (1 - t) * (1 - t) * t * a + 3 * (1 - t) * t * t * b + t * t * t
+            }
+            var lo = 0.0, hi = 1.0
+            for _ in 0..<30 {
+                let mid = (lo + hi) / 2
+                if curve(mid, x1, x2) < x { lo = mid } else { hi = mid }
+            }
+            return curve((lo + hi) / 2, y1, y2)
+        }
     }
 }
 
-/// The play glyph. Private: the illustration file's `Triangle` is private too,
-/// and a shape shared by two motifs is not worth a design-system entry.
+// MARK: - Projection
+
+/// The mockup's 3-D: `.duoPersp { perspective: 4.2w; perspective-origin:
+/// 50% -30% }` around `.duoRig { rotateY(-14deg) }` around each half's
+/// `rotateX`, hinged at the fold. One `CATransform3D` per half, in that
+/// half's own coordinates.
+enum DuoFoldProjection {
+    enum Half { case upper, lower }
+
+    /// One half of the 2007 × 2853 inner display.
+    static let halfRatio: CGFloat = 0.7105
+    /// The art's layout box, height ÷ width.
+    static let boxRatio: CGFloat = 1.44
+    static let yaw: CGFloat = -14
+
+    static func transform(half: Half, angle: Double, width w: CGFloat) -> CATransform3D {
+        let h = w * halfRatio
+        let offset: CGFloat = half == .upper ? 0 : h
+        // Both halves' transform-origin, and the rig's centre: the hinge.
+        let hinge = CGPoint(x: w / 2, y: h)
+        let eye = CGPoint(x: w / 2, y: -0.3 * boxRatio * w)
+        var perspective = CATransform3DIdentity
+        perspective.m34 = -1 / (4.2 * w)
+
+        // Row vectors: each step applies after the previous one.
+        var m = CATransform3DMakeTranslation(-hinge.x, offset - hinge.y, 0)
+        m = CATransform3DConcat(m, CATransform3DMakeRotation(CGFloat(angle) * .pi / 180, 1, 0, 0))
+        m = CATransform3DConcat(m, CATransform3DMakeRotation(yaw * .pi / 180, 0, 1, 0))
+        m = CATransform3DConcat(m, CATransform3DMakeTranslation(hinge.x - eye.x, hinge.y - eye.y, 0))
+        m = CATransform3DConcat(m, perspective)
+        m = CATransform3DConcat(m, CATransform3DMakeTranslation(eye.x, eye.y - offset, 0))
+        return m
+    }
+
+    /// Where `point` (in the half's own coordinates) is drawn.
+    static func project(_ point: CGPoint, half: Half, angle: Double, width: CGFloat) -> CGPoint {
+        let m = transform(half: half, angle: angle, width: width)
+        let x = point.x * m.m11 + point.y * m.m21 + m.m41
+        let y = point.x * m.m12 + point.y * m.m22 + m.m42
+        let w = point.x * m.m14 + point.y * m.m24 + m.m44
+        return CGPoint(x: x / w, y: y / w)
+    }
+}
+
+/// The play glyph.
 private struct PlayTriangle: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
