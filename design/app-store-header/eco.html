@@ -59,7 +59,21 @@ const duo = (x, y, w, z = 4) => {
   </div>`;
 };
 let html;
-if (f === 'tv') {
+if (f === 'ipad') {
+  // iPad board of the canvas (iPad-N.dc.html): 688 × 516 at scale 4 → 2752 × 2064.
+  html = `<div class="panel" style="width:688px;height:516px"><div class="bloom"></div>
+   <div style="position:absolute;left:44px;top:44px;width:460px;z-index:6">
+     <div class="eyebrow" style="font-size:10.5px;letter-spacing:.22em">${t.e}</div>
+     <h2 class="head" style="font-size:36px;line-height:1.02;margin-top:13px">${t.h}</h2>
+     <p class="sub" style="font-size:13.5px;line-height:1.42;margin-top:12px;max-width:400px">${t.s}</p>
+   </div>
+   ${dev(262, 214, 392, 220, 10, 6, -2, img('tv', 'tv-home-en.png'), 1)}
+   <div style="position:absolute;left:420px;top:438px;width:74px;height:5px;border-radius:3px;background:linear-gradient(#2a2a2e,#141416);transform:rotate(-2deg);opacity:.9"></div>
+   ${dev(44, 262, 178, 237, 13, 6, -5, img('ipad', 'ipad-home.png'), 3)}
+   ${dev(588, 320, 84, 182, 14, 4, 7, img('iphone', 'iphone-home.png'), 3)}
+   ${duo(326, 360, 112)}
+   <div class="grain"></div></div>`;
+} else if (f === 'tv') {
   html = `<div class="panel" style="width:640px;height:360px"><div class="bloom"></div>
    <div style="position:absolute;left:36px;top:84px;width:214px;z-index:6">
      <div class="eyebrow" style="font-size:8px;letter-spacing:.2em">${t.e}</div>

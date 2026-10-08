@@ -42,6 +42,11 @@ const TXT = {
     fr: { e: 'iPhone Duo, déplié', h: 'Dépliez-le.<br>C’est un grand écran.', s: 'Ouvert à plat, le film remplit l’écran, en pleine qualité, tout droit de votre serveur.' },
     de: { e: 'iPhone Duo, aufgeklappt', h: 'Aufklappen.<br>Großes Kino.', s: 'Ganz aufgeklappt füllt der Film den Bildschirm – in voller Qualität, direkt von deinem Server.' },
   },
+  outer: {
+    en: { e: 'iPhone Duo, folded', h: 'Folded,<br>still a cinema.', s: 'Closed, the outer screen plays the film in landscape, with every control at hand.' },
+    fr: { e: 'iPhone Duo, plié', h: 'Plié,<br>c’est toujours du cinéma.', s: 'Fermé, l’écran extérieur lit le film en paysage, avec toutes les commandes sous la main.' },
+    de: { e: 'iPhone Duo, zugeklappt', h: 'Zugeklappt<br>immer noch Kino.', s: 'Zugeklappt spielt der Außenbildschirm den Film im Querformat ab – mit allen Bedienelementen.' },
+  },
   land: {
     en: { e: 'Folded or open', h: 'Folded or open,<br>it fits.', s: 'Portrait or landscape, folded or open: Home, detail pages and rows fit the iPhone Duo.' },
     fr: { e: 'Plié ou déplié', h: 'Plié ou déplié,<br>tout s’ajuste.', s: 'En portrait ou en paysage, plié ou déplié : l’accueil, les fiches et les rangées s’ajustent à l’iPhone Duo.' },
@@ -64,7 +69,19 @@ const text = `
  </div>`;
 const ghost = `<div class="dev" style="width:423px;height:601px;border-radius:26px;left:362px;top:430px;transform:rotate(8deg);opacity:.42;filter:saturate(.7)"><div class="scr" style="inset:0;background:linear-gradient(170deg,#182028,#0E0E0E)"></div></div>`;
 let body = '';
-if (v === 'open') {
+if (v === 'outer') {
+  document.getElementById('stage').innerHTML = `<div class="panel" style="width:678px;height:466px"><div class="bloom"></div>
+   <div style="position:absolute;left:40px;top:118px;width:236px;z-index:4">
+     <div class="eyebrow" style="font-size:10.5px;letter-spacing:.22em">${t.e}</div>
+     <h2 class="head" style="font-size:30px;line-height:1.04;margin-top:12px">${t.h}</h2>
+     <p class="sub" style="font-size:13px;line-height:1.45;margin-top:12px">${t.s}</p>
+   </div>
+   <div class="dev" style="width:356px;height:245px;border-radius:24px;left:296px;top:112px;transform:rotate(-3deg)">
+    <div class="scr" style="inset:7px;border-radius:20px">${shot(q.get('shot'))}</div>
+   </div>
+   <div class="grain"></div></div>`;
+  throw 'done';
+} else if (v === 'open') {
   // Portrait inner display, 2007 × 2853 → 470 × 668, bezel 9, corners 30.
   body = `${ghost}
   <div class="dev" style="width:470px;height:668px;border-radius:30px;left:100px;top:318px;transform:rotate(-3deg)">

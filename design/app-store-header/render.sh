@@ -19,9 +19,12 @@ if [[ $query == *fmt=plank* ]]; then page=plank.html; size=440,956; scale=3; fi
 if [[ $query == *fmt=shot* ]]; then page=shots.html; size=440,956; scale=3; fi
 # iPhone Duo planks (duo.html): a 669 × 951 board at scale 3 → 2007 × 2853, the inner display.
 if [[ $query == *fmt=duo* ]]; then page=duo.html; size=669,951; scale=3; fi
+# …and the folded, landscape one (v=outer): the outer display, 678 × 466 at scale 3 → 2034 × 1398.
+if [[ $query == *fmt=duo*v=outer* ]]; then size=678,466; fi
 # Ecosystem planks (eco.html): f=ios → iPhone board; f=tv → 640 × 360 at scale 6 → 3840 × 2160.
 if [[ $query == *fmt=eco* ]]; then page=eco.html; size=440,956; scale=3; fi
 if [[ $query == *fmt=eco*f=tv* ]]; then size=640,360; scale=6; fi
+if [[ $query == *fmt=eco*f=ipad* ]]; then size=688,516; scale=4; fi
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu \
   --hide-scrollbars --force-device-scale-factor=$scale --allow-file-access-from-files \
   --virtual-time-budget=4000 --window-size=$size --screenshot="$out" \
