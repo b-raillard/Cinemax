@@ -63,7 +63,7 @@ Mêmes 13 planches, mêmes cadrages, titres traduits, dans `~/Desktop/JellyGlass
 
 ## 2 ter. La série iPhone Duo (2026-10-08)
 
-En-tête (3840 × 1646), résultats de recherche (3840 × 2560) et une 7e image iPhone (1320 × 2868, réduite en 1284 × 2778), en EN / FR / DE : l'iPhone Duo à moitié plié sur une table, le film en haut, le pupitre en bas. Générateurs versionnés dans `design/app-store-header/` : `page.html` (variante `v=duo`), `plank.html` (gabarit du canvas de refonte : Instrument Sans, halo, grain), `render.sh` (`fmt=header|search|plank`, `lang=en|fr|de`, `duo=<capture>`). Accroches : « Put your films on the table. » / « JellyGlass se plie en quatre. L'iPhone Duo, en deux. » / « Klappt wie im Kino. », sous-titre « …Popcorn not included. », badge vert « NEW · MADE FOR IPHONE DUO » — le badge et la 2e ligne verte SONT le message, ne pas les retirer sur la 7e image.
+En-tête (3840 × 1646), résultats de recherche (3840 × 2560) et une 7e image iPhone (1320 × 2868, réduite en 1284 × 2778), en EN / FR / DE : l'iPhone Duo à moitié plié sur une table, le film en haut, le pupitre en bas. Générateurs versionnés dans `design/app-store-header/` : `page.html` (variante `v=duo`), `plank.html` (gabarit du canvas de refonte : Instrument Sans, halo, grain), `render.sh` (`fmt=header|search|plank`, `lang=en|fr|de`, `duo=<capture>`). Accroches : « Put your movies on the table. » / « JellyGlass se plie en quatre. L'iPhone Duo, en deux. » / « Klappt wie im Kino. », sous-titre « …Popcorn not included. », badge vert « NEW · MADE FOR IPHONE DUO » — le badge et la 2e ligne verte SONT le message, ne pas les retirer sur la 7e image.
 
 **Pièges de cette série :**
 

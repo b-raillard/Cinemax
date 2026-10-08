@@ -891,7 +891,7 @@
 "onboarding.personalize.body" = "The main menu can be reordered, trimmed, or pointed straight at your libraries; the accent colour and text size are yours too. All of it lives in Settings.";
 "onboarding.duo.title" = "Ready for iPhone Duo";
 "onboarding.duo.body" = "Moving to iPhone Duo? Half-fold it and set it down: the film stays on top and the controls rest on the table. Popcorn not included.";
-"onboarding.duo.onDuo.title" = "Put your films on the table";
+"onboarding.duo.onDuo.title" = "Put your movies on the table";
 "onboarding.duo.onDuo.body" = "Half-fold your iPhone Duo and set it down: the film stays on the top screen and the controls move to the bottom one. A padlock keeps them on screen.";
 "settings.discoverApp" = "Discover the app";
 
@@ -1256,7 +1256,7 @@
 "whatsNew.offer.accept" = "Turn on";
 "whatsNew.language.title" = "JellyGlass in English";
 "whatsNew.language.body" = "Your device is set to %@. JellyGlass can speak it too; you can always change it in Settings → Appearance.";
-"whatsNew.tableMode.title" = "Put your films on the table";
+"whatsNew.tableMode.title" = "Put your movies on the table";
 "whatsNew.tableMode.body" = "Half-fold your iPhone Duo and set it down: the film stays on the top screen and the controls move to the bottom one, as big blocks that are easy to hit. A padlock keeps them on screen for the whole film.";
 "whatsNew.tableMode.other.title" = "Ready for iPhone Duo";
 "whatsNew.tableMode.other.body" = "Moving to iPhone Duo? Half-fold it and set it down: the film stays on the top screen and the controls move to the bottom one, as big blocks that are easy to hit. A padlock keeps them on screen.";
