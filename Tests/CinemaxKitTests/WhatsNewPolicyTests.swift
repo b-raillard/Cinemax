@@ -242,6 +242,64 @@ struct WhatsNewLanguageOfferTests {
         #expect(outcome == .stampOnly)
     }
 
+    @Test("Une page réservée à l'autre plateforme n'apparaît pas")
+    func otherPlatformPageExcluded() {
+        let catalogue = [WhatsNewRelease(version: ServerVersion(2, 4, 0), pages: [
+            WhatsNewPage(id: "both", illustration: .playOn),
+            WhatsNewPage(id: "tvOnly", illustration: .playOn, platforms: [.tvOS]),
+            WhatsNewPage(id: "iosOnly", illustration: .playOn, platforms: [.iOS])
+        ])]
+        #expect(WhatsNewCatalogue.pages(since: nil, upTo: ServerVersion(2, 4, 0), in: catalogue, platform: .iOS).map(\.id)
+                == ["both", "iosOnly"])
+        #expect(WhatsNewCatalogue.pages(since: nil, upTo: ServerVersion(2, 4, 0), in: catalogue, platform: .tvOS).map(\.id)
+                == ["both", "tvOnly"])
+        #expect(WhatsNewCatalogue.allPages(in: catalogue, platform: .tvOS).map(\.id) == ["both", "tvOnly"])
+    }
+
+    @Test("Une version dont les seules pages sont pour l'autre plateforme se tamponne en silence")
+    func otherPlatformOnlyIsSilentStamp() {
+        let other: WhatsNewPlatform = WhatsNewPlatform.current == .iOS ? .tvOS : .iOS
+        let catalogue = [WhatsNewRelease(version: ServerVersion(2, 4, 0), pages: [
+            WhatsNewPage(id: "elsewhere", illustration: .playOn, platforms: [other])
+        ])]
+        let outcome = WhatsNewPolicy.decide(
+            lastSeenVersion: "2.3.5", installed: ServerVersion(2, 4, 0), isFirstRun: false, catalogue: catalogue)
+        #expect(outcome == .stampOnly)
+    }
+
+    @Test("Une page à variante Duo lit sa variante « other » hors de l'iPhone Duo")
+    func duoVariantKey() {
+        let page = WhatsNewPage(id: "tableMode", illustration: .playOn, hasDuoVariant: true)
+        #expect(page.textKey(onDuo: true) == "tableMode")
+        #expect(page.textKey(onDuo: false) == "tableMode.other")
+        #expect(WhatsNewPage(id: "plain", illustration: .playOn).textKey(onDuo: false) == "plain")
+    }
+
+    @Test("La 2.4.0 : le Duo et la vitesse sur iOS, la compatibilité Duo et la vitesse sur Apple TV")
+    func shipped240() {
+        let since = ServerVersion(2, 3, 5), installed = ServerVersion(2, 4, 0)
+        #expect(WhatsNewCatalogue.pages(since: since, upTo: installed, platform: .iOS).map(\.id)
+                == ["tableMode", "everyScreen", "smoothSpeed"])
+        #expect(WhatsNewCatalogue.pages(since: since, upTo: installed, platform: .tvOS).map(\.id)
+                == ["duoOnTV", "smoothSpeed"])
+    }
+
+    @Test("Chaque page livrée a son titre et son texte dans chaque langue, variante Duo comprise")
+    func shippedPagesLocalized() {
+        let keys = WhatsNewCatalogue.releases.flatMap(\.pages).flatMap { page in
+            page.hasDuoVariant ? [page.textKey(onDuo: true), page.textKey(onDuo: false)] : [page.id]
+        }
+        for code in AppLanguage.supported {
+            let bundle = Bundle.localizedBundle(for: code)
+            for key in keys {
+                for part in ["title", "body"] {
+                    let full = "whatsNew.\(key).\(part)"
+                    #expect(bundle.localizedString(forKey: full, value: nil, table: nil) != full, "\(code) \(full)")
+                }
+            }
+        }
+    }
+
     @Test("La page est livrée en 2.3.1, avec son titre dans chaque langue")
     func shippedPageExists() throws {
         let page = try #require(WhatsNewCatalogue.releases.flatMap(\.pages).first { $0.id == "language" })
@@ -253,3 +311,71 @@ struct WhatsNewLanguageOfferTests {
         }
     }
 }
+
+#if canImport(QuartzCore)
+import QuartzCore
+
+/// The drawn iPhone Duo of « Quoi de neuf » and the onboarding: the timings and
+/// the 3-D projection are the approved mockup's (2026-10-08), so they are
+/// locked here rather than trusted to a reading of the animation.
+@Suite("Animation du Duo plié")
+struct DuoFoldTimelineTests {
+    @Test("Au départ le Duo est à plat, pupitre vide, table éteinte")
+    func startsFlat() {
+        let pose = DuoFoldTimeline.pose(at: 0)
+        #expect(pose.upper == 0)
+        #expect(pose.lower == 0)
+        #expect(pose.glow == 0)
+        #expect(pose.tiles.allSatisfy { $0.opacity == 0 })
+        #expect(pose.play.opacity == 0)
+    }
+
+    @Test("À mi-boucle il est plié sur la table, chaque bloc en place")
+    func foldedMidLoop() {
+        let pose = DuoFoldTimeline.pose(at: DuoFoldTimeline.period * 0.55)
+        #expect(pose.upper == -9)
+        #expect(pose.lower == 62)
+        #expect(pose.glow == 1)
+        #expect(pose.tiles.allSatisfy { $0.opacity == 1 && $0.lift == 0 })
+        #expect(pose.play.opacity == 1 && pose.play.scale == 1)
+        #expect(abs(pose.progress - (0.20 + 0.32 * 0.15 / 0.44)) < 0.0001)
+    }
+
+    @Test("Sans animations : plié, tout en place, barre au repos")
+    func still() {
+        let pose = DuoFoldTimeline.pose(at: nil)
+        #expect(pose.upper == -9 && pose.lower == 62 && pose.glow == 1)
+        #expect(pose.tiles.allSatisfy { $0.opacity == 1 && $0.lift == 0 })
+        #expect(pose.progress == 0.38)
+    }
+
+    @Test("Les blocs arrivent l'un après l'autre, 0,07 s d'écart")
+    func staggered() {
+        let pose = DuoFoldTimeline.pose(at: DuoFoldTimeline.period * 0.38)
+        #expect(pose.tiles[0].opacity > pose.tiles[5].opacity)
+        #expect(pose.tiles[5].opacity > pose.tiles[10].opacity)
+    }
+
+    @Test("La charnière ne se disjoint jamais : les deux moitiés s'y rejoignent", arguments: [0.0, 0.2, 0.3, 0.5, 0.9])
+    func hingeStaysJoined(_ fraction: Double) {
+        let pose = DuoFoldTimeline.pose(at: DuoFoldTimeline.period * fraction)
+        let w: CGFloat = 100, h = w * DuoFoldProjection.halfRatio
+        for x in [CGFloat(0), w / 2, w] {
+            let top = DuoFoldProjection.project(CGPoint(x: x, y: h), half: .upper, angle: pose.upper, width: w)
+            let bottom = DuoFoldProjection.project(CGPoint(x: x, y: 0), half: .lower, angle: pose.lower, width: w)
+            #expect(abs(top.x - bottom.x) < 0.01 && abs(top.y - (bottom.y + h)) < 0.01, "x=\(x)")
+        }
+    }
+
+    @Test("Plié, la moitié basse se couche : plus courte, plus large au bord proche")
+    func lowerHalfLiesDown() {
+        let w: CGFloat = 100, h = w * DuoFoldProjection.halfRatio
+        let nearLeft = DuoFoldProjection.project(CGPoint(x: 0, y: h), half: .lower, angle: 62, width: w)
+        let nearRight = DuoFoldProjection.project(CGPoint(x: w, y: h), half: .lower, angle: 62, width: w)
+        let farLeft = DuoFoldProjection.project(CGPoint(x: 0, y: 0), half: .lower, angle: 62, width: w)
+        let farRight = DuoFoldProjection.project(CGPoint(x: w, y: 0), half: .lower, angle: 62, width: w)
+        #expect(nearLeft.y - farLeft.y < h * 0.9)
+        #expect(nearRight.x - nearLeft.x > farRight.x - farLeft.x)
+    }
+}
+#endif

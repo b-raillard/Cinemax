@@ -7,10 +7,11 @@ import SwiftUI
 /// the next UI change and has to be re-shot per platform, per theme, per accent
 /// — which is precisely how a "what's new" screen ends up showing an interface
 /// the user is not looking at. These follow the user's accent, flip with
-/// dark/light and scale through `CinemaScale`, and nothing here animates, so
-/// there is nothing for Motion Effects or Reduce Motion to switch off — the
-/// one exception is `.halloweenNight`, a whole scene with its own view
-/// (`WhatsNewHalloweenScene`), whose motion both of them stop.
+/// dark/light and scale through `CinemaScale`, and the motifs do not animate,
+/// so there is nothing for Motion Effects or Reduce Motion to switch off — the
+/// two exceptions have their own views, whose motion both of them stop:
+/// `.halloweenNight` (`WhatsNewHalloweenScene`) and `.duoTable`
+/// (`WhatsNewDuoScene`). The onboarding draws its pages with this enum too.
 ///
 /// Kept apart from `CinemaIllustration` on purpose: that enum is the vocabulary
 /// of empty and error states, and folding feature art into it would make "which
@@ -36,6 +37,19 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     /// The app in the device's language — two speech bubbles, the old one
     /// faded, the new one in the accent.
     case language
+    /// iPhone Duo's table mode — a Duo folding onto the table, the film above,
+    /// the controls arriving below (`WhatsNewDuoScene`, animated).
+    case duoTable
+    /// The layout pass for the Duo, folded and open — two screens, one hero.
+    case everyScreen
+    /// Playback speed that keeps sound and picture together.
+    case smoothSpeed
+    /// Onboarding — your own server.
+    case server
+    /// Onboarding — Quick Connect's code.
+    case quickConnect
+    /// Onboarding — the accent colour and the menu are yours.
+    case personalize
 
     /// Drawn as a wide scene across the page, not a motif on the halo.
     var isScene: Bool { self == .halloweenNight }
@@ -47,12 +61,13 @@ struct WhatsNewIllustrationView: View {
     var baseSize: CGFloat = 132
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.self) private var environment
 
     var body: some View {
-        if kind.isScene {
-            WhatsNewHalloweenScene()
-        } else {
-            motif
+        switch kind {
+        case .halloweenNight: WhatsNewHalloweenScene()
+        case .duoTable: WhatsNewDuoScene(side: CinemaScale.pt(baseSize))
+        default: motif
         }
     }
 
@@ -64,15 +79,18 @@ struct WhatsNewIllustrationView: View {
         // `CinemaIllustrationView`, so the two read alike side by side.
         let u = side / 100
         ZStack {
+            // The approved 2.4.0 mockup's halo: 18 % wider than the motif on
+            // every side, accent at 22 % fading out at its edge.
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [themeManager.accent.opacity(0.20), themeManager.accent.opacity(0)],
+                        colors: [themeManager.accent.opacity(0.22), themeManager.accent.opacity(0)],
                         center: .center,
                         startRadius: 0,
-                        endRadius: side / 2
+                        endRadius: side * 0.68
                     )
                 )
+                .frame(width: side * 1.36, height: side * 1.36)
 
             switch kind {
             case .watchTogether: watchTogether(u)
@@ -83,11 +101,24 @@ struct WhatsNewIllustrationView: View {
             case .parentalLock:  parentalLock(u)
             case .accessibility: accessibility(u)
             case .language:      language(u)
-            case .halloweenNight: EmptyView()   // drawn by `body` as a scene
+            case .everyScreen, .smoothSpeed, .server, .quickConnect, .personalize:
+                MotifCanvas(kind: kind, ink: ink)
+            case .halloweenNight, .duoTable: EmptyView()   // drawn by `body` as scenes
             }
         }
         .frame(width: side, height: side)
         .accessibilityHidden(true)
+    }
+
+    /// The 2.4.0 motifs' colours, the mockup's: neutral tiles are the text
+    /// colour mixed into the page at 14 % and 22 % — opaque, so the halo
+    /// stays behind them — marks in `onSurfaceVariant`, one accent gesture.
+    private var ink: MotifInk {
+        let mix = { (amount: Double) in
+            MotifInk.mix(CinemaColor.onSurface, amount, into: CinemaColor.surface, in: environment)
+        }
+        return MotifInk(tile: mix(0.14), tileHigh: mix(0.22), mark: CinemaColor.onSurfaceVariant,
+                        accent: themeManager.accent, text: CinemaColor.onSurface)
     }
 
     // MARK: - Motifs
@@ -285,5 +316,110 @@ private struct Triangle: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.closeSubpath()
         return path
+    }
+}
+
+/// Colours of the motifs drawn by `MotifCanvas`.
+struct MotifInk {
+    let tile: Color
+    let tileHigh: Color
+    let mark: Color
+    let accent: Color
+    let text: Color
+
+    /// `color-mix(in srgb, a amount, b)`, resolved for this environment.
+    static func mix(_ a: Color, _ amount: Double, into b: Color, in environment: EnvironmentValues) -> Color {
+        let x = a.resolve(in: environment), y = b.resolve(in: environment)
+        let f = Float(amount)
+        return Color(.sRGB,
+                     red: Double(x.red * f + y.red * (1 - f)),
+                     green: Double(x.green * f + y.green * (1 - f)),
+                     blue: Double(x.blue * f + y.blue * (1 - f)))
+    }
+}
+
+/// The motifs introduced with 2.4.0 (onboarding + « Quoi de neuf »), drawn on
+/// the 100 × 100 grid exactly as the approved mockup's SVG — same rectangles,
+/// radii and opacities — so the app and the design cannot drift.
+private struct MotifCanvas: View {
+    let kind: WhatsNewIllustration
+    let ink: MotifInk
+
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.scaleBy(x: size.width / 100, y: size.height / 100)
+            draw(in: &ctx)
+        }
+    }
+
+    private func box(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
+        CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    private func rect(_ ctx: inout GraphicsContext, _ frame: CGRect, _ r: CGFloat, _ color: Color,
+                      _ opacity: Double = 1) {
+        ctx.fill(Path(roundedRect: frame, cornerRadius: r), with: .color(color.opacity(opacity)))
+    }
+
+    private func dot(_ ctx: inout GraphicsContext, _ cx: CGFloat, _ cy: CGFloat, _ r: CGFloat,
+                     _ color: Color, _ opacity: Double = 1) {
+        ctx.fill(Path(ellipseIn: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)),
+                 with: .color(color.opacity(opacity)))
+    }
+
+    private func triangle(_ ctx: inout GraphicsContext, _ points: [CGPoint], _ color: Color, _ opacity: Double = 1) {
+        var path = Path()
+        path.addLines(points)
+        path.closeSubpath()
+        ctx.fill(path, with: .color(color.opacity(opacity)))
+    }
+
+    private func draw(in ctx: inout GraphicsContext) {
+        switch kind {
+        case .server:
+            // Three units, the top one switched on.
+            rect(&ctx, box(26, 20, 48, 16), 5, ink.tile)
+            rect(&ctx, box(26, 42, 48, 16), 5, ink.tile)
+            rect(&ctx, box(26, 64, 48, 16), 5, ink.tileHigh)
+            dot(&ctx, 64, 28, 3.2, ink.accent)
+            dot(&ctx, 64, 50, 3.2, ink.mark, 0.5)
+            dot(&ctx, 64, 72, 3.2, ink.mark, 0.5)
+            for y in [26.5, 48.5, 70.5] as [CGFloat] { rect(&ctx, box(33, y, 18, 3), 1.5, ink.mark, 0.5) }
+        case .quickConnect:
+            // Four code tiles, the third being typed.
+            rect(&ctx, box(14, 40, 16, 22), 5, ink.tile)
+            rect(&ctx, box(34, 40, 16, 22), 5, ink.tile)
+            rect(&ctx, box(54, 40, 16, 22), 5, ink.accent)
+            rect(&ctx, box(74, 40, 16, 22), 5, ink.tileHigh)
+            rect(&ctx, box(20, 49.5, 4, 4), 2, ink.mark)
+            rect(&ctx, box(40, 49.5, 4, 4), 2, ink.mark)
+            rect(&ctx, box(80, 49.5, 4, 4), 2, ink.mark, 0.5)
+        case .personalize:
+            // Three swatches, the accent picked, over a slider.
+            dot(&ctx, 34, 40, 11, ink.tile)
+            dot(&ctx, 54, 40, 11, ink.accent)
+            dot(&ctx, 74, 40, 11, ink.tileHigh)
+            rect(&ctx, box(20, 62, 62, 8), 4, ink.tile)
+            rect(&ctx, box(20, 62, 38, 8), 4, ink.accent)
+            dot(&ctx, 58, 66, 7, ink.text)
+        case .everyScreen:
+            // The closed Duo's narrow screen and the open one, the same hero on both.
+            rect(&ctx, box(16, 22, 26, 54), 6, ink.tile)
+            rect(&ctx, box(16, 22, 26, 22), 6, ink.accent)
+            rect(&ctx, box(20, 50, 8, 11), 2, ink.mark, 0.45)
+            rect(&ctx, box(30, 50, 8, 11), 2, ink.mark, 0.45)
+            rect(&ctx, box(50, 22, 38, 54), 6, ink.tile)
+            rect(&ctx, box(50, 22, 38, 22), 6, ink.accent)
+            for x in [54, 65, 76] as [CGFloat] { rect(&ctx, box(x, 50, 9, 12), 2, ink.mark, 0.45) }
+        case .smoothSpeed:
+            // Fast-forward over a progress bar: faster, still in step.
+            rect(&ctx, box(18, 34, 64, 30), 9, ink.tile)
+            triangle(&ctx, [CGPoint(x: 38, y: 40), CGPoint(x: 52, y: 49), CGPoint(x: 38, y: 58)], ink.accent)
+            triangle(&ctx, [CGPoint(x: 52, y: 40), CGPoint(x: 66, y: 49), CGPoint(x: 52, y: 58)], ink.accent, 0.55)
+            rect(&ctx, box(18, 70, 64, 5), 2.5, ink.tileHigh)
+            rect(&ctx, box(18, 70, 40, 5), 2.5, ink.accent)
+        default:
+            break
+        }
     }
 }

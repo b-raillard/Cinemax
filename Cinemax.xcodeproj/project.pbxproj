@@ -323,6 +323,7 @@
 		6E901AB8C47DDDE0CBA2565E /* LibrarySearchRanker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56E5F1E76FACB749BF2BBC8D /* LibrarySearchRanker.swift */; };
 		6EAE740222EA7B865B13DBE2 /* CinemaToggleIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38AC0B18ACCE5C2EBA766E08 /* CinemaToggleIndicator.swift */; };
 		6F53D5318F61F2B34CE1E894 /* MetadataIdentifyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70046F639E1635F36221E545 /* MetadataIdentifyTab.swift */; };
+		6F71626045F4B7E8EDC99876 /* WhatsNewDuoScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E6ABA2067D1592776041CEF /* WhatsNewDuoScene.swift */; };
 		6F9AEB4561324499DA1F1F4E /* NativeVideoPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07FE737816B4F86FC1A9D144 /* NativeVideoPresenter.swift */; };
 		6FA84644D5074B8EB0CFF97F /* MenuConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2E6BDC1B376722400F1A3C /* MenuConfig.swift */; };
 		6FD9760CC8B8978452CF4288 /* SleepTimerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74EFA596296688A96C374135 /* SleepTimerController.swift */; };
@@ -369,6 +370,7 @@
 		8105E34A1FA7F853D18E35A9 /* MotionEffectsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A95C622F89111741037C483 /* MotionEffectsTests.swift */; };
 		821767BF1E1F02D6444B38B2 /* PlaylistDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C9B065C554B6040FB46EC23 /* PlaylistDetailScreen.swift */; };
 		82907A8055F41FD0E791C49E /* VLCStreamPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D742BCF96212F6A06B3E40 /* VLCStreamPresenter.swift */; };
+		8311B0FCEF3D978D2406F1A9 /* IPhoneDuoDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52D91998DD6889F208AE78CC /* IPhoneDuoDetection.swift */; };
 		83A446B71A40107299A25266 /* DestructiveConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D219D83E0BF87FF74FAE367 /* DestructiveConfirmSheet.swift */; };
 		8408A487C19DAB3D82498B24 /* RatingBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C632FC97E86299EBCAA2CA /* RatingBadge.swift */; };
 		8430CBF103C7D8FDE321302F /* StreamProxyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C5B18A062473FEFA3852339 /* StreamProxyTests.swift */; };
@@ -448,6 +450,7 @@
 		9CACAE33A8F87B0F5DB0EF28 /* AdminItemMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592DF5F22CD8B9D9D263F7FD /* AdminItemMenu.swift */; };
 		9CCCA4A247BE9433C414A122 /* MenuSettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F59E7E97CEC6588B7625C2 /* MenuSettingsScreen.swift */; };
 		9D7DC4B535360291C3465976 /* VideoPlayerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14D3FE509DDFB9EA6569161 /* VideoPlayerCoordinator.swift */; };
+		9EF88DCE280B7911F2FBD125 /* WhatsNewDuoScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E6ABA2067D1592776041CEF /* WhatsNewDuoScene.swift */; };
 		9F4E23E8D1FF5B730B545655 /* SyncPlayHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = A350CFA644A65DA91D2A002D /* SyncPlayHUD.swift */; };
 		9F7E13CC3312F27A84915032 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 280786386ED204F8AAAF36B6 /* Assets.xcassets */; };
 		9FEDF2A2C55372ED0B435719 /* PlaybackReporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97FFFD02B7FDCCDF546C872 /* PlaybackReporterTests.swift */; };
@@ -554,6 +557,7 @@
 		C57AF8D68109237A53D4ED1E /* CardLabelLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D584410BAFEC8C152E9D4530 /* CardLabelLocalizationTests.swift */; };
 		C5C3810A18222D30E7BA422E /* LibraryHeroSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40DF377C72F0695AEC1CB0D6 /* LibraryHeroSection.swift */; };
 		C5D36C26403F925F329F9896 /* VLCStreamPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D742BCF96212F6A06B3E40 /* VLCStreamPresenter.swift */; };
+		C5E489B70D749E7EF41DF44B /* IPhoneDuoDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52D91998DD6889F208AE78CC /* IPhoneDuoDetection.swift */; };
 		C66DEBC7160DF78205F50CAB /* LoginViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D37B5166A4FB48D21B2F845 /* LoginViewModel.swift */; };
 		C6E0C3AD2F43862B73C2A143 /* SeasonalTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */; };
 		C6ECB352E613955A5A110A8E /* LibraryLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB36F2BA2BA2F32157D2B57 /* LibraryLogicTests.swift */; };
@@ -836,6 +840,7 @@
 		2C408AFB766D464538419F25 /* CinemaxTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CinemaxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2C82E587493C660B54ADBA63 /* SeasonalHomeRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalHomeRowTests.swift; sourceTree = "<group>"; };
 		2D56D83F6063EA3C8CB1B2A0 /* PlayerPostureLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPostureLayoutTests.swift; sourceTree = "<group>"; };
+		2E6ABA2067D1592776041CEF /* WhatsNewDuoScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewDuoScene.swift; sourceTree = "<group>"; };
 		2FCF5A94AA4897A4644B777A /* AdminLoadStateContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLoadStateContainer.swift; sourceTree = "<group>"; };
 		30F942B639984C5E72E1D32F /* AutoSkipPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSkipPolicy.swift; sourceTree = "<group>"; };
 		31D07FDBA8B067335CB393D9 /* LoginViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewModelTests.swift; sourceTree = "<group>"; };
@@ -879,6 +884,7 @@
 		4F5D9387C11356CF0140347C /* ServerRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRegistryTests.swift; sourceTree = "<group>"; };
 		51EA3ACED7C511625904B26B /* TVBackNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVBackNavigation.swift; sourceTree = "<group>"; };
 		520518BCFA8AF149838E5906 /* MediaDetailEpisodeOverviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailEpisodeOverviewSheet.swift; sourceTree = "<group>"; };
+		52D91998DD6889F208AE78CC /* IPhoneDuoDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneDuoDetection.swift; sourceTree = "<group>"; };
 		53363AB0D63349A37334B381 /* QuickConnectAuthorizeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickConnectAuthorizeViewModelTests.swift; sourceTree = "<group>"; };
 		5364D454BCC297C0F2D9A3DB /* CinemaxWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CinemaxWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5392E5D6360E4430456477E9 /* ServerDiscoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerDiscoverySheet.swift; sourceTree = "<group>"; };
@@ -1211,6 +1217,7 @@
 				CAE7D2FCE0D1E553996F8787 /* ReviewPromptPolicy.swift */,
 				7FECC078CF0E11539ABE5316 /* ReviewPromptTracker.swift */,
 				1B57183A10839E3056C3659D /* WhatsNewCatalogue.swift */,
+				2E6ABA2067D1592776041CEF /* WhatsNewDuoScene.swift */,
 				EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */,
 				73B67ACF04B1FFE9E01F4782 /* WhatsNewIllustration.swift */,
 				5E19706AD8199FD7B1BDF875 /* WhatsNewPolicy.swift */,
@@ -1735,6 +1742,7 @@
 				D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */,
 				E9A353B49C5117D5F686F07B /* GlassModifiers.swift */,
 				E7B5A6240F3E4871F763D087 /* Haptics.swift */,
+				52D91998DD6889F208AE78CC /* IPhoneDuoDetection.swift */,
 				32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */,
 				9025B941E4912A05542646B1 /* SettingsKeys.swift */,
 				0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */,
@@ -2355,6 +2363,7 @@
 				283176386959EFAD7BE0E52D /* HeroBackdropImage.swift in Sources */,
 				47242004DB5BA9497108DE62 /* HomeScreen.swift in Sources */,
 				FA853F39728C4E3652D2C5E5 /* HomeViewModel.swift in Sources */,
+				8311B0FCEF3D978D2406F1A9 /* IPhoneDuoDetection.swift in Sources */,
 				0C4D6F89D7F95157F7800C6F /* IdentifyConfirmView.swift in Sources */,
 				90841E57AFF705E50E87D0A7 /* IdentifyFlowModel.swift in Sources */,
 				9356471229C7DE73C5829295 /* IdentifyFormView.swift in Sources */,
@@ -2501,6 +2510,7 @@
 				5D88CC33F8334EF5E6CD5475 /* WatchTogetherLobby.swift in Sources */,
 				86526F1D7EA8C308D75CD1FE /* WatchedHistoryScreen.swift in Sources */,
 				3ED7BC82385E90F72DE07604 /* WhatsNewCatalogue.swift in Sources */,
+				9EF88DCE280B7911F2FBD125 /* WhatsNewDuoScene.swift in Sources */,
 				2FE46B13F4BCB62EEB66B345 /* WhatsNewHalloweenScene.swift in Sources */,
 				CAA9FDA459FB87E7B3F367AB /* WhatsNewIllustration.swift in Sources */,
 				5387266807C86D4BE2FC1828 /* WhatsNewPolicy.swift in Sources */,
@@ -2717,6 +2727,7 @@
 				8497BA437CDCC5ECB1BFC24D /* HeroBackdropImage.swift in Sources */,
 				28A82A58BDED7ACD5B9221F8 /* HomeScreen.swift in Sources */,
 				46E0FC9041E6B386190D5B6C /* HomeViewModel.swift in Sources */,
+				C5E489B70D749E7EF41DF44B /* IPhoneDuoDetection.swift in Sources */,
 				89F53E8EDBEA3B58E4C7EE7B /* IdentifyConfirmView.swift in Sources */,
 				A15DBD5254EFF4F2B820B5A3 /* IdentifyFlowModel.swift in Sources */,
 				5C29AEB096D8E2EFB1A7DBA2 /* IdentifyFormView.swift in Sources */,
@@ -2864,6 +2875,7 @@
 				415D6E200AACAF80F3B06507 /* WatchTogetherLobby.swift in Sources */,
 				94D50ED24372C2DF858DA620 /* WatchedHistoryScreen.swift in Sources */,
 				CF9B70C7595EA08B2F235061 /* WhatsNewCatalogue.swift in Sources */,
+				6F71626045F4B7E8EDC99876 /* WhatsNewDuoScene.swift in Sources */,
 				C20E16BB64AFF1A1C12F0D7E /* WhatsNewHalloweenScene.swift in Sources */,
 				3C2B94112906A6D51E669730 /* WhatsNewIllustration.swift in Sources */,
 				71448B532787D84CB37C5B41 /* WhatsNewPolicy.swift in Sources */,
@@ -2966,7 +2978,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.3.5;
+				CURRENT_PROJECT_VERSION = 2.4.0;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -2985,7 +2997,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.3.5;
+				MARKETING_VERSION = 2.4.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -3231,7 +3243,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.3.5;
+				CURRENT_PROJECT_VERSION = 2.4.0;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -3244,7 +3256,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.3.5;
+				MARKETING_VERSION = 2.4.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
