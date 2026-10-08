@@ -27,11 +27,11 @@ html,body{margin:0;background:#07070A;font-family:'Instrument Sans',system-ui,sa
 <script>
 const q = new URLSearchParams(location.search);
 const lang = q.get('lang') || 'en', f = q.get('f') || 'ios';
-// Headline = the approved 2.4.0 « What's New » title (whatsNew.everyScreen.title).
+// Headline: the library follows you everywhere (user, 2026-10-08).
 const TXT = {
-  en: { e: 'iPhone · iPad · iPhone Duo · Apple TV', h: 'At home<br>on every screen.', s: 'Pick up where you left off on any of them, or send the film to the big screen with “Play on…”.' },
-  fr: { e: 'iPhone · iPad · iPhone Duo · Apple TV', h: 'À l’aise<br>sur tous les écrans.', s: 'Reprenez où vous en étiez sur chacun, ou envoyez le film sur grand écran avec « Lire sur… ».' },
-  de: { e: 'iPhone · iPad · iPhone Duo · Apple TV', h: 'Auf jedem Bildschirm<br>zu Hause.', s: 'Mach auf jedem Gerät da weiter, wo du warst – oder schick den Film mit „Abspielen auf …“ auf den großen Bildschirm.' },
+  en: { e: 'iPhone · iPad · iPhone Duo · Apple TV', h: 'Your library,<br>everywhere.', s: 'Pick up where you left off on any of them, or send the film to the big screen with “Play on…”.' },
+  fr: { e: 'iPhone · iPad · iPhone Duo · Apple TV', h: 'Votre médiathèque,<br>partout.', s: 'Reprenez où vous en étiez sur chacun, ou envoyez le film sur grand écran avec « Lire sur… ».' },
+  de: { e: 'iPhone · iPad · iPhone Duo · Apple TV', h: 'Deine Mediathek,<br>überall.', s: 'Mach auf jedem Gerät da weiter, wo du warst – oder schick den Film mit „Abspielen auf …“ auf den großen Bildschirm.' },
 };
 const t = TXT[lang];
 const dir = q.get('dir');
