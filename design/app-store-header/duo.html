@@ -48,7 +48,7 @@ const TXT = {
     de: { e: 'Zu- oder aufgeklappt', h: 'Auf jedem Bildschirm<br>zu Hause.', s: 'Hoch oder quer, zu- oder aufgeklappt: Startseite, Detailseiten und Reihen passen sich dem iPhone Duo an.' },
   },
 };
-const t = TXT[v][lang];
+const t = TXT[q.get('t') || v][lang]; // t= borrows another plate's text for this layout
 const src = (f) => `${q.get('dir')}/${f}`;
 const shot = (f) => f ? `<img src="${src(f)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top">` : '';
 // The fold runs across the middle of the inner display (portrait) — a faint crease.
