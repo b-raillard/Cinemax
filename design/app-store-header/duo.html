@@ -89,7 +89,8 @@ if (v === 'outer') {
   </div>`;
 } else if (v === 'land') {
   // Landscape inner display (2853 × 2007), bleeding off the right edge.
-  body = `${ghost}
+  // No ghost device here: its lower edge showed as a hard line under the landscape Duo.
+  body = `
   <div class="dev" style="width:690px;height:486px;border-radius:30px;left:44px;top:372px;transform:rotate(-3deg)">
    <div class="scr" style="inset:9px;border-radius:22px">${shot(q.get('shot'))}${q.get('crease') === '0' ? '' : crease('v')}</div>
   </div>`;
