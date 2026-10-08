@@ -38,14 +38,14 @@ const TXT = {
     de: { e: 'Tischmodus', h: 'Klappt wie<br><em>im Kino.</em>', s: 'Der Tischmodus fürs iPhone Duo.<br>Popcorn nicht inbegriffen.', b: 'NEU · GEMACHT FÜRS IPHONE DUO' },
   },
   open: {
-    en: { e: 'iPhone Duo, open', h: 'Unfold it.<br>It’s a big screen.', s: 'Open, detail pages spread out: artwork, synopsis, versions and cast, all on one screen.' },
-    fr: { e: 'iPhone Duo, déplié', h: 'Dépliez-le.<br>C’est un grand écran.', s: 'Déplié, la fiche prend ses aises : affiche, synopsis, versions et distribution sur un seul écran.' },
-    de: { e: 'iPhone Duo, aufgeklappt', h: 'Aufklappen.<br>Großes Kino.', s: 'Aufgeklappt hat die Detailseite Platz: Titelbild, Handlung, Versionen und Besetzung auf einem Bildschirm.' },
+    en: { e: 'iPhone Duo, open', h: 'Unfold it.<br>It’s a big screen.', s: 'Open it flat and the film fills the screen, in full quality, straight from your server.' },
+    fr: { e: 'iPhone Duo, déplié', h: 'Dépliez-le.<br>C’est un grand écran.', s: 'Ouvert à plat, le film remplit l’écran, en pleine qualité, tout droit de votre serveur.' },
+    de: { e: 'iPhone Duo, aufgeklappt', h: 'Aufklappen.<br>Großes Kino.', s: 'Ganz aufgeklappt füllt der Film den Bildschirm – in voller Qualität, direkt von deinem Server.' },
   },
   land: {
-    en: { e: 'Folded or open', h: 'At home<br>on every screen.', s: 'Portrait or landscape, folded or open: Home, detail pages and rows fit the iPhone Duo.' },
-    fr: { e: 'Plié ou déplié', h: 'À l’aise<br>sur tous les écrans.', s: 'En portrait ou en paysage, plié ou déplié : l’accueil, les fiches et les rangées s’ajustent à l’iPhone Duo.' },
-    de: { e: 'Zu- oder aufgeklappt', h: 'Auf jedem Bildschirm<br>zu Hause.', s: 'Hoch oder quer, zu- oder aufgeklappt: Startseite, Detailseiten und Reihen passen sich dem iPhone Duo an.' },
+    en: { e: 'Folded or open', h: 'Folded or open,<br>it fits.', s: 'Portrait or landscape, folded or open: Home, detail pages and rows fit the iPhone Duo.' },
+    fr: { e: 'Plié ou déplié', h: 'Plié ou déplié,<br>tout s’ajuste.', s: 'En portrait ou en paysage, plié ou déplié : l’accueil, les fiches et les rangées s’ajustent à l’iPhone Duo.' },
+    de: { e: 'Zu- oder aufgeklappt', h: 'Zu oder auf,<br>alles passt.', s: 'Hoch oder quer, zu- oder aufgeklappt: Startseite, Detailseiten und Reihen passen sich dem iPhone Duo an.' },
   },
 };
 const t = TXT[q.get('t') || v][lang]; // t= borrows another plate's text for this layout
@@ -74,7 +74,7 @@ if (v === 'open') {
   // Landscape inner display (2853 × 2007), bleeding off the right edge.
   body = `${ghost}
   <div class="dev" style="width:690px;height:486px;border-radius:30px;left:44px;top:372px;transform:rotate(-3deg)">
-   <div class="scr" style="inset:9px;border-radius:22px">${shot(q.get('shot'))}${crease('v')}</div>
+   <div class="scr" style="inset:9px;border-radius:22px">${shot(q.get('shot'))}${q.get('crease') === '0' ? '' : crease('v')}</div>
   </div>`;
 } else {
   // Half-folded on a table — the plank of plank.html, scaled to this board.
