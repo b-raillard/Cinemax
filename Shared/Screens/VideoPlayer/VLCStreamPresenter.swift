@@ -501,6 +501,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var progressTimer: Timer?
     private var hideControlsWorkItem: DispatchWorkItem?
     private var didSeekToStart = false
+    /// The viewer's last play/pause request was a PAUSE. Kept apart from the
+    /// engine state because a pause sent to an engine whose input is blocked
+    /// (a stalled feed) is queued and never applied: the state stays
+    /// `.playing`, and the rebuild that follows used to resume playback the
+    /// viewer had stopped (recette 2026-10-08, M6-06). A re-opened media honours
+    /// it (`pauseOnOpen`); an episode change drops it.
+    private var pauseIntended = false
+    /// A rebuild re-opened the media while `pauseIntended` held: pause it once
+    /// its resume seek has left (`onEngineTimeChanged`). One-shot, cleared by
+    /// `beginOpenLoading()`.
+    private var pauseOnOpen = false
     /// True once the player has reported a real (non-zero) position. The skip
     /// intro/outro button stays hidden until then — otherwise a segment that
     /// starts at 0 flashes the button during the loading spinner.
@@ -898,8 +909,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return machine
     }
 
-    private func enginePlay() { player.resume() }
-    private func enginePause() { player.pause() }
+    private func enginePlay() { pauseIntended = false; player.resume() }
+    private func enginePause() { pauseIntended = true; player.pause() }
 
     /// Shows/hides the centered loading spinner. Driven from playback start, the
     /// retry path, engine state changes (opening/buffering → on; playing/paused →
@@ -924,6 +935,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// episode nav) invalidates "we know a demuxer exists".
     private func beginOpenLoading() {
         mediaConfirmedOpen = false
+        pauseOnOpen = false
         endedAtMs = nil
         // Until this open reaches its `play()`, any `.stopped` is the media it
         // replaces winding down — including the trailing stop of an attempt
@@ -964,8 +976,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     ///
     /// Teardown and the error dialog still call `setLoading(false)` directly:
     /// they own the screen and must clear it whether or not anything opened.
+    ///
+    /// Nor while a resume seek is still to be sent: a rebuild on a slow link
+    /// showed the frame at 0:00 without a spinner for ≈ 4.5 s before the seek
+    /// left (recette 2026-10-08, B2-OBS-2). The seek fires on the first time
+    /// update with a known length, so this assumes a source with a resume point
+    /// has a length — true of every file the server can resume; a live stream
+    /// has no resume point (`startTime == nil`).
     private func clearLoadingIfOpen() {
-        guard mediaConfirmedOpen else { return }
+        guard mediaConfirmedOpen, !startSeekPending else { return }
         setLoading(false)
     }
 
@@ -1161,10 +1180,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             """)
         // Sent BEFORE the rebuild, which resets what the document describes.
         DiagnosticsUploader.send(reason: "seek-stranded", engine: "vlc")
-        // Spent only once the rebuild is actually under way: `false` means a
-        // re-resolve is already running (it owns the recovery) or the player
-        // is closing — neither used anything.
-        guard reResolveAndResume(from: targetMs, surfacingFailure: true) else { return false }
+        return rebuildSpendingRecovery(from: targetMs)
+    }
+
+    /// The rebuild of the nets that do not sample the picture — the stranded
+    /// seek and the feed escalation — on the picture net's budget (see
+    /// `PictureStallPolicy.spendRecovery`: one budget, or a stream that breaks
+    /// the same way every time rebuilds four times instead of two; recette
+    /// 2026-10-08, M6-10). Spent only once the rebuild is actually under way:
+    /// `false` means no budget is left, a re-resolve is already running (it owns
+    /// the recovery) or the player is closing — neither used anything. A failed
+    /// negotiation surfaces (retry, then the alert): the media is neither
+    /// stopped nor re-opening, so the open watchdog, whose guard reads the OLD
+    /// media's time and length, would leave the spinner turning for ever (M6-07).
+    private func rebuildSpendingRecovery(from ms: Int32) -> Bool {
+        guard pictureStall.recoveriesLeft > 0 else { return false }
+        guard reResolveAndResume(from: ms, surfacingFailure: true) else { return false }
         _ = pictureStall.spendRecovery()
         return true
     }
@@ -1179,7 +1210,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             positionMs: currentMs,
             isPlaying: enginePlaying,
             hasVideoTrack: !player.videoTracks.isEmpty,
-            seekSettling: seeks.isSettling,
+            // A rebuild negotiating runs on the old, frozen picture: judging it
+            // spent the budget on refused recoveries (M6-10).
+            seekSettling: seeks.isSettling || reResolve.isNegotiating,
             mediaConfirmedOpen: mediaConfirmedOpen
         ) {
         case .healthy:
@@ -1225,7 +1258,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // the shape: a wedged decoder (clock moving) or a whole pipeline
             // stalled (clock frozen, sound gone too).
             DiagnosticsUploader.send(reason: clockMoved ? "picture-stall" : "playback-freeze", engine: "vlc")
-            _ = reResolveAndResume(from: currentMs)
+            // Surfacing: a refused negotiation otherwise left a frozen picture
+            // under an endless spinner, with no alert (M6-07).
+            _ = reResolveAndResume(from: currentMs, surfacingFailure: true)
         }
     }
 
@@ -1308,7 +1343,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 feed-stall re-anchor did not restore the feed \
                 (read=\(now, privacy: .public)) — rebuilding
                 """)
-            _ = self.reResolveAndResume(from: self.currentMs)
+            if !self.rebuildSpendingRecovery(from: self.currentMs) {
+                logger.error("feed-stall escalation refused (no recovery left, or a rebuild is running)")
+            }
         }
         feedReanchorWatchdog = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.feedReanchorGrace, execute: work)
@@ -4312,7 +4349,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     @objc private func playPauseTapped() {
-        let willPlay = !enginePlaying
+        // `pauseIntended` first: a pause queued behind a blocked input leaves
+        // the state `.playing`, and a second tap must then mean « play ».
+        let willPlay = pauseIntended || !enginePlaying
         // In a SyncPlay group the tap is a request to the server, not a local
         // action: emit it and let the echoed command move every participant's
         // playhead together. The center glyph + icon still flip for immediate
@@ -4320,7 +4359,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if syncPlay.isInGroup {
             if willPlay { syncPlay.userDidPlay() } else { syncPlay.userDidPause() }
         } else {
-            if enginePlaying { enginePause() } else { enginePlay() }
+            if willPlay { enginePlay() } else { enginePause() }
         }
         flashCenterGlyph(playing: willPlay)
         #if os(iOS)
@@ -4658,6 +4697,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.info = vlcInfo
             self.startTime = nil
             self.didSeekToStart = true // new episode starts at 0
+            self.pauseIntended = false // a paused episode does not open the next one paused
             self.hasValidTime = false
             self.lastKnownPositionMs = 0 // don't resume a retry at the old episode's position
             self.seeks.cancelPending() // a queued skip must not seek the new episode
@@ -5738,7 +5778,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 }
                 return
             }
-            guard !self.isTearingDown, gen == self.navGeneration else { return }
+            // Closed (or superseded) during the negotiation: the session just
+            // negotiated is nobody's, and no stop report will ever name it —
+            // on a transcode, an orphan ffmpeg (recette 2026-10-08, M6-09).
+            guard !self.isTearingDown, gen == self.navGeneration else {
+                self.releaseServerSession(fresh)
+                return
+            }
+            // A skip made DURING the negotiation went to the old engine; it is
+            // where the viewer wants to be (M6-08: resumed at P−1 instead of P−11).
+            let resumeAtMs = self.seeks.pendingTargetMs ?? self.seeks.settlingTargetMs ?? resumeMs
+            self.seeks.cancelPending()
+            let resumeAtSeconds = Double(resumeAtMs) / 1000.0
             // The negotiation we're replacing holds its own play session AND a
             // live stream the server opened for it (`isAutoOpenLiveStream`), and
             // no stop report will ever reference them once `info` is overwritten
@@ -5747,7 +5798,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // the server's CPU, which makes the *new* stream stutter.
             self.releaseServerSession(self.info)
             self.info = fresh
-            self.startTime = resumeSeconds > 1 ? resumeSeconds : nil
+            self.startTime = resumeAtSeconds > 1 ? resumeAtSeconds : nil
             self.didSeekToStart = (self.startTime == nil)   // re-arm seek-to-resume
             self.hasValidTime = false
             self.didRetry = false
@@ -5772,6 +5823,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             await PlaybackAudioSession.activate()
             guard !self.isTearingDown, gen == self.navGeneration else { return }
             self.lastPlayStart = Date()
+            self.pauseOnOpen = self.pauseIntended
             try? self.player.play(media)
             self.scheduleOpenWatchdog()
             self.reporter?.resetTicking()
@@ -5803,6 +5855,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // before the end so a stale tick past EOF doesn't seek into nothing.
             let targetMs = min(Int32(clamping: Int(start * 1000)), max(0, lengthMs - 5000))
             if targetMs > 0 { seeks.engineSeek(targetMs) }
+        }
+        // A re-opened media (rebuild, retry) plays on open; the viewer had
+        // paused. After the resume seek, never before it: paused, the engine
+        // sends no more time updates, and the seek would never leave.
+        if pauseOnOpen, !startSeekPending {
+            pauseOnOpen = false
+            player.pause()
         }
     }
 

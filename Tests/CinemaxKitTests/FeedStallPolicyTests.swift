@@ -228,9 +228,48 @@ struct FeedStallPolicyTests {
     func aLaterEndReportExemptsAgain() {
         var policy = FeedStallPolicy()
         _ = feed(&policy, bytes: 1_000, endReports: 1)
+        _ = feed(&policy, bytes: 1_000, endReports: 1)   // plate : la fin tient
         _ = feed(&policy, bytes: 2_000, endReports: 1)   // relue : plus exemptée
         // Elle atteint de nouveau la fin dans la même seconde où elle relit.
         for _ in 0..<20 { #expect(feed(&policy, bytes: 3_000, endReports: 2) == .healthy) }
+    }
+
+    // Recette 2026-10-08 (M6-03) : `readBytes` vient de `libvlc_media_get_stats`,
+    // 40 à 174 ms en retard sur l'annonce de fin. Une annonce tombée juste avant
+    // un battement fige un compte trop bas, et le battement suivant voit les
+    // derniers octets arriver : ce rattrapage levait l'exemption, d'où un
+    // réancrage en plein générique (≈ 1 reprise lue jusqu'au bout sur 7).
+
+    @Test("Annonce, rattrapage d'un battement, puis plat : toujours exempté")
+    func catchUpRightAfterTheReportKeepsTheExemption() {
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 500_000_000)
+        #expect(feed(&policy, bytes: 500_000_000, endReports: 1) == .healthy) // annonce, compte en retard
+        #expect(feed(&policy, bytes: 500_400_000, endReports: 1) == .healthy) // rattrapage
+        for _ in 0..<20 { #expect(feed(&policy, bytes: 500_400_000, endReports: 1) == .healthy) }
+        #expect(policy.reanchorsLeft == FeedStallPolicy.reanchorBudget)
+    }
+
+    @Test("Annonce, plat, puis des octets : relecture, l'exemption tombe")
+    func growthAfterAFlatBeatIsARead() {
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 500_000_000, endReports: 1)
+        _ = feed(&policy, bytes: 500_000_000, endReports: 1)
+        _ = feed(&policy, bytes: 501_000_000, endReports: 1)
+        var outcomes: [FeedStallPolicy.Outcome] = []
+        for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 501_000_000, endReports: 1)) }
+        #expect(outcomes.last == .reanchor)
+    }
+
+    @Test("Annonce puis deux battements qui lisent : relecture, l'exemption tombe")
+    func twoGrowingBeatsAfterTheReportAreARead() {
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 500_000_000, endReports: 1)
+        _ = feed(&policy, bytes: 500_400_000, endReports: 1) // rattrapage
+        _ = feed(&policy, bytes: 501_400_000, endReports: 1) // relecture
+        var outcomes: [FeedStallPolicy.Outcome] = []
+        for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 501_400_000, endReports: 1)) }
+        #expect(outcomes.last == .reanchor)
     }
 
     @Test("Une réouverture oublie la fin de l'ancien flux")
