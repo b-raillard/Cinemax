@@ -508,7 +508,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// viewer had stopped (recette 2026-10-08, M6-06). A re-opened media honours
     /// it (`pauseOnOpen`); an episode change drops it.
     private var pauseIntended = false
-    /// A rebuild re-opened the media while `pauseIntended` held: pause it once
+    /// A rebuild or a retry re-opened the media while `pauseIntended` held: pause it once
     /// its resume seek has left (`onEngineTimeChanged`). One-shot, cleared by
     /// `beginOpenLoading()`.
     private var pauseOnOpen = false
@@ -5523,6 +5523,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.hasValidTime = false
                     self.mediaLengthMs = 0
                 }
+                // A retry is a reopen too: it honours a pause like a rebuild —
+                // a failed negotiation now lands here (M6-07).
+                self.pauseOnOpen = self.pauseIntended
                 self.activateSessionThenPlay(media)
             }
             return
