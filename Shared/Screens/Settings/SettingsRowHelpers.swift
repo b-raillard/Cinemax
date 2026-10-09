@@ -78,18 +78,35 @@ func iOSSettingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some 
 
 /// Colored icon badge used as the leading element of a settings row.
 @MainActor
-@ViewBuilder
 func iOSRowIcon(systemName: String, color: Color) -> some View {
-    ZStack {
-        RoundedRectangle(cornerRadius: CinemaRadius.small)
-            .fill(color.opacity(0.12))
-            .frame(width: 32, height: 32)
+    SettingsRowIcon(systemName: systemName, color: color)
+}
 
-        Image(systemName: systemName)
-            .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-            .foregroundStyle(color)
+/// The badge itself, a view so it can read the text size: at the
+/// ACCESSIBILITY sizes it steps aside. Its 40 pt left the label too narrow for
+/// a single German syllable group — « Bewegung / seffekte », « Berechtigu /
+/// ngen », broken mid-word even with the control already moved underneath
+/// (recette 2026-10-08, M1-08 / M1-09). The label carries the meaning; the
+/// badge is decoration.
+private struct SettingsRowIcon: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let systemName: String
+    let color: Color
+
+    var body: some View {
+        if !dynamicTypeSize.isAccessibilitySize {
+            ZStack {
+                RoundedRectangle(cornerRadius: CinemaRadius.small)
+                    .fill(color.opacity(0.12))
+                    .frame(width: 32, height: 32)
+
+                Image(systemName: systemName)
+                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                    .foregroundStyle(color)
+            }
+            .padding(.trailing, CinemaSpacing.spacing2)
+        }
     }
-    .padding(.trailing, CinemaSpacing.spacing2)
 }
 
 /// Thin divider inset to align with row text (past the icon).

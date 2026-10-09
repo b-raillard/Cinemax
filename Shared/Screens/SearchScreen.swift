@@ -16,6 +16,10 @@ struct SearchScreen: View {
     // this binding, and animates it against the motion-effects setting.
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @FocusState private var searchFieldFocused: Bool
+    #if os(iOS)
+    /// Height of the idle state's scroll viewport (see `resultContent`).
+    @State private var idleViewportHeight: CGFloat = 0
+    #endif
     @State private var viewModel = SearchViewModel()
     @AppStorage(SettingsKey.searchSaveHistory) private var saveSearchHistory: Bool = SettingsKey.Default.searchSaveHistory
 
@@ -364,22 +368,21 @@ struct SearchScreen: View {
             )
             Spacer()
         } else if viewModel.results.isEmpty && viewModel.personResults.isEmpty {
-            Spacer()
-            VStack(spacing: CinemaSpacing.spacing4) {
-                EmptyStateView(
-                    systemImage: "sparkle.magnifyingglass",
-                    title: loc.localized("search.searchLibrary")
-                )
-
-                // Past queries as one-tap chips (gated on the Privacy toggle).
-                if saveSearchHistory, !viewModel.recentSearches.isEmpty {
-                    recentSearchesSection
-                }
-
-                // "Not sure what to watch?" → two pills for a random movie or series.
-                surpriseMePills
+            #if os(iOS)
+            // Scrolls on iOS, centred while it fits: with search history shown,
+            // the stacked « surprise » pills of a long language (German) went
+            // under the tab bar and nothing scrolled (recette 2026-10-08, M1-17).
+            ScrollView {
+                idleContent
+                    .frame(maxWidth: .infinity, minHeight: idleViewportHeight)
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { idleViewportHeight = $0 }
+            #else
             Spacer()
+            idleContent
+            Spacer()
+            #endif
         } else {
             SearchResultsGrid(
                 results: viewModel.results,
@@ -398,6 +401,24 @@ struct SearchScreen: View {
             // Card → fiche zoom (iOS). The results are de-duplicated by id, so
             // one surface is enough here.
             .cardZoomScope(zoomNamespace, surface: "search.results")
+        }
+    }
+
+    /// Nothing typed yet: the invitation, past queries, the « surprise » pills.
+    private var idleContent: some View {
+        VStack(spacing: CinemaSpacing.spacing4) {
+            EmptyStateView(
+                systemImage: "sparkle.magnifyingglass",
+                title: loc.localized("search.searchLibrary")
+            )
+
+            // Past queries as one-tap chips (gated on the Privacy toggle).
+            if saveSearchHistory, !viewModel.recentSearches.isEmpty {
+                recentSearchesSection
+            }
+
+            // "Not sure what to watch?" → two pills for a random movie or series.
+            surpriseMePills
         }
     }
 
