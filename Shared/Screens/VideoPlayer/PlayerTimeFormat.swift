@@ -13,6 +13,17 @@ enum PlayerTimeFormat {
             : String(format: "%d:%02d", m, s)
     }
 
+    /// A playback speed — « 1,5× » in French and German, « 1.5× » in English,
+    /// up to two decimals (« 0,75× ») and none when whole (« 2× »). In the APP's
+    /// language, like every user-visible number: `String(format: "%g×")`
+    /// printed « 1.5× » in a German app (recette 2026-10-08, M4-12). Not
+    /// `loc.decimal`, which is fixed at one decimal.
+    static func speed(_ rate: Float, languageCode: String) -> String {
+        Double(rate).formatted(
+            .number.precision(.fractionLength(0...2)).locale(Locale(identifier: languageCode))
+        ) + "×"
+    }
+
     /// A duration in WORDS, for VoiceOver — « 1 heure, 2 minutes, 3 secondes ».
     ///
     /// The clock string above is unusable as an `accessibilityValue`: VoiceOver

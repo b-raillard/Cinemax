@@ -1052,6 +1052,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.applyServerTrackDefaultsIfNeeded()
                     #if os(iOS)
                     self.updateMirror()   // the aspect is known now
+                    // The deck's subtitle / audio blocks: SwiftVLC's
+                    // `selectedSubtitleTrack` only moves on this event, so the
+                    // refresh made right after a selection read the OLD track,
+                    // 4–13 s on screen and to VoiceOver (recette 2026-10-08, M4-02).
+                    self.refreshTabletopValues()
                     #endif
                 case .encounteredError:
                     self.handleEngineFailure("encountered-error")
@@ -2170,6 +2175,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         chaptersButton.addTarget(self, action: #selector(openChapterMenu), for: .touchUpInside)
         chaptersButton.accessibilityLabel = loc.localized("player.chapters")
         titleBlockButton.showsMenuAsPrimaryAction = true
+        // An open menu must not lose its deck: the auto-hide faded the deck
+        // and left « Statistiques » alone on screen (recette 2026-10-08,
+        // M4-11). `toggleStats` re-arms it.
+        titleBlockButton.addAction(UIAction { [weak self] _ in self?.hideControlsWorkItem?.cancel() },
+                                   for: .menuActionTriggered)
         titleBlockButton.accessibilityLabel = titleText
         scrubBlock.translatesAutoresizingMaskIntoConstraints = false
         scrubBlock.backgroundColor = TabletopHUDStyle.blockFill
@@ -3231,8 +3241,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// by size transitions (rotation, window resize) with the TARGET size, on
     /// appearance, and with `force` when the deck's contents change.
     private func applyLayoutMode(size: CGSize? = nil, force: Bool = false) {
+        // The simulation is an iPhone's: on an iPad it stretched the deck over
+        // 1032 pt (recette 2026-10-08, M4-18) — the Réglages row is hidden there too.
         let hinge = PlayerPostureLayout.effectiveHinge(
-            hingeReading, simulateTabletop: UserDefaults.standard.bool(forKey: SettingsKey.debugSimulateTabletop))
+            hingeReading,
+            simulateTabletop: UIDevice.current.userInterfaceIdiom == .phone
+                && UserDefaults.standard.bool(forKey: SettingsKey.debugSimulateTabletop))
         let mode = PlayerPostureLayout.mode(hinge: hinge, viewSize: size ?? view.bounds.size)
         guard force || mode != layoutMode else { return }
         // Never under a finger on the slider: the swap moves and resizes it,
@@ -3315,8 +3329,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return TabletopHalo.subtitleView(in: videoView) == nil
     }
 
+    /// Never before the current media has shown a frame (`hasValidTime`): at
+    /// an episode change the deck kept the PREVIOUS episode's picture for up to
+    /// ≈ 12 s — the layout refresh retook it from the old frame, and the next
+    /// periodic retake is 10 ticks away (recette 2026-10-08, M4-13).
+    /// `onEngineTimeChanged` takes the first one.
     private func refreshTabletopThumbnail() {
-        guard layoutMode == .tabletop else { return }
+        guard layoutMode == .tabletop, hasValidTime else { return }
         tabletopThumbnail = TabletopHalo.thumbnail(of: videoView, videoAspect: videoAspect)
         refreshTabletopValues()
     }
@@ -3481,7 +3500,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                   let index = player.audioTracks.firstIndex(of: track) else { return nil }
             return displayLabel(forAudioOrdinal: index, track: track)
         }()
-        let speedValue = String(format: "%g×", playbackRate)
+        let speedValue = PlayerTimeFormat.speed(playbackRate, languageCode: loc.languageCode)
         subtitleButton.configuration = TabletopHUDStyle.block(symbol: "captions.bubble", pointSize: 22,
                                                               title: loc.localized("player.subtitles"),
                                                               subtitle: subtitleValue)
@@ -3489,8 +3508,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         audioButton.configuration = TabletopHUDStyle.block(symbol: "waveform", pointSize: 22,
                                                            title: loc.localized("player.audio"), subtitle: audioValue)
         audioButton.accessibilityValue = audioValue
+        // A short title of its own: « Geschwindigkeit » was cut to « Geschwin… »
+        // in an 84 pt block (M4-12).
         speedButton.configuration = TabletopHUDStyle.block(symbol: "gauge.with.needle", pointSize: 22,
-                                                           title: loc.localized("player.speed"), subtitle: speedValue)
+                                                           title: loc.localized("player.tabletop.speed"), subtitle: speedValue)
         speedButton.accessibilityValue = speedValue
         chaptersButton.configuration = TabletopHUDStyle.block(symbol: "list.bullet", pointSize: 22,
                                                               title: loc.localized("player.chapters"))
@@ -3878,7 +3899,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     @objc private func openSpeedMenu() {
         var opts: [(String, Bool, () -> Void)] = []
         for rate in Self.speedOptions {
-            let label = String(format: "%g×", rate)
+            let label = PlayerTimeFormat.speed(rate, languageCode: loc.languageCode)
             opts.append((label, abs(playbackRate - rate) < 0.01, { [weak self] in
                 self?.setPlaybackRate(rate)
             }))
@@ -3894,6 +3915,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// out of sync until a while back at 1×). Flushing re-syncs both at the
     /// new rate, at the cost of a brief rebuffer.
     private func setPlaybackRate(_ rate: Float) {
+        // Re-picking the checked speed re-anchored all the same — a needless
+        // ≈ 0.9 s rebuffer (recette 2026-10-08, M4-05).
+        guard abs(rate - playbackRate) > 0.01 else { return }
         playbackRate = rate
         try? player.setPlaybackRate(PlaybackRate(rate))
         #if os(iOS)
@@ -4700,6 +4724,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.pauseIntended = false // a paused episode does not open the next one paused
             self.hasValidTime = false
             self.lastKnownPositionMs = 0 // don't resume a retry at the old episode's position
+            #if os(iOS)
+            self.tabletopThumbnail = nil // the old episode's picture (M4-13)
+            #endif
             self.seeks.cancelPending() // a queued skip must not seek the new episode
             self.didRetry = false
             self.didReportEnd = false
@@ -5845,7 +5872,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func onEngineTimeChanged() {
         refreshTimeUI()
         if currentMs > 0 {
+            let firstFrame = !hasValidTime
             hasValidTime = true; noteMediaOpened()
+            #if os(iOS)
+            if firstFrame, tabletopThumbnail == nil { refreshTabletopThumbnail() }
+            #endif
             // A settling seek echoes its target here before any frame is decoded —
             // only hide the spinner once the playhead is actually moving again.
             if !seeks.sampleSettle() { clearLoadingIfOpen() }
