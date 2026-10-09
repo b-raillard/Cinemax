@@ -50,6 +50,11 @@ enum CardArtwork {
     case poster
     /// `.backdrop`, 16:9 — the two `WideCard` rails on Home.
     case backdrop
+    /// A 2:3 poster whose URL the host built itself, because it is not the
+    /// item's own primary: Watch History draws an episode with its SERIES'
+    /// poster, and the preview lifted the episode's 16:9 still cropped into
+    /// 2:3 instead (recette 2026-10-08, M1-16).
+    case posterURL(URL?)
 }
 
 /// Destination token for "Go to series". Declared here, alongside the
@@ -522,6 +527,8 @@ private struct CardArtworkPreview: View {
                 width: Self.previewPosterWidth,
                 height: Self.previewPosterWidth * 3 / 2
             )
+        case .posterURL(let url):
+            previewArtwork(url: url, width: Self.previewPosterWidth, height: Self.previewPosterWidth * 3 / 2)
         case .backdrop:
             previewArtwork(
                 url: item.backdropItemId.map {

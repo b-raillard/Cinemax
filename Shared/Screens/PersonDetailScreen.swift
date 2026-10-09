@@ -38,9 +38,15 @@ struct PersonDetailScreen: View {
     /// the header 84 pt inboard of the rows under it.
     private let pagePadding: CGFloat = CinemaTVLayout.pagePadding
     #else
+    @Environment(\.horizontalSizeClass) private var sizeClass
     private let portraitSize: CGFloat = 132
     private let cardWidth: CGFloat = 130
-    private let pagePadding: CGFloat = CinemaSpacing.spacing5
+    /// The page column `ContentRow` draws its filmography rails at — 16 pt on
+    /// iPhone, 32 on iPad. A fixed 28 pt left the header and biography on
+    /// another left edge than the rails under them (recette 2026-10-08, M3-01).
+    private var pagePadding: CGFloat {
+        AdaptiveLayout.horizontalPadding(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
+    }
     #endif
 
     var body: some View {

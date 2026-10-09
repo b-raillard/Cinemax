@@ -153,7 +153,7 @@ struct IOSAppearanceDetailView: View {
                         }
                     } control: {
                         Stepper(
-                            "\(Int(fontScale * 100))%",
+                            "\(Int((fontScale * 100).rounded()))%", // `Int(1.15 * 100)` is 114 (M3-03)
                             onIncrement: {
                                 if let idx = fontScaleOptions.firstIndex(of: fontScale), idx < fontScaleOptions.count - 1 {
                                     fontScale = fontScaleOptions[idx + 1]

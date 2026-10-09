@@ -40,6 +40,15 @@ struct DeepLinkRouteTests {
         #expect(AppState.isValidItemId(undashed))
     }
 
+    /// Recette 2026-10-08 (M5-14) : le serveur résout le GUID nul en dossier
+    /// racine « Media Folders », ouvert avec ses boutons de mutation.
+    @Test("Le GUID nul est refusé, avec ou sans tirets")
+    func nilGuidRefused() {
+        #expect(AppState.isValidItemId(String(repeating: "0", count: 32)) == false)
+        #expect(AppState.isValidItemId("00000000-0000-0000-0000-000000000000") == false)
+        #expect(route("cinemax://item/" + String(repeating: "0", count: 32)) == nil)
+    }
+
     @Test("Hôte et schéma insensibles à la casse, verbe non")
     func caseFolding() {
         #expect(route("HTTPS://\(host.uppercased())/item/\(undashed)") == .item(id: undashed))
