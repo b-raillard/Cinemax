@@ -1956,6 +1956,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 9EB712D0EF32F6F1D9108178 /* Build configuration list for PBXNativeTarget "Cinemax" */;
 			buildPhases = (
+				3B557E0B5864319CB8A9B9F9 /* Require the iOS 27.1 SDK for archives */,
 				D0AA17A40F4AED9C8112E576 /* Sources */,
 				FD2FDE40B84FB4E1CA0E6A36 /* Resources */,
 				81916552939BB20684F3B232 /* Frameworks */,
@@ -2152,6 +2153,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		3B557E0B5864319CB8A9B9F9 /* Require the iOS 27.1 SDK for archives */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Require the iOS 27.1 SDK for archives";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$ACTION\" = \"install\" ] && [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  major=${SDK_VERSION%%.*}\n  case $SDK_VERSION in *.*) rest=${SDK_VERSION#*.}; minor=${rest%%.*} ;; *) minor=0 ;; esac\n  if [ \"$major\" -lt 27 ] || { [ \"$major\" -eq 27 ] && [ \"$minor\" -lt 1 ]; }; then\n    echo \"error: archive built with the iOS $SDK_VERSION SDK: the iPhone Duo code (UIHingeInteraction) needs 27.1 or later. Archive with DEVELOPER_DIR=/Applications/Xcode-27.1-RC.app/Contents/Developer.\"\n    exit 1\n  fi\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0ADF0A8C258C44D97EB9DFFD /* Sources */ = {
