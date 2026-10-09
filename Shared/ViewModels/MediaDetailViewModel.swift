@@ -425,10 +425,23 @@ final class MediaDetailViewModel {
                 try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
             }
             NotificationCenter.default.post(name: .cinemaxItemUserDataChanged, object: self)
+            await refreshSeriesPlayedState(using: appState)
         } catch {
             logger.error("Episode watched toggle failed: \(error.localizedDescription, privacy: .public)")
             setEpisodePlayed(id: id, played: !target)
         }
+    }
+
+    /// The SERIES' own watched state after an episode toggle: the server
+    /// derives it from its episodes, and the fiche's series button stayed on
+    /// its stale value — the tier-2 notification it posts is one it ignores
+    /// itself (recette 2026-10-08, D12-OBS-1). One light userData read.
+    private func refreshSeriesPlayedState(using appState: AppState) async {
+        guard resolvedType == .series, let userId = appState.currentUserId, let seriesId = item?.id,
+              let data = try? await appState.apiClient.fetchUserData(itemId: seriesId, userId: userId),
+              item?.id == seriesId else { return }
+        item?.userData = data
+        isPlayed = data.isPlayed ?? false
     }
 
     /// Reflects a played-state change in the local episode arrays so the

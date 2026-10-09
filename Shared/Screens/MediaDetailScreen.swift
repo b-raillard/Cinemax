@@ -2062,7 +2062,12 @@ private struct PlayActionButtonsSection: View, Equatable {
                     // Side by side when both labels fit, stacked otherwise —
                     // a narrow column truncated « From the start » to « From t… ».
                     ViewThatFits(in: .horizontal) {
-                        HStack(spacing: CinemaSpacing.spacing3) {
+                        // Equal halves only when the LONGER label fits in one:
+                        // an `HStack` was judged on the SUM of its labels, then
+                        // split evenly, and « Von Anfang an » shrank to ≈ 0.86
+                        // beside a full-size « Abspielen » (recette 2026-10-08,
+                        // M3-03). Otherwise the stack below takes over.
+                        EqualWidthRow(spacing: CinemaSpacing.spacing3) {
                             lectureButton.frame(maxWidth: .infinity)
                             playFromBeginningButton.frame(maxWidth: .infinity)
                         }
@@ -2246,3 +2251,34 @@ struct DeferredView<Content: View>: View {
 
     var body: some View { make() }
 }
+
+#if os(iOS)
+/// Lays its children out side by side at EQUAL widths, and reports as its
+/// ideal width the widest child's times their number — so a `ViewThatFits`
+/// around it falls back to its next option as soon as one child would have to
+/// shrink, instead of judging the sum of the children's ideal widths.
+private struct EqualWidthRow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
+        let gaps = spacing * CGFloat(subviews.count - 1)
+        let idealWidth = (ideals.map(\.width).max() ?? 0) * CGFloat(subviews.count) + gaps
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? idealWidth
+        let cell = max(0, (width - gaps) / CGFloat(subviews.count))
+        let height = subviews.map { $0.sizeThatFits(ProposedViewSize(width: cell, height: nil)).height }.max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let cell = max(0, (bounds.width - spacing * CGFloat(subviews.count - 1)) / CGFloat(subviews.count))
+        for (index, subview) in subviews.enumerated() {
+            let x = bounds.minX + CGFloat(index) * (cell + spacing)
+            subview.place(at: CGPoint(x: x, y: bounds.minY),
+                          proposal: ProposedViewSize(width: cell, height: bounds.height))
+        }
+    }
+}
+#endif

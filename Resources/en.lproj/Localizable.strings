@@ -909,6 +909,7 @@
 "player.autoSkipped.intro" = "Intro skipped";
 "player.autoSkipped.credits" = "Credits skipped";
 "player.speed" = "Speed";
+"player.tabletop.speed" = "Speed";
 "player.audioDelay" = "Audio delay";
 "player.audio.silentSuffix" = "(silent on Apple)";
 "player.audio.silent.title" = "Silent on Apple";

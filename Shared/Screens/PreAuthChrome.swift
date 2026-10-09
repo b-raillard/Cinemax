@@ -186,21 +186,37 @@ struct PreAuthLanguagePicker: View {
 }
 
 extension View {
-    /// The mobile column of a pre-auth screen, made scrollable on a landscape
-    /// phone (`isShort`, compact height). The column is sized for a portrait
-    /// screen; in ~430 pt of height it overflowed — the header cut at the top,
-    /// the subtitle squeezed onto one truncated line — and an error banner or
-    /// the keyboard made it worse. Portrait phones and iPad keep the
-    /// Spacer-centred column untouched.
-    @ViewBuilder
-    func preAuthShortScroll(_ isShort: Bool) -> some View {
-        if isShort {
-            ScrollView {
-                self.padding(.top, CinemaSpacing.spacing3)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-        } else {
-            self
+    /// The mobile column of a pre-auth screen, ALWAYS in a scroll view, at
+    /// least as tall as the viewport — so a column that fits keeps its
+    /// Spacer-centred layout, and one that does not (landscape phone, keyboard
+    /// up, an error banner, a closed iPhone Duo, large Dynamic Type) scrolls
+    /// instead of overflowing. `isShort` (compact height) only adds the top
+    /// inset the landscape column needs.
+    ///
+    /// Unconditional on purpose (recette 2026-10-08): the previous
+    /// `if isShort { ScrollView { self } } else { self }` wrapped only landscape
+    /// phones — a closed Duo in portrait (regular height) kept a column that
+    /// could not scroll under the keyboard (M3-17) — and switched the view's
+    /// IDENTITY on rotation, destroying the fields' `@FocusState` (M3-07).
+    func preAuthScroll(isShort: Bool) -> some View {
+        modifier(PreAuthScroll(isShort: isShort))
+    }
+}
+
+private struct PreAuthScroll: ViewModifier {
+    let isShort: Bool
+    @State private var viewportHeight: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        ScrollView {
+            content
+                .padding(.top, isShort ? CinemaSpacing.spacing3 : 0)
+                .frame(maxWidth: .infinity, minHeight: viewportHeight)
         }
+        .scrollBounceBehavior(.basedOnSize)
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
     }
 }

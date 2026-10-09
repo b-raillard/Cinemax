@@ -50,6 +50,11 @@ enum CardArtwork {
     case poster
     /// `.backdrop`, 16:9 — the two `WideCard` rails on Home.
     case backdrop
+    /// A 2:3 poster whose URL the host built itself, because it is not the
+    /// item's own primary: Watch History draws an episode with its SERIES'
+    /// poster, and the preview lifted the episode's 16:9 still cropped into
+    /// 2:3 instead (recette 2026-10-08, M1-16).
+    case posterURL(URL?)
 }
 
 /// Destination token for "Go to series". Declared here, alongside the
@@ -242,17 +247,20 @@ private struct CardMenuContent: View {
         // Only computed for the types whose card carries the useful userData —
         // a series card doesn't know its next-up episode's, so its label stays
         // "Play" and "Play from beginning" doesn't show.
+        // The position this menu shows AND plays, read once, here. The
+        // OVERRIDE, not the raw snapshot: marking the item watched in this very
+        // menu must retire "Resume" and "Play from beginning" along with
+        // flipping the label (locked by `CardMenuOptimisticStateTests`). Read
+        // ONCE because the override expires on the clock (20 s): a label drawn
+        // as « Play » and an action re-reading the snapshot after expiry
+        // started a film just marked unwatched at 1:16 (recette 2026-10-08,
+        // M2-16). The actions are handed this value, never re-derive it.
+        let effectiveTicks = CardPlayTargetResolver.effectivePositionTicks(
+            item.positionTicks, isPlayed: item.isPlayed, playedOverride: playedOverride
+        )
         let localResume: Bool = {
             guard item.type == .movie || item.type == .episode else { return false }
-            // The OVERRIDE, not the raw snapshot: marking the item watched in
-            // this very menu must retire "Resume" and "Play from beginning"
-            // along with flipping the label. Locked by
-            // `CardMenuOptimisticStateTests`.
-            return CardPlayTargetResolver.isResumable(
-                positionTicks: item.positionTicks,
-                isPlayed: item.isPlayed,
-                playedOverride: playedOverride
-            )
+            return CardPlayTargetResolver.isResumable(positionTicks: effectiveTicks)
         }()
         // Same presence discipline as the "Play on…" entry below, applied to
         // the LOCAL play entries too: `startPlayback` calls `coordinator?.play`
@@ -270,7 +278,7 @@ private struct CardMenuContent: View {
             if isPlayable {
                 if canPlayLocally {
                     Button {
-                        Task { await startPlayback(fromStart: false) }
+                        Task { await startPlayback(fromStart: false, positionTicks: effectiveTicks) }
                     } label: {
                         Label(
                             // `detail.*` rather than a card-scoped twin: these are
@@ -283,7 +291,7 @@ private struct CardMenuContent: View {
                     }
                     if localResume {
                         Button {
-                            Task { await startPlayback(fromStart: true) }
+                            Task { await startPlayback(fromStart: true, positionTicks: effectiveTicks) }
                         } label: {
                             Label(loc.localized("detail.playFromBeginning"), systemImage: "gobackward")
                         }
@@ -296,7 +304,7 @@ private struct CardMenuContent: View {
                 // open and already has its own empty state (`remote.noTargets.*`).
                 if let cardActions, (cardActions.knownRemoteTargetCount ?? 1) > 0 {
                     Button {
-                        Task { await startRemotePlay() }
+                        Task { await startRemotePlay(positionTicks: effectiveTicks) }
                     } label: {
                         Label(loc.localized("remote.title"), systemImage: "tv.badge.wifi")
                     }
@@ -362,8 +370,8 @@ private struct CardMenuContent: View {
     /// root presenter, exactly what `PlayLink` does); iOS goes through the
     /// `fullScreenCover` hosted by `AppNavigation`, because a menu button
     /// inside a lazy container can't push a `NavigationLink`.
-    private func startPlayback(fromStart: Bool) async {
-        guard let target = await resolvedCardPlayTarget() else { return }
+    private func startPlayback(fromStart: Bool, positionTicks: Int) async {
+        guard let target = await resolvedCardPlayTarget(positionTicks: positionTicks) else { return }
         let startTime = fromStart ? nil : target.startSeconds
         // The screen's own trio when it has one (Home's two rails), else
         // resolve it here — without this, an episode played from Search or
@@ -419,8 +427,8 @@ private struct CardMenuContent: View {
     /// Sends to another session what "Play" would have started here, going
     /// through the same resolver — so a series sends its next-up episode and a
     /// half-watched movie resumes where it left off.
-    private func startRemotePlay() async {
-        guard let target = await resolvedCardPlayTarget() else { return }
+    private func startRemotePlay(positionTicks: Int) async {
+        guard let target = await resolvedCardPlayTarget(positionTicks: positionTicks) else { return }
         cardActions?.present(remotePlay: RemotePlayIntent(
             itemId: target.itemId,
             title: target.title,
@@ -439,20 +447,16 @@ private struct CardMenuContent: View {
     /// via the same resolver so both stay in lockstep with a series' next-up
     /// episode / a movie's resume position. `nil` when there's no signed-in
     /// user or the item carries no id — both callers no-op in that case.
-    private func resolvedCardPlayTarget() async -> CardPlayTarget? {
+    ///
+    /// `positionTicks` is the menu's own effective position, computed when it
+    /// rendered (see `body`) — never re-derived here.
+    private func resolvedCardPlayTarget(positionTicks: Int) async -> CardPlayTarget? {
         guard let userId = appState.currentUserId, let id = item.id else { return nil }
 
         // `CardMenuItem` is already scalars-only, which is what lets this hand
         // straight to a `nonisolated` resolver — the extraction that used to
         // happen here (because `BaseItemDto` is not Sendable) now happens once
         // per card at the modifier's entry point instead of once per call.
-        // Same discipline as the play group's label: an optimistic watched
-        // override still in force outranks the snapshot, so a "Resume" the
-        // user has just invalidated can't hand a mid-film offset to the
-        // player — nor to `startRemotePlay`, which routes through here too.
-        let positionTicks = CardPlayTargetResolver.effectivePositionTicks(
-            item.positionTicks, isPlayed: item.isPlayed, playedOverride: playedOverride
-        )
         return await CardPlayTargetResolver.resolve(
             itemId: id, type: item.type, title: item.name ?? "",
             positionTicks: positionTicks,
@@ -522,6 +526,8 @@ private struct CardArtworkPreview: View {
                 width: Self.previewPosterWidth,
                 height: Self.previewPosterWidth * 3 / 2
             )
+        case .posterURL(let url):
+            previewArtwork(url: url, width: Self.previewPosterWidth, height: Self.previewPosterWidth * 3 / 2)
         case .backdrop:
             previewArtwork(
                 url: item.backdropItemId.map {
