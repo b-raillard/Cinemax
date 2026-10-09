@@ -190,9 +190,13 @@ final class SeekMachine {
 
     /// Accumulate a ±N skip: advance the pending target from the last target
     /// (or the live position if none) and re-arm the debounced commit.
+    ///
+    /// The base is the target still in flight before the live clock: a skip
+    /// made while the previous one settles must add to where the viewer is
+    /// going, not to the stale position libVLC still reports (D05-OBS-1).
     func skip(bySeconds delta: Int) {
         accumulate(toAbsoluteMs: SeekCoalescer.relativeTarget(
-            deltaSeconds: delta, pendingMs: pendingTargetMs, currentMs: currentMs()))
+            deltaSeconds: delta, pendingMs: pendingTargetMs ?? settlingTargetMs, currentMs: currentMs()))
     }
 
     /// Set an absolute pending target, paint it immediately, and (re)arm the

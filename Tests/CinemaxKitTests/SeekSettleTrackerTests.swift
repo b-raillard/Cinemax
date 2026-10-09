@@ -90,3 +90,25 @@ struct SeekSettleTrackerTests {
         #expect(afterReset == false)
     }
 }
+
+/// Recette 2026-10-08, D05-OBS-1 : des ±10 rapprochés perdaient ou inversaient
+/// un pas — un bond de 20 s lu sur une position libVLC périmée comptait comme
+/// un atterrissage.
+@Suite("Seek — un bond n'est pas une progression")
+struct SeekSettleJumpTests {
+    @Test("Un bond avant de plus de 3 s recale la référence sans compter")
+    func forwardJumpRebaselines() {
+        var tracker = SeekSettleTracker()
+        _ = tracker.noteProgress(positionMs: 10_000, thresholdMs: 120)
+        #expect(tracker.noteProgress(positionMs: 30_000, thresholdMs: 120) == false)
+        // La lecture qui suit, elle, compte.
+        #expect(tracker.noteProgress(positionMs: 30_200, thresholdMs: 120) == true)
+    }
+
+    @Test("Une avance de lecture ordinaire (même à 2×) compte toujours")
+    func ordinaryProgressStillCounts() {
+        var tracker = SeekSettleTracker()
+        _ = tracker.noteProgress(positionMs: 10_000, thresholdMs: 120)
+        #expect(tracker.noteProgress(positionMs: 12_000, thresholdMs: 120) == true)
+    }
+}
