@@ -75,7 +75,12 @@ final class VideoPlayerCoordinator {
                 return
             }
             do {
-                let info = try await apiClient.getPlaybackInfo(itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine, mediaSourceId: mediaSourceId)
+                let info = try await apiClient.getPlaybackInfo(
+                    itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
+                    mediaSourceId: CardPlayTargetResolver.sourceToOpen(
+                        itemId: itemId, explicitSourceId: mediaSourceId, startTime: startTime
+                    )
+                )
                 #if DEBUG
                 logger.info("tvOS play: engine=\(engine.rawValue), method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
                 #endif
