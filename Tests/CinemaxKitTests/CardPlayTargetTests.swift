@@ -230,3 +230,26 @@ struct CardPlayTargetTests {
         #expect(api.getNextUpCompletedCount == 1)
     }
 }
+
+/// Recette 2026-10-08, M2-15 : un titre à deux versions repris depuis une carte
+/// ouvrait la 4K classée première à la position du 1080p, y rapportait sa
+/// progression, et Sintel sortait de « Reprendre » après une relance.
+@Suite("Source ouverte par une reprise")
+struct ResumeSourceTests {
+    @Test("Une reprise sans version choisie ouvre la source de l'élément")
+    func resumeOpensTheItemsOwnSource() {
+        #expect(CardPlayTargetResolver.sourceToOpen(itemId: "sintel", explicitSourceId: nil, startTime: 487) == "sintel")
+    }
+
+    @Test("Une version choisie l'emporte toujours")
+    func explicitVersionWins() {
+        #expect(CardPlayTargetResolver.sourceToOpen(itemId: "sintel", explicitSourceId: "4k", startTime: 487) == "4k")
+        #expect(CardPlayTargetResolver.sourceToOpen(itemId: "sintel", explicitSourceId: "4k", startTime: nil) == "4k")
+    }
+
+    @Test("Un départ à 0 laisse le choix au classement")
+    func startFromZeroLeavesTheRankedPick() {
+        #expect(CardPlayTargetResolver.sourceToOpen(itemId: "sintel", explicitSourceId: nil, startTime: nil) == nil)
+        #expect(CardPlayTargetResolver.sourceToOpen(itemId: "sintel", explicitSourceId: nil, startTime: 0) == nil)
+    }
+}
