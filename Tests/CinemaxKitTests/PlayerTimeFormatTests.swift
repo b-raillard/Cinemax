@@ -51,3 +51,16 @@ struct PlayerTimeFormatTests {
         #expect(PlayerTimeFormat.ms(Int32.max) == "596:31:23")
     }
 }
+
+/// Recette 2026-10-08, M4-12 : `String(format: "%g×")` écrivait « 1.5× » dans
+/// une app en allemand.
+@Suite("PlayerTimeFormat — vitesse")
+struct PlayerSpeedFormatTests {
+    @Test("La vitesse suit la langue de l'app, jusqu'à deux décimales")
+    func speedFollowsTheAppLanguage() {
+        #expect(PlayerTimeFormat.speed(1.5, languageCode: "de") == "1,5×")
+        #expect(PlayerTimeFormat.speed(0.75, languageCode: "fr") == "0,75×")
+        #expect(PlayerTimeFormat.speed(1.25, languageCode: "en") == "1.25×")
+        #expect(PlayerTimeFormat.speed(2, languageCode: "fr") == "2×")
+    }
+}

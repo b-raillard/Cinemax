@@ -375,7 +375,9 @@ struct SettingsScreen: View {
     /// iOS only: table mode does not exist on tvOS.
     private var debugTabletopRows: [SettingsToggleRow] {
         #if os(iOS)
-        [.init(id: "debugSimulateTabletop", icon: "laptopcomputer", label: loc.localized("settings.debug.simulateTabletop"),
+        // An iPhone's simulation: on an iPad it stretched the deck (M4-18).
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return [] }
+        return [.init(id: "debugSimulateTabletop", icon: "laptopcomputer", label: loc.localized("settings.debug.simulateTabletop"),
                value: $debugSimulateTabletop, tint: .orange)]
         #else
         []
