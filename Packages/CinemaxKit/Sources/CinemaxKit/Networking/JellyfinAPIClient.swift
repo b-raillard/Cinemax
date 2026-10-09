@@ -544,11 +544,29 @@ public final class JellyfinAPIClient: Sendable {
         #if os(tvOS)
         "Apple TV"
         #elseif os(iOS)
-        "iPhone"
+        Self.iOSDeviceName
         #else
         "Apple Device"
         #endif
     }
+
+    #if os(iOS)
+    /// « iPad » or « iPhone », from the hardware model — every iOS device was
+    /// « iPhone », so an iPad showed as one in « Lire sur… » and the server's
+    /// device list (recette 2026-10-08). Read through `uname` (the simulator
+    /// reports its host, hence `SIMULATOR_MODEL_IDENTIFIER`), not `UIDevice`,
+    /// which is main-actor-isolated and absent from this package's imports;
+    /// `UIDevice.name` (the user's own) needs an entitlement since iOS 16.
+    private static let iOSDeviceName: String = {
+        var info = utsname()
+        uname(&info)
+        let machine = withUnsafeBytes(of: &info.machine) { raw in
+            String(bytes: raw.prefix { $0 != 0 }, encoding: .utf8) ?? ""
+        }
+        let model = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? machine
+        return model.hasPrefix("iPad") ? "iPad" : "iPhone"
+    }()
+    #endif
 
     internal var deviceID: String {
         KeychainService.getOrCreateDeviceID()

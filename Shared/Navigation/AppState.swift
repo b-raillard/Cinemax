@@ -344,6 +344,10 @@ final class AppState {
         // `isASCII` too: `Character.isHexDigit` also answers yes for the
         // FULL-WIDTH digits and letters (`０`…`９`, `ａ`…`ｆ`), which no
         // Jellyfin id contains (audit 2026-09-22, S11).
+        // Never the NIL id: the server resolves it to the root « Media
+        // Folders », opened from a forged link with its mutation buttons
+        // (recette 2026-10-08, M5-14).
+        guard id.contains(where: { $0 != "0" && $0 != "-" }) else { return false }
         if id.count == 32, id.allSatisfy({ $0.isASCII && $0.isHexDigit }) { return true }
         return UUID(uuidString: id) != nil
     }
