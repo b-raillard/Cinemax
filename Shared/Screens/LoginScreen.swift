@@ -250,8 +250,12 @@ struct LoginScreen: View {
     /// the action area differ.
     private var mobileLayout: some View {
         ZStack {
+            // The glow is drawn OVER the background, outside the layout: as a
+            // ZStack child its 500 pt circle set the stack's minimum size and
+            // pushed the column off a landscape phone (recette 2026-10-08,
+            // M3-08/M3-06).
             CinemaColor.surface.ignoresSafeArea()
-            backgroundGlow
+                .overlay { backgroundGlow.allowsHitTesting(false) }
 
             VStack(spacing: 0) {
                 Spacer()
@@ -292,6 +296,7 @@ struct LoginScreen: View {
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 280)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.bottom, isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing8)
 
@@ -352,7 +357,7 @@ struct LoginScreen: View {
                 .frame(maxWidth: formMaxWidth)
                 .padding(.bottom, isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing6)
             }
-            .preAuthShortScroll(isShortLayout)
+            .preAuthScroll(isShort: isShortLayout)
 
             // Success toast
             if viewModel.showSuccess {
