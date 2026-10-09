@@ -69,6 +69,24 @@ targets:
       # Shared by source with BOTH extensions (see the file): the app targets
       # carry it only so its trust decision can be unit-tested.
       - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
+    # Archive guard (recette 2.4.0, P0): archived with the iOS 27.0 SDK, the app
+    # compiles every `#if !NO_HINGE_API` block to nothing — no iPhone Duo
+    # detection, no table mode — and builds without a word (2.4.0, 2026-10-08).
+    # ARCHIVES only (ACTION=install): CI's `xcodebuild build` on Xcode 27.0 is
+    # untouched. `scripts/check-archive-sdk.sh` checks the archive itself
+    # before upload. Drop both once CI moves to 27.1 with the NO_HINGE_API lines.
+    preBuildScripts:
+      - name: Require the iOS 27.1 SDK for archives
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "$ACTION" = "install" ] && [ "$PLATFORM_NAME" = "iphoneos" ]; then
+            major=${SDK_VERSION%%.*}
+            case $SDK_VERSION in *.*) rest=${SDK_VERSION#*.}; minor=${rest%%.*} ;; *) minor=0 ;; esac
+            if [ "$major" -lt 27 ] || { [ "$major" -eq 27 ] && [ "$minor" -lt 1 ]; }; then
+              echo "error: archive built with the iOS $SDK_VERSION SDK: the iPhone Duo code (UIHingeInteraction) needs 27.1 or later. Archive with DEVELOPER_DIR=/Applications/Xcode-27.1-RC.app/Contents/Developer."
+              exit 1
+            fi
+          fi
     dependencies:
       - package: CinemaxKit
       - package: SwiftVLC
