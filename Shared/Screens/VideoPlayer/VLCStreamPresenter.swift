@@ -510,6 +510,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// restarting at 0 (the initial resume-seek has already fired by then, so
     /// `startTime` alone wouldn't re-seek). See `handlePlaybackError`.
     private var lastKnownPositionMs: Int32 = 0
+    /// Where the film ended, set by the `.ended` decision: SwiftVLC zeroes its
+    /// clock on `.stopped`, so the stop report must not read it. Reset by
+    /// `beginOpenLoading()`. See `PlaybackReporter.heldPositionSeconds`.
+    private var endedAtMs: Int64?
     /// Explicit HUD state so single-tap toggling never depends on mid-animation
     /// `alpha` reads.
     private var controlsVisible = true
@@ -920,6 +924,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// episode nav) invalidates "we know a demuxer exists".
     private func beginOpenLoading() {
         mediaConfirmedOpen = false
+        endedAtMs = nil
         // Until this open reaches its `play()`, any `.stopped` is the media it
         // replaces winding down — including the trailing stop of an attempt
         // whose failure is already being retried. See `PlaybackEndPolicy`.
@@ -4437,18 +4442,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         !didSeekToStart && (startTime ?? 0) > 0
     }
 
-    /// The position every report must carry instead of the engine's while the
-    /// engine has not reached it (see `PlaybackReporter.reportableSeconds`).
-    /// Two shapes: a resume seek not sent yet (initial open, wake re-resolve,
-    /// or a mid-film retry once it has re-armed `startTime`), and a re-open
-    /// that has not produced a demuxer yet — between `beginOpenLoading()` and
-    /// the retry's own `startTime` write, the dead engine reads 0 while
-    /// `lastKnownPositionMs` still holds where the film dropped. An episode
-    /// swap zeroes that position, so a new episode reports its own playhead.
+    /// The position every report must carry instead of the engine's (see
+    /// `PlaybackReporter.heldPositionSeconds`, which holds the rule and its
+    /// measured reasons). The resume seek counts as pending until it is sent —
+    /// initial open, wake re-resolve, or a mid-film retry once it has re-armed
+    /// `startTime`. The clock is unreliable before a re-open has produced a
+    /// demuxer (between `beginOpenLoading()` and the retry's own `startTime`
+    /// write the dead engine reads 0) and while a rebuild negotiates (the old
+    /// media winding down reads 0 with `mediaConfirmedOpen` still true). An
+    /// episode swap zeroes `lastKnownPositionMs`, so a new episode reports its
+    /// own playhead.
     private var pendingResumeSecondsForReport: Double? {
-        if startSeekPending { return startTime }
-        if !mediaConfirmedOpen, lastKnownPositionMs > 1000 { return Double(lastKnownPositionMs) / 1000 }
-        return nil
+        PlaybackReporter.heldPositionSeconds(
+            endedAtMs: endedAtMs,
+            pendingResumeSeconds: startSeekPending ? startTime : nil,
+            settlingTargetMs: seeks.settlingTargetMs,
+            engineClockReliable: mediaConfirmedOpen && !reResolve.isNegotiating,
+            lastKnownMs: lastKnownPositionMs
+        )
     }
 
     /// Repaints presence, the waiting overlay and any arrival/departure line.
@@ -5155,6 +5166,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             case .recheck(let delay):
                 scheduleFailedOpenRecheck(after: delay)
             case .ended:
+                endedAtMs = stopPositionMs
                 handlePlaybackEnded()
             case .unexpectedStop:
                 // The stream died mid-film and libVLC reported a CLEAN EOF, so

@@ -133,6 +133,33 @@ final class PlaybackReporter {
         return engineSeconds
     }
 
+    /// The position a VLC report must carry INSTEAD of the engine clock, or
+    /// `nil` when the clock is right — what `VLCStreamPresenter` hands
+    /// `pendingResume`. **A report never reads a clock the engine has reset**
+    /// (recette 2026-10-08): SwiftVLC sets `currentTime` to 0 on `.stopped`, and
+    /// a seek still reads the pre-seek position until it lands. In order:
+    /// - the film ended → where it ended. The stop of a natural end (and of the
+    ///   autoplay relay) left at 0 about 2 runs in 3, and a title skipped to its
+    ///   end from below 90 % stayed unwatched with its resume point erased;
+    /// - a resume seek not sent yet → the resume position;
+    /// - a seek still settling → its target: closing within the second after a
+    ///   resume seek sent the 0.4 s the engine still read;
+    /// - no open media, or a rebuild negotiating (the old media may have
+    ///   stopped, its clock at 0) → the last position actually played, if any.
+    nonisolated static func heldPositionSeconds(
+        endedAtMs: Int64?,
+        pendingResumeSeconds: Double?,
+        settlingTargetMs: Int32?,
+        engineClockReliable: Bool,
+        lastKnownMs: Int32
+    ) -> Double? {
+        if let ended = endedAtMs, ended > 0 { return Double(ended) / 1000 }
+        if let resume = pendingResumeSeconds { return resume }
+        if let target = settlingTargetMs, target > 0 { return Double(target) / 1000 }
+        if !engineClockReliable, lastKnownMs > 1000 { return Double(lastKnownMs) / 1000 }
+        return nil
+    }
+
     /// Converts a playback position in seconds to Jellyfin's 100 ns ticks.
     ///
     /// `Int(seconds * 10_000_000)` **traps** ("Double value cannot be converted
