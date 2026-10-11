@@ -112,6 +112,8 @@ private struct PlaylistCardContextMenu: ViewModifier {
         Button(action: onRename) {
             Label(labels.rename, systemImage: "pencil")
         }
+        // The destructive entry in a group of its own, as on the mock-up.
+        Divider()
         Button(role: .destructive, action: onDelete) {
             Label(labels.delete, systemImage: "trash")
         }

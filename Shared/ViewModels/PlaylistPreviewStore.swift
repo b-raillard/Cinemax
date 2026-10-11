@@ -49,6 +49,9 @@ enum PlaylistCoverStack {
     static let previewLimit = 4
     /// A poster's height, as a fraction of the cover's side (posters are 2:3).
     static let posterHeightFraction: CGFloat = 0.7
+    /// A poster's corner radius, as a fraction of the cover's side — the
+    /// mock-up rounds a poster with the cover's scale, not a fixed token.
+    static let posterCornerFraction: CGFloat = 0.025
 
     /// Where one poster sits, as fractions of the cover's side.
     struct Slot: Equatable {
@@ -87,11 +90,13 @@ enum PlaylistCoverStack {
 
     /// The slots for `count` posters, in DRAWING order (back to front). One
     /// poster stands alone, centred; two add the one on the left; three add
-    /// the one on the right. No poster index ever appears twice.
+    /// the one on the right. No poster index ever appears twice. The whole
+    /// stack sits 2 % below centre (the validated mock-up), the two back
+    /// posters 3 % lower still.
     static func slots(count: Int) -> [Slot] {
-        let front = Slot(posterIndex: 0, rotation: 0, xOffset: 0, yOffset: 0)
-        let left = Slot(posterIndex: 1, rotation: -9, xOffset: -0.15, yOffset: 0.03)
-        let right = Slot(posterIndex: 2, rotation: 9, xOffset: 0.15, yOffset: 0.03)
+        let front = Slot(posterIndex: 0, rotation: 0, xOffset: 0, yOffset: 0.02)
+        let left = Slot(posterIndex: 1, rotation: -9, xOffset: -0.15, yOffset: 0.05)
+        let right = Slot(posterIndex: 2, rotation: 9, xOffset: 0.15, yOffset: 0.05)
         if count <= 0 { return [] }
         if count == 1 { return [front] }
         if count == 2 { return [left, front] }

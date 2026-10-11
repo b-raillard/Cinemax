@@ -98,13 +98,13 @@ struct PlaylistCoverStackTests {
         #expect(one.map(\.posterIndex) == [0])
         #expect(one.first?.rotation == 0)
         #expect(one.first?.xOffset == 0)
-        #expect(one.first?.yOffset == 0)
+        #expect(one.first?.yOffset == 0.02)
 
         let two = PlaylistCoverStack.slots(count: 2)
         #expect(two.map(\.posterIndex) == [1, 0])
         #expect(two.first?.rotation == -9)
         #expect(two.first?.xOffset == -0.15)
-        #expect(two.first?.yOffset == 0.03)
+        #expect(two.first?.yOffset == 0.05)
 
         let three = PlaylistCoverStack.slots(count: 3)
         #expect(three.map(\.posterIndex) == [2, 1, 0])

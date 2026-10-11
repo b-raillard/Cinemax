@@ -50,8 +50,8 @@ struct LibraryFolderBrowseScreen: View {
             .toolbar {
                 if isPlaylist {
                     ToolbarItem(placement: .topBarTrailing) {
-                        // No `.buttonStyle(.glass)`: iOS 26 already draws
-                        // toolbar items in Liquid Glass (toolbar RULE).
+                        // No glass button style of its own: iOS 26 already
+                        // draws toolbar items in Liquid Glass (toolbar RULE).
                         Button {
                             playlistManagement = .create
                         } label: {

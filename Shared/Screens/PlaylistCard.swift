@@ -81,8 +81,8 @@ struct PlaylistCover: View {
         return Color.clear
             .frame(width: height * 2 / 3, height: height)
             .overlay { CinemaLazyImage(url: url(for: placed.poster), fallbackIcon: "film") }
-            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
-            .shadow(color: Color.black.opacity(0.35), radius: side * 0.04, x: 0, y: side * 0.02)
+            .clipShape(RoundedRectangle(cornerRadius: side * PlaylistCoverStack.posterCornerFraction))
+            .shadow(color: Color.black.opacity(0.55), radius: side * 0.04, x: 0, y: side * 0.03)
             .rotationEffect(.degrees(placed.slot.rotation))
             .offset(x: placed.slot.xOffset * side, y: placed.slot.yOffset * side)
     }

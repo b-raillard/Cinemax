@@ -130,10 +130,24 @@ struct PlaylistDetailScreen: View {
                 Task { await viewModel.load(playlistId: playlistId, using: appState) }
             }
         case .empty:
-            EmptyStateView(
-                systemImage: "music.note.list",
-                title: loc.localized("playlist.contents.empty")
-            )
+            // The header alone — its cover says « vide » and its line says
+            // « Cette playlist est vide »: a playlist page keeps its name and
+            // its look even with nothing in it (and tvOS, which has no
+            // navigation bar, keeps a title).
+            ScrollView {
+                #if os(tvOS)
+                header
+                    .padding(.horizontal, CinemaTVLayout.pagePadding)
+                    .padding(.top, CinemaSpacing.spacing5)
+                #else
+                header
+                #endif
+            }
+            #if os(iOS)
+            .refreshable {
+                await viewModel.load(playlistId: playlistId, using: appState)
+            }
+            #endif
         case .loaded:
             list
         }
@@ -286,7 +300,7 @@ struct PlaylistDetailScreen: View {
         #else
         return VStack(spacing: CinemaSpacing.spacing3) {
             PlaylistCover(content: cover, imageBuilder: appState.imageBuilder)
-                .frame(width: 200)
+                .frame(width: 216)
             headerText(alignment: .center)
         }
         .frame(maxWidth: .infinity)
@@ -312,9 +326,10 @@ struct PlaylistDetailScreen: View {
 
     /// « 4 éléments · 6 h 12 min ». A SERIES entry adds nothing to the
     /// duration: its runtime is one episode's, not the show's total (a season
-    /// likewise carries no total of its own).
+    /// likewise carries no total of its own). An empty playlist says so.
     private var headerMeta: String {
         let items = viewModel.items
+        if items.isEmpty { return loc.localized("playlist.contents.empty") }
         var parts = [loc.itemCount(items.count)]
         let ticks = items
             .filter { $0.type != .series && $0.type != .season }
