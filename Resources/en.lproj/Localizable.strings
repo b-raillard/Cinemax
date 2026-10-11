@@ -1204,6 +1204,19 @@
 "playlist.removeItem" = "Remove from playlist";
 "playlist.removeItem.done" = "Removed from playlist";
 
+/* Managing a playlist: rename, delete (owner or administrator only — the card's menu and the page's « … »), create an empty one. */
+"playlist.rename" = "Rename";
+"playlist.rename.title" = "Rename playlist";
+"playlist.rename.done" = "Playlist renamed";
+"playlist.delete" = "Delete playlist";
+"playlist.delete.message" = "“%@” will be deleted from your server, on all your devices. Your films and series stay in your library.";
+"playlist.delete.done" = "Playlist deleted";
+"playlist.delete.failed" = "Couldn't delete this playlist";
+"playlist.manage" = "Playlist options";
+"playlist.create" = "Create";
+"playlist.create.message" = "You'll add titles from their detail page.";
+"playlist.create.done" = "Playlist “%@” created";
+
 /* Home "Upcoming" and "Collections" rows. */
 "settings.homePage.upcoming" = "Upcoming";
 "settings.homePage.collections" = "Collections";
