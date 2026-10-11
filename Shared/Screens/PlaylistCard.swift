@@ -134,3 +134,82 @@ struct PlaylistCard: View {
         }
     }
 }
+
+// MARK: - Wired card
+
+/// A playlist card as a focusable button, wired to the shared
+/// `PlaylistPreviewStore` and carrying the playlist's management menu.
+///
+/// The preview is asked for from the card's own `.task(id:)`: the cards live
+/// in a `LazyHStack` / `LazyVGrid`, so only the playlists actually drawn are
+/// fetched. The task is keyed on the store's `generation`, so a change
+/// anywhere (`.cinemaxPlaylistsChanged`) re-asks once per card on screen while
+/// the cover keeps what it shows.
+///
+/// The menu sits on the `Button` — the focusable view — never on its label
+/// (tvOS focus). Rename / Delete only when the server says the user may
+/// delete it (`canDelete`: owner or administrator); its strings are resolved
+/// HERE and captured, since a `contextMenu`'s content receives no injected
+/// `@Observable` (see `docs/rules/playlists.md`).
+struct PlaylistCardButton: View {
+    let playlist: BaseItemDto
+    let onOpen: () -> Void
+    /// Raised by the menu; the screen's `.playlistManagement` host acts on it.
+    let onManage: (PlaylistManagementRequest) -> Void
+
+    @Environment(AppState.self) private var appState
+    @Environment(LocalizationManager.self) private var loc
+
+    private var store: PlaylistPreviewStore { .shared }
+
+    var body: some View {
+        let preview = playlist.id.flatMap { store.preview(for: $0) }
+        let cover = PlaylistCoverStack.content(preview: preview, fallbackCount: playlist.childCount)
+        let count = preview?.totalCount ?? playlist.childCount
+        let title = Self.displayName(playlist.name, untitled: loc.localized("playlist.untitled"))
+
+        Button(action: onOpen) {
+            PlaylistCard(
+                title: title,
+                countText: count.map { loc.itemCount($0) },
+                cover: cover,
+                imageBuilder: appState.imageBuilder
+            )
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .playlistCardContextMenu(
+            canManage: playlist.canDelete == true && playlist.id != nil,
+            labels: PlaylistMenuLabels(
+                rename: loc.localized("playlist.rename"),
+                delete: loc.localized("playlist.delete")
+            ),
+            preview: PlaylistCover(content: cover, imageBuilder: appState.imageBuilder, cornerRadius: 0),
+            onRename: {
+                if let id = playlist.id { onManage(.rename(id: id, name: playlist.name ?? "")) }
+            },
+            onDelete: {
+                if let id = playlist.id { onManage(.delete(id: id, name: title)) }
+            }
+        )
+        .task(id: PreviewRequest(playlistId: playlist.id, userId: appState.currentUserId, generation: store.generation)) {
+            guard let id = playlist.id, let userId = appState.currentUserId else { return }
+            store.load(playlistId: id, userId: userId, api: appState.apiClient)
+        }
+    }
+
+    /// A playlist's name, or « Playlist sans nom » for a blank one.
+    static func displayName(_ name: String?, untitled: String) -> String {
+        guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return untitled }
+        return name
+    }
+
+    private struct PreviewRequest: Hashable {
+        let playlistId: String?
+        let userId: String?
+        let generation: Int
+    }
+}
