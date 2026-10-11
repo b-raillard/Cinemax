@@ -3,10 +3,15 @@ import CinemaxKit
 import JellyfinAPI
 
 /// Browses a folder-of-folders library — Jellyfin **Collections** (BoxSets) or
-/// **Playlists**. Each card is itself a folder; tapping one drills into its
-/// contents via a scoped `MediaLibraryScreen`, whose own cards then open item
-/// detail. Reached as a library tab from the custom-menu (library mode); see
-/// `MenuConfigStore.libraryTab` → `.libraryFolders`.
+/// **Playlists**. Each card is itself a folder: a collection opens its fiche,
+/// a playlist its own page (`PlaylistDetailScreen`). Reached as a library tab
+/// from the custom-menu (library mode; see `MenuConfigStore.libraryTab` →
+/// `.libraryFolders`) and, for playlists, from Home's « Vos playlists » rail.
+///
+/// Playlists get the playlist card (poster-stack cover, a count line that is
+/// always laid out), its rename / delete menu, a « Nouvelle playlist » action
+/// and a reload on `.cinemaxPlaylistsChanged`. Collections keep the plain
+/// poster grid, unchanged.
 struct LibraryFolderBrowseScreen: View {
     /// Where the folders come from.
     ///
@@ -33,18 +38,34 @@ struct LibraryFolderBrowseScreen: View {
     /// Hoisted out of the `LazyVGrid` so `navigationDestination(item:)` is honored
     /// — SwiftUI silently ignores it inside lazy containers (see CLAUDE.md).
     @State private var selection: FolderSelection?
+    /// Rename / delete / create — screen-level for the same reason: a dialog
+    /// attached to a grid cell dies when the cell is recycled.
+    @State private var playlistManagement: PlaylistManagementRequest?
 
     var body: some View {
         content
             .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                if isPlaylist {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        // No `.buttonStyle(.glass)`: iOS 26 already draws
+                        // toolbar items in Liquid Glass (toolbar RULE).
+                        Button {
+                            playlistManagement = .create
+                        } label: {
+                            Label(loc.localized("playlist.new.label"), systemImage: "plus")
+                        }
+                    }
+                }
+            }
             #endif
             .navigationDestination(item: $selection) { sel in
                 // A playlist is ORDERED, and only `getPlaylistItems` returns it
                 // in order — a `parentId` query cannot.
                 if isPlaylist {
-                    PlaylistDetailScreen(playlistId: sel.id, title: sel.name)
+                    PlaylistDetailScreen(playlistId: sel.id, title: sel.name, canManage: sel.canManage)
                 } else {
                     // A collection gets its own fiche — backdrop, overview,
                     // "Play all", and its members — not a bare scoped grid.
@@ -57,6 +78,13 @@ struct LibraryFolderBrowseScreen: View {
             .task(id: source) {
                 await viewModel.load(source: source, using: appState)
             }
+            // A playlist created, renamed or deleted — here or anywhere else.
+            // `load` keeps the grid on screen while it refetches.
+            .onReceive(NotificationCenter.default.publisher(for: .cinemaxPlaylistsChanged)) { _ in
+                guard isPlaylist else { return }
+                Task { await viewModel.load(source: source, using: appState) }
+            }
+            .playlistManagement($playlistManagement)
     }
 
     @ViewBuilder
@@ -72,10 +100,20 @@ struct LibraryFolderBrowseScreen: View {
                 Task { await viewModel.load(source: source, using: appState) }
             }
         case .empty:
-            EmptyStateView(
-                systemImage: isPlaylist ? "music.note.list" : "rectangle.stack",
-                title: loc.localized(isPlaylist ? "library.playlists.empty" : "library.collections.empty")
-            )
+            if isPlaylist {
+                // Not a dead end: the first playlist can be made right here.
+                EmptyStateView(
+                    systemImage: "music.note.list",
+                    title: loc.localized("library.playlists.empty"),
+                    actionTitle: loc.localized("playlist.new.label"),
+                    onAction: { playlistManagement = .create }
+                )
+            } else {
+                EmptyStateView(
+                    systemImage: "rectangle.stack",
+                    title: loc.localized("library.collections.empty")
+                )
+            }
         case .loaded(let folders):
             grid(folders)
         }
@@ -86,41 +124,33 @@ struct LibraryFolderBrowseScreen: View {
             #if os(tvOS)
             // tvOS renders no navigation bar, so `.navigationTitle` above draws
             // nothing at all — the page arrived untitled. Same in-scroll title
-            // `FavoritesScreen` carries.
-            Text(title)
-                .font(CinemaFont.display(.small))
-                .foregroundStyle(CinemaColor.onSurface)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, gridPadding)
-                .padding(.top, CinemaSpacing.spacing5)
+            // `FavoritesScreen` carries. Playlists put their « Nouvelle
+            // playlist » beside it (iOS has it in the toolbar), in its own
+            // focus section so an up-press from the grid reaches it.
+            HStack(alignment: .center, spacing: CinemaSpacing.spacing4) {
+                Text(title)
+                    .font(CinemaFont.display(.small))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isPlaylist {
+                    CinemaButton(title: loc.localized("playlist.new.label"), style: .ghost, icon: "plus") {
+                        playlistManagement = .create
+                    }
+                    .frame(width: CinemaTVLayout.ctaWidth)
+                }
+            }
+            .focusSection()
+            .padding(.horizontal, gridPadding)
+            .padding(.top, CinemaSpacing.spacing5)
             #endif
 
             LazyVGrid(columns: columns, spacing: gridSpacing) {
                 ForEach(folders, id: \.id) { folder in
-                    Button {
-                        if let id = folder.id {
-                            selection = FolderSelection(id: id, name: folder.name ?? title)
-                        }
-                    } label: {
-                        PosterCard(
-                            title: folder.name ?? "",
-                            imageURL: folder.id.map {
-                                appState.imageBuilder.imageURL(
-                                    itemId: $0, imageType: .primary,
-                                    maxWidth: 300, tag: folder.primaryImageTagValue
-                                )
-                            },
-                            subtitle: folder.childCount.map { loc.itemCount($0) }
-                        )
+                    if isPlaylist {
+                        playlistCard(folder)
+                    } else {
+                        collectionCard(folder)
                     }
-                    #if os(tvOS)
-                    // Every other card grid in the app carries the focus card
-                    // style; this one was the sole `.plain` holdout, so its
-                    // cards neither grew nor brightened under focus.
-                    .buttonStyle(CinemaTVCardButtonStyle())
-                    #else
-                    .buttonStyle(.plain)
-                    #endif
                 }
             }
             .padding(.horizontal, gridPadding)
@@ -137,11 +167,60 @@ struct LibraryFolderBrowseScreen: View {
         #endif
     }
 
+    /// The playlist card: poster-stack cover, a count line that is always laid
+    /// out (cards of one row share a height whatever they know), and the
+    /// playlist's rename / delete menu when the server allows it.
+    private func playlistCard(_ playlist: BaseItemDto) -> some View {
+        PlaylistCardButton(playlist: playlist) {
+            if let id = playlist.id {
+                selection = FolderSelection(
+                    id: id,
+                    name: PlaylistCardButton.displayName(playlist.name, untitled: loc.localized("playlist.untitled")),
+                    canManage: playlist.canDelete == true
+                )
+            }
+        } onManage: { request in
+            playlistManagement = request
+        }
+    }
+
+    private func collectionCard(_ folder: BaseItemDto) -> some View {
+        Button {
+            if let id = folder.id {
+                selection = FolderSelection(id: id, name: folder.name ?? title, canManage: false)
+            }
+        } label: {
+            PosterCard(
+                title: folder.name ?? "",
+                imageURL: folder.id.map {
+                    appState.imageBuilder.imageURL(
+                        itemId: $0, imageType: .primary,
+                        maxWidth: 300, tag: folder.primaryImageTagValue
+                    )
+                },
+                subtitle: folder.childCount.map { loc.itemCount($0) }
+            )
+        }
+        #if os(tvOS)
+        // Every other card grid in the app carries the focus card
+        // style; this one was the sole `.plain` holdout, so its
+        // cards neither grew nor brightened under focus.
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
+    }
+
     private var columns: [GridItem] {
         #if os(tvOS)
         CinemaTVLayout.posterGridColumns
         #else
-        Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
+        // Square playlist covers read best two-up on a phone and four-up on an
+        // iPad; collections keep their three 2:3 posters a row.
+        let count = isPlaylist
+            ? (AdaptiveLayout.form(horizontalSizeClass: sizeClass) == .regular ? 4 : 2)
+            : 3
+        return Array(repeating: GridItem(.flexible(), spacing: 16), count: count)
         #endif
     }
 
@@ -162,10 +241,13 @@ struct LibraryFolderBrowseScreen: View {
     }
 }
 
-/// `navigationDestination(item:)` payload — the tapped folder's id + display name.
+/// `navigationDestination(item:)` payload — the tapped folder's id + display
+/// name, and for a playlist whether its page offers rename / delete (the
+/// server's `canDelete`).
 private struct FolderSelection: Identifiable, Hashable {
     let id: String
     let name: String
+    let canManage: Bool
 }
 
 @MainActor

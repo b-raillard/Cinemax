@@ -40,6 +40,10 @@ struct HomeScreen: View {
     @State private var playlistsDestination: PlaylistsDestination?
     /// One playlist, opened from a card on the rail.
     @State private var playlistDestination: PlaylistDestination?
+    /// Rename / delete raised from a playlist card's menu. Screen-level: the
+    /// cards sit in a `LazyHStack`, where a dialog attached to the cell would
+    /// die with it (see `PlaylistManagementRequest`).
+    @State private var playlistManagement: PlaylistManagementRequest?
     /// "Go to series" target raised from a card's context menu. State lives
     /// here and the destination is hoisted to the screen body: SwiftUI
     /// ignores `navigationDestination(item:)` inside a `LazyHStack`, where the
@@ -207,11 +211,15 @@ struct HomeScreen: View {
         // One playlist's contents, in playlist order and reorderable — its card
         // drills INTO it rather than opening an item detail.
         .navigationDestination(item: $playlistDestination) { target in
-            PlaylistDetailScreen(playlistId: target.id, title: target.name)
+            PlaylistDetailScreen(playlistId: target.id, title: target.name, canManage: target.canManage)
         }
         // "Go to series" from an episode card's context menu. Hoisted to the
         // screen root for the same reason as `favoritesDestination` above.
         .seriesDestinationHost($seriesDestination)
+        // Rename / delete from a playlist card's menu — the ONE modifier the
+        // playlist management adds to this body (the type-checker is at its
+        // limit here, see `enabledRails`).
+        .playlistManagement($playlistManagement)
         .onAppear {
             isVisible = true
             // Consume any refresh deferred while hidden. A pending full reload
@@ -286,6 +294,8 @@ struct HomeScreen: View {
     private struct PlaylistDestination: Identifiable, Hashable {
         let id: String
         let name: String
+        /// The server's `canDelete` — whether the page offers rename / delete.
+        let canManage: Bool
     }
 
     private struct FavoritesDestination: Identifiable, Hashable {
@@ -337,12 +347,16 @@ struct HomeScreen: View {
             item.backdropItemID.map { builder.imageURL(itemId: $0, imageType: .backdrop, maxWidth: 600, tag: item.backdropImageTagValue) }
         })
 
-        // The three newer rails draw the same 2:3 poster at the same width and
-        // were simply never added here, so their cards downloaded on first
-        // scroll while every older row was already warm. « Prochainement »
-        // cards open the SERIES and show its poster like any other card.
+        // The newer rails draw the same 2:3 poster at the same width and were
+        // simply never added here, so their cards downloaded on first scroll
+        // while every older row was already warm. « Prochainement » cards open
+        // the SERIES and show its poster like any other card. Playlists are
+        // NOT here any more: their cover is no longer the server's own image
+        // but a stack of their first entries' posters, which the card fetches
+        // itself (`PlaylistPreviewStore`) — warming the server mosaic would
+        // download images nothing draws.
         prefetcher.prefetch(
-            (viewModel.playlists + viewModel.collections + viewModel.upcomingItems).map { item in
+            (viewModel.collections + viewModel.upcomingItems).map { item in
                 item.id.map { builder.imageURL(itemId: $0, imageType: .primary, maxWidth: 300, tag: item.primaryImageTagValue) }
             }
         )
@@ -1530,11 +1544,11 @@ struct HomeScreen: View {
 
     // MARK: - Playlists
 
-    /// The user's own playlists. Cards drill into the playlist's contents, so
-    /// they deliberately carry no `mediaCardContextMenu`: a playlist is a
-    /// folder, and none of that menu's entries (play, watched, favorite, add to
-    /// a playlist) mean anything on one — the same reason
-    /// `LibraryFolderBrowseScreen` has none either.
+    /// The user's own playlists. Cards drill into the playlist's contents and
+    /// carry the playlist's OWN menu (rename / delete, when the server allows
+    /// it) — never `mediaCardContextMenu`: a playlist is a folder, and none of
+    /// that menu's entries (play, watched, favorite, add to a playlist) mean
+    /// anything on one.
     private var playlistsRow: some View {
         ContentRow(
             title: loc.localized("home.playlists"),
@@ -1548,29 +1562,18 @@ struct HomeScreen: View {
         }
     }
 
-    @ViewBuilder
     private func playlistCard(_ playlist: BaseItemDto) -> some View {
-        Button {
+        PlaylistCardButton(playlist: playlist) {
             if let id = playlist.id {
-                playlistDestination = PlaylistDestination(id: id, name: playlist.name ?? "")
+                playlistDestination = PlaylistDestination(
+                    id: id,
+                    name: PlaylistCardButton.displayName(playlist.name, untitled: loc.localized("playlist.untitled")),
+                    canManage: playlist.canDelete == true
+                )
             }
-        } label: {
-            PosterCard(
-                title: playlist.name ?? loc.localized("playlist.untitled"),
-                imageURL: playlist.id.map {
-                    appState.imageBuilder.imageURL(
-                        itemId: $0, imageType: .primary,
-                        maxWidth: 300, tag: playlist.primaryImageTagValue
-                    )
-                },
-                subtitle: playlist.childCount.map { loc.itemCount($0) }
-            )
+        } onManage: { request in
+            playlistManagement = request
         }
-        #if os(tvOS)
-        .buttonStyle(CinemaTVCardButtonStyle())
-        #else
-        .buttonStyle(.plain)
-        #endif
     }
 
     /// The user's collections. A collection opens its own fiche — the one with
@@ -1616,7 +1619,8 @@ struct HomeScreen: View {
         #endif
         // No `mediaCardContextMenu`: a collection is a folder, and none of that
         // menu's entries — play, watched, favourite, add to a playlist — mean
-        // anything on one. Same reason the playlists rail carries none.
+        // anything on one. Same reason the playlists rail carries none (its
+        // cards have the playlist's own rename / delete menu instead).
     }
 
     /// Episodes the server expects to air soon.
