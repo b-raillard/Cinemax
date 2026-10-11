@@ -10,7 +10,7 @@ This folder is flat, so its features cannot each have a `CLAUDE.md`. **Before ed
 | `MediaDetailRemotePlay`, `RemoteControlListener` | `docs/rules/remote-control.md` |
 | `HomeScreen`, `FavoritesScreen`, `WatchedHistoryScreen`, `SeasonCollectionScreen` | `docs/rules/home.md` (+ the Watch History bullet in `Settings/CLAUDE.md`) |
 | `SearchScreen` | `docs/rules/search.md` |
-| `AddToPlaylistSheet`, `PlaylistDetailScreen`, `LibraryFolderBrowseScreen` | `docs/rules/playlists.md` (+ the Collections / Playlists RULE in `Shared/Navigation/CLAUDE.md`) |
+| `AddToPlaylistSheet`, `PlaylistDetailScreen`, `PlaylistCard`, `PlaylistManagement`, `LibraryFolderBrowseScreen` | `docs/rules/playlists.md` (+ the Collections / Playlists RULE in `Shared/Navigation/CLAUDE.md`) |
 | `WatchTogetherLobby`, `MediaDetailWatchTogether` | `VideoPlayer/CLAUDE.md` → SyncPlay / Watch Together |
 | `PrivacySecurityScreen`, `ProfileScreen`, `LicensesView` | `Settings/CLAUDE.md` |
 | `NativeVideoPresenter`, `VideoPlayerView`, `PlayLink`, `HLSManifestLoader` | `VideoPlayer/CLAUDE.md` |
