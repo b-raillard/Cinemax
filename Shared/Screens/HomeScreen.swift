@@ -1571,9 +1571,11 @@ struct HomeScreen: View {
     private func playlistCard(_ playlist: BaseItemDto) -> some View {
         PlaylistCardButton(playlist: playlist) {
             if let id = playlist.id {
+                // The RAW name: the page shows « Playlist sans nom » for a
+                // blank one itself, and pre-fills « Renommer » with this.
                 playlistDestination = PlaylistDestination(
                     id: id,
-                    name: PlaylistCardButton.displayName(playlist.name, untitled: loc.localized("playlist.untitled")),
+                    name: playlist.name ?? "",
                     canManage: playlist.canDelete == true
                 )
             }

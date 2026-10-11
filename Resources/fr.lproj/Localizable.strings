@@ -1215,7 +1215,7 @@
 "playlist.delete.done" = "Playlist supprimée";
 "playlist.delete.failed" = "Impossible de supprimer cette playlist";
 "playlist.manage" = "Options de la playlist";
-"playlist.manage.denied" = "Seul le propriétaire de cette playlist peut la modifier";
+"playlist.manage.denied" = "Seul le propriétaire de cette playlist (ou un administrateur) peut la modifier";
 "playlist.create" = "Créer";
 "playlist.create.message" = "Tu ajouteras des titres depuis leur fiche.";
 "playlist.create.done" = "Playlist « %@ » créée";

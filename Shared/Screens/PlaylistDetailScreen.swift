@@ -45,7 +45,9 @@ struct PlaylistDetailScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dismiss) private var dismiss
 
-    /// State, not a `let`: a rename made on this page retitles it.
+    /// The playlist's OWN name (possibly blank), as the server has it —
+    /// what « Renommer » pre-fills. State, not a `let`: a rename made on this
+    /// page retitles it. Shown through `displayTitle`.
     @State private var title: String
     @State private var viewModel = PlaylistDetailViewModel()
     @State private var playlistManagement: PlaylistManagementRequest?
@@ -53,6 +55,9 @@ struct PlaylistDetailScreen: View {
     @State private var editMode: EditMode = .inactive
     #endif
 
+    /// `title` is the playlist's raw name (`BaseItemDto.name`), NOT a display
+    /// fallback: a blank one reads « Playlist sans nom » on screen, but the
+    /// rename field must not pre-fill that placeholder as if it were a name.
     init(playlistId: String, title: String, canManage: Bool = false) {
         self.playlistId = playlistId
         self.canManage = canManage
@@ -61,7 +66,7 @@ struct PlaylistDetailScreen: View {
 
     var body: some View {
         content
-            .navigationTitle(title)
+            .navigationTitle(displayTitle)
             #if os(iOS)
             // Inline: the header below carries the name in large type, under
             // the cover — a large title above it would say it twice.
@@ -92,7 +97,7 @@ struct PlaylistDetailScreen: View {
                                 Label(loc.localized("playlist.rename"), systemImage: "pencil")
                             }
                             Button(role: .destructive) {
-                                playlistManagement = .delete(id: playlistId, name: title)
+                                playlistManagement = .delete(id: playlistId, name: displayTitle)
                             } label: {
                                 Label(loc.localized("playlist.delete"), systemImage: "trash")
                             }
@@ -317,9 +322,13 @@ struct PlaylistDetailScreen: View {
         #endif
     }
 
+    private var displayTitle: String {
+        PlaylistCardButton.displayName(title, untitled: loc.localized("playlist.untitled"))
+    }
+
     private func headerText(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: CinemaSpacing.spacing1) {
-            Text(title)
+            Text(displayTitle)
                 .font(CinemaFont.headline(.medium))
                 .foregroundStyle(CinemaColor.onSurface)
                 .multilineTextAlignment(alignment == .center ? .center : .leading)

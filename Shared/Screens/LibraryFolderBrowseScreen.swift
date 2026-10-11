@@ -184,9 +184,10 @@ struct LibraryFolderBrowseScreen: View {
     private func playlistCard(_ playlist: BaseItemDto) -> some View {
         PlaylistCardButton(playlist: playlist) {
             if let id = playlist.id {
+                // The RAW name — see `PlaylistDetailScreen.init`.
                 selection = FolderSelection(
                     id: id,
-                    name: PlaylistCardButton.displayName(playlist.name, untitled: loc.localized("playlist.untitled")),
+                    name: playlist.name ?? "",
                     canManage: playlist.canDelete == true
                 )
             }

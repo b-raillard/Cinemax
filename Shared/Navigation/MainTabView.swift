@@ -349,7 +349,12 @@ struct MainTabView: View {
             // item in the parent folder regardless of how Jellyfin typed it.
             MediaLibraryScreen(itemType: kind, parentId: id, overrideTitle: name)
         case .libraryFolders(let id, let name, let isPlaylist):
-            LibraryFolderBrowseScreen(source: .parent(id), title: name, isPlaylist: isPlaylist)
+            // A Playlists view lists the same playlists `getPlaylists` returns,
+            // but only that read carries `canDelete` (the card's rename /
+            // delete guard) — through `.parent` the tab's cards could not be
+            // managed while Home's « Voir tout » could. Collections keep the
+            // folder read.
+            LibraryFolderBrowseScreen(source: isPlaylist ? .playlists : .parent(id), title: name, isPlaylist: isPlaylist)
         }
     }
 }

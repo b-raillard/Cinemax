@@ -1213,7 +1213,7 @@
 "playlist.delete.done" = "Playlist deleted";
 "playlist.delete.failed" = "Couldn't delete this playlist";
 "playlist.manage" = "Playlist options";
-"playlist.manage.denied" = "Only this playlist's owner can change it";
+"playlist.manage.denied" = "Only this playlist's owner (or an administrator) can change it";
 "playlist.create" = "Create";
 "playlist.create.message" = "You'll add titles from their detail page.";
 "playlist.create.done" = "Playlist “%@” created";

@@ -193,11 +193,15 @@ extension JellyfinAPIClient: PlaylistAPI {
     /// are. The server answers 403 to a user who neither owns the playlist nor
     /// holds an editing share — a refusal, not a session problem, but a 401
     /// here would be a genuine authentication failure, hence the usual hook.
+    ///
+    /// Only the playlist's own `item-` entry is dropped: no cached read lists
+    /// playlists by name (`getPlaylists` and `getPlaylistItems` are uncached),
+    /// and a full `clear()` would refetch every rail of the app for a rename.
     public func renamePlaylist(playlistId: String, name: String) async throws {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         do {
             _ = try await client.send(Paths.updatePlaylist(playlistID: playlistId, UpdatePlaylistDto(name: name)))
-            cache.clear()
+            cache.invalidate(prefix: "item-\(playlistId)-")
         } catch {
             notifyIfUnauthorized(error)
             throw error

@@ -1213,7 +1213,7 @@
 "playlist.delete.done" = "Playlist gelöscht";
 "playlist.delete.failed" = "Playlist konnte nicht gelöscht werden";
 "playlist.manage" = "Playlist-Optionen";
-"playlist.manage.denied" = "Nur der Besitzer dieser Playlist kann sie ändern";
+"playlist.manage.denied" = "Nur der Besitzer dieser Playlist (oder ein Administrator) kann sie ändern";
 "playlist.create" = "Erstellen";
 "playlist.create.message" = "Titel fügst du über ihre Detailseite hinzu.";
 "playlist.create.done" = "Playlist „%@“ erstellt";
