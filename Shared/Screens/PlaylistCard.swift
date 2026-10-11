@@ -41,7 +41,7 @@ struct PlaylistCover: View {
     @ViewBuilder
     private func layers(side: CGFloat) -> some View {
         switch content {
-        case .loading:
+        case .neutral:
             // No icon: a playlist with contents must not flash « vide » while
             // its preview is on its way.
             CinemaColor.surfaceContainerHigh
@@ -159,6 +159,8 @@ struct PlaylistCardButton: View {
 
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
+    /// Part of the preview's scope: a new cap starts the store afresh.
+    @AppStorage(SettingsKey.privacyMaxContentAge) private var maxContentAge: Int = SettingsKey.Default.privacyMaxContentAge
 
     private var store: PlaylistPreviewStore { .shared }
 
@@ -195,9 +197,14 @@ struct PlaylistCardButton: View {
                 if let id = playlist.id { onManage(.delete(id: id, name: title)) }
             }
         )
-        .task(id: PreviewRequest(playlistId: playlist.id, userId: appState.currentUserId, generation: store.generation)) {
+        .task(id: PreviewRequest(
+            playlistId: playlist.id,
+            userId: appState.currentUserId,
+            contentAgeCap: maxContentAge,
+            generation: store.generation
+        )) {
             guard let id = playlist.id, let userId = appState.currentUserId else { return }
-            store.load(playlistId: id, userId: userId, api: appState.apiClient)
+            store.load(playlistId: id, userId: userId, contentAgeCap: maxContentAge, api: appState.apiClient)
         }
     }
 
@@ -210,6 +217,7 @@ struct PlaylistCardButton: View {
     private struct PreviewRequest: Hashable {
         let playlistId: String?
         let userId: String?
+        let contentAgeCap: Int
         let generation: Int
     }
 }

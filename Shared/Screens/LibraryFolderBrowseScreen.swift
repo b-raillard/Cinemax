@@ -153,6 +153,14 @@ struct LibraryFolderBrowseScreen: View {
                     }
                 }
             }
+            #if os(tvOS)
+            // A section of its own, so Down from the header's « Nouvelle
+            // playlist » always enters the grid: the focus engine only moves
+            // to what lies in the button's path, and with fewer than six
+            // playlists nothing sits under a trailing 240 pt button — focus
+            // was trapped between it and the tab bar.
+            .focusSection()
+            #endif
             .padding(.horizontal, gridPadding)
             .padding(.top, CinemaSpacing.spacing3)
         }
@@ -162,6 +170,9 @@ struct LibraryFolderBrowseScreen: View {
         // Pull-to-refresh has no gesture on a remote — the modifier is inert
         // on tvOS and only reads as if a refresh were available.
         .refreshable {
+            // A change made on another device: the covers and counts are
+            // re-asked too, not just the list.
+            if isPlaylist { PlaylistPreviewStore.shared.invalidate() }
             await viewModel.load(source: source, using: appState)
         }
         #endif
@@ -261,8 +272,14 @@ final class FolderBrowseViewModel {
     }
 
     private(set) var state: State = .loading
+    /// Three callers can overlap (`.task`, pull-to-refresh, and the
+    /// `.cinemaxPlaylistsChanged` reload): only the newest load may write, or
+    /// a slower, older answer could bring back a playlist just deleted.
+    @ObservationIgnored private var loadGeneration = 0
 
     func load(source: LibraryFolderBrowseScreen.Source, using appState: AppState) async {
+        loadGeneration += 1
+        let generation = loadGeneration
         guard let userId = appState.currentUserId else {
             state = .failed
             return
@@ -284,8 +301,10 @@ final class FolderBrowseViewModel {
             case .playlists:
                 folders = try await appState.apiClient.getPlaylists(userId: userId)
             }
+            guard generation == loadGeneration else { return }
             state = folders.isEmpty ? .empty : .loaded(folders)
         } catch {
+            guard generation == loadGeneration else { return }
             state = .failed
         }
     }

@@ -31,7 +31,7 @@ enum PlaylistReorder {
 /// loaded (no extra request), its name and « N éléments · durée ». When the
 /// server allows it (`canManage`, its `canDelete`), the iOS toolbar's « … »
 /// renames or deletes the playlist; a deletion pops the page. tvOS manages
-/// from the cards (long press), so its header stays unfocusable.
+/// from the cards (long press); its header is only a focus stop.
 struct PlaylistDetailScreen: View {
     let playlistId: String
     /// Whether the page offers rename / delete — the server's `canDelete`,
@@ -212,8 +212,8 @@ struct PlaylistDetailScreen: View {
     /// remote, and enough to reach any arrangement.
     private var list: some View {
         ScrollView {
-            // Unfocusable: tvOS manages a playlist from its card's long press,
-            // so the page's only focusable rows are its entries.
+            // tvOS manages a playlist from its card's long press; the header
+            // only offers a focus stop above the entries (see `header`).
             header
                 .padding(.horizontal, CinemaTVLayout.pagePadding)
                 .padding(.top, CinemaSpacing.spacing5)
@@ -293,6 +293,14 @@ struct PlaylistDetailScreen: View {
         return HStack(alignment: .center, spacing: CinemaSpacing.spacing8) {
             PlaylistCover(content: cover, imageBuilder: appState.imageBuilder)
                 .frame(width: CinemaTVLayout.playlistCoverSide)
+                // Focusable — it does nothing — so the page has a top row,
+                // as `PersonDetailScreen`'s portrait: an Up press from the
+                // first entry lands here (and scrolls the header back into
+                // view) instead of escaping into the tab bar, and an EMPTY
+                // playlist still has something to focus.
+                .cinemaFocus()
+                .focusable()
+                .focusEffectDisabled()
             headerText(alignment: .leading)
             Spacer(minLength: 0)
         }

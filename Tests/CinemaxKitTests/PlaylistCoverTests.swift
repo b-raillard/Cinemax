@@ -117,14 +117,19 @@ struct PlaylistCoverStackTests {
 
     /// Le fond neutre ne doit jamais faire flasher « vide » sur une playlist
     /// qui a du contenu : l'icône vide n'apparaît que quand c'est SU.
-    @Test("Chargement, vide ou affiches")
+    @Test("Neutre, vide ou affiches")
     func coverContent() {
-        #expect(PlaylistCoverStack.content(preview: nil, fallbackCount: nil) == .loading)
-        #expect(PlaylistCoverStack.content(preview: nil, fallbackCount: 4) == .loading)
+        #expect(PlaylistCoverStack.content(preview: nil, fallbackCount: nil) == .neutral)
+        #expect(PlaylistCoverStack.content(preview: nil, fallbackCount: 4) == .neutral)
         #expect(PlaylistCoverStack.content(preview: nil, fallbackCount: 0) == .empty)
 
         let none = PlaylistPreview(posters: [], totalCount: 0)
         #expect(PlaylistCoverStack.content(preview: none, fallbackCount: 4) == .empty)
+
+        // Des éléments, mais aucun dessinable (tous masqués par la limite
+        // d'âge) : pas d'icône « vide » à côté de « 5 éléments ».
+        let hidden = PlaylistPreview(posters: [], totalCount: 5)
+        #expect(PlaylistCoverStack.content(preview: hidden, fallbackCount: 5) == .neutral)
 
         let poster = PlaylistCoverPoster(itemId: "m1", tag: nil)
         let some = PlaylistPreview(posters: [poster], totalCount: 1)
@@ -235,7 +240,7 @@ struct PlaylistPreviewStoreTests {
         api.playlistPreviewGate = gate
         let (store, _) = makeStore()
         let older = store.load(playlistId: "p1", userId: "u1", api: api)
-        #expect(await eventually { api.playlistPreviewRequests.count == 1 })
+        #expect(await eventually { api.playlistPreviewRequestCount == 1 })
 
         api.playlistPreviewGate = nil
         api.stubbedPlaylistPreviews["p1"] = page(["m1", "m2"], total: 3)
@@ -263,6 +268,22 @@ struct PlaylistPreviewStoreTests {
         #expect(store.preview(for: "p1") == nil)
         await other?.value
         #expect(store.preview(for: "p1")?.posters.map(\.itemId) == ["m9"])
+    }
+
+    /// Une affiche que la nouvelle limite masque ne doit pas rester affichée
+    /// « en attendant » — encore moins si le rechargement échoue.
+    @Test("Une nouvelle limite d'âge repart de zéro")
+    func aNewAgeCapStartsAfresh() async {
+        let api = MockAPIClient()
+        api.stubbedPlaylistPreviews["p1"] = page(["m1"], total: 2)
+        let (store, _) = makeStore()
+        await store.load(playlistId: "p1", userId: "u1", contentAgeCap: 0, api: api)?.value
+        #expect(store.preview(for: "p1") != nil)
+
+        api.shouldFailPlaylistPreview = true
+        await store.load(playlistId: "p1", userId: "u1", contentAgeCap: 12, api: api)?.value
+        #expect(store.preview(for: "p1") == nil)
+        #expect(api.playlistPreviewRequests.count == 2)
     }
 
     @Test("Une playlist sans nom affiche « Playlist sans nom »")

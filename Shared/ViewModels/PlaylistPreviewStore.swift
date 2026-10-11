@@ -24,9 +24,11 @@ struct PlaylistPreview: Equatable, Sendable {
 
 /// What a cover draws.
 enum PlaylistCoverContent: Equatable {
-    /// Nothing known yet: a neutral ground, deliberately WITHOUT the empty
-    /// icon, so a playlist that has contents never flashes « vide » first.
-    case loading
+    /// A neutral ground, deliberately WITHOUT the empty icon: nothing known
+    /// yet (a playlist with contents must never flash « vide » first), or
+    /// contents known but none of them drawable (every fetched entry hidden
+    /// by the age cap, or id-less) — the count beside it says it is not empty.
+    case neutral
     /// Known to hold nothing drawable.
     case empty
     /// Front first, 1 to 3 posters.
@@ -43,10 +45,13 @@ enum PlaylistCoverContent: Equatable {
 enum PlaylistCoverStack {
     /// The most posters a cover fans out.
     static let maxPosters = 3
-    /// How many entries a preview asks for: one more than `maxPosters`, so a
-    /// duplicate among the first three (the same film twice, two episodes of
-    /// one show) still leaves a chance at a third distinct poster.
-    static let previewLimit = 4
+    /// How many entries a preview asks for. Far more than `maxPosters`
+    /// because Jellyfin stores a series added to a playlist as ALL its
+    /// episodes: a playlist opening on a show starts with a run of its
+    /// episodes, which collapse to one poster, and four entries drew a single
+    /// poster on a three-title playlist. Cheap: no userData, the primary tag
+    /// only.
+    static let previewLimit = 24
     /// A poster's height, as a fraction of the cover's side (posters are 2:3).
     static let posterHeightFraction: CGFloat = 0.7
     /// A poster's corner radius, as a fraction of the cover's side — the
@@ -122,12 +127,15 @@ enum PlaylistCoverStack {
 
     /// What a card's cover draws, from what is known so far. `fallbackCount`
     /// is `getPlaylists`' `childCount`: a playlist it already reports empty
-    /// shows its empty cover at once instead of waiting on a preview.
+    /// shows its empty cover at once instead of waiting on a preview. A
+    /// preview with entries but no drawable poster stays neutral: the « vide »
+    /// icon beside « 5 éléments » would contradict itself.
     static func content(preview: PlaylistPreview?, fallbackCount: Int?) -> PlaylistCoverContent {
         if let preview {
-            return preview.posters.isEmpty ? .empty : .posters(preview.posters)
+            if !preview.posters.isEmpty { return .posters(preview.posters) }
+            return preview.totalCount > 0 ? .neutral : .empty
         }
-        return fallbackCount == 0 ? .empty : .loading
+        return fallbackCount == 0 ? .empty : .neutral
     }
 }
 
@@ -165,10 +173,12 @@ final class PlaylistPreviewStore {
     /// The generation each held preview was fetched in — current means fresh.
     @ObservationIgnored private var loadedGeneration: [String: Int] = [:]
     @ObservationIgnored private var inFlight: [String: InFlight] = [:]
-    /// Whose previews these are. Another account (a user switch, another
-    /// server) starts from nothing: what a playlist shows can depend on the
-    /// viewer's parental limit.
-    @ObservationIgnored private var ownerUserId: String?
+    /// Whose previews these are, and under which content-age cap. Another
+    /// account (a user switch, another server) or another cap starts from
+    /// nothing: what a cover may show depends on both, and keeping the old
+    /// previews "until the refetch lands" would leave a poster the new cap
+    /// hides on screen — for good, if that refetch fails.
+    @ObservationIgnored private var owner: Owner?
     /// Bumped by that reset, so an answer for the previous account is dropped.
     @ObservationIgnored private var epoch = 0
     @ObservationIgnored private var observerTokens: [any NSObjectProtocol] = []
@@ -176,6 +186,11 @@ final class PlaylistPreviewStore {
     private struct InFlight {
         let generation: Int
         let task: Task<Void, Never>
+    }
+
+    private struct Owner: Equatable {
+        let userId: String
+        let contentAgeCap: Int
     }
 
     /// `notificationCenter` is injectable so a test can post without touching
@@ -200,10 +215,13 @@ final class PlaylistPreviewStore {
 
     /// Starts fetching `playlistId`'s preview unless the one held is current
     /// or a fetch for this generation is already running. Returns the running
-    /// fetch — a test awaits it; a card never does.
+    /// fetch — a test awaits it; a card never does. `contentAgeCap` is the
+    /// Privacy & Security ceiling (`SettingsKey.privacyMaxContentAge`), which
+    /// the client applies to what the preview returns.
     @discardableResult
-    func load(playlistId: String, userId: String, api: any PlaylistAPI) -> Task<Void, Never>? {
-        if userId != ownerUserId { reset(for: userId) }
+    func load(playlistId: String, userId: String, contentAgeCap: Int = 0, api: any PlaylistAPI) -> Task<Void, Never>? {
+        let requester = Owner(userId: userId, contentAgeCap: contentAgeCap)
+        if requester != owner { reset(for: requester) }
         if loadedGeneration[playlistId] == generation { return nil }
         if let running = inFlight[playlistId], running.generation == generation { return running.task }
 
@@ -222,7 +240,10 @@ final class PlaylistPreviewStore {
             } catch {
                 // The card keeps what it shows (a previous preview, or its
                 // `childCount` and the neutral ground) — a cover is decoration.
-                logger.warning("Playlist preview failed: \(error.localizedDescription, privacy: .public)")
+                // A reset (another account) cancels its fetches: not a failure.
+                if !Task.isCancelled {
+                    logger.warning("Playlist preview failed: \(error.localizedDescription, privacy: .public)")
+                }
             }
             self?.finish(playlistId: playlistId, generation: requestGeneration, epoch: requestEpoch, preview: preview)
         }
@@ -249,8 +270,8 @@ final class PlaylistPreviewStore {
         if previews[playlistId] != preview { previews[playlistId] = preview }
     }
 
-    private func reset(for userId: String) {
-        ownerUserId = userId
+    private func reset(for newOwner: Owner) {
+        owner = newOwner
         epoch += 1
         for running in inFlight.values { running.task.cancel() }
         inFlight = [:]

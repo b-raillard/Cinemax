@@ -152,8 +152,8 @@ private struct PlaylistManagementHost: ViewModifier {
         content
             .onChange(of: request) { _, newValue in
                 guard let newValue else { return }
-                begin(newValue)
                 request = nil
+                Task { await begin(newValue) }
             }
             .confirmationDialog(
                 loc.localized("playlist.delete"),
@@ -198,17 +198,35 @@ private struct PlaylistManagementHost: ViewModifier {
             }
     }
 
-    private func begin(_ request: PlaylistManagementRequest) {
+    private func begin(_ request: PlaylistManagementRequest) async {
         switch request {
         case let .rename(id, name):
+            guard await mayManage(id) else { return }
             nameText = name
             renaming = Target(id: id, name: name)
         case let .delete(id, name):
+            guard await mayManage(id) else { return }
             deleting = Target(id: id, name: name)
         case .create:
             nameText = ""
             isCreating = true
         }
+    }
+
+    /// The card and the page offer management on the LIST read's `canDelete`,
+    /// and on Jellyfin 12.0 that read reports `true` for every playlist the
+    /// user can see: its `/Items` path checks `CanDelete(user, folders)`,
+    /// which a playlist does not override, so `Playlist.CanDelete(User)`
+    /// (owner or administrator) is skipped. The single-item read applies the
+    /// real rule on every version (10.9 → 12.x), so it is asked once, before
+    /// opening a dialog the server would refuse. No answer (offline, an
+    /// error) lets the dialog open: the server still decides.
+    private func mayManage(_ playlistId: String) async -> Bool {
+        guard let userId = appState.currentUserId,
+              let item = try? await appState.apiClient.getItem(userId: userId, itemId: playlistId),
+              item.canDelete == false else { return true }
+        toast.error(loc.localized("playlist.manage.denied"))
+        return false
     }
 
     private func delete(_ target: Target) async {
@@ -257,8 +275,8 @@ private struct PlaylistManagementHost: ViewModifier {
         isBusy = true
         defer { isBusy = false }
         do {
-            // An empty seed: `createPlaylist` passes `mediaType: .video`,
-            // which is what lets Jellyfin create a playlist with no items.
+            // An empty seed: `createPlaylist` passes `mediaType: .video`, without
+            // which Jellyfin would quietly make an AUDIO playlist of it.
             _ = try await appState.apiClient.createPlaylist(name: name, itemIds: [], userId: userId)
             NotificationCenter.default.post(name: .cinemaxPlaylistsChanged, object: nil)
             toast.success(loc.localized("playlist.create.done", name))

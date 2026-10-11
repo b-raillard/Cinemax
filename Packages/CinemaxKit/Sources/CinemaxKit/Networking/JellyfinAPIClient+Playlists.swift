@@ -58,7 +58,8 @@ extension JellyfinAPIClient: PlaylistAPI {
     /// Creates a playlist seeded with `itemIds` and returns the new playlist id.
     ///
     /// `mediaType: .video` matches what this app can play; without it Jellyfin
-    /// infers the type from the seed items, which fails for an empty seed.
+    /// infers the type from the seed items, and an EMPTY seed silently becomes
+    /// an **Audio** playlist (10.9 → 12.x `PlaylistManager.CreatePlaylist`).
     public func createPlaylist(name: String, itemIds: [String], userId: String) async throws -> String {
         guard let client = getClient() else { throw JellyfinError.notConnected }
         let body = CreatePlaylistDto(

@@ -599,6 +599,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedPlaylistPreviews: [String: PlaylistPreviewPage] = [:]
     /// Every `getPlaylistPreview` call's playlist id, in order.
     private(set) var playlistPreviewRequests: [String] = []
+    /// Locked read, for polling while a fetch may still be appending.
+    var playlistPreviewRequestCount: Int { recordLock.withLock { playlistPreviewRequests.count } }
     /// When set, every preview read waits on it before answering — holds a
     /// fetch "in flight" without guessing its duration with a sleep. The
     /// answer is read BEFORE the wait, so a held fetch returns what the server

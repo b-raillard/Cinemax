@@ -434,7 +434,12 @@ struct HomeScreen: View {
             .padding(.top, CinemaSpacing.spacing20)
         }
         #if os(iOS)
-        .refreshable { await viewModel.reload(using: appState) }
+        .refreshable {
+            // Playlist covers / counts too — a pull-to-refresh is how a change
+            // made on another device reaches this screen.
+            PlaylistPreviewStore.shared.invalidate()
+            await viewModel.reload(using: appState)
+        }
         #endif
     }
 
@@ -581,6 +586,7 @@ struct HomeScreen: View {
             }
             #if os(iOS)
             .refreshable {
+                PlaylistPreviewStore.shared.invalidate()
                 await viewModel.reload(using: appState)
             }
             #endif
