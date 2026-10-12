@@ -125,3 +125,31 @@ struct SavedAccountRegistryTests {
         #expect(ServerRegistry.accountKey(serverId: "S1", userId: "A") == "S1|A")
     }
 }
+
+// MARK: - Revocation of ONE token
+
+/// `DELETE /Devices?id=` needed an administrator and revoked EVERY token of the
+/// device id (all users): a non-admin's logout never revoked anything, and with
+/// several remembered accounts an admin's logout would have killed them all.
+@Suite("Révocation de session — un seul jeton")
+struct SessionRevokeRequestTests {
+
+    @Test("POST /Sessions/Logout, authentifié par le jeton révoqué, sans identifiant d'appareil en query")
+    func logoutRequest() throws {
+        let request = try #require(ServerSessionRevoker.makeRequest(
+            url: URL(string: "https://maison.local/jellyfin")!,
+            accessToken: "tokB",
+            deviceId: "dev-1"
+        ))
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://maison.local/jellyfin/Sessions/Logout")
+        let auth = try #require(request.value(forHTTPHeaderField: "Authorization"))
+        #expect(auth.contains("Token=tokB"))
+        #expect(auth.contains("DeviceId=dev-1"))
+    }
+
+    @Test("Rien à révoquer sans jeton")
+    func noToken() {
+        #expect(ServerSessionRevoker.makeRequest(url: URL(string: "https://maison.local")!, accessToken: "", deviceId: "dev-1") == nil)
+    }
+}
