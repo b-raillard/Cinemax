@@ -648,3 +648,51 @@ struct MultiAccountSignInTests {
         #expect(AccountSettingsStore.load(for: "S1|kid", defaults: defaults) == nil)
     }
 }
+
+// MARK: - Server switch parity (security review)
+
+@MainActor
+@Suite("Changement de serveur et codes")
+struct ServerSwitchLockTests {
+
+    private func makeApp(defaults: UserDefaults, locked: Set<String>, parental: Bool) -> (AppState, ServerEntry) {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let a = ServerEntry(id: "S1", name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
+                            accessToken: "tokKid", userId: "kid", username: "Enfants")
+        let b = ServerEntry(id: "S2", name: "Chalet", url: ServerURLNormalizer.normalize("https://chalet.local")!,
+                            accessToken: "tokP", userId: "parent", username: "Parent")
+        let kc = MockKeychain()
+        kc.savedServers = [a, b]
+        kc.savedActiveServerId = "S1"
+        let app = AppState(apiClient: api, keychain: kc)
+        app.settingsDefaults = defaults
+        app.sessionValidator = { _, _ in .valid }
+        app.accountLockProvider = { locked.contains($0) }
+        app.parentalLockProvider = { parental }
+        app.loadServersFromKeychain()
+        app.currentUserId = "kid"
+        app.isAuthenticated = true
+        return (app, b)
+    }
+
+    @Test("Un compte protégé sur un autre serveur exige son code")
+    func protectedAccountOnOtherServer() async {
+        let (app, b) = makeApp(defaults: .isolatedForTesting(), locked: ["S2|parent"], parental: false)
+        #expect(await app.switchTo(b) == .locked)
+        #expect(app.activeServerId == "S1")
+        #expect(await app.switchTo(b, unlocked: true) == .commit)
+        #expect(app.activeServerId == "S2")
+    }
+
+    @Test("Code parental actif : un compte moins bridé sur un autre serveur exige un code")
+    func lessRestrictedOnOtherServer() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 0, accentColor: "green", darkMode: true),
+                                  for: "S2|parent", defaults: defaults)
+        let (app, b) = makeApp(defaults: defaults, locked: [], parental: true)
+        #expect(await app.switchTo(b) == .locked)
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+    }
+}

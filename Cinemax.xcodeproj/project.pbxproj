@@ -103,6 +103,7 @@
 		237FC704F4298C6323A1AAD0 /* AppStoreLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D0C06E8FC2D6FCF5591A7F /* AppStoreLookup.swift */; };
 		23F08C5E6904A507BF0E2C93 /* PosterPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD74C7044AE82EE6BA3DDAB0 /* PosterPrefetcher.swift */; };
 		2590035AB6AEC75B266B4C1F /* PlaybackEndDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9AFFAB5E7CBF61850F4909B /* PlaybackEndDecision.swift */; };
+		259651448F09EF35B7C61B8A /* AccountUnlockSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245AC9290B5C84E45108BE92 /* AccountUnlockSheet.swift */; };
 		268B258004F73D3E2701E314 /* FavoritesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06DF659E53C9DB219FB06A7F /* FavoritesScreen.swift */; };
 		26FE32C915B9FA41BD2760A3 /* AdminCatalogScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B4D9D3C1CDC4B248270077 /* AdminCatalogScreen.swift */; };
 		276021C21CB270437185ACF2 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1B61BF8E4B4D7BFFEEDF40 /* MainTabView.swift */; };
@@ -649,6 +650,7 @@
 		E01BB78AC2D8F4002A09E253 /* AdminDevicesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410E2B368E14B0EE19701528 /* AdminDevicesScreen.swift */; };
 		E0CC38869663ED812B2CA030 /* LibrarySearchRankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57A1FF6A68786670C9AAFFA /* LibrarySearchRankerTests.swift */; };
 		E0F705B2946022AA8BDF92A5 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 8D7F6852C615693ED7D592BA /* SwiftVLC */; };
+		E15E2925AE4F5DBA5862BD5D /* AccountUnlockSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245AC9290B5C84E45108BE92 /* AccountUnlockSheet.swift */; };
 		E283DEC1BE44B3671AEF1E74 /* CardActionPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C683E40EA41CFFB115C0AD25 /* CardActionPresenter.swift */; };
 		E33B8B9DA68A84DFEE1E03EF /* TVBackNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F3FB6BF53E15B2FC37932C6 /* TVBackNavigationTests.swift */; };
 		E37C4E1A902805EAE8650D5C /* SeasonalPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4488B1840E82BB0065E338E1 /* SeasonalPaletteTests.swift */; };
@@ -851,6 +853,7 @@
 		21BABF86A35C84258A60B23F /* ReviewPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptTests.swift; sourceTree = "<group>"; };
 		222727514B548DD4F92249FC /* SeasonalAmbianceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalAmbianceTests.swift; sourceTree = "<group>"; };
 		223258AFA0F2668369423520 /* CinemaxKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxKitTests.swift; sourceTree = "<group>"; };
+		245AC9290B5C84E45108BE92 /* AccountUnlockSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountUnlockSheet.swift; sourceTree = "<group>"; };
 		2476F64981986D065EC567DD /* DiagnosticsUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsUploader.swift; sourceTree = "<group>"; };
 		2572067930833AF233E9A6DB /* AccountSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsStore.swift; sourceTree = "<group>"; };
 		25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminUserDetailViewModel.swift; sourceTree = "<group>"; };
@@ -1852,6 +1855,7 @@
 				C7C5D4D792DD5DF3A38B3DD1 /* AccountManageView.swift */,
 				3C5DA725DEAC59113CD1C8BF /* AccountSwitcherView.swift */,
 				636102BE1235D1931CB0B026 /* AccountSwitchFlow.swift */,
+				245AC9290B5C84E45108BE92 /* AccountUnlockSheet.swift */,
 				2B2FB3A383399267B4735B67 /* WhoIsWatchingScreen.swift */,
 			);
 			path = Accounts;
@@ -2358,6 +2362,7 @@
 				409362A6EC91C09AD6A89471 /* AccountSettingsStore.swift in Sources */,
 				A72B043829E3BEB2A34F57D3 /* AccountSwitchFlow.swift in Sources */,
 				46F41E533A09F61A4C94EAC8 /* AccountSwitcherView.swift in Sources */,
+				259651448F09EF35B7C61B8A /* AccountUnlockSheet.swift in Sources */,
 				28607C1A48373994CB677989 /* AdaptiveLayout.swift in Sources */,
 				7B95F6AD4D4FADB0685A8A81 /* AddToPlaylistSheet.swift in Sources */,
 				2C598521E34C029BD36C4A3C /* AdminActivityScreen.swift in Sources */,
@@ -2734,6 +2739,7 @@
 				8003A34BD456561198A70B9E /* AccountSettingsStore.swift in Sources */,
 				7EACAC847E87AA5015C136A5 /* AccountSwitchFlow.swift in Sources */,
 				1835208B4EA52C623C4E2C79 /* AccountSwitcherView.swift in Sources */,
+				E15E2925AE4F5DBA5862BD5D /* AccountUnlockSheet.swift in Sources */,
 				A8C1C7C4A4E243D4F959D865 /* AdaptiveLayout.swift in Sources */,
 				5268C36D803C151025ABFF22 /* AddToPlaylistSheet.swift in Sources */,
 				648763482602FDCD12A8DC88 /* AdminActivityScreen.swift in Sources */,

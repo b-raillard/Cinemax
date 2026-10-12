@@ -38,7 +38,7 @@ struct AppNavigation: View {
     /// its `isUnlocked` flag is session state — a scene-event recreation would
     /// either re-open a gate the parent had closed or drop an unlock they are
     /// mid-way through using. See the RULE on `ParentalLockController`.
-    private static let sharedParentalLock = ParentalLockController()
+    static let sharedParentalLock = ParentalLockController()
     /// Seasonal themes — a process singleton like the stores above, so a
     /// scene-struct recreation never re-reads the defaults.
     private static let sharedSeasonal = SeasonalThemeController()
@@ -52,7 +52,7 @@ struct AppNavigation: View {
     private static let sharedEarlyAdopter = EarlyAdopterService()
     /// The per-account codes (multi-account) — a process singleton: it caches
     /// what it has read from the Keychain, per account.
-    private static let sharedAccountLocks = AccountLockStore()
+    static let sharedAccountLocks = AccountLockStore()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()

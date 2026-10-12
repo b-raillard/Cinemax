@@ -15,6 +15,11 @@ public enum SwitchDecision: Sendable, Equatable {
     case unreachable
     /// Token validated → commit the switch.
     case commit
+    /// The target's account carries a code — its own, or the parental one
+    /// because it is less restricted than the current account (multi-account).
+    /// Nothing was dialled or changed; ask the code, then switch with
+    /// `unlocked: true`.
+    case locked
 }
 
 /// Pure decision logic for the multi-server registry.

@@ -251,6 +251,9 @@ struct TVAccountManageScreen: View {
     @State private var entry = ""
     @State private var message: String?
     @State private var removing: SavedAccount?
+    /// Protected accounts (other than the current one) whose code was typed in
+    /// this screen: their rows unlock, as on iOS (`AccountDetailView`).
+    @State private var openedKeys: Set<String> = []
     @FocusState private var focused: String?
 
     var body: some View {
@@ -328,6 +331,9 @@ struct TVAccountManageScreen: View {
         let hasCode = locks.hasLock(key)
         let age = appState.ageCap(forAccountKey: key)
         let option = ParentalAgeOption(rawValue: age) ?? .all
+        // Same rule as iOS: another account's protected settings (its code,
+        // age cap, removal) open only with ITS code (security review parity).
+        let mustOpen = hasCode && account.userId != appState.currentUserId && !openedKeys.contains(key)
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             HStack(spacing: CinemaSpacing.spacing3) {
                 UserAvatar(userId: account.userId, name: account.username, primaryImageTag: nil, size: 60)
@@ -335,12 +341,17 @@ struct TVAccountManageScreen: View {
                     .font(CinemaFont.headline(.small))
                     .foregroundStyle(CinemaColor.onSurface)
             }
+            if mustOpen {
+                row(id: "open-\(key)", title: loc.localized("accounts.pin.title", account.username),
+                    subtitle: loc.localized("accounts.codeRequired"), value: nil) {
+                    begin(.unlock(account))
+                }
+            } else {
             row(id: "code-\(key)", title: loc.localized("accounts.detail.code"),
                 subtitle: loc.localized("accounts.detail.code.subtitle"),
                 value: loc.localized(hasCode ? "a11y.toggle.on" : "a11y.toggle.off")) {
                 if hasCode {
-                    // Removing another account's code takes ITS code first.
-                    if account.userId == appState.currentUserId { locks.remove(key: key) } else { begin(.unlock(account)) }
+                    locks.remove(key: key)
                 } else {
                     begin(.choose(account))
                 }
@@ -353,6 +364,7 @@ struct TVAccountManageScreen: View {
             }
             row(id: "remove-\(key)", title: loc.localized("accounts.detail.remove"), subtitle: nil, value: nil) {
                 removing = account
+            }
             }
         }
         .padding(.bottom, CinemaSpacing.spacing4)
@@ -426,7 +438,7 @@ struct TVAccountManageScreen: View {
             guard let key = appState.accountKey(for: account) else { return }
             switch await locks.verify(key: key, pin: pin) {
             case .unlocked:
-                locks.remove(key: key)
+                openedKeys.insert(key)
                 begin(.list)
             case .wrong:
                 message = loc.localized("accounts.pin.wrong")
