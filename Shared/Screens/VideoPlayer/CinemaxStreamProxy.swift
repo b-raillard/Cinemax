@@ -634,6 +634,24 @@ final class CinemaxStreamProxy: @unchecked Sendable {
             break
         }
         task.resume()
+        watchClientHangUp(conn, handler: handler)
+    }
+
+    /// libVLC hanging up on a request is a read that COMPLETES (FIN) or fails
+    /// on the loopback connection. Nothing read it after the head, and
+    /// `stateUpdateHandler` only sees `.failed` / `.cancelled`, so after a
+    /// rebuild the frozen upstream request lived on for its 30 s timeout,
+    /// reconnected and pulled 344 KB for nobody (recette 2026-10-08, M6-14).
+    /// Bytes are ignored: libVLC sends one request per connection.
+    private func watchClientHangUp(_ conn: NWConnection, handler: UpstreamHandler) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 4 * 1024) { [weak self, weak handler] _, _, isComplete, error in
+            guard let handler else { return }
+            if isComplete || error != nil {
+                handler.cancel()
+                return
+            }
+            self?.watchClientHangUp(conn, handler: handler)
+        }
     }
 
     // MARK: Request routing (pure — unit-tested)

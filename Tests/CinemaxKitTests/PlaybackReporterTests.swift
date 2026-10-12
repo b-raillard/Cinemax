@@ -315,6 +315,62 @@ struct PlaybackReporterTests {
         #expect(PlaybackReporter.reportableSeconds(engineSeconds: 12, pendingResumeSeconds: .nan) == 12)
     }
 
+    // MARK: - Une horloge remise à 0 n'est jamais rapportée (recette 2026-10-08, lot 1)
+
+    private func held(
+        ended: Int64? = nil, resume: Double? = nil, settling: Int32? = nil,
+        reliable: Bool = true, lastKnown: Int32 = 0
+    ) -> Double? {
+        PlaybackReporter.heldPositionSeconds(
+            endedAtMs: ended, pendingResumeSeconds: resume, settlingTargetMs: settling,
+            engineClockReliable: reliable, lastKnownMs: lastKnown
+        )
+    }
+
+    @Test("Fin naturelle : l'arrêt porte la position de fin, pas l'horloge remise à 0")
+    func endedReportsWhereTheFilmEnded() {
+        // Tears of Steel amené au bout depuis 52 % : `currentMs=0 stopPos=733917`.
+        #expect(held(ended: 733_917, lastKnown: 380_000) == 733.917)
+        // Une fin l'emporte même sur une fenêtre de seek encore ouverte.
+        #expect(held(ended: 733_917, settling: 700_000) == 733.917)
+        #expect(held(ended: 0) == nil)
+    }
+
+    @Test("Seek de reprise en vol : le rapport porte la cible, pas les 0,4 s lus par le moteur")
+    func settlingSeekReportsItsTarget() {
+        #expect(held(settling: 1_644_490) == 1644.49)
+        // Un seek ramené à 0 n'a rien à protéger : l'horloge fait foi.
+        #expect(held(settling: 0) == nil)
+        // Une reprise pas encore envoyée passe avant.
+        #expect(held(resume: 4800, settling: 12_000) == 4800)
+    }
+
+    @Test("Renégociation : l'ancien média arrêté (horloge à 0) ne fait pas rapporter 0")
+    func negotiationReportsLastPlayedPosition() {
+        #expect(held(reliable: false, lastKnown: 164_449) == 164.449)
+        // Rien de joué (≤ 1 s) : pas de position à protéger.
+        #expect(held(reliable: false, lastKnown: 800) == nil)
+        // Média ouvert, rien en vol : l'horloge du moteur fait foi.
+        #expect(held(reliable: true, lastKnown: 164_449) == nil)
+    }
+
+    @Test("Fin naturelle de bout en bout : le serveur reçoit les ticks de fin malgré une horloge à 0")
+    func stopAfterEndCarriesEndTicks() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 0, isPaused: true) },
+            pendingResume: { PlaybackReporter.heldPositionSeconds(
+                endedAtMs: 733_000, pendingResumeSeconds: nil, settlingTargetMs: nil,
+                engineClockReliable: true, lastKnownMs: 733_700
+            ) }
+        )
+
+        reporter.reportStop()
+        await reporter.drain()
+        #expect(mock.lastStopTicks == 7_330_000_000)
+    }
+
     @Test("Stop avant la reprise : le serveur reçoit la position demandée, pas 0")
     func stopBeforeResumeKeepsResumePoint() async throws {
         let mock = CountingPlaybackAPI()

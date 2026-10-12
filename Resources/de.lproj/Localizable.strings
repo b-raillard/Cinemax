@@ -909,6 +909,7 @@
 "player.autoSkipped.intro" = "Intro übersprungen";
 "player.autoSkipped.credits" = "Abspann übersprungen";
 "player.speed" = "Geschwindigkeit";
+"player.tabletop.speed" = "Tempo";
 "player.audioDelay" = "Audioverzögerung";
 "player.audio.silentSuffix" = "(auf Apple-Geräten stumm)";
 "player.audio.silent.title" = "Auf Apple-Geräten stumm";

@@ -296,6 +296,9 @@ struct FeedStallPolicy {
     /// `readBytes` when libVLC last said its input had ended; nil once the
     /// input reads again (or a fresh open replaced it).
     private var inputEndedAtBytes: UInt64?
+    /// A new end report arrived on the previous heartbeat: the growth seen on
+    /// this one may be the byte counter catching up, not a re-read.
+    private var endJustReported = false
 
     init() {
         reanchorsLeft = Self.reanchorBudget
@@ -312,6 +315,7 @@ struct FeedStallPolicy {
         // A fresh input restarts `readBytes` at zero: the old end must not
         // cover the new stream's silence.
         inputEndedAtBytes = nil
+        endJustReported = false
     }
 
     /// One sample per second, from the player's existing 1 s heartbeat.
@@ -375,14 +379,32 @@ struct FeedStallPolicy {
     ///   - reports: how many times libVLC has reported the end of its input
     ///     (`VLCEngineFacts.inputEndReports`, monotonic). See the RULE.
     ///   - readBytes: the same counter `sample` reads.
+    ///
+    /// **The heartbeat right after a new report may still see bytes arrive,
+    /// and that is the counter catching up, not a re-read**: `readBytes` comes
+    /// from `libvlc_media_get_stats`, 40–174 ms behind the end report, so a
+    /// report landing just before a heartbeat snapshots a count that the next
+    /// heartbeat finds larger. Lifting the exemption on that growth (recette
+    /// 2026-10-08, M6-03: ≈ 1 resumed playback in 7 that reaches the end)
+    /// re-anchored during the credits — and, with the rebuild escalation, replayed
+    /// the end. That one growth re-snaps the end instead; any later growth is
+    /// a real re-read (a seek back) and lifts it.
     mutating func noteInputEnd(reports: Int, readBytes: UInt64?) {
         guard let bytes = readBytes else { return }
         if reports != lastEndReports {
             lastEndReports = reports
             inputEndedAtBytes = bytes
-        } else if let endedAt = inputEndedAtBytes, bytes > endedAt {
-            inputEndedAtBytes = nil   // reading again: the end no longer holds
+            endJustReported = true
+            return
         }
+        if let endedAt = inputEndedAtBytes, bytes > endedAt {
+            if endJustReported {
+                inputEndedAtBytes = bytes   // catch-up: the end still holds
+            } else {
+                inputEndedAtBytes = nil     // reading again: the end no longer holds
+            }
+        }
+        endJustReported = false
     }
 
     /// Whether the whole source has been read, i.e. the input has nothing left

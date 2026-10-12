@@ -32,6 +32,11 @@ struct OnboardingScreen: View {
     /// The Duo page speaks to an iPhone Duo's owner (`detectsIPhoneDuo`).
     @State private var isDuo = false
     @State private var showServerHelp = false
+    #if os(iOS)
+    /// Height of the page's scroll viewport, so a page shorter than the screen
+    /// stays centred in it (see `pageBody`).
+    @State private var pageViewportHeight: CGFloat = 0
+    #endif
     @FocusState private var focusedControl: Control?
 
     private enum Control: Hashable { case primary, back, skip }
@@ -58,8 +63,38 @@ struct OnboardingScreen: View {
 
     // MARK: - Pages
 
+    /// iOS: the page SCROLLS, « Passer » and the footer stay outside it. At
+    /// Dynamic Type AX4–AX5 the page was taller than the screen and, unscrolled,
+    /// pushed « Passer », « Précédent », « Suivant » and « C'est parti » off it —
+    /// only the (unannounced) swipe still advanced (recette 2026-10-08, M5-10;
+    /// worse since the 132 pt illustration of 2.4.0). Same shape as
+    /// `WhatsNewScreen.pageBody`: a page that fits stays centred in the viewport.
     @ViewBuilder
     private var pageBody: some View {
+        #if os(iOS)
+        ScrollView {
+            pageContent
+                .padding(.vertical, CinemaSpacing.spacing4)
+                .frame(maxWidth: .infinity, minHeight: pageViewportHeight)
+                // A swipe is the idiom a pager teaches on a phone; the buttons
+                // below stay the accessible path and the only one on tvOS.
+                // Simultaneous, so the vertical scroll keeps working.
+                .contentShape(Rectangle())
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 24).onEnded { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        if value.translation.width < 0 { advance() } else { goBack() }
+                    }
+                )
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageViewportHeight = $0 }
+        #else
+        pageContent
+        #endif
+    }
+
+    private var pageContent: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             // Drawn like « Quoi de neuf »'s, the Duo one animated; left out on
             // a landscape phone, where the page has no height to spare — the
@@ -71,6 +106,7 @@ struct OnboardingScreen: View {
             Text(loc.localized("onboarding.\(page.textKey(onDuo: isDuo)).title"))
                 .font(CinemaFont.headline(.large))
                 .foregroundStyle(CinemaColor.onSurface)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(loc.localized("onboarding.\(page.textKey(onDuo: isDuo)).body"))
                 .font(CinemaFont.dynamicBody)
@@ -92,17 +128,6 @@ struct OnboardingScreen: View {
         .id(page)
         .transition(.opacity)
         .animation(motionEffects ? .easeInOut(duration: 0.25) : nil, value: page)
-        #if os(iOS)
-        // A swipe is the idiom a pager teaches on a phone; the buttons below
-        // stay the accessible path and the only one on tvOS.
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 24).onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                value.translation.width < 0 ? advance() : goBack()
-            }
-        )
-        #endif
     }
 
     // MARK: - Footer

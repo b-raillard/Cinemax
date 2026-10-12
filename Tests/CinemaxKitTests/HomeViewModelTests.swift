@@ -641,3 +641,75 @@ struct HomeGenrePreferencesTests {
         #expect(HomeGenrePreferences.effectiveGenres(available: available, in: defaults) == ["Action", "Horror"])
     }
 }
+
+/// Recette 2026-10-08, lot 4 : la reprise et « Ajouts récents ».
+@MainActor
+@Suite("HomeViewModel — reprise et ajouts récents")
+struct HomeResumeRemovalTests {
+
+    private func makeAppState(api: MockAPIClient) -> AppState {
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = "user1"
+        return appState
+    }
+
+    private func makeItem(id: String, isPlayed: Bool, positionTicks: Int) -> BaseItemDto {
+        var item = BaseItemDto()
+        item.id = id
+        item.name = id
+        item.type = .movie
+        var data = UserItemDataDto(key: id)
+        data.isPlayed = isPlayed
+        data.playbackPositionTicks = positionTicks
+        item.userData = data
+        return item
+    }
+
+    // M2-12 : retirer un revisionnage de « Reprendre » effaçait son état vu.
+    @Test("Retirer un titre VU de la reprise le garde vu (MarkPlayed sans date)")
+    func removingAWatchedItemKeepsItWatched() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        vm.resumeItems = [makeItem(id: "ed", isPlayed: true, positionTicks: 760_000_000)]
+        await vm.removeResumeItem(vm.resumeItems[0], using: makeAppState(api: api), toast: ToastCenter(), loc: LocalizationManager())
+        #expect(api.markPlayedCalls == ["ed"])
+        #expect(api.markUnplayedCalls.isEmpty)
+        #expect(vm.resumeItems.isEmpty)
+    }
+
+    @Test("Retirer un titre non vu de la reprise efface sa progression (MarkUnplayed)")
+    func removingAnUnwatchedItemClearsIt() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        vm.resumeItems = [makeItem(id: "sintel", isPlayed: false, positionTicks: 4_870_000_000)]
+        await vm.removeResumeItem(vm.resumeItems[0], using: makeAppState(api: api), toast: ToastCenter(), loc: LocalizationManager())
+        #expect(api.markUnplayedCalls == ["sintel"])
+        #expect(api.markPlayedCalls.isEmpty)
+    }
+
+    // M2-10 : « Ajouts récents » gardait un instantané « 9 % vu » après un
+    // marquage fait ailleurs, et proposait « Reprendre ».
+    @Test("Le rafraîchissement userData relit la progression des cartes « Ajouts récents »")
+    func userDataRefreshPatchesRecentlyAddedProgress() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        vm.latestItems = [
+            makeItem(id: "ed", isPlayed: true, positionTicks: 600_000_000),
+            makeItem(id: "dune", isPlayed: false, positionTicks: 0),
+        ]
+        var fresh = UserItemDataDto(key: "ed")
+        fresh.isPlayed = false
+        fresh.playbackPositionTicks = 0
+        api.stubbedItemUserData = fresh
+
+        await vm.refreshUserDataRails(using: makeAppState(api: api), showNextUp: false, showFavorites: false)
+
+        #expect(vm.latestItems[0].userData?.playbackPositionTicks == 0)
+        #expect(vm.latestItems[0].userData?.isPlayed == false)
+        // Only the card showing a progress costs a request — never the row.
+        #expect(api.getItemUserDataCallCount == 1)
+        #expect(api.getItemsQueries.contains {
+            $0.includeItemTypes == [.movie, .series] && $0.isFavorite == nil
+        } == false)
+    }
+}

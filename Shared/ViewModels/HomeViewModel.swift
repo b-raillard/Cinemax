@@ -569,8 +569,10 @@ final class HomeViewModel {
 
     /// Removes an item from Continue Watching. There is no dedicated
     /// "hide from resume" endpoint in Jellyfin — the standard client mechanism
-    /// is to clear the item's played/progress state (`markItemUnplayed`), which
-    /// resets its resume position so `/UserItems/Resume` stops returning it.
+    /// is to clear the item's progress: `markItemUnplayed` for an unwatched
+    /// item, `markItemPlayed` (no date) for a watched one being rewatched,
+    /// either of which zeroes the position so `/UserItems/Resume` stops
+    /// returning it.
     /// Optimistic removal → server call → success toast, restoring the card on
     /// failure.
     ///
@@ -592,7 +594,17 @@ final class HomeViewModel {
         resumeNavigation[id] = nil
 
         do {
-            try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            // A WATCHED item here is a rewatch stopped part-way: un-marking it
+            // also wiped its watched state — gone from the history, listed as
+            // unwatched (recette 2026-10-08, M2-12). `MarkPlayed` without a date
+            // only zeroes the position and keeps the play count and last-played
+            // date (`BaseItem.MarkPlayed`, read in the 12.2 sources), which is
+            // all `/UserItems/Resume` needs to drop it.
+            if removed.userData?.isPlayed == true {
+                try await appState.apiClient.markItemPlayed(itemId: id, userId: userId)
+            } else {
+                try await appState.apiClient.markItemUnplayed(itemId: id, userId: userId)
+            }
             toast.success(loc.localized("home.continueWatching.removed"))
             // One item's userData changed — post the lighter tier-2 notification.
             // Home's own `.cinemaxItemUserDataChanged` handler re-fetches the
@@ -625,6 +637,40 @@ final class HomeViewModel {
             let hero = resumeItems.first ?? latestItems.first
             if hero != heroItem { heroItem = hero }
         }
+    }
+
+    /// Re-reads the userData of the « Recently added » cards that show a
+    /// PROGRESS — the only stale state there that can mislead: a card's
+    /// « Resume » reads the position alone (`CardPlayTargetResolver
+    /// .isResumable`), so a snapshot left behind by a watched toggle made
+    /// elsewhere offered « Resume » and « 9 % watched » on a title the server
+    /// holds unwatched at 0 (recette 2026-10-08, M2-10). Per card, not the
+    /// row: re-running its two catalogue queries on every toggle is what this
+    /// targeted refresh exists to avoid. Usually zero to three light requests.
+    private func refreshLatestProgress(using appState: AppState) async {
+        guard let userId = appState.currentUserId else { return }
+        let ids = latestItems.compactMap { item -> String? in
+            guard (item.userData?.playbackPositionTicks ?? 0) > 0 else { return nil }
+            return item.id
+        }
+        guard !ids.isEmpty else { return }
+        let api = appState.apiClient
+        let fresh = await withTaskGroup(of: (String, UserItemDataDto?).self) { group in
+            for id in ids {
+                group.addTask { (id, try? await api.fetchUserData(itemId: id, userId: userId)) }
+            }
+            var result: [String: UserItemDataDto] = [:]
+            for await (id, data) in group { if let data { result[id] = data } }
+            return result
+        }
+        guard !fresh.isEmpty else { return }
+        let patched = latestItems.map { item -> BaseItemDto in
+            guard let id = item.id, let data = fresh[id] else { return item }
+            var copy = item
+            copy.userData = data
+            return copy
+        }
+        if patched != latestItems { latestItems = patched }
     }
 
     /// Lightweight refresh of just the Favorites row — fired by
@@ -854,7 +900,8 @@ final class HomeViewModel {
         async let resume: Void = refreshResume(using: appState)
         async let nextUp: Void = showNextUp ? refreshNextUp(using: appState) : ()
         async let favorites: Void = showFavorites ? refreshFavorites(using: appState) : ()
-        _ = await (resume, nextUp, favorites)
+        async let latestProgress: Void = refreshLatestProgress(using: appState)
+        _ = await (resume, nextUp, favorites, latestProgress)
         // « Parce que vous avez vu … » is userData-dependent twice over: its
         // SEED is the last played item — finishing a film is exactly when it
         // should change — and it excludes what is played or in Continue
