@@ -26,25 +26,51 @@ enum PlaylistReorder {
 /// — and only it populates `playlistItemID`, the ENTRY id every mutation is
 /// addressed by (the same film can sit in a playlist twice, and each occurrence
 /// moves independently). A `parentId` query returns neither.
+///
+/// Headed by the playlist's poster-stack cover, built from the entries already
+/// loaded (no extra request), its name and « N éléments · durée ». When the
+/// server allows it (`canManage`, its `canDelete`), the iOS toolbar's « … »
+/// renames or deletes the playlist; a deletion pops the page. tvOS manages
+/// from the cards (long press); its header is only a focus stop.
 struct PlaylistDetailScreen: View {
     let playlistId: String
-    let title: String
+    /// Whether the page offers rename / delete — the server's `canDelete`,
+    /// carried by the card that opened it. Defaults to `false`, so a call site
+    /// that does not know shows no management rather than a refused one.
+    let canManage: Bool
 
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toast
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dismiss) private var dismiss
 
+    /// The playlist's OWN name (possibly blank), as the server has it —
+    /// what « Renommer » pre-fills. State, not a `let`: a rename made on this
+    /// page retitles it. Shown through `displayTitle`.
+    @State private var title: String
     @State private var viewModel = PlaylistDetailViewModel()
+    @State private var playlistManagement: PlaylistManagementRequest?
     #if os(iOS)
     @State private var editMode: EditMode = .inactive
     #endif
 
+    /// `title` is the playlist's raw name (`BaseItemDto.name`), NOT a display
+    /// fallback: a blank one reads « Playlist sans nom » on screen, but the
+    /// rename field must not pre-fill that placeholder as if it were a name.
+    init(playlistId: String, title: String, canManage: Bool = false) {
+        self.playlistId = playlistId
+        self.canManage = canManage
+        _title = State(initialValue: title)
+    }
+
     var body: some View {
         content
-            .navigationTitle(title)
+            .navigationTitle(displayTitle)
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
+            // Inline: the header below carries the name in large type, under
+            // the cover — a large title above it would say it twice.
+            .navigationBarTitleDisplayMode(.inline)
             .environment(\.editMode, $editMode)
             .toolbar {
                 if !viewModel.items.isEmpty {
@@ -60,11 +86,37 @@ struct PlaylistDetailScreen: View {
                         }
                     }
                 }
+                if canManage {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        // Whatever the contents — deleting an EMPTY playlist is
+                        // one of the reasons this menu exists.
+                        Menu {
+                            Button {
+                                playlistManagement = .rename(id: playlistId, name: title)
+                            } label: {
+                                Label(loc.localized("playlist.rename"), systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                playlistManagement = .delete(id: playlistId, name: displayTitle)
+                            } label: {
+                                Label(loc.localized("playlist.delete"), systemImage: "trash")
+                            }
+                        } label: {
+                            Label(loc.localized("playlist.manage"), systemImage: "ellipsis")
+                        }
+                    }
+                }
             }
             #endif
             .task(id: playlistId) {
                 await viewModel.load(playlistId: playlistId, using: appState)
             }
+            .playlistManagement(
+                $playlistManagement,
+                // Gone from the server: nothing left to show here.
+                onDeleted: { _ in dismiss() },
+                onRenamed: { _, newName in title = newName }
+            )
             // Only ever pushed (Home's playlists rail, or the Playlists tab's
             // folder browser) — see `tvPushedScreen`.
             .tvPushedScreen()
@@ -83,10 +135,24 @@ struct PlaylistDetailScreen: View {
                 Task { await viewModel.load(playlistId: playlistId, using: appState) }
             }
         case .empty:
-            EmptyStateView(
-                systemImage: "music.note.list",
-                title: loc.localized("playlist.contents.empty")
-            )
+            // The header alone — its cover says « vide » and its line says
+            // « Cette playlist est vide »: a playlist page keeps its name and
+            // its look even with nothing in it (and tvOS, which has no
+            // navigation bar, keeps a title).
+            ScrollView {
+                #if os(tvOS)
+                header
+                    .padding(.horizontal, CinemaTVLayout.pagePadding)
+                    .padding(.top, CinemaSpacing.spacing5)
+                #else
+                header
+                #endif
+            }
+            #if os(iOS)
+            .refreshable {
+                await viewModel.load(playlistId: playlistId, using: appState)
+            }
+            #endif
         case .loaded:
             list
         }
@@ -104,6 +170,14 @@ struct PlaylistDetailScreen: View {
     /// Music.app makes.
     private var list: some View {
         List {
+            // The first row, OUTSIDE the `ForEach` that carries `.onMove` and
+            // the swipe actions: the header is neither movable nor removable.
+            header
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .deleteDisabled(true)
+                .moveDisabled(true)
+
             ForEach(viewModel.items, id: \.playlistItemID) { item in
                 NavigationLink {
                     DeferredView {
@@ -143,6 +217,12 @@ struct PlaylistDetailScreen: View {
     /// remote, and enough to reach any arrangement.
     private var list: some View {
         ScrollView {
+            // tvOS manages a playlist from its card's long press; the header
+            // only offers a focus stop above the entries (see `header`).
+            header
+                .padding(.horizontal, CinemaTVLayout.pagePadding)
+                .padding(.top, CinemaSpacing.spacing5)
+
             LazyVStack(spacing: CinemaSpacing.spacing3) {
                 ForEach(Array(viewModel.items.enumerated()), id: \.element.playlistItemID) { index, item in
                     // A `NavigationLink` rather than the hoisted
@@ -200,6 +280,81 @@ struct PlaylistDetailScreen: View {
         .scrollClipDisabled()
     }
     #endif
+
+    // MARK: - Header
+
+    /// The cover, the name and « N éléments · durée ». Built from the loaded
+    /// entries: the cover takes their posters (series poster for an episode,
+    /// never a repeat), at the very URLs the cards ask for.
+    private var header: some View {
+        let cover = PlaylistCoverStack.content(
+            preview: PlaylistPreview(
+                posters: PlaylistCoverStack.posters(from: viewModel.items),
+                totalCount: viewModel.items.count
+            ),
+            fallbackCount: nil
+        )
+        #if os(tvOS)
+        return HStack(alignment: .center, spacing: CinemaSpacing.spacing8) {
+            PlaylistCover(content: cover, imageBuilder: appState.imageBuilder)
+                .frame(width: CinemaTVLayout.playlistCoverSide)
+                // Focusable — it does nothing — so the page has a top row,
+                // as `PersonDetailScreen`'s portrait: an Up press from the
+                // first entry lands here (and scrolls the header back into
+                // view) instead of escaping into the tab bar, and an EMPTY
+                // playlist still has something to focus.
+                .cinemaFocus()
+                .focusable()
+                .focusEffectDisabled()
+            headerText(alignment: .leading)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        #else
+        return VStack(spacing: CinemaSpacing.spacing3) {
+            PlaylistCover(content: cover, imageBuilder: appState.imageBuilder)
+                .frame(width: 216)
+            headerText(alignment: .center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, CinemaSpacing.spacing3)
+        .accessibilityElement(children: .combine)
+        #endif
+    }
+
+    private var displayTitle: String {
+        PlaylistCardButton.displayName(title, untitled: loc.localized("playlist.untitled"))
+    }
+
+    private func headerText(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: CinemaSpacing.spacing1) {
+            Text(displayTitle)
+                .font(CinemaFont.headline(.medium))
+                .foregroundStyle(CinemaColor.onSurface)
+                .multilineTextAlignment(alignment == .center ? .center : .leading)
+                .lineLimit(2)
+                .accessibilityAddTraits(.isHeader)
+            Text(headerMeta)
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceMuted)
+                .lineLimit(1)
+        }
+    }
+
+    /// « 4 éléments · 6 h 12 min ». A SERIES entry adds nothing to the
+    /// duration: its runtime is one episode's, not the show's total (a season
+    /// likewise carries no total of its own). An empty playlist says so.
+    private var headerMeta: String {
+        let items = viewModel.items
+        if items.isEmpty { return loc.localized("playlist.contents.empty") }
+        var parts = [loc.itemCount(items.count)]
+        let ticks = items
+            .filter { $0.type != .series && $0.type != .season }
+            .compactMap(\.runTimeTicks)
+            .reduce(0, +)
+        if ticks.jellyfinMinutes > 0 { parts.append(loc.runtime(minutes: ticks.jellyfinMinutes)) }
+        return parts.joined(separator: " · ")
+    }
 
     private func remove(entryId: String) async {
         switch await viewModel.remove(entryId: entryId, playlistId: playlistId, using: appState) {

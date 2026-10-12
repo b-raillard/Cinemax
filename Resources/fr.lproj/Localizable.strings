@@ -1207,6 +1207,20 @@
 "playlist.removeItem" = "Retirer de la playlist";
 "playlist.removeItem.done" = "Retiré de la playlist";
 
+/* Gérer une playlist : renommer, supprimer (propriétaire ou administrateur seulement — menu de la carte et « … » de la page), en créer une vide. */
+"playlist.rename" = "Renommer";
+"playlist.rename.title" = "Renommer la playlist";
+"playlist.rename.done" = "Playlist renommée";
+"playlist.delete" = "Supprimer la playlist";
+"playlist.delete.message" = "« %@ » sera supprimée de ton serveur, sur tous tes appareils. Les films et séries restent dans ta bibliothèque.";
+"playlist.delete.done" = "Playlist supprimée";
+"playlist.delete.failed" = "Impossible de supprimer cette playlist";
+"playlist.manage" = "Options de la playlist";
+"playlist.manage.denied" = "Seul le propriétaire de cette playlist (ou un administrateur) peut la modifier";
+"playlist.create" = "Créer";
+"playlist.create.message" = "Tu ajouteras des titres depuis leur fiche.";
+"playlist.create.done" = "Playlist « %@ » créée";
+
 /* Rangées d'accueil « Prochainement » et « Collections ». */
 "settings.homePage.upcoming" = "Prochainement";
 "settings.homePage.collections" = "Collections";

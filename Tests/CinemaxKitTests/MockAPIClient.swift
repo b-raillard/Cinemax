@@ -595,6 +595,42 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldFailPlaylistRemove { throw stubbedError }
     }
 
+    /// Previews per playlist id; an id absent here answers an empty page.
+    var stubbedPlaylistPreviews: [String: PlaylistPreviewPage] = [:]
+    /// Every `getPlaylistPreview` call's playlist id, in order.
+    private(set) var playlistPreviewRequests: [String] = []
+    /// Locked read, for polling while a fetch may still be appending.
+    var playlistPreviewRequestCount: Int { recordLock.withLock { playlistPreviewRequests.count } }
+    /// When set, every preview read waits on it before answering — holds a
+    /// fetch "in flight" without guessing its duration with a sleep. The
+    /// answer is read BEFORE the wait, so a held fetch returns what the server
+    /// held when it was asked (what an overlapping older request would bring).
+    var playlistPreviewGate: TestLatch?
+    var shouldFailPlaylistPreview = false
+    func getPlaylistPreview(playlistId: String, userId: String, limit: Int) async throws -> PlaylistPreviewPage {
+        // Read before the request is recorded: a test that waits for the
+        // record to appear may change the stubs right after.
+        let page = stubbedPlaylistPreviews[playlistId] ?? PlaylistPreviewPage(items: [], totalCount: 0)
+        let shouldFail = shouldFailPlaylistPreview
+        let gate = playlistPreviewGate
+        recordLock.withLock { playlistPreviewRequests.append(playlistId) }
+        if let gate { await gate.wait() }
+        if shouldFail { throw stubbedError }
+        return page
+    }
+
+    /// Every `deletePlaylist` / `renamePlaylist` call, in order.
+    private(set) var deletedPlaylistIds: [String] = []
+    private(set) var renamedPlaylists: [(id: String, name: String)] = []
+    func deletePlaylist(playlistId: String) async throws {
+        recordLock.withLock { deletedPlaylistIds.append(playlistId) }
+        if shouldThrow { throw stubbedError }
+    }
+    func renamePlaylist(playlistId: String, name: String) async throws {
+        recordLock.withLock { renamedPlaylists.append((id: playlistId, name: name)) }
+        if shouldThrow { throw stubbedError }
+    }
+
     private(set) var getSimilarItemsCallCount = 0
     /// Every `getSimilarItems` call's seed id and limit, in order.
     private(set) var similarItemsRequests: [(itemId: String, limit: Int)] = []

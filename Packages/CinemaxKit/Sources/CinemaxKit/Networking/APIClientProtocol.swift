@@ -680,6 +680,29 @@ public protocol PlaylistAPI: Sendable {
     func movePlaylistItem(playlistId: String, entryId: String, newIndex: Int) async throws
     /// A playlist's contents in playlist order, each carrying its entry id.
     func getPlaylistItems(playlistId: String, userId: String) async throws -> [BaseItemDto]
+    /// The first `limit` entries of a playlist and how many it holds in all —
+    /// what a playlist card needs for its cover and its count, without reading
+    /// the whole playlist.
+    func getPlaylistPreview(playlistId: String, userId: String, limit: Int) async throws -> PlaylistPreviewPage
+    /// Deletes the playlist itself (its contents stay in the library). The
+    /// server refuses unless the user owns it or is an administrator — answer
+    /// `BaseItemDto.canDelete` before offering it.
+    func deletePlaylist(playlistId: String) async throws
+    /// Renames the playlist, leaving its entries and its shares untouched.
+    func renamePlaylist(playlistId: String, name: String) async throws
+}
+
+/// A playlist's first entries plus its total — see `PlaylistAPI.getPlaylistPreview`.
+public struct PlaylistPreviewPage: Sendable {
+    /// The first entries, in playlist order.
+    public let items: [BaseItemDto]
+    /// Every entry the playlist holds, not just `items`.
+    public let totalCount: Int
+
+    public init(items: [BaseItemDto], totalCount: Int) {
+        self.items = items
+        self.totalCount = totalCount
+    }
 }
 
 public extension PlaylistAPI {
@@ -689,6 +712,11 @@ public extension PlaylistAPI {
     func removeFromPlaylist(playlistId: String, entryIds: [String]) async throws {}
     func movePlaylistItem(playlistId: String, entryId: String, newIndex: Int) async throws {}
     func getPlaylistItems(playlistId: String, userId: String) async throws -> [BaseItemDto] { [] }
+    func getPlaylistPreview(playlistId: String, userId: String, limit: Int) async throws -> PlaylistPreviewPage {
+        PlaylistPreviewPage(items: [], totalCount: 0)
+    }
+    func deletePlaylist(playlistId: String) async throws {}
+    func renamePlaylist(playlistId: String, name: String) async throws {}
 }
 
 // MARK: - Aggregate

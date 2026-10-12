@@ -173,6 +173,8 @@ enum CinemaTVLayout {
     static let personPortraitSize: CGFloat = 280
     /// 16:9 episode still in the detail fiche's episode row.
     static let episodeThumbnailWidth: CGFloat = 200
+    /// The square poster-stack cover heading a playlist's own page.
+    static let playlistCoverSide: CGFloat = 320
 
     // MARK: Grids
 
