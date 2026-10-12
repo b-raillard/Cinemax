@@ -51,6 +51,14 @@ enum ProFeatureGate {
         #endif
     }
 
+    /// Whether Réglages shows « JellyGlass Pro » at all: once the Pro has
+    /// launched (or in a `PRO_PREVIEW` build), or in a Debug build whose
+    /// « Palier simulé » is set. Before the launch, production users never
+    /// see a Pro page — App Review would meet a product that is not on sale.
+    static func showsProEntry(proLaunched: Bool, override: ProTierOverride) -> Bool {
+        proLaunched || override != .automatic
+    }
+
     static func tier(
         proLaunched: Bool,
         isPro: Bool,
@@ -72,6 +80,16 @@ enum ProFeatureGate {
 }
 
 extension EntitlementStore {
+    /// `ProFeatureGate.showsProEntry` for this store's Debug override.
+    var showsProEntry: Bool {
+        #if DEBUG
+        let override = proTierOverride
+        #else
+        let override = ProTierOverride.automatic
+        #endif
+        return ProFeatureGate.showsProEntry(proLaunched: ProFeatureGate.proLaunched, override: override)
+    }
+
     /// The tier for this user, the founder recognition coming from `earlyAdopter`.
     func proTier(earlyAdopter: EarlyAdopterService) -> ProTier {
         #if DEBUG

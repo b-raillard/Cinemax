@@ -32,6 +32,17 @@ struct UserSwitchSheet: View {
     /// Opens straight on the manual step with this username — reconnecting a
     /// remembered account whose session expired (multi-account).
     var prefilledUsername: String?
+    /// The free account change (Settings, no Pro): shows « Comptes mémorisés ·
+    /// PRO » under the grid, whose tap opens the contextual sheet (PRO-03).
+    /// The presenter then injects the entitlement stores and `ProStore`.
+    var showsProHint = false
+    @State private var showUpsell = false
+    // OPTIONAL reads: this sheet is also presented from the account switcher
+    // and « Qui regarde ? », which inject none of them — only the free path
+    // (Settings) does, and only it shows the PRO entry.
+    @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
+    @Environment(EarlyAdopterService.self) private var earlyAdopter: EarlyAdopterService?
+    @Environment(ProStore.self) private var proStore: ProStore?
 
     var body: some View {
         Group {
@@ -156,12 +167,38 @@ struct UserSwitchSheet: View {
                 enterManualMode()
             }
             .padding(.bottom, CinemaSpacing.spacing4)
+
+            if showsProHint, let entitlements, let earlyAdopter, let proStore {
+                ProLockedFeatureRow(feature: .memorizedAccounts) { showUpsell = true }
+                    .padding(.horizontal, gridHorizontalPadding)
+                    .padding(.bottom, CinemaSpacing.spacing4)
+                    #if os(tvOS)
+                    .fullScreenCover(isPresented: $showUpsell) {
+                        upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
+                    }
+                    #else
+                    .sheet(isPresented: $showUpsell) {
+                        upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
+                    }
+                    #endif
+            }
         }
         #if os(tvOS)
         // The tiles carry `CinemaTVCardButtonStyle`, which grows on focus —
         // without this the edge tiles' scaled ring is clipped.
         .scrollClipDisabled()
         #endif
+    }
+
+    private func upsell(entitlements: EntitlementStore, earlyAdopter: EarlyAdopterService, proStore: ProStore) -> some View {
+        ProUpsellSheet(feature: .memorizedAccounts)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
+            .environment(loc)
+            .environment(themeManager)
+            .environment(toasts)
+            .preferredColorScheme(themeManager.colorScheme)
     }
 
     /// A text-only secondary action. `.plain` gives it NO focus treatment on

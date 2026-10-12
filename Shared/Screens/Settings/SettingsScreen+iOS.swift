@@ -97,8 +97,14 @@ extension SettingsScreen {
 
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false)) { category in
-                iOSCategoryButton(category)
+            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false, showsPro: entitlements.showsProEntry)) { category in
+                if category == .pro {
+                    // A banner card rather than a pill (mockup « Achat Pro »).
+                    ProSettingsBanner { selectedCategory = .pro }
+                        .padding(.bottom, CinemaSpacing.spacing2)
+                } else {
+                    iOSCategoryButton(category)
+                }
             }
         }
         .padding(.horizontal, CinemaSpacing.spacing4)
@@ -255,6 +261,8 @@ extension SettingsScreen {
         // sub-screens aren't fighting the wrapping ScrollView. The remaining
         // static-form categories keep the original wrapper.
         switch category {
+        case .pro:
+            ProScreen()
         case .administration:
             AdminLandingScreen()
         case .advancedAdmin:
@@ -273,7 +281,7 @@ extension SettingsScreen {
                         iOSInterfaceDetail
                     case .playback:
                         iOSPlaybackDetail
-                    case .administration, .advancedAdmin:
+                    case .pro, .administration, .advancedAdmin:
                         EmptyView() // handled above
                     }
                 }

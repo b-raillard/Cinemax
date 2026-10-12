@@ -136,7 +136,7 @@ extension SettingsScreen {
                 // tvOS explicitly hides admin entries — admin workflows are
                 // iOS/iPadOS-only. `isAdmin: false` is safe because the filter
                 // short-circuits on `isTVOS: true` regardless of admin flag.
-                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true)) { category in
+                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsPro: entitlements.showsProEntry)) { category in
                     tvCategoryButton(category)
                 }
 
@@ -323,6 +323,8 @@ extension SettingsScreen {
                 .focused($focusedItem, equals: .back)
 
                 switch category {
+                case .pro:
+                    ProScreen()
                 case .appearance:
                     tvAppearanceDetail
                 case .account:

@@ -24,7 +24,7 @@ nonisolated enum ProFeatureCatalogue {
         Feature(id: .customMenu, titleKey: "pro.feature.menu.title", detailKey: "pro.feature.menu.detail", icon: "rectangle.grid.2x2", isGated: false),
         Feature(id: .accentsAndIcons, titleKey: "pro.feature.accents.title", detailKey: "pro.feature.accents.detail", icon: "paintpalette", isGated: false),
         Feature(id: .seasonalAllYear, titleKey: "pro.feature.seasonal.title", detailKey: "pro.feature.seasonal.detail", icon: "leaf", isGated: false),
-        Feature(id: .shortcuts, titleKey: "pro.feature.shortcuts.title", detailKey: "pro.feature.shortcuts.detail", icon: "square.stack.3d.up", isGated: false),
+        Feature(id: .shortcuts, titleKey: "pro.feature.shortcuts.title", detailKey: "pro.feature.shortcuts.detail", icon: "square.stack.3d.up", isGated: false)
     ]
 
     static func feature(_ id: ProFeatureID) -> Feature? {

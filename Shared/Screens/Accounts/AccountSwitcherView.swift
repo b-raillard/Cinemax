@@ -127,9 +127,11 @@ struct AccountSwitcherView: View {
     @Environment(ParentalLockController.self) private var parentalLock
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(EarlyAdopterService.self) private var earlyAdopter
+    @Environment(ProStore.self) private var proStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var flow = AccountSwitchFlow()
+    @State private var showUpsell = false
     @State private var showAddAccount = false
     @State private var showAddChoice = false
     @State private var showQuickConnect = false
@@ -294,6 +296,18 @@ struct AccountSwitcherView: View {
             Text(loc.localized("accounts.switch.freeHint"))
                 .font(CinemaFont.dynamicLabel(.small))
                 .foregroundStyle(CinemaColor.onSurfaceMuted)
+            // Story PRO-03: the locked feature says what it is, on a tap.
+            ProLockedFeatureRow(feature: .memorizedAccounts) { showUpsell = true }
+        }
+        .sheet(isPresented: $showUpsell) {
+            ProUpsellSheet(feature: .memorizedAccounts)
+                .environment(entitlements)
+                .environment(earlyAdopter)
+                .environment(proStore)
+                .environment(loc)
+                .environment(themeManager)
+                .environment(toasts)
+                .preferredColorScheme(themeManager.colorScheme)
         }
     }
 
@@ -333,6 +347,7 @@ struct AccountAvatarToolbarButton: View {
     @Environment(ParentalLockController.self) private var parentalLock
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(EarlyAdopterService.self) private var earlyAdopter
+    @Environment(ProStore.self) private var proStore
     @Environment(NetworkMonitor.self) private var network
     @State private var showSwitcher = false
 
@@ -354,6 +369,7 @@ struct AccountAvatarToolbarButton: View {
                 .environment(parentalLock)
                 .environment(entitlements)
                 .environment(earlyAdopter)
+                .environment(proStore)
                 .environment(network)
                 .preferredColorScheme(themeManager.colorScheme)
         }

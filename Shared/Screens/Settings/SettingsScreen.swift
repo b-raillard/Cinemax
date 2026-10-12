@@ -17,6 +17,9 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     // first (its pill is the accented hero on the iOS landing); Lecture
     // sits right after Interface — it hosts the most-consulted playback
     // toggles, promoted out of the Interface hub in the 2026-07 reorg.
+    // « JellyGlass Pro » leads (story PRO-01) — but only where it must be
+    // shown (`ProFeatureGate.showsProEntry`): never before the Pro launches.
+    case pro
     case appearance
     case interface
     case playback
@@ -32,6 +35,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .pro:            "star.circle"
         case .appearance:     "paintpalette"
         case .interface:      "tv"
         case .playback:       "play.rectangle"
@@ -44,6 +48,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     @MainActor func localizedName(_ loc: LocalizationManager) -> String {
         switch self {
+        case .pro:            loc.localized("settings.pro")
         case .appearance:     loc.localized("settings.appearance")
         case .interface:      loc.localized("settings.interface")
         case .playback:       loc.localized("settings.playback")
@@ -75,8 +80,9 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     /// Filters `allCases` by admin visibility and platform. Use this instead
     /// of raw `allCases` in rendering code — keeps gating in one place.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [SettingsCategory] {
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, showsPro: Bool = false) -> [Self] {
         allCases.filter { category in
+            if category == .pro { return showsPro }
             if isTVOS && category.isAdminOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
             return true
@@ -169,6 +175,7 @@ struct SettingsScreen: View {
     /// and the Pro gate of « Changer de compte » (both platforms).
     @Environment(EntitlementStore.self) var entitlements
     @Environment(EarlyAdopterService.self) var earlyAdopter
+    @Environment(ProStore.self) var proStore
     @Environment(AccountLockStore.self) var accountLocks
     @State var showLogOutAlert = false
     @State var showLicenses = false
@@ -492,6 +499,7 @@ struct SettingsScreen: View {
                 .environment(parentalLock)
                 .environment(entitlements)
                 .environment(earlyAdopter)
+                .environment(proStore)
         } else {
             plainUserSwitchSheet
         }
@@ -511,7 +519,10 @@ struct SettingsScreen: View {
     }
 
     private var plainUserSwitchSheet: some View {
-        UserSwitchSheet()
+        UserSwitchSheet(showsProHint: entitlements.proTier(earlyAdopter: earlyAdopter) == .free)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
             .environment(appState)
             .environment(themeManager)
             .environment(loc)

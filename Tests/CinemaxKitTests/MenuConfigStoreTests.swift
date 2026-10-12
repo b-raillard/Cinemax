@@ -702,6 +702,24 @@ struct SettingsCategoryTests {
                 == [.appearance, .interface, .playback, .account, .server])
     }
 
+    @Test("« JellyGlass Pro » ouvre le landing, sur les deux plateformes, seulement quand on doit la montrer")
+    @MainActor func proEntry() {
+        for isTVOS in [false, true] {
+            #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: isTVOS, showsPro: true)
+                    == [.pro, .appearance, .interface, .playback, .account, .server])
+            #expect(!SettingsCategory.visibleCases(isAdmin: true, isTVOS: isTVOS, showsPro: false).contains(.pro))
+        }
+    }
+
+    @Test("La page Pro ne se montre qu'une fois le Pro lancé, ou un palier Debug choisi")
+    func proEntryVisibility() {
+        #expect(ProFeatureGate.showsProEntry(proLaunched: true, override: .automatic))
+        #expect(!ProFeatureGate.showsProEntry(proLaunched: false, override: .automatic))
+        for forced in ProTierOverride.allCases where forced != .automatic {
+            #expect(ProFeatureGate.showsProEntry(proLaunched: false, override: forced))
+        }
+    }
+
     @Test("le hub Interface expose exactement les quatre sous-pages écran, dans l'ordre")
     func interfaceSubPages() {
         #expect(InterfaceSubcategory.allCases == [.menu, .homePage, .library, .detailPage])
