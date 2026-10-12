@@ -385,8 +385,9 @@ struct AppNavigation: View {
             // the tab bar visible before its profile is loaded.
             // `restoreSession` has already hydrated the registry, so both the
             // active id and the known ids are available here.
-            menuConfig.activate(serverId: appState.activeServerId,
-                                knownServerIds: Set(appState.servers.map(\.id)))
+            menuConfig.activate(accountKey: appState.activeAccountKey,
+                                serverId: appState.activeServerId,
+                                knownProfileIds: appState.knownMenuProfileIds)
             // Search history is per-server too: the first server that activates
             // after the upgrade inherits the old global list, once.
             SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
@@ -479,24 +480,38 @@ struct AppNavigation: View {
             // the observers below can call it freely.
             remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
         }
-        // RULE — DECLARATION ORDER IS LOAD-BEARING: `activeServerId` must be
-        // observed BEFORE `currentUserId`. A server switch mutates both (and
-        // `serverURL`) in one transaction, and SwiftUI delivers
-        // same-transaction `onChange` handlers in declaration order. This one
-        // swaps the menu profile; the `currentUserId` one below is the single
-        // owner of `refreshAvailableViews()`, which merges the fetched
-        // libraries into `libraryEntries` and persists them. Refreshing before
-        // the swap would merge the NEW server's libraries into the PREVIOUS
-        // server's profile and save them there. Do not reorder these, and do
-        // not add a second refresh owner.
-        .onChange(of: appState.activeServerId) { _, newId in
-            // Menu configuration is per-server (mode, kind, order, enabled
-            // flags, cached views). Nothing to invalidate on a switch — the
-            // target server's own profile is loaded wholesale.
-            menuConfig.activate(serverId: newId,
-                                knownServerIds: Set(appState.servers.map(\.id)))
+        // RULE — DECLARATION ORDER IS LOAD-BEARING: the ACCOUNT (server +
+        // user, `activeAccountKey`) must be observed BEFORE `currentUserId`. A
+        // switch — of server or of account — mutates them in one transaction,
+        // and SwiftUI delivers same-transaction `onChange` handlers in
+        // declaration order. This one swaps the menu profile; the
+        // `currentUserId` one below is the single owner of
+        // `refreshAvailableViews()`, which merges the fetched libraries into
+        // `libraryEntries` and persists them. Refreshing before the swap would
+        // merge the NEW account's libraries into the PREVIOUS one's profile and
+        // save them there. Do not reorder these, and do not add a second
+        // refresh owner. Keyed on the account, not the server, since
+        // multi-account: a same-server switch never moves `activeServerId`.
+        .onChange(of: appState.activeAccountKey) { _, newKey in
+            // Signed out (`nil`): keep the loaded profile, as `activate(nil)`
+            // always did — re-signing in must find it intact.
+            guard let newKey else { return }
+            // Menu configuration is per account (mode, kind, order, enabled
+            // flags, cached views), seeded once from the server's.
+            menuConfig.activate(accountKey: newKey,
+                                serverId: appState.activeServerId,
+                                knownProfileIds: appState.knownMenuProfileIds)
             // No-op once the legacy search history has found its server.
-            SearchHistoryStore.migrateLegacyIfNeeded(into: newId)
+            SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
+            // Accent and light/dark follow the account. `AppState` already
+            // saved the account being left and swapped the age cap; the
+            // appearance goes through `ThemeManager`'s setters so it
+            // re-renders (a raw defaults write would not). No snapshot = the
+            // account inherits the current look.
+            if let look = AccountSettingsStore.load(for: newKey, defaults: .standard) {
+                if themeManager.accentColorKey != look.accentColor { themeManager.accentColorKey = look.accentColor }
+                if themeManager.darkModeEnabled != look.darkMode { themeManager.darkModeEnabled = look.darkMode }
+            }
         }
         .onChange(of: appState.serverURL) { _, new in
             // Re-decide stream transport for the new server (or clear on logout).

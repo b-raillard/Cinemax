@@ -187,6 +187,7 @@
 		3F54016BEA73B7FE701C16AD /* DiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8119FB81D7402C131E9B1DB0 /* DiagnosticsTests.swift */; };
 		3F6DB053F2E36DC1CA4F46A7 /* MediaDetailCastSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A51D73542F8E7874313164 /* MediaDetailCastSection.swift */; };
 		4067439FB88F4A0C526FE72F /* CardPlayTargetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 378B9A362B8428E2A6F99BB9 /* CardPlayTargetTests.swift */; };
+		409362A6EC91C09AD6A89471 /* AccountSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2572067930833AF233E9A6DB /* AccountSettingsStore.swift */; };
 		4134A3AE6228FC62801C9E93 /* CinemaxKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC223F1A46FB5458A8F326AD /* CinemaxKit */; };
 		415D6E200AACAF80F3B06507 /* WatchTogetherLobby.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F56B5D815F6314968F0D02 /* WatchTogetherLobby.swift */; };
 		41825A58E20778FED229A053 /* VLCEngineLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87E3960725C47DF87C9D4987 /* VLCEngineLogTests.swift */; };
@@ -374,6 +375,7 @@
 		7EBA370BF944C1F3434F41E9 /* MetadataRemoteImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F07644595CAB3060CA6E9C3 /* MetadataRemoteImagePicker.swift */; };
 		7F6D160EABA133540130AABC /* MediaLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */; };
 		7FB1C0EDE50B3335093F475C /* ThemeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61944A0EB692FE3706F500B /* ThemeManager.swift */; };
+		8003A34BD456561198A70B9E /* AccountSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2572067930833AF233E9A6DB /* AccountSettingsStore.swift */; };
 		80E280BB3BDB1809D638838A /* SyncPlayJoinStart.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFCA029CD82A0FFB73FB4C6C /* SyncPlayJoinStart.swift */; };
 		810327697D0FB00F2EBBA2F5 /* MetadataBrowserScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F10EC9288051CE15DC9B29 /* MetadataBrowserScreen.swift */; };
 		8105E34A1FA7F853D18E35A9 /* MotionEffectsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A95C622F89111741037C483 /* MotionEffectsTests.swift */; };
@@ -840,6 +842,7 @@
 		222727514B548DD4F92249FC /* SeasonalAmbianceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalAmbianceTests.swift; sourceTree = "<group>"; };
 		223258AFA0F2668369423520 /* CinemaxKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CinemaxKitTests.swift; sourceTree = "<group>"; };
 		2476F64981986D065EC567DD /* DiagnosticsUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsUploader.swift; sourceTree = "<group>"; };
+		2572067930833AF233E9A6DB /* AccountSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsStore.swift; sourceTree = "<group>"; };
 		25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminUserDetailViewModel.swift; sourceTree = "<group>"; };
 		25D8CB8B2A5B48928CFF4A61 /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
 		25DBC840D04F02A6587A96D6 /* AdminLandingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLandingScreen.swift; sourceTree = "<group>"; };
@@ -1673,6 +1676,7 @@
 		9374720A7D9E701EF5CC8FEF /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				2572067930833AF233E9A6DB /* AccountSettingsStore.swift */,
 				B0C21D7C91F182C22D9040E2 /* CardPlayTarget.swift */,
 				C346F0B7AFF504DA6593370E /* HomeViewModel.swift */,
 				FAE341711C920F2F12128C51 /* LibraryCollectionsScope.swift */,
@@ -2321,6 +2325,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2F4C51078FC6EFB427650A5F /* AccentOption.swift in Sources */,
+				409362A6EC91C09AD6A89471 /* AccountSettingsStore.swift in Sources */,
 				28607C1A48373994CB677989 /* AdaptiveLayout.swift in Sources */,
 				7B95F6AD4D4FADB0685A8A81 /* AddToPlaylistSheet.swift in Sources */,
 				2C598521E34C029BD36C4A3C /* AdminActivityScreen.swift in Sources */,
@@ -2691,6 +2696,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5115EECDD47EEF8054E73643 /* AccentOption.swift in Sources */,
+				8003A34BD456561198A70B9E /* AccountSettingsStore.swift in Sources */,
 				A8C1C7C4A4E243D4F959D865 /* AdaptiveLayout.swift in Sources */,
 				5268C36D803C151025ABFF22 /* AddToPlaylistSheet.swift in Sources */,
 				648763482602FDCD12A8DC88 /* AdminActivityScreen.swift in Sources */,

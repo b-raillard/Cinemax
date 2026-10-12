@@ -67,6 +67,9 @@ final class AppState {
     /// `ProFeatureGate`). Wired by `AppNavigation` from the entitlement stores;
     /// `false` = free behaviour: signing in as someone else replaces the account.
     var multiAccountProvider: @MainActor () -> Bool = { false }
+    /// Where the per-account settings live (`AccountSettingsStore`) and the age
+    /// cap is read from. `.standard` in the app; tests inject an isolated suite.
+    var settingsDefaults: UserDefaults = .standard
 
     /// Accounts whose token a switch found revoked (`accountKey`). They stay in
     /// the list, marked « Session expirée », until reconnected or removed.
@@ -481,6 +484,9 @@ final class AppState {
             return
         }
         serverTransitionGeneration &+= 1
+        // Captured BEFORE anything moves: step 2 already repoints
+        // `activeServerId`, which would pair the new server with the old user.
+        let previousAccountKey = activeAccountKey
 
         // 1. Legacy mirror. Every existing read path (`restoreSession`,
         //    `SettingsScreen`, `ExtensionSessionBridge`) keeps working unchanged.
@@ -511,9 +517,17 @@ final class AppState {
         //    re-applied after it — same sequence as `restoreSession`, and easy
         //    to forget. (`reconnect` already clears the cache; the explicit call
         //    keeps the intent visible at this call site.)
+        //    The settings that follow the ACCOUNT are swapped first, so the age
+        //    cap applied below — and every load the tier-1 post triggers — is
+        //    the target account's, never the one being left.
+        AccountSettingsStore.swap(
+            from: previousAccountKey,
+            to: ServerRegistry.accountKey(serverId: used.id, userId: userId),
+            defaults: settingsDefaults
+        )
         apiClient.reconnect(url: used.url, accessToken: token)
         apiClient.clearCache()
-        let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        let storedAge = settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
         apiClient.applyContentRatingLimit(maxAge: storedAge)
 
         // 4. Observable state. `serverURL` FIRST, `currentUserId` LAST: a switch
@@ -757,7 +771,8 @@ final class AppState {
         // Its search history goes with it. Nothing could ever read it again —
         // a re-added server mints a fresh id — so keeping it would only leave
         // that library's queries on the device.
-        SearchHistoryStore.clear(serverId: entry.id)
+        SearchHistoryStore.clearServer(serverId: entry.id)
+        AccountSettingsStore.removeServer(serverId: entry.id, defaults: settingsDefaults)
         // Its certificate approval goes with it: a pin outliving its server
         // would silently pre-approve whatever answers on that host:port later.
         if let key = ServerCertificateTrust.trustKey(for: entry.url) {
@@ -864,6 +879,18 @@ final class AppState {
         return ServerRegistry.accountKey(serverId: activeServerId, userId: currentUserId)
     }
 
+    /// Every menu-profile key still meaningful: each server's id (legacy,
+    /// pre-multi-account profiles) and each remembered account's key.
+    var knownMenuProfileIds: Set<String> {
+        var ids = Set(servers.map(\.id))
+        for entry in servers {
+            for account in ServerRegistry.accounts(of: entry) {
+                ids.insert(ServerRegistry.accountKey(serverId: entry.id, userId: account.userId))
+            }
+        }
+        return ids
+    }
+
     /// The accounts the switcher offers for the active server.
     var activeAccounts: [SavedAccount] {
         guard let entry = activeEntryIfAny else { return [] }
@@ -940,6 +967,10 @@ final class AppState {
         servers[index] = ServerRegistry.forgetting(userId: userId, in: servers[index])
         expiredAccountIds.remove(key)
         persistRegistry()
+        // What followed this account leaves with it (its menu profile is pruned
+        // at the next activation, being no longer in `knownMenuProfileIds`).
+        SearchHistoryStore.clear(serverId: key)
+        AccountSettingsStore.remove(accountKey: key, defaults: settingsDefaults)
         return nil
     }
 

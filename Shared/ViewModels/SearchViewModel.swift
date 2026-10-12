@@ -286,9 +286,18 @@ final class SearchViewModel {
     /// appear and on every server switch — cheap (one defaults read), and
     /// equality-guarded so a re-attach with nothing changed fires no render.
     func loadHistory(forServer serverId: String?) {
+        loadHistory(serverId: serverId, accountKey: nil)
+    }
+
+    /// Multi-account: the list on screen is the ACCOUNT's (`accountKey`,
+    /// `<serverId>|<userId>`), seeded once from its server's list; without an
+    /// account it is the server's, as before.
+    func loadHistory(serverId: String?, accountKey: String?) {
         SearchHistoryStore.migrateLegacyIfNeeded(into: serverId, defaults: defaults)
-        historyServerId = serverId
-        let list = SearchHistoryStore.load(serverId: serverId, defaults: defaults)
+        SearchHistoryStore.migrateServerListIfNeeded(serverId: serverId, into: accountKey, defaults: defaults)
+        let scope = accountKey ?? serverId
+        historyServerId = scope
+        let list = SearchHistoryStore.load(serverId: scope, defaults: defaults)
         if list != recentSearches { recentSearches = list }
     }
 
@@ -398,7 +407,9 @@ final class SearchViewModel {
         let includePersons = scope == .all
         // The server the query runs against, captured NOW: a switch landing
         // while it is in flight must not file this query under the new server.
-        let historyServer = appState.activeServerId
+        // The list the query is filed under is the one on screen when it
+        // started (the account's, or the server's without multi-account).
+        let historyServer = historyServerId
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }

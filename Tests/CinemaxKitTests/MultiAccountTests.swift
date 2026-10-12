@@ -337,3 +337,77 @@ struct MultiAccountAppStateTests {
         #expect(stored?.savedAccounts?.contains { $0.accessToken == "tokA" } != true)
     }
 }
+
+// MARK: - Per-account settings (age cap, accent, theme)
+
+@Suite("Réglages par compte")
+struct AccountSettingsTests {
+
+    @Test("Échange : l'ancien compte est sauvé, le nouveau chargé ; sans instantané on hérite")
+    func swapAndInherit() {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        defaults.set("orange", forKey: SettingsKey.accentColor)
+        defaults.set(true, forKey: SettingsKey.darkMode)
+
+        // A → B, B never seen: B inherits A's values (a restricted device stays restricted).
+        let first = AccountSettingsStore.swap(from: "S1|A", to: "S1|B", defaults: defaults)
+        #expect(first == nil)
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+
+        // B changes its own values, then B → A restores A's.
+        defaults.set(0, forKey: SettingsKey.privacyMaxContentAge)
+        defaults.set("blue", forKey: SettingsKey.accentColor)
+        defaults.set(false, forKey: SettingsKey.darkMode)
+        let back = AccountSettingsStore.swap(from: "S1|B", to: "S1|A", defaults: defaults)
+        #expect(back == AccountSettingsSnapshot(maxContentAge: 10, accentColor: "orange", darkMode: true))
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+
+        // …and A → B brings B's own values back.
+        let again = AccountSettingsStore.swap(from: "S1|A", to: "S1|B", defaults: defaults)
+        #expect(again == AccountSettingsSnapshot(maxContentAge: 0, accentColor: "blue", darkMode: false))
+    }
+
+    @Test("Retirer un compte efface son instantané ; retirer un serveur, ceux de ses comptes")
+    func removal() {
+        let defaults = UserDefaults.isolatedForTesting()
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 12, accentColor: "red", darkMode: true), for: "S1|A", defaults: defaults)
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 0, accentColor: "red", darkMode: true), for: "S1|B", defaults: defaults)
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 0, accentColor: "red", darkMode: true), for: "S2|A", defaults: defaults)
+
+        AccountSettingsStore.remove(accountKey: "S1|A", defaults: defaults)
+        #expect(AccountSettingsStore.load(for: "S1|A", defaults: defaults) == nil)
+        AccountSettingsStore.removeServer(serverId: "S1", defaults: defaults)
+        #expect(AccountSettingsStore.load(for: "S1|B", defaults: defaults) == nil)
+        #expect(AccountSettingsStore.load(for: "S2|A", defaults: defaults) != nil)
+    }
+
+    @MainActor
+    @Test("Une bascule applique la limite d'âge du compte cible AVANT de recharger")
+    func switchAppliesAgeCap() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(0, forKey: SettingsKey.privacyMaxContentAge)
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 10, accentColor: "green", darkMode: true),
+                                  for: "S1|B", defaults: defaults)
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let kc = MockKeychain()
+        var entry = ServerEntry(id: "S1", name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
+                                accessToken: "tokA", userId: "A", username: "Alice")
+        entry = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: Date(), in: entry)
+        kc.savedServers = [entry]
+        kc.savedActiveServerId = "S1"
+        let app = AppState(apiClient: api, keychain: kc)
+        app.settingsDefaults = defaults
+        app.sessionValidator = { _, _ in .valid }
+        app.loadServersFromKeychain()
+        app.currentUserId = "A"
+        app.isAuthenticated = true
+
+        await app.switchAccount(to: "B")
+
+        #expect(api.appliedRatingLimits.last == 10)
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+        #expect(AccountSettingsStore.load(for: "S1|A", defaults: defaults)?.maxContentAge == 0)
+    }
+}
