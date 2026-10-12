@@ -85,6 +85,21 @@ final class EntitlementStore {
         resolve()
     }
 
+    /// StoreKit no longer grants this app the Pro (refund, family-sharing
+    /// exit — `ProPurchasePolicy`): the local record goes, and so does the
+    /// iCloud mirror when THIS app wrote it, otherwise the other platform
+    /// would stay Pro for ever on a refunded purchase. The other platform's
+    /// record is never touched (it may be a purchase of its own).
+    func revokeOwnPurchase(ownBundleID: String) {
+        defaults.removeObject(forKey: SettingsKey.entitlementLocalRecord)
+        if localRecord != nil { localRecord = nil }
+        if cloudRecord?.writerBundleID == ownBundleID {
+            mirror.remove()
+            cloudRecord = nil
+        }
+        resolve()
+    }
+
     #if DEBUG
     /// Settings → Debug → « Simuler Pro ». Persisted, DEBUG builds only.
     func setDebugOverride(_ value: Bool) {

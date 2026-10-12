@@ -1395,3 +1395,6 @@
 "settings.debug.earlyAdopter.env.production" = "Produktion";
 "settings.debug.earlyAdopter.env.sandbox" = "Sandbox / TestFlight";
 "settings.debug.earlyAdopter.env.xcode" = "Xcode";
+
+// Pro purchase (lot 2)
+"settings.debug.proTier.launched" = "Gestartet (%@)";

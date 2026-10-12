@@ -197,14 +197,29 @@ struct ProFeatureGateTests {
         }
     }
 
+    #if PRO_PREVIEW
+    @Test("Une build aperçu se comporte comme si le Pro était lancé")
+    func previewBuildIsLaunched() {
+        #expect(ProFeatureGate.proLaunched)
+    }
+    #else
     @Test("Le Pro n'est pas lancé dans cette version")
     func notLaunchedYet() {
         #expect(ProFeatureGate.proLaunched == false)
     }
+    #endif
 
-    @Test("Le choix Debug parcourt automatique → gratuit → Pro → fondateur → automatique")
+    @Test("« Lancé » ouvre le vrai parcours : gratuit, puis Pro une fois acheté, fondateur reconnu")
+    func launchedOverride() {
+        #expect(ProFeatureGate.tier(proLaunched: false, isPro: false, isEarlyAdopter: false, override: .launched) == .free)
+        #expect(ProFeatureGate.tier(proLaunched: false, isPro: true, isEarlyAdopter: false, override: .launched) == .pro)
+        #expect(ProFeatureGate.tier(proLaunched: false, isPro: false, isEarlyAdopter: true, override: .launched) == .founder)
+    }
+
+    @Test("Le choix Debug parcourt automatique → lancé → gratuit → Pro → fondateur → automatique")
     func overrideCycle() {
-        #expect(ProTierOverride.automatic.next == .free)
+        #expect(ProTierOverride.automatic.next == .launched)
+        #expect(ProTierOverride.launched.next == .free)
         #expect(ProTierOverride.free.next == .pro)
         #expect(ProTierOverride.pro.next == .founder)
         #expect(ProTierOverride.founder.next == .automatic)

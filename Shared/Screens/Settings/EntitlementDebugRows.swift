@@ -83,6 +83,9 @@ func proTierText(_ entitlements: EntitlementStore, earlyAdopter: EarlyAdopterSer
     if entitlements.proTierOverride == .automatic {
         return loc.localized("settings.debug.proTier.automatic", tierText)
     }
+    if entitlements.proTierOverride == .launched {
+        return loc.localized("settings.debug.proTier.launched", tierText)
+    }
     #endif
     return tierText
 }

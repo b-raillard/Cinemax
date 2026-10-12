@@ -50,6 +50,10 @@ struct AppNavigation: View {
     /// Early adopters (installed before the Pro): a process singleton — its
     /// `init` reads the Keychain cache. Nothing grants on it yet.
     private static let sharedEarlyAdopter = EarlyAdopterService()
+    /// The Pro purchase (StoreKit 2): a process singleton — it listens to
+    /// `Transaction.updates` for the life of the process, which a scene-struct
+    /// recreation must not start twice.
+    private static let sharedProStore = ProStore(entitlements: sharedEntitlements)
     /// The per-account codes (multi-account) — a process singleton: it caches
     /// what it has read from the Keychain, per account.
     static let sharedAccountLocks = AccountLockStore()
@@ -64,6 +68,7 @@ struct AppNavigation: View {
     @State private var seasonal = Self.sharedSeasonal
     @State private var entitlements = Self.sharedEntitlements
     @State private var earlyAdopter = Self.sharedEarlyAdopter
+    @State private var proStore = Self.sharedProStore
     @State private var accountLocks = Self.sharedAccountLocks
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
@@ -243,6 +248,7 @@ struct AppNavigation: View {
         .environment(seasonal)
         .environment(entitlements)
         .environment(earlyAdopter)
+        .environment(proStore)
         .environment(accountLocks)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
@@ -369,6 +375,11 @@ struct AppNavigation: View {
             appState.apiClient.setPreferredLanguage(code)
         }
         .task {
+            // The Pro purchase: listen to `Transaction.updates` (an « Ask to
+            // Buy » approval or a refund that arrived while the app was closed
+            // is delivered there) and reconcile with StoreKit's current
+            // entitlements — a local cache, no network, no account prompt.
+            proStore.start()
             // Let the confirm-before-logout coordinator see real connectivity.
             // Captured strongly: `NetworkMonitor` and `AppState` are both process
             // singletons, so there is no lifetime to protect — and a `weak`
@@ -621,6 +632,7 @@ struct AppNavigation: View {
                 // Synchronize the iCloud key-value store on every return to
                 // the foreground (the launch one is the store's `init`).
                 entitlements.refresh()
+                Task { await proStore.refresh() }
             }
             if newPhase == .background {
                 lastBackgroundedAt = Date()
