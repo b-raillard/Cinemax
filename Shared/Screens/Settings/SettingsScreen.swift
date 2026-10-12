@@ -164,13 +164,12 @@ struct SettingsScreen: View {
     /// Forwarded into `privacySecuritySheet` — that sheet is a separate
     /// presentation context and re-injects its environment by hand.
     @Environment(ParentalLockController.self) var parentalLock
-    #if os(tvOS)
-    /// Settings → Lecture → Débogage (tvOS). iOS reads it inside
-    /// `EntitlementDebugRows` instead — its Playback page is a pushed
-    /// destination, where only a standalone view re-renders.
+    /// Settings → Lecture → Débogage (tvOS; iOS reads them inside
+    /// `EntitlementDebugRows`, its Playback page being a pushed destination)
+    /// and the Pro gate of « Changer de compte » (both platforms).
     @Environment(EntitlementStore.self) var entitlements
     @Environment(EarlyAdopterService.self) var earlyAdopter
-    #endif
+    @Environment(AccountLockStore.self) var accountLocks
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
@@ -477,11 +476,36 @@ struct SettingsScreen: View {
         LicensesView()
     }
 
+    /// « Changer de compte »: the profile switcher when several accounts may
+    /// be remembered (multi-account, `ProFeatureGate`), else the historical
+    /// password / Quick Connect sheet.
+    @ViewBuilder
     private var userSwitchSheet: some View {
+        #if os(iOS)
+        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
+            AccountSwitcherView()
+                .environment(appState)
+                .environment(themeManager)
+                .environment(loc)
+                .environment(toasts)
+                .environment(accountLocks)
+                .environment(parentalLock)
+                .environment(entitlements)
+                .environment(earlyAdopter)
+        } else {
+            plainUserSwitchSheet
+        }
+        #else
+        plainUserSwitchSheet
+        #endif
+    }
+
+    private var plainUserSwitchSheet: some View {
         UserSwitchSheet()
             .environment(appState)
             .environment(themeManager)
             .environment(loc)
+            .environment(toasts)
     }
 
     /// Signs out of the active server and reports what happened. The auto-hop

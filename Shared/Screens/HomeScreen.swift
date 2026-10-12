@@ -107,6 +107,13 @@ struct HomeScreen: View {
         #if os(iOS)
         .navigationTitle(loc.localized("tab.home"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // Who is watching: the avatar opens the profile switcher
+            // (multi-account), or the account change without the Pro.
+            ToolbarItem(placement: .topBarTrailing) {
+                AccountAvatarToolbarButton()
+            }
+        }
         #endif
         .task {
             await viewModel.loadInitial(using: appState)

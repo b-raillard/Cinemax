@@ -29,6 +29,9 @@ struct UserSwitchSheet: View {
     @State private var authError: String?
     @State private var showManualEntry = false
     @State private var manualUsername: String = ""
+    /// Opens straight on the manual step with this username — reconnecting a
+    /// remembered account whose session expired (multi-account).
+    var prefilledUsername: String? = nil
 
     var body: some View {
         Group {
@@ -39,6 +42,10 @@ struct UserSwitchSheet: View {
             #endif
         }
         .task {
+            if let prefilledUsername, !prefilledUsername.isEmpty {
+                manualUsername = prefilledUsername
+                showManualEntry = true
+            }
             await loadUsers()
         }
     }

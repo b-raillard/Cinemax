@@ -50,6 +50,9 @@ struct AppNavigation: View {
     /// Early adopters (installed before the Pro): a process singleton — its
     /// `init` reads the Keychain cache. Nothing grants on it yet.
     private static let sharedEarlyAdopter = EarlyAdopterService()
+    /// The per-account codes (multi-account) — a process singleton: it caches
+    /// what it has read from the Keychain, per account.
+    private static let sharedAccountLocks = AccountLockStore()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -61,6 +64,7 @@ struct AppNavigation: View {
     @State private var seasonal = Self.sharedSeasonal
     @State private var entitlements = Self.sharedEntitlements
     @State private var earlyAdopter = Self.sharedEarlyAdopter
+    @State private var accountLocks = Self.sharedAccountLocks
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
@@ -235,6 +239,7 @@ struct AppNavigation: View {
         .environment(seasonal)
         .environment(entitlements)
         .environment(earlyAdopter)
+        .environment(accountLocks)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
         .environment(reviewPrompt)
@@ -351,6 +356,15 @@ struct AppNavigation: View {
             // capture here was ineffective anyway, the enclosing `.task` already
             // holding `network` strongly (Swift 6.4 warns about exactly that).
             appState.isOnlineProvider = { [network] in network.isOnline }
+            // Multi-account: remembering several accounts is a Pro feature
+            // (open to everyone until the Pro launches — `ProFeatureGate`); a
+            // protected profile, or one less restricted than the current one
+            // while a parental code is set, needs a code (`AppState.switchAccount`).
+            appState.multiAccountProvider = { [entitlements, earlyAdopter] in
+                entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
+            }
+            appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
+            appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
             // The language rides every request as `Accept-Language` (Jellyfin
             // 12.0 localizes the media-stream titles the track pickers print
             // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds

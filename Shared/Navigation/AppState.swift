@@ -904,6 +904,31 @@ final class AppState {
         return ids
     }
 
+    /// Sets the age cap of one account (« Gérer les comptes », behind the
+    /// parental gate). The ACTIVE account's cap is applied at once, exactly as
+    /// the Privacy screen's row does; another account's is stored in its
+    /// snapshot and applies when it opens.
+    func setAgeCap(_ age: Int, forAccountKey key: String) {
+        if key == activeAccountKey {
+            settingsDefaults.set(age, forKey: SettingsKey.privacyMaxContentAge)
+            apiClient.applyContentRatingLimit(maxAge: age)
+            republishExtensionSession()
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+        } else {
+            var snapshot = AccountSettingsStore.load(for: key, defaults: settingsDefaults)
+                ?? AccountSettingsStore.current(defaults: settingsDefaults)
+            snapshot.maxContentAge = age
+            AccountSettingsStore.save(snapshot, for: key, defaults: settingsDefaults)
+        }
+    }
+
+    /// The age cap an account opens with (its own, else the current one).
+    func ageCap(forAccountKey key: String) -> Int {
+        key == activeAccountKey
+            ? settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+            : AccountSettingsStore.ageCap(for: key, defaults: settingsDefaults)
+    }
+
     /// The accounts the switcher offers for the active server.
     var activeAccounts: [SavedAccount] {
         guard let entry = activeEntryIfAny else { return [] }

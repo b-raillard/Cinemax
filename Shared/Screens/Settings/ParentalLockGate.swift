@@ -259,7 +259,7 @@ struct ParentalLockEnrollView: View {
 
 /// Entered-digit indicator. Shows at least `minimumSlots` slots so the required
 /// length is legible before anything is typed, and grows with a longer PIN.
-private struct ParentalPINDots: View {
+struct ParentalPINDots: View {
     @Environment(ThemeManager.self) private var themeManager
     let count: Int
     /// `minPINLength` when choosing a PIN, `minUnlockPINLength` when typing
@@ -308,6 +308,9 @@ struct ParentalPINPad: View {
     /// Digits required before submit is enabled — `minPINLength` to choose a
     /// PIN, `minUnlockPINLength` to type an existing one.
     let minimumLength: Int
+    /// Most digits accepted — `maxPINLength` for the parental code; exactly
+    /// `accountPINLength` for a per-account code (multi-account).
+    var maximumLength: Int = ParentalLockPolicy.maxPINLength
     let isDisabled: Bool
     let onSubmit: () -> Void
 
@@ -402,7 +405,7 @@ struct ParentalPINPad: View {
     private func press(_ key: Key) {
         switch key {
         case .digit(let value):
-            guard entry.count < ParentalLockPolicy.maxPINLength else { return }
+            guard entry.count < maximumLength else { return }
             entry.append(String(value))
             Haptics.tap()
         case .delete:
