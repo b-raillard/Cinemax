@@ -8,14 +8,16 @@ private let tvBundle = "com.cinemax.tvos"
 private func fact(
     product: String = ProProduct.iOSProductID,
     transaction: String = "2000000111",
-    familyShared: Bool = false
+    familyShared: Bool = false,
+    environment: AppTransactionSnapshot.Environment = .production
 ) -> ProEntitlementFact {
     ProEntitlementFact(
         productID: product,
         originalTransactionID: transaction,
         purchaseDate: Date(timeIntervalSinceReferenceDate: 812_000_000),
         signedTransaction: "jws.\(transaction)",
-        isFamilyShared: familyShared
+        isFamilyShared: familyShared,
+        environment: environment
     )
 }
 
@@ -58,6 +60,29 @@ struct RevokeOwnPurchaseTests {
         #expect(store.cloudRecord?.writerBundleID == tvBundle)
         #expect(store.state == .pro(.cloudMirror))
     }
+
+    @Test("Le miroir est relu juste avant d'être retiré : un record neuf de l'autre plateforme survit")
+    func rereadsMirrorBeforeRemoving() {
+        let cloud = InMemoryCloudKeyValueStore()
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        store.recordPurchase(record(writer: iosBundle))
+        // The Apple TV rewrote the key; its notification is not processed yet.
+        cloud.set(record(writer: tvBundle, transaction: "tv").encoded(), forKey: CloudEntitlementMirror.key)
+
+        store.revokeOwnPurchase(ownBundleID: iosBundle)
+
+        #expect(cloud.data(forKey: CloudEntitlementMirror.key) != nil)
+        #expect(store.state == .pro(.cloudMirror))
+    }
+
+    @Test("Un record d'achat de test (bac à sable, Xcode) lu dans iCloud ne débloque rien")
+    func nonProductionMirrorIgnored() {
+        let cloud = InMemoryCloudKeyValueStore()
+        let sandbox = fact(transaction: "sb", environment: .sandbox).record(writerBundleID: tvBundle)
+        cloud.set(sandbox.encoded(), forKey: CloudEntitlementMirror.key)
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        #expect(store.state == .free)
+    }
 }
 
 // MARK: - Reconciliation policy
@@ -68,25 +93,42 @@ struct ProPurchasePolicyTests {
     @Test("Un droit vérifié jamais enregistré s'enregistre (local + miroir)")
     func recordsNewEntitlement() {
         let action = ProPurchasePolicy.reconcile(
-            entitlement: fact(), localRecord: nil, cloudRecord: nil, ownBundleID: iosBundle
+            entitlement: .entitled(fact()), localRecord: nil, cloudRecord: nil, ownBundleID: iosBundle
         )
-        #expect(action == .record(record(writer: iosBundle)))
+        #expect(action == .record(record(writer: iosBundle), mirror: true))
     }
 
     @Test("Un droit reçu par le Partage familial débloque comme un achat")
     func familySharedRecords() {
         let shared = fact(familyShared: true)
         let action = ProPurchasePolicy.reconcile(
-            entitlement: shared, localRecord: nil, cloudRecord: nil, ownBundleID: iosBundle
+            entitlement: .entitled(shared), localRecord: nil, cloudRecord: nil, ownBundleID: iosBundle
         )
-        #expect(action == .record(shared.record(writerBundleID: iosBundle)))
+        #expect(action == .record(shared.record(writerBundleID: iosBundle), mirror: true))
+    }
+
+    @Test("Un achat de test (bac à sable, TestFlight, Xcode) s'enregistre ici mais n'est jamais miroité")
+    func nonProductionNotMirrored() {
+        for environment in [AppTransactionSnapshot.Environment.sandbox, .xcode] {
+            let test = fact(environment: environment)
+            let action = ProPurchasePolicy.reconcile(
+                entitlement: .entitled(test), localRecord: nil, cloudRecord: nil, ownBundleID: iosBundle
+            )
+            #expect(action == .record(test.record(writerBundleID: iosBundle), mirror: false))
+            // Already recorded locally: nothing more to do, no mirror ever.
+            let again = ProPurchasePolicy.reconcile(
+                entitlement: .entitled(test), localRecord: test.record(writerBundleID: iosBundle),
+                cloudRecord: nil, ownBundleID: iosBundle
+            )
+            #expect(again == .none)
+        }
     }
 
     @Test("Déjà enregistré et miroité : rien à écrire")
     func alreadyRecorded() {
         let mine = record(writer: iosBundle)
         let action = ProPurchasePolicy.reconcile(
-            entitlement: fact(), localRecord: mine, cloudRecord: mine, ownBundleID: iosBundle
+            entitlement: .entitled(fact()), localRecord: mine, cloudRecord: mine, ownBundleID: iosBundle
         )
         #expect(action == .none)
     }
@@ -97,7 +139,7 @@ struct ProPurchasePolicyTests {
         var refreshed = fact()
         refreshed.signedTransaction = "jws.resigned"
         let action = ProPurchasePolicy.reconcile(
-            entitlement: refreshed, localRecord: mine, cloudRecord: mine, ownBundleID: iosBundle
+            entitlement: .entitled(refreshed), localRecord: mine, cloudRecord: mine, ownBundleID: iosBundle
         )
         #expect(action == .none)
     }
@@ -106,9 +148,9 @@ struct ProPurchasePolicyTests {
     func rewritesMissingMirror() {
         let mine = record(writer: iosBundle)
         let action = ProPurchasePolicy.reconcile(
-            entitlement: fact(), localRecord: mine, cloudRecord: nil, ownBundleID: iosBundle
+            entitlement: .entitled(fact()), localRecord: mine, cloudRecord: nil, ownBundleID: iosBundle
         )
-        #expect(action == .record(mine))
+        #expect(action == .record(mine, mirror: true))
     }
 
     @Test("Le miroir de l'autre plateforme suffit à l'autre : on ne l'écrase pas pour rien")
@@ -116,25 +158,43 @@ struct ProPurchasePolicyTests {
         let mine = record(writer: iosBundle)
         let theirs = record(writer: tvBundle, transaction: "tv")
         let action = ProPurchasePolicy.reconcile(
-            entitlement: fact(), localRecord: mine, cloudRecord: theirs, ownBundleID: iosBundle
+            entitlement: .entitled(fact()), localRecord: mine, cloudRecord: theirs, ownBundleID: iosBundle
         )
         #expect(action == .none)
     }
 
-    @Test("Plus aucun droit et un enregistrement de CETTE app : retrait (remboursement, départ du groupe)")
-    func revokesWhenEntitlementGone() {
+    @Test("Révocation PROUVÉE (remboursement, départ du groupe) : retrait complet, miroir compris")
+    func revokesOnProvenRevocation() {
         let action = ProPurchasePolicy.reconcile(
-            entitlement: nil, localRecord: record(writer: iosBundle), cloudRecord: nil, ownBundleID: iosBundle
+            entitlement: .revoked, localRecord: record(writer: iosBundle), cloudRecord: record(writer: iosBundle), ownBundleID: iosBundle
         )
         #expect(action == .revoke)
     }
 
-    @Test("Plus aucun droit, rien d'enregistré ici : rien à faire (le miroir de l'autre reste)")
-    func nothingToRevoke() {
+    @Test("Remboursé puis réinstallé : plus de record local, mais NOTRE miroir doit partir")
+    func revokedAfterReinstallRemovesOwnMirror() {
         let action = ProPurchasePolicy.reconcile(
-            entitlement: nil, localRecord: nil, cloudRecord: record(writer: tvBundle), ownBundleID: iosBundle
+            entitlement: .revoked, localRecord: nil, cloudRecord: record(writer: iosBundle), ownBundleID: iosBundle
         )
-        #expect(action == .none)
+        #expect(action == .revoke)
+    }
+
+    @Test("Simple ABSENCE (compte App Store déconnecté, restauration hors ligne) : local seul, miroir gardé")
+    func absenceOnlyClearsLocal() {
+        let action = ProPurchasePolicy.reconcile(
+            entitlement: .absent, localRecord: record(writer: iosBundle), cloudRecord: record(writer: iosBundle), ownBundleID: iosBundle
+        )
+        #expect(action == .clearLocal)
+    }
+
+    @Test("Rien d'enregistré ici, quelle que soit la réponse : on ne touche pas au miroir de l'autre")
+    func nothingToRevoke() {
+        for answer in [ProEntitlementState.absent, .revoked] {
+            let action = ProPurchasePolicy.reconcile(
+                entitlement: answer, localRecord: nil, cloudRecord: record(writer: tvBundle), ownBundleID: iosBundle
+            )
+            #expect(action == .none)
+        }
     }
 
     @Test("Chaque app vend son propre produit")
@@ -151,13 +211,18 @@ struct ProPurchasePolicyTests {
 // MARK: - Store
 
 /// A StoreKit stand-in. `entitlement` is what `Transaction.currentEntitlements`
-/// would hold; `pushUpdate()` plays `Transaction.updates`.
+/// (and `Transaction.latest`) would answer; `pushUpdate()` plays
+/// `Transaction.updates`; `holdNextEntitlementRead()` parks the next read
+/// until `releaseHeldRead(with:)` — a refresh caught mid-flight.
 actor FakeProStoreClient: ProStoreClient {
     var productToReturn: ProductSnapshot? = ProductSnapshot(id: ProProduct.current, displayName: "JellyGlass Pro", displayPrice: "7,99 €")
     var purchaseResult: ProPurchaseOutcome = .cancelled
-    var entitlement: ProEntitlementFact?
+    var purchaseError: (any Error)?
+    var entitlement: ProEntitlementState = .absent
     var syncError: (any Error)?
     private(set) var syncCount = 0
+    private var holdNext = false
+    private var held: CheckedContinuation<ProEntitlementState, Never>?
     private let stream: AsyncStream<Void>
     private let continuation: AsyncStream<Void>.Continuation
 
@@ -166,18 +231,32 @@ actor FakeProStoreClient: ProStoreClient {
     }
 
     func set(purchase: ProPurchaseOutcome) { purchaseResult = purchase }
-    func set(entitlement: ProEntitlementFact?) { self.entitlement = entitlement }
+    func set(purchaseError: (any Error)?) { self.purchaseError = purchaseError }
+    func set(entitlement: ProEntitlementState) { self.entitlement = entitlement }
     func set(product: ProductSnapshot?) { productToReturn = product }
     func set(syncError: (any Error)?) { self.syncError = syncError }
+    func holdNextEntitlementRead() { holdNext = true }
+    var isHoldingARead: Bool { held != nil }
+    func releaseHeldRead(with answer: ProEntitlementState) {
+        held?.resume(returning: answer)
+        held = nil
+    }
 
     func product(id: String) async throws -> ProductSnapshot? { productToReturn }
 
     func purchase(id: String) async throws -> ProPurchaseOutcome {
-        if case .purchased(let bought) = purchaseResult { entitlement = bought }
+        if let purchaseError { throw purchaseError }
+        if case .purchased(let bought) = purchaseResult { entitlement = .entitled(bought) }
         return purchaseResult
     }
 
-    func currentEntitlement(productID: String) async -> ProEntitlementFact? { entitlement }
+    func entitlementState(productID: String) async -> ProEntitlementState {
+        if holdNext {
+            holdNext = false
+            return await withCheckedContinuation { held = $0 }
+        }
+        return entitlement
+    }
 
     func sync() async throws {
         syncCount += 1
@@ -211,7 +290,7 @@ struct ProStoreTests {
         #expect(store.productState == .unavailable)
     }
 
-    @Test("Achat réussi : Pro enregistré, miroir écrit")
+    @Test("Achat réussi : Pro enregistré, miroir écrit, issue publiée pour l'alerte")
     func purchaseSucceeds() async {
         let client = FakeProStoreClient()
         await client.set(purchase: .purchased(fact(product: ProProduct.current)))
@@ -221,6 +300,9 @@ struct ProStoreTests {
         #expect(entitlements.state == .pro(.purchase))
         #expect(entitlements.cloudRecord?.writerBundleID == iosBundle)
         #expect(store.isPurchasing == false)
+        #expect(store.lastOutcome == outcome)
+        store.acknowledgeOutcome()
+        #expect(store.lastOutcome == nil)
     }
 
     @Test("Annulation : rien ne change, aucun message")
@@ -230,6 +312,18 @@ struct ProStoreTests {
         #expect(await store.purchase() == .cancelled)
         #expect(entitlements.state == .free)
         #expect(store.isPending == false)
+        #expect(store.lastOutcome == nil)
+    }
+
+    @Test("Une erreur de StoreKit pendant l'achat est un échec, jamais un Pro")
+    func purchaseThrows() async {
+        struct Boom: Error {}
+        let client = FakeProStoreClient()
+        await client.set(purchaseError: Boom())
+        let (store, entitlements) = makeStore(client)
+        #expect(await store.purchase() == .failed)
+        #expect(entitlements.state == .free)
+        #expect(store.lastOutcome == .failed)
     }
 
     @Test("En attente (Demander à acheter) : l'état reste, puis l'approbation débloque par les mises à jour")
@@ -241,7 +335,7 @@ struct ProStoreTests {
         #expect(await store.purchase() == .pending)
         #expect(store.isPending)
 
-        await client.set(entitlement: fact(product: ProProduct.current))
+        await client.set(entitlement: .entitled(fact(product: ProProduct.current)))
         client.pushUpdate()
 
         #expect(await eventually { entitlements.state.isPro })
@@ -251,18 +345,38 @@ struct ProStoreTests {
     @Test("Un remboursement arrivé par les mises à jour repasse en gratuit")
     func refundThroughUpdates() async {
         let client = FakeProStoreClient()
-        await client.set(entitlement: fact(product: ProProduct.current))
+        await client.set(entitlement: .entitled(fact(product: ProProduct.current)))
         let (store, entitlements) = makeStore(client)
         store.start()
         #expect(await eventually { entitlements.state.isPro })
 
-        await client.set(entitlement: nil)
+        await client.set(entitlement: .revoked)
         client.pushUpdate()
 
         #expect(await eventually { entitlements.state == .free })
     }
 
-    @Test("Restaurer : trouvé, rien trouvé, échec")
+    @Test("Une lecture partie AVANT l'achat ne défait pas l'achat en revenant après")
+    func staleRefreshCannotUndoPurchase() async {
+        let client = FakeProStoreClient()
+        await client.set(purchase: .purchased(fact(product: ProProduct.current)))
+        let (store, entitlements) = makeStore(client)
+
+        await client.holdNextEntitlementRead()
+        let staleRefresh = Task { await store.refresh() }
+        #expect(await eventually { await client.isHoldingARead })
+
+        #expect(await store.purchase() == .purchased(fact(product: ProProduct.current)))
+        #expect(entitlements.state == .pro(.purchase))
+
+        // The refresh started before the purchase now answers « revoked ».
+        await client.releaseHeldRead(with: .revoked)
+        await staleRefresh.value
+
+        #expect(entitlements.state == .pro(.purchase))
+    }
+
+    @Test("Restaurer : trouvé, rien trouvé, annulé, échec")
     func restore() async {
         struct Boom: Error {}
         let client = FakeProStoreClient()
@@ -270,7 +384,7 @@ struct ProStoreTests {
         #expect(await store.restore() == .nothingFound)
         #expect(await client.syncCount == 1)
 
-        await client.set(entitlement: fact(product: ProProduct.current))
+        await client.set(entitlement: .entitled(fact(product: ProProduct.current)))
         #expect(await store.restore() == .restored)
         #expect(entitlements.state.isPro)
 

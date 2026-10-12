@@ -180,6 +180,8 @@ struct SettingsScreen: View {
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
+    /// `accountSwitchTier`'s snapshot while « Changer de compte » is open.
+    @State var userSwitchTier: ProTier?
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
@@ -477,6 +479,18 @@ struct SettingsScreen: View {
         .whatsNewPresentation(isPresented: $showWhatsNew) { whatsNewSheet }
         .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
+        // The account change keeps the tier it opened with: buying the Pro
+        // from its PRO entry flips the tier, and re-deciding the sheet then
+        // would swap the plain sheet out from under its open upsell (and
+        // « Merci ! »). Re-read at the next opening.
+        .onChange(of: showUserSwitch) { _, open in
+            userSwitchTier = open ? entitlements.proTier(earlyAdopter: earlyAdopter) : nil
+        }
+    }
+
+    /// The tier « Changer de compte » decides with — frozen while it is open.
+    private var accountSwitchTier: ProTier {
+        userSwitchTier ?? entitlements.proTier(earlyAdopter: earlyAdopter)
     }
 
     private var licensesSheet: some View {
@@ -489,7 +503,7 @@ struct SettingsScreen: View {
     @ViewBuilder
     private var userSwitchSheet: some View {
         #if os(iOS)
-        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
+        if accountSwitchTier.unlocksProFeatures {
             AccountSwitcherView()
                 .environment(appState)
                 .environment(themeManager)
@@ -504,7 +518,7 @@ struct SettingsScreen: View {
             plainUserSwitchSheet
         }
         #else
-        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
+        if accountSwitchTier.unlocksProFeatures {
             WhoIsWatchingScreen(mode: .cover) { showUserSwitch = false }
                 .environment(appState)
                 .environment(themeManager)
@@ -519,7 +533,7 @@ struct SettingsScreen: View {
     }
 
     private var plainUserSwitchSheet: some View {
-        UserSwitchSheet(showsProHint: entitlements.proTier(earlyAdopter: earlyAdopter) == .free)
+        UserSwitchSheet(showsProHint: accountSwitchTier == .free)
             .environment(entitlements)
             .environment(earlyAdopter)
             .environment(proStore)

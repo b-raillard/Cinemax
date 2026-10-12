@@ -55,7 +55,7 @@ final class EntitlementStore {
         let local = defaults.data(forKey: SettingsKey.entitlementLocalRecord)
             .flatMap(CloudEntitlementRecord.decode)
         if local != localRecord { localRecord = local }
-        let cloud = mirror.read()
+        let cloud = Self.trusted(mirror.read())
         if cloud != cloudRecord { cloudRecord = cloud }
         #if DEBUG
         let override = defaults.bool(forKey: SettingsKey.debugSimulatePro)
@@ -68,13 +68,25 @@ final class EntitlementStore {
 
     /// Records a purchase made on this device: locally, then in the iCloud
     /// mirror so the other platform's app sees it.
-    func recordPurchase(_ record: CloudEntitlementRecord) {
+    /// `mirror: false` for a TEST purchase (sandbox, TestFlight, Xcode): it
+    /// unlocks this device only, never the user's real other platform.
+    func recordPurchase(_ record: CloudEntitlementRecord, mirror writesMirror: Bool = true) {
         guard let data = record.encoded() else { return }
         defaults.set(data, forKey: SettingsKey.entitlementLocalRecord)
-        mirror.write(record)
         if localRecord != record { localRecord = record }
-        if cloudRecord != record { cloudRecord = record }
+        if writesMirror {
+            mirror.write(record)
+            if cloudRecord != record { cloudRecord = record }
+        }
         resolve()
+    }
+
+    /// The iCloud record this build trusts: a test purchase found there (an
+    /// older build, or a tester's) unlocks nothing — the key-value store has
+    /// no test / production split.
+    private static func trusted(_ record: CloudEntitlementRecord?) -> CloudEntitlementRecord? {
+        guard let record, record.isProduction else { return nil }
+        return record
     }
 
     /// Forgets this device's purchase. The iCloud mirror is left alone: it may
@@ -89,13 +101,20 @@ final class EntitlementStore {
     /// exit — `ProPurchasePolicy`): the local record goes, and so does the
     /// iCloud mirror when THIS app wrote it, otherwise the other platform
     /// would stay Pro for ever on a refunded purchase. The other platform's
-    /// record is never touched (it may be a purchase of its own).
+    /// record is never touched (it may be a purchase of its own) — the key is
+    /// re-read right before deciding, since the other platform may have
+    /// rewritten it after the last external-change notice was handled.
     func revokeOwnPurchase(ownBundleID: String) {
         defaults.removeObject(forKey: SettingsKey.entitlementLocalRecord)
         if localRecord != nil { localRecord = nil }
-        if cloudRecord?.writerBundleID == ownBundleID {
+        mirror.synchronize()
+        let current = mirror.read()
+        if current?.writerBundleID == ownBundleID {
             mirror.remove()
-            cloudRecord = nil
+            if cloudRecord != nil { cloudRecord = nil }
+        } else {
+            let trusted = Self.trusted(current)
+            if trusted != cloudRecord { cloudRecord = trusted }
         }
         resolve()
     }

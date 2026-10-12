@@ -1,18 +1,14 @@
 import SwiftUI
 
 /// The purchase call-to-action shared by the Pro page and the contextual
-/// sheet: the price read from StoreKit (never written by hand — spec R6), the
-/// « Demander à acheter » waiting state, and the result alert. Only drawn for a
-/// FREE user; the caller decides that.
+/// sheet: the price read from StoreKit (never written by hand — spec R6) and
+/// the « Demander à acheter » waiting state. Only drawn for a FREE user; the
+/// caller decides that. The RESULT is not shown here: a verified purchase
+/// flips the tier and removes this very view, so the alert lives on a
+/// container that survives it (`proPurchaseResultAlert`).
 struct ProPurchaseBlock: View {
     @Environment(ProStore.self) private var proStore
     @Environment(LocalizationManager.self) private var loc
-
-    /// Called once a VERIFIED purchase has been acknowledged — the contextual
-    /// sheet closes itself on it.
-    var onPurchased: () -> Void = {}
-
-    @State private var outcome: ProPurchaseOutcome?
 
     var body: some View {
         VStack(spacing: CinemaSpacing.spacing3) {
@@ -24,12 +20,7 @@ struct ProPurchaseBlock: View {
                     style: .accent,
                     isLoading: proStore.isPurchasing
                 ) {
-                    Task {
-                        // Cancelled = the user closed the system sheet: no
-                        // message at all (spec R6).
-                        let result = await proStore.purchase()
-                        if result != .cancelled { outcome = result }
-                    }
+                    Task { await proStore.purchase() }
                 }
                 .disabled(proStore.isPurchasing)
                 Text(loc.localized("pro.buy.footnote"))
@@ -51,35 +42,60 @@ struct ProPurchaseBlock: View {
             }
         }
         .task { if proStore.product == nil { await proStore.loadProduct() } }
-        .alert(
-            alertTitle,
-            isPresented: Binding(get: { outcome != nil }, set: { if !$0 { outcome = nil } })
+    }
+}
+
+/// « Merci ! » / « Demande envoyée » / « Achat impossible » — the outcome
+/// `ProStore` publishes (`lastOutcome`). Attached to the Pro page and to the
+/// contextual sheet, i.e. to the containers that SURVIVE the tier flip a
+/// purchase causes, and to exactly one of them at a time (a Pro page pushed
+/// inside the sheet does not host it).
+private struct ProPurchaseResultAlert: ViewModifier {
+    @Environment(ProStore.self) private var proStore
+    @Environment(LocalizationManager.self) private var loc
+    let onPurchased: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(
+            title,
+            isPresented: Binding(
+                get: { proStore.lastOutcome != nil },
+                set: { if !$0 { proStore.acknowledgeOutcome() } }
+            )
         ) {
             Button(loc.localized("action.ok")) {
-                // After the « Merci ! », not before it: a sheet closing on the
-                // purchase itself would take the thank-you down with it.
-                if case .purchased = outcome { onPurchased() }
-                outcome = nil
+                // After the « Merci ! », not before it.
+                let purchased = if case .purchased = proStore.lastOutcome { true } else { false }
+                proStore.acknowledgeOutcome()
+                if purchased { onPurchased() }
             }
         } message: {
-            Text(alertMessage)
+            Text(message)
         }
     }
 
-    private var alertTitle: String {
-        switch outcome {
+    private var title: String {
+        switch proStore.lastOutcome {
         case .purchased: loc.localized("pro.result.success.title")
         case .pending: loc.localized("pro.result.pending.title")
         default: loc.localized("pro.result.failed.title")
         }
     }
 
-    private var alertMessage: String {
-        switch outcome {
+    private var message: String {
+        switch proStore.lastOutcome {
         case .purchased: loc.localized("pro.result.success.message")
         case .pending: loc.localized("pro.result.pending.message")
         default: loc.localized("pro.result.failed.message")
         }
+    }
+}
+
+extension View {
+    /// See `ProPurchaseResultAlert`. `onPurchased` runs once « Merci ! » is
+    /// acknowledged — the contextual sheet closes itself there.
+    func proPurchaseResultAlert(onPurchased: @escaping () -> Void = {}) -> some View {
+        modifier(ProPurchaseResultAlert(onPurchased: onPurchased))
     }
 }
 

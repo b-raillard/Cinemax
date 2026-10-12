@@ -12,9 +12,11 @@ protocol ProStoreClient: Sendable {
     /// Shows the system purchase sheet. A `.purchased` outcome is VERIFIED and
     /// already finished.
     func purchase(id: String) async throws -> ProPurchaseOutcome
-    /// The verified, non-revoked entitlement to `productID` in StoreKit's
-    /// local cache (`Transaction.currentEntitlements`) — answers offline.
-    func currentEntitlement(productID: String) async -> ProEntitlementFact?
+    /// What StoreKit's local cache says, positively: a verified, non-revoked
+    /// entitlement (`Transaction.currentEntitlements`), else a proven
+    /// revocation (`Transaction.latest` carries a `revocationDate`), else
+    /// nothing either way. Answers offline.
+    func entitlementState(productID: String) async -> ProEntitlementState
     /// `AppStore.sync()` — may ask for the Apple-account password, so only on
     /// the « Restaurer les achats » tap (spec R5).
     func sync() async throws
@@ -52,14 +54,18 @@ struct StoreKitProClient: ProStoreClient {
         }
     }
 
-    func currentEntitlement(productID: String) async -> ProEntitlementFact? {
+    func entitlementState(productID: String) async -> ProEntitlementState {
         for await verification in Transaction.currentEntitlements {
             guard case .verified(let transaction) = verification,
                   transaction.productID == productID,
                   transaction.revocationDate == nil else { continue }
-            return Self.fact(transaction, jws: verification.jwsRepresentation)
+            return .entitled(Self.fact(transaction, jws: verification.jwsRepresentation))
         }
-        return nil
+        if case .verified(let latest)? = await Transaction.latest(for: productID),
+           latest.revocationDate != nil {
+            return .revoked
+        }
+        return .absent
     }
 
     func sync() async throws {
@@ -89,7 +95,8 @@ struct StoreKitProClient: ProStoreClient {
             originalTransactionID: String(transaction.originalID),
             purchaseDate: transaction.originalPurchaseDate,
             signedTransaction: jws,
-            isFamilyShared: transaction.ownershipType == .familyShared
+            isFamilyShared: transaction.ownershipType == .familyShared,
+            environment: AppTransactionSnapshot.Environment(transaction.environment)
         )
     }
 }
@@ -114,12 +121,23 @@ final class ProStore {
     /// instead of the purchase button. In memory only — after a relaunch the
     /// approval still arrives through `Transaction.updates`.
     private(set) var isPending = false
+    /// The last purchase's outcome worth telling (purchased / pending /
+    /// failed), until `acknowledgeOutcome()`. Held HERE, not in the view that
+    /// raised it: a verified purchase flips the tier, which removes the
+    /// purchase button — an alert owned by it went down before « Merci ! »
+    /// was read. Shown by `proPurchaseResultAlert`, on a container that
+    /// survives the flip.
+    private(set) var lastOutcome: ProPurchaseOutcome?
 
     @ObservationIgnored private let client: any ProStoreClient
     @ObservationIgnored private let entitlements: EntitlementStore
     @ObservationIgnored private let ownBundleID: String
     @ObservationIgnored private let productID: String
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
+    /// Bumped by every applied answer. A refresh compares it across its
+    /// StoreKit read and drops an answer overtaken by a newer one — a read
+    /// started before a purchase must not revoke it on its way back.
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private let logger = Logger(subsystem: "com.cinemax", category: "ProStore")
 
     init(
@@ -154,7 +172,10 @@ final class ProStore {
     /// Re-reads StoreKit's current entitlements and aligns the records with
     /// them. Launch, every return to the foreground, every pushed update.
     func refresh() async {
-        apply(await client.currentEntitlement(productID: productID))
+        let started = generation
+        let state = await client.entitlementState(productID: productID)
+        guard started == generation else { return }
+        apply(state)
     }
 
     /// The Pro page's price. A failure or an unknown product reads as
@@ -188,12 +209,14 @@ final class ProStore {
         }
         switch outcome {
         case .purchased(let fact):
-            apply(fact)
+            apply(.entitled(fact))
         case .pending:
             isPending = true
         case .cancelled, .failed:
             break
         }
+        // Cancelled = the user closed the system sheet: nothing to say (R6).
+        if outcome != .cancelled { lastOutcome = outcome }
         return outcome
     }
 
@@ -211,24 +234,34 @@ final class ProStore {
             logger.error("Restore failed: \(error.localizedDescription, privacy: .public)")
             return .failed
         }
-        let fact = await client.currentEntitlement(productID: productID)
-        apply(fact)
-        return fact == nil ? .nothingFound : .restored
+        let state = await client.entitlementState(productID: productID)
+        apply(state)
+        if case .entitled = state { return .restored }
+        return .nothingFound
     }
 
-    private func apply(_ fact: ProEntitlementFact?) {
-        if fact != nil, isPending { isPending = false }
+    /// The result alert was read.
+    func acknowledgeOutcome() {
+        if lastOutcome != nil { lastOutcome = nil }
+    }
+
+    private func apply(_ state: ProEntitlementState) {
+        generation += 1
+        if case .entitled = state, isPending { isPending = false }
         switch ProPurchasePolicy.reconcile(
-            entitlement: fact,
+            entitlement: state,
             localRecord: entitlements.localRecord,
             cloudRecord: entitlements.cloudRecord,
             ownBundleID: ownBundleID
         ) {
-        case .record(let record):
-            entitlements.recordPurchase(record)
+        case .record(let record, let mirror):
+            entitlements.recordPurchase(record, mirror: mirror)
         case .revoke:
-            logger.info("Pro no longer granted by StoreKit — local record withdrawn")
+            logger.info("Pro revoked by StoreKit — local record and own mirror withdrawn")
             entitlements.revokeOwnPurchase(ownBundleID: ownBundleID)
+        case .clearLocal:
+            logger.info("No Pro entitlement in StoreKit — local record withdrawn, mirror kept")
+            entitlements.clearLocal()
         case .none:
             break
         }

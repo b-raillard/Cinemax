@@ -40,7 +40,7 @@ struct ProStoreKitTests {
         #expect(product?.displayPrice.isEmpty == false)
     }
 
-    @Test("Acheté → Pro (local + miroir) ; remboursé → gratuit, miroir retiré")
+    @Test("Acheté → Pro sur cet appareil, SANS miroir (achat de test) ; remboursé → gratuit")
     func purchaseThenRefund() async throws {
         let session = try await session()
         let cloud = InMemoryCloudKeyValueStore()
@@ -53,8 +53,10 @@ struct ProStoreKitTests {
             return
         }
         #expect(fact.productID == ProProduct.current)
+        #expect(fact.environment == .xcode)
         #expect(entitlements.state == .pro(.purchase))
-        #expect(cloud.data(forKey: CloudEntitlementMirror.key) != nil)
+        // A test purchase never reaches the user's real iCloud store.
+        #expect(cloud.data(forKey: CloudEntitlementMirror.key) == nil)
 
         // A launch after the purchase: StoreKit's cache still grants it.
         await store.refresh()
@@ -69,6 +71,9 @@ struct ProStoreKitTests {
             return entitlements.state == .free
         })
         #expect(cloud.data(forKey: CloudEntitlementMirror.key) == nil)
+        // …and it reads as a PROVEN revocation, not a mere absence — the
+        // distinction that decides whether the mirror goes (spec R4).
+        #expect(await StoreKitProClient().entitlementState(productID: ProProduct.current) == .revoked)
     }
 
     @Test("Un échec de StoreKit est un échec, jamais un Pro")

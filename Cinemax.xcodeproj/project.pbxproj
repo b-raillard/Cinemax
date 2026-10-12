@@ -295,6 +295,7 @@
 		5D713300EE9F24D10EC7E5F5 /* ServerDTODecodingFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0039794C2E42BB6A81DF65F8 /* ServerDTODecodingFixtureTests.swift */; };
 		5D88CC33F8334EF5E6CD5475 /* WatchTogetherLobby.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F56B5D815F6314968F0D02 /* WatchTogetherLobby.swift */; };
 		5D915E76B0DA26C390A2DEBA /* AdminApiKeysViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4306C11E79B9A2CFADC83D03 /* AdminApiKeysViewModel.swift */; };
+		5E08B306F6FB3DB8087C3ECC /* ProPurchasePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5819CDB3718D9D40A95FFC27 /* ProPurchasePolicy.swift */; };
 		5E7ACBD3F69CDD439BC407CD /* PreAuthChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B5D2636A930296A6BD74ED /* PreAuthChrome.swift */; };
 		5E8410C6D81C3929C2E83BD3 /* AppUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111D7559C3B4164DFE2D5AB3 /* AppUpdateChecker.swift */; };
 		5E8DE9281D3D11ADBEE71751 /* TrickplayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFAC463F8054600F3BCEB911 /* TrickplayController.swift */; };
@@ -449,6 +450,7 @@
 		93B35A6DFD66F033D825B06E /* EarlyAdopterPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6C07D98733F869DE0964C5 /* EarlyAdopterPolicy.swift */; };
 		94D50ED24372C2DF858DA620 /* WatchedHistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE70722EFBCE65782C560AB /* WatchedHistoryScreen.swift */; };
 		94FAFFC584637C9051886991 /* PlayerPostureLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = F04F467D7C6E337AA909ACEA /* PlayerPostureLayout.swift */; };
+		95386959CD9A92FF35522964 /* ProPurchasePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5819CDB3718D9D40A95FFC27 /* ProPurchasePolicy.swift */; };
 		9571EA1D7D6ABC920F3D858E /* MediaQualityBadges.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D53C46CC9C173E104ABA41C /* MediaQualityBadges.swift */; };
 		95D68AD670E4ECC5960D13F8 /* EarlyAdopterStoreKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 578DD2F53EE999AA23445742 /* EarlyAdopterStoreKitTests.swift */; };
 		95D94E036EDA6AE3326386D4 /* ServerDiscoverySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5392E5D6360E4430456477E9 /* ServerDiscoverySheet.swift */; };
@@ -949,6 +951,7 @@
 		56B5D2636A930296A6BD74ED /* PreAuthChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreAuthChrome.swift; sourceTree = "<group>"; };
 		56E5F1E76FACB749BF2BBC8D /* LibrarySearchRanker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySearchRanker.swift; sourceTree = "<group>"; };
 		578DD2F53EE999AA23445742 /* EarlyAdopterStoreKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarlyAdopterStoreKitTests.swift; sourceTree = "<group>"; };
+		5819CDB3718D9D40A95FFC27 /* ProPurchasePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProPurchasePolicy.swift; sourceTree = "<group>"; };
 		58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BaseItemDto+Metadata.swift"; sourceTree = "<group>"; };
 		592DF5F22CD8B9D9D263F7FD /* AdminItemMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminItemMenu.swift; sourceTree = "<group>"; };
 		59CE3A78C397CC15A81F1635 /* GlassTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTextField.swift; sourceTree = "<group>"; };
@@ -1448,6 +1451,7 @@
 				61F0018394188F0CBD7E9BFA /* ProFeatureCatalogue.swift */,
 				144001395FD45F445D092E8D /* ProFeatureGate.swift */,
 				A14E395C0B3AE1EF268BD499 /* ProProduct.swift */,
+				5819CDB3718D9D40A95FFC27 /* ProPurchasePolicy.swift */,
 				9455AD337D2236EA18C5F1DA /* ProStore.swift */,
 			);
 			path = Entitlements;
@@ -2581,6 +2585,7 @@
 				D1FD200830F92D92C67F44D1 /* ProFeatureGate.swift in Sources */,
 				35B9B33AF0E852E862FF69FC /* ProProduct.swift in Sources */,
 				9ADBA99599754516A75FD17F /* ProPurchaseBlock.swift in Sources */,
+				95386959CD9A92FF35522964 /* ProPurchasePolicy.swift in Sources */,
 				C093815F243EEC11196A4350 /* ProScreen.swift in Sources */,
 				4A648D591123BC0B94A8CA76 /* ProStore.swift in Sources */,
 				F9C70C2B2234381A7E3D789C /* ProUpsellSheet.swift in Sources */,
@@ -2966,6 +2971,7 @@
 				39DB6C8822925DFC841B6EE7 /* ProFeatureGate.swift in Sources */,
 				51182D903AEE237FF32247CD /* ProProduct.swift in Sources */,
 				27C7A8833DCAD1E11699EAB4 /* ProPurchaseBlock.swift in Sources */,
+				5E08B306F6FB3DB8087C3ECC /* ProPurchasePolicy.swift in Sources */,
 				9778A75E28BF73B4F179042D /* ProScreen.swift in Sources */,
 				335CC6351948D0BC3AAAF12F /* ProStore.swift in Sources */,
 				B469CDAFEB71989559B23989 /* ProUpsellSheet.swift in Sources */,

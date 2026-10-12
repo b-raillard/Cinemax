@@ -26,7 +26,7 @@ struct ProUpsellSheet: View {
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                         CinemaButton(title: loc.localized("action.back"), style: .ghost) { showAll = false }
                             .frame(width: CinemaTVLayout.ctaWidth)
-                        ProScreen()
+                        ProScreen(hostsResultAlert: false)
                     }
                     .padding(.horizontal, CinemaTVLayout.pagePadding)
                     .padding(.vertical, CinemaSpacing.spacing8)
@@ -38,11 +38,12 @@ struct ProUpsellSheet: View {
             }
         }
         .onExitCommand { if showAll { showAll = false } else { dismiss() } }
+        .proPurchaseResultAlert { dismiss() }
         #else
         NavigationStack {
             ScrollView { content.padding(CinemaSpacing.spacing5) }
                 .background(CinemaColor.surface.ignoresSafeArea())
-                .navigationDestination(isPresented: $showAll) { ProScreen() }
+                .navigationDestination(isPresented: $showAll) { ProScreen(hostsResultAlert: false) }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { dismiss() } label: { Image(systemName: "xmark") }
@@ -51,6 +52,7 @@ struct ProUpsellSheet: View {
                 }
         }
         .presentationDetents([.medium, .large])
+        .proPurchaseResultAlert { dismiss() }
         #endif
     }
 
@@ -72,7 +74,7 @@ struct ProUpsellSheet: View {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            ProPurchaseBlock { dismiss() }
+            ProPurchaseBlock()
             secondaryButton(loc.localized("pro.upsell.seeAll"), color: themeManager.accent) { showAll = true }
             secondaryButton(loc.localized("pro.upsell.notNow"), color: CinemaColor.onSurfaceVariant) { dismiss() }
         }

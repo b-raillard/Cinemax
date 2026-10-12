@@ -147,7 +147,10 @@ struct AccountSwitcherView: View {
                 Group {
                     switch flow.step {
                     case .pick:
-                        if multiAccount { pickGrid } else { freeContent }
+                        // Frozen while the upsell is up: a purchase made in
+                        // it flips the tier, and swapping `freeContent` out
+                        // would tear its sheet — and « Merci ! » — down.
+                        if multiAccount && !showUpsell { pickGrid } else { freeContent }
                     case .code(let account, let parental):
                         AccountCodeStep(flow: flow, account: account, parental: parental, avatarSize: 72) {
                             Task { if await flow.submit(appState: appState, locks: locks, parentalLock: parentalLock, toasts: toasts, loc: loc) { dismiss() } }

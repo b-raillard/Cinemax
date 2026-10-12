@@ -21,9 +21,22 @@ struct ProScreen: View {
     static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
     static let privacyURL = URL(string: "https://b-raillard.github.io/Cinemax/privacy.html")
 
+    /// `false` when pushed inside the contextual sheet, which hosts the
+    /// result alert itself (one host at a time).
+    var hostsResultAlert = true
+
     private var tier: ProTier { entitlements.proTier(earlyAdopter: earlyAdopter) }
 
     var body: some View {
+        if hostsResultAlert {
+            platformBody.proPurchaseResultAlert()
+        } else {
+            platformBody
+        }
+    }
+
+    @ViewBuilder
+    private var platformBody: some View {
         #if os(tvOS)
         tvBody
         #else

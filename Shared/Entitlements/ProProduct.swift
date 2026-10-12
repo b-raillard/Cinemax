@@ -38,17 +38,33 @@ nonisolated struct ProEntitlementFact: Sendable, Equatable {
     /// that wants to verify it.
     var signedTransaction: String?
     let isFamilyShared: Bool
+    /// Where it was bought: only a `.production` purchase is ever mirrored.
+    let environment: AppTransactionSnapshot.Environment
 
-    /// The record `EntitlementStore` keeps and mirrors.
+    /// The record `EntitlementStore` keeps (and, if production, mirrors).
     func record(writerBundleID: String) -> CloudEntitlementRecord {
         CloudEntitlementRecord(
             productID: productID,
             originalTransactionID: originalTransactionID,
             purchaseDate: purchaseDate,
             signedTransaction: signedTransaction,
-            writerBundleID: writerBundleID
+            writerBundleID: writerBundleID,
+            environment: environment.rawValue
         )
     }
+}
+
+/// What StoreKit says about this app's Pro, POSITIVELY — the policy never
+/// reads a refund into a mere absence.
+nonisolated enum ProEntitlementState: Sendable, Equatable {
+    /// `Transaction.currentEntitlements` holds a verified, non-revoked one.
+    case entitled(ProEntitlementFact)
+    /// No current entitlement, and the latest verified transaction carries a
+    /// `revocationDate`: refunded, or family sharing withdrawn.
+    case revoked
+    /// Nothing either way: never bought — or StoreKit cannot tell yet (App
+    /// Store signed out, a restored device not synced, another account).
+    case absent
 }
 
 /// How a purchase ended (spec R6).
@@ -70,50 +86,4 @@ nonisolated enum ProRestoreOutcome: Sendable, Equatable {
     /// The user dismissed the Apple-account sign-in `AppStore.sync()` raised.
     case cancelled
     case failed
-}
-
-/// The pure reconciliation of StoreKit's answer with what the app recorded
-/// (spec R3, R4). StoreKit's `currentEntitlements` is the truth on the
-/// platform the purchase was made on; the local record and the iCloud mirror
-/// follow it.
-nonisolated enum ProPurchasePolicy {
-    enum Action: Sendable, Equatable {
-        /// Write the record locally and to the mirror (`recordPurchase`).
-        case record(CloudEntitlementRecord)
-        /// StoreKit no longer grants it: `revokeOwnPurchase`.
-        case revoke
-        case none
-    }
-
-    static func reconcile(
-        entitlement: ProEntitlementFact?,
-        localRecord: CloudEntitlementRecord?,
-        cloudRecord: CloudEntitlementRecord?,
-        ownBundleID: String
-    ) -> Action {
-        guard let entitlement else {
-            // Only a record THIS app wrote is this app's to withdraw.
-            if let localRecord, localRecord.writerBundleID == ownBundleID { return .revoke }
-            return .none
-        }
-        let candidate = entitlement.record(writerBundleID: ownBundleID)
-        let localUpToDate = localRecord.map { sameTransaction($0, candidate) } ?? false
-        // The mirror only has to carry SOME purchase: the other platform's own
-        // record serves just as well, and overwriting it would churn iCloud on
-        // every launch of both apps. Rewritten when absent (a refund on the
-        // other platform removed it) or when it is ours but stale.
-        let mirrorUpToDate: Bool = {
-            guard let cloudRecord else { return false }
-            if cloudRecord.writerBundleID != ownBundleID { return true }
-            return sameTransaction(cloudRecord, candidate)
-        }()
-        return localUpToDate && mirrorUpToDate ? .none : .record(candidate)
-    }
-
-    /// Same purchase, whatever JWS StoreKit re-signed it with.
-    private static func sameTransaction(_ lhs: CloudEntitlementRecord, _ rhs: CloudEntitlementRecord) -> Bool {
-        lhs.productID == rhs.productID
-            && lhs.originalTransactionID == rhs.originalTransactionID
-            && lhs.writerBundleID == rhs.writerBundleID
-    }
 }
