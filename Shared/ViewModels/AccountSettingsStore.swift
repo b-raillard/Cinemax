@@ -24,7 +24,6 @@ struct AccountSettingsSnapshot: Codable, Equatable, Sendable {
 /// here; the appearance is re-applied by `AppNavigation` through
 /// `ThemeManager`'s setters (a raw defaults write would not re-render).
 enum AccountSettingsStore {
-
     static func current(defaults: UserDefaults) -> AccountSettingsSnapshot {
         AccountSettingsSnapshot(
             maxContentAge: defaults.integer(forKey: SettingsKey.privacyMaxContentAge),

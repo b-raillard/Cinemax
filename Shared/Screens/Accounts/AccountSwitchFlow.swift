@@ -38,7 +38,7 @@ final class AccountSwitchFlow {
         isWorking = true
         defer { isWorking = false }
         let result = await appState.switchAccount(to: account.userId)
-        return handle(result, account: account, appState: appState, locks: locks, toasts: toasts, loc: loc)
+        return handle(result, account: account, hasOwnCode: Self.hasOwnCode(account, appState: appState, locks: locks), toasts: toasts, loc: loc)
     }
 
     /// Checks the typed code, then switches. `true` = switched.
@@ -70,7 +70,7 @@ final class AccountSwitchFlow {
             // whoever holds the device next. Closed again at once.
             if parental { parentalLock.lockForBackground() }
             let result = await appState.switchAccount(to: account.userId, unlocked: true)
-            return handle(result, account: account, appState: appState, locks: locks, toasts: toasts, loc: loc)
+            return handle(result, account: account, hasOwnCode: Self.hasOwnCode(account, appState: appState, locks: locks), toasts: toasts, loc: loc)
         case .wrong(_, let attemptsLeft):
             message = attemptsLeft > 0
                 ? loc.localized("accounts.pin.wrong")
@@ -108,7 +108,7 @@ final class AccountSwitchFlow {
         }
         guard ok else { return false }
         let result = await appState.switchAccount(to: account.userId, unlocked: true)
-        return handle(result, account: account, appState: appState, locks: locks, toasts: toasts, loc: loc)
+        return handle(result, account: account, hasOwnCode: Self.hasOwnCode(account, appState: appState, locks: locks), toasts: toasts, loc: loc)
     }
     #endif
 
@@ -118,11 +118,14 @@ final class AccountSwitchFlow {
         message = nil
     }
 
+    private static func hasOwnCode(_ account: SavedAccount, appState: AppState, locks: AccountLockStore) -> Bool {
+        appState.accountKey(for: account).map(locks.hasLock) ?? false
+    }
+
     private func handle(
         _ result: AppState.AccountSwitchResult,
         account: SavedAccount,
-        appState: AppState,
-        locks: AccountLockStore,
+        hasOwnCode: Bool,
         toasts: ToastCenter,
         loc: LocalizationManager
     ) -> Bool {
@@ -132,7 +135,6 @@ final class AccountSwitchFlow {
             toasts.success(loc.localized("accounts.switchedTo", account.username))
             return true
         case .locked:
-            let hasOwnCode = appState.accountKey(for: account).map(locks.hasLock) ?? false
             step = .code(account, parental: !hasOwnCode)
             entry = ""
             message = nil

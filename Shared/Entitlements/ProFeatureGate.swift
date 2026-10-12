@@ -15,9 +15,9 @@ enum ProTier: Sendable, Equatable {
 enum ProTierOverride: String, CaseIterable, Sendable {
     case automatic, free, pro, founder
 
-    var next: ProTierOverride {
+    var next: Self {
         let all = Self.allCases
-        return all[(all.firstIndex(of: self)! + 1) % all.count]
+        return all[((all.firstIndex(of: self) ?? 0) + 1) % all.count]
     }
 }
 

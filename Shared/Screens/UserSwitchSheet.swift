@@ -31,7 +31,7 @@ struct UserSwitchSheet: View {
     @State private var manualUsername: String = ""
     /// Opens straight on the manual step with this username — reconnecting a
     /// remembered account whose session expired (multi-account).
-    var prefilledUsername: String? = nil
+    var prefilledUsername: String?
 
     var body: some View {
         Group {

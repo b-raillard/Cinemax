@@ -348,7 +348,7 @@ struct TVAccountManageScreen: View {
             row(id: "age-\(key)", title: loc.localized("accounts.detail.age"), subtitle: nil,
                 value: loc.localized(option.localizationKey)) {
                 let all = ParentalAgeOption.allCases
-                let next = all[(all.firstIndex(of: option)! + 1) % all.count]
+                let next = all[((all.firstIndex(of: option) ?? 0) + 1) % all.count]
                 appState.setAgeCap(next.age, forAccountKey: key)
             }
             row(id: "remove-\(key)", title: loc.localized("accounts.detail.remove"), subtitle: nil, value: nil) {
