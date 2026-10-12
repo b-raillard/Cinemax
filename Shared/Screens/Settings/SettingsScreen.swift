@@ -17,8 +17,11 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     // first (its pill is the accented hero on the iOS landing); Lecture
     // sits right after Interface — it hosts the most-consulted playback
     // toggles, promoted out of the Interface hub in the 2026-07 reorg.
-    // « JellyGlass Pro » leads (story PRO-01) — but only where it must be
-    // shown (`ProFeatureGate.showsProEntry`): never before the Pro launches.
+    // « Votre niveau » / JellyGlass Pro (story PRO-01). NOT a row of the
+    // list (`visibleCases` never returns it): reached from the tier chip
+    // under the Settings title (design D), shown only where
+    // `ProFeatureGate.showsProEntry` allows. A case so that both platforms
+    // route it like any category detail.
     case pro
     case appearance
     case interface
@@ -48,7 +51,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     @MainActor func localizedName(_ loc: LocalizationManager) -> String {
         switch self {
-        case .pro:            loc.localized("settings.pro")
+        case .pro:            loc.localized("pro.tier.title")
         case .appearance:     loc.localized("settings.appearance")
         case .interface:      loc.localized("settings.interface")
         case .playback:       loc.localized("settings.playback")
@@ -80,9 +83,9 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     /// Filters `allCases` by admin visibility and platform. Use this instead
     /// of raw `allCases` in rendering code — keeps gating in one place.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, showsPro: Bool = false) -> [Self] {
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [Self] {
         allCases.filter { category in
-            if category == .pro { return showsPro }
+            if category == .pro { return false }
             if isTVOS && category.isAdminOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
             return true
@@ -182,6 +185,13 @@ struct SettingsScreen: View {
     @State var showUserSwitch = false
     /// `accountSwitchTier`'s snapshot while « Changer de compte » is open.
     @State var userSwitchTier: ProTier?
+
+    /// The tier the Settings header wears (design D) — `nil` = show nothing
+    /// (before the Pro launches, see `ProFeatureGate.showsProEntry`).
+    var headerTierLook: ProTierLook? {
+        guard entitlements.showsProEntry else { return nil }
+        return ProTierLook(tier: entitlements.proTier(earlyAdopter: earlyAdopter), themeManager: themeManager)
+    }
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false

@@ -702,12 +702,12 @@ struct SettingsCategoryTests {
                 == [.appearance, .interface, .playback, .account, .server])
     }
 
-    @Test("« JellyGlass Pro » ouvre le landing, sur les deux plateformes, seulement quand on doit la montrer")
-    @MainActor func proEntry() {
+    @Test("« Votre niveau » n'est jamais une ligne de la liste : on l'ouvre par la pastille de l'en-tête")
+    @MainActor func proNeverListed() {
         for isTVOS in [false, true] {
-            #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: isTVOS, showsPro: true)
-                    == [.pro, .appearance, .interface, .playback, .account, .server])
-            #expect(!SettingsCategory.visibleCases(isAdmin: true, isTVOS: isTVOS, showsPro: false).contains(.pro))
+            for isAdmin in [false, true] {
+                #expect(!SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS).contains(.pro))
+            }
         }
     }
 

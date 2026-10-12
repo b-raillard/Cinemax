@@ -62,6 +62,8 @@ extension SettingsScreen {
                     .frame(width: isShortHeader ? 64 : 112, height: isShortHeader ? 64 : 112)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
                     .shadow(color: themeManager.accent.opacity(0.4), radius: 15)
+                    // « Votre niveau » (design D): ring + medal on the logo.
+                    .proTierLogo(headerTierLook, cornerRadius: CinemaRadius.extraLarge, medalSize: isShortHeader ? 22 : 34)
                     .accessibilityHidden(true)
             }
 
@@ -70,6 +72,12 @@ extension SettingsScreen {
                     .font(.system(size: CinemaScale.pt(28), weight: .heavy, design: .default))
                     .foregroundStyle(CinemaColor.onSurface)
                     .tracking(-0.5)
+
+                // …and in words, the door to « Votre niveau » (the Pro page).
+                if let look = headerTierLook {
+                    ProTierChip(tier: look.tier) { selectedCategory = .pro }
+                        .padding(.vertical, CinemaSpacing.spacing1)
+                }
 
                 Text(loc.localized("settings.version", appVersion))
                     .font(CinemaFont.dynamicLabel(.medium))
@@ -97,14 +105,8 @@ extension SettingsScreen {
 
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false, showsPro: entitlements.showsProEntry)) { category in
-                if category == .pro {
-                    // A banner card rather than a pill (mockup « Achat Pro »).
-                    ProSettingsBanner { selectedCategory = .pro }
-                        .padding(.bottom, CinemaSpacing.spacing2)
-                } else {
-                    iOSCategoryButton(category)
-                }
+            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false)) { category in
+                iOSCategoryButton(category)
             }
         }
         .padding(.horizontal, CinemaSpacing.spacing4)

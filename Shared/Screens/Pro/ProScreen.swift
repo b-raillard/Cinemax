@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// « JellyGlass Pro » — Réglages' first entry (stories PRO-01…07, spec R7).
-/// What Pro adds, what stays free, and by tier: the purchase (free), the
-/// thank-you (founder), « Pro est actif » (Pro). « Restaurer les achats » is
-/// on screen in every tier (App Review requires it).
+/// « Votre niveau » / « JellyGlass Pro » (stories PRO-01…07, spec R7) — opened
+/// by the chip under the Settings title (design D). Its head is the membership
+/// card (design B); then what the tier includes, what stays free, and — for a
+/// free user only — the purchase. « Restaurer les achats » is on screen in
+/// every tier (App Review requires it).
 ///
-/// iOS: pushed from the Settings landing. tvOS: the body of the « JellyGlass
-/// Pro » settings detail (inside `tvDetailView`'s scroll view and back button).
+/// iOS: pushed from the Settings landing. tvOS: the body of the `.pro`
+/// settings detail (inside `tvDetailView`'s scroll view and back button).
 /// RULE: never shown at launch, never re-offered on its own (spec R9).
 struct ProScreen: View {
     @Environment(EntitlementStore.self) private var entitlements
@@ -46,19 +47,41 @@ struct ProScreen: View {
 
     // MARK: - Shared pieces
 
-    private var headline: String {
+    /// « Membre depuis juin 2026 » (founder: the first App Store install, of
+    /// either app) / « Actif depuis février 2027 » (Pro: the purchase).
+    private var since: String? {
+        let date: Date?
+        let key: String
         switch tier {
-        case .free: loc.localized("pro.headline.free")
-        case .founder: loc.localized("pro.headline.founder")
-        case .pro: loc.localized("pro.headline.pro")
+        case .founder:
+            date = earlyAdopter.transaction?.originalPurchaseDate ?? earlyAdopter.otherPlatformTransaction?.originalPurchaseDate
+            key = "pro.card.since.founder"
+        case .pro:
+            date = (entitlements.localRecord ?? entitlements.cloudRecord)?.purchaseDate
+            key = "pro.card.since.pro"
+        case .free:
+            return nil
+        }
+        guard let date else { return nil }
+        return loc.localized(key, date.formatted(.dateTime.month(.wide).year().locale(loc.locale)))
+    }
+
+    private var lead: String {
+        switch tier {
+        case .free: loc.localized("pro.subline.free")
+        case .founder: loc.localized("pro.founder.card")
+        case .pro: loc.localized("pro.subline.unlocked")
         }
     }
 
-    private var kicker: some View {
-        Text(loc.localized("pro.kicker"))
+    private var listTitle: some View {
+        Text(loc.localized(tier == .free ? "pro.list.withPro" : "pro.list.included"))
             .font(CinemaFont.dynamicLabel(.medium))
-            .tracking(1.6)
-            .foregroundStyle(themeManager.accent)
+            .fontWeight(.heavy)
+            .tracking(1)
+            .textCase(.uppercase)
+            .foregroundStyle(CinemaColor.onSurfaceMuted)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var alwaysFreeCard: some View {
@@ -78,23 +101,6 @@ struct ProScreen: View {
         .accessibilityElement(children: .combine)
     }
 
-    @ViewBuilder
-    private var tierBlock: some View {
-        switch tier {
-        case .free:
-            ProPurchaseBlock()
-        case .founder:
-            ProNoticeCard(text: loc.localized("pro.founder.card"), systemImage: "star")
-        case .pro:
-            Label(loc.localized("pro.active"), systemImage: "checkmark.circle.fill")
-                .font(CinemaFont.dynamicHeadline())
-                .foregroundStyle(CinemaColor.success)
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .background(CinemaColor.success.opacity(0.14))
-                .clipShape(Capsule())
-        }
-    }
-
     private func restore() {
         Task {
             switch await proStore.restore() {
@@ -112,21 +118,15 @@ struct ProScreen: View {
     private var iOSBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                    kicker
-                    Text(headline)
-                        .font(CinemaFont.dynamicSystem(30, weight: .heavy, relativeTo: .largeTitle))
-                        .foregroundStyle(CinemaColor.onSurface)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(loc.localized(tier == .free ? "pro.subline.free" : "pro.subline.unlocked"))
-                        .font(CinemaFont.dynamicBody)
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                ProMembershipCard(tier: tier, since: since)
 
-                if tier == .founder { tierBlock }
+                Text(lead)
+                    .font(CinemaFont.dynamicBody)
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+                    listTitle
                     ForEach(ProFeatureCatalogue.features) { feature in
                         featureRow(feature)
                     }
@@ -134,7 +134,7 @@ struct ProScreen: View {
 
                 alwaysFreeCard
 
-                if tier != .founder { tierBlock }
+                if tier == .free { ProPurchaseBlock() }
 
                 iOSLinks
             }
@@ -144,17 +144,17 @@ struct ProScreen: View {
             .frame(maxWidth: .infinity)
         }
         .background(CinemaColor.surface.ignoresSafeArea())
-        .navigationTitle(loc.localized("settings.pro"))
+        .navigationTitle(loc.localized("pro.tier.title"))
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private func featureRow(_ feature: ProFeatureCatalogue.Feature) -> some View {
         HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
-            Image(systemName: feature.icon)
-                .font(.system(size: CinemaScale.pt(17), weight: .semibold))
-                .foregroundStyle(themeManager.accent)
+            Image(systemName: tier == .free ? "lock.fill" : feature.icon)
+                .font(.system(size: CinemaScale.pt(tier == .free ? 14 : 17), weight: .semibold))
+                .foregroundStyle(tier == .free ? CinemaColor.onSurfaceVariant : themeManager.accent)
                 .frame(width: 36, height: 36)
-                .background(themeManager.accent.opacity(0.14))
+                .background(tier == .free ? CinemaColor.surfaceContainerHigh : themeManager.accent.opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
@@ -199,16 +199,18 @@ struct ProScreen: View {
     private var tvBody: some View {
         HStack(alignment: .top, spacing: CinemaSpacing.spacing10) {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                kicker
-                Text(headline)
-                    .font(CinemaFont.headline(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
+                ProMembershipCard(tier: tier, since: since)
+                    .frame(maxWidth: 560)
+                Text(lead)
+                    .font(CinemaFont.body)
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .fixedSize(horizontal: false, vertical: true)
+                listTitle
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                     ForEach(ProFeatureCatalogue.features) { feature in
-                        Label(loc.localized(feature.titleKey), systemImage: "checkmark")
+                        Label(loc.localized(feature.titleKey), systemImage: tier == .free ? "lock.fill" : "checkmark")
                             .font(CinemaFont.bodyLarge)
-                            .foregroundStyle(CinemaColor.onSurface)
+                            .foregroundStyle(tier == .free ? CinemaColor.onSurfaceVariant : CinemaColor.onSurface)
                     }
                 }
                 Text(loc.localized("pro.alwaysFree.tv"))
@@ -219,7 +221,7 @@ struct ProScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                tierBlock
+                if tier == .free { ProPurchaseBlock() }
                 if tier == .free {
                     Text(loc.localized("pro.tv.storeNote"))
                         .font(CinemaFont.body)
@@ -240,80 +242,4 @@ struct ProScreen: View {
         }
     }
     #endif
-}
-
-/// The Settings landing's Pro entry on iOS — a banner card rather than a
-/// category pill (mockup « Achat Pro »). A standalone view: it reads the tier
-/// and the price live.
-struct ProSettingsBanner: View {
-    @Environment(EntitlementStore.self) private var entitlements
-    @Environment(EarlyAdopterService.self) private var earlyAdopter
-    @Environment(ProStore.self) private var proStore
-    @Environment(LocalizationManager.self) private var loc
-    @Environment(ThemeManager.self) private var themeManager
-
-    let action: () -> Void
-
-    private var tier: ProTier { entitlements.proTier(earlyAdopter: earlyAdopter) }
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                HStack {
-                    Text(loc.localized("pro.kicker"))
-                        .font(CinemaFont.dynamicLabel(.small))
-                        .tracking(1.6)
-                        .foregroundStyle(tier == .pro ? CinemaColor.success : themeManager.accent)
-                    Spacer()
-                    Text(pill)
-                        .font(CinemaFont.dynamicLabel(.small))
-                        .foregroundStyle(tier == .pro ? CinemaColor.surface : themeManager.onAccentContainer)
-                        .padding(.horizontal, CinemaSpacing.spacing2)
-                        .padding(.vertical, 4)
-                        .background(tier == .pro ? CinemaColor.success : themeManager.accentContainer)
-                        .clipShape(Capsule())
-                }
-                Text(loc.localized(titleKey))
-                    .font(CinemaFont.dynamicSystem(20, weight: .heavy, relativeTo: .title3))
-                    .foregroundStyle(CinemaColor.onSurface)
-                    .multilineTextAlignment(.leading)
-                Text(loc.localized(textKey))
-                    .font(CinemaFont.dynamicLabel(.medium))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background((tier == .pro ? CinemaColor.success : themeManager.accent).opacity(0.14))
-            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .task { if tier == .free, proStore.product == nil { await proStore.loadProduct() } }
-    }
-
-    private var pill: String {
-        switch tier {
-        case .free: proStore.product?.displayPrice ?? loc.localized("pro.badge")
-        case .founder: loc.localized("pro.banner.pill.founder")
-        case .pro: loc.localized("pro.banner.pill.pro")
-        }
-    }
-
-    private var titleKey: String {
-        switch tier {
-        case .free: "pro.banner.free.title"
-        case .founder: "pro.banner.founder.title"
-        case .pro: "pro.banner.pro.title"
-        }
-    }
-
-    private var textKey: String {
-        switch tier {
-        case .free: "pro.banner.free.text"
-        case .founder: "pro.banner.founder.text"
-        case .pro: "pro.banner.pro.text"
-        }
-    }
 }

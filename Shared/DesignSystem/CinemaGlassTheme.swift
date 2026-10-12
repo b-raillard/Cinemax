@@ -74,6 +74,19 @@ enum CinemaColor {
 
     // Success
     static let success = Color.dynamic(light: 0x1F9D45, dark: 0x34C759)
+
+    // Founder « gold » — the founder tier's material (Settings logo ring and
+    // medal, membership card, « Votre niveau » chip). A foil, so the card
+    // keeps its stops in both modes; only the INK used on the page surface
+    // darkens in light mode, to stay readable there.
+    static let founderGoldDeep  = Color.dynamic(light: 0x3B2A0E, dark: 0x3B2A0E)
+    static let founderGold      = Color.dynamic(light: 0x8C6A26, dark: 0x8C6A26)
+    static let founderGoldLight = Color.dynamic(light: 0xE2C27A, dark: 0xE2C27A)
+    /// Text and emblems ON the gold card / medal.
+    static let onFounderGold    = Color.dynamic(light: 0x3A2806, dark: 0x3A2806)
+    static let onFounderCard    = Color.dynamic(light: 0xFFF8E8, dark: 0xFFF8E8)
+    /// Gold text on the page surface (the chip).
+    static let founderGoldInk   = Color.dynamic(light: 0x7A5A1E, dark: 0xE8C77A)
 }
 
 // MARK: - Global UI Scale

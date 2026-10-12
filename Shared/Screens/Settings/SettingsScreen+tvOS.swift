@@ -108,7 +108,22 @@ extension SettingsScreen {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 400, height: 400)
-                .shadow(color: themeManager.accent.opacity(0.5), radius: 40)
+                .shadow(color: headerTierLook.map { $0.tier == .free ? themeManager.accent.opacity(0.5) : $0.glow } ?? themeManager.accent.opacity(0.5), radius: 40)
+                // « Votre niveau » (design D): the medal. No ring on tvOS —
+                // the parallax logo is transparent, a frame would float.
+                .overlay(alignment: .bottomTrailing) {
+                    if let look = headerTierLook, let glyph = look.glyph {
+                        Image(systemName: glyph)
+                            .font(.system(size: CinemaScale.pt(26), weight: .black))
+                            .foregroundStyle(look.medalInk)
+                            .frame(width: 84, height: 84)
+                            .background(look.medalFill, in: Circle())
+                            .padding(6)
+                            .background(CinemaColor.surface, in: Circle())
+                            .offset(x: -40, y: -40)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .accessibilityHidden(true)
 
             VStack(spacing: CinemaSpacing.spacing2) {
@@ -122,6 +137,14 @@ extension SettingsScreen {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .opacity(0.8)
                     .tracking(0.5)
+
+                // The door to « Votre niveau » — focusable, its own section so
+                // a left press from the category pills reaches it.
+                if let look = headerTierLook {
+                    ProTierChip(tier: look.tier) { selectedCategory = .pro }
+                        .padding(.top, CinemaSpacing.spacing4)
+                        .focusSection()
+                }
             }
 
             Spacer()
@@ -136,7 +159,7 @@ extension SettingsScreen {
                 // tvOS explicitly hides admin entries — admin workflows are
                 // iOS/iPadOS-only. `isAdmin: false` is safe because the filter
                 // short-circuits on `isTVOS: true` regardless of admin flag.
-                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsPro: entitlements.showsProEntry)) { category in
+                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true)) { category in
                     tvCategoryButton(category)
                 }
 

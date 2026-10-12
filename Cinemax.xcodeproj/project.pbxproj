@@ -96,6 +96,7 @@
 		1ED2FC93756895B5F884DDA2 /* AdminUserDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C9346642E51488EB9DDC40 /* AdminUserDetailViewModel.swift */; };
 		1EF97616FD7266817F2A97D0 /* AdminNetworkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952BA3312C0EC62F0CF9ACBE /* AdminNetworkViewModel.swift */; };
 		1F8DDF74B6AA98658B045CF5 /* MovieLibraryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A30840A8AEBE5AA59B722F /* MovieLibraryScreen.swift */; };
+		1F9A3C805C303BF5E3CFBC0C /* ProTierViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78921C2150C2BE34E40FF9A1 /* ProTierViews.swift */; };
 		2071AE386D844DA8B6283716 /* SettingsTVActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96FE07986012B06BD4B2E9DD /* SettingsTVActionRow.swift */; };
 		2193AA20E0375074F247E721 /* MediaEntityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B900079191219FB59520FA9 /* MediaEntityID.swift */; };
 		223A88A3CC1776DA1267F6D8 /* SyncPlayQueueParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF6EED4756FEC6BE0B6AE1 /* SyncPlayQueueParsingTests.swift */; };
@@ -635,6 +636,7 @@
 		D585F4071DD435BBDACD16FA /* ExtensionServerTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = 809F99BE7D6CE419D78212E4 /* ExtensionServerTrust.swift */; };
 		D64C3AD31EC5F1CC8C2197F7 /* PlayLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA4717DCFEE46C5BE3F4787 /* PlayLink.swift */; };
 		D795322803A88D523D9D8351 /* SettingsTVLanguagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EBD3E46649C6D2B2201E5F /* SettingsTVLanguagePicker.swift */; };
+		D7C21084767D68802677716C /* ProTierViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78921C2150C2BE34E40FF9A1 /* ProTierViews.swift */; };
 		D835F577D3A0BA5D93A8D881 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B5A6240F3E4871F763D087 /* Haptics.swift */; };
 		D857D49B215D1F23176E0150 /* SettingsRowHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE57A7C26153CDFAB148F7 /* SettingsRowHelpers.swift */; };
 		D87CC3C9E3DF142DECE27059 /* TabletopHalo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C9E03B5F786E06FCDC1E7A /* TabletopHalo.swift */; };
@@ -1008,6 +1010,7 @@
 		75FE585AF0EC0507240E8772 /* APICacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APICacheTests.swift; sourceTree = "<group>"; };
 		7724055A1E25C1AF01224893 /* IntentSessionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentSessionProvider.swift; sourceTree = "<group>"; };
 		78377E8E832D65F7226A2A06 /* AppNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigation.swift; sourceTree = "<group>"; };
+		78921C2150C2BE34E40FF9A1 /* ProTierViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProTierViews.swift; sourceTree = "<group>"; };
 		78A064C067BC85456FB2FE3A /* AudioTrackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTrackPolicy.swift; sourceTree = "<group>"; };
 		7A465A5F06A8149C5E3FB68E /* RemotePlaystateRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlaystateRouter.swift; sourceTree = "<group>"; };
 		7B900079191219FB59520FA9 /* MediaEntityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaEntityID.swift; sourceTree = "<group>"; };
@@ -1998,6 +2001,7 @@
 			children = (
 				AC8F55391E442C62C07CA0BE /* ProPurchaseBlock.swift */,
 				1AF53DB0B4A692BAD98BBAAF /* ProScreen.swift */,
+				78921C2150C2BE34E40FF9A1 /* ProTierViews.swift */,
 				3250DF1EB86453F2907040C8 /* ProUpsellSheet.swift */,
 			);
 			path = Pro;
@@ -2588,6 +2592,7 @@
 				95386959CD9A92FF35522964 /* ProPurchasePolicy.swift in Sources */,
 				C093815F243EEC11196A4350 /* ProScreen.swift in Sources */,
 				4A648D591123BC0B94A8CA76 /* ProStore.swift in Sources */,
+				D7C21084767D68802677716C /* ProTierViews.swift in Sources */,
 				F9C70C2B2234381A7E3D789C /* ProUpsellSheet.swift in Sources */,
 				371D4A76714777A1D53F1851 /* ProfileScreen.swift in Sources */,
 				74CBBF39B6E72933460424C5 /* ProgressBarView.swift in Sources */,
@@ -2974,6 +2979,7 @@
 				5E08B306F6FB3DB8087C3ECC /* ProPurchasePolicy.swift in Sources */,
 				9778A75E28BF73B4F179042D /* ProScreen.swift in Sources */,
 				335CC6351948D0BC3AAAF12F /* ProStore.swift in Sources */,
+				1F9A3C805C303BF5E3CFBC0C /* ProTierViews.swift in Sources */,
 				B469CDAFEB71989559B23989 /* ProUpsellSheet.swift in Sources */,
 				6D74E6C853E8FF744E646086 /* ProfileScreen.swift in Sources */,
 				18D85464EB601F8113743C4D /* ProgressBarView.swift in Sources */,
