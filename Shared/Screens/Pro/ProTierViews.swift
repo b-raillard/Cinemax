@@ -227,6 +227,14 @@ struct ProMembershipCard: View {
 
     private var look: ProTierLook { ProTierLook(tier: tier, themeManager: themeManager) }
 
+    private var emblemInk: Color {
+        switch tier {
+        case .founder: CinemaColor.onFounderGold
+        case .pro: themeManager.accentContainer
+        case .free: CinemaColor.onSurfaceVariant
+        }
+    }
+
     private var line: String {
         switch tier {
         case .founder: loc.localized("pro.card.line.founder")
@@ -246,7 +254,10 @@ struct ProMembershipCard: View {
                 Spacer()
                 Image(systemName: look.glyph ?? "play.fill")
                     .font(.system(size: CinemaScale.pt(18), weight: .black))
-                    .foregroundStyle(tier == .free ? CinemaColor.onSurfaceVariant : look.medalInk)
+                    // On the card the emblem disc is the card's ink, so the
+                    // glyph takes the card's own deep tone (a white check
+                    // on the white disc vanished on the Pro card).
+                    .foregroundStyle(emblemInk)
                     .frame(width: 38, height: 38)
                     .background(tier == .free ? AnyShapeStyle(CinemaColor.surfaceContainerHighest) : AnyShapeStyle(look.cardInk.opacity(0.92)), in: Circle())
                     .accessibilityHidden(true)
