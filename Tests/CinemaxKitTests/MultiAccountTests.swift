@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Observation
 @testable import CinemaxKit
 @testable import Cinemax
 
@@ -456,6 +457,23 @@ struct AccountLockTests {
         _ = await locks.enroll(key: "S1|A", pin: "1234", useBiometrics: false)
         for _ in 0...ParentalLockPolicy.freeAttempts { _ = await locks.verify(key: "S1|A", pin: "0000") }
         if case .throttled = await locks.verify(key: "S1|A", pin: "1234") {} else { Issue.record("a throttled window refuses even the right code") }
+    }
+
+    @Test("Ajouter ou retirer un code redessine les vues qui lisent hasLock")
+    func codeChangesAreObserved() async {
+        final class Flag: @unchecked Sendable { var fired = false }
+        let locks = AccountLockStore(storage: InMemoryAccountLockStorage(), iterations: 1)
+        _ = await locks.enroll(key: "S1|A", pin: "1234", useBiometrics: false)
+
+        let removal = Flag()
+        withObservationTracking { _ = locks.hasLock("S1|A") } onChange: { removal.fired = true }
+        locks.remove(key: "S1|A")
+        #expect(removal.fired, "the toggle stayed on after removing the code (recette 2026-10-12)")
+
+        let enrolment = Flag()
+        withObservationTracking { _ = locks.hasLock("S1|A") } onChange: { enrolment.fired = true }
+        _ = await locks.enroll(key: "S1|A", pin: "5678", useBiometrics: false)
+        #expect(enrolment.fired)
     }
 
     @Test("AppState refuse de basculer vers un compte protégé sans code vérifié")

@@ -19,8 +19,11 @@ import LocalAuthentication
 /// Keychain lazily per key and caches the answer.
 @MainActor @Observable
 final class AccountLockStore {
-    /// Keys known to carry a code. Read by the switcher to draw its padlock.
-    private(set) var lockedKeys: Set<String> = []
+    /// Bumped by every mutator; the readers (`hasLock`, `biometricsEnabled`)
+    /// read it so a view redraws when a code is added or removed. The lazy
+    /// Keychain read itself only touches ignored state — mutating an observed
+    /// property from inside a view's body read is what SwiftUI warns about.
+    private(set) var revision = 0
     private(set) var isVerifying = false
 
     @ObservationIgnored private let storage: any AccountLockStorage
@@ -35,12 +38,14 @@ final class AccountLockStore {
     }
 
     func hasLock(_ key: String) -> Bool {
-        credential(for: key) != nil
+        _ = revision
+        return credential(for: key) != nil
     }
 
     /// Whether Face ID can open `key` (enrolled, armed, iOS).
     func biometricsEnabled(_ key: String) -> Bool {
-        credential(for: key)?.biometricsEnabled == true
+        _ = revision
+        return credential(for: key)?.biometricsEnabled == true
     }
 
     /// Enrols (or replaces) `key`'s code.
@@ -97,7 +102,7 @@ final class AccountLockStore {
         storage.deleteAccountLock(key: key)
         credentials[key] = nil
         loaded.insert(key)
-        if lockedKeys.contains(key) { lockedKeys.remove(key) }
+        revision &+= 1
     }
 
     #if os(iOS)
@@ -142,10 +147,6 @@ final class AccountLockStore {
         if !loaded.contains(key) {
             loaded.insert(key)
             credentials[key] = storage.getAccountLock(key: key)
-            let present = credentials[key] != nil
-            if present != lockedKeys.contains(key) {
-                if present { lockedKeys.insert(key) } else { lockedKeys.remove(key) }
-            }
         }
         return credentials[key]
     }
@@ -154,7 +155,7 @@ final class AccountLockStore {
     private func persist(_ credential: ParentalLockCredential, key: String) -> Bool {
         credentials[key] = credential
         loaded.insert(key)
-        if !lockedKeys.contains(key) { lockedKeys.insert(key) }
+        revision &+= 1
         do {
             try storage.saveAccountLock(credential, key: key)
             return true
