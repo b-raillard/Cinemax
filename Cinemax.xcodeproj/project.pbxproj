@@ -532,6 +532,7 @@
 		AD47EC1B4B389194AB19051F /* TVLayoutMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 391D964B3A0643928983242D /* TVLayoutMetricsTests.swift */; };
 		AD8B2A84E1FA7469C83C5BE9 /* AuthedURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 192311DCC27E4999E2F70068 /* AuthedURLTests.swift */; };
 		AEAD595C48A7E4344A7EE9D9 /* HomeRailGatingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C5CDD49E43CC30C9E1866A0 /* HomeRailGatingTests.swift */; };
+		B071C321CE9813C9E74195DD /* ProStoreKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E64CC4C2106783BCE3184B /* ProStoreKitTests.swift */; };
 		B0DF5ADBE87C53E570DA3791 /* AdminDashboardScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC3E912535197B53EEAEE7A /* AdminDashboardScreen.swift */; };
 		B12D6D645F12BF0CC3051F8C /* AdminScheduledTasksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2101C4E32EEC83662C75D00 /* AdminScheduledTasksScreen.swift */; };
 		B1670D6F0CBDC7204680E65B /* AdminPluginsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762983CA570B7EB3C9E1F65 /* AdminPluginsScreen.swift */; };
@@ -676,6 +677,7 @@
 		E6B2BB0C27B3C1FCDB145884 /* SettingsScreen+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66D79E78292DF655B3F508E /* SettingsScreen+iOS.swift */; };
 		E6C2C97AB4AD05D3A7D95087 /* AdminScheduledTasksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2101C4E32EEC83662C75D00 /* AdminScheduledTasksScreen.swift */; };
 		E71BC25CBB98F5DF97065B98 /* BaseItemDto+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */; };
+		E738ED357B443F3B261AF658 /* ProStoreKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E64CC4C2106783BCE3184B /* ProStoreKitTests.swift */; };
 		E7480A3BA5C2DC1639C0EFA8 /* SeasonalThemePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D8436C1CFF104C77B3237D /* SeasonalThemePolicyTests.swift */; };
 		E7716088FB4DEE5121D1ABB2 /* SeekCoalescerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E3E989946C44C0AAA0640F /* SeekCoalescerTests.swift */; };
 		E84BE53D54D8E3D1974872D9 /* MenuSettingsScreen+tvOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9D01599D90904C2EF5B69CE /* MenuSettingsScreen+tvOS.swift */; };
@@ -1134,6 +1136,7 @@
 		CF37181D8DDD93D930FE74E7 /* CardMenuOptimisticStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardMenuOptimisticStateTests.swift; sourceTree = "<group>"; };
 		CF4FB5F1E2CED9739B873116 /* OnboardingPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPolicyTests.swift; sourceTree = "<group>"; };
 		D083F5B426B3BAA9F95AB35F /* MetadataEditorScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataEditorScreen.swift; sourceTree = "<group>"; };
+		D0E64CC4C2106783BCE3184B /* ProStoreKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProStoreKitTests.swift; sourceTree = "<group>"; };
 		D170AF99C65838B5D919872E /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		D26B6A8F7506FEB0C0F8EFBD /* CloudEntitlementRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudEntitlementRecord.swift; sourceTree = "<group>"; };
 		D2A51D73542F8E7874313164 /* MediaDetailCastSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailCastSection.swift; sourceTree = "<group>"; };
@@ -1581,6 +1584,7 @@
 				13CD4B7F8A56ABCDC093DF80 /* PlaylistReorderTests.swift */,
 				F5015BA3559E63C6E9845F2B /* PlayMethodTests.swift */,
 				B51DBAF346BF0476E8EC42E1 /* ProPurchaseTests.swift */,
+				D0E64CC4C2106783BCE3184B /* ProStoreKitTests.swift */,
 				53363AB0D63349A37334B381 /* QuickConnectAuthorizeViewModelTests.swift */,
 				E9B0EBFA7FD313F6CEB0E3A2 /* RemoteImageCatalogTests.swift */,
 				E1330270587AFAB19C600176 /* RemotePlaystateRouterTests.swift */,
@@ -2334,6 +2338,7 @@
 				4B2D6CD3A3F2E0F74B5A6910 /* PlaylistCoverTests.swift in Sources */,
 				D8970177F3B300A5FCDB327D /* PlaylistReorderTests.swift in Sources */,
 				3B0751A60B995FD70D898BF1 /* ProPurchaseTests.swift in Sources */,
+				B071C321CE9813C9E74195DD /* ProStoreKitTests.swift in Sources */,
 				0ED6BB9632625BE9F922F728 /* QuickConnectAuthorizeViewModelTests.swift in Sources */,
 				A2EEBAC2676A4F47DC3FC75D /* RemoteImageCatalogTests.swift in Sources */,
 				A2055D7AD7A62A82F1577608 /* RemotePlayTargetTests.swift in Sources */,
@@ -2715,6 +2720,7 @@
 				8EEAFA6639D7F35772C20F9E /* PlaylistCoverTests.swift in Sources */,
 				AABF8842303AD2AF9D598A4D /* PlaylistReorderTests.swift in Sources */,
 				507E7F8F474E91BB2F2FAA2D /* ProPurchaseTests.swift in Sources */,
+				E738ED357B443F3B261AF658 /* ProStoreKitTests.swift in Sources */,
 				4E3E811886FBE324F25B62A9 /* QuickConnectAuthorizeViewModelTests.swift in Sources */,
 				70845724465C8D22DA5A783B /* RemoteImageCatalogTests.swift in Sources */,
 				EE463C75A045C127C206E20C /* RemotePlayTargetTests.swift in Sources */,
