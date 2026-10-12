@@ -100,8 +100,23 @@ extension EntitlementStore {
         return ProFeatureGate.tier(
             proLaunched: ProFeatureGate.proLaunched,
             isPro: state.isPro,
-            isEarlyAdopter: earlyAdopter.isEarlyAdopter,
+            isEarlyAdopter: ProFeatureGate.recognisesFounders && earlyAdopter.isEarlyAdopter,
             override: override
         )
+    }
+}
+
+extension ProFeatureGate {
+    /// `false` in a `PRO_PREVIEW` build: a preview exists to walk the
+    /// purchase, and with no pivot every PRODUCTION install reads as an early
+    /// adopter — the tester's own Apple TV (or an earlier App Store install)
+    /// publishes that to their iCloud, which made the preview open on
+    /// « Fondateur », with no purchase button.
+    static var recognisesFounders: Bool {
+        #if PRO_PREVIEW
+        false
+        #else
+        true
+        #endif
     }
 }

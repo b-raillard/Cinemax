@@ -198,14 +198,16 @@ struct ProFeatureGateTests {
     }
 
     #if PRO_PREVIEW
-    @Test("Une build aperçu se comporte comme si le Pro était lancé")
+    @Test("Une build aperçu se comporte comme si le Pro était lancé, sans fondateurs")
     func previewBuildIsLaunched() {
         #expect(ProFeatureGate.proLaunched)
+        #expect(ProFeatureGate.recognisesFounders == false)
     }
     #else
-    @Test("Le Pro n'est pas lancé dans cette version")
+    @Test("Le Pro n'est pas lancé dans cette version ; les fondateurs sont reconnus")
     func notLaunchedYet() {
         #expect(ProFeatureGate.proLaunched == false)
+        #expect(ProFeatureGate.recognisesFounders)
     }
     #endif
 
