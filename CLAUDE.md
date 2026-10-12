@@ -92,7 +92,7 @@ Packages/CinemaxKit/        Models (incl. QuickConnectRequest, SyncPlayModels, R
 docs/design-system/         Canonical design system reference
 ```
 
-`Shared/Screens/` is mostly flat. Exceptions: `Settings/` and `Admin/` feature folders. `PlayLink.swift` + `MediaDetail*.swift` siblings stay at root (tightly coupled to parents).
+`Shared/Screens/` is mostly flat. Exceptions: `Settings/`, `Admin/`, `Accounts/` (multi-account) and `Pro/` (the Pro page and purchase UI) feature folders. `PlayLink.swift` + `MediaDetail*.swift` siblings stay at root (tightly coupled to parents).
 ## Localization
 
 - `LocalizationManager` (`@Observable`, injected from `AppNavigation`). `fr`, `en`, `de` — `AppLanguage`, settled once at launch.
