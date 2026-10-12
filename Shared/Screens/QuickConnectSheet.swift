@@ -64,7 +64,10 @@ struct QuickConnectSheet: View {
             Spacer(minLength: 0)
         }
         .padding(isShortLayout ? CinemaSpacing.spacing4 : CinemaSpacing.spacing6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Top-aligned, like the tvOS body: centred, a column taller than the
+        // `.medium` detent overflowed BOTH ends and the ✕ sat above the sheet,
+        // unreachable at 130 % text (recette 2026-10-08, M3-08 ②).
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(CinemaColor.surface.ignoresSafeArea())
     }
     #endif

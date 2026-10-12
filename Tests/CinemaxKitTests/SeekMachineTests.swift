@@ -89,6 +89,16 @@ struct SeekMachineTests {
         #expect(bench.machine.pendingTargetMs == 35_000)
     }
 
+    @Test("Un saut pendant la stabilisation part de la cible en vol, pas de l'horloge périmée")
+    func skipDuringSettleAddsToTheTargetInFlight() {
+        // Recette 2026-10-08, D05-OBS-1.
+        let bench = Bench()
+        bench.position = 50_000
+        bench.machine.engineSeek(60_000, byUser: true)   // le premier +10 se stabilise
+        bench.machine.skip(bySeconds: 10)                  // libVLC lit encore 50 s
+        #expect(bench.paints.last == 70_000)
+    }
+
     @Test("Un saut ne dépasse jamais la marge de fin")
     func skipClampsBeforeTheEnd() {
         let bench = Bench()

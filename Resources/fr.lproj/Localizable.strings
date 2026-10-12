@@ -487,6 +487,7 @@
 "player.autoSkipped.intro" = "Intro passée";
 "player.autoSkipped.credits" = "Générique passé";
 "player.speed" = "Vitesse";
+"player.tabletop.speed" = "Vitesse";
 "player.audioDelay" = "Délai audio";
 "player.audio.silentSuffix" = "(muet sur Apple)";
 "player.audio.silent.title" = "Piste muette sur Apple";

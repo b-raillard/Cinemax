@@ -191,6 +191,25 @@ enum CardPlayTargetResolver {
             positionTicks, isPlayed: isPlayed, playedOverride: playedOverride, now: now))
     }
 
+    /// The source a first open asks for. An explicit one (the fiche's
+    /// « Version » row) wins; otherwise a RESUME opens the item's own source —
+    /// the one whose id is the item's, which owns the position — and a start
+    /// from 0 leaves the pick to `MediaSourceQuality`.
+    ///
+    /// Without this, a two-version title resumed from a card opened the
+    /// higher-ranked 4K at the 1080p's position, reported its progress there,
+    /// and the title dropped out of « Reprendre » after a relaunch (recette
+    /// 2026-10-08, M2-15: Sintel, resume on the 1080p, card opened the 4K). An
+    /// id matching no source (a series, resolved to an episode server-side)
+    /// falls back to the ranked pick in `MediaSourceQuality.resolve`.
+    nonisolated static func sourceToOpen(
+        itemId: String, explicitSourceId: String?, startTime: Double?
+    ) -> String? {
+        if let explicitSourceId { return explicitSourceId }
+        guard let startTime, startTime > 0 else { return nil }
+        return itemId
+    }
+
     /// The resume offset in seconds, or `nil` to play from the beginning.
     ///
     /// Exposed for the same reason as `isResumable`: Home's hero, its Continue

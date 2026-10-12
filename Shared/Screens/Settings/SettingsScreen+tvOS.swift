@@ -790,7 +790,7 @@ extension SettingsScreen {
                     .font(.system(size: CinemaScale.pt(20), weight: .medium))
                     .foregroundStyle(CinemaColor.onSurface)
                 Spacer()
-                Text("\(Int(fontScale * 100))%")
+                Text("\(Int((fontScale * 100).rounded()))%")
                     .font(.system(size: CinemaScale.pt(17), weight: .semibold))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .monospacedDigit()

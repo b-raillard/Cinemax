@@ -187,7 +187,10 @@ struct VideoPlayerView: View {
     private func negotiate(userId: String, bitrate: Int, engine: VideoPlaybackEngine) async throws -> PlaybackInfo {
         let api = appState.apiClient
         let itemId = itemId
-        let mediaSourceId = mediaSourceId
+        // A resume opens the source that owns the position (M2-15).
+        let mediaSourceId = CardPlayTargetResolver.sourceToOpen(
+            itemId: itemId, explicitSourceId: mediaSourceId, startTime: startTime
+        )
         return try await Task {
             try await api.getPlaybackInfo(
                 itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,

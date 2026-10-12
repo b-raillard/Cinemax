@@ -59,6 +59,11 @@ enum SeekCoalescer {
 /// 30.0 s, HUD pinned to the scrub target throughout — which reads as "the
 /// player froze after a fast-forward". Locked by `SeekSettleTrackerTests`.
 struct SeekSettleTracker {
+    /// The largest advance between two samples that still reads as playback.
+    /// Samples come from the time tick and the 1 s heartbeat; even at 2× a
+    /// heartbeat spans 2 s.
+    static let maxProgressStepMs: Int32 = 3000
+
     private var baselineMs: Int32?
 
     /// Reports whether the playhead has advanced at least `thresholdMs` since
@@ -75,6 +80,16 @@ struct SeekSettleTracker {
         }
         guard Int(positionMs) - Int(baseline) >= Int(thresholdMs) else {
             return false // keep the baseline so small samples accumulate
+        }
+        // A forward JUMP is not playback either: it is libVLC answering a
+        // stale or new position (a second ±10 issued while the first settles
+        // reads 20 s ahead at once). Counted as progress it closed the window
+        // early, the HUD dropped its pending target, and the next skip took
+        // the stale clock as its base — a step lost or reversed (recette
+        // 2026-10-08, D05-OBS-1). Re-baseline on it instead.
+        guard Int(positionMs) - Int(baseline) <= Int(Self.maxProgressStepMs) else {
+            baselineMs = positionMs
+            return false
         }
         baselineMs = positionMs
         return true

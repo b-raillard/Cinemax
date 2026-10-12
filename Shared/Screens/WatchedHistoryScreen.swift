@@ -326,7 +326,7 @@ struct WatchedHistoryScreen: View {
         // screen reloads off `.cinemaxShouldRefreshCatalogue`), favorite too.
         .mediaCardContextMenu(
             item: item,
-            artwork: .poster,
+            artwork: .posterURL(posterURL(for: item)),
             onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
         )
     }
