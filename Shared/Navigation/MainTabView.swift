@@ -331,6 +331,16 @@ struct MainTabView: View {
                 Tab(value: tab.id) {
                     NavigationStack {
                         destinationView(for: tab)
+                            // Who is watching, on EVERY tab root, leading: the
+                            // avatar opens the profile switcher (multi-account),
+                            // or the account change without the Pro. On the root
+                            // only — a pushed page's leading slot is its back
+                            // button, and the player hides the bar anyway.
+                            .toolbar {
+                                ToolbarItem(placement: .topBarLeading) {
+                                    AccountAvatarToolbarButton()
+                                }
+                            }
                     }
                 } label: {
                     Label(tab.displayTitle(loc), systemImage: tab.icon)

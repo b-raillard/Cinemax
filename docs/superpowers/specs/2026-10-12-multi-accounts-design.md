@@ -118,7 +118,7 @@ Raison : `EarlyAdopterService` ne reconnaît un fondateur que sur une transactio
 
 ## 9. Interface
 
-- **iOS** : avatar dans la barre de l'Accueil (`ToolbarItem(.topBarTrailing)`, sans `.buttonStyle(.glass)`) → `AccountSwitcher` présenté en `.popover`.
+- **iOS** : avatar à GAUCHE de la barre de chaque racine d'onglet (`MainTabView`, `ToolbarItem(.topBarLeading)`, sans `.buttonStyle(.glass)` ; demande de recette du 12/10, il était à droite sur l'Accueil seul). Les pages poussées gardent leur bouton retour à cette place, le lecteur masque la barre. Réglages, dont l'accueil masque la barre, le porte en tête de page au même endroit → `AccountSwitcher` présenté en `.popover`.
   - Il affiche une grille des comptes mémorisés (anneau d'accent sur le compte courant, cadenas, « Session expirée »), puis « Ajouter », « Gérer les comptes » et « Mes serveurs ».
   - « Ajouter » réutilise `UserSwitchSheet` (liste, saisie manuelle, Quick Connect).
   - En gratuit après le lancement : `UserSwitchSheet` directement, comme aujourd'hui.

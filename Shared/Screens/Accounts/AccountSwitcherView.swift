@@ -322,7 +322,7 @@ struct AccountSwitcherView: View {
     }
 }
 
-/// The avatar in Home's navigation bar (iOS). A toolbar item: iOS 26 draws its
+/// The avatar leading every tab root's navigation bar (iOS, `MainTabView`). A toolbar item: iOS 26 draws its
 /// Liquid Glass itself — never `.buttonStyle(.glass)` on it (root RULE).
 struct AccountAvatarToolbarButton: View {
     @Environment(AppState.self) private var appState
