@@ -1093,6 +1093,10 @@
 "accounts.switchedTo" = "Vous regardez en tant que %@";
 "accounts.title" = "Qui regarde ?";
 "accounts.add" = "Ajouter";
+"accounts.add.title" = "Ajouter un profil";
+"accounts.add.subtitle" = "Quick Connect évite de taper un mot de passe à la télécommande : approuvez le code depuis un appareil où le compte est connecté.";
+"accounts.add.quickConnect" = "Quick Connect";
+"accounts.add.password" = "Identifiant et mot de passe";
 "accounts.manage" = "Gérer les comptes";
 "accounts.current" = "En cours";
 "accounts.expired" = "Session expirée";

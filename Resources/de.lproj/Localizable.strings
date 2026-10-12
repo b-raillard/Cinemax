@@ -1091,6 +1091,10 @@
 "accounts.switchedTo" = "Du schaust jetzt als %@";
 "accounts.title" = "Wer schaut?";
 "accounts.add" = "Hinzufügen";
+"accounts.add.title" = "Profil hinzufügen";
+"accounts.add.subtitle" = "Mit Quick Connect musst du kein Passwort mit der Fernbedienung eintippen: Bestätige den Code auf einem Gerät, auf dem das Konto angemeldet ist.";
+"accounts.add.quickConnect" = "Quick Connect";
+"accounts.add.password" = "Benutzername und Passwort";
 "accounts.manage" = "Konten verwalten";
 "accounts.current" = "Aktiv";
 "accounts.expired" = "Sitzung abgelaufen";

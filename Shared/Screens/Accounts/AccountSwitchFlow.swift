@@ -64,6 +64,11 @@ final class AccountSwitchFlow {
         switch verdict {
         case .unlocked:
             message = nil
+            // The parental code opened ONE switch, not the parental settings:
+            // `verify` leaves the controller unlocked for the session, which
+            // would hand Privacy & Security and « Gérer les comptes » to
+            // whoever holds the device next. Closed again at once.
+            if parental { parentalLock.lockForBackground() }
             let result = await appState.switchAccount(to: account.userId, unlocked: true)
             return handle(result, account: account, appState: appState, locks: locks, toasts: toasts, loc: loc)
         case .wrong(_, let attemptsLeft):
@@ -95,6 +100,8 @@ final class AccountSwitchFlow {
         let ok: Bool
         if parental {
             ok = await parentalLock.unlockWithBiometrics(reason: reason)
+            // Same as the code path: one switch, not the parental settings.
+            if ok { parentalLock.lockForBackground() }
         } else {
             guard let key = appState.accountKey(for: account) else { return false }
             ok = await locks.unlockWithBiometrics(key: key, reason: reason)

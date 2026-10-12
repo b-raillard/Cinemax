@@ -12,6 +12,9 @@ struct AccountTile: View {
     let isLocked: Bool
     let isExpired: Bool
     let avatarSize: CGFloat
+    /// tvOS: the tile has focus — a round portrait draws its own circular
+    /// accent ring and grows (card focus level, `CinemaTVFocus`).
+    var isFocused: Bool = false
 
     var body: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
@@ -28,10 +31,12 @@ struct AccountTile: View {
                 }
                 .padding(4)
                 .overlay {
-                    if isCurrent {
-                        Circle().strokeBorder(themeManager.accent, lineWidth: 3)
+                    if isCurrent || isFocused {
+                        Circle().strokeBorder(themeManager.accent.opacity(isFocused ? 1 : 0.7), lineWidth: 3)
                     }
                 }
+                .shadow(color: themeManager.accent.opacity(isFocused ? 0.35 : 0), radius: 22, y: 12)
+                .scaleEffect(isFocused ? 1.06 : 1)
             Text(account.username)
                 .font(CinemaFont.dynamicLabel(.large))
                 .foregroundStyle(CinemaColor.onSurface)

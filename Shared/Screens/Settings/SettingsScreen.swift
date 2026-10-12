@@ -496,7 +496,17 @@ struct SettingsScreen: View {
             plainUserSwitchSheet
         }
         #else
-        plainUserSwitchSheet
+        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
+            WhoIsWatchingScreen(mode: .cover) { showUserSwitch = false }
+                .environment(appState)
+                .environment(themeManager)
+                .environment(loc)
+                .environment(toasts)
+                .environment(accountLocks)
+                .environment(parentalLock)
+        } else {
+            plainUserSwitchSheet
+        }
         #endif
     }
 

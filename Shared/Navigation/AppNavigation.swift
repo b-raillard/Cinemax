@@ -73,6 +73,10 @@ struct AppNavigation: View {
     @State private var cardActions = CardActionPresenter()
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
+    /// tvOS « Qui regarde ? » at launch (multi-account) — decided once, right
+    /// after the session is restored, and shown BEFORE « Quoi de neuf ».
+    @State private var showWhoIsWatching = false
+    @AppStorage(SettingsKey.accountsAskOnLaunch) private var accountsAskOnLaunch = SettingsKey.Default.accountsAskOnLaunch
     /// Deliberately NOT one of the process singletons above: it holds two
     /// `UserDefaults` reads and a throttled network hop, so a scene-event
     /// recreation costs nothing — and the standing offer is re-derived from
@@ -321,7 +325,7 @@ struct AppNavigation: View {
         // `@Observable` objects down with it (same reason `onboardingSheet`
         // does it).
         .whatsNewPresentation(isPresented: Binding(
-            get: { !whatsNewPages.isEmpty && appState.isAuthenticated },
+            get: { !whatsNewPages.isEmpty && appState.isAuthenticated && !showWhoIsWatching },
             set: { presented in
                 guard !presented else { return }
                 finishWhatsNew()
@@ -337,6 +341,21 @@ struct AppNavigation: View {
                     systemReduceMotion: systemReduceMotion
                 ))
         }
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $showWhoIsWatching) {
+            WhoIsWatchingScreen(mode: .launch) { showWhoIsWatching = false }
+                .environment(appState)
+                .environment(themeManager)
+                .environment(loc)
+                .environment(toasts)
+                .environment(accountLocks)
+                .environment(parentalLock)
+                .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
+                    appToggle: motionEffects,
+                    systemReduceMotion: systemReduceMotion
+                ))
+        }
+        #endif
         // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
         // AppState — MainTabView switches to Home, HomeScreen pushes detail.
         .onOpenURL { url in
@@ -384,6 +403,15 @@ struct AppNavigation: View {
                 onboardingSeen = true
             }
             hasCheckedSession = true
+            #if os(tvOS)
+            // The living-room picker: only with several remembered accounts to
+            // choose from, and only when the household asked for it.
+            if appState.isAuthenticated, accountsAskOnLaunch,
+               entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures,
+               appState.activeAccounts.count >= 2 {
+                showWhoIsWatching = true
+            }
+            #endif
             // Baseline attach so the menu editor has an API client even with
             // no session. The library-mode view refresh is NOT triggered here:
             // `onChange(of: appState.currentUserId)` below owns it for every

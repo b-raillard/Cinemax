@@ -13,6 +13,8 @@ struct MainTabView: View {
     @Environment(MenuConfigStore.self) private var menuConfig
     @Environment(SettingsNavCoordinator.self) private var settingsNav
     @Environment(SeasonalThemeController.self) private var seasonal
+    @Environment(EntitlementStore.self) private var entitlements
+    @Environment(EarlyAdopterService.self) private var earlyAdopter
     @State private var selectedTabID: String = "home"
     /// Deep-link item to present modally from the tab root when the user's
     /// custom menu has no Home tab to route through (see the deep-link
@@ -60,6 +62,9 @@ struct MainTabView: View {
     /// drop it, and then the first tab plays that role — the user still needs
     /// one screen the Menu button converges on before it gives up and suspends
     /// the app.
+    /// Value of the leading « Profil » tab (multi-account).
+    static let profileTabID = "accounts.profile"
+
     private var tvHomeTabID: String? {
         displayedTabs.first(where: { $0.id == MenuEntry.homeID })?.id ?? displayedTabs.first?.id
     }
@@ -263,6 +268,21 @@ struct MainTabView: View {
     @ViewBuilder
     private func tvTabLayout(tabs: [ResolvedTab]) -> some View {
         TabView(selection: $selectedTabID) {
+            // Multi-account: the leading « Profil » tab IS « Qui regarde ? ».
+            // Outside `displayedTabs` on purpose: it is neither the Menu
+            // button's home fallback (`tvHomeTabID`) nor a tab root that
+            // registers with `TVBackCoordinator`; Menu there goes to Accueil
+            // through the single handler below.
+            if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
+                Tab(value: Self.profileTabID) {
+                    WhoIsWatchingScreen(mode: .tab) {
+                        selectedTabID = tvHomeTabID ?? selectedTabID
+                    }
+                } label: {
+                    Label(appState.currentUser?.name ?? loc.localized("accounts.title"), systemImage: "person.crop.circle")
+                        .layoutBoundDynamicType()
+                }
+            }
             ForEach(tabs) { tab in
                 Tab(value: tab.id) {
                     NavigationStack {
