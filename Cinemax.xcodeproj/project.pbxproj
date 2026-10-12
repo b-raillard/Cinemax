@@ -265,6 +265,7 @@
 		55DDC66E0CC921159717737F /* ServersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */; };
 		562ECFF99482CFF3CEC6435D /* CinemaxKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223258AFA0F2668369423520 /* CinemaxKitTests.swift */; };
 		5696ECB7B9811A5CD17279E7 /* AdminRelativeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54A9FC0F398EBC3E87764B50 /* AdminRelativeFormatter.swift */; };
+		56AE0D76B3B5271C859CA20F /* AccountLockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9104FBBF825F55A5F637BAB /* AccountLockStore.swift */; };
 		574B9D39C15D539DEC66C125 /* AdminTabbedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE7EDAE1CB51A7F06D6BD83 /* AdminTabbedScreen.swift */; };
 		575A596CB9AB11EAB858E4F5 /* SleepTimerOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */; };
 		5782D05B40C908DB8241AAE6 /* CinemaxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A70C2603459BCEE70535BB4 /* CinemaxApp.swift */; };
@@ -396,6 +397,7 @@
 		86526F1D7EA8C308D75CD1FE /* WatchedHistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE70722EFBCE65782C560AB /* WatchedHistoryScreen.swift */; };
 		86AC24861A35CA8EDFE28605 /* AdminPluginsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762983CA570B7EB3C9E1F65 /* AdminPluginsScreen.swift */; };
 		870ED1B70E8234C2FDBEAD6E /* SeasonalThemePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 756663BDEA8390301E8117E8 /* SeasonalThemePolicy.swift */; };
+		8770BADC697109FB04AD0221 /* AccountLockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9104FBBF825F55A5F637BAB /* AccountLockStore.swift */; };
 		87DECA3E86190E204B98905D /* CloudKeyValueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DA26861069F545AD474AF1 /* CloudKeyValueStore.swift */; };
 		880679762A2ABF35AF9B5B62 /* RemotePlaystateRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A465A5F06A8149C5E3FB68E /* RemotePlaystateRouter.swift */; };
 		88F9D715BA01E84DCB310C87 /* PlayerTimeFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C78DE5E6487FF7D0204D485 /* PlayerTimeFormatTests.swift */; };
@@ -1093,6 +1095,7 @@
 		C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVButtonStyles.swift; sourceTree = "<group>"; };
 		C841DD38B96B93109EC57823 /* EntitlementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementPolicy.swift; sourceTree = "<group>"; };
 		C8D742BCF96212F6A06B3E40 /* VLCStreamPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VLCStreamPresenter.swift; sourceTree = "<group>"; };
+		C9104FBBF825F55A5F637BAB /* AccountLockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountLockStore.swift; sourceTree = "<group>"; };
 		CAE7D2FCE0D1E553996F8787 /* ReviewPromptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptPolicy.swift; sourceTree = "<group>"; };
 		CB70200A45E30CF69C12BE71 /* CinemaxKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CinemaxKit; path = Packages/CinemaxKit; sourceTree = SOURCE_ROOT; };
 		CB88BD157A83540E8C49B329 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
@@ -1594,6 +1597,7 @@
 		8822C04E24F87E1AE0E81BF0 /* Screens */ = {
 			isa = PBXGroup;
 			children = (
+				C006B9D313A5BD9830043053 /* Accounts */,
 				966BE0EA92A03684308CA6FA /* Admin */,
 				617BA33C992B13701372DF33 /* Settings */,
 				B047DC9BB4F744ACF2542679 /* VideoPlayer */,
@@ -1827,6 +1831,14 @@
 				58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */,
 			);
 			path = Extensions;
+			sourceTree = "<group>";
+		};
+		C006B9D313A5BD9830043053 /* Accounts */ = {
+			isa = PBXGroup;
+			children = (
+				C9104FBBF825F55A5F637BAB /* AccountLockStore.swift */,
+			);
+			path = Accounts;
 			sourceTree = "<group>";
 		};
 		C70987E95FC6274490A70D84 /* CinemaxWidget */ = {
@@ -2325,6 +2337,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2F4C51078FC6EFB427650A5F /* AccentOption.swift in Sources */,
+				56AE0D76B3B5271C859CA20F /* AccountLockStore.swift in Sources */,
 				409362A6EC91C09AD6A89471 /* AccountSettingsStore.swift in Sources */,
 				28607C1A48373994CB677989 /* AdaptiveLayout.swift in Sources */,
 				7B95F6AD4D4FADB0685A8A81 /* AddToPlaylistSheet.swift in Sources */,
@@ -2696,6 +2709,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5115EECDD47EEF8054E73643 /* AccentOption.swift in Sources */,
+				8770BADC697109FB04AD0221 /* AccountLockStore.swift in Sources */,
 				8003A34BD456561198A70B9E /* AccountSettingsStore.swift in Sources */,
 				A8C1C7C4A4E243D4F959D865 /* AdaptiveLayout.swift in Sources */,
 				5268C36D803C151025ABFF22 /* AddToPlaylistSheet.swift in Sources */,

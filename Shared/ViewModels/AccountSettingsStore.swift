@@ -55,6 +55,20 @@ enum AccountSettingsStore {
         return target
     }
 
+    /// Whether age cap `candidate` lets more through than `current`. `0` means
+    /// « no limit », the most permissive of all.
+    static func isLessRestrictive(_ candidate: Int, than current: Int) -> Bool {
+        let rank = { (age: Int) in age <= 0 ? Int.max : age }
+        return rank(candidate) > rank(current)
+    }
+
+    /// The cap `accountKey` would open with: its own, or — never seen — the
+    /// current one (it inherits).
+    static func ageCap(for accountKey: String, defaults: UserDefaults) -> Int {
+        load(for: accountKey, defaults: defaults)?.maxContentAge
+            ?? defaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+    }
+
     static func remove(accountKey: String, defaults: UserDefaults) {
         var map = all(defaults: defaults)
         guard map.removeValue(forKey: accountKey) != nil else { return }

@@ -411,3 +411,141 @@ struct AccountSettingsTests {
         #expect(AccountSettingsStore.load(for: "S1|A", defaults: defaults)?.maxContentAge == 0)
     }
 }
+
+// MARK: - Per-account code
+
+final class InMemoryAccountLockStorage: AccountLockStorage, @unchecked Sendable {
+    var items: [String: ParentalLockCredential] = [:]
+    func getAccountLock(key: String) -> ParentalLockCredential? { items[key] }
+    func saveAccountLock(_ credential: ParentalLockCredential, key: String) throws { items[key] = credential }
+    func deleteAccountLock(key: String) { items[key] = nil }
+}
+
+@MainActor
+@Suite("Code par compte")
+struct AccountLockTests {
+
+    @Test("Un code de compte à 4 chiffres est accepté ; le contrôle parental exige toujours 6")
+    func pinLengths() {
+        #expect(ParentalLockPolicy.makeCredential(pin: "1234", minimumLength: ParentalLockPolicy.accountPINLength,
+                                                  biometricsEnabled: false, iterations: 1) != nil)
+        #expect(ParentalLockPolicy.makeCredential(pin: "1234", biometricsEnabled: false, iterations: 1) == nil)
+        #expect(ParentalLockPolicy.makeCredential(pin: "12a4", minimumLength: 4, biometricsEnabled: false, iterations: 1) == nil)
+    }
+
+    @Test("Enrôler, vérifier, retirer ; deux comptes sont indépendants")
+    func enrolVerifyRemove() async {
+        let storage = InMemoryAccountLockStorage()
+        let locks = AccountLockStore(storage: storage, iterations: 1)
+
+        #expect(await locks.enroll(key: "S1|A", pin: "1234", useBiometrics: false))
+        #expect(locks.hasLock("S1|A"))
+        #expect(!locks.hasLock("S1|B"))
+
+        if case .wrong = await locks.verify(key: "S1|A", pin: "0000") {} else { Issue.record("a wrong code must be refused") }
+        if case .unlocked = await locks.verify(key: "S1|A", pin: "1234") {} else { Issue.record("the right code must unlock") }
+
+        locks.remove(key: "S1|A")
+        #expect(!locks.hasLock("S1|A"))
+        #expect(storage.items.isEmpty)
+    }
+
+    @Test("Passé les essais libres, la pause refuse même le bon code")
+    func backoff() async {
+        let locks = AccountLockStore(storage: InMemoryAccountLockStorage(), iterations: 1)
+        _ = await locks.enroll(key: "S1|A", pin: "1234", useBiometrics: false)
+        for _ in 0...ParentalLockPolicy.freeAttempts { _ = await locks.verify(key: "S1|A", pin: "0000") }
+        if case .throttled = await locks.verify(key: "S1|A", pin: "1234") {} else { Issue.record("a throttled window refuses even the right code") }
+    }
+
+    @Test("AppState refuse de basculer vers un compte protégé sans code vérifié")
+    func switchRequiresUnlock() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let kc = MockKeychain()
+        var entry = ServerEntry(id: "S1", name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
+                                accessToken: "tokA", userId: "A", username: "Alice")
+        entry = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: Date(), in: entry)
+        kc.savedServers = [entry]
+        kc.savedActiveServerId = "S1"
+        let app = AppState(apiClient: api, keychain: kc)
+        app.settingsDefaults = .isolatedForTesting()
+        app.sessionValidator = { _, _ in .valid }
+        app.accountLockProvider = { $0 == "S1|B" }
+        app.loadServersFromKeychain()
+        app.currentUserId = "A"
+        app.isAuthenticated = true
+
+        #expect(await app.switchAccount(to: "B") == .locked)
+        #expect(app.currentUserId == "A")
+        #expect(await app.switchAccount(to: "B", unlocked: true) == .switched)
+        #expect(app.currentUserId == "B")
+    }
+}
+
+// MARK: - Parental control across accounts
+
+@MainActor
+@Suite("Contrôle parental et bascule de compte")
+struct AccountSwitchParentalTests {
+
+    private func makeApp(defaults: UserDefaults, parentalLock: Bool, bobAge: Int?) -> AppState {
+        if let bobAge {
+            AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: bobAge, accentColor: "green", darkMode: true),
+                                      for: "S1|B", defaults: defaults)
+        }
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let kc = MockKeychain()
+        var entry = ServerEntry(id: "S1", name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
+                                accessToken: "tokA", userId: "A", username: "Enfants")
+        entry = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: Date(), in: entry)
+        kc.savedServers = [entry]
+        kc.savedActiveServerId = "S1"
+        let app = AppState(apiClient: api, keychain: kc)
+        app.settingsDefaults = defaults
+        app.sessionValidator = { _, _ in .valid }
+        app.parentalLockProvider = { parentalLock }
+        app.loadServersFromKeychain()
+        app.currentUserId = "A"
+        app.isAuthenticated = true
+        return app
+    }
+
+    @Test("Code parental actif : un compte moins bridé exige un code")
+    func lessRestrictedNeedsUnlock() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 0)
+        #expect(await app.switchAccount(to: "B") == .locked)
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+        #expect(await app.switchAccount(to: "B", unlocked: true) == .switched)
+    }
+
+    @Test("Code parental actif : un compte au moins aussi bridé s'ouvre sans code")
+    func sameOrStricterOpens() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        #expect(await makeApp(defaults: defaults, parentalLock: true, bobAge: 10).switchAccount(to: "B") == .switched)
+        let inherit = UserDefaults.isolatedForTesting()
+        inherit.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        // No snapshot: B inherits 12, nothing is lifted.
+        #expect(await makeApp(defaults: inherit, parentalLock: true, bobAge: nil).switchAccount(to: "B") == .switched)
+    }
+
+    @Test("Sans code parental, la limite par compte ne bloque rien")
+    func noParentalLock() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        #expect(await makeApp(defaults: defaults, parentalLock: false, bobAge: 0).switchAccount(to: "B") == .switched)
+    }
+
+    @Test("Échelle des limites : 0 = aucune limite, la plus permissive")
+    func permissiveness() {
+        #expect(AccountSettingsStore.isLessRestrictive(0, than: 10))
+        #expect(AccountSettingsStore.isLessRestrictive(16, than: 12))
+        #expect(!AccountSettingsStore.isLessRestrictive(10, than: 12))
+        #expect(!AccountSettingsStore.isLessRestrictive(0, than: 0))
+        #expect(!AccountSettingsStore.isLessRestrictive(12, than: 0))
+    }
+}

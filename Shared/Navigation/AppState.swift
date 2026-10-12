@@ -70,6 +70,17 @@ final class AppState {
     /// Where the per-account settings live (`AccountSettingsStore`) and the age
     /// cap is read from. `.standard` in the app; tests inject an isolated suite.
     var settingsDefaults: UserDefaults = .standard
+    /// Whether an account (`accountKey`) carries a code (`AccountLockStore`).
+    /// Wired by `AppNavigation`; the switch refuses such an account unless the
+    /// caller has just verified the code — the check lives HERE, not only in
+    /// the switcher's UI, so no other path can open a protected profile.
+    var accountLockProvider: @MainActor (String) -> Bool = { _ in false }
+    /// Whether the parental code is enrolled (`ParentalLockController.isEnabled`).
+    /// With it, opening an account LESS restricted than the current one needs a
+    /// code (that account's, or the parental one): the age cap follows the
+    /// account, so without this a child could lift it by picking a parent's
+    /// profile. Wired by `AppNavigation`.
+    var parentalLockProvider: @MainActor () -> Bool = { false }
 
     /// Accounts whose token a switch found revoked (`accountKey`). They stay in
     /// the list, marked « Session expirée », until reconnected or removed.
@@ -864,6 +875,8 @@ final class AppState {
         /// The server could not be asked: nothing destroyed, still on the
         /// current account.
         case unreachable
+        /// The account carries a code that was not verified for this switch.
+        case locked
     }
 
     /// The registry entry of the server the app is ON (never the MRU fallback).
@@ -901,9 +914,20 @@ final class AppState {
     /// is validated OFF the shared client first (same rule as `switchTo`); a
     /// switch NEVER revokes anything.
     @discardableResult
-    func switchAccount(to userId: String) async -> AccountSwitchResult {
+    func switchAccount(to userId: String, unlocked: Bool = false) async -> AccountSwitchResult {
         guard let entry = activeEntryIfAny else { return .needsLogin }
         if userId == currentUserId, isAuthenticated { return .switched }
+        let targetKey = ServerRegistry.accountKey(serverId: entry.id, userId: userId)
+        if !unlocked {
+            if accountLockProvider(targetKey) { return .locked }
+            if parentalLockProvider(),
+               AccountSettingsStore.isLessRestrictive(
+                   AccountSettingsStore.ageCap(for: targetKey, defaults: settingsDefaults),
+                   than: settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+               ) {
+                return .locked
+            }
+        }
         guard isOnlineProvider() else { return .offline }
         guard let target = ServerRegistry.activating(userId: userId, in: entry),
               let token = target.accessToken else { return .needsLogin }
