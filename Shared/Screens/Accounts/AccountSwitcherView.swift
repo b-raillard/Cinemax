@@ -131,6 +131,9 @@ struct AccountSwitcherView: View {
 
     @State private var flow = AccountSwitchFlow()
     @State private var showAddAccount = false
+    @State private var showAddChoice = false
+    @State private var showQuickConnect = false
+    @State private var quickConnect = LoginViewModel()
 
     private var multiAccount: Bool {
         entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
@@ -170,6 +173,34 @@ struct AccountSwitcherView: View {
         }
         .frame(minWidth: 360, idealWidth: 400, minHeight: 460, idealHeight: 560)
         .sheet(isPresented: $showAddAccount) { signInSheet(prefilled: nil) }
+        // « Ajouter »: Quick Connect (approve from a device where the account
+        // is signed in — no password typed) or username + password.
+        .confirmationDialog(loc.localized("accounts.add.title"), isPresented: $showAddChoice, titleVisibility: .visible) {
+            Button(loc.localized("accounts.add.quickConnect")) { showQuickConnect = true }
+            Button(loc.localized("accounts.add.password")) { showAddAccount = true }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        } message: {
+            Text(loc.localized("accounts.add.subtitle"))
+        }
+        .sheet(isPresented: $showQuickConnect) {
+            QuickConnectSheet(viewModel: quickConnect)
+                .environment(themeManager)
+                .environment(loc)
+        }
+        .onChange(of: showQuickConnect) { _, presented in
+            if presented {
+                quickConnect.addsAccount = true
+                quickConnect.startQuickConnect(using: appState, loc: loc)
+            } else {
+                quickConnect.cancelQuickConnect()
+            }
+        }
+        .onChange(of: quickConnect.showSuccess) { _, success in
+            guard success else { return }
+            quickConnect.showSuccess = false
+            showQuickConnect = false
+            dismiss()
+        }
         .sheet(item: $flow.reconnect) { account in signInSheet(prefilled: account.username) }
     }
 
@@ -205,7 +236,7 @@ struct AccountSwitcherView: View {
                     .buttonStyle(.plain)
                     .disabled(flow.isWorking)
                 }
-                Button { showAddAccount = true } label: {
+                Button { showAddChoice = true } label: {
                     VStack(spacing: CinemaSpacing.spacing2) {
                         Image(systemName: "plus")
                             .font(.system(size: CinemaScale.pt(26), weight: .semibold))
