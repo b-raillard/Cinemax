@@ -95,6 +95,13 @@ struct AccountDetailView: View {
     private var mustUnlock: Bool { !isCurrent && locks.hasLock(key) && !unlocked }
 
     var body: some View {
+        // Pushed in the stack, hence OUTSIDE the list's gate: without its own,
+        // a background → foreground re-lock left the age cap and « Retirer »
+        // usable with no code (final review, I4).
+        ParentalLockGate { content }
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
                 if mustUnlock {

@@ -567,3 +567,84 @@ struct AccountSwitchParentalTests {
         #expect(!AccountSettingsStore.isLessRestrictive(12, than: 0))
     }
 }
+
+// MARK: - Final review fixes (sign-in paths, cleanup)
+
+@MainActor
+@Suite("Multi-comptes — connexions et nettoyage")
+struct MultiAccountSignInTests {
+
+    private func makeApp(defaults: UserDefaults, parentalLock: Bool, entry: ServerEntry, currentUser: String?) -> (AppState, MockAPIClient) {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let kc = MockKeychain()
+        kc.savedServers = [entry]
+        kc.savedActiveServerId = entry.id
+        let app = AppState(apiClient: api, keychain: kc)
+        app.settingsDefaults = defaults
+        app.sessionValidator = { _, _ in .valid }
+        app.sessionRevoker = { _, _ in }
+        app.multiAccountProvider = { true }
+        app.parentalLockProvider = { parentalLock }
+        app.loadServersFromKeychain()
+        app.serverURL = entry.url
+        app.hasServer = true
+        app.currentUserId = currentUser
+        app.isAuthenticated = currentUser != nil
+        return (app, api)
+    }
+
+    private var maison: ServerEntry {
+        ServerEntry(id: "S1", name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
+                    accessToken: "tokKid", userId: "kid", username: "Enfants")
+    }
+
+    @Test("Code parental actif : ajouter un compte moins bridé ne lève pas la limite")
+    func addAccountKeepsParentalCap() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 0, accentColor: "blue", darkMode: true),
+                                  for: "S1|parent", defaults: defaults)
+        let (app, api) = makeApp(defaults: defaults, parentalLock: true, entry: maison, currentUser: "kid")
+
+        await app.addAccount(session: UserSession(userID: "parent", username: "Parent", accessToken: "tokP", serverID: "srv"))
+
+        #expect(app.currentUserId == "parent")
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+        #expect(api.appliedRatingLimits.last == 10)
+    }
+
+    @Test("Écran de connexion : le compte connecté ouvre avec SA limite d'âge")
+    func loginAppliesAccountCap() {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(0, forKey: SettingsKey.privacyMaxContentAge)
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 10, accentColor: "green", darkMode: true),
+                                  for: "S1|kid", defaults: defaults)
+        var signedOut = maison
+        signedOut.accessToken = nil; signedOut.userId = nil; signedOut.username = nil
+        let (app, api) = makeApp(defaults: defaults, parentalLock: false, entry: signedOut, currentUser: nil)
+
+        app.upsertActiveEntry(session: UserSession(userID: "kid", username: "Enfants", accessToken: "tokKid2", serverID: "srv"))
+
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+        #expect(api.appliedRatingLimits.last == 10)
+    }
+
+    @Test("Se déconnecter du compte actif efface ce qui le suivait (réglages, recherches, code)")
+    func logoutCleansUpLeavingAccount() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 10, accentColor: "green", darkMode: true),
+                                  for: "S1|kid", defaults: defaults)
+        var entry = maison
+        entry = ServerRegistry.remembering(userId: "parent", username: "Parent", accessToken: "tokP", at: Date(), in: entry)
+        let (app, _) = makeApp(defaults: defaults, parentalLock: false, entry: entry, currentUser: "kid")
+        var forgotten: [String] = []
+        app.onAccountForgotten = { forgotten.append($0) }
+
+        _ = await app.logout(reason: .userInitiated)
+
+        #expect(app.currentUserId == "parent")
+        #expect(forgotten == ["S1|kid"])
+        #expect(AccountSettingsStore.load(for: "S1|kid", defaults: defaults) == nil)
+    }
+}

@@ -384,6 +384,7 @@ struct AppNavigation: View {
             }
             appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
             appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
+            appState.onAccountForgotten = { [accountLocks] key in accountLocks.remove(key: key) }
             // The language rides every request as `Accept-Language` (Jellyfin
             // 12.0 localizes the media-stream titles the track pickers print
             // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds

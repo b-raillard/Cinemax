@@ -81,6 +81,11 @@ final class AppState {
     /// account, so without this a child could lift it by picking a parent's
     /// profile. Wired by `AppNavigation`.
     var parentalLockProvider: @MainActor () -> Bool = { false }
+    /// Called with an account's key when it leaves this device for good (sign-
+    /// out, removal, replacement in free mode, its server removed), so what
+    /// lives outside `AppState` — its code in `AccountLockStore` — goes with it.
+    /// Wired by `AppNavigation`.
+    var onAccountForgotten: @MainActor (String) -> Void = { _ in }
 
     /// Accounts whose token a switch found revoked (`accountKey`). They stay in
     /// the list, marked « Session expirée », until reconnected or removed.
@@ -745,6 +750,14 @@ final class AppState {
         persistRegistry()
         pendingRollbackServer = nil
         isAddingServer = false
+        // The login-screen path does not go through `applyActiveServer`: the
+        // account's own settings (above all its age cap) are loaded here, so a
+        // child signing in after the parent's session expired opens with the
+        // child's cap, not the parent's. (Final review, I2.)
+        let key = ServerRegistry.accountKey(serverId: entry.id, userId: session.userID)
+        clampSignInAgeCap(forAccountKey: key)
+        AccountSettingsStore.swap(from: nil, to: key, defaults: settingsDefaults)
+        apiClient.applyContentRatingLimit(maxAge: settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge))
     }
 
     /// Removes a NON-active server. The active one is never deletable — the user
@@ -776,6 +789,7 @@ final class AppState {
         guard entry.id != activeServerId else { return }
         for account in ServerRegistry.accounts(of: entry) {
             revokeTokenInBackground(account.accessToken, on: entry.url)
+            onAccountForgotten(ServerRegistry.accountKey(serverId: entry.id, userId: account.userId))
         }
         servers.removeAll { $0.id == entry.id }
         persistRegistry()
@@ -800,6 +814,9 @@ final class AppState {
             revokeSessionInBackground(for: active)
         }
         let signedOutUserId = active?.userId
+        if reason == .userInitiated, let active, let signedOutUserId, !signedOutUserId.isEmpty {
+            forgetAccountData(ServerRegistry.accountKey(serverId: active.id, userId: signedOutUserId))
+        }
 
         // Keep the entry, drop its credentials: the card stays in the list ready
         // for a re-login. ONLY the active entry is touched, so a confirmed-invalid
@@ -904,6 +921,30 @@ final class AppState {
         return ids
     }
 
+    /// A SIGN-IN (not a switch: « Ajouter », Quick Connect, the login screen)
+    /// never lifts the age cap while the parental code is set. A switch asks for
+    /// a code when the target is less restricted (`switchAccount` → `.locked`);
+    /// a sign-in has no such step — the account's Jellyfin password (or the
+    /// lack of one, common at home) is not the parent's code — so the target's
+    /// stored cap is clamped to the current one. The parent raises it again
+    /// behind the parental gate in « Gérer les comptes ». (Final review, C1.)
+    private func clampSignInAgeCap(forAccountKey key: String) {
+        guard parentalLockProvider(),
+              var snapshot = AccountSettingsStore.load(for: key, defaults: settingsDefaults) else { return }
+        let current = settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+        guard AccountSettingsStore.isLessRestrictive(snapshot.maxContentAge, than: current) else { return }
+        snapshot.maxContentAge = current
+        AccountSettingsStore.save(snapshot, for: key, defaults: settingsDefaults)
+    }
+
+    /// Everything that followed an account leaving this device for good: its
+    /// settings snapshot, its search history, and — through the hook — its code.
+    private func forgetAccountData(_ key: String) {
+        AccountSettingsStore.remove(accountKey: key, defaults: settingsDefaults)
+        SearchHistoryStore.clear(serverId: key)
+        onAccountForgotten(key)
+    }
+
     /// Sets the age cap of one account (« Gérer les comptes », behind the
     /// parental gate). The ACTIVE account's cap is applied at once, exactly as
     /// the Privacy screen's row does; another account's is stored in its
@@ -988,6 +1029,7 @@ final class AppState {
             for account in ServerRegistry.accounts(of: servers[index]) where account.userId != session.userID {
                 revokeTokenInBackground(account.accessToken, on: servers[index].url)
                 servers[index] = ServerRegistry.forgetting(userId: account.userId, in: servers[index])
+                forgetAccountData(ServerRegistry.accountKey(serverId: servers[index].id, userId: account.userId))
             }
             persistRegistry()
         }
@@ -996,7 +1038,9 @@ final class AppState {
         entry.userId = session.userID
         entry.username = session.username
         if !session.serverID.isEmpty { entry.serverID = session.serverID }
-        expiredAccountIds.remove(ServerRegistry.accountKey(serverId: entry.id, userId: session.userID))
+        let key = ServerRegistry.accountKey(serverId: entry.id, userId: session.userID)
+        expiredAccountIds.remove(key)
+        clampSignInAgeCap(forAccountKey: key)
         await applyActiveServer(entry)
     }
 
@@ -1018,8 +1062,7 @@ final class AppState {
         persistRegistry()
         // What followed this account leaves with it (its menu profile is pruned
         // at the next activation, being no longer in `knownMenuProfileIds`).
-        SearchHistoryStore.clear(serverId: key)
-        AccountSettingsStore.remove(accountKey: key, defaults: settingsDefaults)
+        forgetAccountData(key)
         return nil
     }
 
