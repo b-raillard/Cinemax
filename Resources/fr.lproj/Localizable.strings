@@ -1337,6 +1337,11 @@
 "settings.debug.entitlement.source.debugOverride" = "simulé";
 "settings.debug.simulatePro" = "Simuler Pro";
 "settings.debug.earlyAdopter" = "Early adopter";
+"settings.debug.proTier" = "Palier simulé";
+"settings.debug.proTier.automatic" = "Automatique (%@)";
+"settings.debug.proTier.free" = "Gratuit";
+"settings.debug.proTier.pro" = "Pro";
+"settings.debug.proTier.founder" = "Fondateur";
 "settings.debug.earlyAdopter.yes" = "Oui";
 "settings.debug.earlyAdopter.no" = "Non";
 "settings.debug.earlyAdopter.unknown" = "Inconnu";

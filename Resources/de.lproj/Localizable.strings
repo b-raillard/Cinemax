@@ -1335,6 +1335,11 @@
 "settings.debug.entitlement.source.debugOverride" = "simuliert";
 "settings.debug.simulatePro" = "Pro simulieren";
 "settings.debug.earlyAdopter" = "Early Adopter";
+"settings.debug.proTier" = "Simulierte Stufe";
+"settings.debug.proTier.automatic" = "Automatisch (%@)";
+"settings.debug.proTier.free" = "Kostenlos";
+"settings.debug.proTier.pro" = "Pro";
+"settings.debug.proTier.founder" = "Gründer";
 "settings.debug.earlyAdopter.yes" = "Ja";
 "settings.debug.earlyAdopter.no" = "Nein";
 "settings.debug.earlyAdopter.unknown" = "Unbekannt";
