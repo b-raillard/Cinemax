@@ -153,3 +153,187 @@ struct SessionRevokeRequestTests {
         #expect(ServerSessionRevoker.makeRequest(url: URL(string: "https://maison.local")!, accessToken: "", deviceId: "dev-1") == nil)
     }
 }
+
+// MARK: - AppState orchestration
+
+/// Collects the tokens `AppState` revokes, from its background tasks.
+private actor RevokedTokens {
+    private(set) var tokens: [String] = []
+    func record(_ token: String) { tokens.append(token) }
+}
+
+@MainActor
+@Suite("Multi-comptes — AppState")
+struct MultiAccountAppStateTests {
+
+    private let url = ServerURLNormalizer.normalize("https://maison.local")!
+
+    /// Server « Maison » signed in as Alice (A) with Bob (B) remembered.
+    private func household(rememberBob: Bool = true) -> ServerEntry {
+        var entry = ServerEntry(id: "S1", name: "Maison", url: url, serverID: "srv",
+                                accessToken: "tokA", userId: "A", username: "Alice",
+                                lastUsedAt: Date(timeIntervalSince1970: 1_000))
+        if rememberBob {
+            entry = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB",
+                                               at: Date(timeIntervalSince1970: 500), in: entry)
+        }
+        return entry
+    }
+
+    private func makeState(
+        api: MockAPIClient,
+        keychain: MockKeychain = MockKeychain(),
+        servers: [ServerEntry],
+        multiAccount: Bool = true,
+        revoked: RevokedTokens? = nil
+    ) -> AppState {
+        keychain.savedServers = servers
+        keychain.savedActiveServerId = servers.first?.id
+        let app = AppState(apiClient: api, keychain: keychain)
+        app.sessionValidator = { _, _ in await api.validateSession() }
+        app.multiAccountProvider = { multiAccount }
+        if let revoked {
+            app.sessionRevoker = { _, token in await revoked.record(token) }
+        } else {
+            app.sessionRevoker = { _, _ in }
+        }
+        app.loadServersFromKeychain()
+        app.serverURL = url
+        app.hasServer = true
+        app.isAuthenticated = true
+        app.accessToken = servers.first?.accessToken
+        app.currentUserId = servers.first?.userId
+        return app
+    }
+
+    @Test("Bascule validée : le compte cible devient actif, client et miroir suivent, l'autre reste mémorisé")
+    func switchValid() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let kc = MockKeychain()
+        let app = makeState(api: api, keychain: kc, servers: [household()])
+
+        let result = await app.switchAccount(to: "B")
+
+        #expect(result == .switched)
+        #expect(app.currentUserId == "B")
+        #expect(app.accessToken == "tokB")
+        #expect(app.activeServerId == "S1")
+        #expect(app.activeAccountKey == "S1|B")
+        #expect(api.reconnectedTokens.last == "tokB")
+        #expect(kc.savedSession?.userID == "B")
+        #expect(Set(app.activeAccounts.map(\.userId)) == ["A", "B"])
+    }
+
+    @Test("Bascule refusée par le serveur : compte marqué expiré, rien d'autre ne bouge")
+    func switchInvalid() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .invalid
+        let app = makeState(api: api, servers: [household()])
+
+        let result = await app.switchAccount(to: "B")
+
+        #expect(result == .needsLogin)
+        #expect(app.currentUserId == "A")
+        #expect(app.expiredAccountIds.contains("S1|B"))
+        #expect(api.reconnectedTokens.isEmpty)
+        // Kept: the user may reconnect it.
+        #expect(app.activeAccounts.contains { $0.userId == "B" })
+    }
+
+    @Test("Bascule indéterminée (serveur lent) : rien n'est détruit")
+    func switchIndeterminate() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .indeterminate
+        let app = makeState(api: api, servers: [household()])
+
+        #expect(await app.switchAccount(to: "B") == .unreachable)
+        #expect(app.currentUserId == "A")
+        #expect(app.expiredAccountIds.isEmpty)
+        #expect(api.reconnectedTokens.isEmpty)
+    }
+
+    @Test("Bascule hors ligne : aucun appel")
+    func switchOffline() async {
+        let api = MockAPIClient()
+        let app = makeState(api: api, servers: [household()])
+        app.isOnlineProvider = { false }
+
+        #expect(await app.switchAccount(to: "B") == .offline)
+        #expect(api.validateSessionCallCount == 0)
+        #expect(app.currentUserId == "A")
+    }
+
+    @Test("Ajout en Pro : le nouveau compte devient actif, les autres restent")
+    func addPro() async {
+        let api = MockAPIClient()
+        let revoked = RevokedTokens()
+        let app = makeState(api: api, servers: [household(rememberBob: false)], revoked: revoked)
+
+        await app.addAccount(session: UserSession(userID: "C", username: "Carl", accessToken: "tokC", serverID: "srv"))
+
+        #expect(app.currentUserId == "C")
+        #expect(Set(app.activeAccounts.map(\.userId)) == ["A", "C"])
+        #expect(await revoked.tokens.isEmpty)
+    }
+
+    @Test("Ajout en gratuit : l'ancien compte est oublié et son jeton révoqué")
+    func addFree() async {
+        let api = MockAPIClient()
+        let revoked = RevokedTokens()
+        let app = makeState(api: api, servers: [household(rememberBob: false)], multiAccount: false, revoked: revoked)
+
+        await app.addAccount(session: UserSession(userID: "C", username: "Carl", accessToken: "tokC", serverID: "srv"))
+
+        #expect(app.currentUserId == "C")
+        #expect(app.activeAccounts.map(\.userId) == ["C"])
+        #expect(await eventually { await revoked.tokens == ["tokA"] })
+    }
+
+    @Test("Retirer un compte non actif : révoqué et oublié, la session active intacte")
+    func removeOther() async {
+        let api = MockAPIClient()
+        let revoked = RevokedTokens()
+        let app = makeState(api: api, servers: [household()], revoked: revoked)
+
+        await app.removeAccount(userId: "B")
+
+        #expect(app.currentUserId == "A")
+        #expect(app.accessToken == "tokA")
+        #expect(app.activeAccounts.map(\.userId) == ["A"])
+        #expect(api.reconnectedTokens.isEmpty)
+        #expect(await eventually { await revoked.tokens == ["tokB"] })
+    }
+
+    @Test("Déconnexion du compte actif : bascule vers un autre compte du même serveur avant tout autre serveur")
+    func logoutHopsToSameServerAccount() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let other = ServerEntry(id: "S2", name: "Chalet", url: ServerURLNormalizer.normalize("https://chalet.local")!,
+                                accessToken: "tokZ", userId: "Z", username: "Zoé",
+                                lastUsedAt: Date(timeIntervalSince1970: 9_999_999))
+        let revoked = RevokedTokens()
+        let app = makeState(api: api, servers: [household(), other], revoked: revoked)
+
+        let outcome = await app.logout(reason: .userInitiated)
+
+        #expect(outcome == .switchedAccount(name: "Bob"))
+        #expect(app.activeServerId == "S1")
+        #expect(app.currentUserId == "B")
+        // The signed-out account is gone from the list, token included.
+        #expect(app.activeAccounts.map(\.userId) == ["B"])
+        #expect(await eventually { await revoked.tokens == ["tokA"] })
+    }
+
+    @Test("Une déconnexion ne laisse aucun jeton du compte dans la liste mémorisée")
+    func logoutForgetsToken() async {
+        let app = makeState(api: MockAPIClient(), servers: [household(rememberBob: false)])
+
+        _ = await app.logout(reason: .sessionExpired)
+
+        let stored = app.servers.first { $0.id == "S1" }
+        #expect(stored?.accessToken == nil)
+        #expect(ServerRegistry.accounts(of: stored!).isEmpty)
+        #expect(stored?.savedAccounts?.contains { $0.accessToken == "tokA" } != true)
+    }
+}

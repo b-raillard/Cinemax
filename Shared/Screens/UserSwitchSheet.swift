@@ -414,24 +414,13 @@ struct UserSwitchSheet: View {
             let session = try await appState.apiClient.authenticate(
                 username: trimmed, password: password
             )
-            try appState.keychain.saveAccessToken(session.accessToken)
-            try appState.keychain.saveUserSession(session)
-            appState.accessToken = session.accessToken
-            appState.currentUserId = session.userID
-            // Same server, different user: refresh the active registry entry so
-            // the servers list shows who is signed in on it.
-            appState.upsertActiveEntry(session: session)
-            // reconnect() clears the cache as its first action — needed so
-            // personalised DTOs (resume, next-up, rating-filtered lists)
-            // from the previous user's session don't bleed across accounts.
-            appState.apiClient.reconnect(
-                url: appState.serverURL ?? AppState.placeholderServerURL,
-                accessToken: session.accessToken
-            )
-            appState.isAuthenticated = true
-            // Refresh admin flag + full user so Settings rerenders with the
-            // right categories for the switched-to user.
-            await appState.refreshCurrentUser()
+            // One path for every account change (`AppState.addAccount`): legacy
+            // mirror, registry (remembered alongside the others with the Pro,
+            // replacing the previous one without), client, age cap, extensions
+            // and the tier-1 reload. It used to write the token and the user id
+            // here by hand, which never reloaded Home and left the client on
+            // the new token when a Keychain write threw.
+            await appState.addAccount(session: session)
 
             toasts.success(String(format: loc.localized("switchAccount.success"), trimmed))
             password = ""

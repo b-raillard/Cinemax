@@ -489,8 +489,13 @@ struct SettingsScreen: View {
     /// it always be accompanied by the toast.
     func performLogout() async {
         let outcome = await appState.logout(reason: .userInitiated)
-        if case .switchedTo(let entry) = outcome {
+        switch outcome {
+        case .switchedTo(let entry):
             toasts.success(loc.localized("servers.switchedTo", entry.displayName))
+        case .switchedAccount(let name):
+            toasts.success(loc.localized("accounts.switchedTo", name))
+        case .signedOut:
+            break
         }
     }
 

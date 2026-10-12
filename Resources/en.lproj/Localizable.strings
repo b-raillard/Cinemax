@@ -1088,6 +1088,7 @@
 "servers.switch.confirm" = "Switch to “%@”? Your screens will reload from that server.";
 "servers.switch.action" = "Switch server";
 "servers.switchedTo" = "Connected to %@";
+"accounts.switchedTo" = "Now watching as %@";
 "servers.offline" = "You're offline. Can't switch servers right now.";
 "servers.unreachable" = "That server is unreachable. Staying on the current one.";
 "servers.delete" = "Remove";

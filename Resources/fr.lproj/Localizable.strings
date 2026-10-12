@@ -1090,6 +1090,7 @@
 "servers.switch.confirm" = "Basculer vers « %@ » ? Vos écrans seront rechargés depuis ce serveur.";
 "servers.switch.action" = "Changer de serveur";
 "servers.switchedTo" = "Connecté à %@";
+"accounts.switchedTo" = "Vous regardez en tant que %@";
 "servers.offline" = "Vous êtes hors ligne. Impossible de changer de serveur.";
 "servers.unreachable" = "Ce serveur est injoignable. Vous restez connecté au serveur actuel.";
 "servers.delete" = "Supprimer";

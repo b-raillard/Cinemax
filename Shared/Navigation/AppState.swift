@@ -58,6 +58,19 @@ final class AppState {
             url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID()
         )
     }
+    /// Revokes ONE token server-side (`ServerSessionRevoker`, `POST /Sessions/Logout`).
+    /// A seam so the multi-account tests can see which tokens were revoked.
+    var sessionRevoker: @Sendable (URL, String) async -> Void = { url, token in
+        await ServerSessionRevoker.revoke(url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID())
+    }
+    /// Whether several accounts may be REMEMBERED per server (a Pro feature,
+    /// `ProFeatureGate`). Wired by `AppNavigation` from the entitlement stores;
+    /// `false` = free behaviour: signing in as someone else replaces the account.
+    var multiAccountProvider: @MainActor () -> Bool = { false }
+
+    /// Accounts whose token a switch found revoked (`accountKey`). They stay in
+    /// the list, marked « Session expirée », until reconnected or removed.
+    private(set) var expiredAccountIds: Set<String> = []
 
     // MARK: - Multi-server state
     //
@@ -387,6 +400,9 @@ final class AppState {
     enum LogoutOutcome: Sendable, Equatable {
         /// Signed out and switched to another registered server.
         case switchedTo(ServerEntry)
+        /// Signed out and switched to another account remembered on the SAME
+        /// server (its display name, for the toast).
+        case switchedAccount(name: String)
         /// Signed out; the app is now on `LoginScreen` (same server) or
         /// `ServerSetupScreen` (nothing left to hop to).
         case signedOut
@@ -733,7 +749,9 @@ final class AppState {
 
     func removeServer(_ entry: ServerEntry) async {
         guard entry.id != activeServerId else { return }
-        revokeSessionInBackground(for: entry)
+        for account in ServerRegistry.accounts(of: entry) {
+            revokeTokenInBackground(account.accessToken, on: entry.url)
+        }
         servers.removeAll { $0.id == entry.id }
         persistRegistry()
         // Its search history goes with it. Nothing could ever read it again —
@@ -755,6 +773,7 @@ final class AppState {
         if reason == .userInitiated, let active {
             revokeSessionInBackground(for: active)
         }
+        let signedOutUserId = active?.userId
 
         // Keep the entry, drop its credentials: the card stays in the list ready
         // for a re-login. ONLY the active entry is touched, so a confirmed-invalid
@@ -777,6 +796,15 @@ final class AppState {
 
         switch reason {
         case .userInitiated:
+            // Another account remembered on THIS server comes first: the
+            // household member signing out of the living-room TV expects the
+            // next profile, not another server.
+            if let active, let signedOutUserId,
+               let stored = servers.first(where: { $0.id == active.id }),
+               let next = ServerRegistry.nextAccount(after: signedOutUserId, in: stored),
+               await switchAccount(to: next.userId) == .switched {
+                return .switchedAccount(name: next.username)
+            }
             if let active, let candidate = ServerRegistry.nextCandidate(after: active.id, in: servers) {
                 if await switchTo(candidate) == .commit {
                     return .switchedTo(candidate)
@@ -809,9 +837,121 @@ final class AppState {
         }
     }
 
+    // MARK: - Multi-account (several accounts on one server)
+
+    enum AccountSwitchResult: Sendable, Equatable {
+        case switched
+        /// Offline: nothing dialled, nothing changed.
+        case offline
+        /// The server refused the remembered token (or the account is unknown):
+        /// the account is marked expired and must be reconnected.
+        case needsLogin
+        /// The server could not be asked: nothing destroyed, still on the
+        /// current account.
+        case unreachable
+    }
+
+    /// The registry entry of the server the app is ON (never the MRU fallback).
+    private var activeEntryIfAny: ServerEntry? {
+        guard let activeServerId else { return nil }
+        return servers.first { $0.id == activeServerId }
+    }
+
+    /// `serverId|userId` of the account the app is on — the key of every
+    /// per-account setting. `nil` while signed out.
+    var activeAccountKey: String? {
+        guard let activeServerId, let currentUserId, !currentUserId.isEmpty else { return nil }
+        return ServerRegistry.accountKey(serverId: activeServerId, userId: currentUserId)
+    }
+
+    /// The accounts the switcher offers for the active server.
+    var activeAccounts: [SavedAccount] {
+        guard let entry = activeEntryIfAny else { return [] }
+        return ServerRegistry.accounts(of: entry)
+    }
+
+    /// Switches to another account remembered on the active server. The token
+    /// is validated OFF the shared client first (same rule as `switchTo`); a
+    /// switch NEVER revokes anything.
+    @discardableResult
+    func switchAccount(to userId: String) async -> AccountSwitchResult {
+        guard let entry = activeEntryIfAny else { return .needsLogin }
+        if userId == currentUserId, isAuthenticated { return .switched }
+        guard isOnlineProvider() else { return .offline }
+        guard let target = ServerRegistry.activating(userId: userId, in: entry),
+              let token = target.accessToken else { return .needsLogin }
+        let key = ServerRegistry.accountKey(serverId: entry.id, userId: userId)
+        switch await sessionValidator(entry.url, token) {
+        case .valid:
+            expiredAccountIds.remove(key)
+            await applyActiveServer(target)
+            return .switched
+        case .invalid:
+            expiredAccountIds.insert(key)
+            return .needsLogin
+        case .indeterminate:
+            return .unreachable
+        }
+    }
+
+    /// Records a freshly authenticated account of the ACTIVE server and makes
+    /// it active, through the same tail as every other transition
+    /// (`applyActiveServer`: mirror, client, age cap, extensions, tier-1 reload).
+    ///
+    /// Pro (or founder): the previous account stays remembered. Free: signing
+    /// in as someone else REPLACES the previous account — forgotten and its
+    /// token revoked, so a free device never accumulates sessions silently.
+    func addAccount(session: UserSession) async {
+        guard let index = servers.firstIndex(where: { $0.id == activeServerId }) else {
+            // No registered server to attach to (should not happen once signed
+            // in) — fall back to the historical path.
+            upsertActiveEntry(session: session)
+            return
+        }
+        if !multiAccountProvider(), let previous = servers[index].userId, previous != session.userID {
+            for account in ServerRegistry.accounts(of: servers[index]) where account.userId != session.userID {
+                revokeTokenInBackground(account.accessToken, on: servers[index].url)
+                servers[index] = ServerRegistry.forgetting(userId: account.userId, in: servers[index])
+            }
+            persistRegistry()
+        }
+        var entry = servers[index]
+        entry.accessToken = session.accessToken
+        entry.userId = session.userID
+        entry.username = session.username
+        if !session.serverID.isEmpty { entry.serverID = session.serverID }
+        expiredAccountIds.remove(ServerRegistry.accountKey(serverId: entry.id, userId: session.userID))
+        await applyActiveServer(entry)
+    }
+
+    /// Removes one account from this device and revokes its token. Removing the
+    /// ACTIVE account is a sign-out (`logout(.userInitiated)`), which moves on
+    /// to another remembered account when there is one.
+    @discardableResult
+    func removeAccount(userId: String) async -> LogoutOutcome? {
+        if userId == currentUserId {
+            return await logout(reason: .userInitiated)
+        }
+        guard let index = servers.firstIndex(where: { $0.id == activeServerId }) else { return nil }
+        if let account = ServerRegistry.accounts(of: servers[index]).first(where: { $0.userId == userId }) {
+            revokeTokenInBackground(account.accessToken, on: servers[index].url)
+        }
+        let key = ServerRegistry.accountKey(serverId: servers[index].id, userId: userId)
+        servers[index] = ServerRegistry.forgetting(userId: userId, in: servers[index])
+        expiredAccountIds.remove(key)
+        persistRegistry()
+        return nil
+    }
+
     /// Strips credentials from one entry, keeping the entry itself.
     private func clearSession(of entry: ServerEntry) {
         guard let index = servers.firstIndex(where: { $0.id == entry.id }) else { return }
+        // The account leaves the remembered list too: a signed-out (or
+        // server-revoked) token must never linger where the switcher can offer
+        // it or a later sign-in can resurrect it.
+        if let userId = servers[index].userId, !userId.isEmpty {
+            servers[index] = ServerRegistry.forgetting(userId: userId, in: servers[index])
+        }
         servers[index].accessToken = nil
         servers[index].userId = nil
         servers[index].username = nil
@@ -822,11 +962,17 @@ final class AppState {
     /// local entry is dropped either way, and a dead server must not freeze the
     /// UI for the request timeout. Standalone helper — never the shared client.
     private func revokeSessionInBackground(for entry: ServerEntry) {
-        guard let token = entry.accessToken, !token.isEmpty, isOnlineProvider() else { return }
-        let url = entry.url
-        let deviceId = KeychainService.getOrCreateDeviceID()
+        guard let token = entry.accessToken, !token.isEmpty else { return }
+        revokeTokenInBackground(token, on: entry.url)
+    }
+
+    /// Revokes exactly one token. Never on a plain switch: tokens of the
+    /// accounts remembered on this device coexist on purpose.
+    private func revokeTokenInBackground(_ token: String, on url: URL) {
+        guard !token.isEmpty, isOnlineProvider() else { return }
+        let revoker = sessionRevoker
         Task.detached(priority: .utility) {
-            await ServerSessionRevoker.revoke(url: url, accessToken: token, deviceId: deviceId)
+            await revoker(url, token)
         }
     }
 

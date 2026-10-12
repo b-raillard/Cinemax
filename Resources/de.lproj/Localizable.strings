@@ -1088,6 +1088,7 @@
 "servers.switch.confirm" = "Zu „%@“ wechseln? Deine Ansichten werden von diesem Server neu geladen.";
 "servers.switch.action" = "Server wechseln";
 "servers.switchedTo" = "Verbunden mit %@";
+"accounts.switchedTo" = "Du schaust jetzt als %@";
 "servers.offline" = "Du bist offline. Der Server kann gerade nicht gewechselt werden.";
 "servers.unreachable" = "Dieser Server ist nicht erreichbar. Du bleibst mit dem aktuellen Server verbunden.";
 "servers.delete" = "Entfernen";
