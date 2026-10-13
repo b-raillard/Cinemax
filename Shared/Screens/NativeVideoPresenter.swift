@@ -1006,6 +1006,7 @@ final class NativeVideoPresenter {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.playbackReporter.reportBackgroundProgress()
+                self?.playbackReporter.creditEngagementIfQualified()
             }
         }
     }
