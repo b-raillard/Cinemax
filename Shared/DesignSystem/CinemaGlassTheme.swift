@@ -87,6 +87,27 @@ enum CinemaColor {
     static let onFounderCard    = Color.dynamic(light: 0xFFF8E8, dark: 0xFFF8E8)
     /// Gold text on the page surface (the chip).
     static let founderGoldInk   = Color.dynamic(light: 0x7A5A1E, dark: 0xE8C77A)
+    /// The founder card's brushed gold: its far stop, its pale highlight
+    /// (the name's metallic top) and its wordmark.
+    static let founderGoldShade = Color.dynamic(light: 0x5A410F, dark: 0x5A410F)
+    static let founderGoldPale  = Color.dynamic(light: 0xFFF3D0, dark: 0xFFF3D0)
+    static let founderGoldMark  = Color.dynamic(light: 0xF6E2B0, dark: 0xF6E2B0)
+
+    // Membership-card « titanium » (design A, 2026-10-13) — a material, so
+    // the same dark stops in both modes, like the gold foil above.
+    static let titaniumDeep  = Color.dynamic(light: 0x141517, dark: 0x141517)
+    static let titaniumMid   = Color.dynamic(light: 0x33363B, dark: 0x33363B)
+    static let titaniumEdge  = Color.dynamic(light: 0x1C1D20, dark: 0x1C1D20)
+    /// The free card's ground.
+    static let titaniumPlain = Color.dynamic(light: 0x1E1F21, dark: 0x1E1F21)
+    /// Light and shade mixed into the accent for the metal's highlights.
+    static let metalLight    = Color.dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
+    static let metalShade    = Color.dynamic(light: 0x000000, dark: 0x000000)
+    /// Ink on a light metallic emblem.
+    static let onMetalEmblem = Color.dynamic(light: 0x111111, dark: 0x111111)
+    /// Text on the dark titanium cards.
+    static let onTitanium        = Color.dynamic(light: 0xF2F2F2, dark: 0xF2F2F2)
+    static let onTitaniumVariant = Color.dynamic(light: 0xB9B8B6, dark: 0xB9B8B6)
 }
 
 // MARK: - Global UI Scale

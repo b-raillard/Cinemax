@@ -55,37 +55,6 @@ struct ProTierLook {
         }
     }
 
-    var cardFill: LinearGradient {
-        switch tier {
-        case .founder:
-            LinearGradient(
-                stops: [
-                    .init(color: CinemaColor.founderGoldDeep, location: 0),
-                    .init(color: CinemaColor.founderGold, location: 0.46),
-                    .init(color: CinemaColor.founderGoldLight, location: 0.74),
-                    .init(color: CinemaColor.founderGold, location: 1)
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-        case .pro:
-            LinearGradient(colors: [themeManager.accentContainer, themeManager.accentContainer, themeManager.accent], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .free:
-            LinearGradient(colors: [CinemaColor.surfaceContainerHigh, CinemaColor.surfaceContainerHigh], startPoint: .top, endPoint: .bottom)
-        }
-    }
-
-    var cardInk: Color {
-        switch tier {
-        case .founder: CinemaColor.onFounderCard
-        case .pro: themeManager.onAccentContainer
-        case .free: CinemaColor.onSurface
-        }
-    }
-
-    var cardSecondaryInk: Color {
-        tier == .free ? CinemaColor.onSurfaceVariant : cardInk.opacity(0.82)
-    }
-
     var glow: Color {
         switch tier {
         case .founder: CinemaColor.founderGoldLight.opacity(0.45)
@@ -214,8 +183,11 @@ struct ProTierChip: View {
     }
 }
 
-/// The membership card (design B) — the head of the Pro page. Founder: a
-/// gold foil; Pro: the accent; free: a plain surface.
+/// The membership card — the head of the Pro page, in the « titanium »
+/// material chosen on 2026-10-13 (design A of the card study): brushed
+/// graphite with an accent edge, glow and metallic name for Pro; brushed gold
+/// for a founder; a dark card with an accent edge and halos for free (it had
+/// no colour at all). Materials: the same in light and dark mode.
 struct ProMembershipCard: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ThemeManager.self) private var themeManager
@@ -225,21 +197,107 @@ struct ProMembershipCard: View {
     /// Debug-forced tier, no App Store answer yet).
     let since: String?
 
-    private var look: ProTierLook { ProTierLook(tier: tier, themeManager: themeManager) }
-
-    private var emblemInk: Color {
-        switch tier {
-        case .founder: CinemaColor.onFounderGold
-        case .pro: themeManager.accentContainer
-        case .free: CinemaColor.onSurfaceVariant
-        }
-    }
+    private var accent: Color { themeManager.accent }
+    private var accentLight: Color { accent.mix(with: CinemaColor.metalLight, by: 0.35) }
+    private var accentDeep: Color { accent.mix(with: CinemaColor.metalShade, by: 0.55) }
 
     private var line: String {
         switch tier {
         case .founder: loc.localized("pro.card.line.founder")
         case .pro: loc.localized("pro.card.line.pro")
         case .free: loc.localized("pro.card.line.free")
+        }
+    }
+
+    // MARK: Material
+
+    /// The tone the edge, the glow and the halo take.
+    private var tint: Color { tier == .founder ? CinemaColor.founderGoldLight : accent }
+
+    private var ground: LinearGradient {
+        switch tier {
+        case .founder:
+            LinearGradient(colors: [CinemaColor.founderGoldDeep, CinemaColor.founderGold, CinemaColor.founderGoldShade],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .pro:
+            LinearGradient(stops: [.init(color: CinemaColor.titaniumEdge, location: 0),
+                                   .init(color: CinemaColor.titaniumMid, location: 0.48),
+                                   .init(color: CinemaColor.titaniumDeep, location: 1)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .free:
+            LinearGradient(colors: [CinemaColor.titaniumPlain, CinemaColor.titaniumPlain], startPoint: .top, endPoint: .bottom)
+        }
+    }
+
+    @ViewBuilder
+    private var material: some View {
+        ZStack {
+            ground
+            // Brushed metal: hairlines every 3 pt. Free stays smooth.
+            if tier != .free {
+                Canvas { context, size in
+                    var x: CGFloat = 0
+                    while x < size.width {
+                        context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)),
+                                     with: .color(CinemaColor.metalLight.opacity(0.035)))
+                        x += 3
+                    }
+                }
+            }
+            // The glow in the top-trailing corner (and, for free, a second
+            // halo bottom-leading — the colour the free card was missing).
+            RadialGradient(colors: [tint.opacity(tier == .free ? 0.32 : 0.38), .clear],
+                           center: .topTrailing, startRadius: 0, endRadius: 260)
+            if tier == .free {
+                RadialGradient(colors: [accent.opacity(0.18), .clear],
+                               center: .bottomLeading, startRadius: 0, endRadius: 220)
+            } else {
+                // The sheen across the metal.
+                LinearGradient(stops: [.init(color: .clear, location: 0.3),
+                                       .init(color: CinemaColor.metalLight.opacity(0.18), location: 0.46),
+                                       .init(color: CinemaColor.metalLight.opacity(0.02), location: 0.56),
+                                       .init(color: .clear, location: 0.7)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }
+    }
+
+    // MARK: Inks
+
+    private var nameStyle: AnyShapeStyle {
+        switch tier {
+        case .founder:
+            AnyShapeStyle(LinearGradient(colors: [CinemaColor.founderGoldPale, CinemaColor.founderGoldLight, CinemaColor.founderGold],
+                                         startPoint: .top, endPoint: .bottom))
+        case .pro:
+            AnyShapeStyle(LinearGradient(colors: [accentLight, accent, accentDeep], startPoint: .top, endPoint: .bottom))
+        case .free:
+            AnyShapeStyle(CinemaColor.onTitanium)
+        }
+    }
+
+    private var wordmarkInk: Color { tier == .founder ? CinemaColor.founderGoldMark : accentLight }
+
+    private var secondaryInk: Color {
+        tier == .founder ? CinemaColor.onFounderCard.opacity(0.8) : CinemaColor.onTitaniumVariant
+    }
+
+    private var emblemFill: AnyShapeStyle {
+        switch tier {
+        case .founder:
+            AnyShapeStyle(LinearGradient(colors: [CinemaColor.founderGoldPale, CinemaColor.founderGoldLight], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .pro:
+            AnyShapeStyle(LinearGradient(colors: [accentLight, accent], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .free:
+            AnyShapeStyle(accent.opacity(0.2))
+        }
+    }
+
+    private var emblemInk: Color {
+        switch tier {
+        case .founder: CinemaColor.founderGoldDeep
+        case .pro: CinemaColor.onMetalEmblem
+        case .free: accent
         }
     }
 
@@ -250,25 +308,23 @@ struct ProMembershipCard: View {
                     .font(CinemaFont.dynamicLabel(.medium))
                     .fontWeight(.black)
                     .tracking(3)
-                    .foregroundStyle(look.cardSecondaryInk)
+                    .foregroundStyle(wordmarkInk)
                 Spacer()
-                Image(systemName: look.glyph ?? "play.fill")
+                Image(systemName: ProTierLook(tier: tier, themeManager: themeManager).glyph ?? "play.fill")
                     .font(.system(size: CinemaScale.pt(18), weight: .black))
-                    // On the card the emblem disc is the card's ink, so the
-                    // glyph takes the card's own deep tone (a white check
-                    // on the white disc vanished on the Pro card).
                     .foregroundStyle(emblemInk)
                     .frame(width: 38, height: 38)
-                    .background(tier == .free ? AnyShapeStyle(CinemaColor.surfaceContainerHighest) : AnyShapeStyle(look.cardInk.opacity(0.92)), in: Circle())
+                    .background(emblemFill, in: Circle())
+                    .shadow(color: tier == .free ? .clear : tint.opacity(0.6), radius: 9)
                     .accessibilityHidden(true)
             }
             Spacer(minLength: CinemaSpacing.spacing4)
             Text(tier.name(loc))
                 .font(CinemaFont.dynamicSystem(32, weight: .black, relativeTo: .title1))
-                .foregroundStyle(look.cardInk)
+                .foregroundStyle(nameStyle)
             Text(line)
                 .font(CinemaFont.dynamicLabel(.medium))
-                .foregroundStyle(look.cardSecondaryInk)
+                .foregroundStyle(secondaryInk)
                 .padding(.top, 2)
             if let since {
                 Text(since)
@@ -276,15 +332,20 @@ struct ProMembershipCard: View {
                     .fontWeight(.bold)
                     .tracking(1)
                     .textCase(.uppercase)
-                    .foregroundStyle(look.cardSecondaryInk)
+                    .foregroundStyle(secondaryInk)
                     .padding(.top, CinemaSpacing.spacing3)
             }
         }
         .padding(CinemaSpacing.spacing4)
         .frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading)
-        .background(look.cardFill)
+        .background(material)
         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
-        .shadow(color: look.glow.opacity(0.6), radius: 24, y: 10)
+        // The edge: an accent (gold) filet, and a light top bevel on metal.
+        .overlay {
+            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+                .strokeBorder(tint.opacity(tier == .free ? 0.55 : 0.75), lineWidth: tier == .free ? 2 : 1.5)
+        }
+        .shadow(color: tier == .free ? .clear : tint.opacity(0.28), radius: 20, y: 10)
         .accessibilityElement(children: .combine)
     }
 }
