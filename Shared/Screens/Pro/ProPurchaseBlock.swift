@@ -127,6 +127,7 @@ struct ProNoticeCard: View {
 /// The small « PRO » capsule on an entry that needs the Pro.
 struct ProBadge: View {
     @Environment(LocalizationManager.self) private var loc
+    @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
         HStack(spacing: 4) {
@@ -136,10 +137,10 @@ struct ProBadge: View {
             Text(loc.localized("pro.badge"))
                 .font(.system(size: CinemaScale.pt(12), weight: .heavy))
         }
-        .foregroundStyle(CinemaColor.onSurfaceVariant)
+        .foregroundStyle(themeManager.accent)
         .padding(.horizontal, CinemaSpacing.spacing2)
         .padding(.vertical, 3)
-        .background(CinemaColor.surfaceContainerHighest)
+        .background(themeManager.accent.opacity(0.16))
         .clipShape(Capsule())
     }
 }

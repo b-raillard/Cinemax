@@ -87,6 +87,9 @@ enum CinemaColor {
     static let onFounderCard    = Color.dynamic(light: 0xFFF8E8, dark: 0xFFF8E8)
     /// Gold text on the page surface (the chip).
     static let founderGoldInk   = Color.dynamic(light: 0x7A5A1E, dark: 0xE8C77A)
+    /// The Settings logo's ring and glow: the pale foil vanished on the light
+    /// page (recette 2026-10-13), so light mode takes a richer gold.
+    static let founderGoldRing = Color.dynamic(light: 0xC0902E, dark: 0xE2C27A)
     /// The founder card's brushed gold: its far stop, its pale highlight
     /// (the name's metallic top) and its wordmark.
     static let founderGoldShade = Color.dynamic(light: 0x5A410F, dark: 0x5A410F)

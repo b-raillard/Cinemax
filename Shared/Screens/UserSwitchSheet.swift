@@ -75,13 +75,18 @@ struct UserSwitchSheet: View {
             } else if isLoading {
                 LoadingStateView()
             } else if users.isEmpty {
-                EmptyStateView(
-                    systemImage: "person.crop.circle.badge.questionmark",
-                    title: loc.localized("switchAccount.noPublicUsers.title"),
-                    subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
-                    actionTitle: loc.localized("switchAccount.signInManually"),
-                    onAction: { enterManualMode() }
-                )
+                // A server that lists no users (Jellyfin's default) lands
+                // here: the Pro hint must show on this branch too.
+                VStack(spacing: CinemaSpacing.spacing4) {
+                    EmptyStateView(
+                        systemImage: "person.crop.circle.badge.questionmark",
+                        title: loc.localized("switchAccount.noPublicUsers.title"),
+                        subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
+                        actionTitle: loc.localized("switchAccount.signInManually"),
+                        onAction: { enterManualMode() }
+                    )
+                    proHint
+                }
             } else {
                 userGrid
             }
@@ -168,26 +173,34 @@ struct UserSwitchSheet: View {
             }
             .padding(.bottom, CinemaSpacing.spacing4)
 
-            if showsProHint, let entitlements, let earlyAdopter, let proStore {
-                ProLockedFeatureRow(feature: .memorizedAccounts) { showUpsell = true }
-                    .padding(.horizontal, gridHorizontalPadding)
-                    .padding(.bottom, CinemaSpacing.spacing4)
-                    #if os(tvOS)
-                    .fullScreenCover(isPresented: $showUpsell) {
-                        upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
-                    }
-                    #else
-                    .sheet(isPresented: $showUpsell) {
-                        upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
-                    }
-                    #endif
-            }
+            proHint
         }
         #if os(tvOS)
         // The tiles carry `CinemaTVCardButtonStyle`, which grows on focus —
         // without this the edge tiles' scaled ring is clipped.
         .scrollClipDisabled()
         #endif
+    }
+
+    /// « Comptes mémorisés · PRO » under the grid or the empty state, for a
+    /// free user (`showsProHint`).
+    @ViewBuilder
+    private var proHint: some View {
+        if showsProHint, let entitlements, let earlyAdopter, let proStore {
+            ProLockedFeatureRow(feature: .memorizedAccounts) { showUpsell = true }
+                .padding(.horizontal, gridHorizontalPadding)
+                .padding(.bottom, CinemaSpacing.spacing4)
+                #if os(tvOS)
+                .frame(maxWidth: CinemaTVLayout.formMaxWidth)
+                .fullScreenCover(isPresented: $showUpsell) {
+                    upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
+                }
+                #else
+                .sheet(isPresented: $showUpsell) {
+                    upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
+                }
+                #endif
+        }
     }
 
     private func upsell(entitlements: EntitlementStore, earlyAdopter: EarlyAdopterService, proStore: ProStore) -> some View {

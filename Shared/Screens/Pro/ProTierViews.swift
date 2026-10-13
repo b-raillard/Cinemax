@@ -24,7 +24,7 @@ struct ProTierLook {
 
     var ring: Color? {
         switch tier {
-        case .founder: CinemaColor.founderGoldLight
+        case .founder: CinemaColor.founderGoldRing
         case .pro: themeManager.accent
         case .free: nil
         }
@@ -57,7 +57,7 @@ struct ProTierLook {
 
     var glow: Color {
         switch tier {
-        case .founder: CinemaColor.founderGoldLight.opacity(0.45)
+        case .founder: CinemaColor.founderGoldRing.opacity(0.55)
         case .pro: themeManager.accent.opacity(0.4)
         case .free: .clear
         }

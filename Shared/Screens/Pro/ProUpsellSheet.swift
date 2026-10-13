@@ -124,7 +124,7 @@ struct ProLockedFeatureRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(catalogueFeature.map { loc.localized($0.titleKey) } ?? "")
                         .font(CinemaFont.dynamicSystem(16, weight: .semibold, relativeTo: .headline))
-                        .foregroundStyle(CinemaColor.onSurface)
+                        .foregroundStyle(themeManager.accent)
                     Text(catalogueFeature.map { loc.localized($0.detailKey) } ?? "")
                         .font(CinemaFont.dynamicLabel(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -140,7 +140,9 @@ struct ProLockedFeatureRow: View {
             .contentShape(Rectangle())
         }
         #if os(tvOS)
-        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        // A row (`CinemaRadius.large`), so the row level's rounded ring —
+        // the chip style drew a capsule over it.
+        .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
         .focusEffectDisabled()
         .hoverEffectDisabled()
         #else
