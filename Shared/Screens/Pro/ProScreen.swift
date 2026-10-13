@@ -80,7 +80,7 @@ struct ProScreen: View {
             .fontWeight(.heavy)
             .tracking(1)
             .textCase(.uppercase)
-            .foregroundStyle(CinemaColor.onSurfaceMuted)
+            .foregroundStyle(themeManager.accent)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -88,7 +88,7 @@ struct ProScreen: View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             Text(loc.localized("pro.alwaysFree.title"))
                 .font(CinemaFont.dynamicHeadline())
-                .foregroundStyle(CinemaColor.onSurface)
+                .foregroundStyle(themeManager.accent)
             Text(loc.localized("pro.alwaysFree.body"))
                 .font(CinemaFont.dynamicBody)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -152,15 +152,15 @@ struct ProScreen: View {
         HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
             Image(systemName: tier == .free ? "lock.fill" : feature.icon)
                 .font(.system(size: CinemaScale.pt(tier == .free ? 14 : 17), weight: .semibold))
-                .foregroundStyle(tier == .free ? CinemaColor.onSurfaceVariant : themeManager.accent)
+                .foregroundStyle(themeManager.accent)
                 .frame(width: 36, height: 36)
-                .background(tier == .free ? CinemaColor.surfaceContainerHigh : themeManager.accent.opacity(0.14))
+                .background(themeManager.accent.opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(loc.localized(feature.titleKey))
                     .font(CinemaFont.dynamicSystem(16, weight: .bold, relativeTo: .headline))
-                    .foregroundStyle(CinemaColor.onSurface)
+                    .foregroundStyle(themeManager.accent)
                 Text(loc.localized(feature.detailKey))
                     .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
@@ -208,9 +208,14 @@ struct ProScreen: View {
                 listTitle
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
                     ForEach(ProFeatureCatalogue.features) { feature in
-                        Label(loc.localized(feature.titleKey), systemImage: tier == .free ? "lock.fill" : "checkmark")
-                            .font(CinemaFont.bodyLarge)
-                            .foregroundStyle(tier == .free ? CinemaColor.onSurfaceVariant : CinemaColor.onSurface)
+                        HStack(spacing: CinemaSpacing.spacing3) {
+                            Image(systemName: tier == .free ? "lock.fill" : "checkmark")
+                                .foregroundStyle(themeManager.accent)
+                                .accessibilityHidden(true)
+                            Text(loc.localized(feature.titleKey))
+                                .foregroundStyle(CinemaColor.onSurface)
+                        }
+                        .font(CinemaFont.bodyLarge)
                     }
                 }
                 Text(loc.localized("pro.alwaysFree.tv"))

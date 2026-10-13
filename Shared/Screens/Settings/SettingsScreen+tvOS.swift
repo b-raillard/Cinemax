@@ -611,7 +611,7 @@ extension SettingsScreen {
                     .joined(separator: "\n"),
                 action: { earlyAdopterRowAction(earlyAdopter) }
             )
-            #if DEBUG
+            #if DEBUG || PRO_PREVIEW
             // Free / Pro / founder, forced — cycles on each press.
             tvActionRow(
                 id: "proTier",

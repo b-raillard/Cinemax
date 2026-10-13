@@ -451,8 +451,12 @@ struct SettingsScreen: View {
             #endif
         }
         #if os(iOS)
+        // The bar stays — empty and untitled (the header below is the title)
+        // — so the account avatar `MainTabView` puts on every tab root sits
+        // here as THE SAME toolbar item, same size and place to the pixel. A
+        // hand-placed copy over a hidden bar was always a few points off
+        // (recette 2026-10-13, C-03).
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
         #endif
         // The Debug « Forcer … » switches write `debug.forcedSeason` through
         // `@AppStorage`; the controller, which re-evaluates the season, follows.

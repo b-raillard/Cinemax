@@ -82,7 +82,7 @@ enum ProFeatureGate {
 extension EntitlementStore {
     /// `ProFeatureGate.showsProEntry` for this store's Debug override.
     var showsProEntry: Bool {
-        #if DEBUG
+        #if DEBUG || PRO_PREVIEW
         let override = proTierOverride
         #else
         let override = ProTierOverride.automatic
@@ -92,7 +92,7 @@ extension EntitlementStore {
 
     /// The tier for this user, the founder recognition coming from `earlyAdopter`.
     func proTier(earlyAdopter: EarlyAdopterService) -> ProTier {
-        #if DEBUG
+        #if DEBUG || PRO_PREVIEW
         let override = proTierOverride
         #else
         let override = ProTierOverride.automatic

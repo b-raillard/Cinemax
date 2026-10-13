@@ -60,6 +60,8 @@ final class EntitlementStore {
         #if DEBUG
         let override = defaults.bool(forKey: SettingsKey.debugSimulatePro)
         if override != debugOverride { debugOverride = override }
+        #endif
+        #if DEBUG || PRO_PREVIEW
         let tier = defaults.string(forKey: SettingsKey.debugProTier).flatMap(ProTierOverride.init(rawValue:)) ?? .automatic
         if tier != proTierOverride { proTierOverride = tier }
         #endif
@@ -126,8 +128,11 @@ final class EntitlementStore {
         if value != debugOverride { debugOverride = value }
         resolve()
     }
+    #endif
 
-    /// Settings → Debug → « Palier simulé ». Persisted, DEBUG builds only.
+    #if DEBUG || PRO_PREVIEW
+    /// Settings → Debug → « Palier simulé ». Persisted, DEBUG and preview
+    /// builds only (a preview is never submitted — `ProFeatureGate`).
     func setProTierOverride(_ value: ProTierOverride) {
         defaults.set(value.rawValue, forKey: SettingsKey.debugProTier)
         if value != proTierOverride { proTierOverride = value }
