@@ -83,8 +83,15 @@ final class PlaybackReporter {
     /// the existing 1 s `onTick()` heartbeat (never a timer of its own).
     /// Reset by `reportStart`; handed out, then reset, by `reportStop` through
     /// `.cinemaxPlaybackSessionEnded` — the engine-agnostic signal
-    /// `ReviewPromptTracker` counts engaged sessions from.
+    /// `ReviewPromptTracker` counts engaged sessions from (posted earlier, and
+    /// once, by `creditEngagementIfQualified` when the app goes to the
+    /// background).
     private(set) var watchedSeconds = 0
+    /// The session's `watchedSeconds` were already announced by
+    /// `creditEngagementIfQualified()` — the app went to the background past
+    /// the engaged threshold — so its stop must not announce them again.
+    /// Reset by `reportStart` and `reportStop`, like the count itself.
+    private var engagementCredited = false
     /// `userInfo` key of `.cinemaxPlaybackSessionEnded`: the session's
     /// `watchedSeconds`, an `Int`.
     nonisolated static let watchedSecondsKey = "watchedSeconds"
@@ -182,6 +189,7 @@ final class PlaybackReporter {
 
     func reportStart(startTime: Double?) {
         watchedSeconds = 0
+        engagementCredited = false
         guard let ctx = context() else { return }
         if let id = ctx.info.playSessionId { endedPlaySessionIds.remove(id) }
         let positionTicks = startTime.map { Self.positionTicks(fromSeconds: $0) } ?? 0
@@ -214,12 +222,16 @@ final class PlaybackReporter {
         }
         // Posted at call time, unlike tier-2 below: how long the user watched
         // does not depend on the server having recorded anything. Both reasons
-        // post — each episode of an autoplay chain is its own session.
-        NotificationCenter.default.post(
-            name: .cinemaxPlaybackSessionEnded, object: nil,
-            userInfo: [Self.watchedSecondsKey: watchedSeconds]
-        )
+        // post — each episode of an autoplay chain is its own session — unless
+        // the background already credited this session (one session, one count).
+        if !engagementCredited {
+            NotificationCenter.default.post(
+                name: .cinemaxPlaybackSessionEnded, object: nil,
+                userInfo: [Self.watchedSecondsKey: watchedSeconds]
+            )
+        }
         watchedSeconds = 0
+        engagementCredited = false
         let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient
         let itemId = ctx.itemId
@@ -249,6 +261,27 @@ final class PlaybackReporter {
                 await client.stopEncoding(playSessionId: playSessionId)
             }
         }
+    }
+
+    /// Background entry: announces the session's `watchedSeconds` NOW when they
+    /// already make it an engaged one, through the same
+    /// `.cinemaxPlaybackSessionEnded` its stop would have posted — at most once
+    /// per session, the stop then staying silent.
+    ///
+    /// An app swiped away from the app switcher is killed while suspended:
+    /// nothing runs, the player never closes, `reportStop` never comes, and
+    /// the episode watched last — often the whole evening's only one — was
+    /// never counted. Going to the background is the last moment the app is
+    /// guaranteed to run before that. Below the threshold nothing is posted:
+    /// the session may still become engaged, and its stop will count it then.
+    func creditEngagementIfQualified() {
+        guard !engagementCredited,
+              ReviewPromptPolicy.qualifies(watchedSeconds: watchedSeconds) else { return }
+        engagementCredited = true
+        NotificationCenter.default.post(
+            name: .cinemaxPlaybackSessionEnded, object: nil,
+            userInfo: [Self.watchedSecondsKey: watchedSeconds]
+        )
     }
 
     /// Background entry: app moved to background. Always reports `isPaused: true`

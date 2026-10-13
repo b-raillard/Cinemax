@@ -572,6 +572,68 @@ struct PlaybackReporterTests {
         #expect(received.values == [7], "chaque épisode d'un enchaînement est sa propre séance")
         #expect(reporter.watchedSeconds == 0)
     }
+
+    @Test("Arrière-plan après 10 min : la séance est annoncée tout de suite, une seule fois, et son stop se tait")
+    func backgroundCreditsEngagedSessionOnce() {
+        let reporter = PlaybackReporter(
+            apiClient: CountingPlaybackAPI(),
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+        // Same discipline as above: synchronous post, `queue: nil`, no
+        // suspension point in this body.
+        let received = WatchedSecondsWitness()
+        let token = NotificationCenter.default.addObserver(
+            forName: .cinemaxPlaybackSessionEnded, object: nil, queue: nil
+        ) { note in
+            received.record(note.userInfo?[PlaybackReporter.watchedSecondsKey] as? Int)
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        let engaged = ReviewPromptPolicy.minimumWatchedSeconds
+        for _ in 0..<engaged { reporter.onTick() }
+        reporter.creditEngagementIfQualified()
+        #expect(received.values == [engaged], "l'app tuée depuis le sélecteur ne reviendra jamais fermer le lecteur")
+
+        // Back in the foreground, still the same session: a second trip to
+        // the background and the stop announce nothing more.
+        reporter.onTick()
+        reporter.creditEngagementIfQualified()
+        reporter.reportStop(reason: .episodeSwap)
+        #expect(received.values == [engaged], "une séance, un seul compte")
+        #expect(reporter.watchedSeconds == 0)
+
+        // The next episode is a new session again.
+        reporter.reportStart(startTime: nil)
+        for _ in 0..<3 { reporter.onTick() }
+        reporter.reportStop(reason: .episodeSwap)
+        #expect(received.values == [engaged, 3])
+    }
+
+    @Test("Arrière-plan avant 10 min : rien n'est annoncé, le stop compte la séance entière")
+    func backgroundBelowThresholdLeavesItToTheStop() {
+        let reporter = PlaybackReporter(
+            apiClient: CountingPlaybackAPI(),
+            context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: false) }
+        )
+        let received = WatchedSecondsWitness()
+        let token = NotificationCenter.default.addObserver(
+            forName: .cinemaxPlaybackSessionEnded, object: nil, queue: nil
+        ) { note in
+            received.record(note.userInfo?[PlaybackReporter.watchedSecondsKey] as? Int)
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        let short = ReviewPromptPolicy.minimumWatchedSeconds - 1
+        for _ in 0..<short { reporter.onTick() }
+        reporter.creditEngagementIfQualified()
+        #expect(received.values.isEmpty, "la séance peut encore devenir engagée")
+
+        for _ in 0..<5 { reporter.onTick() }
+        reporter.reportStop(reason: .sessionEnded)
+        #expect(received.values == [short + 5])
+    }
 }
 
 /// Collects the `watchedSeconds` carried by `.cinemaxPlaybackSessionEnded`.

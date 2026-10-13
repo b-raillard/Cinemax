@@ -301,9 +301,12 @@ struct AppNavigation: View {
         // run, which is gated on the session check below.
         .modifier(AppUpdatePresentation(checker: updateChecker, loc: loc))
         #if os(iOS)
-        // The App Store rating request, raised only once the player has
-        // closed — see `ReviewPromptTracker.playerDidClose`.
-        .modifier(ReviewPromptPresentation(tracker: reviewPrompt))
+        // The App Store rating request, raised once the player has closed or
+        // a few seconds into a signed-in launch — see `ReviewPromptTracker`.
+        // Withdrawn rather than stacked over the launch's own presentations.
+        .modifier(ReviewPromptPresentation(tracker: reviewPrompt) {
+            !whatsNewPages.isEmpty || updateChecker.decision != .none || !appState.isAuthenticated
+        })
         #endif
         // « Quoi de neuf » — the first launch on a new version. A sheet on
         // iOS (closable from its top button or a swipe down, both of which
@@ -436,6 +439,15 @@ struct AppNavigation: View {
             case .show(let pages):
                 whatsNewPages = pages
             }
+            #if os(iOS)
+            // The rating request's launch moment, for whoever never closes a
+            // player (they swipe the app away with it open) — see
+            // `ReviewPromptTracker.appDidLaunch`. Signed-in only: over the
+            // login form it would interrupt the one thing the user came to do.
+            if appState.isAuthenticated {
+                reviewPrompt.appDidLaunch()
+            }
+            #endif
             // A joined group learns WHAT to watch only from the socket's
             // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
             // it through the same in-process pair an App Intent and a remote
@@ -689,9 +701,12 @@ extension Notification.Name {
     /// separate `.cinemaxFavoritesChanged` fast path (cards carry no heart badge).
     static let cinemaxItemUserDataChanged = Notification.Name("cinemaxItemUserDataChanged")
     /// A play session ended (`PlaybackReporter.reportStop`, BOTH reasons — an
-    /// episode swap included, so the player may still be on screen). Posted at
-    /// call time; `userInfo[PlaybackReporter.watchedSecondsKey]` carries the
-    /// session's unpaused seconds. Consumed by `ReviewPromptPresentation`.
+    /// episode swap included, so the player may still be on screen), or was
+    /// credited early as an engaged one when the app went to the background
+    /// (`creditEngagementIfQualified` — posted once per session, its stop then
+    /// stays silent). Posted at call time;
+    /// `userInfo[PlaybackReporter.watchedSecondsKey]` carries the session's
+    /// unpaused seconds. Consumed by `ReviewPromptPresentation`.
     static let cinemaxPlaybackSessionEnded = Notification.Name("cinemaxPlaybackSessionEnded")
     /// Posted after a favorite heart toggle succeeds. Home observes it and
     /// refreshes just its Favorites row (the full-reload notification above

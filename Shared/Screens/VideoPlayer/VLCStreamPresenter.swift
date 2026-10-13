@@ -5692,6 +5692,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func handleDidEnterBackground() {
+        // The app may be killed from the app switcher without ever coming
+        // back — count an engaged session now (see the reporter).
+        reporter?.creditEngagementIfQualified()
         // Remember whether we were actively watching, where, and for how long, so
         // we can pick back up. (`.buffering`/`.opening` also count as "watching".)
         switch player.state {
