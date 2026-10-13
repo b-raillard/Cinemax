@@ -205,7 +205,10 @@ struct ProTierInks {
         case .pro:
             AnyShapeStyle(LinearGradient(colors: [accentLight, accent, accentDeep], startPoint: .top, endPoint: .bottom))
         case .free:
-            AnyShapeStyle(CinemaColor.onTitanium)
+            AnyShapeStyle(LinearGradient(colors: [CinemaColor.metalLight,
+                                                  CinemaColor.metalLight.mix(with: CinemaColor.metalShade, by: 0.18),
+                                                  CinemaColor.metalLight.mix(with: CinemaColor.metalShade, by: 0.42)],
+                                         startPoint: .top, endPoint: .bottom))
         }
     }
 
@@ -253,38 +256,54 @@ struct ProTierMaterial: View {
     let accent: Color
     /// The glow's reach: a card's corner, or most of a TV screen.
     var glowRadius: CGFloat = 260
-    /// Screen size (the Apple TV page): the same material, quieter. Spread
-    /// over a whole TV, the card's gold read as a wall of yellow (recette
-    /// 2026-10-13) — the ground darkens, the glow and the sheen soften, and
-    /// gold stays in the name, the emblem and a faint corner light.
+    /// Screen size (the Apple TV page): one quiet recipe for every tier, the
+    /// founder's (recette 2026-10-13) — a near-black ground carrying the
+    /// tier's colour, brushed hairlines, a faint corner light, and the colour
+    /// itself kept for the metallic name and the emblem. Gold for a founder,
+    /// the accent for Pro, neutral graphite for free. The card's brighter
+    /// metal read as a wall of yellow, a muddy grey and two smudges there.
     var fullScreen = false
 
-    private var tint: Color { tier == .founder ? CinemaColor.founderGoldLight : accent }
+    private var tint: Color {
+        switch tier {
+        case .founder: CinemaColor.founderGoldLight
+        case .pro: accent
+        case .free: fullScreen ? CinemaColor.metalLight : accent
+        }
+    }
 
     private var glowOpacity: Double {
         switch (tier, fullScreen) {
         case (.founder, true): 0.16
-        case (.pro, true): 0.24
-        case (.free, true): 0.22
+        case (.pro, true): 0.14
+        case (.free, true): 0.05
         case (.free, false): 0.32
         default: 0.38
         }
     }
 
+    /// Near-black stops carrying `color`, lightest top-leading.
+    private func darkGround(_ color: Color, _ amounts: [Double]) -> LinearGradient {
+        LinearGradient(colors: amounts.map { color.mix(with: CinemaColor.metalShade, by: $0) },
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
     private var ground: LinearGradient {
         switch tier {
         case .founder where fullScreen:
-            LinearGradient(colors: [CinemaColor.founderGoldDeep.mix(with: CinemaColor.metalShade, by: 0.35),
-                                    CinemaColor.founderGoldDeep.mix(with: CinemaColor.metalShade, by: 0.6),
-                                    CinemaColor.founderGoldDeep.mix(with: CinemaColor.metalShade, by: 0.8)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            darkGround(CinemaColor.founderGoldDeep, [0.35, 0.6, 0.8])
         case .founder:
             LinearGradient(colors: [CinemaColor.founderGoldDeep, CinemaColor.founderGold, CinemaColor.founderGoldShade],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .pro where fullScreen:
+            darkGround(accent, [0.78, 0.86, 0.93])
         case .pro:
             LinearGradient(stops: [.init(color: CinemaColor.titaniumEdge, location: 0),
                                    .init(color: CinemaColor.titaniumMid, location: 0.48),
                                    .init(color: CinemaColor.titaniumDeep, location: 1)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .free where fullScreen:
+            LinearGradient(colors: [CinemaColor.titaniumPlain, CinemaColor.titaniumDeep, CinemaColor.titaniumDeep.mix(with: CinemaColor.metalShade, by: 0.4)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         case .free:
             LinearGradient(colors: [CinemaColor.titaniumPlain, CinemaColor.titaniumPlain], startPoint: .top, endPoint: .bottom)
@@ -294,8 +313,8 @@ struct ProTierMaterial: View {
     var body: some View {
         ZStack {
             ground
-            // Brushed metal: hairlines every 3 pt. Free stays smooth.
-            if tier != .free {
+            // Brushed metal: hairlines every 3 pt. The free CARD stays smooth.
+            if tier != .free || fullScreen {
                 Canvas { context, size in
                     var x: CGFloat = 0
                     while x < size.width {
@@ -305,18 +324,25 @@ struct ProTierMaterial: View {
                     }
                 }
             }
-            // The glow in the top-trailing corner (and, for free, a second
-            // halo bottom-leading — the colour the free card was missing).
+            // The light in the top-trailing corner.
             RadialGradient(colors: [tint.opacity(glowOpacity), .clear],
                            center: .topTrailing, startRadius: 0, endRadius: glowRadius)
-            if tier == .free {
+            if fullScreen {
+                // The faintest sheen — what tells metal from paint at TV size.
+                LinearGradient(stops: [.init(color: .clear, location: 0.3),
+                                       .init(color: CinemaColor.metalLight.opacity(0.05), location: 0.46),
+                                       .init(color: .clear, location: 0.62)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            } else if tier == .free {
+                // The free card's second halo, bottom-leading — the colour it
+                // was missing.
                 RadialGradient(colors: [accent.opacity(0.18), .clear],
                                center: .bottomLeading, startRadius: 0, endRadius: glowRadius * 0.85)
             } else {
                 // The sheen across the metal.
                 LinearGradient(stops: [.init(color: .clear, location: 0.3),
-                                       .init(color: CinemaColor.metalLight.opacity(fullScreen ? 0.06 : 0.18), location: 0.46),
-                                       .init(color: CinemaColor.metalLight.opacity(fullScreen ? 0.01 : 0.02), location: 0.56),
+                                       .init(color: CinemaColor.metalLight.opacity(0.18), location: 0.46),
+                                       .init(color: CinemaColor.metalLight.opacity(0.02), location: 0.56),
                                        .init(color: .clear, location: 0.7)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             }
