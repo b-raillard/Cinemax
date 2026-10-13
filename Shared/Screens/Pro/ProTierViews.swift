@@ -183,39 +183,101 @@ struct ProTierChip: View {
     }
 }
 
-/// The membership card — the head of the Pro page, in the « titanium »
-/// material chosen on 2026-10-13 (design A of the card study): brushed
-/// graphite with an accent edge, glow and metallic name for Pro; brushed gold
-/// for a founder; a dark card with an accent edge and halos for free (it had
-/// no colour at all). Materials: the same in light and dark mode.
-struct ProMembershipCard: View {
-    @Environment(LocalizationManager.self) private var loc
-    @Environment(ThemeManager.self) private var themeManager
-
+/// The inks of a tier's material (`ProTierMaterial`): the metallic name, the
+/// wordmark, the secondary text and the emblem. The material is dark in both
+/// modes, so none of these follow light / dark.
+@MainActor
+struct ProTierInks {
     let tier: ProTier
-    /// « Membre depuis juin 2026 » — `nil` when the date is not known (a
-    /// Debug-forced tier, no App Store answer yet).
-    let since: String?
+    let accent: Color
 
-    private var accent: Color { themeManager.accent }
-    private var accentLight: Color { accent.mix(with: CinemaColor.metalLight, by: 0.35) }
-    private var accentDeep: Color { accent.mix(with: CinemaColor.metalShade, by: 0.55) }
+    var accentLight: Color { accent.mix(with: CinemaColor.metalLight, by: 0.35) }
+    var accentDeep: Color { accent.mix(with: CinemaColor.metalShade, by: 0.55) }
 
-    private var line: String {
+    /// The tone the edge, the glow and the halo take.
+    var tint: Color { tier == .founder ? CinemaColor.founderGoldLight : accent }
+
+    var nameStyle: AnyShapeStyle {
         switch tier {
-        case .founder: loc.localized("pro.card.line.founder")
-        case .pro: loc.localized("pro.card.line.pro")
-        case .free: loc.localized("pro.card.line.free")
+        case .founder:
+            AnyShapeStyle(LinearGradient(colors: [CinemaColor.founderGoldPale, CinemaColor.founderGoldLight, CinemaColor.founderGold],
+                                         startPoint: .top, endPoint: .bottom))
+        case .pro:
+            AnyShapeStyle(LinearGradient(colors: [accentLight, accent, accentDeep], startPoint: .top, endPoint: .bottom))
+        case .free:
+            AnyShapeStyle(CinemaColor.onTitanium)
         }
     }
 
-    // MARK: Material
+    var wordmarkInk: Color { tier == .founder ? CinemaColor.founderGoldMark : accentLight }
 
-    /// The tone the edge, the glow and the halo take.
+    var secondaryInk: Color {
+        tier == .founder ? CinemaColor.onFounderCard.opacity(0.8) : CinemaColor.onTitaniumVariant
+    }
+
+    var emblemFill: AnyShapeStyle {
+        switch tier {
+        case .founder:
+            AnyShapeStyle(LinearGradient(colors: [CinemaColor.founderGoldPale, CinemaColor.founderGoldLight], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .pro:
+            AnyShapeStyle(LinearGradient(colors: [accentLight, accent], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .free:
+            AnyShapeStyle(accent.opacity(0.2))
+        }
+    }
+
+    var emblemInk: Color {
+        switch tier {
+        case .founder: CinemaColor.founderGoldDeep
+        case .pro: CinemaColor.onMetalEmblem
+        case .free: accent
+        }
+    }
+
+    /// SF Symbol of the emblem — the medal's glyph, a play mark for free.
+    var emblemGlyph: String {
+        switch tier {
+        case .founder: "star.fill"
+        case .pro: "checkmark"
+        case .free: "play.fill"
+        }
+    }
+}
+
+/// A tier's material — brushed graphite with an accent glow (Pro), brushed
+/// gold (founder), smooth dark with two accent halos (free); the same in light
+/// and dark mode. The membership card wears it, and so does the whole Apple TV
+/// « Votre niveau » page (design D, 2026-10-13), at screen size.
+struct ProTierMaterial: View {
+    let tier: ProTier
+    let accent: Color
+    /// The glow's reach: a card's corner, or most of a TV screen.
+    var glowRadius: CGFloat = 260
+    /// Screen size (the Apple TV page): the same material, quieter. Spread
+    /// over a whole TV, the card's gold read as a wall of yellow (recette
+    /// 2026-10-13) — the ground darkens, the glow and the sheen soften, and
+    /// gold stays in the name, the emblem and a faint corner light.
+    var fullScreen = false
+
     private var tint: Color { tier == .founder ? CinemaColor.founderGoldLight : accent }
+
+    private var glowOpacity: Double {
+        switch (tier, fullScreen) {
+        case (.founder, true): 0.16
+        case (.pro, true): 0.24
+        case (.free, true): 0.22
+        case (.free, false): 0.32
+        default: 0.38
+        }
+    }
 
     private var ground: LinearGradient {
         switch tier {
+        case .founder where fullScreen:
+            LinearGradient(colors: [CinemaColor.founderGoldDeep.mix(with: CinemaColor.metalShade, by: 0.35),
+                                    CinemaColor.founderGoldDeep.mix(with: CinemaColor.metalShade, by: 0.6),
+                                    CinemaColor.founderGoldDeep.mix(with: CinemaColor.metalShade, by: 0.8)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
         case .founder:
             LinearGradient(colors: [CinemaColor.founderGoldDeep, CinemaColor.founderGold, CinemaColor.founderGoldShade],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -229,8 +291,7 @@ struct ProMembershipCard: View {
         }
     }
 
-    @ViewBuilder
-    private var material: some View {
+    var body: some View {
         ZStack {
             ground
             // Brushed metal: hairlines every 3 pt. Free stays smooth.
@@ -246,60 +307,67 @@ struct ProMembershipCard: View {
             }
             // The glow in the top-trailing corner (and, for free, a second
             // halo bottom-leading — the colour the free card was missing).
-            RadialGradient(colors: [tint.opacity(tier == .free ? 0.32 : 0.38), .clear],
-                           center: .topTrailing, startRadius: 0, endRadius: 260)
+            RadialGradient(colors: [tint.opacity(glowOpacity), .clear],
+                           center: .topTrailing, startRadius: 0, endRadius: glowRadius)
             if tier == .free {
                 RadialGradient(colors: [accent.opacity(0.18), .clear],
-                               center: .bottomLeading, startRadius: 0, endRadius: 220)
+                               center: .bottomLeading, startRadius: 0, endRadius: glowRadius * 0.85)
             } else {
                 // The sheen across the metal.
                 LinearGradient(stops: [.init(color: .clear, location: 0.3),
-                                       .init(color: CinemaColor.metalLight.opacity(0.18), location: 0.46),
-                                       .init(color: CinemaColor.metalLight.opacity(0.02), location: 0.56),
+                                       .init(color: CinemaColor.metalLight.opacity(fullScreen ? 0.06 : 0.18), location: 0.46),
+                                       .init(color: CinemaColor.metalLight.opacity(fullScreen ? 0.01 : 0.02), location: 0.56),
                                        .init(color: .clear, location: 0.7)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             }
         }
+        .accessibilityHidden(true)
     }
+}
 
-    // MARK: Inks
+/// The emblem disc of a tier (star, check, play) on its material.
+struct ProTierEmblem: View {
+    let inks: ProTierInks
+    let size: CGFloat
 
-    private var nameStyle: AnyShapeStyle {
-        switch tier {
-        case .founder:
-            AnyShapeStyle(LinearGradient(colors: [CinemaColor.founderGoldPale, CinemaColor.founderGoldLight, CinemaColor.founderGold],
-                                         startPoint: .top, endPoint: .bottom))
-        case .pro:
-            AnyShapeStyle(LinearGradient(colors: [accentLight, accent, accentDeep], startPoint: .top, endPoint: .bottom))
-        case .free:
-            AnyShapeStyle(CinemaColor.onTitanium)
+    var body: some View {
+        Image(systemName: inks.emblemGlyph)
+            .font(.system(size: size * 0.47, weight: .black))
+            .foregroundStyle(inks.emblemInk)
+            .frame(width: size, height: size)
+            .background(inks.emblemFill, in: Circle())
+            // No glow: it smeared the mark (recette 2026-10-13).
+            .accessibilityHidden(true)
+    }
+}
+
+extension ProTier {
+    /// « Tout est inclus, pour toujours » / « Merci de soutenir JellyGlass » /
+    /// « Lecture complète, sans limite ».
+    @MainActor func cardLine(_ loc: LocalizationManager) -> String {
+        switch self {
+        case .founder: loc.localized("pro.card.line.founder")
+        case .pro: loc.localized("pro.card.line.pro")
+        case .free: loc.localized("pro.card.line.free")
         }
     }
+}
 
-    private var wordmarkInk: Color { tier == .founder ? CinemaColor.founderGoldMark : accentLight }
+/// The membership card — the head of the Pro page on iPhone and iPad, in the
+/// « titanium » material chosen on 2026-10-13 (design A of the card study):
+/// brushed graphite with an accent edge, glow and metallic name for Pro;
+/// brushed gold for a founder; a dark card with an accent edge and halos for
+/// free (it had no colour at all). Materials: the same in light and dark mode.
+struct ProMembershipCard: View {
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(ThemeManager.self) private var themeManager
 
-    private var secondaryInk: Color {
-        tier == .founder ? CinemaColor.onFounderCard.opacity(0.8) : CinemaColor.onTitaniumVariant
-    }
+    let tier: ProTier
+    /// « Membre depuis juin 2026 » — `nil` when the date is not known (a
+    /// Debug-forced tier, no App Store answer yet).
+    let since: String?
 
-    private var emblemFill: AnyShapeStyle {
-        switch tier {
-        case .founder:
-            AnyShapeStyle(LinearGradient(colors: [CinemaColor.founderGoldPale, CinemaColor.founderGoldLight], startPoint: .topLeading, endPoint: .bottomTrailing))
-        case .pro:
-            AnyShapeStyle(LinearGradient(colors: [accentLight, accent], startPoint: .topLeading, endPoint: .bottomTrailing))
-        case .free:
-            AnyShapeStyle(accent.opacity(0.2))
-        }
-    }
-
-    private var emblemInk: Color {
-        switch tier {
-        case .founder: CinemaColor.founderGoldDeep
-        case .pro: CinemaColor.onMetalEmblem
-        case .free: accent
-        }
-    }
+    private var inks: ProTierInks { ProTierInks(tier: tier, accent: themeManager.accent) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -308,23 +376,17 @@ struct ProMembershipCard: View {
                     .font(CinemaFont.dynamicLabel(.medium))
                     .fontWeight(.black)
                     .tracking(3)
-                    .foregroundStyle(wordmarkInk)
+                    .foregroundStyle(inks.wordmarkInk)
                 Spacer()
-                Image(systemName: ProTierLook(tier: tier, themeManager: themeManager).glyph ?? "play.fill")
-                    .font(.system(size: CinemaScale.pt(18), weight: .black))
-                    .foregroundStyle(emblemInk)
-                    .frame(width: 38, height: 38)
-                    .background(emblemFill, in: Circle())
-                    .shadow(color: tier == .free ? .clear : tint.opacity(0.6), radius: 9)
-                    .accessibilityHidden(true)
+                ProTierEmblem(inks: inks, size: 38)
             }
             Spacer(minLength: CinemaSpacing.spacing4)
             Text(tier.name(loc))
                 .font(CinemaFont.dynamicSystem(32, weight: .black, relativeTo: .title1))
-                .foregroundStyle(nameStyle)
-            Text(line)
+                .foregroundStyle(inks.nameStyle)
+            Text(tier.cardLine(loc))
                 .font(CinemaFont.dynamicLabel(.medium))
-                .foregroundStyle(secondaryInk)
+                .foregroundStyle(inks.secondaryInk)
                 .padding(.top, 2)
             if let since {
                 Text(since)
@@ -332,20 +394,20 @@ struct ProMembershipCard: View {
                     .fontWeight(.bold)
                     .tracking(1)
                     .textCase(.uppercase)
-                    .foregroundStyle(secondaryInk)
+                    .foregroundStyle(inks.secondaryInk)
                     .padding(.top, CinemaSpacing.spacing3)
             }
         }
         .padding(CinemaSpacing.spacing4)
         .frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading)
-        .background(material)
+        .background(ProTierMaterial(tier: tier, accent: themeManager.accent))
         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
         // The edge: an accent (gold) filet, and a light top bevel on metal.
         .overlay {
             RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                .strokeBorder(tint.opacity(tier == .free ? 0.55 : 0.75), lineWidth: tier == .free ? 2 : 1.5)
+                .strokeBorder(inks.tint.opacity(tier == .free ? 0.55 : 0.75), lineWidth: tier == .free ? 2 : 1.5)
         }
-        .shadow(color: tier == .free ? .clear : tint.opacity(0.28), radius: 20, y: 10)
+        .shadow(color: tier == .free ? .clear : inks.tint.opacity(0.28), radius: 20, y: 10)
         .accessibilityElement(children: .combine)
     }
 }

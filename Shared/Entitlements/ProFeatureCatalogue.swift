@@ -14,6 +14,10 @@ nonisolated enum ProFeatureCatalogue {
         let detailKey: String
         let icon: String
         let isGated: Bool
+
+        /// The one- or two-word label of the Apple TV pills (« Comptes »,
+        /// « Lire sur… ») — `pro.feature.<name>.short`.
+        var shortKey: String { titleKey.replacingOccurrences(of: ".title", with: ".short") }
     }
 
     static let features: [Feature] = [

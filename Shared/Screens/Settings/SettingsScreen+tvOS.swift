@@ -61,11 +61,24 @@ extension SettingsScreen {
             // starts at the top — no explicit reset needed on first appear.
         }
         .background {
-            // Centered accent bloom — persists across all settings pages
-            Circle()
-                .fill(themeManager.accent.opacity(0.3))
-                .frame(width: CinemaBloom.settingsSize, height: CinemaBloom.settingsSize)
-                .blur(radius: CinemaBloom.settingsBlur)
+            if selectedCategory == .pro {
+                // « Votre niveau » (design D): the tier's material, edge to
+                // edge — the screen is the membership card.
+                ProTierMaterial(tier: entitlements.proTier(earlyAdopter: earlyAdopter),
+                                accent: themeManager.accent, glowRadius: 1400, fullScreen: true)
+                    // The pills and the small print sit low: shade the foot.
+                    .overlay {
+                        LinearGradient(colors: [.clear, CinemaColor.metalShade.opacity(0.55)],
+                                       startPoint: .center, endPoint: .bottom)
+                    }
+                    .ignoresSafeArea()
+            } else {
+                // Centered accent bloom — persists across all other settings pages
+                Circle()
+                    .fill(themeManager.accent.opacity(0.3))
+                    .frame(width: CinemaBloom.settingsSize, height: CinemaBloom.settingsSize)
+                    .blur(radius: CinemaBloom.settingsBlur)
+            }
         }
         .task { await loadServerUsers() }
         .task { await probeQuickConnect() }
@@ -321,7 +334,10 @@ extension SettingsScreen {
                         Text(category.localizedName(loc))
                             .font(CinemaFont.headline(.medium))
                     }
-                    .foregroundStyle(backFocused ? themeManager.accent : CinemaColor.onSurface)
+                    // On the Pro page's material (dark in both modes) the
+                    // resting ink is the material's, not the page's.
+                    .foregroundStyle(backFocused ? themeManager.accent
+                                     : (category == .pro ? CinemaColor.onTitanium : CinemaColor.onSurface))
                     // Row-level focus (`CinemaTVFocus` stroke + brightness) —
                     // text colour alone was the only signal. The stroke BLEEDS
                     // OUTWARD through negative padding on the overlay rather

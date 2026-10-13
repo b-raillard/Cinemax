@@ -28,6 +28,13 @@ struct ProScreen: View {
 
     private var tier: ProTier { entitlements.proTier(earlyAdopter: earlyAdopter) }
 
+    #if os(tvOS)
+    @FocusState private var focusedFeature: ProFeatureID?
+    /// The feature the line above the pills spells out — the focused pill's,
+    /// kept when focus leaves the row.
+    @State private var shownFeature: ProFeatureID = .memorizedAccounts
+    #endif
+
     var body: some View {
         if hostsResultAlert {
             platformBody.proPurchaseResultAlert()
@@ -196,55 +203,138 @@ struct ProScreen: View {
     // MARK: - tvOS
 
     #if os(tvOS)
+    /// Design D, chosen 2026-10-13: the screen IS the card. The tier's material
+    /// fills it (drawn by `SettingsScreen`'s background, edge to edge), the
+    /// tier's name is the headline, and the features are a row of pills whose
+    /// focused one is spelt out above them. The material is dark in both
+    /// modes, so the page reads its tokens in the dark scheme.
     private var tvBody: some View {
-        HStack(alignment: .top, spacing: CinemaSpacing.spacing10) {
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                ProMembershipCard(tier: tier, since: since)
-                    .frame(maxWidth: 560)
-                Text(lead)
-                    .font(CinemaFont.body)
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
-                listTitle
-                VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                    ForEach(ProFeatureCatalogue.features) { feature in
-                        HStack(spacing: CinemaSpacing.spacing3) {
-                            Image(systemName: tier == .free ? "lock.fill" : "checkmark")
-                                .foregroundStyle(themeManager.accent)
-                                .accessibilityHidden(true)
-                            Text(loc.localized(feature.titleKey))
-                                .foregroundStyle(CinemaColor.onSurface)
-                        }
-                        .font(CinemaFont.bodyLarge)
-                    }
-                }
+        let inks = ProTierInks(tier: tier, accent: themeManager.accent)
+        return VStack(alignment: .leading, spacing: 0) {
+            tvIdentity(inks)
+            tvActions
+                .padding(.top, CinemaSpacing.spacing6)
+            tvFeatures(inks)
+                .padding(.top, CinemaSpacing.spacing10)
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 Text(loc.localized("pro.alwaysFree.tv"))
-                    .font(CinemaFont.body)
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(loc.localized("pro.tv.legal"))
+                    .opacity(0.7)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(CinemaFont.label(.medium))
+            .foregroundStyle(inks.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, CinemaSpacing.spacing6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.colorScheme, .dark)
+    }
 
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-                if tier == .free { ProPurchaseBlock() }
-                if tier == .free {
+    private func tvIdentity(_ inks: ProTierInks) -> some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                Text(loc.localized("pro.card.wordmark"))
+                    .font(CinemaFont.label(.large))
+                    .fontWeight(.black)
+                    .tracking(5)
+                    .foregroundStyle(inks.wordmarkInk)
+                ProTierEmblem(inks: inks, size: 52)
+            }
+            Text(tier.name(loc))
+                .font(.system(size: CinemaScale.pt(96), weight: .black))
+                .tracking(-2)
+                .foregroundStyle(inks.nameStyle)
+                .accessibilityAddTraits(.isHeader)
+            Text(tier.cardLine(loc))
+                .font(.system(size: CinemaScale.pt(24), weight: .bold))
+                .foregroundStyle(inks.secondaryInk)
+            Text(lead)
+                .font(CinemaFont.body)
+                .foregroundStyle(inks.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: CinemaTVLayout.formMaxWidth * 0.7, alignment: .leading)
+            if let since {
+                Text(since)
+                    .font(CinemaFont.label(.medium))
+                    .fontWeight(.heavy)
+                    .tracking(2)
+                    .textCase(.uppercase)
+                    .foregroundStyle(inks.secondaryInk)
+                    .padding(.top, CinemaSpacing.spacing1)
+            }
+        }
+    }
+
+    private var tvActions: some View {
+        HStack(alignment: .top, spacing: CinemaSpacing.spacing4) {
+            if tier == .free {
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                    ProPurchaseBlock()
                     Text(loc.localized("pro.tv.storeNote"))
-                        .font(CinemaFont.body)
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .font(CinemaFont.label(.medium))
+                        .foregroundStyle(CinemaColor.onTitaniumVariant)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                CinemaButton(title: loc.localized("pro.restore"), style: .ghost, isLoading: proStore.isRestoring, action: restore)
-                Text(loc.localized("pro.tv.legal"))
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.onSurfaceMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 560)
             }
-            .frame(width: 560)
-            .padding(CinemaSpacing.spacing6)
-            .background(CinemaColor.surfaceContainerHigh)
-            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
+            CinemaButton(title: loc.localized("pro.restore"), style: .ghost, isLoading: proStore.isRestoring, action: restore)
+                .frame(width: CinemaTVLayout.ctaWidth * 1.4)
+        }
+        .focusSection()
+    }
+
+    /// « INCLUS POUR VOUS — Comptes mémorisés : … » over a row of pills; the
+    /// line names the focused pill (the first one until focus reaches them).
+    private func tvFeatures(_ inks: ProTierInks) -> some View {
+        let shown = ProFeatureCatalogue.features.first { $0.id == shownFeature } ?? ProFeatureCatalogue.features[0]
+        return VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            (Text(loc.localized(tier == .free ? "pro.list.withPro" : "pro.list.included").uppercased())
+                .fontWeight(.heavy)
+                .foregroundColor(inks.wordmarkInk)
+             + Text("  ·  ")
+             + Text(loc.localized(shown.titleKey)).fontWeight(.bold)
+             + Text(" — " + loc.localized(shown.detailKey)))
+                .font(CinemaFont.body)
+                .foregroundStyle(CinemaColor.onTitanium)
+                .lineLimit(2)
+                .frame(maxWidth: CinemaTVLayout.formMaxWidth, alignment: .leading)
+                .animation(nil, value: shownFeature)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    ForEach(ProFeatureCatalogue.features) { feature in
+                        tvFeaturePill(feature)
+                    }
+                }
+                .padding(.vertical, CinemaSpacing.spacing2)
+            }
+            .scrollClipDisabled()
             .focusSection()
         }
+        .onChange(of: focusedFeature) { _, id in
+            if let id { shownFeature = id }
+        }
+    }
+
+    private func tvFeaturePill(_ feature: ProFeatureCatalogue.Feature) -> some View {
+        Button { shownFeature = feature.id } label: {
+            HStack(spacing: CinemaSpacing.spacing2) {
+                Image(systemName: feature.icon)
+                    .accessibilityHidden(true)
+                Text(loc.localized(feature.shortKey))
+            }
+            .font(CinemaFont.label(.large))
+            .fontWeight(.semibold)
+            .foregroundStyle(CinemaColor.onTitanium)
+            .padding(.horizontal, CinemaSpacing.spacing5)
+            .frame(height: 72)
+            .background(CinemaColor.metalLight.opacity(focusedFeature == feature.id ? 0.22 : 0.10), in: Capsule())
+        }
+        .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($focusedFeature, equals: feature.id)
+        .accessibilityLabel(loc.localized(feature.titleKey))
+        .accessibilityHint(loc.localized(feature.detailKey))
     }
     #endif
 }

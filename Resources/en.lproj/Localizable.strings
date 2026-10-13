@@ -1460,3 +1460,11 @@
 "pro.card.since.pro" = "Active since %@";
 "pro.list.included" = "Included for you";
 "pro.list.withPro" = "With Pro";
+"pro.feature.accounts.short" = "Accounts";
+"pro.feature.admin.short" = "Admin";
+"pro.feature.watchTogether.short" = "Watch Together";
+"pro.feature.playOn.short" = "Play on…";
+"pro.feature.menu.short" = "Menu";
+"pro.feature.accents.short" = "Colours";
+"pro.feature.seasonal.short" = "Seasons";
+"pro.feature.shortcuts.short" = "Siri";

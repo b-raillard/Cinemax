@@ -1460,3 +1460,11 @@
 "pro.card.since.pro" = "Aktiv seit %@";
 "pro.list.included" = "Für dich inklusive";
 "pro.list.withPro" = "Mit Pro";
+"pro.feature.accounts.short" = "Konten";
+"pro.feature.admin.short" = "Verwaltung";
+"pro.feature.watchTogether.short" = "Gemeinsam schauen";
+"pro.feature.playOn.short" = "Abspielen auf …";
+"pro.feature.menu.short" = "Menü";
+"pro.feature.accents.short" = "Farben";
+"pro.feature.seasonal.short" = "Jahreszeiten";
+"pro.feature.shortcuts.short" = "Siri";
