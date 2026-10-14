@@ -37,6 +37,10 @@ struct UserSwitchSheet: View {
     /// The presenter then injects the entitlement stores and `ProStore`.
     var showsProHint = false
     @State private var showUpsell = false
+    /// tvOS: the empty state's « Connexion manuelle » has held focus at least
+    /// once — see `proHint`.
+    @FocusState private var manualSignInFocused: Bool
+    @State private var proHintFocusable = false
     // OPTIONAL reads: this sheet is also presented from the account switcher
     // and « Qui regarde ? », which inject none of them — only the free path
     // (Settings) does, and only it shows the PRO entry.
@@ -83,9 +87,13 @@ struct UserSwitchSheet: View {
                         title: loc.localized("switchAccount.noPublicUsers.title"),
                         subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
                         actionTitle: loc.localized("switchAccount.signInManually"),
-                        onAction: { enterManualMode() }
+                        onAction: { enterManualMode() },
+                        actionFocused: $manualSignInFocused
                     )
                     proHint
+                }
+                .onChange(of: manualSignInFocused) { _, focused in
+                    if focused { proHintFocusable = true }
                 }
             } else {
                 userGrid
@@ -192,6 +200,14 @@ struct UserSwitchSheet: View {
                 .padding(.bottom, CinemaSpacing.spacing4)
                 #if os(tvOS)
                 .frame(maxWidth: CinemaTVLayout.formMaxWidth)
+                // On an empty server list the row stays out of focus until
+                // « Connexion manuelle » has had it: tvOS starts on the
+                // focusable nearest the top-leading corner, and this row,
+                // wider than the button, reaches further left — so it took the
+                // first focus (recette 2026-10-13, TV-09). `prefersDefaultFocus`,
+                // `resetFocus`, `defaultFocus` and a delayed `@FocusState` write
+                // all lost to that pick. The grid case starts on a tile.
+                .disabled(users.isEmpty && !proHintFocusable)
                 .fullScreenCover(isPresented: $showUpsell) {
                     upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
                 }
