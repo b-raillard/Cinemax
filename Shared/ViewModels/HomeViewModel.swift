@@ -59,7 +59,7 @@ struct HomeSnapshot: Codable, Sendable, Equatable {
     /// Bumped when the shape changes; an older file is ignored, not migrated.
     static let currentVersion = 1
 
-    var version = HomeSnapshot.currentVersion
+    var version = Self.currentVersion
     var resumeItems: [BaseItemDto] = []
     var latestItems: [BaseItemDto] = []
     var favoriteItems: [BaseItemDto] = []
@@ -78,7 +78,7 @@ struct HomeSnapshotStore: Sendable {
     /// re-create a file the clear has just deleted.
     private static let queue = DispatchQueue(label: "com.cinemax.home-snapshot", qos: .utility)
 
-    static let standard = HomeSnapshotStore(
+    static let standard = Self(
         directory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
             .appendingPathComponent("HomeSnapshots", isDirectory: true)
     )
