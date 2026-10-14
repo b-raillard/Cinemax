@@ -247,38 +247,33 @@ struct ProTierInks {
     }
 }
 
-/// A tier's material — brushed graphite with an accent glow (Pro), brushed
-/// gold (founder), smooth dark with two accent halos (free); the same in light
-/// and dark mode. The membership card wears it, and so does the whole Apple TV
-/// « Votre niveau » page (design D, 2026-10-13), at screen size.
+/// A tier's material, the same in light and dark mode: a near-black ground
+/// carrying the tier's colour, brushed hairlines, a faint corner light, and
+/// the colour itself kept for the metallic name and the emblem — gold for a
+/// founder, the accent for Pro, neutral graphite for free. The founder's quiet
+/// recipe (recette 2026-10-13), worn edge to edge by the Apple TV « Votre
+/// niveau » page (design D) and by the iPhone / iPad membership card (design C,
+/// 2026-10-14). The earlier bright metal read as a wall of yellow, a muddy grey
+/// and two smudges.
 struct ProTierMaterial: View {
     let tier: ProTier
     let accent: Color
     /// The glow's reach: a card's corner, or most of a TV screen.
-    var glowRadius: CGFloat = 260
-    /// Screen size (the Apple TV page): one quiet recipe for every tier, the
-    /// founder's (recette 2026-10-13) — a near-black ground carrying the
-    /// tier's colour, brushed hairlines, a faint corner light, and the colour
-    /// itself kept for the metallic name and the emblem. Gold for a founder,
-    /// the accent for Pro, neutral graphite for free. The card's brighter
-    /// metal read as a wall of yellow, a muddy grey and two smudges there.
-    var fullScreen = false
+    var glowRadius: CGFloat = 320
 
     private var tint: Color {
         switch tier {
         case .founder: CinemaColor.founderGoldLight
         case .pro: accent
-        case .free: fullScreen ? CinemaColor.metalLight : accent
+        case .free: CinemaColor.metalLight
         }
     }
 
     private var glowOpacity: Double {
-        switch (tier, fullScreen) {
-        case (.founder, true): 0.16
-        case (.pro, true): 0.14
-        case (.free, true): 0.05
-        case (.free, false): 0.32
-        default: 0.38
+        switch tier {
+        case .founder: 0.16
+        case .pro: 0.14
+        case .free: 0.05
         }
     }
 
@@ -290,62 +285,36 @@ struct ProTierMaterial: View {
 
     private var ground: LinearGradient {
         switch tier {
-        case .founder where fullScreen:
-            darkGround(CinemaColor.founderGoldDeep, [0.35, 0.6, 0.8])
         case .founder:
-            LinearGradient(colors: [CinemaColor.founderGoldDeep, CinemaColor.founderGold, CinemaColor.founderGoldShade],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .pro where fullScreen:
-            darkGround(accent, [0.78, 0.86, 0.93])
+            darkGround(CinemaColor.founderGoldDeep, [0.35, 0.6, 0.8])
         case .pro:
-            LinearGradient(stops: [.init(color: CinemaColor.titaniumEdge, location: 0),
-                                   .init(color: CinemaColor.titaniumMid, location: 0.48),
-                                   .init(color: CinemaColor.titaniumDeep, location: 1)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .free where fullScreen:
+            darkGround(accent, [0.78, 0.86, 0.93])
+        case .free:
             LinearGradient(colors: [CinemaColor.titaniumPlain, CinemaColor.titaniumDeep, CinemaColor.titaniumDeep.mix(with: CinemaColor.metalShade, by: 0.4)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .free:
-            LinearGradient(colors: [CinemaColor.titaniumPlain, CinemaColor.titaniumPlain], startPoint: .top, endPoint: .bottom)
         }
     }
 
     var body: some View {
         ZStack {
             ground
-            // Brushed metal: hairlines every 3 pt. The free CARD stays smooth.
-            if tier != .free || fullScreen {
-                Canvas { context, size in
-                    var x: CGFloat = 0
-                    while x < size.width {
-                        context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)),
-                                     with: .color(CinemaColor.metalLight.opacity(0.035)))
-                        x += 3
-                    }
+            // Brushed metal: hairlines every 3 pt.
+            Canvas { context, size in
+                var x: CGFloat = 0
+                while x < size.width {
+                    context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)),
+                                 with: .color(CinemaColor.metalLight.opacity(0.035)))
+                    x += 3
                 }
             }
             // The light in the top-trailing corner.
             RadialGradient(colors: [tint.opacity(glowOpacity), .clear],
                            center: .topTrailing, startRadius: 0, endRadius: glowRadius)
-            if fullScreen {
-                // The faintest sheen — what tells metal from paint at TV size.
-                LinearGradient(stops: [.init(color: .clear, location: 0.3),
-                                       .init(color: CinemaColor.metalLight.opacity(0.05), location: 0.46),
-                                       .init(color: .clear, location: 0.62)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-            } else if tier == .free {
-                // The free card's second halo, bottom-leading — the colour it
-                // was missing.
-                RadialGradient(colors: [accent.opacity(0.18), .clear],
-                               center: .bottomLeading, startRadius: 0, endRadius: glowRadius * 0.85)
-            } else {
-                // The sheen across the metal.
-                LinearGradient(stops: [.init(color: .clear, location: 0.3),
-                                       .init(color: CinemaColor.metalLight.opacity(0.18), location: 0.46),
-                                       .init(color: CinemaColor.metalLight.opacity(0.02), location: 0.56),
-                                       .init(color: .clear, location: 0.7)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-            }
+            // The faintest sheen — what tells metal from paint.
+            LinearGradient(stops: [.init(color: .clear, location: 0.3),
+                                   .init(color: CinemaColor.metalLight.opacity(0.05), location: 0.46),
+                                   .init(color: .clear, location: 0.62)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
         }
         .accessibilityHidden(true)
     }
@@ -379,14 +348,14 @@ extension ProTier {
     }
 }
 
-/// The membership card — the head of the Pro page on iPhone and iPad, in the
-/// « titanium » material chosen on 2026-10-13 (design A of the card study):
-/// brushed graphite with an accent edge, glow and metallic name for Pro;
-/// brushed gold for a founder; a dark card with an accent edge and halos for
-/// free (it had no colour at all). Materials: the same in light and dark mode.
+/// The membership card — the head of the Pro page on iPhone and iPad (design C
+/// of the card study, 2026-10-14): the Apple TV page's material at card size,
+/// plus a fine edge in the tier's colour to set it off the page. No coloured
+/// shadow or halo; on a light page, a neutral shadow lifts the dark card.
 struct ProMembershipCard: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.colorScheme) private var colorScheme
 
     let tier: ProTier
     /// « Membre depuis juin 2026 » — `nil` when the date is not known (a
@@ -428,12 +397,13 @@ struct ProMembershipCard: View {
         .frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading)
         .background(ProTierMaterial(tier: tier, accent: themeManager.accent))
         .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
-        // The edge: an accent (gold) filet, and a light top bevel on metal.
+        // The edge: a fine filet in the tier's colour (gold, the accent), a
+        // faint light one on free's neutral graphite.
         .overlay {
             RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                .strokeBorder(inks.tint.opacity(tier == .free ? 0.55 : 0.75), lineWidth: tier == .free ? 2 : 1.5)
+                .strokeBorder(tier == .free ? CinemaColor.metalLight.opacity(0.16) : inks.tint.opacity(0.45), lineWidth: 1)
         }
-        .shadow(color: tier == .free ? .clear : inks.tint.opacity(0.28), radius: 20, y: 10)
+        .shadow(color: colorScheme == .light ? CinemaColor.metalShade.opacity(0.18) : .clear, radius: 18, y: 6)
         .accessibilityElement(children: .combine)
     }
 }

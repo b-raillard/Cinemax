@@ -266,7 +266,8 @@ struct ProScreen: View {
     }
 
     private var tvActions: some View {
-        HStack(alignment: .top, spacing: CinemaSpacing.spacing4) {
+        // Restore sits level with the purchase block's button, not its top.
+        HStack(alignment: tier == .free ? .proAction : .top, spacing: CinemaSpacing.spacing4) {
             if tier == .free {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                     ProPurchaseBlock()

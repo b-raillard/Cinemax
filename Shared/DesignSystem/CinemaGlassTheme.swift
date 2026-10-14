@@ -90,18 +90,14 @@ enum CinemaColor {
     /// The Settings logo's ring and glow: the pale foil vanished on the light
     /// page (recette 2026-10-13), so light mode takes a richer gold.
     static let founderGoldRing = Color.dynamic(light: 0xC0902E, dark: 0xE2C27A)
-    /// The founder card's brushed gold: its far stop, its pale highlight
-    /// (the name's metallic top) and its wordmark.
-    static let founderGoldShade = Color.dynamic(light: 0x5A410F, dark: 0x5A410F)
+    /// The founder name's pale metallic top, and its wordmark.
     static let founderGoldPale  = Color.dynamic(light: 0xFFF3D0, dark: 0xFFF3D0)
     static let founderGoldMark  = Color.dynamic(light: 0xF6E2B0, dark: 0xF6E2B0)
 
-    // Membership-card « titanium » (design A, 2026-10-13) — a material, so
-    // the same dark stops in both modes, like the gold foil above.
+    // The tier material's graphite (`ProTierMaterial`) — a material, so the
+    // same dark stops in both modes, like the gold foil above.
     static let titaniumDeep  = Color.dynamic(light: 0x141517, dark: 0x141517)
-    static let titaniumMid   = Color.dynamic(light: 0x33363B, dark: 0x33363B)
-    static let titaniumEdge  = Color.dynamic(light: 0x1C1D20, dark: 0x1C1D20)
-    /// The free card's ground.
+    /// The free tier's ground, lightest stop.
     static let titaniumPlain = Color.dynamic(light: 0x1E1F21, dark: 0x1E1F21)
     /// Light and shade mixed into the accent for the metal's highlights.
     static let metalLight    = Color.dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)

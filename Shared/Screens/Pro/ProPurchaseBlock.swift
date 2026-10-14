@@ -10,8 +10,19 @@ struct ProPurchaseBlock: View {
     @Environment(ProStore.self) private var proStore
     @Environment(LocalizationManager.self) private var loc
 
+    // On Apple TV the block is a left column beside « Restaurer les achats »,
+    // over a left-aligned note: its text reads from the left too. The iPhone
+    // sheet centres it.
+    #if os(tvOS)
+    private let alignment = HorizontalAlignment.leading
+    private let textAlignment = TextAlignment.leading
+    #else
+    private let alignment = HorizontalAlignment.center
+    private let textAlignment = TextAlignment.center
+    #endif
+
     var body: some View {
-        VStack(spacing: CinemaSpacing.spacing3) {
+        VStack(alignment: alignment, spacing: CinemaSpacing.spacing3) {
             if proStore.isPending {
                 ProNoticeCard(text: loc.localized("pro.pending"), systemImage: "hourglass")
             } else if let product = proStore.product {
@@ -23,19 +34,21 @@ struct ProPurchaseBlock: View {
                     Task { await proStore.purchase() }
                 }
                 .disabled(proStore.isPurchasing)
+                .alignmentGuide(.proAction) { $0[VerticalAlignment.center] }
                 Text(loc.localized("pro.buy.footnote"))
                     .font(CinemaFont.dynamicLabel(.small))
                     .foregroundStyle(CinemaColor.onSurfaceMuted)
-                    .multilineTextAlignment(.center)
+                    .multilineTextAlignment(textAlignment)
                     .fixedSize(horizontal: false, vertical: true)
             } else if proStore.productState == .unavailable {
                 Text(loc.localized("pro.price.unavailable"))
                     .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .multilineTextAlignment(.center)
+                    .multilineTextAlignment(textAlignment)
                 CinemaButton(title: loc.localized("pro.price.retry"), style: .ghost) {
                     Task { await proStore.loadProduct() }
                 }
+                .alignmentGuide(.proAction) { $0[VerticalAlignment.center] }
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 54)
@@ -43,6 +56,18 @@ struct ProPurchaseBlock: View {
         }
         .task { if proStore.product == nil { await proStore.loadProduct() } }
     }
+}
+
+extension VerticalAlignment {
+    private enum ProActionAlignment: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat { context[VerticalAlignment.center] }
+    }
+
+    /// The purchase block's BUTTON (buy, or retry), whatever text sits above
+    /// it — what the Apple TV page lines « Restaurer les achats » up with.
+    /// Aligning the tops instead dropped « Réessayer » under the price notice
+    /// (recette 2026-10-14).
+    static let proAction = VerticalAlignment(ProActionAlignment.self)
 }
 
 /// « Merci ! » / « Demande envoyée » / « Achat impossible » — the outcome

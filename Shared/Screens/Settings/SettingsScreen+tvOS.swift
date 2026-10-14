@@ -65,7 +65,7 @@ extension SettingsScreen {
                 // « Votre niveau » (design D): the tier's material, edge to
                 // edge — the screen is the membership card.
                 ProTierMaterial(tier: entitlements.proTier(earlyAdopter: earlyAdopter),
-                                accent: themeManager.accent, glowRadius: 1400, fullScreen: true)
+                                accent: themeManager.accent, glowRadius: 1400)
                     // The pills and the small print sit low: shade the foot.
                     .overlay {
                         LinearGradient(colors: [.clear, CinemaColor.metalShade.opacity(0.55)],
