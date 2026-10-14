@@ -18,6 +18,14 @@ enum ReviewPromptPolicy {
     /// at 3 / 365 days on its own; this keeps our own calls sparse).
     static let minimumInterval: TimeInterval = 90 * 24 * 60 * 60
 
+    /// After the player closes: long enough for its dismiss animation
+    /// (fullScreenCover / navigation pop, ~0.4 s) to finish.
+    static let afterCloseDelay: Duration = .seconds(1)
+    /// After a launch on the signed-in app: past the first paint and the
+    /// launch's own presentations, and long enough that a viewer who opened
+    /// the app to press « Reprendre » has opened a player — which withdraws it.
+    static let afterLaunchDelay: Duration = .seconds(5)
+
     static func qualifies(watchedSeconds: Int) -> Bool {
         watchedSeconds >= minimumWatchedSeconds
     }

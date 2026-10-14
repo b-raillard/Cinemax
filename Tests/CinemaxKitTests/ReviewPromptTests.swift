@@ -158,6 +158,63 @@ struct ReviewPromptTrackerTests {
         #expect(second.isDue)
     }
 
+    @Test("Lancement avec trois séances en attente : la demande est due, après le délai du lancement")
+    func launchWithPendingSessionsIsDue() {
+        let sut = tracker(UserDefaults.isolatedForTesting())
+        for _ in 0..<3 { sut.recordSession(watchedSeconds: watched) }
+        sut.appDidLaunch()
+        #expect(sut.isDue)
+        #expect(sut.dueDelay == ReviewPromptPolicy.afterLaunchDelay)
+    }
+
+    @Test("Le lancement ne demande qu'une fois par processus")
+    func launchAsksOncePerProcess() {
+        let sut = tracker(UserDefaults.isolatedForTesting())
+        sut.appDidLaunch()
+        #expect(!sut.isDue)
+
+        for _ in 0..<3 { sut.recordSession(watchedSeconds: watched) }
+        sut.appDidLaunch()
+        #expect(!sut.isDue, "la fermeture du lecteur reste le moment ordinaire")
+    }
+
+    @Test("Lancement sans assez de séances : rien")
+    func launchWithoutEnoughSessionsIsNotDue() {
+        let sut = tracker(UserDefaults.isolatedForTesting())
+        for _ in 0..<2 { sut.recordSession(watchedSeconds: watched) }
+        sut.appDidLaunch()
+        #expect(!sut.isDue)
+    }
+
+    @Test("Un lecteur ouvert pendant le délai du lancement retire la demande ; la fermeture redemande, avec son propre délai")
+    func playerOpenedDuringLaunchDelayWithdraws() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let sut = tracker(defaults)
+        for _ in 0..<3 { sut.recordSession(watchedSeconds: watched) }
+        sut.appDidLaunch()
+        #expect(sut.isDue)
+
+        sut.playerDidOpen()
+        #expect(!sut.isDue)
+        #expect(defaults.integer(forKey: SettingsKey.reviewQualifyingPlaybacks) == 3)
+
+        sut.playerDidClose()
+        #expect(sut.isDue)
+        #expect(sut.dueDelay == ReviewPromptPolicy.afterCloseDelay)
+    }
+
+    @Test("withdraw éteint la demande sans rien estampiller")
+    func withdrawDoesNotStamp() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let sut = tracker(defaults)
+        for _ in 0..<3 { sut.recordSession(watchedSeconds: watched) }
+        sut.playerDidClose()
+        sut.withdraw()
+        #expect(!sut.isDue)
+        #expect((defaults.string(forKey: SettingsKey.reviewLastPromptedVersion) ?? "").isEmpty)
+        #expect(defaults.integer(forKey: SettingsKey.reviewQualifyingPlaybacks) == 3)
+    }
+
     @Test("Version déjà sollicitée : jamais due")
     func alreadyPromptedVersionNeverDue() {
         let defaults = UserDefaults.isolatedForTesting()
