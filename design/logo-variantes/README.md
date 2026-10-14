@@ -8,6 +8,8 @@ L'icône de l'app, **recolorée sans être redessinée**. Seule la teinte de la 
 
 Les icônes d'origine avaient leurs coins arrondis peints dans l'image, blancs à l'extérieur (gris clair sur l'icône sombre), avec un liseré le long de la courbe. iOS et tvOS appliquent leur propre masque à une icône **carrée**. `recolor.py` remplace ce blanc et ce liseré par le fond, prolongé en douceur depuis les pixels voisins (le reflet du bord haut s'estompe dans le coin). Hors des quatre coins, aucun pixel ne change : le script le vérifie.
 
+**Logo tvOS des Réglages (`AppLogo.imageset/app_logo_tv.png`), redécoupé le 2026-10-13** : l'ancien détourage gardait autour de la méduse une bande du fond sombre de l'icône (et des taches entre les tentacules), visible sur le fond des Réglages. `recut_tv_logo.py <original> <sortie> <dossier d'aperçus> 90 30` retire tout ce fond : remplissage depuis les bords de l'image sur les pixels proches du fond (le néon l'arrête ; l'objectif est protégé), seuls les pixels collés au néon restent, adoucis et recolorés à la couleur du néon voisin. L'original est gardé dans `originaux/AppLogo.imageset/app_logo_tv.png`. Les déclinaisons de couleur sous `declinaisons/` gardent l'ancien détourage.
+
 Les icônes de `Resources/` ont reçu cette version sans coins : `app_icon_1024.png`, `_dark`, `_tinted` (couleurs inchangées) et `AppLogo.imageset/app_logo.png`. Les originaux, coins compris, sont gardés dans `originaux/` et restent la source du script. Les calques tvOS et le logo tvOS n'avaient pas de coins peints.
 
 ## Contenu
