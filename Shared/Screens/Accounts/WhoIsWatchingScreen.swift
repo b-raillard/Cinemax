@@ -478,7 +478,7 @@ struct TVAccountAvatarButton: View {
     var body: some View {
         Button(action: action) {
             UserAvatar(userId: appState.currentUserId, name: appState.currentUser?.name,
-                       primaryImageTag: appState.currentUser?.primaryImageTag, size: 64)
+                       primaryImageTag: appState.currentUser?.primaryImageTag, size: CinemaTVLayout.accountAvatarSize)
                 .overlay {
                     if isFocused {
                         Circle().strokeBorder(themeManager.accent, lineWidth: CinemaTVFocus.cardRingWidth)

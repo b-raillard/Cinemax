@@ -55,6 +55,7 @@ struct MainTabView: View {
     /// `TVTopBarFocus`. Starts false: a tvOS app opens with focus in a page.
     @State private var topBarHasFocus = false
     @State private var showWhoIsWatching = false
+    @Environment(\.motionEffectsEnabled) private var motionEffects
     @Environment(ToastCenter.self) private var toasts
     @Environment(AccountLockStore.self) private var accountLocks
     @Environment(ParentalLockController.self) private var parentalLock
@@ -70,7 +71,6 @@ struct MainTabView: View {
     /// drop it, and then the first tab plays that role — the user still needs
     /// one screen the Menu button converges on before it gives up and suspends
     /// the app.
-
     private var tvHomeTabID: String? {
         displayedTabs.first(where: { $0.id == MenuEntry.homeID })?.id ?? displayedTabs.first?.id
     }
@@ -303,13 +303,14 @@ struct MainTabView: View {
             if showsTVAccountAvatar && topBarHasFocus {
                 TVAccountAvatarButton { showWhoIsWatching = true }
                     .padding(.leading, CinemaTVLayout.pagePadding)
-                    .padding(.top, Self.tvAvatarTop)
+                    .padding(.top, CinemaTVLayout.accountAvatarTop)
                     .transition(.opacity)
                     .ignoresSafeArea()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIFocusSystem.didUpdateNotification)) { note in
-            if let inBar = TVTopBarFocus.isInTopBar(note) { topBarHasFocus = inBar }
+            guard let inBar = TVTopBarFocus.isInTopBar(note), inBar != topBarHasFocus else { return }
+            withAnimation(motionEffects ? .easeInOut(duration: 0.2) : nil) { topBarHasFocus = inBar }
         }
         .fullScreenCover(isPresented: $showWhoIsWatching) {
             WhoIsWatchingScreen(mode: .cover) { showWhoIsWatching = false }
@@ -331,10 +332,6 @@ struct MainTabView: View {
     private var showsTVAccountAvatar: Bool {
         entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
     }
-
-    /// Top of the avatar, centring it on the native bar (measured on the
-    /// Apple TV 4K simulator, tvOS 27).
-    private static let tvAvatarTop: CGFloat = 47
     #endif
 
     // MARK: - iOS / iPadOS — adaptive tab bar ↔ sidebar

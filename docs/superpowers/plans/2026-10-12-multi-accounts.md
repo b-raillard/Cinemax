@@ -160,7 +160,7 @@ func removeAccount(userId: String) async -> LogoutOutcome       // actif → bas
 **Files:**
 - Create: `Shared/Screens/Accounts/WhoIsWatchingScreen.swift` (modes `.launch` et `.tab`)
 - Modify: `Shared/Navigation/AppNavigation.swift` (cover au lancement avant « Quoi de neuf »)
-- Modify: `Shared/Navigation/MainTabView.swift` (onglet « Profil » de tête, exclu du repli d'accueil)
+- Modify: `Shared/Navigation/MainTabView.swift` (onglet « Profil » de tête — remplacé le 14/10 par un avatar à gauche de la barre, TV-10)
 - Modify: `Shared/Navigation/TVBackNavigation.swift` si le repli doit ignorer l'onglet
 - Modify: `Shared/Screens/Settings/SettingsTVProfileSection.swift`
 - Modify: `Shared/DesignSystem/SettingsKeys.swift` (`accounts.askOnLaunch`, défaut `true`)
