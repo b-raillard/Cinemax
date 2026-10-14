@@ -120,6 +120,9 @@ extension SettingsScreen {
             default: break
             }
         }
+        // Another tab, or a category: the landing will pick a first focus
+        // again when it comes back, which must be a pill again.
+        .onDisappear { tierChipFocusable = false }
     }
 
     var tvBrandPanel: some View {

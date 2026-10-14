@@ -452,6 +452,9 @@ struct UserSwitchSheet: View {
 
     private func exitManualMode() {
         showManualEntry = false
+        // Back on the empty state: tvOS picks a first focus again, which must
+        // be « Connexion manuelle » again, not the Pro row (see `proHint`).
+        proHintFocusable = false
         manualUsername = ""
         password = ""
         authError = nil

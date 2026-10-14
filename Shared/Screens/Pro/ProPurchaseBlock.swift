@@ -10,16 +10,12 @@ struct ProPurchaseBlock: View {
     @Environment(ProStore.self) private var proStore
     @Environment(LocalizationManager.self) private var loc
 
-    // On Apple TV the block is a left column beside « Restaurer les achats »,
-    // over a left-aligned note: its text reads from the left too. The iPhone
-    // sheet centres it.
-    #if os(tvOS)
-    private let alignment = HorizontalAlignment.leading
-    private let textAlignment = TextAlignment.leading
-    #else
-    private let alignment = HorizontalAlignment.center
-    private let textAlignment = TextAlignment.center
-    #endif
+    /// Centred in the contextual sheet (both platforms); `.leading` on the
+    /// Apple TV Pro page, where the block is a left column beside
+    /// « Restaurer les achats », over a left-aligned note.
+    var alignment: HorizontalAlignment = .center
+
+    private var textAlignment: TextAlignment { alignment == .leading ? .leading : .center }
 
     var body: some View {
         VStack(alignment: alignment, spacing: CinemaSpacing.spacing3) {

@@ -270,7 +270,7 @@ struct ProScreen: View {
         HStack(alignment: tier == .free ? .proAction : .top, spacing: CinemaSpacing.spacing4) {
             if tier == .free {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                    ProPurchaseBlock()
+                    ProPurchaseBlock(alignment: .leading)
                     Text(loc.localized("pro.tv.storeNote"))
                         .font(CinemaFont.label(.medium))
                         .foregroundStyle(CinemaColor.onTitaniumVariant)
