@@ -83,13 +83,18 @@ private struct ProTierLogoDecoration: ViewModifier {
     let cornerRadius: CGFloat
     let medalSize: CGFloat
 
+    private static let ringWidth: CGFloat = 3
+
     func body(content: Content) -> some View {
         content
             .overlay {
                 if let ring = look.ring {
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .strokeBorder(ring, lineWidth: 3)
-                        .padding(-5)
+                    // Flush against the logo's edge, its corners concentric:
+                    // a 2 pt gap and a same-radius ring read as a loose frame
+                    // (recette 2026-10-14, I-01).
+                    RoundedRectangle(cornerRadius: cornerRadius + Self.ringWidth)
+                        .strokeBorder(ring, lineWidth: Self.ringWidth)
+                        .padding(-Self.ringWidth)
                         .shadow(color: look.glow, radius: 16)
                         .accessibilityHidden(true)
                 }

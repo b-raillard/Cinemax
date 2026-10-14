@@ -44,6 +44,7 @@ extension SettingsScreen {
                 // back to the top so the tab bar resurfaces naturally.
                 if newValue == nil {
                     selectedInterfaceSub = nil
+                    tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
             }
@@ -111,6 +112,14 @@ extension SettingsScreen {
         // `canOpenURL` is an IPC: re-resolved each time the landing appears
         // (including a pop back from a category), never per render.
         .onAppear { rateAppURL = AppUpdateChecker.rateAppURL() }
+        // Only a landing item arms the chip: on a return from a category the
+        // value still names that page's last focus until tvOS picks anew.
+        .onChange(of: focusedItem) { _, item in
+            switch item {
+            case .category, .rateApp: tierChipFocusable = true
+            default: break
+            }
+        }
     }
 
     var tvBrandPanel: some View {
@@ -151,17 +160,23 @@ extension SettingsScreen {
                     .opacity(0.8)
                     .tracking(0.5)
 
-                // The door to « Votre niveau » — focusable, its own section so
-                // a left press from the category pills reaches it.
+                // The door to « Votre niveau ». Disabled until a pill has had
+                // focus: the landing must open (and come back from a
+                // category) on the menu on the right, and tvOS would
+                // otherwise pick this chip, nearer the top-leading corner
+                // (recette 2026-10-14, TV-06; same pick as TV-09).
                 if let look = headerTierLook {
                     ProTierChip(tier: look.tier) { selectedCategory = .pro }
                         .padding(.top, CinemaSpacing.spacing4)
-                        .focusSection()
+                        .disabled(!tierChipFocusable)
                 }
             }
 
             Spacer()
         }
+        // The whole panel is the section, so a left press from ANY pill —
+        // « Apparence » sits far above the chip — lands on it.
+        .focusSection()
     }
 
     var tvNavigationPanel: some View {

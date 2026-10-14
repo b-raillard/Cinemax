@@ -284,6 +284,9 @@ struct SettingsScreen: View {
     // tvOS-only stored properties
     #if os(tvOS)
     @FocusState var focusedItem: SettingsFocus?
+    /// The « Votre niveau » chip stays out of focus until a category pill has
+    /// had it — see `tvBrandPanel`. Reset each time the landing comes back.
+    @State var tierChipFocusable = false
     @State var serverUsers: [UserDto] = []
     /// Idempotency guard for `loadServerUsers`. tvOS `.task` re-fires every
     /// time SwiftUI re-enters the view hierarchy (which happens whenever

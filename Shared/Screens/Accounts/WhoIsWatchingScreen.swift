@@ -163,6 +163,10 @@ struct WhoIsWatchingScreen: View {
                 .padding(.vertical, CinemaSpacing.spacing4)
                 .padding(.horizontal, CinemaTVLayout.pagePadding)
             }
+            // A row narrower than the screen sits centred under the centred
+            // title (it started at the left edge — recette 2026-10-14, TV-11);
+            // a longer one still scrolls from the left.
+            .defaultScrollAnchor(.center, for: .alignment)
             .scrollClipDisabled()
             .focusSection()
 
