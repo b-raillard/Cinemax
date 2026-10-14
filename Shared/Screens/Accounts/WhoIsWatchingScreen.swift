@@ -5,15 +5,13 @@ import CinemaxKit
 /// « Qui regarde ? » on Apple TV (multi-account): the living-room profile
 /// picker.
 ///
-/// Three hosts, one screen:
-/// - `.launch`: a root `fullScreenCover` at launch (signed in, ≥ 2 remembered
-///   accounts, « Demander à l'ouverture » on), BEFORE « Quoi de neuf ». Menu
-///   keeps the last profile (it dismisses).
-/// - `.tab`: the content of the leading « Profil » tab of the bar. Menu belongs
-///   to `MainTabView`'s single handler (→ Accueil), per the tvOS Menu RULE.
-/// - `.cover`: from Réglages → Compte. Menu dismisses.
+/// Two hosts, one screen, both full-screen covers whose Menu dismisses:
+/// - `.launch`: at launch (signed in, ≥ 2 remembered accounts, « Demander à
+///   l'ouverture » on), BEFORE « Quoi de neuf ». Menu keeps the last profile.
+/// - `.cover`: from the account avatar left of the tab bar
+///   (`TVAccountAvatarButton`) or Réglages → Compte.
 struct WhoIsWatchingScreen: View {
-    enum Mode { case launch, tab, cover }
+    enum Mode { case launch, cover }
 
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -53,7 +51,7 @@ struct WhoIsWatchingScreen: View {
                 }
             }
         }
-        .modifier(ExitHandling(mode: mode, onExit: exit))
+        .onExitCommand(perform: exit)
         .fullScreenCover(isPresented: $showSignIn) {
             UserSwitchSheet()
                 .environment(appState)
@@ -173,10 +171,8 @@ struct WhoIsWatchingScreen: View {
             HStack(spacing: CinemaSpacing.spacing4) {
                 CinemaButton(title: loc.localized("accounts.manage"), style: .ghost) { showManage = true }
                     .frame(width: 420)
-                if mode != .tab {
-                    CinemaButton(title: loc.localized("action.done"), style: .accent) { onFinished() }
-                        .frame(width: CinemaTVLayout.ctaWidth)
-                }
+                CinemaButton(title: loc.localized("action.done"), style: .accent) { onFinished() }
+                    .frame(width: CinemaTVLayout.ctaWidth)
             }
             .focusSection()
         }
@@ -211,22 +207,6 @@ struct WhoIsWatchingScreen: View {
         if case .code = flow.step { flow.back(); return }
         if showAddChoice { showAddChoice = false; return }
         onFinished()
-    }
-}
-
-/// Menu handling per host: the tab leaves it to `MainTabView`'s single
-/// handler (an inner one would never run — the ancestor wins); the covers
-/// own theirs.
-private struct ExitHandling: ViewModifier {
-    let mode: WhoIsWatchingScreen.Mode
-    let onExit: () -> Void
-
-    func body(content: Content) -> some View {
-        if mode == .tab {
-            content
-        } else {
-            content.onExitCommand(perform: onExit)
-        }
     }
 }
 
@@ -475,6 +455,44 @@ struct TVAccountManageScreen: View {
             _ = await appState.removeAccount(userId: account.userId)
             toasts.success(loc.localized("accounts.removed", account.username))
         }
+    }
+}
+
+/// The account avatar LEFT of the top tab bar (recette 2026-10-14, TV-10) —
+/// tvOS's counterpart of the iPhone's `AccountAvatarToolbarButton`. It was a
+/// leading « Profil » tab, and six tabs overflowed the native bar: the first
+/// and last were cut. `UITabBar.leadingAccessoryView` cannot host it (its
+/// subviews never take input, per the SDK header), so `MainTabView` overlays
+/// it while focus is in the bar, and a left press from the first tab reaches
+/// it. The host owns the presentation: this button disappears as soon as
+/// focus leaves the bar, which would tear down a cover attached here.
+struct TVAccountAvatarButton: View {
+    @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+    @FocusState private var isFocused: Bool
+
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            UserAvatar(userId: appState.currentUserId, name: appState.currentUser?.name,
+                       primaryImageTag: appState.currentUser?.primaryImageTag, size: 64)
+                .overlay {
+                    if isFocused {
+                        Circle().strokeBorder(themeManager.accent, lineWidth: CinemaTVFocus.cardRingWidth)
+                    }
+                }
+                .scaleEffect(isFocused ? CinemaTVFocus.cardScale : 1)
+                .animation(motionEffects ? .easeInOut(duration: 0.2) : nil, value: isFocused)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .focused($isFocused)
+        .accessibilityLabel(loc.localized("accessibility.accounts.switcher"))
+        .accessibilityValue(Text(appState.currentUser?.name ?? ""))
     }
 }
 #endif

@@ -230,3 +230,38 @@ extension View {
         #endif
     }
 }
+
+#if os(tvOS)
+// MARK: - Is focus in the top tab bar?
+
+/// Whether a focus update landed in the top band where the native tab bar
+/// sits (or on the account avatar overlaid beside it) — drives
+/// `MainTabView`'s avatar (recette 2026-10-14, TV-10). Read from the
+/// focused item's position rather than its class: SwiftUI focus items are not
+/// always views, and the bar's internals are private.
+@MainActor
+enum TVTopBarFocus {
+    /// Bottom of the band, in window points. The bar spans ≈ 35–111 pt on the
+    /// Apple TV 4K simulator; no page puts a focusable this high.
+    static let bandBottom: CGFloat = 150
+
+    /// `nil` when the notification carries no next item.
+    static func isInTopBar(_ notification: Notification) -> Bool? {
+        guard let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey] as? UIFocusUpdateContext,
+              let item = context.nextFocusedItem,
+              let top = windowMinY(of: item) else { return nil }
+        return top < bandBottom
+    }
+
+    private static func windowMinY(of item: any UIFocusItem) -> CGFloat? {
+        if let view = item as? UIView {
+            return view.convert(view.bounds, to: nil).minY
+        }
+        guard let space = item.parentFocusEnvironment?.focusItemContainer?.coordinateSpace,
+              let window = UIApplication.shared.connectedScenes
+                  .compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first
+        else { return nil }
+        return space.convert(item.frame, to: window).minY
+    }
+}
+#endif
