@@ -135,7 +135,8 @@ struct FavoritesViewModelTests {
             if startIndex == 0 {
                 return (makeItems(40, prefix: "Page1"), 120)
             }
-            return (makeItems(40, prefix: "Page2"), 0)   // uncounted ⇒ 0
+            // Uncounted: Jellyfin reports the PAGE's size, not 0 (measured, 10.11).
+            return (makeItems(40, prefix: "Page2"), 40)
         }
         let vm = FavoritesViewModel()
         let appState = makeAppState(api: api)
@@ -583,8 +584,9 @@ struct PaginatedLoaderTests {
     func uncountedPageKeepsTotal() async {
         let loader = PaginatedLoader<Int>(pageSize: 2)
         await loader.loadMore { _ in (items: [1, 2], total: 5) }
-        // `total == 0`: the page was fetched with `enableTotalRecordCount: false`.
-        await loader.loadMore { _ in (items: [3, 4], total: 0) }
+        // Fetched with `enableTotalRecordCount: false`: Jellyfin then reports
+        // the page's own size as the total (measured on 10.11), never 0.
+        await loader.loadMore { _ in (items: [3, 4], total: 2) }
 
         #expect(loader.items == [1, 2, 3, 4])
         #expect(loader.totalCount == 5, "the header keeps the first page's count")
@@ -595,11 +597,21 @@ struct PaginatedLoaderTests {
     func uncountedShortPageEnds() async {
         let loader = PaginatedLoader<Int>(pageSize: 2)
         await loader.loadMore { _ in (items: [1, 2], total: 3) }
-        await loader.loadMore { _ in (items: [3], total: 0) }
+        await loader.loadMore { _ in (items: [3], total: 1) }
 
         #expect(loader.items == [1, 2, 3])
         #expect(loader.hasLoadedAll)
         #expect(loader.totalCount == 3)
+    }
+
+    @Test("an uncounted full page ends the list once the first page's total is reached")
+    func uncountedPageEndsAtFirstTotal() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 4) }
+        await loader.loadMore { _ in (items: [3, 4], total: 2) }
+
+        #expect(loader.hasLoadedAll, "4 of 4 — no empty extra request")
+        #expect(loader.totalCount == 4)
     }
 
     @Test("an empty FIRST page reporting 0 is the end, not an uncounted page")
@@ -619,6 +631,7 @@ struct PaginatedLoaderTests {
         await loader.loadMore { _ in (items: (0..<40).map { "m\($0)" }, total: 200) }
 
         #expect(loader.prefetchDistance == 20)
+        #expect(PaginatedLoader<String>(pageSize: 1).prefetchDistance == 1, "never 0 — the trigger would be dead")
         #expect(!loader.shouldLoadMore(onAppearOf: "m19"), "outside the window")
         #expect(loader.shouldLoadMore(onAppearOf: "m20"), "first card of the window")
         #expect(loader.shouldLoadMore(onAppearOf: "m39"), "the last card still triggers")

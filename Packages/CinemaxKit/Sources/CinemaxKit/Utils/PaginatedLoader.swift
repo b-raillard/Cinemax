@@ -59,7 +59,8 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
 
     public init(pageSize: Int = 40, prefetchDistance: Int? = nil, identity: (@Sendable (T) -> String?)? = nil) {
         self.pageSize = pageSize
-        self.prefetchDistance = prefetchDistance ?? pageSize / 2
+        // At least 1, or `items.suffix(0)` would never let a page start.
+        self.prefetchDistance = max(1, prefetchDistance ?? pageSize / 2)
         self.identity = identity
     }
 
@@ -172,21 +173,28 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
             } else {
                 items.append(contentsOf: fresh)
             }
-            // A later page may be fetched WITHOUT the server-side count
-            // (`total == 0`): `totalRecordCount` is a second COUNT query over
+            // Only the FIRST page (`startIndex == 0`) is fetched with the
+            // server-side count: `totalRecordCount` is a second COUNT query over
             // the whole match, which made every 40-card page of a 10.11 server
             // cost ~146 ms instead of ~84 ms — for a number the first page
-            // already gave us. Such a page keeps the first page's total, and
-            // its end is a short page instead.
-            let isCounted = loadedCount == 0 || result.total > 0
+            // already gave us. An UNCOUNTED page's `total` is meaningless:
+            // Jellyfin then reports the page's own size (measured on 10.11:
+            // 40, not 0 — `QueryResult` falls back to `items.Count`), so it is
+            // decided from the REQUEST, never read from the response, and such
+            // a page keeps the first page's total.
+            let isCounted = loadedCount == 0
             // Count what the SERVER sent, not what we retained — see `loadedCount`.
             loadedCount += result.items.count
             if isCounted { totalCount = result.total }
             // An empty page is the end of the list whatever the reported total
             // says: without this, a server over-reporting `totalRecordCount`
-            // leaves the last card asking for more for ever.
+            // leaves the last card asking for more for ever. An uncounted page
+            // also ends the list when it comes back short — the only end
+            // signal it carries besides the first page's total.
             hasLoadedAll = result.items.isEmpty
-                || (isCounted ? loadedCount >= result.total : result.items.count < pageSize)
+                || (isCounted
+                    ? loadedCount >= result.total
+                    : result.items.count < pageSize || loadedCount >= totalCount)
             handOverOrRelease()
         } catch {
             // Caller can observe isLoadingMore returning to false with no new items

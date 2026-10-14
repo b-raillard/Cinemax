@@ -73,6 +73,11 @@ struct HomeSnapshotStore: Sendable {
     /// `nil` disables the store (no directory resolvable).
     let directory: URL?
 
+    /// Every write and every clear runs here, in order: a clear (sign-out,
+    /// server removal) waits for the saves already queued, so a save can never
+    /// re-create a file the clear has just deleted.
+    private static let queue = DispatchQueue(label: "com.cinemax.home-snapshot", qos: .utility)
+
     static let standard = HomeSnapshotStore(
         directory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
             .appendingPathComponent("HomeSnapshots", isDirectory: true)
@@ -99,7 +104,23 @@ struct HomeSnapshotStore: Sendable {
         return snapshot
     }
 
+    /// Queues the write off the caller's thread — see `queue`.
+    func enqueueSave(_ snapshot: HomeSnapshot, serverId: String, userId: String, maxContentAge: Int) {
+        let store = self
+        Self.queue.async {
+            store.write(snapshot, serverId: serverId, userId: userId, maxContentAge: maxContentAge)
+        }
+    }
+
+    /// Synchronous: returns once the file is written.
     func save(_ snapshot: HomeSnapshot, serverId: String, userId: String, maxContentAge: Int) {
+        let store = self
+        Self.queue.sync {
+            store.write(snapshot, serverId: serverId, userId: userId, maxContentAge: maxContentAge)
+        }
+    }
+
+    private func write(_ snapshot: HomeSnapshot, serverId: String, userId: String, maxContentAge: Int) {
         guard let directory,
               let url = fileURL(serverId: serverId, userId: userId, maxContentAge: maxContentAge),
               let data = try? JSONEncoder().encode(snapshot)
@@ -108,14 +129,16 @@ struct HomeSnapshotStore: Sendable {
         try? data.write(to: url, options: .atomic)
     }
 
-    /// Every file of one server — all its users and caps.
+    /// Every file of one server — all its users and caps. Synchronous, and
+    /// ordered after every save already queued.
     func clear(serverId: String) {
-        guard let directory,
-              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)
-        else { return }
+        guard let directory else { return }
         let prefix = "\(Self.sanitize(serverId))_"
-        for name in names where name.hasPrefix(prefix) {
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        Self.queue.sync {
+            guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
+            for name in names where name.hasPrefix(prefix) {
+                try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+            }
         }
     }
 }
@@ -399,7 +422,9 @@ final class HomeViewModel {
         let maxContentAge = defaults.integer(forKey: SettingsKey.privacyMaxContentAge)
         let snapshotServerId = appState.activeServerId
         var snapshotRead: Task<Void, Never>?
-        if let snapshotServerId, isPhaseOneEmpty {
+        // Not after a failed load either: Retry from the error state would
+        // flash yesterday's Home before the same error came back.
+        if let snapshotServerId, isPhaseOneEmpty, loadFailure == nil {
             let store = snapshotStore
             snapshotRead = Task { [weak self] in
                 let snapshot = await Task.detached(priority: .userInitiated) {
@@ -572,18 +597,18 @@ final class HomeViewModel {
 
         heroItem = resumeItems.first ?? latestItems.first
 
-        // A clean phase 1 becomes the next cold start's first paint.
-        if firstError == nil, anySucceeded, let snapshotServerId {
+        // A clean phase 1 becomes the next cold start's first paint — only
+        // while that same account is still the one signed in: a load landing
+        // after a sign-out must not re-create the file the sign-out deleted.
+        if firstError == nil, anySucceeded, let snapshotServerId,
+           appState.currentUserId == userId, appState.activeServerId == snapshotServerId {
             let snapshot = HomeSnapshot(
                 resumeItems: resumeItems, latestItems: latestItems,
                 favoriteItems: favoriteItems, nextUpItems: nextUpItems,
                 playlists: playlists, upcomingItems: upcomingItems,
                 collections: collections
             )
-            let store = snapshotStore
-            Task.detached(priority: .utility) {
-                store.save(snapshot, serverId: snapshotServerId, userId: userId, maxContentAge: maxContentAge)
-            }
+            snapshotStore.enqueueSave(snapshot, serverId: snapshotServerId, userId: userId, maxContentAge: maxContentAge)
         }
 
         // Every source failed: the server is unreachable (or refusing every
