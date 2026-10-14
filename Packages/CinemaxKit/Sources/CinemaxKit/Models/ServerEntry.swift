@@ -54,6 +54,11 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
     /// Manual position in the servers list. `nil` ⇒ the entry has never been
     /// placed by hand and sorts by the automatic rule — see `ServerRegistry.sorted`.
     public var sortIndex: Int?
+    /// Accounts remembered on this device for this server (multi-account). The
+    /// active one may or may not be in the list — always read the set through
+    /// `ServerRegistry.accounts(of:)`, which merges in the active triple. `nil`
+    /// on every entry written before multi-account.
+    public var savedAccounts: [SavedAccount]?
 
     public init(
         id: String = UUID().uuidString,
@@ -66,7 +71,8 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
         serverVersion: String? = nil,
         lastUsedAt: Date = Date(),
         displayNameOverride: String? = nil,
-        sortIndex: Int? = nil
+        sortIndex: Int? = nil,
+        savedAccounts: [SavedAccount]? = nil
     ) {
         self.id = id
         self.name = name
@@ -79,6 +85,7 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
         self.lastUsedAt = lastUsedAt
         self.displayNameOverride = displayNameOverride
         self.sortIndex = sortIndex
+        self.savedAccounts = savedAccounts
     }
 
     /// What every surface prints for this server: the user's label when they

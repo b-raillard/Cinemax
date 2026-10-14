@@ -17,6 +17,9 @@ final class EntitlementStore {
     private(set) var cloudRecord: CloudEntitlementRecord?
     /// The « Simuler Pro » switch. Always `false` in a Release build.
     private(set) var debugOverride = false
+    /// Settings → Débogage « Palier simulé » (free / Pro / founder), read by
+    /// `proTier(earlyAdopter:)`. Always `.automatic` in a Release build.
+    private(set) var proTierOverride: ProTierOverride = .automatic
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let mirror: CloudEntitlementMirror
@@ -57,6 +60,8 @@ final class EntitlementStore {
         #if DEBUG
         let override = defaults.bool(forKey: SettingsKey.debugSimulatePro)
         if override != debugOverride { debugOverride = override }
+        let tier = defaults.string(forKey: SettingsKey.debugProTier).flatMap(ProTierOverride.init(rawValue:)) ?? .automatic
+        if tier != proTierOverride { proTierOverride = tier }
         #endif
         resolve()
     }
@@ -86,6 +91,12 @@ final class EntitlementStore {
         defaults.set(value, forKey: SettingsKey.debugSimulatePro)
         if value != debugOverride { debugOverride = value }
         resolve()
+    }
+
+    /// Settings → Debug → « Palier simulé ». Persisted, DEBUG builds only.
+    func setProTierOverride(_ value: ProTierOverride) {
+        defaults.set(value.rawValue, forKey: SettingsKey.debugProTier)
+        if value != proTierOverride { proTierOverride = value }
     }
     #endif
 

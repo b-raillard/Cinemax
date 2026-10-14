@@ -586,6 +586,16 @@ extension SettingsScreen {
                     .joined(separator: "\n"),
                 action: { earlyAdopterRowAction(earlyAdopter) }
             )
+            #if DEBUG
+            // Free / Pro / founder, forced — cycles on each press.
+            tvActionRow(
+                id: "proTier",
+                icon: "person.2.badge.key",
+                label: loc.localized("settings.debug.proTier"),
+                subtitle: proTierText(entitlements, earlyAdopter: earlyAdopter, loc: loc),
+                action: { entitlements.setProTierOverride(entitlements.proTierOverride.next) }
+            )
+            #endif
             // tvOS has no share sheet and no MetricKit (every MetricKit class
             // is `API_UNAVAILABLE(tvos)`), so the export is iOS-only. The row
             // stays so the limitation is stated rather than silently absent;

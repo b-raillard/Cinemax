@@ -166,3 +166,61 @@ struct EntitlementStoreTests {
     }
     #endif
 }
+
+// MARK: - Pro feature gate
+
+@Suite("Porte des fonctions Pro")
+struct ProFeatureGateTests {
+
+    @Test("Avant le lancement de Pro, tout le monde passe (fondateur)", arguments: [
+        (false, false), (true, false), (false, true), (true, true),
+    ])
+    func beforeLaunch(isPro: Bool, isEarlyAdopter: Bool) {
+        let tier = ProFeatureGate.tier(proLaunched: false, isPro: isPro, isEarlyAdopter: isEarlyAdopter, override: .automatic)
+        #expect(tier != .free)
+        #expect(tier == (isPro ? .pro : .founder))
+    }
+
+    @Test("Après le lancement : Pro acheté, fondateur, sinon gratuit")
+    func afterLaunch() {
+        #expect(ProFeatureGate.tier(proLaunched: true, isPro: true, isEarlyAdopter: false, override: .automatic) == .pro)
+        #expect(ProFeatureGate.tier(proLaunched: true, isPro: false, isEarlyAdopter: true, override: .automatic) == .founder)
+        #expect(ProFeatureGate.tier(proLaunched: true, isPro: false, isEarlyAdopter: false, override: .automatic) == .free)
+    }
+
+    @Test("Le choix Debug l'emporte sur tout")
+    func override() {
+        for launched in [false, true] {
+            #expect(ProFeatureGate.tier(proLaunched: launched, isPro: true, isEarlyAdopter: true, override: .free) == .free)
+            #expect(ProFeatureGate.tier(proLaunched: launched, isPro: false, isEarlyAdopter: false, override: .pro) == .pro)
+            #expect(ProFeatureGate.tier(proLaunched: launched, isPro: false, isEarlyAdopter: false, override: .founder) == .founder)
+        }
+    }
+
+    @Test("Le Pro n'est pas lancé dans cette version")
+    func notLaunchedYet() {
+        #expect(ProFeatureGate.proLaunched == false)
+    }
+
+    @Test("Le choix Debug parcourt automatique → gratuit → Pro → fondateur → automatique")
+    func overrideCycle() {
+        #expect(ProTierOverride.automatic.next == .free)
+        #expect(ProTierOverride.free.next == .pro)
+        #expect(ProTierOverride.pro.next == .founder)
+        #expect(ProTierOverride.founder.next == .automatic)
+    }
+
+    #if DEBUG
+    @MainActor
+    @Test("Le choix Debug est persistant et observable")
+    func storeOverride() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let store = EntitlementStore(defaults: defaults, cloud: InMemoryCloudKeyValueStore())
+        #expect(store.proTierOverride == .automatic)
+        store.setProTierOverride(.free)
+        #expect(store.proTierOverride == .free)
+        let reopened = EntitlementStore(defaults: defaults, cloud: InMemoryCloudKeyValueStore())
+        #expect(reopened.proTierOverride == .free)
+    }
+    #endif
+}

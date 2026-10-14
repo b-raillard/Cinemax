@@ -12,6 +12,10 @@ final class LoginViewModel {
     var isAuthenticating = false
     var errorMessage: String?
     var showSuccess = false
+    /// `true` when this model signs in an ADDITIONAL account of the active
+    /// server (Quick Connect from the profile picker) rather than the session
+    /// of the login screen.
+    var addsAccount = false
 
     // MARK: - Quick Connect
 
@@ -112,6 +116,15 @@ final class LoginViewModel {
     /// Shared post-authentication wiring used by both the password and Quick
     /// Connect paths: persist the session, hydrate the user, flip authenticated.
     private func completeSession(_ session: UserSession, using appState: AppState) async {
+        // Adding an account to the server the app is ON (multi-account,
+        // Quick Connect from « Qui regarde ? »): one path, `AppState.addAccount`
+        // — it writes the mirror, remembers or replaces, and reloads.
+        if addsAccount {
+            await appState.addAccount(session: session)
+            quickConnectCode = nil
+            showSuccess = true
+            return
+        }
         do {
             // All THREE legacy-mirror items are written together here, so the
             // trio can never describe two different servers. This is the write

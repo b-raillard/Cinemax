@@ -70,6 +70,34 @@ enum SearchHistoryStore {
         }
     }
 
+    /// Forgets a server's list AND every one of its accounts' (multi-account
+    /// keys are `<serverId>|<userId>`) — the server leaving the registry.
+    static func clearServer(serverId: String, defaults: UserDefaults = .standard) {
+        clear(serverId: serverId, defaults: defaults)
+        let prefix = key(forServer: serverId) + "|"
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            defaults.removeObject(forKey: key)
+        }
+        defaults.removeObject(forKey: SettingsKey.searchRecentQueriesAccountMigration(serverId: serverId))
+    }
+
+    /// One-shot copy of server `serverId`'s list into `accountKey`, the first
+    /// of its accounts to open Search after multi-account: that list belonged
+    /// to whoever was signed in before. Keyed on a MARKER per server, never on
+    /// "the account has no list" — clearing an account's list must not
+    /// re-import the server's (same reason as the legacy migration).
+    @discardableResult
+    static func migrateServerListIfNeeded(serverId: String?, into accountKey: String?, defaults: UserDefaults = .standard) -> Bool {
+        guard let serverId, !serverId.isEmpty, let accountKey, !accountKey.isEmpty else { return false }
+        let marker = SettingsKey.searchRecentQueriesAccountMigration(serverId: serverId)
+        guard defaults.object(forKey: marker) == nil else { return false }
+        defaults.set(accountKey, forKey: marker)
+        let serverList = load(serverId: serverId, defaults: defaults)
+        guard !serverList.isEmpty, defaults.object(forKey: key(forServer: accountKey)) == nil else { return false }
+        save(serverList, serverId: accountKey, defaults: defaults)
+        return true
+    }
+
     /// One-shot, idempotent, non-destructive copy of the legacy global list
     /// into `serverId` — see the RULE in the type header. Returns `true` only
     /// when something was actually copied.

@@ -103,6 +103,12 @@ enum SettingsKey {
     /// Deliberately OUTSIDE the `search.recentQueries.` prefix, so a history
     /// wipe can never mistake it for a server's list.
     static let searchRecentQueriesMigratedTo = "search.recentQueriesMigratedTo"
+    /// Marker of the one-shot copy of server `serverId`'s list into the first
+    /// of its accounts to open Search (multi-account) — its value is that
+    /// account's key.
+    static func searchRecentQueriesAccountMigration(serverId: String) -> String {
+        "search.recentQueriesAccountMigratedTo.\(serverId)"
+    }
 
     // Library landing (iOS + tvOS)
     /// `"browse"` (default) shows the cinematic hero + genre rows ("By genre");
@@ -126,6 +132,12 @@ enum SettingsKey {
     /// `0` = unrestricted; 10/12/14/16/18 select a ceiling and any item rated
     /// above it is hidden. Routes through `apiClient.applyContentRatingLimit`.
     static let privacyMaxContentAge = "privacy.maxContentAge"
+    /// JSON `[accountKey: AccountSettingsSnapshot]` — the age cap, accent and
+    /// light/dark of every account remembered on this device (multi-account).
+    /// Written only through `AccountSettingsStore`.
+    static let accountSettings = "account.settings"
+    /// tvOS « Qui regarde ? » at launch (multi-account), default on.
+    static let accountsAskOnLaunch = "accounts.askOnLaunch"
 
     // Debug
     static let debugFastSleepTimer = "debug.fastSleepTimer"
@@ -138,6 +150,8 @@ enum SettingsKey {
     /// written ONLY by `EntitlementStore` (`setDebugOverride`), and only in a
     /// DEBUG build — a Release build never reads it (`EntitlementPolicy`).
     static let debugSimulatePro = "debug.simulatePro"
+    /// DEBUG « Palier simulé » — `ProTierOverride` raw value (automatic / free / pro / founder).
+    static let debugProTier = "debug.proTier"
     /// Debug: force the early-adopter status (`EarlyAdopterDebugOverride`
     /// raw value; absent = automatic). Read and written ONLY by
     /// `EarlyAdopterService`, and only in a DEBUG build.
@@ -251,6 +265,7 @@ enum SettingsKey {
         static let dimUnfocusedPosters = false
 
         static let privacyMaxContentAge = 0
+        static let accountsAskOnLaunch = true
 
         static let debugFastSleepTimer = false
         static let debugShowSkipToEnd = false

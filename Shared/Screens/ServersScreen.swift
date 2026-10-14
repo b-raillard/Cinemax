@@ -154,6 +154,8 @@ struct ServersScreen: View {
     @State private var switchingId: String?
     /// Id of the entry being renamed (same freshness RULE as the two above).
     @State private var pendingRenameId: String?
+    /// A switch refused with `.locked`: the server whose account needs a code.
+    @State private var lockedSwitch: ServerEntry?
     @State private var renameText = ""
     #if !os(tvOS)
     @State private var editMode: EditMode = .inactive
@@ -188,6 +190,11 @@ struct ServersScreen: View {
             #endif
         }
         .task { await viewModel.pingIfNeeded(using: appState) }
+        #if os(tvOS)
+        .fullScreenCover(item: $lockedSwitch) { entry in unlockSheet(for: entry) }
+        #else
+        .sheet(item: $lockedSwitch) { entry in unlockSheet(for: entry) }
+        #endif
         .confirmationDialog(
             loc.localized("servers.switch.action"),
             isPresented: Binding(
@@ -256,12 +263,39 @@ struct ServersScreen: View {
             toasts.error(loc.localized("servers.offline"))
         case .unreachable:
             toasts.error(loc.localized("servers.unreachable"))
+        case .locked:
+            // Its account carries a code (or would lift the age cap while the
+            // parental code is set): ask it, then switch — see `unlockSheet`.
+            lockedSwitch = entry
         case .needsLogin:
             // The root already swapped to `LoginScreen` scoped to that server.
             // Dismiss so this modal doesn't sit on top of it (it survives when
             // the host is `LoginScreen` itself, which stays mounted).
             dismiss()
         }
+    }
+
+    private func unlockSheet(for entry: ServerEntry) -> some View {
+        AccountUnlockSheet(
+            accountKey: ServerRegistry.accountKey(serverId: entry.id, userId: entry.userId ?? ""),
+            name: entry.username ?? entry.displayName
+        ) {
+            Task {
+                switch await appState.switchTo(entry, unlocked: true) {
+                case .commit:
+                    toasts.success(loc.localized("servers.switchedTo", entry.displayName))
+                    dismiss()
+                case .offline:
+                    toasts.error(loc.localized("servers.offline"))
+                case .unreachable:
+                    toasts.error(loc.localized("servers.unreachable"))
+                case .needsLogin, .locked:
+                    dismiss()
+                }
+            }
+        }
+        .environment(themeManager)
+        .environment(loc)
     }
 
     private func performDelete(id: String) async {

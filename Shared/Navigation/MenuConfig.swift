@@ -298,8 +298,20 @@ final class MenuConfigStore {
     ///     means "registry not hydrated", never "no servers" — pruning against
     ///     it would wipe every profile.
     func activate(serverId: String?, knownServerIds: Set<String>) {
+        activate(accountKey: nil, serverId: serverId, knownProfileIds: knownServerIds)
+    }
+
+    /// Multi-account: the profile is the ACCOUNT's (`<serverId>|<userId>`), so
+    /// each member of a household keeps their own tabs. An account with no
+    /// profile yet is seeded once from its server's (the arrangement of
+    /// whoever was signed in before multi-account), never shared with it.
+    /// `knownProfileIds` holds both server ids and account keys
+    /// (`AppState.knownMenuProfileIds`); the prune rule is unchanged.
+    func activate(accountKey: String?, serverId: String?, knownProfileIds: Set<String>) {
         guard let serverId else { return }
-        guard serverId != activeProfileId else { return }
+        let profileId = accountKey ?? serverId
+        guard profileId != activeProfileId else { return }
+        let knownServerIds = knownProfileIds
 
         // Evaluated BEFORE the prune: the legacy seed must run only when no
         // profile was ever written, not when a prune happens to empty the dict.
@@ -307,7 +319,7 @@ final class MenuConfigStore {
         var dirty = false
 
         if !knownServerIds.isEmpty {
-            let orphans = profiles.keys.filter { $0 != serverId && !knownServerIds.contains($0) }
+            let orphans = profiles.keys.filter { $0 != profileId && !knownServerIds.contains($0) }
             if !orphans.isEmpty {
                 for orphan in orphans { profiles.removeValue(forKey: orphan) }
                 dirty = true
@@ -315,20 +327,25 @@ final class MenuConfigStore {
         }
 
         let profile: MenuProfile
-        if let stored = profiles[serverId] {
+        if let stored = profiles[profileId] {
             profile = stored
+        } else if profileId != serverId, let serverProfile = profiles[serverId] {
+            // First activation of this account: start from its server's menu.
+            profile = serverProfile
+            profiles[profileId] = serverProfile
+            dirty = true
         } else if isFirstEverActivation, let legacy = Self.legacyProfileSeed() {
             // One-shot upgrade path: the single global menu this install was
             // using becomes the first server's profile. Every later server
             // starts from factory defaults.
             profile = legacy
-            profiles[serverId] = legacy
+            profiles[profileId] = legacy
             dirty = true
         } else {
             profile = .factoryDefault
         }
 
-        activeProfileId = serverId
+        activeProfileId = profileId
         mode = profile.mode
         customKind = profile.customKind
         // Enforce the cap on restored state — defensive against snapshots

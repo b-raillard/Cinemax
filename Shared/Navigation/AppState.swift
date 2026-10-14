@@ -58,6 +58,38 @@ final class AppState {
             url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID()
         )
     }
+    /// Revokes ONE token server-side (`ServerSessionRevoker`, `POST /Sessions/Logout`).
+    /// A seam so the multi-account tests can see which tokens were revoked.
+    var sessionRevoker: @Sendable (URL, String) async -> Void = { url, token in
+        await ServerSessionRevoker.revoke(url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID())
+    }
+    /// Whether several accounts may be REMEMBERED per server (a Pro feature,
+    /// `ProFeatureGate`). Wired by `AppNavigation` from the entitlement stores;
+    /// `false` = free behaviour: signing in as someone else replaces the account.
+    var multiAccountProvider: @MainActor () -> Bool = { false }
+    /// Where the per-account settings live (`AccountSettingsStore`) and the age
+    /// cap is read from. `.standard` in the app; tests inject an isolated suite.
+    var settingsDefaults: UserDefaults = .standard
+    /// Whether an account (`accountKey`) carries a code (`AccountLockStore`).
+    /// Wired by `AppNavigation`; the switch refuses such an account unless the
+    /// caller has just verified the code — the check lives HERE, not only in
+    /// the switcher's UI, so no other path can open a protected profile.
+    var accountLockProvider: @MainActor (String) -> Bool = { _ in false }
+    /// Whether the parental code is enrolled (`ParentalLockController.isEnabled`).
+    /// With it, opening an account LESS restricted than the current one needs a
+    /// code (that account's, or the parental one): the age cap follows the
+    /// account, so without this a child could lift it by picking a parent's
+    /// profile. Wired by `AppNavigation`.
+    var parentalLockProvider: @MainActor () -> Bool = { false }
+    /// Called with an account's key when it leaves this device for good (sign-
+    /// out, removal, replacement in free mode, its server removed), so what
+    /// lives outside `AppState` — its code in `AccountLockStore` — goes with it.
+    /// Wired by `AppNavigation`.
+    var onAccountForgotten: @MainActor (String) -> Void = { _ in }
+
+    /// Accounts whose token a switch found revoked (`accountKey`). They stay in
+    /// the list, marked « Session expirée », until reconnected or removed.
+    private(set) var expiredAccountIds: Set<String> = []
 
     // MARK: - Multi-server state
     //
@@ -387,6 +419,9 @@ final class AppState {
     enum LogoutOutcome: Sendable, Equatable {
         /// Signed out and switched to another registered server.
         case switchedTo(ServerEntry)
+        /// Signed out and switched to another account remembered on the SAME
+        /// server (its display name, for the toast).
+        case switchedAccount(name: String)
         /// Signed out; the app is now on `LoginScreen` (same server) or
         /// `ServerSetupScreen` (nothing left to hop to).
         case signedOut
@@ -465,6 +500,9 @@ final class AppState {
             return
         }
         serverTransitionGeneration &+= 1
+        // Captured BEFORE anything moves: step 2 already repoints
+        // `activeServerId`, which would pair the new server with the old user.
+        let previousAccountKey = activeAccountKey
 
         // 1. Legacy mirror. Every existing read path (`restoreSession`,
         //    `SettingsScreen`, `ExtensionSessionBridge`) keeps working unchanged.
@@ -495,9 +533,17 @@ final class AppState {
         //    re-applied after it — same sequence as `restoreSession`, and easy
         //    to forget. (`reconnect` already clears the cache; the explicit call
         //    keeps the intent visible at this call site.)
+        //    The settings that follow the ACCOUNT are swapped first, so the age
+        //    cap applied below — and every load the tier-1 post triggers — is
+        //    the target account's, never the one being left.
+        AccountSettingsStore.swap(
+            from: previousAccountKey,
+            to: ServerRegistry.accountKey(serverId: used.id, userId: userId),
+            defaults: settingsDefaults
+        )
         apiClient.reconnect(url: used.url, accessToken: token)
         apiClient.clearCache()
-        let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
+        let storedAge = settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
         apiClient.applyContentRatingLimit(maxAge: storedAge)
 
         // 4. Observable state. `serverURL` FIRST, `currentUserId` LAST: a switch
@@ -583,8 +629,14 @@ final class AppState {
     /// that must never reach the network (offline, no stored token), then the
     /// token is validated against that server before anything is committed.
     @discardableResult
-    func switchTo(_ entry: ServerEntry) async -> SwitchDecision {
+    func switchTo(_ entry: ServerEntry, unlocked: Bool = false) async -> SwitchDecision {
         guard entry.id != activeServerId else { return .commit }
+        // Same code / parental checks as an account switch: a server switch
+        // opens that server's account, with ITS age cap (security review).
+        if !unlocked, let userId = entry.userId, !userId.isEmpty,
+           requiresCode(forAccountKey: ServerRegistry.accountKey(serverId: entry.id, userId: userId)) {
+            return .locked
+        }
 
         switch ServerRegistry.decideSwitch(entry: entry, isOnline: isOnlineProvider(), validity: nil) {
         case .offline:
@@ -704,6 +756,14 @@ final class AppState {
         persistRegistry()
         pendingRollbackServer = nil
         isAddingServer = false
+        // The login-screen path does not go through `applyActiveServer`: the
+        // account's own settings (above all its age cap) are loaded here, so a
+        // child signing in after the parent's session expired opens with the
+        // child's cap, not the parent's. (Final review, I2.)
+        let key = ServerRegistry.accountKey(serverId: entry.id, userId: session.userID)
+        clampSignInAgeCap(forAccountKey: key)
+        AccountSettingsStore.swap(from: nil, to: key, defaults: settingsDefaults)
+        apiClient.applyContentRatingLimit(maxAge: settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge))
     }
 
     /// Removes a NON-active server. The active one is never deletable — the user
@@ -733,13 +793,17 @@ final class AppState {
 
     func removeServer(_ entry: ServerEntry) async {
         guard entry.id != activeServerId else { return }
-        revokeSessionInBackground(for: entry)
+        for account in ServerRegistry.accounts(of: entry) {
+            revokeTokenInBackground(account.accessToken, on: entry.url)
+            onAccountForgotten(ServerRegistry.accountKey(serverId: entry.id, userId: account.userId))
+        }
         servers.removeAll { $0.id == entry.id }
         persistRegistry()
         // Its search history goes with it. Nothing could ever read it again —
         // a re-added server mints a fresh id — so keeping it would only leave
         // that library's queries on the device.
-        SearchHistoryStore.clear(serverId: entry.id)
+        SearchHistoryStore.clearServer(serverId: entry.id)
+        AccountSettingsStore.removeServer(serverId: entry.id, defaults: settingsDefaults)
         // Its certificate approval goes with it: a pin outliving its server
         // would silently pre-approve whatever answers on that host:port later.
         if let key = ServerCertificateTrust.trustKey(for: entry.url) {
@@ -754,6 +818,10 @@ final class AppState {
 
         if reason == .userInitiated, let active {
             revokeSessionInBackground(for: active)
+        }
+        let signedOutUserId = active?.userId
+        if reason == .userInitiated, let active, let signedOutUserId, !signedOutUserId.isEmpty {
+            forgetAccountData(ServerRegistry.accountKey(serverId: active.id, userId: signedOutUserId))
         }
 
         // Keep the entry, drop its credentials: the card stays in the list ready
@@ -777,6 +845,15 @@ final class AppState {
 
         switch reason {
         case .userInitiated:
+            // Another account remembered on THIS server comes first: the
+            // household member signing out of the living-room TV expects the
+            // next profile, not another server.
+            if let active, let signedOutUserId,
+               let stored = servers.first(where: { $0.id == active.id }),
+               let next = ServerRegistry.nextAccount(after: signedOutUserId, in: stored),
+               await switchAccount(to: next.userId) == .switched {
+                return .switchedAccount(name: next.username)
+            }
             if let active, let candidate = ServerRegistry.nextCandidate(after: active.id, in: servers) {
                 if await switchTo(candidate) == .commit {
                     return .switchedTo(candidate)
@@ -809,9 +886,206 @@ final class AppState {
         }
     }
 
+    // MARK: - Multi-account (several accounts on one server)
+
+    enum AccountSwitchResult: Sendable, Equatable {
+        case switched
+        /// Offline: nothing dialled, nothing changed.
+        case offline
+        /// The server refused the remembered token (or the account is unknown):
+        /// the account is marked expired and must be reconnected.
+        case needsLogin
+        /// The server could not be asked: nothing destroyed, still on the
+        /// current account.
+        case unreachable
+        /// The account carries a code that was not verified for this switch.
+        case locked
+    }
+
+    /// The registry entry of the server the app is ON (never the MRU fallback).
+    private var activeEntryIfAny: ServerEntry? {
+        guard let activeServerId else { return nil }
+        return servers.first { $0.id == activeServerId }
+    }
+
+    /// `serverId|userId` of the account the app is on — the key of every
+    /// per-account setting. `nil` while signed out.
+    var activeAccountKey: String? {
+        guard let activeServerId, let currentUserId, !currentUserId.isEmpty else { return nil }
+        return ServerRegistry.accountKey(serverId: activeServerId, userId: currentUserId)
+    }
+
+    /// Every menu-profile key still meaningful: each server's id (legacy,
+    /// pre-multi-account profiles) and each remembered account's key.
+    var knownMenuProfileIds: Set<String> {
+        var ids = Set(servers.map(\.id))
+        for entry in servers {
+            for account in ServerRegistry.accounts(of: entry) {
+                ids.insert(ServerRegistry.accountKey(serverId: entry.id, userId: account.userId))
+            }
+        }
+        return ids
+    }
+
+    /// Whether opening `key` needs a code: the account's own, or — while the
+    /// parental code is set — one because it is LESS restricted than the
+    /// current account (the age cap follows the account). Checked by both the
+    /// account and the server switch, here rather than in a screen.
+    func requiresCode(forAccountKey key: String) -> Bool {
+        if accountLockProvider(key) { return true }
+        guard parentalLockProvider() else { return false }
+        return AccountSettingsStore.isLessRestrictive(
+            AccountSettingsStore.ageCap(for: key, defaults: settingsDefaults),
+            than: settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+        )
+    }
+
+    /// A SIGN-IN (not a switch: « Ajouter », Quick Connect, the login screen)
+    /// never lifts the age cap while the parental code is set. A switch asks for
+    /// a code when the target is less restricted (`switchAccount` → `.locked`);
+    /// a sign-in has no such step — the account's Jellyfin password (or the
+    /// lack of one, common at home) is not the parent's code — so the target's
+    /// stored cap is clamped to the current one. The parent raises it again
+    /// behind the parental gate in « Gérer les comptes ». (Final review, C1.)
+    private func clampSignInAgeCap(forAccountKey key: String) {
+        guard parentalLockProvider(),
+              var snapshot = AccountSettingsStore.load(for: key, defaults: settingsDefaults) else { return }
+        let current = settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+        guard AccountSettingsStore.isLessRestrictive(snapshot.maxContentAge, than: current) else { return }
+        snapshot.maxContentAge = current
+        AccountSettingsStore.save(snapshot, for: key, defaults: settingsDefaults)
+    }
+
+    /// Everything that followed an account leaving this device for good: its
+    /// settings snapshot, its search history, and — through the hook — its code.
+    private func forgetAccountData(_ key: String) {
+        AccountSettingsStore.remove(accountKey: key, defaults: settingsDefaults)
+        SearchHistoryStore.clear(serverId: key)
+        onAccountForgotten(key)
+    }
+
+    /// Sets the age cap of one account (« Gérer les comptes », behind the
+    /// parental gate). The ACTIVE account's cap is applied at once, exactly as
+    /// the Privacy screen's row does; another account's is stored in its
+    /// snapshot and applies when it opens.
+    func setAgeCap(_ age: Int, forAccountKey key: String) {
+        if key == activeAccountKey {
+            settingsDefaults.set(age, forKey: SettingsKey.privacyMaxContentAge)
+            apiClient.applyContentRatingLimit(maxAge: age)
+            republishExtensionSession()
+            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+        } else {
+            var snapshot = AccountSettingsStore.load(for: key, defaults: settingsDefaults)
+                ?? AccountSettingsStore.current(defaults: settingsDefaults)
+            snapshot.maxContentAge = age
+            AccountSettingsStore.save(snapshot, for: key, defaults: settingsDefaults)
+        }
+    }
+
+    /// The age cap an account opens with (its own, else the current one).
+    func ageCap(forAccountKey key: String) -> Int {
+        key == activeAccountKey
+            ? settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+            : AccountSettingsStore.ageCap(for: key, defaults: settingsDefaults)
+    }
+
+    /// The accounts the switcher offers for the active server.
+    var activeAccounts: [SavedAccount] {
+        guard let entry = activeEntryIfAny else { return [] }
+        return ServerRegistry.accounts(of: entry)
+    }
+
+    /// Switches to another account remembered on the active server. The token
+    /// is validated OFF the shared client first (same rule as `switchTo`); a
+    /// switch NEVER revokes anything.
+    @discardableResult
+    func switchAccount(to userId: String, unlocked: Bool = false) async -> AccountSwitchResult {
+        guard let entry = activeEntryIfAny else { return .needsLogin }
+        if userId == currentUserId, isAuthenticated { return .switched }
+        if !unlocked, requiresCode(forAccountKey: ServerRegistry.accountKey(serverId: entry.id, userId: userId)) {
+            return .locked
+        }
+        guard isOnlineProvider() else { return .offline }
+        guard let target = ServerRegistry.activating(userId: userId, in: entry),
+              let token = target.accessToken else { return .needsLogin }
+        let key = ServerRegistry.accountKey(serverId: entry.id, userId: userId)
+        switch await sessionValidator(entry.url, token) {
+        case .valid:
+            expiredAccountIds.remove(key)
+            await applyActiveServer(target)
+            return .switched
+        case .invalid:
+            expiredAccountIds.insert(key)
+            return .needsLogin
+        case .indeterminate:
+            return .unreachable
+        }
+    }
+
+    /// Records a freshly authenticated account of the ACTIVE server and makes
+    /// it active, through the same tail as every other transition
+    /// (`applyActiveServer`: mirror, client, age cap, extensions, tier-1 reload).
+    ///
+    /// Pro (or founder): the previous account stays remembered. Free: signing
+    /// in as someone else REPLACES the previous account — forgotten and its
+    /// token revoked, so a free device never accumulates sessions silently.
+    func addAccount(session: UserSession) async {
+        guard let index = servers.firstIndex(where: { $0.id == activeServerId }) else {
+            // No registered server to attach to (should not happen once signed
+            // in) — fall back to the historical path.
+            upsertActiveEntry(session: session)
+            return
+        }
+        if !multiAccountProvider(), let previous = servers[index].userId, previous != session.userID {
+            for account in ServerRegistry.accounts(of: servers[index]) where account.userId != session.userID {
+                revokeTokenInBackground(account.accessToken, on: servers[index].url)
+                servers[index] = ServerRegistry.forgetting(userId: account.userId, in: servers[index])
+                forgetAccountData(ServerRegistry.accountKey(serverId: servers[index].id, userId: account.userId))
+            }
+            persistRegistry()
+        }
+        var entry = servers[index]
+        entry.accessToken = session.accessToken
+        entry.userId = session.userID
+        entry.username = session.username
+        if !session.serverID.isEmpty { entry.serverID = session.serverID }
+        let key = ServerRegistry.accountKey(serverId: entry.id, userId: session.userID)
+        expiredAccountIds.remove(key)
+        clampSignInAgeCap(forAccountKey: key)
+        await applyActiveServer(entry)
+    }
+
+    /// Removes one account from this device and revokes its token. Removing the
+    /// ACTIVE account is a sign-out (`logout(.userInitiated)`), which moves on
+    /// to another remembered account when there is one.
+    @discardableResult
+    func removeAccount(userId: String) async -> LogoutOutcome? {
+        if userId == currentUserId {
+            return await logout(reason: .userInitiated)
+        }
+        guard let index = servers.firstIndex(where: { $0.id == activeServerId }) else { return nil }
+        if let account = ServerRegistry.accounts(of: servers[index]).first(where: { $0.userId == userId }) {
+            revokeTokenInBackground(account.accessToken, on: servers[index].url)
+        }
+        let key = ServerRegistry.accountKey(serverId: servers[index].id, userId: userId)
+        servers[index] = ServerRegistry.forgetting(userId: userId, in: servers[index])
+        expiredAccountIds.remove(key)
+        persistRegistry()
+        // What followed this account leaves with it (its menu profile is pruned
+        // at the next activation, being no longer in `knownMenuProfileIds`).
+        forgetAccountData(key)
+        return nil
+    }
+
     /// Strips credentials from one entry, keeping the entry itself.
     private func clearSession(of entry: ServerEntry) {
         guard let index = servers.firstIndex(where: { $0.id == entry.id }) else { return }
+        // The account leaves the remembered list too: a signed-out (or
+        // server-revoked) token must never linger where the switcher can offer
+        // it or a later sign-in can resurrect it.
+        if let userId = servers[index].userId, !userId.isEmpty {
+            servers[index] = ServerRegistry.forgetting(userId: userId, in: servers[index])
+        }
         servers[index].accessToken = nil
         servers[index].userId = nil
         servers[index].username = nil
@@ -822,11 +1096,17 @@ final class AppState {
     /// local entry is dropped either way, and a dead server must not freeze the
     /// UI for the request timeout. Standalone helper — never the shared client.
     private func revokeSessionInBackground(for entry: ServerEntry) {
-        guard let token = entry.accessToken, !token.isEmpty, isOnlineProvider() else { return }
-        let url = entry.url
-        let deviceId = KeychainService.getOrCreateDeviceID()
+        guard let token = entry.accessToken, !token.isEmpty else { return }
+        revokeTokenInBackground(token, on: entry.url)
+    }
+
+    /// Revokes exactly one token. Never on a plain switch: tokens of the
+    /// accounts remembered on this device coexist on purpose.
+    private func revokeTokenInBackground(_ token: String, on url: URL) {
+        guard !token.isEmpty, isOnlineProvider() else { return }
+        let revoker = sessionRevoker
         Task.detached(priority: .utility) {
-            await ServerSessionRevoker.revoke(url: url, accessToken: token, deviceId: deviceId)
+            await revoker(url, token)
         }
     }
 

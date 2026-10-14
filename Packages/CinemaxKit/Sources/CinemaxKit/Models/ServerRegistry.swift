@@ -15,6 +15,11 @@ public enum SwitchDecision: Sendable, Equatable {
     case unreachable
     /// Token validated → commit the switch.
     case commit
+    /// The target's account carries a code — its own, or the parental one
+    /// because it is less restricted than the current account (multi-account).
+    /// Nothing was dialled or changed; ask the code, then switch with
+    /// `unlocked: true`.
+    case locked
 }
 
 /// Pure decision logic for the multi-server registry.
@@ -127,11 +132,107 @@ public enum ServerRegistry {
             serverVersion: entry.serverVersion,
             lastUsedAt: entry.lastUsedAt,
             displayNameOverride: existing.displayNameOverride,   // user-owned (RULE above)
-            sortIndex: existing.sortIndex                        // user-owned (RULE above)
+            sortIndex: existing.sortIndex,                       // user-owned (RULE above)
+            // The remembered accounts are carried over for the same reason as
+            // the two fields above: no caller hands in the full list (a login
+            // describes ONE account), so taking the incoming `nil` would forget
+            // every other member of the household on the next sign-in. The
+            // stored ACTIVE triple is folded in too: a sign-in as someone else
+            // must not drop the account it replaces (free mode forgets it
+            // explicitly, through `forgetting`).
+            savedAccounts: existing.userId == nil && existing.savedAccounts == nil ? nil : accounts(of: existing)
         )
         merged.lastUsedAt = max(existing.lastUsedAt, entry.lastUsedAt)
+        // …and the account that just signed in is (re)remembered with its fresh
+        // token, so the switcher never offers a stale one.
+        if let userId = entry.userId, !userId.isEmpty, let token = entry.accessToken, !token.isEmpty {
+            merged = remembering(userId: userId, username: entry.username ?? "", accessToken: token,
+                                 at: entry.lastUsedAt, in: merged)
+        }
         updated[index] = merged
         return updated
+    }
+
+    // MARK: - Remembered accounts (multi-account)
+
+    /// Identity of one account on one server — the key every per-account
+    /// setting (menu profile, search history, appearance, age cap, code) uses.
+    public static func accountKey(serverId: String, userId: String) -> String {
+        "\(serverId)|\(userId)"
+    }
+
+    /// Every account the switcher offers for `entry`: the remembered ones plus
+    /// the active triple (an entry written before multi-account carries only
+    /// the triple), one per user, most recently used first.
+    public static func accounts(of entry: ServerEntry) -> [SavedAccount] {
+        var byUser: [String: SavedAccount] = [:]
+        for account in entry.savedAccounts ?? [] { byUser[account.userId] = account }
+        if let userId = entry.userId, !userId.isEmpty, let token = entry.accessToken, !token.isEmpty {
+            let previous = byUser[userId]
+            byUser[userId] = SavedAccount(
+                userId: userId,
+                username: entry.username ?? previous?.username ?? "",
+                accessToken: token,
+                lastUsedAt: max(previous?.lastUsedAt ?? entry.lastUsedAt, entry.lastUsedAt)
+            )
+        }
+        return byUser.values.sorted {
+            $0.lastUsedAt != $1.lastUsedAt ? $0.lastUsedAt > $1.lastUsedAt : $0.userId < $1.userId
+        }
+    }
+
+    /// Inserts or updates the account `userId` (its token always replaced).
+    public static func remembering(
+        userId: String,
+        username: String,
+        accessToken: String,
+        at date: Date,
+        in entry: ServerEntry
+    ) -> ServerEntry {
+        var updated = entry
+        var list = entry.savedAccounts ?? []
+        if let index = list.firstIndex(where: { $0.userId == userId }) {
+            list[index].accessToken = accessToken
+            if !username.isEmpty { list[index].username = username }
+            list[index].lastUsedAt = max(list[index].lastUsedAt, date)
+        } else {
+            list.append(SavedAccount(userId: userId, username: username, accessToken: accessToken, lastUsedAt: date))
+        }
+        updated.savedAccounts = list
+        return updated
+    }
+
+    /// `entry` with `userId` as its active account (the triple), the previous
+    /// active account kept in the list. `nil` when the account is not known.
+    public static func activating(userId: String, in entry: ServerEntry) -> ServerEntry? {
+        let all = accounts(of: entry)
+        guard let target = all.first(where: { $0.userId == userId }) else { return nil }
+        var updated = entry
+        updated.savedAccounts = all
+        updated.accessToken = target.accessToken
+        updated.userId = target.userId
+        updated.username = target.username
+        return updated
+    }
+
+    /// `entry` without the account `userId`. Forgetting the ACTIVE account
+    /// empties the triple (the entry reads as signed out) — the caller decides
+    /// what to activate next.
+    public static func forgetting(userId: String, in entry: ServerEntry) -> ServerEntry {
+        var updated = entry
+        updated.savedAccounts = accounts(of: entry).filter { $0.userId != userId }
+        if entry.userId == userId {
+            updated.accessToken = nil
+            updated.userId = nil
+            updated.username = nil
+        }
+        return updated
+    }
+
+    /// The account to fall back to after `userId` leaves: the most recently
+    /// used OTHER account of the same server.
+    public static func nextAccount(after userId: String, in entry: ServerEntry) -> SavedAccount? {
+        accounts(of: entry).first { $0.userId != userId }
     }
 
     /// Dedup probe for the add flow: is this URL (in any equivalent spelling)

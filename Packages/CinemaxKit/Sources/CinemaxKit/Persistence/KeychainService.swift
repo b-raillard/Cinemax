@@ -238,6 +238,26 @@ public struct KeychainService: Sendable {
         delete(for: Self.parentalLockAccount)
     }
 
+    // MARK: - Per-account code (multi-account)
+
+    /// One item per remembered account: `account_lock.<serverId>|<userId>`,
+    /// app-private like the parental lock and for the same reasons. A decode
+    /// failure reads as « no code » (fail-open, as `getParentalLock`).
+    static func accountLockAccount(key: String) -> String { "account_lock.\(key)" }
+
+    public func getAccountLock(key: String) -> ParentalLockCredential? {
+        guard let data = getData(for: Self.accountLockAccount(key: key)) else { return nil }
+        return try? JSONDecoder().decode(ParentalLockCredential.self, from: data)
+    }
+
+    public func saveAccountLock(_ credential: ParentalLockCredential, key: String) throws {
+        try save(data: JSONEncoder().encode(credential), for: Self.accountLockAccount(key: key))
+    }
+
+    public func deleteAccountLock(key: String) {
+        delete(for: Self.accountLockAccount(key: key))
+    }
+
     // MARK: - Early adopter cache
 
     /// Account holding the last verified `AppTransaction` facts (JSON, owned by

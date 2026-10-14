@@ -78,3 +78,13 @@ public extension SecureStorageProtocol {
 // MARK: - Conformance
 
 extension KeychainService: SecureStorageProtocol {}
+
+/// Storage of the per-account codes (multi-account), a seam so the app's
+/// `AccountLockStore` is testable without a real Keychain.
+public protocol AccountLockStorage: Sendable {
+    func getAccountLock(key: String) -> ParentalLockCredential?
+    func saveAccountLock(_ credential: ParentalLockCredential, key: String) throws
+    func deleteAccountLock(key: String)
+}
+
+extension KeychainService: AccountLockStorage {}

@@ -631,6 +631,39 @@ struct MenuConfigStoreTests {
         #expect(store.resolvedTabs == tabs)
     }
 
+    // MARK: - Per-account profiles (multi-account)
+
+    @Test("Un compte prend son propre profil, semé une fois depuis celui de son serveur")
+    func accountProfileSeededFromServer() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        seedProfiles(["S1": emptyLibraryProfile])
+
+        let store = MenuConfigStore()
+        store.activate(accountKey: "S1|A", serverId: "S1", knownProfileIds: ["S1", "S1|A", "S1|B"])
+        #expect(store.activeProfileId == "S1|A")
+        #expect(store.mode == emptyLibraryProfile.mode)
+        #expect(persistedProfiles()["S1|A"] != nil)
+
+        // A's own edit stays A's: B, seeded from the server, does not get it.
+        store.setMode(.default)
+        store.activate(accountKey: "S1|B", serverId: "S1", knownProfileIds: ["S1", "S1|A", "S1|B"])
+        #expect(store.mode == emptyLibraryProfile.mode)
+        store.activate(accountKey: "S1|A", serverId: "S1", knownProfileIds: ["S1", "S1|A", "S1|B"])
+        #expect(store.mode == .default)
+    }
+
+    @Test("Le profil d'un compte retiré est élagué")
+    func accountProfilePruned() {
+        clearMenuDefaults()
+        defer { clearMenuDefaults() }
+        seedProfiles(["S1|A": MenuProfile.factoryDefault, "S1|gone": emptyLibraryProfile])
+
+        let store = MenuConfigStore()
+        store.activate(accountKey: "S1|A", serverId: "S1", knownProfileIds: ["S1", "S1|A"])
+        #expect(persistedProfiles().keys.sorted() == ["S1|A"])
+    }
+
     // MARK: - LibraryView filtering
 
     @Test("LibraryView.isVideoLibrary excludes non-video collection types, keeps nil/mixed")
