@@ -2,7 +2,7 @@
 
 > « Notes de version / What's New » d'App Store Connect (4000 caractères max par langue). Copier le contenu de chaque bloc tel quel.
 >
-> iOS seulement : rien ne change sur Apple TV dans cette version (la demande de note n'existe que sur iPhone / iPad).
+> La demande de note n'existe que sur iPhone / iPad. L'Apple TV a ses propres notes (`tvos.md`) : le logo des Réglages redécoupé (#317), qui ne touche que tvOS.
 
 ## Français
 
