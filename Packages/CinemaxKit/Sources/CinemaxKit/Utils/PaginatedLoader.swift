@@ -13,7 +13,14 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     /// queued behind that phantom pass would wait forever (see `acquireGuard`).
     public private(set) var isLoadingMore = false
     public private(set) var hasLoadedAll = false
-    private let pageSize: Int
+    /// The page size every `loadMore` fetch asks for. Callers pass it as their
+    /// `limit` — a page shorter than this is how a page fetched WITHOUT the
+    /// server-side count tells the loader it reached the end.
+    public let pageSize: Int
+
+    /// How many cards before the end of `items` the next page is requested —
+    /// see `shouldLoadMore(onAppearOf:)`.
+    public let prefetchDistance: Int
 
     /// Extracts a stable identity for de-duplication, when the element type has
     /// one. `nil` (the default) keeps the historical append-everything
@@ -50,9 +57,29 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     @ObservationIgnored
     private var waiters: [(kind: PendingCall, continuation: CheckedContinuation<Bool, Never>)] = []
 
-    public init(pageSize: Int = 40, identity: (@Sendable (T) -> String?)? = nil) {
+    public init(pageSize: Int = 40, prefetchDistance: Int? = nil, identity: (@Sendable (T) -> String?)? = nil) {
         self.pageSize = pageSize
+        self.prefetchDistance = prefetchDistance ?? pageSize / 2
         self.identity = identity
+    }
+
+    /// Whether the card `id` that just appeared sits within `prefetchDistance`
+    /// of the end of what is loaded, i.e. whether the next page should leave
+    /// NOW. Needs the `identity` extractor; without one it is always false.
+    ///
+    /// The grids used to fire only when the very LAST card appeared — by
+    /// definition the moment the user has run out of content — so every page
+    /// boundary was a full round trip spent staring at the footer spinner.
+    /// Measured by replaying the grid's own page query against a 10.11 server
+    /// (800 films, 40 per page): 161 ms of stall per boundary on the LAN,
+    /// 207 ms at 60 ms RTT, 19 boundaries to reach the end. Half a page of
+    /// lead is ~7 rows on a 3-column iPhone grid and ~3 on tvOS: at a brisk
+    /// 8 rows/s flick that is ~0.8 s, several times what a page costs, so the
+    /// next page is normally in before the user gets there. O(prefetchDistance)
+    /// per appearance — it only looks at the tail.
+    public func shouldLoadMore(onAppearOf id: String?) -> Bool {
+        guard !isLoadingMore, !hasLoadedAll, let id, let identity else { return false }
+        return items.suffix(prefetchDistance).contains { identity($0) == id }
     }
 
     /// Drops incoming elements already present in `existing`.
@@ -145,13 +172,21 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
             } else {
                 items.append(contentsOf: fresh)
             }
+            // A later page may be fetched WITHOUT the server-side count
+            // (`total == 0`): `totalRecordCount` is a second COUNT query over
+            // the whole match, which made every 40-card page of a 10.11 server
+            // cost ~146 ms instead of ~84 ms — for a number the first page
+            // already gave us. Such a page keeps the first page's total, and
+            // its end is a short page instead.
+            let isCounted = loadedCount == 0 || result.total > 0
             // Count what the SERVER sent, not what we retained — see `loadedCount`.
             loadedCount += result.items.count
-            totalCount = result.total
+            if isCounted { totalCount = result.total }
             // An empty page is the end of the list whatever the reported total
             // says: without this, a server over-reporting `totalRecordCount`
             // leaves the last card asking for more for ever.
-            hasLoadedAll = loadedCount >= result.total || result.items.isEmpty
+            hasLoadedAll = result.items.isEmpty
+                || (isCounted ? loadedCount >= result.total : result.items.count < pageSize)
             handOverOrRelease()
         } catch {
             // Caller can observe isLoadingMore returning to false with no new items

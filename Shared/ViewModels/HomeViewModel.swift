@@ -38,6 +38,88 @@ struct BecauseYouWatchedRail: Equatable {
     let items: [BaseItemDto]
 }
 
+/// The phase-1 rails of Home as they last landed, kept on disk so a COLD
+/// launch paints the last known Home at once instead of a skeleton.
+///
+/// Nothing else survives a relaunch: `APICache` is memory-only and
+/// `reconnect` clears it, so every cold start used to wait for the slowest
+/// phase-1 rail before showing anything. Replayed against a 10.11 server with
+/// the app's exact phase-1 queries (6-connection pool, median of 15), that
+/// wait is ~140 ms on the LAN and ~220 ms at 60 ms RTT — before the new
+/// connections' TCP + TLS handshakes, which a cold launch also pays. The
+/// snapshot is shown only while that first load is in flight and is replaced
+/// wholesale by it (`HomeViewModel.load`): it never outlives a successful
+/// phase 1, and a load that fails everywhere drops it for the usual error.
+///
+/// One file per server + user + content-age cap (a lowered cap must never
+/// show a title the new cap hides), in Caches — the system may purge it,
+/// which only costs one skeleton. No token or URL is stored: items only.
+/// Signing out of a server or removing it deletes that server's files.
+struct HomeSnapshot: Codable, Sendable, Equatable {
+    /// Bumped when the shape changes; an older file is ignored, not migrated.
+    static let currentVersion = 1
+
+    var version = HomeSnapshot.currentVersion
+    var resumeItems: [BaseItemDto] = []
+    var latestItems: [BaseItemDto] = []
+    var favoriteItems: [BaseItemDto] = []
+    var nextUpItems: [BaseItemDto] = []
+    var playlists: [BaseItemDto] = []
+    var upcomingItems: [BaseItemDto] = []
+    var collections: [BaseItemDto] = []
+}
+
+struct HomeSnapshotStore: Sendable {
+    /// `nil` disables the store (no directory resolvable).
+    let directory: URL?
+
+    static let standard = HomeSnapshotStore(
+        directory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("HomeSnapshots", isDirectory: true)
+    )
+
+    /// File-name safe: server ids are UUIDs and user ids hex, but nothing
+    /// outside `[A-Za-z0-9-]` is ever let into a path component.
+    private static func sanitize(_ value: String) -> String {
+        String(value.map { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") ? $0 : "_" })
+    }
+
+    func fileURL(serverId: String, userId: String, maxContentAge: Int) -> URL? {
+        directory?.appendingPathComponent(
+            "\(Self.sanitize(serverId))_\(Self.sanitize(userId))_\(maxContentAge).json"
+        )
+    }
+
+    func load(serverId: String, userId: String, maxContentAge: Int) -> HomeSnapshot? {
+        guard let url = fileURL(serverId: serverId, userId: userId, maxContentAge: maxContentAge),
+              let data = try? Data(contentsOf: url),
+              let snapshot = try? JSONDecoder().decode(HomeSnapshot.self, from: data),
+              snapshot.version == HomeSnapshot.currentVersion
+        else { return nil }
+        return snapshot
+    }
+
+    func save(_ snapshot: HomeSnapshot, serverId: String, userId: String, maxContentAge: Int) {
+        guard let directory,
+              let url = fileURL(serverId: serverId, userId: userId, maxContentAge: maxContentAge),
+              let data = try? JSONEncoder().encode(snapshot)
+        else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+    }
+
+    /// Every file of one server — all its users and caps.
+    func clear(serverId: String) {
+        guard let directory,
+              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)
+        else { return }
+        let prefix = "\(Self.sanitize(serverId))_"
+        for name in names where name.hasPrefix(prefix) {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
+    }
+}
+
 @MainActor @Observable
 final class HomeViewModel {
     var heroItem: BaseItemDto?
@@ -172,10 +254,16 @@ final class HomeViewModel {
     /// Where the rail switches and genre picks are read. `.standard` in the
     /// app; a test passes its own suite (see `HomeRailPreferences.snapshot`).
     private let defaults: UserDefaults
+    private let snapshotStore: HomeSnapshotStore
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, snapshotStore: HomeSnapshotStore = .standard) {
         self.defaults = defaults
+        self.snapshotStore = snapshotStore
     }
+
+    /// True while the rails on screen came from `HomeSnapshot` rather than
+    /// from this session's phase 1 — see `load`.
+    @ObservationIgnored private(set) var isShowingSnapshot = false
 
     /// Bumped by every `load`. Two loads overlap routinely (a pull-to-refresh
     /// during the first paint, the tier-1 refresh a server switch posts while
@@ -200,7 +288,42 @@ final class HomeViewModel {
         generation == loadGeneration && !Task.isCancelled
     }
 
+    /// Whether no phase-1 rail holds anything — the state in which a cold
+    /// start may paint `HomeSnapshot`.
+    private var isPhaseOneEmpty: Bool {
+        resumeItems.isEmpty && latestItems.isEmpty && favoriteItems.isEmpty
+            && nextUpItems.isEmpty && playlists.isEmpty && upcomingItems.isEmpty
+            && collections.isEmpty
+    }
+
+    private func clearPhaseOneRails() {
+        resumeItems = []
+        latestItems = []
+        favoriteItems = []
+        nextUpItems = []
+        playlists = []
+        upcomingItems = []
+        collections = []
+    }
+
+    /// Paints a disk snapshot and drops the skeleton. Rails switched off
+    /// since it was written stay empty; resume and recently added feed the
+    /// hero and are never gated, as in `load`.
+    private func applySnapshot(_ snapshot: HomeSnapshot, rails: HomeRailPreferences.Snapshot) {
+        resumeItems = snapshot.resumeItems
+        latestItems = snapshot.latestItems
+        if rails.favorites { favoriteItems = snapshot.favoriteItems }
+        if rails.nextUp { nextUpItems = snapshot.nextUpItems }
+        if rails.playlists { playlists = snapshot.playlists }
+        if rails.upcoming { upcomingItems = snapshot.upcomingItems }
+        if rails.collections { collections = snapshot.collections }
+        heroItem = resumeItems.first ?? latestItems.first
+        isShowingSnapshot = true
+        isLoading = false
+    }
+
     private func clearContent() {
+        isShowingSnapshot = false
         heroItem = nil
         resumeItems = []
         latestItems = []
@@ -268,6 +391,25 @@ final class HomeViewModel {
         // Resume and Recently Added are deliberately absent from the gate:
         // they also feed `heroItem` below, and the hero is never gated.
         let rails = HomeRailPreferences.snapshot(in: defaults)
+
+        // Cold start — nothing of this identity on screen yet: paint the last
+        // known Home from disk while phase 1 is in flight (see `HomeSnapshot`).
+        // Read off the main actor, and applied only if phase 1 has not landed
+        // first. Never on a refresh: a Home already on screen stays as it is.
+        let maxContentAge = defaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+        let snapshotServerId = appState.activeServerId
+        var snapshotRead: Task<Void, Never>?
+        if let snapshotServerId, isPhaseOneEmpty {
+            let store = snapshotStore
+            snapshotRead = Task { [weak self] in
+                let snapshot = await Task.detached(priority: .userInitiated) {
+                    store.load(serverId: snapshotServerId, userId: userId, maxContentAge: maxContentAge)
+                }.value
+                guard let self, let snapshot, self.isCurrent(generation),
+                      self.isLoading, self.isPhaseOneEmpty else { return }
+                self.applySnapshot(snapshot, rails: rails)
+            }
+        }
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
@@ -407,6 +549,14 @@ final class HomeViewModel {
         // Superseded while phase 1 was in flight: the newer load owns every
         // slice from here on, including the loading flags.
         guard generation == loadGeneration else { return }
+        snapshotRead?.cancel()
+        // Phase 1 replaces the snapshot WHOLESALE: a rail whose fetch failed
+        // goes back to empty, exactly as it would have without a snapshot, so
+        // nothing read from disk outlives the first real answer.
+        if isShowingSnapshot {
+            clearPhaseOneRails()
+            isShowingSnapshot = false
+        }
         for result in sections {
             switch result {
             case .resume(let items): resumeItems = items
@@ -421,6 +571,20 @@ final class HomeViewModel {
         }
 
         heroItem = resumeItems.first ?? latestItems.first
+
+        // A clean phase 1 becomes the next cold start's first paint.
+        if firstError == nil, anySucceeded, let snapshotServerId {
+            let snapshot = HomeSnapshot(
+                resumeItems: resumeItems, latestItems: latestItems,
+                favoriteItems: favoriteItems, nextUpItems: nextUpItems,
+                playlists: playlists, upcomingItems: upcomingItems,
+                collections: collections
+            )
+            let store = snapshotStore
+            Task.detached(priority: .utility) {
+                store.save(snapshot, serverId: snapshotServerId, userId: userId, maxContentAge: maxContentAge)
+            }
+        }
 
         // Every source failed: the server is unreachable (or refusing every
         // request). Stop here rather than running phase 2 — its genre fan-out

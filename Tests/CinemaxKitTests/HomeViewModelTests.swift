@@ -713,3 +713,150 @@ struct HomeResumeRemovalTests {
         } == false)
     }
 }
+
+// MARK: - Cold-start snapshot
+
+/// Free so the `@Sendable` mock handlers could call it too.
+private func makeSnapshotItem(_ id: String) -> BaseItemDto {
+    var item = BaseItemDto()
+    item.id = id
+    item.name = id
+    return item
+}
+
+@MainActor
+@Suite("Home snapshot (cold-start first paint)")
+struct HomeSnapshotTests {
+
+    /// A private directory per test: suites run in parallel, and the real
+    /// Caches directory must never be touched by a test.
+    private func makeStore() -> HomeSnapshotStore {
+        HomeSnapshotStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("HomeSnapshotTests-\(UUID().uuidString)", isDirectory: true))
+    }
+
+    /// The snapshot is keyed by the ACTIVE server, which only a hydrated
+    /// registry provides — same construction as `SearchViewModelHistoryTests`.
+    private func makeAppState(api: MockAPIClient, serverId: String = "srv") -> AppState {
+        let keychain = MockKeychain()
+        keychain.savedServers = [
+            ServerEntry(id: serverId, name: "NAS", url: URL(string: "https://a.local")!,
+                        accessToken: "tok", userId: "user1")
+        ]
+        keychain.savedActiveServerId = serverId
+        let appState = AppState(apiClient: api, keychain: keychain)
+        appState.loadServersFromKeychain()
+        appState.currentUserId = "user1"
+        return appState
+    }
+
+    @Test("A snapshot round-trips, per server + user + content-age cap")
+    func storeRoundTrips() {
+        let store = makeStore()
+        let snapshot = HomeSnapshot(resumeItems: [makeSnapshotItem("r")], latestItems: [makeSnapshotItem("l")])
+        store.save(snapshot, serverId: "srv", userId: "user1", maxContentAge: 0)
+
+        #expect(store.load(serverId: "srv", userId: "user1", maxContentAge: 0) == snapshot)
+        #expect(store.load(serverId: "srv", userId: "user2", maxContentAge: 0) == nil)
+        #expect(store.load(serverId: "srv", userId: "user1", maxContentAge: 12) == nil,
+                "a different cap must never read another cap's rails")
+        #expect(store.load(serverId: "other", userId: "user1", maxContentAge: 0) == nil)
+    }
+
+    @Test("A snapshot of another format version is ignored")
+    func otherVersionIgnored() {
+        let store = makeStore()
+        var snapshot = HomeSnapshot(resumeItems: [makeSnapshotItem("r")])
+        snapshot.version = HomeSnapshot.currentVersion + 1
+        store.save(snapshot, serverId: "srv", userId: "user1", maxContentAge: 0)
+
+        #expect(store.load(serverId: "srv", userId: "user1", maxContentAge: 0) == nil)
+    }
+
+    @Test("Clearing a server removes its files only")
+    func clearIsPerServer() {
+        let store = makeStore()
+        let snapshot = HomeSnapshot(resumeItems: [makeSnapshotItem("r")])
+        store.save(snapshot, serverId: "A", userId: "user1", maxContentAge: 0)
+        store.save(snapshot, serverId: "A", userId: "user2", maxContentAge: 12)
+        store.save(snapshot, serverId: "AB", userId: "user1", maxContentAge: 0)
+
+        store.clear(serverId: "A")
+
+        #expect(store.load(serverId: "A", userId: "user1", maxContentAge: 0) == nil)
+        #expect(store.load(serverId: "A", userId: "user2", maxContentAge: 12) == nil)
+        #expect(store.load(serverId: "AB", userId: "user1", maxContentAge: 0) == snapshot,
+                "a server whose id merely STARTS with the cleared one is untouched")
+    }
+
+    @Test("A cold load paints the snapshot while phase 1 is in flight, then phase 1 replaces it")
+    func coldLoadPaintsSnapshotThenReplacesIt() async {
+        let store = makeStore()
+        store.save(HomeSnapshot(resumeItems: [makeSnapshotItem("old")], favoriteItems: [makeSnapshotItem("fav-old")]),
+                   serverId: "srv", userId: "user1", maxContentAge: 0)
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeSnapshotItem("new")]
+        let gate = TestLatch()
+        api.resumeGate = gate
+        let vm = HomeViewModel(defaults: .isolatedForTesting(), snapshotStore: store)
+
+        let load = Task { await vm.load(using: makeAppState(api: api)) }
+
+        let painted = await eventually { vm.resumeItems.map(\.id) == ["old"] }
+        #expect(painted, "the snapshot must paint before phase 1 answers")
+        #expect(vm.isShowingSnapshot)
+        #expect(vm.isLoading == false, "the skeleton drops on the snapshot")
+        #expect(vm.heroItem?.id == "old")
+
+        gate.open()
+        await load.value
+
+        #expect(vm.resumeItems.map(\.id) == ["new"])
+        #expect(vm.favoriteItems.isEmpty, "nothing read from disk outlives phase 1")
+        #expect(vm.isShowingSnapshot == false)
+        let saved = await eventually {
+            store.load(serverId: "srv", userId: "user1", maxContentAge: 0)?.resumeItems.map(\.id) == ["new"]
+        }
+        #expect(saved, "a clean phase 1 becomes the next cold start's snapshot")
+    }
+
+    @Test("A phase 1 failing everywhere drops the snapshot for the error state")
+    func totalFailureDropsSnapshot() async {
+        let store = makeStore()
+        store.save(HomeSnapshot(resumeItems: [makeSnapshotItem("old")]),
+                   serverId: "srv", userId: "user1", maxContentAge: 0)
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        api.seriesWithRecentEpisodesShouldThrow = true
+        let gate = TestLatch()
+        api.resumeGate = gate
+        let vm = HomeViewModel(defaults: .isolatedForTesting(), snapshotStore: store)
+
+        let load = Task { await vm.load(using: makeAppState(api: api)) }
+        let painted = await eventually { vm.isShowingSnapshot }
+        #expect(painted)
+
+        gate.open()
+        await load.value
+
+        #expect(vm.resumeItems.isEmpty)
+        #expect(vm.heroItem == nil)
+        #expect(vm.loadFailure != nil, "an unreachable server shows the error, not yesterday's Home")
+    }
+
+    @Test("No active server, no snapshot: the test-host path never touches the disk")
+    func noActiveServerNoSnapshot() async {
+        let store = makeStore()
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeSnapshotItem("new")]
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = "user1"
+        let vm = HomeViewModel(defaults: .isolatedForTesting(), snapshotStore: store)
+
+        await vm.load(using: appState)
+
+        #expect(vm.resumeItems.map(\.id) == ["new"])
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: store.directory?.path ?? "")) ?? []
+        #expect(files.isEmpty)
+    }
+}

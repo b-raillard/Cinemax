@@ -434,8 +434,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// `enableTotalRecordCount` of every `searchItems` call, in order.
     private(set) var searchCountFlags: [Bool] = []
 
+    /// Holds `getResumeItems` open until opened — keeps Home's phase 1 in
+    /// flight so a test can observe what is on screen meanwhile.
+    var resumeGate: TestLatch?
+
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock { getResumeItemsCallCount += 1 }
+        if let resumeGate { await resumeGate.wait() }
         if shouldThrow { throw stubbedError }
         return stubbedResumeItems
     }
