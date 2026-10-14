@@ -22,3 +22,7 @@ TODO_APP_SUBMISSION.md
 
 # Superpowers brainstorming companion (maquettes locales)
 .superpowers/
+
+# Python bytecode (scripts/perf-replay)
+__pycache__/
+*.pyc
