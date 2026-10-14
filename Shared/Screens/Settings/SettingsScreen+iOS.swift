@@ -62,6 +62,8 @@ extension SettingsScreen {
                     .frame(width: isShortHeader ? 64 : 112, height: isShortHeader ? 64 : 112)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
                     .shadow(color: themeManager.accent.opacity(0.4), radius: 15)
+                    // « Votre niveau » (design D): ring + medal on the logo.
+                    .proTierLogo(headerTierLook, cornerRadius: CinemaRadius.extraLarge, medalSize: isShortHeader ? 22 : 34)
                     .accessibilityHidden(true)
             }
 
@@ -71,26 +73,23 @@ extension SettingsScreen {
                     .foregroundStyle(CinemaColor.onSurface)
                     .tracking(-0.5)
 
+                // …and in words, the door to « Votre niveau » (the Pro page).
+                if let look = headerTierLook {
+                    ProTierChip(tier: look.tier) { selectedCategory = .pro }
+                        .padding(.vertical, CinemaSpacing.spacing1)
+                }
+
                 Text(loc.localized("settings.version", appVersion))
                     .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .tracking(0.5)
             }
         }
-        .padding(.top, isShortHeader ? CinemaSpacing.spacing3 : CinemaSpacing.spacing8)
+        // Top padding is small: the (empty) navigation bar above already
+        // gives the logo its air since the avatar moved into it.
+        .padding(.top, isShortHeader ? 0 : CinemaSpacing.spacing2)
         .padding(.bottom, isShortHeader ? CinemaSpacing.spacing4 : CinemaSpacing.spacing6)
         .frame(maxWidth: .infinity)
-        // The account avatar every other tab root carries in its navigation
-        // bar (`MainTabView`), which this landing hides: same place, leading.
-        // Not a toolbar item here, so the glass is drawn by the button style.
-        .overlay(alignment: .topLeading) {
-            AccountAvatarToolbarButton()
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                // Lines up with the bar's leading item on the other tabs
-                // (measured on the iPhone 17 Pro simulator).
-                .padding(.leading, CinemaSpacing.spacing2)
-        }
     }
 
     // MARK: iOS Navigation List
@@ -255,6 +254,8 @@ extension SettingsScreen {
         // sub-screens aren't fighting the wrapping ScrollView. The remaining
         // static-form categories keep the original wrapper.
         switch category {
+        case .pro:
+            ProScreen()
         case .administration:
             AdminLandingScreen()
         case .advancedAdmin:
@@ -273,7 +274,7 @@ extension SettingsScreen {
                         iOSInterfaceDetail
                     case .playback:
                         iOSPlaybackDetail
-                    case .administration, .advancedAdmin:
+                    case .pro, .administration, .advancedAdmin:
                         EmptyView() // handled above
                     }
                 }

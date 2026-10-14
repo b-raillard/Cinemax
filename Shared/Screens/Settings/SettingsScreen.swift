@@ -17,6 +17,12 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     // first (its pill is the accented hero on the iOS landing); Lecture
     // sits right after Interface — it hosts the most-consulted playback
     // toggles, promoted out of the Interface hub in the 2026-07 reorg.
+    // « Votre niveau » / JellyGlass Pro (story PRO-01). NOT a row of the
+    // list (`visibleCases` never returns it): reached from the tier chip
+    // under the Settings title (design D), shown only where
+    // `ProFeatureGate.showsProEntry` allows. A case so that both platforms
+    // route it like any category detail.
+    case pro
     case appearance
     case interface
     case playback
@@ -32,6 +38,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .pro:            "star.circle"
         case .appearance:     "paintpalette"
         case .interface:      "tv"
         case .playback:       "play.rectangle"
@@ -44,6 +51,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     @MainActor func localizedName(_ loc: LocalizationManager) -> String {
         switch self {
+        case .pro:            loc.localized("pro.tier.title")
         case .appearance:     loc.localized("settings.appearance")
         case .interface:      loc.localized("settings.interface")
         case .playback:       loc.localized("settings.playback")
@@ -75,8 +83,9 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 
     /// Filters `allCases` by admin visibility and platform. Use this instead
     /// of raw `allCases` in rendering code — keeps gating in one place.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [SettingsCategory] {
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [Self] {
         allCases.filter { category in
+            if category == .pro { return false }
             if isTVOS && category.isAdminOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
             return true
@@ -169,10 +178,20 @@ struct SettingsScreen: View {
     /// and the Pro gate of « Changer de compte » (both platforms).
     @Environment(EntitlementStore.self) var entitlements
     @Environment(EarlyAdopterService.self) var earlyAdopter
+    @Environment(ProStore.self) var proStore
     @Environment(AccountLockStore.self) var accountLocks
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
+    /// `accountSwitchTier`'s snapshot while « Changer de compte » is open.
+    @State var userSwitchTier: ProTier?
+
+    /// The tier the Settings header wears (design D) — `nil` = show nothing
+    /// (before the Pro launches, see `ProFeatureGate.showsProEntry`).
+    var headerTierLook: ProTierLook? {
+        guard entitlements.showsProEntry else { return nil }
+        return ProTierLook(tier: entitlements.proTier(earlyAdopter: earlyAdopter), themeManager: themeManager)
+    }
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
@@ -265,6 +284,9 @@ struct SettingsScreen: View {
     // tvOS-only stored properties
     #if os(tvOS)
     @FocusState var focusedItem: SettingsFocus?
+    /// The « Votre niveau » chip stays out of focus until a category pill has
+    /// had it — see `tvBrandPanel`. Reset each time the landing comes back.
+    @State var tierChipFocusable = false
     @State var serverUsers: [UserDto] = []
     /// Idempotency guard for `loadServerUsers`. tvOS `.task` re-fires every
     /// time SwiftUI re-enters the view hierarchy (which happens whenever
@@ -432,8 +454,12 @@ struct SettingsScreen: View {
             #endif
         }
         #if os(iOS)
+        // The bar stays — empty and untitled (the header below is the title)
+        // — so the account avatar `MainTabView` puts on every tab root sits
+        // here as THE SAME toolbar item, same size and place to the pixel. A
+        // hand-placed copy over a hidden bar was always a few points off
+        // (recette 2026-10-13, C-03).
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
         #endif
         // The Debug « Forcer … » switches write `debug.forcedSeason` through
         // `@AppStorage`; the controller, which re-evaluates the season, follows.
@@ -470,6 +496,18 @@ struct SettingsScreen: View {
         .whatsNewPresentation(isPresented: $showWhatsNew) { whatsNewSheet }
         .fullScreenCover(isPresented: $showProfile) { profileSheet }
         #endif
+        // The account change keeps the tier it opened with: buying the Pro
+        // from its PRO entry flips the tier, and re-deciding the sheet then
+        // would swap the plain sheet out from under its open upsell (and
+        // « Merci ! »). Re-read at the next opening.
+        .onChange(of: showUserSwitch) { _, open in
+            userSwitchTier = open ? entitlements.proTier(earlyAdopter: earlyAdopter) : nil
+        }
+    }
+
+    /// The tier « Changer de compte » decides with — frozen while it is open.
+    private var accountSwitchTier: ProTier {
+        userSwitchTier ?? entitlements.proTier(earlyAdopter: earlyAdopter)
     }
 
     private var licensesSheet: some View {
@@ -482,7 +520,7 @@ struct SettingsScreen: View {
     @ViewBuilder
     private var userSwitchSheet: some View {
         #if os(iOS)
-        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
+        if accountSwitchTier.unlocksProFeatures {
             AccountSwitcherView()
                 .environment(appState)
                 .environment(themeManager)
@@ -492,11 +530,12 @@ struct SettingsScreen: View {
                 .environment(parentalLock)
                 .environment(entitlements)
                 .environment(earlyAdopter)
+                .environment(proStore)
         } else {
             plainUserSwitchSheet
         }
         #else
-        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
+        if accountSwitchTier.unlocksProFeatures {
             WhoIsWatchingScreen(mode: .cover) { showUserSwitch = false }
                 .environment(appState)
                 .environment(themeManager)
@@ -511,7 +550,10 @@ struct SettingsScreen: View {
     }
 
     private var plainUserSwitchSheet: some View {
-        UserSwitchSheet()
+        UserSwitchSheet(showsProHint: accountSwitchTier == .free)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
             .environment(appState)
             .environment(themeManager)
             .environment(loc)

@@ -217,6 +217,10 @@ targets:
     scheme:
       testTargets:
         - CinemaxTests
+      # Local StoreKit for runs launched from Xcode: the two JellyGlass Pro
+      # products, without App Store Connect. The same file the tests load
+      # (`ProStoreKitTests`). Archives and `simctl` launches ignore it.
+      storeKitConfiguration: Tests/CinemaxKitTests/Fixtures/JellyGlassPro.storekit
 
   CinemaxTV:
     type: application
@@ -304,6 +308,7 @@ targets:
     scheme:
       testTargets:
         - CinemaxTVTests
+      storeKitConfiguration: Tests/CinemaxKitTests/Fixtures/JellyGlassPro.storekit
 
   # Continue-Watching home-screen widget. Dependency-free by design (no
   # CinemaxKit — widget memory budgets are tight): reads the session snapshot

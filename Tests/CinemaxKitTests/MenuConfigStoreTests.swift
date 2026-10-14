@@ -702,6 +702,24 @@ struct SettingsCategoryTests {
                 == [.appearance, .interface, .playback, .account, .server])
     }
 
+    @Test("« Votre niveau » n'est jamais une ligne de la liste : on l'ouvre par la pastille de l'en-tête")
+    @MainActor func proNeverListed() {
+        for isTVOS in [false, true] {
+            for isAdmin in [false, true] {
+                #expect(!SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS).contains(.pro))
+            }
+        }
+    }
+
+    @Test("La page Pro ne se montre qu'une fois le Pro lancé, ou un palier Debug choisi")
+    func proEntryVisibility() {
+        #expect(ProFeatureGate.showsProEntry(proLaunched: true, override: .automatic))
+        #expect(!ProFeatureGate.showsProEntry(proLaunched: false, override: .automatic))
+        for forced in ProTierOverride.allCases where forced != .automatic {
+            #expect(ProFeatureGate.showsProEntry(proLaunched: false, override: forced))
+        }
+    }
+
     @Test("le hub Interface expose exactement les quatre sous-pages écran, dans l'ordre")
     func interfaceSubPages() {
         #expect(InterfaceSubcategory.allCases == [.menu, .homePage, .library, .detailPage])

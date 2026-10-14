@@ -44,6 +44,7 @@ extension SettingsScreen {
                 // back to the top so the tab bar resurfaces naturally.
                 if newValue == nil {
                     selectedInterfaceSub = nil
+                    tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
             }
@@ -61,11 +62,24 @@ extension SettingsScreen {
             // starts at the top — no explicit reset needed on first appear.
         }
         .background {
-            // Centered accent bloom — persists across all settings pages
-            Circle()
-                .fill(themeManager.accent.opacity(0.3))
-                .frame(width: CinemaBloom.settingsSize, height: CinemaBloom.settingsSize)
-                .blur(radius: CinemaBloom.settingsBlur)
+            if selectedCategory == .pro {
+                // « Votre niveau » (design D): the tier's material, edge to
+                // edge — the screen is the membership card.
+                ProTierMaterial(tier: entitlements.proTier(earlyAdopter: earlyAdopter),
+                                accent: themeManager.accent, glowRadius: 1400)
+                    // The pills and the small print sit low: shade the foot.
+                    .overlay {
+                        LinearGradient(colors: [.clear, CinemaColor.metalShade.opacity(0.55)],
+                                       startPoint: .center, endPoint: .bottom)
+                    }
+                    .ignoresSafeArea()
+            } else {
+                // Centered accent bloom — persists across all other settings pages
+                Circle()
+                    .fill(themeManager.accent.opacity(0.3))
+                    .frame(width: CinemaBloom.settingsSize, height: CinemaBloom.settingsSize)
+                    .blur(radius: CinemaBloom.settingsBlur)
+            }
         }
         .task { await loadServerUsers() }
         .task { await probeQuickConnect() }
@@ -98,6 +112,17 @@ extension SettingsScreen {
         // `canOpenURL` is an IPC: re-resolved each time the landing appears
         // (including a pop back from a category), never per render.
         .onAppear { rateAppURL = AppUpdateChecker.rateAppURL() }
+        // Only a landing item arms the chip: on a return from a category the
+        // value still names that page's last focus until tvOS picks anew.
+        .onChange(of: focusedItem) { _, item in
+            switch item {
+            case .category, .rateApp: tierChipFocusable = true
+            default: break
+            }
+        }
+        // Another tab, or a category: the landing will pick a first focus
+        // again when it comes back, which must be a pill again.
+        .onDisappear { tierChipFocusable = false }
     }
 
     var tvBrandPanel: some View {
@@ -108,7 +133,22 @@ extension SettingsScreen {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 400, height: 400)
-                .shadow(color: themeManager.accent.opacity(0.5), radius: 40)
+                .shadow(color: headerTierLook.map { $0.tier == .free ? themeManager.accent.opacity(0.5) : $0.glow } ?? themeManager.accent.opacity(0.5), radius: 40)
+                // « Votre niveau » (design D): the medal. No ring on tvOS —
+                // the parallax logo is transparent, a frame would float.
+                .overlay(alignment: .bottomTrailing) {
+                    if let look = headerTierLook, let glyph = look.glyph {
+                        Image(systemName: glyph)
+                            .font(.system(size: CinemaScale.pt(26), weight: .black))
+                            .foregroundStyle(look.medalInk)
+                            .frame(width: 84, height: 84)
+                            .background(look.medalFill, in: Circle())
+                            .padding(6)
+                            .background(CinemaColor.surface, in: Circle())
+                            .offset(x: -40, y: -40)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .accessibilityHidden(true)
 
             VStack(spacing: CinemaSpacing.spacing2) {
@@ -122,10 +162,24 @@ extension SettingsScreen {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .opacity(0.8)
                     .tracking(0.5)
+
+                // The door to « Votre niveau ». Disabled until a pill has had
+                // focus: the landing must open (and come back from a
+                // category) on the menu on the right, and tvOS would
+                // otherwise pick this chip, nearer the top-leading corner
+                // (recette 2026-10-14, TV-06; same pick as TV-09).
+                if let look = headerTierLook {
+                    ProTierChip(tier: look.tier) { selectedCategory = .pro }
+                        .padding(.top, CinemaSpacing.spacing4)
+                        .disabled(!tierChipFocusable)
+                }
             }
 
             Spacer()
         }
+        // The whole panel is the section, so a left press from ANY pill —
+        // « Apparence » sits far above the chip — lands on it.
+        .focusSection()
     }
 
     var tvNavigationPanel: some View {
@@ -298,7 +352,10 @@ extension SettingsScreen {
                         Text(category.localizedName(loc))
                             .font(CinemaFont.headline(.medium))
                     }
-                    .foregroundStyle(backFocused ? themeManager.accent : CinemaColor.onSurface)
+                    // On the Pro page's material (dark in both modes) the
+                    // resting ink is the material's, not the page's.
+                    .foregroundStyle(backFocused ? themeManager.accent
+                                     : (category == .pro ? CinemaColor.onTitanium : CinemaColor.onSurface))
                     // Row-level focus (`CinemaTVFocus` stroke + brightness) —
                     // text colour alone was the only signal. The stroke BLEEDS
                     // OUTWARD through negative padding on the overlay rather
@@ -323,6 +380,8 @@ extension SettingsScreen {
                 .focused($focusedItem, equals: .back)
 
                 switch category {
+                case .pro:
+                    ProScreen()
                 case .appearance:
                     tvAppearanceDetail
                 case .account:
@@ -586,7 +645,7 @@ extension SettingsScreen {
                     .joined(separator: "\n"),
                 action: { earlyAdopterRowAction(earlyAdopter) }
             )
-            #if DEBUG
+            #if DEBUG || PRO_PREVIEW
             // Free / Pro / founder, forced — cycles on each press.
             tvActionRow(
                 id: "proTier",

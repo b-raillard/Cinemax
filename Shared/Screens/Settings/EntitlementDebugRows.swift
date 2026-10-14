@@ -79,9 +79,12 @@ func proTierText(_ entitlements: EntitlementStore, earlyAdopter: EarlyAdopterSer
     case .pro: loc.localized("settings.debug.proTier.pro")
     case .founder: loc.localized("settings.debug.proTier.founder")
     }
-    #if DEBUG
+    #if DEBUG || PRO_PREVIEW
     if entitlements.proTierOverride == .automatic {
         return loc.localized("settings.debug.proTier.automatic", tierText)
+    }
+    if entitlements.proTierOverride == .launched {
+        return loc.localized("settings.debug.proTier.launched", tierText)
     }
     #endif
     return tierText
@@ -137,14 +140,14 @@ struct EntitlementDebugRows: View {
             #endif
             iOSSettingsDivider
             earlyAdopterRow
-            #if DEBUG
+            #if DEBUG || PRO_PREVIEW
             iOSSettingsDivider
             proTierRow
             #endif
         }
     }
 
-    #if DEBUG
+    #if DEBUG || PRO_PREVIEW
     /// Free / Pro / founder, forced — what the Pro features (multi-account)
     /// see. A press cycles automatic → free → Pro → founder.
     private var proTierRow: some View {

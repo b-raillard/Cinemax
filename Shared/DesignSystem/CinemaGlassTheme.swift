@@ -74,6 +74,39 @@ enum CinemaColor {
 
     // Success
     static let success = Color.dynamic(light: 0x1F9D45, dark: 0x34C759)
+
+    // Founder « gold » — the founder tier's material (Settings logo ring and
+    // medal, membership card, « Votre niveau » chip). A foil, so the card
+    // keeps its stops in both modes; only the INK used on the page surface
+    // darkens in light mode, to stay readable there.
+    static let founderGoldDeep  = Color.dynamic(light: 0x3B2A0E, dark: 0x3B2A0E)
+    static let founderGold      = Color.dynamic(light: 0x8C6A26, dark: 0x8C6A26)
+    static let founderGoldLight = Color.dynamic(light: 0xE2C27A, dark: 0xE2C27A)
+    /// Text and emblems ON the gold card / medal.
+    static let onFounderGold    = Color.dynamic(light: 0x3A2806, dark: 0x3A2806)
+    static let onFounderCard    = Color.dynamic(light: 0xFFF8E8, dark: 0xFFF8E8)
+    /// Gold text on the page surface (the chip).
+    static let founderGoldInk   = Color.dynamic(light: 0x7A5A1E, dark: 0xE8C77A)
+    /// The Settings logo's ring and glow: the pale foil vanished on the light
+    /// page (recette 2026-10-13), so light mode takes a richer gold.
+    static let founderGoldRing = Color.dynamic(light: 0xC0902E, dark: 0xE2C27A)
+    /// The founder name's pale metallic top, and its wordmark.
+    static let founderGoldPale  = Color.dynamic(light: 0xFFF3D0, dark: 0xFFF3D0)
+    static let founderGoldMark  = Color.dynamic(light: 0xF6E2B0, dark: 0xF6E2B0)
+
+    // The tier material's graphite (`ProTierMaterial`) — a material, so the
+    // same dark stops in both modes, like the gold foil above.
+    static let titaniumDeep  = Color.dynamic(light: 0x141517, dark: 0x141517)
+    /// The free tier's ground, lightest stop.
+    static let titaniumPlain = Color.dynamic(light: 0x1E1F21, dark: 0x1E1F21)
+    /// Light and shade mixed into the accent for the metal's highlights.
+    static let metalLight    = Color.dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
+    static let metalShade    = Color.dynamic(light: 0x000000, dark: 0x000000)
+    /// Ink on a light metallic emblem.
+    static let onMetalEmblem = Color.dynamic(light: 0x111111, dark: 0x111111)
+    /// Text on the dark titanium cards.
+    static let onTitanium        = Color.dynamic(light: 0xF2F2F2, dark: 0xF2F2F2)
+    static let onTitaniumVariant = Color.dynamic(light: 0xB9B8B6, dark: 0xB9B8B6)
 }
 
 // MARK: - Global UI Scale

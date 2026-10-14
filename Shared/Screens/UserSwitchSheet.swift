@@ -32,6 +32,21 @@ struct UserSwitchSheet: View {
     /// Opens straight on the manual step with this username — reconnecting a
     /// remembered account whose session expired (multi-account).
     var prefilledUsername: String?
+    /// The free account change (Settings, no Pro): shows « Comptes mémorisés ·
+    /// PRO » under the grid, whose tap opens the contextual sheet (PRO-03).
+    /// The presenter then injects the entitlement stores and `ProStore`.
+    var showsProHint = false
+    @State private var showUpsell = false
+    /// tvOS: the empty state's « Connexion manuelle » has held focus at least
+    /// once — see `proHint`.
+    @FocusState private var manualSignInFocused: Bool
+    @State private var proHintFocusable = false
+    // OPTIONAL reads: this sheet is also presented from the account switcher
+    // and « Qui regarde ? », which inject none of them — only the free path
+    // (Settings) does, and only it shows the PRO entry.
+    @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
+    @Environment(EarlyAdopterService.self) private var earlyAdopter: EarlyAdopterService?
+    @Environment(ProStore.self) private var proStore: ProStore?
 
     var body: some View {
         Group {
@@ -64,13 +79,22 @@ struct UserSwitchSheet: View {
             } else if isLoading {
                 LoadingStateView()
             } else if users.isEmpty {
-                EmptyStateView(
-                    systemImage: "person.crop.circle.badge.questionmark",
-                    title: loc.localized("switchAccount.noPublicUsers.title"),
-                    subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
-                    actionTitle: loc.localized("switchAccount.signInManually"),
-                    onAction: { enterManualMode() }
-                )
+                // A server that lists no users (Jellyfin's default) lands
+                // here: the Pro hint must show on this branch too.
+                VStack(spacing: CinemaSpacing.spacing4) {
+                    EmptyStateView(
+                        systemImage: "person.crop.circle.badge.questionmark",
+                        title: loc.localized("switchAccount.noPublicUsers.title"),
+                        subtitle: loc.localized("switchAccount.noPublicUsers.subtitle"),
+                        actionTitle: loc.localized("switchAccount.signInManually"),
+                        onAction: { enterManualMode() },
+                        actionFocused: $manualSignInFocused
+                    )
+                    proHint
+                }
+                .onChange(of: manualSignInFocused) { _, focused in
+                    if focused { proHintFocusable = true }
+                }
             } else {
                 userGrid
             }
@@ -156,12 +180,54 @@ struct UserSwitchSheet: View {
                 enterManualMode()
             }
             .padding(.bottom, CinemaSpacing.spacing4)
+
+            proHint
         }
         #if os(tvOS)
         // The tiles carry `CinemaTVCardButtonStyle`, which grows on focus —
         // without this the edge tiles' scaled ring is clipped.
         .scrollClipDisabled()
         #endif
+    }
+
+    /// « Comptes mémorisés · PRO » under the grid or the empty state, for a
+    /// free user (`showsProHint`).
+    @ViewBuilder
+    private var proHint: some View {
+        if showsProHint, let entitlements, let earlyAdopter, let proStore {
+            ProLockedFeatureRow(feature: .memorizedAccounts) { showUpsell = true }
+                .padding(.horizontal, gridHorizontalPadding)
+                .padding(.bottom, CinemaSpacing.spacing4)
+                #if os(tvOS)
+                .frame(maxWidth: CinemaTVLayout.formMaxWidth)
+                // On an empty server list the row stays out of focus until
+                // « Connexion manuelle » has had it: tvOS starts on the
+                // focusable nearest the top-leading corner, and this row,
+                // wider than the button, reaches further left — so it took the
+                // first focus (recette 2026-10-13, TV-09). `prefersDefaultFocus`,
+                // `resetFocus`, `defaultFocus` and a delayed `@FocusState` write
+                // all lost to that pick. The grid case starts on a tile.
+                .disabled(users.isEmpty && !proHintFocusable)
+                .fullScreenCover(isPresented: $showUpsell) {
+                    upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
+                }
+                #else
+                .sheet(isPresented: $showUpsell) {
+                    upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
+                }
+                #endif
+        }
+    }
+
+    private func upsell(entitlements: EntitlementStore, earlyAdopter: EarlyAdopterService, proStore: ProStore) -> some View {
+        ProUpsellSheet(feature: .memorizedAccounts)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
+            .environment(loc)
+            .environment(themeManager)
+            .environment(toasts)
+            .preferredColorScheme(themeManager.colorScheme)
     }
 
     /// A text-only secondary action. `.plain` gives it NO focus treatment on
@@ -386,6 +452,9 @@ struct UserSwitchSheet: View {
 
     private func exitManualMode() {
         showManualEntry = false
+        // Back on the empty state: tvOS picks a first focus again, which must
+        // be « Connexion manuelle » again, not the Pro row (see `proHint`).
+        proHintFocusable = false
         manualUsername = ""
         password = ""
         authError = nil
