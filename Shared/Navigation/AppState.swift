@@ -939,11 +939,7 @@ final class AppState {
         return requiresParentalCode(forAccountKey: key)
     }
 
-    /// The parental half of `requiresCode`. A FREE account switch checks only
-    /// this one: it ends in a sign-in with the account's password anyway, and
-    /// an account's own code is Pro (spec 2026-10-20). Every other transition
-    /// — the server switch above all, which stays one-tap in free — keeps the
-    /// full `requiresCode`, so a code set during a Pro period is never skipped.
+    /// The parental half of `requiresCode`.
     private func requiresParentalCode(forAccountKey key: String) -> Bool {
         guard parentalLockProvider() else { return false }
         return AccountSettingsStore.isLessRestrictive(
@@ -1033,7 +1029,11 @@ final class AppState {
         guard let entry = activeEntryIfAny else { return .needsLogin }
         if userId == currentUserId, isAuthenticated { return .switched }
         let key = ServerRegistry.accountKey(serverId: entry.id, userId: userId)
-        if !unlocked, keepsAccountSessions ? requiresCode(forAccountKey: key) : requiresParentalCode(forAccountKey: key) {
+        // Both tiers: a code already set (during a Pro period) keeps guarding
+        // the account even in free — a Jellyfin account may have no password,
+        // so the sign-in that follows is not always a check (security review
+        // 2026-10-20). Only SETTING a code is Pro.
+        if !unlocked, requiresCode(forAccountKey: key) {
             return .locked
         }
         guard isOnlineProvider() else { return .offline }

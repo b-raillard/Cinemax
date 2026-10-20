@@ -119,9 +119,7 @@ final class AccountSwitchFlow {
     }
 
     private static func hasOwnCode(_ account: SavedAccount, appState: AppState, locks: AccountLockStore) -> Bool {
-        // Free: an account's own code is Pro, so a `.locked` there is always
-        // the parental one (`AppState.requiresCode`).
-        appState.keepsAccountSessions && (appState.accountKey(for: account).map(locks.hasLock) ?? false)
+        appState.accountKey(for: account).map(locks.hasLock) ?? false
     }
 
     private func handle(

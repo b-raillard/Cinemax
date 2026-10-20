@@ -605,15 +605,15 @@ struct AccountLockTests {
         app.currentUserId = "A"
         app.isAuthenticated = true
 
+        // Both tiers: a code already set keeps guarding (a Jellyfin account
+        // may have no password); past it, free signs in, Pro switches.
+        #expect(await app.switchAccount(to: "B") == .locked)
+        #expect(app.currentUserId == "A")
         if multiAccount {
-            #expect(await app.switchAccount(to: "B") == .locked)
-            #expect(app.currentUserId == "A")
             #expect(await app.switchAccount(to: "B", unlocked: true) == .switched)
             #expect(app.currentUserId == "B")
         } else {
-            // Free: the account's own code is a Pro feature — neither asked
-            // nor erased; the switch is a sign-in.
-            #expect(await app.switchAccount(to: "B") == .needsLogin)
+            #expect(await app.switchAccount(to: "B", unlocked: true) == .needsLogin)
             #expect(app.currentUserId == "A")
         }
     }

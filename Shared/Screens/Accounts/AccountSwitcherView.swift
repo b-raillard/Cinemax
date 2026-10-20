@@ -277,7 +277,7 @@ struct AccountSwitcherView: View {
                         AccountTile(
                             account: account,
                             isCurrent: account.userId == appState.currentUserId,
-                            isLocked: appState.keepsAccountSessions && (appState.accountKey(for: account).map(locks.hasLock) ?? false),
+                            isLocked: appState.accountKey(for: account).map(locks.hasLock) ?? false,
                             isExpired: appState.isExpired(account),
                             needsSignIn: appState.needsSignIn(account),
                             avatarSize: 72

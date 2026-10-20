@@ -1430,7 +1430,7 @@
 "pro.upsell.seeAll" = "Alles ansehen, was Pro enthält";
 "pro.upsell.notNow" = "Nicht jetzt";
 "pro.feature.accounts.title" = "Gemerkte Konten";
-"pro.feature.accounts.detail" = "Alle finden ihr Profil, ihren Fortschritt und ihre Einstellungen wieder. Wechsel mit einem Tipp, auf Wunsch mit Code.";
+"pro.feature.accounts.detail" = "Jedes Profil bleibt angemeldet: Wechsel mit einem Tipp, ohne Passwort, auf Wunsch mit Code.";
 "pro.feature.admin.title" = "Dein Server in der Tasche";
 "pro.feature.admin.detail" = "Benutzer, Geräte, Aufgaben und Metadaten – vom iPhone oder iPad aus verwaltet, ganz ohne Computer.";
 "pro.feature.watchTogether.title" = "„Gemeinsam schauen“-Abende";

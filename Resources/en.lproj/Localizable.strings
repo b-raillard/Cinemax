@@ -1430,7 +1430,7 @@
 "pro.upsell.seeAll" = "See everything Pro includes";
 "pro.upsell.notNow" = "Not now";
 "pro.feature.accounts.title" = "Remembered accounts";
-"pro.feature.accounts.detail" = "Everyone gets their own profile, progress and settings back. Switch in one tap, with an optional passcode.";
+"pro.feature.accounts.detail" = "Every profile stays signed in: switch in one tap, no password, with an optional passcode.";
 "pro.feature.admin.title" = "Your server in your pocket";
 "pro.feature.admin.detail" = "Users, devices, tasks and metadata, managed from iPhone or iPad, no computer needed.";
 "pro.feature.watchTogether.title" = "Watch Together nights";

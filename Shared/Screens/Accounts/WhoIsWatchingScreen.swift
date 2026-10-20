@@ -153,7 +153,7 @@ struct WhoIsWatchingScreen: View {
                             AccountTile(
                                 account: account,
                                 isCurrent: account.userId == appState.currentUserId,
-                                isLocked: appState.keepsAccountSessions && (appState.accountKey(for: account).map(locks.hasLock) ?? false),
+                                isLocked: appState.accountKey(for: account).map(locks.hasLock) ?? false,
                                 isExpired: appState.isExpired(account),
                                 needsSignIn: appState.needsSignIn(account),
                                 avatarSize: 150,
@@ -411,9 +411,10 @@ struct TVAccountManageScreen: View {
     @ViewBuilder
     private func accountBlock(_ account: SavedAccount) -> some View {
         let key = appState.accountKey(for: account) ?? ""
-        // An account's own code is Pro: in free it neither guards nor shows.
-        let codesEnabled = appState.keepsAccountSessions
-        let hasCode = codesEnabled && locks.hasLock(key)
+        // SETTING a code is Pro; one already set keeps guarding in free and
+        // can be removed there (security review 2026-10-20).
+        let hasCode = locks.hasLock(key)
+        let showsCodeRow = appState.keepsAccountSessions || hasCode
         let age = appState.ageCap(forAccountKey: key)
         let option = ParentalAgeOption(rawValue: age) ?? .all
         // Same rule as iOS: another account's protected settings (its code,
@@ -432,7 +433,7 @@ struct TVAccountManageScreen: View {
                     begin(.unlock(account))
                 }
             } else {
-            if codesEnabled {
+            if showsCodeRow {
                 row(id: "code-\(key)", title: loc.localized("accounts.detail.code"),
                     subtitle: loc.localized("accounts.detail.code.subtitle"),
                     value: loc.localized(hasCode ? "a11y.toggle.on" : "a11y.toggle.off")) {

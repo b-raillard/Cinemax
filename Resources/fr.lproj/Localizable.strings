@@ -1432,7 +1432,7 @@
 "pro.upsell.seeAll" = "Voir tout ce que Pro inclut";
 "pro.upsell.notNow" = "Pas maintenant";
 "pro.feature.accounts.title" = "Comptes mémorisés";
-"pro.feature.accounts.detail" = "Chacun retrouve son profil, ses reprises et ses réglages. On passe de l'un à l'autre d'un geste, protégé par un code si besoin.";
+"pro.feature.accounts.detail" = "Chaque profil reste connecté : on passe de l'un à l'autre d'un geste, sans mot de passe, protégé par un code si besoin.";
 "pro.feature.admin.title" = "Votre serveur dans la poche";
 "pro.feature.admin.detail" = "Utilisateurs, appareils, tâches et métadonnées, gérés depuis l'iPhone ou l'iPad, sans ordinateur.";
 "pro.feature.watchTogether.title" = "Soirées « Regarder ensemble »";
