@@ -59,6 +59,7 @@ struct MainTabView: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(AccountLockStore.self) private var accountLocks
     @Environment(ParentalLockController.self) private var parentalLock
+    @Environment(ProStore.self) private var proStore
 
     /// True only while the user is editing the menu on the Main Menu
     /// sub-page. Drives whether the bar snapshot keeps pace with the live
@@ -320,6 +321,9 @@ struct MainTabView: View {
                 .environment(toasts)
                 .environment(accountLocks)
                 .environment(parentalLock)
+                .environment(entitlements)
+                .environment(earlyAdopter)
+                .environment(proStore)
         }
         // One handler for the whole layout — see `tvExitCommand`. It is
         // deliberately the ONLY `.onExitCommand` inside the tab content: an
@@ -328,9 +332,10 @@ struct MainTabView: View {
         .onExitCommand(perform: tvExitCommand)
     }
 
-    /// The avatar is offered where the « Profil » tab was: Pro (or founder).
+    /// The avatar is offered to every tier (spec 2026-10-20): free lists the
+    /// remembered accounts too, each asking for a sign-in.
     private var showsTVAccountAvatar: Bool {
-        entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
+        appState.isAuthenticated
     }
     #endif
 

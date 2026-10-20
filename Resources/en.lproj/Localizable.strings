@@ -1098,9 +1098,10 @@
 "accounts.manage" = "Manage accounts";
 "accounts.current" = "Current";
 "accounts.expired" = "Session expired";
+"accounts.signedOut" = "Password required";
+"accounts.reconnect.title" = "Sign in to %@";
+"pro.reconnect.hint" = "With Pro, switch accounts without a password";
 "accounts.codeRequired" = "Code required";
-"accounts.switch" = "Switch account";
-"accounts.switch.freeHint" = "The chosen account’s password is asked for at every switch.";
 "accounts.pin.title" = "%@’s code";
 "accounts.pin.parental.title" = "Parental code";
 "accounts.pin.parental.subtitle" = "%@’s profile is less restricted than this one.";

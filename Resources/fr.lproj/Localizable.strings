@@ -1100,9 +1100,10 @@
 "accounts.manage" = "Gérer les comptes";
 "accounts.current" = "En cours";
 "accounts.expired" = "Session expirée";
+"accounts.signedOut" = "Mot de passe requis";
+"accounts.reconnect.title" = "Se reconnecter à %@";
+"pro.reconnect.hint" = "Avec Pro, plus besoin de mot de passe pour changer de compte";
 "accounts.codeRequired" = "Code requis";
-"accounts.switch" = "Changer de compte";
-"accounts.switch.freeHint" = "Le mot de passe du compte choisi est demandé à chaque changement.";
 "accounts.pin.title" = "Code de %@";
 "accounts.pin.parental.title" = "Code parental";
 "accounts.pin.parental.subtitle" = "Le profil %@ est moins restreint que celui-ci.";

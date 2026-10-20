@@ -11,6 +11,9 @@ struct AccountTile: View {
     let isCurrent: Bool
     let isLocked: Bool
     let isExpired: Bool
+    /// Opening it asks for a sign-in (free tier, or no session on this device)
+    /// — said quietly, unlike a real expiry (`AppState.needsSignIn`).
+    var needsSignIn: Bool = false
     let avatarSize: CGFloat
     /// tvOS: the tile has focus — a round portrait draws its own circular
     /// accent ring and grows (card focus level, `CinemaTVFocus`).
@@ -57,6 +60,7 @@ struct AccountTile: View {
     private var status: String? {
         if isCurrent { return loc.localized("accounts.current") }
         if isExpired { return loc.localized("accounts.expired") }
+        if needsSignIn { return loc.localized("accounts.signedOut") }
         if isLocked { return loc.localized("accounts.codeRequired") }
         return nil
     }
@@ -131,15 +135,14 @@ struct AccountSwitcherView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var flow = AccountSwitchFlow()
-    @State private var showUpsell = false
     @State private var showAddAccount = false
     @State private var showAddChoice = false
     @State private var showQuickConnect = false
     @State private var quickConnect = LoginViewModel()
-
-    private var multiAccount: Bool {
-        entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
-    }
+    /// The remembered account whose password step is open (« Se reconnecter »
+    /// → Mot de passe).
+    @State private var reconnectWithPassword: SavedAccount?
+    @State private var reconnectTarget: String?
 
     var body: some View {
         NavigationStack {
@@ -147,10 +150,7 @@ struct AccountSwitcherView: View {
                 Group {
                     switch flow.step {
                     case .pick:
-                        // Frozen while the upsell is up: a purchase made in
-                        // it flips the tier, and swapping `freeContent` out
-                        // would tear its sheet — and « Merci ! » — down.
-                        if multiAccount && !showUpsell { pickGrid } else { freeContent }
+                        pickGrid
                     case .code(let account, let parental):
                         AccountCodeStep(flow: flow, account: account, parental: parental, avatarSize: 72) {
                             Task { if await flow.submit(appState: appState, locks: locks, parentalLock: parentalLock, toasts: toasts, loc: loc) { dismiss() } }
@@ -198,6 +198,9 @@ struct AccountSwitcherView: View {
                 quickConnect.startQuickConnect(using: appState, loc: loc)
             } else {
                 quickConnect.cancelQuickConnect()
+                // A reconnection abandoned here leaves no marker behind
+                // (`AppState.clearPendingSignIn`); after a success it is a no-op.
+                appState.clearPendingSignIn()
             }
         }
         .onChange(of: quickConnect.showSuccess) { _, success in
@@ -206,15 +209,57 @@ struct AccountSwitcherView: View {
             showQuickConnect = false
             dismiss()
         }
-        .sheet(item: $flow.reconnect) { account in signInSheet(prefilled: account.username) }
+        // « Se reconnecter » (free tier, or an account without a session):
+        // Quick Connect or the password, as for « Ajouter ».
+        .confirmationDialog(
+            loc.localized("accounts.reconnect.title", flow.reconnect?.username ?? ""),
+            isPresented: reconnectChoice,
+            titleVisibility: .visible,
+            presenting: flow.reconnect
+        ) { account in
+            Button(loc.localized("accounts.add.quickConnect")) { showQuickConnect = true }
+            Button(loc.localized("accounts.add.password")) {
+                reconnectTarget = account.userId
+                reconnectWithPassword = account
+            }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        }
+        .sheet(item: $reconnectWithPassword, onDismiss: finishReconnection) { account in
+            signInSheet(prefilled: account.username, showsProHint: !appState.keepsAccountSessions)
+        }
+    }
+
+    /// The reconnection choice is up while `flow.reconnect` names an account.
+    /// Closing it without picking a way in drops the pending sign-in marker;
+    /// the check waits a turn, the picked button's action having run first.
+    private var reconnectChoice: Binding<Bool> {
+        Binding(
+            get: { flow.reconnect != nil },
+            set: { presented in
+                guard !presented else { return }
+                flow.reconnect = nil
+                Task { @MainActor in
+                    if reconnectWithPassword == nil && !showQuickConnect { appState.clearPendingSignIn() }
+                }
+            }
+        )
+    }
+
+    /// The password step closed: a success opened the profile (the switcher
+    /// closes too); anything else just drops the pending sign-in marker.
+    private func finishReconnection() {
+        appState.clearPendingSignIn()
+        let opened = reconnectTarget != nil && reconnectTarget == appState.currentUserId
+        reconnectTarget = nil
+        if opened { dismiss() }
     }
 
     private var title: String {
         if case .code = flow.step { return "" }
-        return multiAccount ? loc.localized("accounts.title") : loc.localized("accounts.switch")
+        return loc.localized("accounts.title")
     }
 
-    // MARK: Pro / founder
+    // MARK: Profiles
 
     private var pickGrid: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
@@ -232,8 +277,9 @@ struct AccountSwitcherView: View {
                         AccountTile(
                             account: account,
                             isCurrent: account.userId == appState.currentUserId,
-                            isLocked: appState.accountKey(for: account).map(locks.hasLock) ?? false,
+                            isLocked: appState.keepsAccountSessions && (appState.accountKey(for: account).map(locks.hasLock) ?? false),
                             isExpired: appState.isExpired(account),
+                            needsSignIn: appState.needsSignIn(account),
                             avatarSize: 72
                         )
                         .contentShape(Rectangle())
@@ -279,41 +325,6 @@ struct AccountSwitcherView: View {
         }
     }
 
-    // MARK: Free
-
-    private var freeContent: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            HStack(spacing: CinemaSpacing.spacing3) {
-                UserAvatar(userId: appState.currentUserId, name: appState.currentUser?.name,
-                           primaryImageTag: appState.currentUser?.primaryImageTag, size: 56)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(appState.currentUser?.name ?? "")
-                        .font(CinemaFont.dynamicHeadline())
-                        .foregroundStyle(CinemaColor.onSurface)
-                    Text(appState.activeServerDisplayName)
-                        .font(CinemaFont.dynamicLabel(.medium))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                }
-            }
-            CinemaButton(title: loc.localized("accounts.switch"), style: .ghost) { showAddAccount = true }
-            Text(loc.localized("accounts.switch.freeHint"))
-                .font(CinemaFont.dynamicLabel(.small))
-                .foregroundStyle(CinemaColor.onSurfaceMuted)
-            // Story PRO-03: the locked feature says what it is, on a tap.
-            ProLockedFeatureRow(feature: .memorizedAccounts) { showUpsell = true }
-        }
-        .sheet(isPresented: $showUpsell) {
-            ProUpsellSheet(feature: .memorizedAccounts)
-                .environment(entitlements)
-                .environment(earlyAdopter)
-                .environment(proStore)
-                .environment(loc)
-                .environment(themeManager)
-                .environment(toasts)
-                .preferredColorScheme(themeManager.colorScheme)
-        }
-    }
-
     @ViewBuilder
     private func faceIDButton(account: SavedAccount, parental: Bool) -> some View {
         let available = parental
@@ -330,12 +341,15 @@ struct AccountSwitcherView: View {
         }
     }
 
-    private func signInSheet(prefilled: String?) -> some View {
-        UserSwitchSheet(prefilledUsername: prefilled)
+    private func signInSheet(prefilled: String?, showsProHint: Bool = false) -> some View {
+        UserSwitchSheet(prefilledUsername: prefilled, showsProReconnectHint: showsProHint)
             .environment(appState)
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
     }
 }
 

@@ -813,7 +813,7 @@ struct MultiAccountSignInTests {
 @Suite("Changement de serveur et codes")
 struct ServerSwitchLockTests {
 
-    private func makeApp(defaults: UserDefaults, locked: Set<String>, parental: Bool) -> (AppState, ServerEntry) {
+    private func makeApp(defaults: UserDefaults, locked: Set<String>, parental: Bool, multiAccount: Bool = true) -> (AppState, ServerEntry) {
         let api = MockAPIClient()
         api.stubbedValidity = .valid
         let a = ServerEntry(id: "S1", name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
@@ -828,16 +828,18 @@ struct ServerSwitchLockTests {
         app.sessionValidator = { _, _ in .valid }
         app.accountLockProvider = { locked.contains($0) }
         app.parentalLockProvider = { parental }
-        app.multiAccountProvider = { true }   // an account's own code is Pro
+        app.multiAccountProvider = { multiAccount }
         app.loadServersFromKeychain()
         app.currentUserId = "kid"
         app.isAuthenticated = true
         return (app, b)
     }
 
-    @Test("Un compte protégé sur un autre serveur exige son code")
-    func protectedAccountOnOtherServer() async {
-        let (app, b) = makeApp(defaults: .isolatedForTesting(), locked: ["S2|parent"], parental: false)
+    /// Free included: a server switch stays one-tap in free, so a code set on
+    /// the other server's account (during a Pro period) must still be asked.
+    @Test("Un compte protégé sur un autre serveur exige son code, Pro comme gratuit", arguments: [true, false])
+    func protectedAccountOnOtherServer(multiAccount: Bool) async {
+        let (app, b) = makeApp(defaults: .isolatedForTesting(), locked: ["S2|parent"], parental: false, multiAccount: multiAccount)
         #expect(await app.switchTo(b) == .locked)
         #expect(app.activeServerId == "S1")
         #expect(await app.switchTo(b, unlocked: true) == .commit)

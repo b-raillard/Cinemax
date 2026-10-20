@@ -15,9 +15,6 @@ struct EmptyStateView: View {
     var subtitle: String? = nil
     var actionTitle: String? = nil
     var onAction: (() -> Void)? = nil
-    /// Reports when the action button holds focus — for a host that must know
-    /// focus has landed on it (tvOS, `UserSwitchSheet`).
-    var actionFocused: FocusState<Bool>.Binding?
 
     var body: some View {
         VStack(spacing: CinemaSpacing.spacing3) {
@@ -49,7 +46,6 @@ struct EmptyStateView: View {
                 CinemaButton(title: actionTitle, style: .ghost) {
                     onAction()
                 }
-                .modifier(OptionalFocusBinding(binding: actionFocused))
                 .frame(width: actionWidth)
                 .padding(.top, CinemaSpacing.spacing2)
             }
@@ -66,19 +62,6 @@ struct EmptyStateView: View {
         #else
         200
         #endif
-    }
-}
-
-private struct OptionalFocusBinding: ViewModifier {
-    let binding: FocusState<Bool>.Binding?
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if let binding {
-            content.focused(binding)
-        } else {
-            content
-        }
     }
 }
 

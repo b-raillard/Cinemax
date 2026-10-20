@@ -1098,9 +1098,10 @@
 "accounts.manage" = "Konten verwalten";
 "accounts.current" = "Aktiv";
 "accounts.expired" = "Sitzung abgelaufen";
+"accounts.signedOut" = "Passwort erforderlich";
+"accounts.reconnect.title" = "Bei %@ anmelden";
+"pro.reconnect.hint" = "Mit Pro wechselst du Konten ohne Passwort";
 "accounts.codeRequired" = "Code erforderlich";
-"accounts.switch" = "Konto wechseln";
-"accounts.switch.freeHint" = "Bei jedem Wechsel wird das Passwort des gewählten Kontos abgefragt.";
 "accounts.pin.title" = "Code von %@";
 "accounts.pin.parental.title" = "Elterncode";
 "accounts.pin.parental.subtitle" = "Das Profil %@ ist weniger eingeschränkt als dieses.";

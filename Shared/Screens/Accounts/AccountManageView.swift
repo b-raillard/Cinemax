@@ -42,7 +42,7 @@ struct AccountManageView: View {
         let key = appState.accountKey(for: account) ?? ""
         let age = appState.ageCap(forAccountKey: key)
         var badges: [String] = []
-        if locks.hasLock(key) { badges.append(loc.localized("accounts.badge.code")) }
+        if appState.keepsAccountSessions, locks.hasLock(key) { badges.append(loc.localized("accounts.badge.code")) }
         if age > 0 { badges.append(loc.localized("accounts.badge.age", age)) }
         if appState.isExpired(account) { badges.append(loc.localized("accounts.expired")) }
         return HStack(spacing: CinemaSpacing.spacing3) {
@@ -92,7 +92,10 @@ struct AccountDetailView: View {
 
     private var key: String { appState.accountKey(for: account) ?? "" }
     private var isCurrent: Bool { account.userId == appState.currentUserId }
-    private var mustUnlock: Bool { !isCurrent && locks.hasLock(key) && !unlocked }
+    /// An account's own code is Pro: in free it neither guards this page nor
+    /// shows (spec 2026-10-20 — not erased either).
+    private var codesEnabled: Bool { appState.keepsAccountSessions }
+    private var mustUnlock: Bool { codesEnabled && !isCurrent && locks.hasLock(key) && !unlocked }
 
     var body: some View {
         // Pushed in the stack, hence OUTSIDE the list's gate: without its own,
@@ -189,6 +192,7 @@ struct AccountDetailView: View {
                     .foregroundStyle(CinemaColor.onSurface)
             }
 
+            if codesEnabled {
             sectionHeader(loc.localized("accounts.detail.access"))
             VStack(spacing: 0) {
                 toggleRow(
@@ -215,6 +219,7 @@ struct AccountDetailView: View {
                 }
             }
             .background(RoundedRectangle(cornerRadius: CinemaRadius.large).fill(CinemaColor.surfaceContainerHigh))
+            }
 
             sectionHeader(loc.localized("accounts.detail.own"))
             ageMenu

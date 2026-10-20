@@ -20,6 +20,11 @@ struct WhoIsWatchingScreen: View {
     @Environment(AccountLockStore.self) private var locks
     @Environment(ParentalLockController.self) private var parentalLock
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    // OPTIONAL: only the Pro hint of a free reconnection reads them, and the
+    // launch host does not inject them (« Qui regarde ? » at launch is Pro).
+    @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
+    @Environment(EarlyAdopterService.self) private var earlyAdopter: EarlyAdopterService?
+    @Environment(ProStore.self) private var proStore: ProStore?
 
     let mode: Mode
     /// Called once a profile is open (or kept): the host dismisses or goes to
@@ -32,6 +37,10 @@ struct WhoIsWatchingScreen: View {
     @State private var showQuickConnect = false
     @State private var quickConnect = LoginViewModel()
     @State private var showManage = false
+    /// The remembered account whose password step is open (« Se reconnecter »
+    /// → Mot de passe).
+    @State private var reconnectWithPassword: SavedAccount?
+    @State private var showUpsell = false
     @FocusState private var focusedTile: String?
 
     var body: some View {
@@ -39,7 +48,13 @@ struct WhoIsWatchingScreen: View {
             CinemaColor.surface.ignoresSafeArea()
             switch flow.step {
             case .pick:
-                if showAddChoice { addChoice } else { picker }
+                if let account = flow.reconnect {
+                    reconnectChoice(account)
+                } else if showAddChoice {
+                    addChoice
+                } else {
+                    picker
+                }
             case .code(let account, let parental):
                 VStack(spacing: CinemaSpacing.spacing5) {
                     AccountCodeStep(flow: flow, account: account, parental: parental, avatarSize: 140) {
@@ -59,12 +74,13 @@ struct WhoIsWatchingScreen: View {
                 .environment(loc)
                 .environment(toasts)
         }
-        .fullScreenCover(item: $flow.reconnect) { account in
-            UserSwitchSheet(prefilledUsername: account.username)
+        .fullScreenCover(item: $reconnectWithPassword, onDismiss: finishReconnection) { account in
+            UserSwitchSheet(prefilledUsername: account.username, showsProReconnectHint: !appState.keepsAccountSessions)
                 .environment(appState)
                 .environment(themeManager)
                 .environment(loc)
                 .environment(toasts)
+                .modifier(OptionalProEnvironment(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore))
         }
         .fullScreenCover(isPresented: $showQuickConnect) {
             QuickConnectSheet(viewModel: quickConnect)
@@ -77,6 +93,9 @@ struct WhoIsWatchingScreen: View {
                 quickConnect.startQuickConnect(using: appState, loc: loc)
             } else {
                 quickConnect.cancelQuickConnect()
+                // An abandoned reconnection leaves no marker behind; after a
+                // success it is a no-op (`AppState.clearPendingSignIn`).
+                appState.clearPendingSignIn()
             }
         }
         .onChange(of: quickConnect.showSuccess) { _, success in
@@ -84,7 +103,19 @@ struct WhoIsWatchingScreen: View {
             quickConnect.showSuccess = false
             showQuickConnect = false
             showAddChoice = false
+            flow.reconnect = nil
             onFinished()
+        }
+        .fullScreenCover(isPresented: $showUpsell) {
+            if let entitlements, let earlyAdopter, let proStore {
+                ProUpsellSheet(feature: .memorizedAccounts)
+                    .environment(entitlements)
+                    .environment(earlyAdopter)
+                    .environment(proStore)
+                    .environment(loc)
+                    .environment(themeManager)
+                    .environment(toasts)
+            }
         }
         .fullScreenCover(isPresented: $showManage) {
             TVAccountManageScreen()
@@ -122,8 +153,9 @@ struct WhoIsWatchingScreen: View {
                             AccountTile(
                                 account: account,
                                 isCurrent: account.userId == appState.currentUserId,
-                                isLocked: appState.accountKey(for: account).map(locks.hasLock) ?? false,
+                                isLocked: appState.keepsAccountSessions && (appState.accountKey(for: account).map(locks.hasLock) ?? false),
                                 isExpired: appState.isExpired(account),
+                                needsSignIn: appState.needsSignIn(account),
                                 avatarSize: 150,
                                 isFocused: focusedTile == account.userId
                             )
@@ -203,10 +235,74 @@ struct WhoIsWatchingScreen: View {
         }
     }
 
+    /// « Se reconnecter à … » (free tier, or an account without a session):
+    /// Quick Connect or the password, as for « Ajouter », and — in free — the
+    /// Pro hint under them, inside the same 620 pt column so it never reaches
+    /// further left than the buttons (tvOS's top-leading first focus).
+    private func reconnectChoice(_ account: SavedAccount) -> some View {
+        VStack(spacing: CinemaSpacing.spacing6) {
+            AccountTile(account: account, isCurrent: false, isLocked: false, isExpired: false, avatarSize: 150)
+                .frame(width: 220)
+            Text(loc.localized("accounts.reconnect.title", account.username))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+                .multilineTextAlignment(.center)
+            VStack(spacing: CinemaSpacing.spacing3) {
+                CinemaButton(title: loc.localized("accounts.add.quickConnect"), style: .accent, icon: "qrcode") {
+                    showQuickConnect = true
+                }
+                CinemaButton(title: loc.localized("accounts.add.password"), style: .ghost, icon: "keyboard") {
+                    reconnectWithPassword = account
+                }
+                CinemaButton(title: loc.localized("action.cancel"), style: .ghost) { cancelReconnection() }
+                if !appState.keepsAccountSessions, entitlements != nil {
+                    CinemaButton(title: loc.localized("pro.reconnect.hint"), style: .ghost, icon: "sparkles") {
+                        showUpsell = true
+                    }
+                }
+            }
+            .frame(width: 620)
+            .focusSection()
+        }
+    }
+
+    private func cancelReconnection() {
+        flow.reconnect = nil
+        appState.clearPendingSignIn()
+    }
+
+    /// The password step closed: a success opened the profile (the host
+    /// moves on), anything else leaves the choice up and drops the marker.
+    private func finishReconnection() {
+        appState.clearPendingSignIn()
+        if let account = flow.reconnect, account.userId == appState.currentUserId {
+            flow.reconnect = nil
+            onFinished()
+        }
+    }
+
     private func exit() {
         if case .code = flow.step { flow.back(); return }
+        if flow.reconnect != nil { cancelReconnection(); return }
         if showAddChoice { showAddChoice = false; return }
         onFinished()
+    }
+}
+
+/// Injects the Pro stores when the host provided them (the launch host does
+/// not): `UserSwitchSheet` reads them optionally for its Pro hint.
+private struct OptionalProEnvironment: ViewModifier {
+    let entitlements: EntitlementStore?
+    let earlyAdopter: EarlyAdopterService?
+    let proStore: ProStore?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let entitlements, let earlyAdopter, let proStore {
+            content.environment(entitlements).environment(earlyAdopter).environment(proStore)
+        } else {
+            content
+        }
     }
 }
 
@@ -296,13 +392,16 @@ struct TVAccountManageScreen: View {
             ForEach(appState.activeAccounts, id: \.userId) { account in
                 accountBlock(account)
             }
-            row(id: "askOnLaunch",
-                title: loc.localized("accounts.askOnLaunch"),
-                subtitle: loc.localized("accounts.askOnLaunch.subtitle"),
-                value: loc.localized(askOnLaunch ? "a11y.toggle.on" : "a11y.toggle.off")) {
-                askOnLaunch.toggle()
+            // « Qui regarde ? » at launch is Pro (it needs open sessions).
+            if appState.keepsAccountSessions {
+                row(id: "askOnLaunch",
+                    title: loc.localized("accounts.askOnLaunch"),
+                    subtitle: loc.localized("accounts.askOnLaunch.subtitle"),
+                    value: loc.localized(askOnLaunch ? "a11y.toggle.on" : "a11y.toggle.off")) {
+                    askOnLaunch.toggle()
+                }
+                .padding(.top, CinemaSpacing.spacing4)
             }
-            .padding(.top, CinemaSpacing.spacing4)
             Text(loc.localized("accounts.manage.footer"))
                 .font(CinemaFont.dynamicLabel(.small))
                 .foregroundStyle(CinemaColor.onSurfaceMuted)
@@ -312,7 +411,9 @@ struct TVAccountManageScreen: View {
     @ViewBuilder
     private func accountBlock(_ account: SavedAccount) -> some View {
         let key = appState.accountKey(for: account) ?? ""
-        let hasCode = locks.hasLock(key)
+        // An account's own code is Pro: in free it neither guards nor shows.
+        let codesEnabled = appState.keepsAccountSessions
+        let hasCode = codesEnabled && locks.hasLock(key)
         let age = appState.ageCap(forAccountKey: key)
         let option = ParentalAgeOption(rawValue: age) ?? .all
         // Same rule as iOS: another account's protected settings (its code,
@@ -331,13 +432,15 @@ struct TVAccountManageScreen: View {
                     begin(.unlock(account))
                 }
             } else {
-            row(id: "code-\(key)", title: loc.localized("accounts.detail.code"),
-                subtitle: loc.localized("accounts.detail.code.subtitle"),
-                value: loc.localized(hasCode ? "a11y.toggle.on" : "a11y.toggle.off")) {
-                if hasCode {
-                    locks.remove(key: key)
-                } else {
-                    begin(.choose(account))
+            if codesEnabled {
+                row(id: "code-\(key)", title: loc.localized("accounts.detail.code"),
+                    subtitle: loc.localized("accounts.detail.code.subtitle"),
+                    value: loc.localized(hasCode ? "a11y.toggle.on" : "a11y.toggle.off")) {
+                    if hasCode {
+                        locks.remove(key: key)
+                    } else {
+                        begin(.choose(account))
+                    }
                 }
             }
             row(id: "age-\(key)", title: loc.localized("accounts.detail.age"), subtitle: nil,

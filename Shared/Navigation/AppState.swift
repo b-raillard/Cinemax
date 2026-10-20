@@ -488,6 +488,9 @@ final class AppState {
     /// Makes `entry` the active server end to end: mirror, registry, API
     /// client, observable state, extensions, catalogue refresh.
     func applyActiveServer(_ entry: ServerEntry) async {
+        // Any transition ends a pending reconnection (`pendingSignInKey`): a
+        // marker must never outlive the switch that set it.
+        pendingSignInKey = nil
         // A usable session needs BOTH a token and a user id. A token-without-user
         // entry is reachable (a migrated install whose `access_token` survived but
         // whose `user_session` didn't) and applying it would persist a
@@ -932,8 +935,16 @@ final class AppState {
     /// current account (the age cap follows the account). Checked by both the
     /// account and the server switch, here rather than in a screen.
     func requiresCode(forAccountKey key: String) -> Bool {
-        // An account's own code is Pro: in free it is neither asked nor erased.
-        if keepsAccountSessions, accountLockProvider(key) { return true }
+        if accountLockProvider(key) { return true }
+        return requiresParentalCode(forAccountKey: key)
+    }
+
+    /// The parental half of `requiresCode`. A FREE account switch checks only
+    /// this one: it ends in a sign-in with the account's password anyway, and
+    /// an account's own code is Pro (spec 2026-10-20). Every other transition
+    /// — the server switch above all, which stays one-tap in free — keeps the
+    /// full `requiresCode`, so a code set during a Pro period is never skipped.
+    private func requiresParentalCode(forAccountKey key: String) -> Bool {
         guard parentalLockProvider() else { return false }
         return AccountSettingsStore.isLessRestrictive(
             AccountSettingsStore.ageCap(for: key, defaults: settingsDefaults),
@@ -1022,7 +1033,7 @@ final class AppState {
         guard let entry = activeEntryIfAny else { return .needsLogin }
         if userId == currentUserId, isAuthenticated { return .switched }
         let key = ServerRegistry.accountKey(serverId: entry.id, userId: userId)
-        if !unlocked, requiresCode(forAccountKey: key) {
+        if !unlocked, keepsAccountSessions ? requiresCode(forAccountKey: key) : requiresParentalCode(forAccountKey: key) {
             return .locked
         }
         guard isOnlineProvider() else { return .offline }
