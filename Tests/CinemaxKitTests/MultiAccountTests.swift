@@ -338,17 +338,65 @@ struct MultiAccountAppStateTests {
         #expect(await revoked.tokens.isEmpty)
     }
 
-    @Test("Ajout en gratuit : l'ancien compte est oublié et son jeton révoqué")
-    func addFree() async {
+    @Test("Connexion en gratuit : l'ancien compte reste listé, sans session, son jeton révoqué, ses réglages gardés")
+    func freeSignInKeepsOthersListed() async throws {
         let api = MockAPIClient()
         let revoked = RevokedTokens()
         let app = makeState(api: api, servers: [household(rememberBob: false)], multiAccount: false, revoked: revoked)
+        app.settingsDefaults = .isolatedForTesting()
 
         await app.addAccount(session: UserSession(userID: "C", username: "Carl", accessToken: "tokC", serverID: "srv"))
 
         #expect(app.currentUserId == "C")
-        #expect(app.activeAccounts.map(\.userId) == ["C"])
+        #expect(Set(app.activeAccounts.map(\.userId)) == ["A", "C"])
+        let alice = try #require(app.activeAccounts.first { $0.userId == "A" })
+        #expect(alice.hasSession == false)
         #expect(await eventually { await revoked.tokens == ["tokA"] })
+        #expect(AccountSettingsStore.load(for: "S1|A", defaults: app.settingsDefaults) != nil)
+    }
+
+    @Test("Connexion en gratuit : un jeton resté d'une période Pro est révoqué aussi")
+    func freeSignInDropsLeftoverTokens() async throws {
+        let api = MockAPIClient()
+        let revoked = RevokedTokens()
+        let app = makeState(api: api, servers: [household()], multiAccount: false, revoked: revoked)
+
+        await app.addAccount(session: UserSession(userID: "A", username: "Alice", accessToken: "tokA2", serverID: "srv"))
+
+        let bob = try #require(app.activeAccounts.first { $0.userId == "B" })
+        #expect(bob.hasSession == false)
+        #expect(await eventually { await revoked.tokens.contains("tokB") })
+        #expect(app.currentUserId == "A")
+    }
+
+    @Test("Bascule en gratuit : toujours une connexion, même avec un jeton valide, sans appel serveur")
+    func freeSwitchNeedsSignIn() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let app = makeState(api: api, servers: [household()], multiAccount: false)
+
+        #expect(await app.switchAccount(to: "B") == .needsLogin)
+        #expect(app.currentUserId == "A")
+        #expect(api.validateSessionCallCount == 0)
+    }
+
+    @Test("Bascule en gratuit hors ligne : hors ligne, pas de connexion vouée à l'échec")
+    func freeSwitchOffline() async {
+        let api = MockAPIClient()
+        let app = makeState(api: api, servers: [household()], multiAccount: false)
+        app.isOnlineProvider = { false }
+
+        #expect(await app.switchAccount(to: "B") == .offline)
+    }
+
+    @Test("Bascule en Pro vers un compte sans session : connexion, sans appel serveur")
+    func proSwitchSessionlessNeedsLogin() async {
+        let api = MockAPIClient()
+        let entry = ServerRegistry.droppingSession(userId: "B", in: household())
+        let app = makeState(api: api, servers: [entry])
+
+        #expect(await app.switchAccount(to: "B") == .needsLogin)
+        #expect(api.validateSessionCallCount == 0)
     }
 
     @Test("Retirer un compte non actif : révoqué et oublié, la session active intacte")
@@ -461,6 +509,7 @@ struct AccountSettingsTests {
         let app = AppState(apiClient: api, keychain: kc)
         app.settingsDefaults = defaults
         app.sessionValidator = { _, _ in .valid }
+        app.multiAccountProvider = { true }   // a one-tap switch is Pro
         app.loadServersFromKeychain()
         app.currentUserId = "A"
         app.isAuthenticated = true
@@ -536,8 +585,9 @@ struct AccountLockTests {
         #expect(enrolment.fired)
     }
 
-    @Test("AppState refuse de basculer vers un compte protégé sans code vérifié")
-    func switchRequiresUnlock() async {
+    @Test("AppState refuse de basculer vers un compte protégé sans code vérifié (Pro) ; en gratuit le code est ignoré",
+          arguments: [true, false])
+    func switchRequiresUnlock(multiAccount: Bool) async {
         let api = MockAPIClient()
         api.stubbedValidity = .valid
         let kc = MockKeychain()
@@ -550,14 +600,22 @@ struct AccountLockTests {
         app.settingsDefaults = .isolatedForTesting()
         app.sessionValidator = { _, _ in .valid }
         app.accountLockProvider = { $0 == "S1|B" }
+        app.multiAccountProvider = { multiAccount }
         app.loadServersFromKeychain()
         app.currentUserId = "A"
         app.isAuthenticated = true
 
-        #expect(await app.switchAccount(to: "B") == .locked)
-        #expect(app.currentUserId == "A")
-        #expect(await app.switchAccount(to: "B", unlocked: true) == .switched)
-        #expect(app.currentUserId == "B")
+        if multiAccount {
+            #expect(await app.switchAccount(to: "B") == .locked)
+            #expect(app.currentUserId == "A")
+            #expect(await app.switchAccount(to: "B", unlocked: true) == .switched)
+            #expect(app.currentUserId == "B")
+        } else {
+            // Free: the account's own code is a Pro feature — neither asked
+            // nor erased; the switch is a sign-in.
+            #expect(await app.switchAccount(to: "B") == .needsLogin)
+            #expect(app.currentUserId == "A")
+        }
     }
 }
 
@@ -567,7 +625,7 @@ struct AccountLockTests {
 @Suite("Contrôle parental et bascule de compte")
 struct AccountSwitchParentalTests {
 
-    private func makeApp(defaults: UserDefaults, parentalLock: Bool, bobAge: Int?) -> AppState {
+    private func makeApp(defaults: UserDefaults, parentalLock: Bool, bobAge: Int?, multiAccount: Bool = true) -> AppState {
         if let bobAge {
             AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: bobAge, accentColor: "green", darkMode: true),
                                       for: "S1|B", defaults: defaults)
@@ -584,10 +642,50 @@ struct AccountSwitchParentalTests {
         app.settingsDefaults = defaults
         app.sessionValidator = { _, _ in .valid }
         app.parentalLockProvider = { parentalLock }
+        app.multiAccountProvider = { multiAccount }
+        app.sessionRevoker = { _, _ in }
         app.loadServersFromKeychain()
         app.currentUserId = "A"
         app.isAuthenticated = true
         return app
+    }
+
+    @Test("Gratuit, code parental actif : le code parental d'abord, puis la connexion, sans brider la limite du compte")
+    func freeParentalGateThenSignIn() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 0, multiAccount: false)
+
+        #expect(await app.switchAccount(to: "B") == .locked)
+        #expect(await app.switchAccount(to: "B", unlocked: true) == .needsLogin)
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.currentUserId == "B")
+        #expect(app.ageCap(forAccountKey: "S1|B") == 0)
+    }
+
+    @Test("Gratuit : une connexion annulée ne laisse pas sauter la limite à un « Ajouter » ultérieur")
+    func cancelledSignInStillClampsLater() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 0, multiAccount: false)
+
+        #expect(await app.switchAccount(to: "B", unlocked: true) == .needsLogin)
+        app.clearPendingSignIn()
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.ageCap(forAccountKey: "S1|B") == 10)
+    }
+
+    @Test("« Ajouter » sans passer par une bascule : un compte moins bridé reste bridé")
+    func addAccountStillClampsWithoutGate() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 0, multiAccount: false)
+
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.ageCap(forAccountKey: "S1|B") == 10)
     }
 
     @Test("Code parental actif : un compte moins bridé exige un code")
@@ -730,6 +828,7 @@ struct ServerSwitchLockTests {
         app.sessionValidator = { _, _ in .valid }
         app.accountLockProvider = { locked.contains($0) }
         app.parentalLockProvider = { parental }
+        app.multiAccountProvider = { true }   // an account's own code is Pro
         app.loadServersFromKeychain()
         app.currentUserId = "kid"
         app.isAuthenticated = true

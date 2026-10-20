@@ -119,7 +119,9 @@ final class AccountSwitchFlow {
     }
 
     private static func hasOwnCode(_ account: SavedAccount, appState: AppState, locks: AccountLockStore) -> Bool {
-        appState.accountKey(for: account).map(locks.hasLock) ?? false
+        // Free: an account's own code is Pro, so a `.locked` there is always
+        // the parental one (`AppState.requiresCode`).
+        appState.keepsAccountSessions && (appState.accountKey(for: account).map(locks.hasLock) ?? false)
     }
 
     private func handle(
@@ -162,5 +164,11 @@ extension AppState {
 
     func isExpired(_ account: SavedAccount) -> Bool {
         accountKey(for: account).map(expiredAccountIds.contains) ?? false
+    }
+
+    /// Whether opening `account` will ask for a sign-in: always in free (other
+    /// than the current account), else when this device holds no valid session.
+    func needsSignIn(_ account: SavedAccount) -> Bool {
+        account.userId != currentUserId && (!keepsAccountSessions || !account.hasSession || isExpired(account))
     }
 }
