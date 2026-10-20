@@ -93,9 +93,12 @@ struct WhoIsWatchingScreen: View {
                 quickConnect.startQuickConnect(using: appState, loc: loc)
             } else {
                 quickConnect.cancelQuickConnect()
-                // An abandoned reconnection leaves no marker behind; after a
-                // success it is a no-op (`AppState.clearPendingSignIn`).
+                // An abandoned reconnection leaves no marker behind, and its
+                // choice closes: a retry goes through `switchAccount` again,
+                // which re-arms the marker after the parental gate. After a
+                // success both are no-ops (`AppState.clearPendingSignIn`).
                 appState.clearPendingSignIn()
+                flow.reconnect = nil
             }
         }
         .onChange(of: quickConnect.showSuccess) { _, success in
@@ -278,13 +281,13 @@ struct WhoIsWatchingScreen: View {
     }
 
     /// The password step closed: a success opened the profile (the host
-    /// moves on), anything else leaves the choice up and drops the marker.
+    /// moves on); anything else closes the choice too, since the marker is
+    /// gone and a retry must pass `switchAccount` (and its gate) again.
     private func finishReconnection() {
         appState.clearPendingSignIn()
-        if let account = flow.reconnect, account.userId == appState.currentUserId {
-            flow.reconnect = nil
-            onFinished()
-        }
+        let succeeded = flow.reconnect.map { $0.userId == appState.currentUserId } ?? false
+        flow.reconnect = nil
+        if succeeded { onFinished() }
     }
 
     private func exit() {

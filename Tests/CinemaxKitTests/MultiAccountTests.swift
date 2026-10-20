@@ -677,6 +677,27 @@ struct AccountSwitchParentalTests {
         #expect(app.ageCap(forAccountKey: "S1|B") == 10)
     }
 
+    @Test("Gratuit : une déconnexion ne laisse pas de marqueur qui ferait sauter la limite d'un « Ajouter » ultérieur")
+    func logoutLeavesNoPendingSignIn() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(18, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 18, multiAccount: false)
+
+        // The sign-out tries the next remembered account (free: a sign-in it
+        // never completes), then lands on server setup; the server is re-added
+        // and a child signs in from LoginScreen, then « Ajouter » brings Bob.
+        _ = await app.logout(reason: .userInitiated)
+        app.serverURL = ServerURLNormalizer.normalize("https://maison.local")
+        app.hasServer = true
+        app.upsertActiveEntry(session: UserSession(userID: "A", username: "Enfants", accessToken: "tokA2", serverID: "srv"))
+        app.currentUserId = "A"
+        app.isAuthenticated = true
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.ageCap(forAccountKey: "S1|B") == 10)
+    }
+
     @Test("« Ajouter » sans passer par une bascule : un compte moins bridé reste bridé")
     func addAccountStillClampsWithoutGate() async {
         let defaults = UserDefaults.isolatedForTesting()

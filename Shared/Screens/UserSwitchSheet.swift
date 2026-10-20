@@ -51,6 +51,11 @@ struct UserSwitchSheet: View {
             iOSChrome
             #endif
         }
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $showUpsell) { upsellContent }
+        #else
+        .sheet(isPresented: $showUpsell) { upsellContent }
+        #endif
         .task {
             if let prefilledUsername, !prefilledUsername.isEmpty {
                 manualUsername = prefilledUsername
@@ -186,15 +191,16 @@ struct UserSwitchSheet: View {
             textActionButton(loc.localized("pro.reconnect.hint"), color: themeManager.accent) {
                 showUpsell = true
             }
-            #if os(tvOS)
-            .fullScreenCover(isPresented: $showUpsell) {
-                upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
-            }
-            #else
-            .sheet(isPresented: $showUpsell) {
-                upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
-            }
-            #endif
+        }
+    }
+
+    /// The Pro sheet hangs off `body`, not off the hint: the hint leaves the
+    /// hierarchy with the manual step, and a presentation attached to a view
+    /// that disappears is torn down with it.
+    @ViewBuilder
+    private var upsellContent: some View {
+        if let entitlements, let earlyAdopter, let proStore {
+            upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
         }
     }
 

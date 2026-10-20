@@ -738,6 +738,8 @@ final class AppState {
     /// Does NOT write the legacy mirror — those call sites already saved it,
     /// which is exactly why they needed no other change.
     func upsertActiveEntry(session: UserSession) {
+        // A sign-in from the login screen never completes a gated switch.
+        pendingSignInKey = nil
         guard let url = serverURL else { return }
         let normalized = ServerURLNormalizer.normalize(url) ?? url
         let existing = ServerRegistry.contains(url: normalized, in: servers)
@@ -845,18 +847,24 @@ final class AppState {
         // server you came from" affordance toward a session that no longer exists.
         pendingRollbackServer = nil
         isAddingServer = false
+        // …and any pending reconnection (`pendingSignInKey`).
+        pendingSignInKey = nil
 
         switch reason {
         case .userInitiated:
             // Another account remembered on THIS server comes first: the
             // household member signing out of the living-room TV expects the
             // next profile, not another server.
-            if let active, let signedOutUserId,
+            // Only an account that still holds a session can take over — in
+            // free none does, and trying one would leave a pending sign-in
+            // marker behind (cleared below anyway).
+            if keepsAccountSessions, let active, let signedOutUserId,
                let stored = servers.first(where: { $0.id == active.id }),
-               let next = ServerRegistry.nextAccount(after: signedOutUserId, in: stored),
+               let next = ServerRegistry.nextAccount(after: signedOutUserId, in: stored), next.hasSession,
                await switchAccount(to: next.userId) == .switched {
                 return .switchedAccount(name: next.username)
             }
+            pendingSignInKey = nil
             if let active, let candidate = ServerRegistry.nextCandidate(after: active.id, in: servers) {
                 if await switchTo(candidate) == .commit {
                     return .switchedTo(candidate)
