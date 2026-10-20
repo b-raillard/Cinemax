@@ -159,6 +159,10 @@ struct WhoIsWatchingScreen: View {
                                 avatarSize: 150,
                                 isFocused: focusedTile == account.userId
                             )
+                            // A focused tvOS button flips its label to the light
+                            // trait: the name (onSurface) went dark on the dark
+                            // screen (design-system trait caveat, recette 2026-10-20).
+                            .environment(\.colorScheme, themeManager.darkModeEnabled ? .dark : .light)
                             .frame(width: 220)
                             .animation(motionEffects ? .easeInOut(duration: 0.2) : nil, value: focusedTile)
                         }
@@ -183,6 +187,8 @@ struct WhoIsWatchingScreen: View {
                                 .font(CinemaFont.dynamicLabel(.large))
                                 .foregroundStyle(CinemaColor.onSurface)
                         }
+                        // Same trait caveat as the account tiles above.
+                        .environment(\.colorScheme, themeManager.darkModeEnabled ? .dark : .light)
                         .frame(width: 220)
                     }
                     .buttonStyle(.plain)
