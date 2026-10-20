@@ -125,6 +125,66 @@ struct SavedAccountRegistryTests {
     func accountKey() {
         #expect(ServerRegistry.accountKey(serverId: "S1", userId: "A") == "S1|A")
     }
+
+    // MARK: Session closed, account kept (free switch, 2026-10-20)
+
+    @Test("droppingSession garde le compte inactif, sans jeton, et laisse l'actif intact")
+    func droppingSessionKeepsAccount() {
+        let base = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0, in: server())
+        let after = ServerRegistry.droppingSession(userId: "B", in: base)
+        let bob = ServerRegistry.accounts(of: after).first { $0.userId == "B" }
+        #expect(bob?.hasSession == false)
+        #expect(bob?.username == "Bob")
+        #expect(after.userId == "A")
+        #expect(after.accessToken == "tokA")
+    }
+
+    @Test("droppingSession du compte présent seulement dans le triplet le garde listé, sans jeton")
+    func droppingSessionOfTripleOnlyAccount() {
+        let after = ServerRegistry.droppingSession(userId: "A", in: server())
+        let accounts = ServerRegistry.accounts(of: after)
+        #expect(accounts.map(\.userId) == ["A"])
+        #expect(accounts.first?.hasSession == false)
+        #expect(after.accessToken == nil)
+        #expect(after.userId == nil)
+    }
+
+    @Test("droppingSession d'un compte inconnu ne change rien")
+    func droppingSessionOfUnknownIsNoOp() {
+        let base = server()
+        #expect(ServerRegistry.droppingSession(userId: "Z", in: base) == base)
+    }
+
+    @Test("activating d'un compte sans session rend un triplet sans jeton (AppState refuse)")
+    func activatingSessionlessAccount() throws {
+        let base = ServerRegistry.droppingSession(
+            userId: "B",
+            in: ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0, in: server())
+        )
+        let switched = try #require(ServerRegistry.activating(userId: "B", in: base))
+        #expect(switched.accessToken == "")
+    }
+
+    @Test("upsert d'une connexion de A ne redonne pas de jeton à B déconnecté")
+    func upsertKeepsSessionlessAccount() {
+        let stored = ServerRegistry.droppingSession(
+            userId: "B",
+            in: ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0, in: server())
+        )
+        let incoming = ServerEntry(name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
+                                   accessToken: "tokA2", userId: "A", username: "Alice", lastUsedAt: t0.addingTimeInterval(30))
+        let merged = ServerRegistry.upsert(incoming, into: [stored])
+        let bob = ServerRegistry.accounts(of: merged[0]).first { $0.userId == "B" }
+        #expect(bob?.hasSession == false)
+    }
+
+    @Test("nextAccount préfère un compte qui a encore une session")
+    func nextAccountPrefersSession() {
+        var entry = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0.addingTimeInterval(10), in: server())
+        entry = ServerRegistry.remembering(userId: "C", username: "Carl", accessToken: "tokC", at: t0.addingTimeInterval(20), in: entry)
+        entry = ServerRegistry.droppingSession(userId: "C", in: entry)
+        #expect(ServerRegistry.nextAccount(after: "A", in: entry)?.userId == "B")
+    }
 }
 
 // MARK: - Revocation of ONE token

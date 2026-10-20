@@ -229,10 +229,32 @@ public enum ServerRegistry {
         return updated
     }
 
+    /// `entry` with the session of `userId` closed and the account KEPT, its
+    /// token emptied — the free switch (2026-10-20): the account stays in the
+    /// list and asks for a sign-in next time. `forgetting` stays the way out
+    /// for good (a sign-out, a removal). Dropping the ACTIVE account also
+    /// empties the triple, which `accounts(of:)` would otherwise fold back in
+    /// with its token.
+    public static func droppingSession(userId: String, in entry: ServerEntry) -> ServerEntry {
+        var list = accounts(of: entry)
+        guard let index = list.firstIndex(where: { $0.userId == userId }) else { return entry }
+        list[index].accessToken = ""
+        var updated = entry
+        updated.savedAccounts = list
+        if entry.userId == userId {
+            updated.accessToken = nil
+            updated.userId = nil
+            updated.username = nil
+        }
+        return updated
+    }
+
     /// The account to fall back to after `userId` leaves: the most recently
-    /// used OTHER account of the same server.
+    /// used OTHER account of the same server, one that still has a session
+    /// first.
     public static func nextAccount(after userId: String, in entry: ServerEntry) -> SavedAccount? {
-        accounts(of: entry).first { $0.userId != userId }
+        let others = accounts(of: entry).filter { $0.userId != userId }
+        return others.first(where: \.hasSession) ?? others.first
     }
 
     /// Dedup probe for the add flow: is this URL (in any equivalent spelling)
