@@ -13,7 +13,14 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     /// queued behind that phantom pass would wait forever (see `acquireGuard`).
     public private(set) var isLoadingMore = false
     public private(set) var hasLoadedAll = false
-    private let pageSize: Int
+    /// The page size every `loadMore` fetch asks for. Callers pass it as their
+    /// `limit` — a page shorter than this is how a page fetched WITHOUT the
+    /// server-side count tells the loader it reached the end.
+    public let pageSize: Int
+
+    /// How many cards before the end of `items` the next page is requested —
+    /// see `shouldLoadMore(onAppearOf:)`.
+    public let prefetchDistance: Int
 
     /// Extracts a stable identity for de-duplication, when the element type has
     /// one. `nil` (the default) keeps the historical append-everything
@@ -50,9 +57,30 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
     @ObservationIgnored
     private var waiters: [(kind: PendingCall, continuation: CheckedContinuation<Bool, Never>)] = []
 
-    public init(pageSize: Int = 40, identity: (@Sendable (T) -> String?)? = nil) {
+    public init(pageSize: Int = 40, prefetchDistance: Int? = nil, identity: (@Sendable (T) -> String?)? = nil) {
         self.pageSize = pageSize
+        // At least 1, or `items.suffix(0)` would never let a page start.
+        self.prefetchDistance = max(1, prefetchDistance ?? pageSize / 2)
         self.identity = identity
+    }
+
+    /// Whether the card `id` that just appeared sits within `prefetchDistance`
+    /// of the end of what is loaded, i.e. whether the next page should leave
+    /// NOW. Needs the `identity` extractor; without one it is always false.
+    ///
+    /// The grids used to fire only when the very LAST card appeared — by
+    /// definition the moment the user has run out of content — so every page
+    /// boundary was a full round trip spent staring at the footer spinner.
+    /// Measured by replaying the grid's own page query against a 10.11 server
+    /// (800 films, 40 per page): 161 ms of stall per boundary on the LAN,
+    /// 207 ms at 60 ms RTT, 19 boundaries to reach the end. Half a page of
+    /// lead is ~7 rows on a 3-column iPhone grid and ~3 on tvOS: at a brisk
+    /// 8 rows/s flick that is ~0.8 s, several times what a page costs, so the
+    /// next page is normally in before the user gets there. O(prefetchDistance)
+    /// per appearance — it only looks at the tail.
+    public func shouldLoadMore(onAppearOf id: String?) -> Bool {
+        guard !isLoadingMore, !hasLoadedAll, let id, let identity else { return false }
+        return items.suffix(prefetchDistance).contains { identity($0) == id }
     }
 
     /// Drops incoming elements already present in `existing`.
@@ -145,13 +173,28 @@ public final class PaginatedLoader<T: Sendable>: Sendable {
             } else {
                 items.append(contentsOf: fresh)
             }
+            // Only the FIRST page (`startIndex == 0`) is fetched with the
+            // server-side count: `totalRecordCount` is a second COUNT query over
+            // the whole match, which made every 40-card page of a 10.11 server
+            // cost ~146 ms instead of ~84 ms — for a number the first page
+            // already gave us. An UNCOUNTED page's `total` is meaningless:
+            // Jellyfin then reports the page's own size (measured on 10.11:
+            // 40, not 0 — `QueryResult` falls back to `items.Count`), so it is
+            // decided from the REQUEST, never read from the response, and such
+            // a page keeps the first page's total.
+            let isCounted = loadedCount == 0
             // Count what the SERVER sent, not what we retained — see `loadedCount`.
             loadedCount += result.items.count
-            totalCount = result.total
+            if isCounted { totalCount = result.total }
             // An empty page is the end of the list whatever the reported total
             // says: without this, a server over-reporting `totalRecordCount`
-            // leaves the last card asking for more for ever.
-            hasLoadedAll = loadedCount >= result.total || result.items.isEmpty
+            // leaves the last card asking for more for ever. An uncounted page
+            // also ends the list when it comes back short — the only end
+            // signal it carries besides the first page's total.
+            hasLoadedAll = result.items.isEmpty
+                || (isCounted
+                    ? loadedCount >= result.total
+                    : result.items.count < pageSize || loadedCount >= totalCount)
             handOverOrRelease()
         } catch {
             // Caller can observe isLoadingMore returning to false with no new items

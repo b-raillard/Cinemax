@@ -191,10 +191,12 @@ extension JellyfinAPIClient {
         /// `hasLoadedAll` from it) and `MediaLibraryViewModel` (whose header
         /// prints « 503 films ») need it, so they keep the default.
         ///
-        /// Pass `false` and `totalCount` comes back `0`: that is the server
-        /// saying "didn't count", never "no results". Never pass `false` from
-        /// a caller that paginates — a `hasLoadedAll` derived from 0 would end
-        /// pagination on the first page.
+        /// Pass `false` and `totalCount` is meaningless: Jellyfin then reports
+        /// the size of the page it returned (measured on 10.11 — 40 for a
+        /// 40-item page, `QueryResult` falling back to `items.Count`), never
+        /// the size of the match. A paginating caller passes `false` only
+        /// AFTER its first page, through `PaginatedLoader`, which decides
+        /// "counted" from the request and ignores such a total.
         enableTotalRecordCount: Bool = true,
         /// `.card` drops `overview` and `genres` — see `ItemFieldSet`.
         fieldSet: ItemFieldSet = .detail
