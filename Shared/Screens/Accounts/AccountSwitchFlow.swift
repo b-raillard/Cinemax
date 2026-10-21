@@ -26,6 +26,14 @@ final class AccountSwitchFlow {
     /// sign-in (`UserSwitchSheet(prefilledUsername:)`).
     var reconnect: SavedAccount?
 
+    /// A reconnection (password step, Quick Connect) just closed: the screen
+    /// closes too when the active account changed — to the account it was
+    /// opened for, or to another one signed in from the same step (« Annuler »
+    /// on the prefilled password leads to the server's user list).
+    nonisolated static func reconnectionOpened(before: String?, after: String?) -> Bool {
+        after != nil && after != before
+    }
+
     /// Tries to open `account`. `true` = switched (the caller dismisses).
     func select(
         _ account: SavedAccount,

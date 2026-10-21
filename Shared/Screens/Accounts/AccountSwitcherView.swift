@@ -14,6 +14,8 @@ struct AccountTile: View {
     /// Opening it asks for a sign-in (free tier, or no session on this device)
     /// — said quietly, unlike a real expiry (`AppState.needsSignIn`).
     var needsSignIn: Bool = false
+    /// `AppState.keepsAccountSessions`: an expiry is only shown in Pro.
+    var keepsSessions: Bool = true
     let avatarSize: CGFloat
     /// tvOS: the tile has focus — a round portrait draws its own circular
     /// accent ring and grows (card focus level, `CinemaTVFocus`).
@@ -57,18 +59,44 @@ struct AccountTile: View {
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
+    private var resolved: AccountTileStatus? {
+        AccountTileStatus.resolve(isCurrent: isCurrent, isExpired: isExpired, needsSignIn: needsSignIn,
+                                  isLocked: isLocked, keepsSessions: keepsSessions)
+    }
+
     private var status: String? {
-        if isCurrent { return loc.localized("accounts.current") }
-        if isExpired { return loc.localized("accounts.expired") }
-        if needsSignIn { return loc.localized("accounts.signedOut") }
-        if isLocked { return loc.localized("accounts.codeRequired") }
-        return nil
+        switch resolved {
+        case .current: loc.localized("accounts.current")
+        case .expired: loc.localized("accounts.expired")
+        case .codeRequired: loc.localized("accounts.codeRequired")
+        case .signedOut: loc.localized("accounts.signedOut")
+        case nil: nil
+        }
     }
 
     private var statusColor: Color {
-        if isCurrent { return themeManager.accent }
-        if isExpired { return CinemaColor.error }
-        return CinemaColor.onSurfaceMuted
+        switch resolved {
+        case .current: themeManager.accent
+        case .expired: CinemaColor.error
+        default: CinemaColor.onSurfaceMuted
+        }
+    }
+}
+
+/// What a profile tile says. Whatever is asked FIRST wins: the code comes
+/// before the sign-in (`switchAccount` checks it first). A red expiry is Pro
+/// information — in free every switch signs in anyway, so a flag left over
+/// from a Pro period reads as the quiet « Mot de passe requis ».
+enum AccountTileStatus: Equatable {
+    case current, expired, codeRequired, signedOut
+
+    static func resolve(isCurrent: Bool, isExpired: Bool, needsSignIn: Bool,
+                        isLocked: Bool, keepsSessions: Bool) -> Self? {
+        if isCurrent { return .current }
+        if isExpired, keepsSessions { return .expired }
+        if isLocked { return .codeRequired }
+        if needsSignIn || isExpired { return .signedOut }
+        return nil
     }
 }
 
@@ -142,7 +170,8 @@ struct AccountSwitcherView: View {
     /// The remembered account whose password step is open (« Se reconnecter »
     /// → Mot de passe).
     @State private var reconnectWithPassword: SavedAccount?
-    @State private var reconnectTarget: String?
+    /// The active account when the password step opened (`finishReconnection`).
+    @State private var reconnectFrom: String?
 
     var body: some View {
         NavigationStack {
@@ -185,7 +214,7 @@ struct AccountSwitcherView: View {
             Button(loc.localized("accounts.add.password")) { showAddAccount = true }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
-            Text(loc.localized("accounts.add.subtitle"))
+            Text(loc.localized("accounts.add.subtitle.phone"))
         }
         .sheet(isPresented: $showQuickConnect) {
             QuickConnectSheet(viewModel: quickConnect)
@@ -219,7 +248,7 @@ struct AccountSwitcherView: View {
         ) { account in
             Button(loc.localized("accounts.add.quickConnect")) { showQuickConnect = true }
             Button(loc.localized("accounts.add.password")) {
-                reconnectTarget = account.userId
+                reconnectFrom = appState.currentUserId
                 reconnectWithPassword = account
             }
             Button(loc.localized("action.cancel"), role: .cancel) {}
@@ -245,12 +274,13 @@ struct AccountSwitcherView: View {
         )
     }
 
-    /// The password step closed: a success opened the profile (the switcher
-    /// closes too); anything else just drops the pending sign-in marker.
+    /// The password step closed: a sign-in — to that account or to another one
+    /// reached from the same step — closes the switcher too; anything else just
+    /// drops the pending sign-in marker.
     private func finishReconnection() {
         appState.clearPendingSignIn()
-        let opened = reconnectTarget != nil && reconnectTarget == appState.currentUserId
-        reconnectTarget = nil
+        let opened = AccountSwitchFlow.reconnectionOpened(before: reconnectFrom, after: appState.currentUserId)
+        reconnectFrom = nil
         if opened { dismiss() }
     }
 
@@ -280,6 +310,7 @@ struct AccountSwitcherView: View {
                             isLocked: appState.accountKey(for: account).map(locks.hasLock) ?? false,
                             isExpired: appState.isExpired(account),
                             needsSignIn: appState.needsSignIn(account),
+                            keepsSessions: appState.keepsAccountSessions,
                             avatarSize: 72
                         )
                         .contentShape(Rectangle())

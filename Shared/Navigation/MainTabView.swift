@@ -297,15 +297,16 @@ struct MainTabView: View {
                 }
             }
         }
-        // Multi-account: the account avatar left of the bar (TV-10). Shown
-        // while focus is in the bar, so a left press from the first tab
-        // reaches it, and gone with the bar once focus moves into a page.
+        // Multi-account: the account avatar left of the bar (TV-10). Always
+        // shown (recette 2026-10-21), but focusable only while focus is in the
+        // bar: a left press from the first tab reaches it, and a page never
+        // sees it — a focusable control at the top-leading corner would take
+        // every page's initial focus (the TV-06 / TV-09 trap).
         .overlay(alignment: .topLeading) {
-            if showsTVAccountAvatar && topBarHasFocus {
-                TVAccountAvatarButton { showWhoIsWatching = true }
+            if showsTVAccountAvatar {
+                TVAccountAvatarButton(isReachable: topBarHasFocus) { showWhoIsWatching = true }
                     .padding(.leading, CinemaTVLayout.pagePadding)
                     .padding(.top, CinemaTVLayout.accountAvatarTop)
-                    .transition(.opacity)
                     .ignoresSafeArea()
             }
         }

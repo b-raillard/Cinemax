@@ -1093,8 +1093,9 @@
 "accounts.add" = "Add";
 "accounts.add.title" = "Add a profile";
 "accounts.add.subtitle" = "Quick Connect avoids typing a password with the remote: approve the code from a device where the account is signed in.";
+"accounts.add.subtitle.phone" = "Quick Connect saves typing a password: approve the code from a device where the account is already signed in.";
 "accounts.add.quickConnect" = "Quick Connect";
-"accounts.add.password" = "Username and password";
+"accounts.add.password" = "Password";
 "accounts.manage" = "Manage accounts";
 "accounts.current" = "Current";
 "accounts.expired" = "Session expired";

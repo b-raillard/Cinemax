@@ -40,6 +40,8 @@ struct WhoIsWatchingScreen: View {
     /// The remembered account whose password step is open (« Se reconnecter »
     /// → Mot de passe).
     @State private var reconnectWithPassword: SavedAccount?
+    /// The active account when the password step opened (`finishReconnection`).
+    @State private var reconnectFrom: String?
     @State private var showUpsell = false
     @FocusState private var focusedTile: String?
 
@@ -159,6 +161,7 @@ struct WhoIsWatchingScreen: View {
                                 isLocked: appState.accountKey(for: account).map(locks.hasLock) ?? false,
                                 isExpired: appState.isExpired(account),
                                 needsSignIn: appState.needsSignIn(account),
+                                keepsSessions: appState.keepsAccountSessions,
                                 avatarSize: 150,
                                 isFocused: focusedTile == account.userId
                             )
@@ -261,6 +264,7 @@ struct WhoIsWatchingScreen: View {
                     showQuickConnect = true
                 }
                 CinemaButton(title: loc.localized("accounts.add.password"), style: .ghost, icon: "keyboard") {
+                    reconnectFrom = appState.currentUserId
                     reconnectWithPassword = account
                 }
                 CinemaButton(title: loc.localized("action.cancel"), style: .ghost) { cancelReconnection() }
@@ -285,7 +289,8 @@ struct WhoIsWatchingScreen: View {
     /// gone and a retry must pass `switchAccount` (and its gate) again.
     private func finishReconnection() {
         appState.clearPendingSignIn()
-        let succeeded = flow.reconnect.map { $0.userId == appState.currentUserId } ?? false
+        let succeeded = AccountSwitchFlow.reconnectionOpened(before: reconnectFrom, after: appState.currentUserId)
+        reconnectFrom = nil
         flow.reconnect = nil
         if succeeded { onFinished() }
     }
@@ -576,9 +581,9 @@ struct TVAccountManageScreen: View {
 /// leading « Profil » tab, and six tabs overflowed the native bar: the first
 /// and last were cut. `UITabBar.leadingAccessoryView` cannot host it (its
 /// subviews never take input, per the SDK header), so `MainTabView` overlays
-/// it while focus is in the bar, and a left press from the first tab reaches
-/// it. The host owns the presentation: this button disappears as soon as
-/// focus leaves the bar, which would tear down a cover attached here.
+/// it, always visible but focusable only while focus is in the bar
+/// (`isReachable`): a left press from the first tab reaches it. The host owns
+/// the presentation.
 struct TVAccountAvatarButton: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -586,6 +591,8 @@ struct TVAccountAvatarButton: View {
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @FocusState private var isFocused: Bool
 
+    /// Focus is in the tab bar: only then can the avatar take focus.
+    var isReachable: Bool = true
     let action: () -> Void
 
     var body: some View {
@@ -604,6 +611,8 @@ struct TVAccountAvatarButton: View {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($isFocused)
+        // Out of the focus engine while focus is in a page.
+        .disabled(!isReachable)
         .accessibilityLabel(loc.localized("accessibility.accounts.switcher"))
         .accessibilityValue(Text(appState.currentUser?.name ?? ""))
     }

@@ -209,7 +209,9 @@ struct AccountDetailView: View {
                         codeStage = .choose
                     }
                 }
-                if locks.hasLock(key), AccountLockStore.biometricsAvailable {
+                // Free shows the code row only to remove a code set while Pro:
+                // no Face ID enrolment there (spec 2026-10-20).
+                if appState.keepsAccountSessions, locks.hasLock(key), AccountLockStore.biometricsAvailable {
                     toggleRow(
                         title: loc.localized("accounts.detail.faceID"),
                         subtitle: loc.localized("accounts.detail.faceID.subtitle"),

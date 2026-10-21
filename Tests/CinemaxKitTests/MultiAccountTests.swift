@@ -585,7 +585,7 @@ struct AccountLockTests {
         #expect(enrolment.fired)
     }
 
-    @Test("AppState refuse de basculer vers un compte protégé sans code vérifié (Pro) ; en gratuit le code est ignoré",
+    @Test("AppState refuse de basculer vers un compte protégé sans code vérifié, en Pro comme en gratuit (où la connexion suit le code)",
           arguments: [true, false])
     func switchRequiresUnlock(multiAccount: Bool) async {
         let api = MockAPIClient()
@@ -876,5 +876,41 @@ struct ServerSwitchLockTests {
         let (app, b) = makeApp(defaults: defaults, locked: [], parental: true)
         #expect(await app.switchTo(b) == .locked)
         #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+    }
+}
+
+@Suite("Mention d'une tuile de compte")
+struct AccountTileStatusTests {
+
+    @Test("Ordre : en cours, puis expirée (Pro), puis code requis (demandé en premier), puis mot de passe requis")
+    func precedence() {
+        #expect(AccountTileStatus.resolve(isCurrent: true, isExpired: true, needsSignIn: true, isLocked: true, keepsSessions: true) == .current)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: true, needsSignIn: true, isLocked: true, keepsSessions: true) == .expired)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: true, isLocked: true, keepsSessions: true) == .codeRequired)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: true, isLocked: false, keepsSessions: true) == .signedOut)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: false, isLocked: true, keepsSessions: true) == .codeRequired)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: false, isLocked: false, keepsSessions: true) == nil)
+    }
+
+    @Test("Gratuit : une expiration restée d'une période Pro n'est jamais affichée en rouge")
+    func freeNeverShowsExpired() {
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: true, needsSignIn: true, isLocked: false, keepsSessions: false) == .signedOut)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: true, needsSignIn: true, isLocked: true, keepsSessions: false) == .codeRequired)
+    }
+}
+
+@Suite("Reconnexion : quand fermer le sélecteur")
+struct ReconnectionOutcomeTests {
+
+    @Test("Le sélecteur se ferme dès que le compte actif a changé, même pour un autre que le compte visé")
+    func closesOnAnySwitch() {
+        #expect(AccountSwitchFlow.reconnectionOpened(before: "A", after: "B"))
+        #expect(AccountSwitchFlow.reconnectionOpened(before: "A", after: "C"))
+    }
+
+    @Test("Rien n'a changé (annulé, échec) : le sélecteur reste ouvert")
+    func staysOpenWithoutSwitch() {
+        #expect(!AccountSwitchFlow.reconnectionOpened(before: "A", after: "A"))
+        #expect(!AccountSwitchFlow.reconnectionOpened(before: "A", after: nil))
     }
 }
