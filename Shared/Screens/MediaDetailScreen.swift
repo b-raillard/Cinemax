@@ -41,13 +41,6 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
-    #if os(iOS)
-    /// The card the iOS episode carousel is scrolled to. Seeded once, after the
-    /// first load, with the episode the fiche was opened for (a `cinemax://`
-    /// link, a search result…) so S03E05 is on screen rather than S03E01; the
-    /// carousel writes it back as the user scrolls.
-    @State private var episodeScrollTarget: String?
-    #endif
     /// Drives the "mark whole season watched" confirmation dialog (F10).
     @State private var showMarkSeasonWatchedConfirm = false
     @Environment(NetworkMonitor.self) private var network
@@ -211,12 +204,6 @@ struct MediaDetailScreen: View {
         #endif
         .task {
             await viewModel.loadInitial(using: appState, loc: loc, cardActions: cardActions)
-            #if os(iOS)
-            if episodeScrollTarget == nil, let requestedId = viewModel.requestedEpisode?.id,
-               viewModel.episodes.contains(where: { $0.id == requestedId }) {
-                episodeScrollTarget = requestedId
-            }
-            #endif
             // After the load, so the series → next-up resolution and the resume
             // position the request needs are already in place. Runs on BOTH
             // platforms: App Intents are iOS-only, but an inbound remote-control
@@ -1773,7 +1760,6 @@ struct MediaDetailScreen: View {
                 .padding(.horizontal, contentPadding)
             }
             .scrollTargetBehavior(.viewAligned)
-            .scrollPosition(id: $episodeScrollTarget)
             #endif
         }
         .confirmationDialog(
