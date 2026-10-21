@@ -26,11 +26,15 @@ final class MediaDetailViewModel {
     /// The episode this fiche was opened FOR, when it was reached by an
     /// episode's id and resolved up to its series — kept as fetched.
     ///
-    /// `episodes` only holds the first season (plus the next-up one), so a
-    /// request naming an episode of any other season — « Lire sur… », a Watch
+    /// `episodes` used to hold only the first season (plus the next-up one), so
+    /// a request naming an episode of any other season — « Lire sur… », a Watch
     /// Together queue, a Siri shortcut — was looked up there, not found, and
     /// fell through to the series' next-up: the wrong episode played, and in a
-    /// group this participant drifted out of step with everybody else.
+    /// group this participant drifted out of step with everybody else. The
+    /// fiche now opens on the episode's own season (`initialSeasonId`), but the
+    /// playback request still reads this field: the user may have switched
+    /// season before it is consumed, and a season missing from the series'
+    /// list falls back to the first one.
     private(set) var requestedEpisode: BaseItemDto?
     /// The side task filling `similarItems` (see `loadSimilar`). Internal so a
     /// test can await it instead of racing it.
@@ -202,7 +206,8 @@ final class MediaDetailViewModel {
                let seriesId = loadedItem.seriesID {
                 async let seriesFetch = appState.apiClient.getItem(userId: userId, itemId: seriesId)
                 async let seriesDetailFetch: Void = loadSeriesDetail(
-                    seriesId: seriesId, apiClient: appState.apiClient, userId: userId, generation: generation
+                    seriesId: seriesId, apiClient: appState.apiClient, userId: userId, generation: generation,
+                    preferredSeasonId: effectiveType == .episode ? loadedItem.seasonID : loadedItem.id
                 )
                 let seriesItem = try await seriesFetch
                 try await seriesDetailFetch
@@ -618,11 +623,15 @@ final class MediaDetailViewModel {
     /// have no dependencies on each other. Episode lists depend on the resolved
     /// season IDs, so a second (parallel) stage fetches the current season's and
     /// the next-up season's episodes together when they differ.
+    ///
+    /// `preferredSeasonId` is the season to open on (see `initialSeasonId`) —
+    /// `nil` for a series opened as itself, which lands on its first season.
     private func loadSeriesDetail(
         seriesId: String,
         apiClient: any APIClientProtocol,
         userId: String,
-        generation: Int
+        generation: Int,
+        preferredSeasonId: String? = nil
     ) async throws {
         async let seasonsTask = apiClient.getSeasons(seriesId: seriesId, userId: userId)
         async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
@@ -633,7 +642,10 @@ final class MediaDetailViewModel {
         seasons = loadedSeasons
         nextUpEpisode = loadedNextUp
 
-        guard let seasonId = loadedSeasons.first?.id else {
+        // Not `loadedSeasons.first` blindly: a fiche reached by an episode's id
+        // (`cinemax://item/…` from the widget / Top Shelf, a search result, a
+        // favorite) opened on season 1 whatever season the episode was in.
+        guard let seasonId = Self.initialSeasonId(in: loadedSeasons, preferring: preferredSeasonId) else {
             rebuildNavigationMaps()
             return
         }
@@ -655,6 +667,18 @@ final class MediaDetailViewModel {
         }
 
         rebuildNavigationMaps()
+    }
+
+    /// The season a fiche opens on: `preferred` — the season of the episode
+    /// (or the season itself) the fiche was opened for — when the series lists
+    /// it, else the first one. A preferred season missing from the list (a
+    /// hidden specials season, a stale id) falls back rather than showing an
+    /// empty episode list.
+    static func initialSeasonId(in seasons: [BaseItemDto], preferring preferred: String?) -> String? {
+        if let preferred, seasons.contains(where: { $0.id == preferred }) {
+            return preferred
+        }
+        return seasons.first?.id
     }
 
     /// Whether a rating clears the Privacy & Security cap. Unrated passes —

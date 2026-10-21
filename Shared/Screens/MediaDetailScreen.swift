@@ -41,6 +41,13 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    #if os(iOS)
+    /// The card the iOS episode carousel is scrolled to. Seeded once, after the
+    /// first load, with the episode the fiche was opened for (a `cinemax://`
+    /// link, a search result…) so S03E05 is on screen rather than S03E01; the
+    /// carousel writes it back as the user scrolls.
+    @State private var episodeScrollTarget: String?
+    #endif
     /// Drives the "mark whole season watched" confirmation dialog (F10).
     @State private var showMarkSeasonWatchedConfirm = false
     @Environment(NetworkMonitor.self) private var network
@@ -204,6 +211,12 @@ struct MediaDetailScreen: View {
         #endif
         .task {
             await viewModel.loadInitial(using: appState, loc: loc, cardActions: cardActions)
+            #if os(iOS)
+            if episodeScrollTarget == nil, let requestedId = viewModel.requestedEpisode?.id,
+               viewModel.episodes.contains(where: { $0.id == requestedId }) {
+                episodeScrollTarget = requestedId
+            }
+            #endif
             // After the load, so the series → next-up resolution and the resume
             // position the request needs are already in place. Runs on BOTH
             // platforms: App Intents are iOS-only, but an inbound remote-control
@@ -1128,7 +1141,8 @@ struct MediaDetailScreen: View {
         // screen itself shows the restricted state). An episode is checked on
         // its own rating too: the series' may be absent or milder.
         // The episode as fetched when the fiche was opened for it — not looked
-        // up in `episodes`, which holds only the first and next-up seasons.
+        // up in `episodes`, which holds only the season ON SCREEN (the user
+        // may have switched) and the next-up one.
         let requestedEpisode = viewModel.requestedEpisode
             ?? viewModel.episodes.first(where: { $0.id == viewModel.itemId })
         guard !viewModel.isAgeRestricted,
@@ -1759,6 +1773,7 @@ struct MediaDetailScreen: View {
                 .padding(.horizontal, contentPadding)
             }
             .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $episodeScrollTarget)
             #endif
         }
         .confirmationDialog(
