@@ -600,10 +600,15 @@ struct TVAccountAvatarButton: View {
             UserAvatar(userId: appState.currentUserId, name: appState.currentUser?.name,
                        primaryImageTag: appState.currentUser?.primaryImageTag, size: CinemaTVLayout.accountAvatarSize)
                 .overlay {
+                    // Set off the disk by a gap: a photo-less avatar is filled
+                    // with the accent, and a ring touching it vanished (recette
+                    // 2026-10-21). Same glow as the « Qui regarde ? » tiles.
                     if isFocused {
                         Circle().strokeBorder(themeManager.accent, lineWidth: CinemaTVFocus.cardRingWidth)
+                            .padding(-(CinemaTVFocus.cardRingWidth + 3))
                     }
                 }
+                .shadow(color: themeManager.accent.opacity(isFocused ? 0.35 : 0), radius: 16, y: 8)
                 .scaleEffect(isFocused ? CinemaTVFocus.cardScale : 1)
                 .animation(motionEffects ? .easeInOut(duration: 0.2) : nil, value: isFocused)
         }
