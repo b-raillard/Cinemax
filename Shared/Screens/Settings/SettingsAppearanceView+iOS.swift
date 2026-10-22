@@ -286,7 +286,7 @@ struct IOSAppearanceDetailView: View {
         .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
     }
 
-    /// iOS shows its own « icon changed » alert on success; a failure is
+    /// The system shows its own « icon changed » alert on success; a failure is
     /// logged by `AppIconSwitcher` and toasted here.
     func chooseAppIcon(_ choice: AppIconChoice) {
         switch AppIconPickerPolicy.outcome(choosing: choice, current: appIconName, tier: proAccess?.currentTier() ?? .founder) {

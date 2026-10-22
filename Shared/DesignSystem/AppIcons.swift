@@ -74,8 +74,9 @@ enum AppIconPickerPolicy {
 
 #if canImport(UIKit)
 /// The system side of the picker — `UIApplication`'s alternate-icon API,
-/// iOS 10.3+ / tvOS 10.2+. iOS raises its own « Vous avez changé l'icône »
-/// alert on every switch; nothing here can (or should) silence it.
+/// iOS 10.3+ / tvOS 10.2+. Both systems raise their own « You have changed
+/// the icon » alert on every switch (seen on the iOS 27 and tvOS 27
+/// simulators); nothing here can (or should) silence it.
 @MainActor
 enum AppIconSwitcher {
     /// `false` hides the whole « Icône de l'app » section.
