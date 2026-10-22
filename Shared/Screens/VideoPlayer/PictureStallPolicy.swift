@@ -219,11 +219,25 @@ struct PictureStallPolicy {
 /// `CinemaxStreamProxy`, and a direct stream never goes through it.
 ///
 /// So this watchdog keys on `readBytes`, the input counter, and fires while the
-/// picture is STILL PLAYING — which is what makes the cure cheap: a re-anchor
-/// seek, which is the one thing that makes libVLC open a fresh connection
-/// (`VLCStreamPresenter.reanchorAfterFeedStall`). If that does not restore the
-/// feed, the picture stops a few seconds later and `PictureStallPolicy` rebuilds
-/// the player exactly as before — the escalation costs no state of its own.
+/// picture is STILL PLAYING — five silent seconds, well inside the buffer.
+///
+/// **RULE — the cure depends on the route, and on the DIRECT route it is the
+/// relay, at once.** Measured twice on an Apple TV behind Cloudflare
+/// (2026-10-08 and 2026-10-21, DirectStream MKV, `peer stream N error:
+/// Cancellation (0x8)`): the re-anchor seek on the direct route brought back
+/// ZERO bytes — `read=` identical before and after (830 942 804 on 10-21) — and
+/// only a rebuild restored the feed. The two re-anchors cost ~16 s of a dying
+/// buffer, and the rebuild then re-opened DIRECT, onto the same edge. So a
+/// direct cut answers `.failoverToRelay`: the caller pins the session to the
+/// loopback relay (`StreamTransportPolicy.noteDirectPlaybackFailed`) and
+/// rebuilds through it straight away, where `CinemaxStreamProxy`'s mid-stream
+/// reconnect makes the next cut invisible. On the RELAY route the re-anchor
+/// keeps its role (`.reanchor`): a seek there opens a fresh loopback connection
+/// and therefore a fresh upstream request — a different situation from the
+/// direct one, reached only when the relay's own reconnect did not catch the
+/// cut (its budget spent, or an upstream that hangs without an error) — and its
+/// 8 s escalation to a rebuild is unchanged. Both cures spend the same
+/// budget, so a refused rebuild can never become a request every five seconds.
 ///
 /// **Five refusals, and each one answers a way the input legitimately goes
 /// quiet**: an adaptive (HLS) stream fetches in per-segment bursts, so silence
@@ -259,7 +273,8 @@ struct FeedStallPolicy {
     /// silent seconds is already far outside the jitter of a healthy feed.
     static let stallSeconds = 5
 
-    /// How many times ONE playback may re-anchor itself. Bounded like every
+    /// How many times ONE playback may re-anchor itself — or fail over to the
+    /// relay, which spends the same allowance. Bounded like every
     /// other self-healing path here: a link that dies again immediately must
     /// surface as a frozen picture (and the rebuild that follows), never as a
     /// silent loop of seeks against the server.
@@ -276,14 +291,28 @@ struct FeedStallPolicy {
     /// costs nothing, firing on a fully-buffered one costs a needless seek.
     static let fullyReadSlackBytes: UInt64 = 4 * 1024 * 1024
 
+    /// What carries the feed: whether its silence is judged at all, and which
+    /// cure a cut gets — see the RULE above.
+    enum Feed: Equatable {
+        /// An HLS stream — its input is bursty by design, never judged.
+        case adaptive
+        /// A progressive stream libVLC reads straight from the server.
+        case direct
+        /// A progressive stream through the loopback relay (`CinemaxStreamProxy`).
+        case relay
+    }
+
     enum Outcome: Equatable {
         case healthy
         /// Silent for this many consecutive seconds, with no re-anchor spent —
         /// either below the threshold, or the budget is exhausted.
         case stalling(seconds: Int)
-        /// Re-anchor playback at the current position to force a fresh
-        /// connection.
+        /// RELAY route: re-anchor playback at the current position, which opens
+        /// a fresh loopback connection and so a fresh upstream request.
         case reanchor
+        /// DIRECT route: rebuild the player through the relay, now, and keep
+        /// the relay for the session — see the RULE above.
+        case failoverToRelay
     }
 
     private var lastBytes: UInt64?
@@ -325,8 +354,12 @@ struct FeedStallPolicy {
     ///   - sourceSizeBytes: the server's size for the source, when it reports
     ///     one. Once `readBytes` reaches it the input is DONE, not dead.
     ///   - isPlaying: the engine's state is `.playing`.
-    ///   - isAdaptiveStream: an HLS stream — its input is bursty by design.
-    ///   - seekSettling: a seek window is open; `updateSeekLoading` owns it.
+    ///   - feed: HLS (never judged), direct or through the relay — the route
+    ///     picks the cure.
+    ///   - seekSettling: a seek window is open, or a rebuild is negotiating
+    ///     (`reResolve.isNegotiating` — the old engine winds down on a dead
+    ///     feed meanwhile, and a second cure then raced the first: 2026-10-21,
+    ///     a re-anchor 6 s into the negotiation). Same gate as the picture's.
     ///   - mediaConfirmedOpen: a demuxer exists.
     ///
     /// Call `noteInputEnd(reports:readBytes:)` first, on the same heartbeat.
@@ -334,11 +367,11 @@ struct FeedStallPolicy {
         readBytes: UInt64?,
         sourceSizeBytes: Int64?,
         isPlaying: Bool,
-        isAdaptiveStream: Bool,
+        feed: Feed,
         seekSettling: Bool,
         mediaConfirmedOpen: Bool
     ) -> Outcome {
-        guard isPlaying, mediaConfirmedOpen, !seekSettling, !isAdaptiveStream,
+        guard isPlaying, mediaConfirmedOpen, !seekSettling, feed != .adaptive,
               inputEndedAtBytes == nil,
               let bytes = readBytes, !Self.isFullyRead(bytes, sourceSizeBytes) else {
             lastBytes = nil
@@ -367,7 +400,7 @@ struct FeedStallPolicy {
         if stalledSeconds >= Self.stallSeconds, reanchorsLeft > 0 {
             reanchorsLeft -= 1
             stalledSeconds = 0
-            return .reanchor
+            return feed == .relay ? .reanchor : .failoverToRelay
         }
         return .stalling(seconds: stalledSeconds)
     }
