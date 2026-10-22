@@ -416,13 +416,14 @@ struct ProFeatureCatalogueTests {
     }
 
     /// `isGated` says a gate site really exists. Lot B gates the
-    /// administration, « Lire sur… » and Siri / Raccourcis; the icons wait for
-    /// their picker (none exists yet) and the seasons all year for lot C —
-    /// each flips here deliberately, together with its gate site.
-    @Test("Les fonctions réellement verrouillées après le lot B")
+    /// administration, « Lire sur… » and Siri / Raccourcis, lot C Halloween
+    /// all year (the « Halloween » choice of Réglages → Apparence); the icons
+    /// wait for their picker (none exists yet) — each flips here
+    /// deliberately, together with its gate site.
+    @Test("Les fonctions réellement verrouillées après le lot C")
     func gatedSet() {
         let gated = Set(ProFeatureCatalogue.features.filter(\.isGated).map(\.id))
-        #expect(gated == [.memorizedAccounts, .administration, .playOn, .shortcuts])
+        #expect(gated == [.memorizedAccounts, .administration, .playOn, .seasonalAllYear, .shortcuts])
     }
 
     @Test("Chaque fonction a son titre, son détail et son nom court, dans chaque langue")

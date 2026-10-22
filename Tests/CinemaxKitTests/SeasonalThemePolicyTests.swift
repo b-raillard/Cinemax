@@ -93,6 +93,92 @@ struct SeasonalThemePolicyTests {
         #expect(theme == nil)
     }
 
+    // MARK: Lot C — Automatique / Désactivé / Halloween (forcé, Pro)
+
+    @Test("A stored value reads back unchanged; « halloween » is the catalogue id")
+    func storedValues() {
+        #expect(SeasonalSetting(rawValue: "automatic") == .automatic)
+        #expect(SeasonalSetting(rawValue: "off") == .off)
+        #expect(SeasonalSetting(rawValue: "halloween") == .halloween)
+        #expect(SeasonalSetting(rawValue: "always") == nil)
+        #expect(SeasonalSetting.halloween.rawValue == SeasonalThemeCatalogue.halloween.id)
+        #expect(SeasonalSetting.choices == [.automatic, .off, .halloween])
+    }
+
+    @Test("Halloween forced shows it out of season when the tier allows it")
+    func forcedChoiceOutOfSeason() {
+        let theme = SeasonalThemePolicy.activeTheme(
+            on: date("2026-04-15T12:00:00Z"), calendar: calendar("UTC"),
+            setting: .halloween, forcedID: "", catalogue: [halloween]
+        )
+        #expect(theme?.id == "halloween")
+    }
+
+    @Test("Refused, Halloween forced reads as Automatique: nothing in April, Halloween in October")
+    func forcedChoiceRefused() {
+        let april = SeasonalThemePolicy.activeTheme(
+            on: date("2026-04-15T12:00:00Z"), calendar: calendar("UTC"),
+            setting: SeasonalThemePolicy.effectiveSetting(.halloween, allowsForced: false), forcedID: "", catalogue: [halloween]
+        )
+        let october = SeasonalThemePolicy.activeTheme(
+            on: date("2026-10-22T12:00:00Z"), calendar: calendar("UTC"),
+            setting: SeasonalThemePolicy.effectiveSetting(.halloween, allowsForced: false), forcedID: "", catalogue: [halloween]
+        )
+        #expect(april == nil)
+        #expect(october?.id == "halloween")
+        #expect(SeasonalThemePolicy.effectiveSetting(.halloween, allowsForced: false) == .automatic)
+        #expect(SeasonalThemePolicy.effectiveSetting(.halloween, allowsForced: true) == .halloween)
+        #expect(SeasonalThemePolicy.effectiveSetting(.off, allowsForced: false) == .off)
+        #expect(SeasonalThemePolicy.effectiveSetting(.automatic, allowsForced: false) == .automatic)
+    }
+
+    @Test("The tier never touches Automatique and Désactivé")
+    func tierIgnoredByFreeChoices() {
+        for allowed in [true, false] {
+            let auto = SeasonalThemePolicy.activeTheme(
+                on: date("2026-10-22T12:00:00Z"), calendar: calendar("UTC"),
+                setting: SeasonalThemePolicy.effectiveSetting(.automatic, allowsForced: allowed), forcedID: "", catalogue: [halloween]
+            )
+            let off = SeasonalThemePolicy.activeTheme(
+                on: date("2026-10-22T12:00:00Z"), calendar: calendar("UTC"),
+                setting: SeasonalThemePolicy.effectiveSetting(.off, allowsForced: allowed), forcedID: "", catalogue: [halloween]
+            )
+            #expect(auto?.id == "halloween")
+            #expect(off == nil)
+        }
+    }
+
+    @Test("The Debug forcing wins over the choice AND the tier")
+    func debugForcingWins() {
+        let theme = SeasonalThemePolicy.activeTheme(
+            on: date("2026-04-15T12:00:00Z"), calendar: calendar("UTC"),
+            setting: SeasonalThemePolicy.effectiveSetting(.halloween, allowsForced: false), forcedID: "halloween", catalogue: [halloween]
+        )
+        #expect(theme?.id == "halloween")
+    }
+
+    @Test("« Quoi de neuf » only offers the season to whoever has it off")
+    func optedIn() {
+        #expect(SeasonalSetting.automatic.isOptedIn)
+        #expect(SeasonalSetting.halloween.isOptedIn)
+        #expect(!SeasonalSetting.off.isOptedIn)
+    }
+
+    @Test("Stepping through the choices skips a refused one, both ways, wrapping")
+    func stepping() {
+        let refuseHalloween: (SeasonalSetting) -> Bool = { $0 != .halloween }
+        #expect(SeasonalSetting.automatic.stepped(by: 1) { _ in true } == .off)
+        #expect(SeasonalSetting.off.stepped(by: 1) { _ in true } == .halloween)
+        #expect(SeasonalSetting.halloween.stepped(by: 1) { _ in true } == .automatic)
+        #expect(SeasonalSetting.automatic.stepped(by: -1) { _ in true } == .halloween)
+        #expect(SeasonalSetting.off.stepped(by: 1, admit: refuseHalloween) == .automatic)
+        #expect(SeasonalSetting.automatic.stepped(by: -1, admit: refuseHalloween) == .off)
+        // Asked once per refused choice — each ask raises the Pro sheet.
+        var asked: [SeasonalSetting] = []
+        _ = SeasonalSetting.off.stepped(by: 1) { asked.append($0); return $0 != .halloween }
+        #expect(asked == [.halloween, .automatic])
+    }
+
     @Test("Catalogue lookup by id")
     func lookup() {
         #expect(SeasonalThemeCatalogue.theme(id: "halloween")?.id == "halloween")
@@ -121,6 +207,10 @@ struct SeasonalThemePolicyTests {
                 #expect(table[theme.nameKey] != nil, "\(lang): \(theme.nameKey)")
                 if let row = theme.row { #expect(table[row.titleKey] != nil, "\(lang): \(row.titleKey)") }
             }
+            for choice in SeasonalSetting.choices {
+                #expect(table[choice.labelKey] != nil, "\(lang): \(choice.labelKey)")
+            }
+            #expect(table["settings.seasonal.choice.halloween.detail"] != nil, "\(lang): halloween.detail")
         }
     }
 

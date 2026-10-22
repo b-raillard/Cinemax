@@ -40,8 +40,12 @@ struct AppNavigation: View {
     /// mid-way through using. See the RULE on `ParentalLockController`.
     static let sharedParentalLock = ParentalLockController()
     /// Seasonal themes — a process singleton like the stores above, so a
-    /// scene-struct recreation never re-reads the defaults.
-    private static let sharedSeasonal = SeasonalThemeController()
+    /// scene-struct recreation never re-reads the defaults. Forcing Halloween
+    /// at any date is the Pro's (lot C): the controller asks the gate itself,
+    /// from init — the root's `onChange` below re-evaluates on a tier change.
+    private static let sharedSeasonal = SeasonalThemeController(
+        allowsForcedSeason: { sharedProAccess.allows(.seasonalAllYear) }
+    )
     /// Free / Pro — a process singleton like the stores above: its `init`
     /// reads the defaults AND the iCloud key-value store and starts listening
     /// for iCloud's external changes, none of which a scene-struct recreation
@@ -265,6 +269,11 @@ struct AppNavigation: View {
         }
         // Midnight: a season can start or end while the app stays open.
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            seasonal.reevaluate()
+        }
+        // The tier moved (a purchase, a refund, Debug « Palier simulé »): a
+        // forced Halloween comes or goes with it (lot C).
+        .onChange(of: proAccess.allows(.seasonalAllYear)) { _, _ in
             seasonal.reevaluate()
         }
         .environment(playlistPresenter)

@@ -5,8 +5,8 @@ import Foundation
 /// (creating a session), the custom menu and the accent colours are FREE and
 /// left the list. `isGated` says whether a gate site really locks the feature
 /// for the free tier yet (lot B: accounts, administration, « Lire sur… »,
-/// Siri / Raccourcis); the app icons wait for their picker, the seasons all
-/// year for lot C. RULE (spec R8): the production pivot is never set while a
+/// Siri / Raccourcis; lot C: the « Halloween » choice of Réglages → Apparence);
+/// the app icons wait for their picker. RULE (spec R8): the production pivot is never set while a
 /// listed feature is still free — locked by `ProFeatureCatalogueTests`.
 nonisolated enum ProFeatureCatalogue {
     struct Feature: Identifiable, Sendable, Equatable {
@@ -29,7 +29,9 @@ nonisolated enum ProFeatureCatalogue {
         // No picker yet (nothing calls `setAlternateIconName`): gated the day
         // it ships, through `ProFeatureGate.mayChooseAppIcon`.
         Feature(id: .appIcons, titleKey: "pro.feature.icons.title", detailKey: "pro.feature.icons.detail", icon: "app.badge", isGated: false),
-        Feature(id: .seasonalAllYear, titleKey: "pro.feature.seasonal.title", detailKey: "pro.feature.seasonal.detail", icon: "leaf", isGated: false),
+        // Lot C: forcing Halloween at any date (Réglages → Apparence). Free
+        // keeps Automatique (Halloween in season) and Désactivé.
+        Feature(id: .seasonalAllYear, titleKey: "pro.feature.seasonal.title", detailKey: "pro.feature.seasonal.detail", icon: "leaf", isGated: true),
         Feature(id: .shortcuts, titleKey: "pro.feature.shortcuts.title", detailKey: "pro.feature.shortcuts.detail", icon: "square.stack.3d.up", isGated: true)
     ]
 

@@ -13,6 +13,9 @@ struct IOSAppearanceDetailView: View {
     @Environment(ThemeManager.self) var themeManager
     @Environment(LocalizationManager.self) var loc
     @Environment(SeasonalThemeController.self) private var seasonal
+    /// The « Halloween » choice is the Pro's (lot C). Optional like
+    /// `SettingsScreen`'s: a host without it leaves the choice open.
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
     @Environment(\.motionEffectsEnabled) private var motionEffects
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @AppStorage(SettingsKey.motionEffects) private var motionEffectsStorage: Bool = SettingsKey.Default.motionEffects
@@ -178,35 +181,7 @@ struct IOSAppearanceDetailView: View {
                 .padding(.top, CinemaSpacing.spacing4)
 
             VStack(spacing: 0) {
-                Button {
-                    seasonal.setSetting(seasonal.setting == .automatic ? .off : .automatic)
-                    Haptics.tap()
-                } label: {
-                    iOSSettingsRow {
-                        SettingsRowAdaptiveLayout {
-                            HStack {
-                                iOSRowIcon(systemName: "calendar", color: themeManager.accent)
-                                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
-                                    Text(loc.localized("settings.seasonal.toggle"))
-                                        .font(CinemaFont.dynamicLabel(.large))
-                                        .foregroundStyle(CinemaColor.onSurface)
-                                    Text(SeasonalSettingsText.catalogueSummary(loc: loc))
-                                        .font(CinemaFont.dynamicLabel(.small))
-                                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        } control: {
-                            CinemaToggleIndicator(isOn: seasonal.setting == .automatic, accent: themeManager.accent, animated: motionEffects)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(loc.localized("settings.seasonal.toggle"))
-                .accessibilityValue(loc.localized(seasonal.setting == .automatic ? "a11y.toggle.on" : "a11y.toggle.off"))
-                .accessibilityHint(SeasonalSettingsText.catalogueSummary(loc: loc))
-                .accessibilityAddTraits(.isToggle)
+                seasonalChoiceRow
 
                 iOSSettingsDivider
 
@@ -243,6 +218,73 @@ struct IOSAppearanceDetailView: View {
     }
 
     // MARK: - Appearance-specific helpers
+
+    /// Automatique / Désactivé / Halloween (lot C) — the whole row opens the
+    /// menu, like the sleep-timer picker. The selection shown is the
+    /// EFFECTIVE one: a forced Halloween the tier refuses reads Automatique.
+    /// Halloween is the Pro's « toute l'année »: locked, its item wears a lock
+    /// and its tap raises the Pro sheet (`ProFeatureAccess.admit`) instead.
+    var seasonalChoiceRow: some View {
+        let selected = seasonal.effectiveSetting
+        let forcedLocked = proAccess?.allows(.seasonalAllYear) == false
+        return Menu {
+            ForEach(SeasonalSetting.choices, id: \.self) { choice in
+                Button {
+                    chooseSeasonal(choice)
+                } label: {
+                    Text(loc.localized(choice.labelKey))
+                    if choice.forcedSeasonID != nil {
+                        Text(loc.localized("settings.seasonal.choice.halloween.detail"))
+                    }
+                    if choice == selected {
+                        Image(systemName: "checkmark")
+                    } else if choice.forcedSeasonID != nil, forcedLocked {
+                        Image(systemName: "lock.fill")
+                    }
+                }
+            }
+        } label: {
+            iOSSettingsRow {
+                SettingsRowAdaptiveLayout {
+                    HStack {
+                        iOSRowIcon(systemName: "calendar", color: themeManager.accent)
+                        VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                            Text(loc.localized("settings.seasonal.toggle"))
+                                .font(CinemaFont.dynamicLabel(.large))
+                                .foregroundStyle(CinemaColor.onSurface)
+                            Text(SeasonalSettingsText.catalogueSummary(loc: loc))
+                                .font(CinemaFont.dynamicLabel(.small))
+                                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                } control: {
+                    HStack(spacing: 4) {
+                        Text(loc.localized(selected.labelKey))
+                            .font(CinemaFont.dynamicLabel(.large))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: CinemaScale.pt(11), weight: .semibold))
+                            .foregroundStyle(CinemaColor.outlineVariant)
+                    }
+                }
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .tint(themeManager.accent)
+        .accessibilityLabel(loc.localized("settings.seasonal.toggle"))
+        .accessibilityValue(loc.localized(selected.labelKey))
+        .accessibilityHint(SeasonalSettingsText.catalogueSummary(loc: loc))
+    }
+
+    /// A refused Halloween changes nothing: the root shows the Pro sheet.
+    func chooseSeasonal(_ choice: SeasonalSetting) {
+        if choice.forcedSeasonID != nil, proAccess?.admit(.seasonalAllYear) == false { return }
+        seasonal.setSetting(choice)
+        Haptics.tap()
+    }
 
     /// « Pendant « Nuit d'Halloween », la couleur du thème remplace la vôtre. »
     /// — visible while a season is on, invisible (space kept) otherwise, so

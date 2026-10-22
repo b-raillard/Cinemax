@@ -120,8 +120,49 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
     let backdrop: SeasonBackdrop?
 }
 
-/// Settings → Appearance. No « always »: with several seasons it has no
-/// meaning; the Debug page can force one for testing.
-enum SeasonalSetting: String, Sendable {
+/// Settings → Appearance (lot C, 2026-10-22): Automatique (the season whose
+/// window contains today), Désactivé, or Halloween forced at ANY date — the
+/// Pro's « Halloween toute l'année », refused to the free tier after the
+/// launch (`SeasonalThemePolicy.effectiveSetting`). A forced choice's raw value
+/// IS its catalogue id, so a second forced season (Christmas…) is one more case
+/// and no migration; « automatic » / « off » read back exactly as before.
+/// The Debug page's `debug.forcedSeason` beats all three.
+enum SeasonalSetting: String, Sendable, CaseIterable {
     case automatic, off
+    case halloween
+
+    /// The order of the Réglages choices.
+    static let choices: [Self] = allCases
+
+    /// « Automatique » / « Désactivé » / « Halloween ».
+    var labelKey: String { "settings.seasonal.choice.\(rawValue)" }
+
+    /// The catalogue season a forced choice names; `nil` for the two others.
+    var forcedSeasonID: String? {
+        switch self {
+        case .automatic, .off: nil
+        case .halloween: rawValue
+        }
+    }
+
+    /// The user has accepted seasonal themes in some form — what « Quoi de
+    /// neuf »'s offer asks: it must never re-offer to (nor downgrade) a forced
+    /// choice.
+    var isOptedIn: Bool { self != .off }
+
+    /// The choice `step` places away (±1, wrapping — the tvOS row's press and
+    /// Left / Right), skipping each one `admit` refuses. `admit` is asked once
+    /// per candidate: for the Pro choice it is `ProFeatureAccess.admit`, whose
+    /// refusal raises the Pro sheet — the step then lands on the next one, so
+    /// a free user is never stuck in front of the locked choice.
+    func stepped(by step: Int, admit: (Self) -> Bool) -> Self {
+        let all = Self.choices
+        guard let start = all.firstIndex(of: self) else { return self }
+        var index = start
+        for _ in 1..<all.count {
+            index = ((index + step) % all.count + all.count) % all.count
+            if admit(all[index]) { return all[index] }
+        }
+        return self
+    }
 }

@@ -14,6 +14,12 @@ private final class TestClock: @unchecked Sendable {
     func set(_ iso: String) { date = ISO8601DateFormatter().date(from: iso)! }
 }
 
+/// The tier as a gate site sees it; main-actor only, like `TestClock`.
+@MainActor
+private final class TierBox {
+    var allows = true
+}
+
 @Suite("Seasonal theme controller")
 @MainActor
 struct SeasonalThemeControllerTests {
@@ -27,12 +33,15 @@ struct SeasonalThemeControllerTests {
     /// it; `nil` leaves the key absent (a user who never touched it).
     private func make(
         _ clock: TestClock, defaults: UserDefaults = .isolatedForTesting(),
-        setting: SeasonalSetting? = .automatic
+        setting: SeasonalSetting? = .automatic,
+        allowsForced: @escaping @MainActor () -> Bool = { true }
     ) -> SeasonalThemeController {
         if let setting, defaults.string(forKey: SettingsKey.seasonalTheme) == nil {
             defaults.set(setting.rawValue, forKey: SettingsKey.seasonalTheme)
         }
-        return SeasonalThemeController(defaults: defaults, calendar: paris, now: { clock.date })
+        return SeasonalThemeController(
+            defaults: defaults, calendar: paris, now: { clock.date }, allowsForcedSeason: allowsForced
+        )
     }
 
     @Test("Off until the user accepts it: nothing stored means no season")
@@ -84,6 +93,52 @@ struct SeasonalThemeControllerTests {
         #expect(c.activeTheme?.id == "halloween")
         c.setForcedSeason("")
         #expect(c.activeTheme == nil)
+    }
+
+    // MARK: Lot C — Halloween toute l'année
+
+    @Test("Halloween forced: shown in April, persisted, read back by a reborn controller")
+    func forcedChoicePersists() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let april = TestClock("2026-04-15T12:00:00Z")
+        let c = make(april, defaults: defaults)
+        #expect(c.activeTheme == nil)
+        c.setSetting(.halloween)
+        #expect(c.activeTheme?.id == "halloween")
+        #expect(defaults.string(forKey: SettingsKey.seasonalTheme) == "halloween")
+        let reborn = make(april, defaults: defaults)
+        #expect(reborn.setting == .halloween)
+        #expect(reborn.effectiveSetting == .halloween)
+        #expect(reborn.activeTheme?.id == "halloween")
+    }
+
+    @Test("Back to free: Automatique on screen, the stored choice kept, nothing taken in season")
+    func backToFree() {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set("halloween", forKey: SettingsKey.seasonalTheme)
+        let clock = TestClock("2026-04-15T12:00:00Z")
+        let c = make(clock, defaults: defaults, setting: nil, allowsForced: { false })
+        #expect(c.setting == .halloween)
+        #expect(c.effectiveSetting == .automatic)
+        #expect(c.activeTheme == nil)
+        #expect(defaults.string(forKey: SettingsKey.seasonalTheme) == "halloween")
+        clock.set("2026-10-22T12:00:00Z")
+        #expect(c.reevaluate() == true)
+        #expect(c.activeTheme?.id == "halloween")
+    }
+
+    @Test("A tier flip is picked up by the next re-evaluation")
+    func tierFlip() {
+        let tier = TierBox()
+        let c = make(TestClock("2026-04-15T12:00:00Z"), setting: .halloween, allowsForced: { tier.allows })
+        #expect(c.activeTheme?.id == "halloween")
+        tier.allows = false
+        #expect(c.reevaluate() == true)
+        #expect(c.activeTheme == nil)
+        #expect(c.effectiveSetting == .automatic)
+        tier.allows = true
+        #expect(c.reevaluate() == true)
+        #expect(c.activeTheme?.id == "halloween")
     }
 
     @Test("Ambiance and row switches persist")

@@ -436,16 +436,7 @@ extension SettingsScreen {
                 subtitle: systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : nil
             )
 
-            tvGlassToggle(
-                icon: "calendar",
-                label: loc.localized("settings.seasonal.toggle"),
-                key: "seasonalTheme",
-                value: Binding(
-                    get: { seasonal.setting == .automatic },
-                    set: { seasonal.setSetting($0 ? .automatic : .off) }
-                ),
-                subtitle: SeasonalSettingsText.catalogueSummary(loc: loc)
-            )
+            tvSeasonalPicker
 
             tvGlassToggle(
                 icon: "sparkles",

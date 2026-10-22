@@ -1371,6 +1371,10 @@
 "settings.seasonal.ambiance" = "Ambiente-Animationen";
 "settings.seasonal.row" = "Vorschläge auf der Startseite";
 "settings.seasonal.accentNote" = "Während „%@“ ersetzt die Farbe des Designs deine eigene.";
+"settings.seasonal.choice.automatic" = "Automatisch";
+"settings.seasonal.choice.off" = "Aus";
+"settings.seasonal.choice.halloween" = "Halloween";
+"settings.seasonal.choice.halloween.detail" = "Das ganze Jahr";
 "settings.debug.forceSeason" = "„%@“ erzwingen";
 "settings.debug.entitlement" = "Berechtigungen";
 "settings.debug.entitlement.free" = "Gratis";

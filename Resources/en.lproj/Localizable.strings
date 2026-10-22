@@ -1371,6 +1371,10 @@
 "settings.seasonal.ambiance" = "Ambient animations";
 "settings.seasonal.row" = "Suggestions on Home";
 "settings.seasonal.accentNote" = "During “%@”, the theme's colour replaces yours.";
+"settings.seasonal.choice.automatic" = "Automatic";
+"settings.seasonal.choice.off" = "Off";
+"settings.seasonal.choice.halloween" = "Halloween";
+"settings.seasonal.choice.halloween.detail" = "All year round";
 "settings.debug.forceSeason" = "Force “%@”";
 "settings.debug.entitlement" = "Entitlements";
 "settings.debug.entitlement.free" = "Free";
