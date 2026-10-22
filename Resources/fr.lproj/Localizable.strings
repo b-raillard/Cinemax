@@ -292,7 +292,7 @@
 
 // MARK: - Debug
 
-"settings.debug" = "Débogage";
+"settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Veille rapide (15 s)";
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
 "settings.debug.simulateTabletop" = "Simuler le mode table (iPhone Duo)";
@@ -542,12 +542,10 @@
 // MARK: - Admin — Landings
 
 "admin.landing.title" = "Administration";
-"admin.advanced.title" = "Admin avancée";
 "admin.landing.section.server" = "Serveur";
-"admin.landing.section.metadata" = "Métadonnées";
-"admin.landing.section.users" = "Utilisateurs et appareils";
-"admin.landing.section.extensions" = "Extensions et tâches";
-"admin.landing.section.advanced" = "Avancé";
+"admin.landing.section.users" = "Utilisateurs";
+"admin.landing.section.library" = "Bibliothèque";
+"admin.landing.section.configuration" = "Configuration";
 "admin.dashboard.subtitle" = "Sessions actives et état du serveur.";
 "admin.metadata.title" = "Gestionnaire de métadonnées";
 "admin.metadata.subtitle" = "Éditer titres, casting, images et rafraîchir les métadonnées.";

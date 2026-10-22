@@ -190,7 +190,8 @@ extension SettingsScreen {
                 // tvOS explicitly hides admin entries — admin workflows are
                 // iOS/iPadOS-only. `isAdmin: false` is safe because the filter
                 // short-circuits on `isTVOS: true` regardless of admin flag.
-                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true)) { category in
+                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true,
+                                                      showsDebug: showsDebugCategory)) { category in
                     tvCategoryButton(category)
                 }
 
@@ -392,8 +393,10 @@ extension SettingsScreen {
                     tvInterfaceDetail
                 case .playback:
                     tvPlaybackDetail
-                case .administration, .advancedAdmin:
-                    // Never selected on tvOS — admin categories are filtered
+                case .debug:
+                    tvDebugDetail
+                case .administration:
+                    // Never selected on tvOS — the admin category is filtered
                     // out of the landing pill list. Render nothing as a
                     // safety net.
                     EmptyView()
@@ -601,15 +604,22 @@ extension SettingsScreen {
 
     // MARK: Playback Detail (tvOS)
 
-    /// Page Lecture top-level : réglages du player + section Débogage (outils
-    /// QA, toujours visibles — pas de gate #if DEBUG, voir CLAUDE.md).
+    /// Page Lecture top-level : réglages du player (la section Débogage est
+    /// devenue la catégorie Debug, 2026-10-22).
     var tvPlaybackDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(playbackToggleRows)
             tvSleepTimerRow
+        }
+    }
 
-            tvSectionLabel(loc.localized("settings.debug"))
-                .padding(.top, CinemaSpacing.spacing4)
+    // MARK: Debug Detail (tvOS)
+
+    /// Page Debug (dernière catégorie) : les outils QA qui fermaient la page
+    /// Lecture, inchangés. Visible hors App Store — voir
+    /// `SettingsCategory.showsDebug` et `Settings/CLAUDE.md`.
+    var tvDebugDetail: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(debugToggleRows)
             // Read-only: pressing it only re-reads the stores (local + the
             // iCloud mirror) — a focusable row is the only kind tvOS can reach.

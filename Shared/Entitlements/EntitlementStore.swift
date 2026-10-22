@@ -17,7 +17,7 @@ final class EntitlementStore {
     private(set) var cloudRecord: CloudEntitlementRecord?
     /// The « Simuler Pro » switch. Always `false` in a Release build.
     private(set) var debugOverride = false
-    /// Settings → Débogage « Palier simulé » (free / Pro / founder), read by
+    /// Settings → Debug « Palier simulé » (free / Pro / founder), read by
     /// `proTier(earlyAdopter:)`. Always `.automatic` in a Release build.
     private(set) var proTierOverride: ProTierOverride = .automatic
 

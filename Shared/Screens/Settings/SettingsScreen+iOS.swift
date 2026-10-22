@@ -96,7 +96,8 @@ extension SettingsScreen {
 
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false)) { category in
+            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false,
+                                                  showsDebug: showsDebugCategory)) { category in
                 iOSCategoryButton(category)
             }
         }
@@ -258,8 +259,6 @@ extension SettingsScreen {
             ProScreen()
         case .administration:
             AdminLandingScreen()
-        case .advancedAdmin:
-            AdvancedAdminLandingScreen()
         default:
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -274,7 +273,9 @@ extension SettingsScreen {
                         iOSInterfaceDetail
                     case .playback:
                         iOSPlaybackDetail
-                    case .pro, .administration, .advancedAdmin:
+                    case .debug:
+                        iOSDebugDetail
+                    case .pro, .administration:
                         EmptyView() // handled above
                     }
                 }
@@ -614,8 +615,8 @@ extension SettingsScreen {
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
-    /// Page Lecture top-level : réglages du player + section Débogage (outils
-    /// QA, toujours visibles — pas de gate #if DEBUG, voir CLAUDE.md).
+    /// Page Lecture top-level : réglages du player (la section Débogage est
+    /// devenue la catégorie Debug, 2026-10-22).
     var iOSPlaybackDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             VStack(spacing: 0) {
@@ -624,10 +625,15 @@ extension SettingsScreen {
                 iOSSleepTimerRow
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        }
+    }
 
+    /// Page Debug (dernière catégorie) : les outils QA qui fermaient la page
+    /// Lecture, inchangés. Visible hors App Store — voir
+    /// `SettingsCategory.showsDebug` et `Settings/CLAUDE.md`.
+    var iOSDebugDetail: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                iOSSettingsSectionHeader(loc.localized("settings.debug"))
-
                 VStack(spacing: 0) {
                     iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
                     iOSSettingsDivider

@@ -28,11 +28,16 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case playback
     case account
     case server
-    // Admin-only categories — gated by `AppState.isAdministrator` at the
-    // render site so non-admins never see these rows. Server still enforces
-    // authorization on every admin endpoint; client-side gating is UX only.
+    // Admin-only — gated by `AppState.isAdministrator` at the render site so
+    // non-admins never see this row. Server still enforces authorization on
+    // every admin endpoint; client-side gating is UX only. ONE category since
+    // 2026-10-22: « Admin avancée » (raw value `advancedAdmin`) merged into it;
+    // nothing ever persisted a category, and that raw value now decodes to
+    // `nil` (the landing).
     case administration
-    case advancedAdmin
+    // QA tools, LAST of the list, both platforms — shown unless the App Store
+    // environment says production (`showsDebug(environment:)`).
+    case debug
 
     var id: String { rawValue }
 
@@ -45,7 +50,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .account:        "person"
         case .server:         "server.rack"
         case .administration: "shield.lefthalf.filled"
-        case .advancedAdmin:  "wrench.and.screwdriver"
+        case .debug:          "ladybug"
         }
     }
 
@@ -58,7 +63,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .account:        loc.localized("settings.account")
         case .server:         loc.localized("settings.server")
         case .administration: loc.localized("admin.landing.title")
-        case .advancedAdmin:  loc.localized("admin.advanced.title")
+        case .debug:          loc.localized("settings.debug")
         }
     }
 
@@ -76,16 +81,30 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     /// all (admin workflows are mobile-only by product decision).
     var isAdminOnly: Bool {
         switch self {
-        case .administration, .advancedAdmin: true
+        case .administration: true
         default: false
         }
     }
 
-    /// Filters `allCases` by admin visibility and platform. Use this instead
-    /// of raw `allCases` in rendering code — keeps gating in one place.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [Self] {
+    /// Whether the Debug category is listed: visible in Xcode and TestFlight
+    /// builds, hidden in the App Store build — decided from the verified
+    /// `AppTransaction` environment (`EarlyAdopterService.transaction`), never
+    /// by `#if DEBUG`. `nil` (not known yet) SHOWS it: a Debug build never asks
+    /// the App Store at launch and a simulator has no sandbox account to
+    /// answer, so both run on `nil` for good — hiding it there would take
+    /// « Palier simulé » away from every recette. An App Store install hides
+    /// it from its first verified answer on (see `Settings/CLAUDE.md`).
+    nonisolated static func showsDebug(environment: AppTransactionSnapshot.Environment?) -> Bool {
+        environment != .production
+    }
+
+    /// Filters `allCases` by admin visibility, platform and the Debug
+    /// decision. Use this instead of raw `allCases` in rendering code — keeps
+    /// gating in one place.
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, showsDebug: Bool) -> [Self] {
         allCases.filter { category in
             if category == .pro { return false }
+            if category == .debug { return showsDebug }
             if isTVOS && category.isAdminOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
             return true
@@ -173,8 +192,9 @@ struct SettingsScreen: View {
     /// Forwarded into `privacySecuritySheet` — that sheet is a separate
     /// presentation context and re-injects its environment by hand.
     @Environment(ParentalLockController.self) var parentalLock
-    /// Settings → Lecture → Débogage (tvOS; iOS reads them inside
-    /// `EntitlementDebugRows`, its Playback page being a pushed destination)
+    /// Settings → Debug (tvOS; iOS reads them inside `EntitlementDebugRows`,
+    /// its Debug page being a pushed destination), the Debug category's
+    /// visibility (both platforms)
     /// and the Pro gate of « Changer de compte » (both platforms).
     @Environment(EntitlementStore.self) var entitlements
     @Environment(EarlyAdopterService.self) var earlyAdopter
@@ -186,6 +206,13 @@ struct SettingsScreen: View {
 
     /// The tier the Settings header wears (design D) — `nil` = show nothing
     /// (before the Pro launches, see `ProFeatureGate.showsProEntry`).
+    /// Whether the Debug category is listed (`SettingsCategory.showsDebug`):
+    /// re-read on every render, so it follows the App Store's answer the
+    /// moment `EarlyAdopterService` records it.
+    var showsDebugCategory: Bool {
+        SettingsCategory.showsDebug(environment: earlyAdopter.transaction?.environment)
+    }
+
     var headerTierLook: ProTierLook? {
         guard entitlements.showsProEntry else { return nil }
         return ProTierLook(tier: entitlements.proTier(earlyAdopter: earlyAdopter), themeManager: themeManager)

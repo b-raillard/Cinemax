@@ -10,7 +10,7 @@ enum ProTier: Sendable, Equatable {
     var unlocksProFeatures: Bool { self != .free }
 }
 
-/// Settings → Débogage « Palier simulé ». `.automatic` = the real answer;
+/// Settings → Debug « Palier simulé ». `.automatic` = the real answer;
 /// `.launched` = the real answer AS IF the Pro had launched (no pre-launch
 /// founder for everyone), which is what lets the local StoreKit file walk
 /// free → purchase → Pro. Persisted under `SettingsKey.debugProTier`,

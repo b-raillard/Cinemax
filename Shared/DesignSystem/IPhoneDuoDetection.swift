@@ -12,7 +12,7 @@ extension View {
     /// is the answer, reporting a hinge with a known status only on a device
     /// that has one. It never writes `false` — the interaction also reports
     /// `nil` when the view leaves its hierarchy, which says nothing about the
-    /// device. Settings → Débogage « Simuler le mode table » counts as a Duo,
+    /// device. Settings → Debug « Simuler le mode table » counts as a Duo,
     /// so the Duo copy can be read on any iPhone. A no-op on tvOS and on an
     /// SDK without the hinge API (`NO_HINGE_API`).
     @ViewBuilder

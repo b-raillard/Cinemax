@@ -302,12 +302,10 @@
 // MARK: - Admin — Landings
 
 "admin.landing.title" = "Verwaltung";
-"admin.advanced.title" = "Erweiterte Verwaltung";
 "admin.landing.section.server" = "Server";
-"admin.landing.section.metadata" = "Metadaten";
-"admin.landing.section.users" = "Benutzer & Geräte";
-"admin.landing.section.extensions" = "Plugins & Aufgaben";
-"admin.landing.section.advanced" = "Erweitert";
+"admin.landing.section.users" = "Benutzer";
+"admin.landing.section.library" = "Bibliothek";
+"admin.landing.section.configuration" = "Konfiguration";
 "admin.dashboard.subtitle" = "Aktive Sitzungen und Serverstatus.";
 "admin.metadata.title" = "Metadaten-Manager";
 "admin.metadata.subtitle" = "Titel, Besetzung und Bilder bearbeiten und Metadaten aktualisieren.";

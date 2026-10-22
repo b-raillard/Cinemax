@@ -103,11 +103,11 @@ func earlyAdopterRowAction(_ service: EarlyAdopterService) {
 }
 
 #if os(iOS)
-/// Settings → Lecture → Débogage (iOS): the read-only « Droits » row, the
+/// Settings → Debug (iOS): the read-only « Droits » row, the
 /// « Simuler Pro » switch in DEBUG builds, then the « Early adopter » row.
 ///
 /// A standalone `View` with its own `@Environment`, like `DiagnosticsExportRows`:
-/// the Playback page is pushed through `navigationDestination`, where only a
+/// the Debug page is pushed through `navigationDestination`, where only a
 /// standalone view re-renders on an `@Observable` change (root iOS
 /// `NavigationStack` RULE) — the switch would otherwise look dead.
 struct EntitlementDebugRows: View {
