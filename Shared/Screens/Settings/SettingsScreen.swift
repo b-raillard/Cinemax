@@ -346,6 +346,9 @@ struct SettingsScreen: View {
     @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
     @State var showLibraryLayoutPicker = false
+    /// `UIApplication.alternateIconName` is not observable: a copy for
+    /// `tvAppIconPicker`, refreshed on appear and after each switch (lot D).
+    @State var appIconName: String?
     #endif
 
     // MARK: Shared Computed Properties

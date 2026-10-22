@@ -423,6 +423,8 @@ extension SettingsScreen {
 
             tvAccentColorPicker
 
+            tvAppIconPicker
+
             tvLanguagePicker
 
             // The row keeps the app's own preference; when the system's Reduce

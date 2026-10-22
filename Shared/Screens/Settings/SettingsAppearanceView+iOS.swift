@@ -17,6 +17,10 @@ struct IOSAppearanceDetailView: View {
     /// `SettingsScreen`'s: a host without it leaves the choice open.
     @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    @Environment(ToastCenter.self) private var toasts
+    /// `UIApplication.alternateIconName` is not observable: a copy, refreshed
+    /// on appear and after each switch (lot D).
+    @State private var appIconName: String?
     @AppStorage(SettingsKey.rainbowUnlocked) private var rainbowUnlocked: Bool = SettingsKey.Default.rainbowUnlocked
     @AppStorage(SettingsKey.motionEffects) private var motionEffectsStorage: Bool = SettingsKey.Default.motionEffects
     /// When on, the system wins over `motionEffectsStorage` (see
@@ -177,6 +181,14 @@ struct IOSAppearanceDetailView: View {
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
 
+            if AppIconSwitcher.isSupported {
+                iOSSettingsSectionHeader(loc.localized("settings.appIcon.title"))
+                    .padding(.top, CinemaSpacing.spacing4)
+
+                appIconSection
+                    .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            }
+
             iOSSettingsSectionHeader(loc.localized("settings.seasonal.section"))
                 .padding(.top, CinemaSpacing.spacing4)
 
@@ -218,6 +230,82 @@ struct IOSAppearanceDetailView: View {
     }
 
     // MARK: - Appearance-specific helpers
+
+    /// « Icône de l'app » (lot D): one tile per `AppIconCatalogue` choice, the
+    /// icon shown ringed in the accent. An alternate icon is the Pro's: for a
+    /// free user it stays listed, with `ProBadge` (the Administration row's
+    /// language), and its tap raises the Pro sheet. The icon a user already
+    /// shows is never taken back (`AppIconPickerPolicy.outcome` → `.keep`).
+    var appIconSection: some View {
+        let tier = proAccess?.currentTier() ?? .founder
+        return iOSSettingsRow {
+            HStack(alignment: .top, spacing: CinemaSpacing.spacing4) {
+                ForEach(AppIconCatalogue.choices) { choice in
+                    let isCurrent = choice.alternateName == appIconName
+                    appIconTile(choice, isCurrent: isCurrent, isLocked: !isCurrent && AppIconPickerPolicy.isLocked(choice, tier: tier))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .onAppear { appIconName = AppIconSwitcher.currentName }
+    }
+
+    func appIconTile(_ choice: AppIconChoice, isCurrent: Bool, isLocked: Bool) -> some View {
+        let side: CGFloat = 64
+        let radius = side * 0.2237 // the system's icon mask, as `recolor.py` draws it
+        return Button {
+            chooseAppIcon(choice)
+        } label: {
+            VStack(spacing: CinemaSpacing.spacing2) {
+                Image(choice.previewImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: side, height: side)
+                    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                    .padding(4)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: radius + 4, style: .continuous)
+                            .strokeBorder(isCurrent ? themeManager.accent : .clear, lineWidth: 2.5)
+                    }
+                Text(loc.localized(choice.labelKey))
+                    .font(CinemaFont.dynamicLabel(.medium))
+                    .foregroundStyle(isCurrent ? CinemaColor.onSurface : CinemaColor.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                if isLocked {
+                    ProBadge()
+                }
+            }
+            .frame(minWidth: 88)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized(choice.labelKey))
+        .accessibilityValue(isLocked ? loc.localized("settings.appIcon.locked") : "")
+        .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// iOS shows its own « icon changed » alert on success; a failure is
+    /// logged by `AppIconSwitcher` and toasted here.
+    func chooseAppIcon(_ choice: AppIconChoice) {
+        switch AppIconPickerPolicy.outcome(choosing: choice, current: appIconName, tier: proAccess?.currentTier() ?? .founder) {
+        case .keep:
+            return
+        case .upsell:
+            proAccess?.admit(.appIcons)
+        case .apply(let name):
+            Haptics.tap()
+            Task {
+                do {
+                    try await AppIconSwitcher.set(name)
+                } catch {
+                    toasts.error(loc.localized("settings.appIcon.error"))
+                }
+                appIconName = AppIconSwitcher.currentName
+            }
+        }
+    }
 
     /// Automatique / Désactivé / Halloween (lot C) — the whole row opens the
     /// menu, like the sleep-timer picker. The selection shown is the

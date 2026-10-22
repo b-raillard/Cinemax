@@ -1375,6 +1375,11 @@
 "settings.seasonal.choice.off" = "Aus";
 "settings.seasonal.choice.halloween" = "Halloween";
 "settings.seasonal.choice.halloween.detail" = "Das ganze Jahr";
+"settings.appIcon.title" = "App-Symbol";
+"settings.appIcon.classic" = "Klassisch";
+"settings.appIcon.halloween" = "Halloween";
+"settings.appIcon.locked" = "Erfordert JellyGlass Pro";
+"settings.appIcon.error" = "Das Symbol konnte nicht geändert werden";
 "settings.debug.forceSeason" = "„%@“ erzwingen";
 "settings.debug.entitlement" = "Berechtigungen";
 "settings.debug.entitlement.free" = "Gratis";
@@ -1443,7 +1448,7 @@
 "pro.feature.playOn.title.tv" = "„Abspielen auf …“ einem anderen Bildschirm";
 "pro.feature.playOn.detail.tv" = "Schicke vom Apple TV aus einen Film an einen anderen Fernseher oder ein anderes Gerät im Haus.";
 "pro.feature.icons.title" = "App-Symbole";
-"pro.feature.icons.detail" = "Wähle das Symbol von JellyGlass auf dem Home-Bildschirm aus seinen Farbvarianten. Das Originalsymbol bleibt kostenlos.";
+"pro.feature.icons.detail" = "Ändere das Symbol von JellyGlass auf dem Home-Bildschirm – zum Start mit der Halloween-Edition. Das Originalsymbol bleibt kostenlos.";
 "pro.feature.seasonal.title" = "Saisonale Themen, das ganze Jahr";
 "pro.feature.seasonal.detail" = "Halloween im April? Behalte dein Lieblingsthema, so lange du willst.";
 "pro.feature.shortcuts.title" = "Siri und Kurzbefehle";
