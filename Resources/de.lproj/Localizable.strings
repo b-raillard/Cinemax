@@ -1440,6 +1440,8 @@
 "pro.feature.admin.detail" = "Benutzer, Geräte, Aufgaben und Metadaten – vom iPhone oder iPad aus verwaltet, ganz ohne Computer.";
 "pro.feature.playOn.title" = "„Abspielen auf …“ dem Apple TV";
 "pro.feature.playOn.detail" = "Wähle einen Film auf dem iPhone, er startet auf dem Fernseher im Wohnzimmer.";
+"pro.feature.playOn.title.tv" = "„Abspielen auf …“ einem anderen Bildschirm";
+"pro.feature.playOn.detail.tv" = "Schicke vom Apple TV aus einen Film an einen anderen Fernseher oder ein anderes Gerät im Haus.";
 "pro.feature.icons.title" = "App-Symbole";
 "pro.feature.icons.detail" = "Wähle das Symbol von JellyGlass auf dem Home-Bildschirm aus seinen Farbvarianten. Das Originalsymbol bleibt kostenlos.";
 "pro.feature.seasonal.title" = "Saisonale Themen, das ganze Jahr";

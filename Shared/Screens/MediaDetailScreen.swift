@@ -462,9 +462,10 @@ struct MediaDetailScreen: View {
         #if os(iOS)
         // Admin-gated 3-dot menu (Identifier / Edit metadata / Refresh /
         // Delete). Server enforces authorization on every endpoint; client
-        // gating is UX only. The admin tools are Pro (lot B): hidden for a
-        // free admin, never paywalled here.
-        if appState.isAdministrator, proAccess?.allows(.administration) ?? true {
+        // gating is UX only. The admin tools are Pro (lot B): a free admin
+        // sees the pill with a lock, whose tap raises the Pro sheet
+        // (`AdminShortcutPresence`, inside `AdminItemMenu`).
+        if AdminShortcutPresence.resolve(isAdmin: appState.isAdministrator, access: proAccess) != .hidden {
             adminMenuPill(for: item)
         }
         #endif

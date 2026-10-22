@@ -1440,6 +1440,8 @@
 "pro.feature.admin.detail" = "Users, devices, tasks and metadata, managed from iPhone or iPad, no computer needed.";
 "pro.feature.playOn.title" = "“Play on…” your Apple TV";
 "pro.feature.playOn.detail" = "Pick a film on your iPhone, it starts on the living-room TV.";
+"pro.feature.playOn.title.tv" = "“Play on…” another screen";
+"pro.feature.playOn.detail.tv" = "From the Apple TV, send a film to another TV or another device at home.";
 "pro.feature.icons.title" = "App icons";
 "pro.feature.icons.detail" = "Pick JellyGlass's Home Screen icon among its colour variants. The original icon stays free.";
 "pro.feature.seasonal.title" = "Seasonal themes, all year round";

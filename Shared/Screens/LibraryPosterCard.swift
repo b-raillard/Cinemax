@@ -177,8 +177,9 @@ private struct PosterCardContent: View {
 
                 #if os(iOS)
                 // No handler, no menu: its destinations need a host screen.
-                if appState.isAdministrator, onAdminAction != nil,
-                   proAccess?.allows(.administration) ?? true {
+                // A free admin gets the lock (`AdminShortcutPresence`).
+                if onAdminAction != nil,
+                   AdminShortcutPresence.resolve(isAdmin: appState.isAdministrator, access: proAccess) != .hidden {
                     AdminItemMenu(
                         item: item,
                         onSelectDestination: { dest in

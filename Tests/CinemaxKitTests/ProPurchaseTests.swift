@@ -432,10 +432,27 @@ struct ProFeatureCatalogueTests {
             let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
             let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
             for feature in ProFeatureCatalogue.features {
-                for key in [feature.titleKey, feature.detailKey, feature.shortKey] {
+                for key in [feature.titleKey, feature.detailKey, feature.shortKey,
+                            feature.displayTitleKey(onTV: true), feature.displayDetailKey(onTV: true)] {
                     #expect(table[key] != nil, "\(lang): \(key)")
                 }
             }
+        }
+    }
+
+    /// Recette 2026-10-22: the Apple TV's Pro sheet for « Lire sur… » read
+    /// « Choisissez un film sur l'iPhone… » — the TV sends too, so it gets
+    /// its own copy; every other feature reads the same on both platforms.
+    @Test("Sur Apple TV, « Lire sur… » parle depuis la télé, pas depuis l'iPhone")
+    func playOnSpeaksFromTheTV() throws {
+        let playOn = try #require(ProFeatureCatalogue.feature(.playOn))
+        #expect(playOn.displayTitleKey(onTV: false) == "pro.feature.playOn.title")
+        #expect(playOn.displayDetailKey(onTV: false) == "pro.feature.playOn.detail")
+        #expect(playOn.displayTitleKey(onTV: true) == "pro.feature.playOn.title.tv")
+        #expect(playOn.displayDetailKey(onTV: true) == "pro.feature.playOn.detail.tv")
+        for feature in ProFeatureCatalogue.features where feature.id != .playOn {
+            #expect(feature.displayTitleKey(onTV: true) == feature.titleKey)
+            #expect(feature.displayDetailKey(onTV: true) == feature.detailKey)
         }
     }
 

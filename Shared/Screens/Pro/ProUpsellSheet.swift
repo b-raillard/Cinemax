@@ -66,7 +66,7 @@ struct ProUpsellSheet: View {
                 .background(themeManager.accent.opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
                 .accessibilityHidden(true)
-            Text(catalogueFeature.map { loc.localized($0.titleKey) } ?? loc.localized("settings.pro"))
+            Text(catalogueFeature.map { loc.localized($0.shownTitleKey) } ?? loc.localized("settings.pro"))
                 .font(CinemaFont.dynamicHeadline(.medium))
                 .foregroundStyle(CinemaColor.onSurface)
                 .multilineTextAlignment(.center)
@@ -88,7 +88,7 @@ struct ProUpsellSheet: View {
     }
 
     private var description: String {
-        let detail = catalogueFeature.map { loc.localized($0.detailKey) } ?? ""
+        let detail = catalogueFeature.map { loc.localized($0.shownDetailKey) } ?? ""
         return [detail, loc.localized("pro.upsell.partOf")].filter { !$0.isEmpty }.joined(separator: " ")
     }
 
@@ -156,10 +156,10 @@ struct ProLockedFeatureRow: View {
         Button(action: action) {
             HStack(spacing: CinemaSpacing.spacing3) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(catalogueFeature.map { loc.localized($0.titleKey) } ?? "")
+                    Text(catalogueFeature.map { loc.localized($0.shownTitleKey) } ?? "")
                         .font(CinemaFont.dynamicSystem(16, weight: .semibold, relativeTo: .headline))
                         .foregroundStyle(themeManager.accent)
-                    Text(catalogueFeature.map { loc.localized($0.detailKey) } ?? "")
+                    Text(catalogueFeature.map { loc.localized($0.shownDetailKey) } ?? "")
                         .font(CinemaFont.dynamicLabel(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .multilineTextAlignment(.leading)

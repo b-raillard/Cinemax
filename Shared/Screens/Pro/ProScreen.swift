@@ -165,10 +165,10 @@ struct ProScreen: View {
                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.medium))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(loc.localized(feature.titleKey))
+                Text(loc.localized(feature.shownTitleKey))
                     .font(CinemaFont.dynamicSystem(16, weight: .bold, relativeTo: .headline))
                     .foregroundStyle(themeManager.accent)
-                Text(loc.localized(feature.detailKey))
+                Text(loc.localized(feature.shownDetailKey))
                     .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .fixedSize(horizontal: false, vertical: true)
@@ -293,8 +293,8 @@ struct ProScreen: View {
                 .fontWeight(.heavy)
                 .foregroundColor(inks.wordmarkInk)
              + Text("  ·  ")
-             + Text(loc.localized(shown.titleKey)).fontWeight(.bold)
-             + Text(" — " + loc.localized(shown.detailKey)))
+             + Text(loc.localized(shown.shownTitleKey)).fontWeight(.bold)
+             + Text(" — " + loc.localized(shown.shownDetailKey)))
                 .font(CinemaFont.body)
                 .foregroundStyle(CinemaColor.onTitanium)
                 .lineLimit(2)
@@ -334,8 +334,8 @@ struct ProScreen: View {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedFeature, equals: feature.id)
-        .accessibilityLabel(loc.localized(feature.titleKey))
-        .accessibilityHint(loc.localized(feature.detailKey))
+        .accessibilityLabel(loc.localized(feature.shownTitleKey))
+        .accessibilityHint(loc.localized(feature.shownDetailKey))
     }
     #endif
 }

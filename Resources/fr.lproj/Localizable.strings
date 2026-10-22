@@ -1442,6 +1442,8 @@
 "pro.feature.admin.detail" = "Utilisateurs, appareils, tâches et métadonnées, gérés depuis l'iPhone ou l'iPad, sans ordinateur.";
 "pro.feature.playOn.title" = "« Lire sur… » l'Apple TV";
 "pro.feature.playOn.detail" = "Choisissez un film sur l'iPhone, il démarre sur la télé du salon.";
+"pro.feature.playOn.title.tv" = "« Lire sur… » un autre écran";
+"pro.feature.playOn.detail.tv" = "Depuis l'Apple TV, envoyez un film vers une autre télé ou un autre appareil de la maison.";
 "pro.feature.icons.title" = "Icônes de l'app";
 "pro.feature.icons.detail" = "Choisissez l'icône de JellyGlass sur l'écran d'accueil parmi ses déclinaisons de couleur. L'icône d'origine reste gratuite.";
 "pro.feature.seasonal.title" = "Les thèmes saisonniers, toute l'année";

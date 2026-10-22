@@ -336,6 +336,25 @@ struct ProFeatureAccessTests {
         #expect(open.upsell == nil)
     }
 
+    #if os(iOS)
+    /// User decision 2026-10-22: the admin's per-item menu (fiche pill,
+    /// poster corner) stays VISIBLE to a free admin, locked — it shows the
+    /// feature exists; its tap raises the Pro sheet instead of the menu.
+    @Test("Menu Admin d'une fiche : caché hors admin, cadenas pour l'admin gratuit, ouvert sinon")
+    func adminShortcutIsLockedNotHidden() {
+        #expect(AdminShortcutPresence.resolve(isAdmin: false, allowsAdministration: true) == .hidden)
+        #expect(AdminShortcutPresence.resolve(isAdmin: false, allowsAdministration: false) == .hidden)
+        #expect(AdminShortcutPresence.resolve(isAdmin: true, allowsAdministration: false) == .locked)
+        #expect(AdminShortcutPresence.resolve(isAdmin: true, allowsAdministration: true) == .open)
+
+        let free = access(launched: true)
+        #expect(AdminShortcutPresence.resolve(isAdmin: true, access: free) == .locked)
+        #expect(free.upsell == nil, "drawing the lock never opens the sheet")
+        #expect(AdminShortcutPresence.resolve(isAdmin: true, access: access(launched: false)) == .open)
+        #expect(AdminShortcutPresence.resolve(isAdmin: true, access: nil) == .open)
+    }
+    #endif
+
     @Test("Lire une vidéo depuis une carte ne passe JAMAIS par la porte Pro")
     func playbackIsNeverGated() {
         let free = access(launched: true)
