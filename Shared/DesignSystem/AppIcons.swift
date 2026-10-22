@@ -28,9 +28,27 @@ struct AppIconChoice: Identifiable, Sendable, Equatable {
         case halloween
         /// The logo in one accent colour (`AccentOption.accentDark`'s hue).
         case accent(AccentOption)
+
+        /// The Apple TV page's caption under the focused icon's name
+        /// (« Icône d'origine », « Halloween », « Couleur »).
+        var captionKey: String {
+            switch self {
+            case .classic: "settings.appIcon.family.classic"
+            case .halloween: "settings.appIcon.family.halloween"
+            case .accent: "settings.appIcon.family.accent"
+            }
+        }
     }
 
     var id: String { alternateName ?? "primary" }
+}
+
+/// One titled group of the picker page.
+struct AppIconSection: Identifiable, Sendable, Equatable {
+    let titleKey: String
+    let choices: [AppIconChoice]
+
+    var id: String { titleKey }
 }
 
 /// The icons the app ships — DATA: the next icon is one entry here, one in
@@ -68,6 +86,19 @@ enum AppIconCatalogue {
         choices.first { $0.alternateName == alternateName }
     }
 
+    /// iPhone / iPad (design A): Classique, Halloween, Couleurs.
+    static let sections: [AppIconSection] = [
+        AppIconSection(titleKey: "settings.appIcon.section.classic", choices: [primary]),
+        AppIconSection(titleKey: "settings.appIcon.section.halloween", choices: halloween),
+        AppIconSection(titleKey: "settings.appIcon.section.colors", choices: accents)
+    ]
+
+    /// Apple TV (design B): two groups, so the 5-column grid fills its rows.
+    static let tvSections: [AppIconSection] = [
+        AppIconSection(titleKey: "settings.appIcon.section.editions", choices: [primary] + halloween),
+        AppIconSection(titleKey: "settings.appIcon.section.colors", choices: accents)
+    ]
+
     /// Apple TV: the choice `step` away from the current one, wrapping. An
     /// unknown current name steps from the primary.
     static func neighbour(of alternateName: String?, by step: Int) -> AppIconChoice {
@@ -97,6 +128,46 @@ enum AppIconPickerPolicy {
     static func outcome(choosing choice: AppIconChoice, current: String?, tier: ProTier) -> Outcome {
         if choice.alternateName == current { return .keep }
         return isLocked(choice, tier: tier) ? .upsell : .apply(choice.alternateName)
+    }
+
+    // MARK: Preview, then apply (the dedicated page, 2026-10-22)
+
+    /// USER RULE: touching a tile only PREVIEWS it — never
+    /// `setAlternateIconName`, whose system alert on every tap was « vraiment
+    /// pas user friendly ». One button applies (`apply(previewing:…)`), so
+    /// the alert comes once per change. (Apple TV: focus previews, select
+    /// applies — the same rule with the remote's own two gestures.)
+    enum TileTap: Equatable, Sendable {
+        case preview(AppIconChoice)
+    }
+
+    static func tileTap(_ choice: AppIconChoice) -> TileTap {
+        .preview(choice)
+    }
+
+    /// The previewed icon's state — the one button's label (« Icône
+    /// actuelle » disabled / « Utiliser cette icône » / « Débloquer avec
+    /// JellyGlass Pro »), the hero's caption, the Apple TV status line.
+    enum PreviewState: Equatable, Sendable {
+        case current, available, locked
+    }
+
+    static func previewState(_ choice: AppIconChoice, current: String?, tier: ProTier) -> PreviewState {
+        if choice.alternateName == current { return .current }
+        return isLocked(choice, tier: tier) ? .locked : .available
+    }
+
+    /// The one button: `.keep` on the current icon, `.apply` (ONE system
+    /// alert), or `.upsell` (`ProFeatureAccess.admit(.appIcons)`).
+    static func apply(previewing: AppIconChoice, current: String?, tier: ProTier) -> Outcome {
+        outcome(choosing: previewing, current: current, tier: tier)
+    }
+
+    /// « 12 icônes de plus avec JellyGlass Pro » — the number of icons this
+    /// tier cannot choose, `nil` when none (no banner).
+    static func proBannerCount(tier: ProTier) -> Int? {
+        let locked = AppIconCatalogue.choices.filter { isLocked($0, tier: tier) }.count
+        return locked > 0 ? locked : nil
     }
 }
 

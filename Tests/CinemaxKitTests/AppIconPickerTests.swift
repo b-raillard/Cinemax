@@ -119,7 +119,74 @@ struct AppIconPickerTests {
                 #expect(table[choice.labelKey] != nil, "\(lang): \(choice.labelKey)")
             }
             #expect(table["settings.appIcon.title"] != nil, "\(lang)")
+            let sections = AppIconCatalogue.sections + AppIconCatalogue.tvSections
+            for key in sections.map(\.titleKey) + AppIconCatalogue.choices.map(\.family.captionKey) {
+                #expect(table[key] != nil, "\(lang): \(key)")
+            }
         }
+    }
+
+    // MARK: - The dedicated page (design A on iPhone / iPad, B on Apple TV)
+
+    @Test("iPhone / iPad : sections Classique, Halloween, Couleurs, qui couvrent chaque choix une fois")
+    func phoneSections() {
+        let sections = AppIconCatalogue.sections
+        #expect(sections.map(\.titleKey) == [
+            "settings.appIcon.section.classic", "settings.appIcon.section.halloween", "settings.appIcon.section.colors",
+        ])
+        #expect(sections.map(\.choices.count) == [1, 3, 9])
+        #expect(sections.flatMap(\.choices) == AppIconCatalogue.choices)
+    }
+
+    @Test("Apple TV : Éditions (Classique + Halloween) puis Couleurs, dans l'ordre du catalogue")
+    func tvSections() {
+        let sections = AppIconCatalogue.tvSections
+        #expect(sections.map(\.titleKey) == ["settings.appIcon.section.editions", "settings.appIcon.section.colors"])
+        #expect(sections.map(\.choices.count) == [4, 9])
+        #expect(sections.flatMap(\.choices) == AppIconCatalogue.choices)
+    }
+
+    /// USER RULE (2026-10-22): a tile only PREVIEWS — the system alert of
+    /// `setAlternateIconName` on every tap was « vraiment pas user friendly ».
+    @Test("Toucher une vignette ne fait que l'aperçu, quel que soit le palier", arguments: [ProTier.free, .pro, .founder])
+    func tileTapOnlyPreviews(tier: ProTier) {
+        for choice in AppIconCatalogue.choices {
+            #expect(AppIconPickerPolicy.tileTap(choice) == .preview(choice))
+        }
+    }
+
+    @Test("Le bouton unique : « Icône actuelle », « Utiliser cette icône » ou « Débloquer avec JellyGlass Pro »")
+    func applyButton() throws {
+        let blue = try #require(AppIconCatalogue.choice(alternateName: "AppIconBlue"))
+        // The preview IS the current icon: disabled « Icône actuelle », for every tier.
+        for tier in [ProTier.free, .pro, .founder] {
+            #expect(AppIconPickerPolicy.previewState(blue, current: "AppIconBlue", tier: tier) == .current)
+            #expect(AppIconPickerPolicy.previewState(AppIconCatalogue.primary, current: nil, tier: tier) == .current)
+        }
+        #expect(AppIconPickerPolicy.previewState(blue, current: nil, tier: .free) == .locked)
+        #expect(AppIconPickerPolicy.previewState(blue, current: nil, tier: .pro) == .available)
+        #expect(AppIconPickerPolicy.previewState(blue, current: nil, tier: .founder) == .available)
+        // Back to Classique is always available, even for a free user holding Blue.
+        #expect(AppIconPickerPolicy.previewState(AppIconCatalogue.primary, current: "AppIconBlue", tier: .free) == .available)
+    }
+
+    @Test("Appliquer l'aperçu : une seule alerte système, ou la feuille Pro quand il est verrouillé")
+    func applyPreview() throws {
+        let blue = try #require(AppIconCatalogue.choice(alternateName: "AppIconBlue"))
+        #expect(AppIconPickerPolicy.apply(previewing: blue, current: nil, tier: .pro) == .apply("AppIconBlue"))
+        #expect(AppIconPickerPolicy.apply(previewing: blue, current: nil, tier: .free) == .upsell)
+        #expect(AppIconPickerPolicy.apply(previewing: blue, current: "AppIconBlue", tier: .free) == .keep)
+        #expect(AppIconPickerPolicy.apply(previewing: AppIconCatalogue.primary, current: "AppIconBlue", tier: .free) == .apply(nil))
+    }
+
+    @Test("Le bandeau « 12 icônes de plus avec JellyGlass Pro » : gratuit seulement, et le compte vient du catalogue")
+    func proBanner() {
+        #expect(AppIconPickerPolicy.proBannerCount(tier: .free) == 12)
+        #expect(AppIconPickerPolicy.proBannerCount(tier: .pro) == nil)
+        #expect(AppIconPickerPolicy.proBannerCount(tier: .founder) == nil)
+        // Before the launch nobody is free, so nobody sees it.
+        let tier = ProFeatureGate.tier(proLaunched: false, isPro: false, isEarlyAdopter: false, override: .automatic)
+        #expect(AppIconPickerPolicy.proBannerCount(tier: tier) == nil)
     }
 
     /// The test host IS the app: its built Info.plist must declare every
