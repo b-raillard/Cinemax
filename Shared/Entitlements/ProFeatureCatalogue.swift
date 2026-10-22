@@ -5,9 +5,10 @@ import Foundation
 /// (creating a session), the custom menu and the accent colours are FREE and
 /// left the list. `isGated` says whether a gate site really locks the feature
 /// for the free tier yet (lot B: accounts, administration, « Lire sur… »,
-/// Siri / Raccourcis; lot C: the « Halloween » choice of Réglages → Apparence);
-/// the app icons wait for their picker. RULE (spec R8): the production pivot is never set while a
-/// listed feature is still free — locked by `ProFeatureCatalogueTests`.
+/// Siri / Raccourcis; lot C: the « Halloween » choice of Réglages → Apparence;
+/// lot D: the alternate app icon, `AppIconPickerPolicy`). RULE (spec R8): the
+/// production pivot is never set while a listed feature is still free —
+/// locked by `ProFeatureCatalogueTests`.
 nonisolated enum ProFeatureCatalogue {
     struct Feature: Identifiable, Sendable, Equatable {
         let id: ProFeatureID
