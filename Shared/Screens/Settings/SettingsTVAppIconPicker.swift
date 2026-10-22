@@ -99,8 +99,13 @@ extension SettingsScreen {
                         }
                     }
                 }
-                .focusSection()
             }
+            // The preview column holds nothing focusable, and the grid sits to
+            // the right of AND below the back button, out of both of its
+            // straight lines: without one section spanning the whole row, Down
+            // and Right from « ‹ Icône de l'app » found nothing and focus was
+            // stuck on it (simulator, 2026-10-22).
+            .focusSection()
         }
         .padding(.horizontal, CinemaSpacing.spacing20)
         .padding(.vertical, CinemaSpacing.spacing8)

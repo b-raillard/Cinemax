@@ -56,10 +56,15 @@ struct AppIconPickerScreen: View {
                     .padding(.horizontal, CinemaSpacing.spacing4)
                     .padding(.top, CinemaSpacing.spacing3)
                     .padding(.bottom, CinemaSpacing.spacing2)
-                    .background {
+                    // Opaque under the button (a ghost « Icône actuelle » is
+                    // translucent: the grid showed through), fading above it.
+                    .background(CinemaColor.surface)
+                    .overlay(alignment: .top) {
                         LinearGradient(colors: [CinemaColor.surface.opacity(0), CinemaColor.surface],
-                                       startPoint: .top, endPoint: .center)
-                            .ignoresSafeArea()
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: CinemaSpacing.spacing6)
+                            .offset(y: -CinemaSpacing.spacing6)
+                            .allowsHitTesting(false)
                     }
             }
         }
@@ -219,7 +224,7 @@ struct AppIconPickerScreen: View {
             }
             .disabled(applying)
         case .locked:
-            CinemaButton(title: loc.localized("settings.appIcon.unlock"), style: .primary, icon: "lock.fill") {
+            CinemaButton(title: loc.localized("settings.appIcon.unlock"), style: .accent, icon: "lock.fill") {
                 applyPreview()
             }
         }
